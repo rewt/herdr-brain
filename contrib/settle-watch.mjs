@@ -298,6 +298,8 @@ function openSession({ mode, r }) {
   const hhmm = new Date().toTimeString().slice(0, 5).replace(':', '');
   const name = mode === 'settle' ? `settle-${runId.toLowerCase()}-${hhmm}` : `exec-${hhmm}`;
   const label = mode === 'settle' ? `settle ${runId}` : 'executive';
+  // org records this session as the actor, so its answers are not mistaken for the operator's.
+  env.push(`ORG_ACTOR=${name}`);
 
   const pick = route(mode);
   log(`route ${pick.key}: model ${pick.model}, effort ${pick.effort}${opt.account ? `, account ${opt.account}` : ''}`);

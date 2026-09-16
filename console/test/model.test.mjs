@@ -123,6 +123,7 @@ test('Herdr being unavailable shows unknown, never a guess', () => {
 test('stripping codes keeps the sentence readable', () => {
   assert.equal(stripCodes('Skip per R-4 (deadbeef12): see ENG-7, and 35109079233; defaced.'), 'Skip per: see, and 35109079233; defaced.');
   assert.equal(decisionHeadline({ text: 'R-3 ENG-2' }).text, `decision recorded ${NO_PLAIN}`);
+  assert.equal(stripCodes('Run the proof (ENG-1, optional) and the check (R-2; R-3).'), 'Run the proof (optional) and the check.');
 });
 
 test('waiting rows keep the ranking org today gives', () => {

@@ -119,7 +119,9 @@ export function hasCodes(text) {
 
 export function stripCodes(text) {
   return oneLine(String(text ?? '').replace(CODE_RE, '').replace(HEX_RE, ''))
-    .replace(/\(\s*[,;:/·]*\s*\)|\[\s*[,;:/·]*\s*\]/g, '')
+    .replace(/([([])(?:\s*[,;:/·])+\s*/g, '$1')
+    .replace(/(?:\s*[,;:/·])+\s*([)\]])/g, '$1')
+    .replace(/\(\s*\)|\[\s*\]/g, '')
     .replace(/\s+([,.;:!?)])/g, '$1')
     .replace(/([(])\s+/g, '$1')
     .replace(/(^|\s)[,;:/·](?=\s|$)/g, '$1')

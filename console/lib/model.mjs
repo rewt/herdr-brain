@@ -90,7 +90,7 @@ export function buildRows({ today, herdr = null, sessions = null }) {
       headline: plain(q.title),
       tag: q.category ?? 'no category',
       time: hhmm(q.created?.at),
-      state: `recommend: ${q.recommend ? plain(q.recommend) : 'not recorded'}`,
+      state: q.recommend ? `recommend: ${plain(q.recommend)}` : 'no recommendation',
       question: q.id,
       actions: ['approve', 'decline'],
       doc: q.memo ? { path: q.memo } : { missing: 'no memo recorded' },

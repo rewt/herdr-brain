@@ -1,0 +1,74 @@
+// Console configuration: ~/.config/herdr-org/console.json (HERDR_ORG_CONSOLE_CONFIG overrides).
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+export class ConfigError extends Error {}
+
+export function configPath(env = process.env) {
+  return env.HERDR_ORG_CONSOLE_CONFIG || path.join(os.homedir(), '.config', 'herdr-org', 'console.json');
+}
+
+export const EXAMPLE = {
+  '//': [
+    'Herdr Brain console configuration. Edit the project below, then delete the "example" line.',
+    'projects[].org          the organization directory (what ORG_DIR would be)',
+    'projects[].cwd          the checkout the executive sessions run in (finds their transcripts)',
+    'projects[].ledger_dir   where settle-watch writes sessions-YYYY-MM-DD.log and the STOP file',
+    'projects[].claude_config_dirs  Claude config dirs to search for session transcripts',
+    'projects[].session_cap  the daily session limit shown in the header',
+    'refresh_seconds         how often to re-read when nothing changed',
+  ],
+  example: true,
+  projects: [
+    {
+      name: 'bch-cloak',
+      org: '/Users/rewt/development/bastian/.org',
+      cwd: '/Users/rewt/development/bastian/bch-cloak',
+      ledger_dir: '/Users/rewt/development/bastian/bch-cloak/.lane/supervisor',
+      claude_config_dirs: ['/Users/rewt/.claude', '/Users/rewt/.claude-personal'],
+      session_cap: 30,
+    },
+  ],
+  refresh_seconds: 5,
+};
+
+function expand(p) {
+  if (typeof p !== 'string' || !p) return null;
+  return path.resolve(p.replace(/^~(?=$|\/)/, os.homedir()));
+}
+
+export function normalizeConfig(raw, file) {
+  if (raw?.example) throw new ConfigError(`${file} is still the example: edit its project paths, then delete the "example" line`);
+  const projects = Array.isArray(raw?.projects) ? raw.projects : [];
+  if (!projects.length) throw new ConfigError(`${file} lists no projects`);
+  const out = projects.map((p, i) => {
+    if (!p?.name) throw new ConfigError(`${file}: projects[${i}] needs a name`);
+    if (!p.org) throw new ConfigError(`${file}: project ${p.name} needs "org" (its organization directory)`);
+    return {
+      name: String(p.name),
+      org: expand(p.org),
+      cwd: expand(p.cwd),
+      ledger_dir: expand(p.ledger_dir),
+      claude_config_dirs: (Array.isArray(p.claude_config_dirs) ? p.claude_config_dirs : [path.join(os.homedir(), '.claude')]).map(expand).filter(Boolean),
+      session_cap: Number.isFinite(p.session_cap) ? p.session_cap : null,
+    };
+  });
+  const refresh = Number(raw.refresh_seconds);
+  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5 };
+}
+
+export function loadConfig(file = configPath()) {
+  if (!fs.existsSync(file)) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(EXAMPLE, null, 2) + '\n', { flag: 'wx' });
+    throw new ConfigError(`wrote an example configuration to ${file}\nedit its project paths, delete the "example" line, then run org console again`);
+  }
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
+  }
+  return normalizeConfig(raw, file);
+}

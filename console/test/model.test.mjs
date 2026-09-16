@@ -173,6 +173,8 @@ test('rows and frames fit 80, 100 and 140 columns', () => {
         const { lines } = renderFrame(view, cols, height - 1);
         assert.equal(lines.length, height - 1, `${cols}x${height} tab ${tab}`);
         for (const l of lines) assert.ok(cellWidth(l.text) <= cols, `${cols}: ${l.text}`);
+        const title = lines.find((l) => l.style === 'title');
+        assert.match(title.text, /\[1 Summary\] 2 Document 3 Context$|1 Summary \[2 Document\] 3 Context$|2 Document \[3 Context\]$/);
       }
     }
   }

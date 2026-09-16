@@ -3,7 +3,7 @@
 // { text, style }; the app maps styles to Ink props and drops color under NO_COLOR.
 // Nothing here depends on Ink, so the layout is tested at any size.
 import { renderMarkdown } from './markdown.mjs';
-import { contextPairs, summaryParagraphs } from './model.mjs';
+import { NO_PLAIN, contextPairs, summaryParagraphs } from './model.mjs';
 import { cellWidth, clip, pad, padStart, wrap } from './text.mjs';
 
 export const MIN_COLS = 80;
@@ -13,7 +13,7 @@ const CHROME = 4; // header, reader title, status line, footer
 export const TABS = ['Summary', 'Document', 'Context'];
 
 export function columns(cols) {
-  const tag = cols >= 140 ? 12 : 10;
+  const tag = cols >= 100 ? 15 : 11;
   const right = cols >= 140 ? 30 : cols >= 100 ? 24 : 20;
   return { marker: 2, tag, right, headline: cols - 2 - tag - right - 2 };
 }
@@ -28,9 +28,16 @@ function rightText(row) {
   return row.kind === 'question' || row.kind === 'run' || row.kind === 'executive' ? row.state : `${row.time}  ${row.state}`;
 }
 
+// The "no plain summary" mark survives clipping: the text before it is cut instead.
+function headlineCell(headline, width) {
+  if (!headline.endsWith(NO_PLAIN) || cellWidth(headline) <= width) return pad(headline, width);
+  const mark = ` ${NO_PLAIN}`;
+  return pad(clip(headline.slice(0, -mark.length), width - cellWidth(mark)) + mark, width);
+}
+
 export function rowLine(row, cols, marker = '  ') {
   const c = columns(cols);
-  return `${pad(marker, c.marker)}${pad(row.headline, c.headline)} ${pad(row.tag, c.tag)} ${padStart(rightText(row), c.right)}`;
+  return `${pad(marker, c.marker)}${headlineCell(row.headline, c.headline)} ${pad(row.tag, c.tag)} ${padStart(rightText(row), c.right)}`;
 }
 
 function listLines(sections, cols, selectedKey, focus) {
@@ -41,7 +48,7 @@ function listLines(sections, cols, selectedKey, focus) {
     for (const row of s.rows) {
       const selected = row.key === selectedKey;
       if (selected) selectedLine = lines.length;
-      lines.push({ text: rowLine(row, cols, selected ? (focus === 'list' ? '> ' : '› ') : '  '), style: selected ? 'selected' : 'row', key: row.key });
+      lines.push({ row, selected, text: rowLine(row, cols, selected ? (focus === 'list' ? '> ' : '› ') : '  '), style: selected ? 'selected' : 'row' });
     }
   }
   return { lines, selectedLine };
@@ -84,7 +91,7 @@ function readerTitle(row, tab, focus, cols, position) {
   const tabs = tabsText(tab);
   const lead = focus === 'reader' ? '> ' : '─ ';
   const pos = position ? ` ${position}` : '';
-  const room = cols - cellWidth(lead) - cellWidth(tabs) - cellWidth(pos) - 2;
+  const room = cols - cellWidth(lead) - cellWidth(tabs) - cellWidth(pos) - 3;
   const title = clip(row?.headline ?? 'nothing selected', Math.max(0, room));
   const fill = '─'.repeat(Math.max(1, cols - cellWidth(lead) - cellWidth(title) - cellWidth(pos) - cellWidth(tabs) - 2));
   return clip(`${lead}${title} ${fill}${pos} ${tabs}`, cols);
@@ -172,13 +179,18 @@ export function renderFrame(view, cols, rows) {
       const { lines: list, selectedLine } = listLines(view.sections, cols, view.selected?.key, view.focus);
       listOffset = scrollWindow(listOffset, selectedLine, h.list, list.length);
       const shown = list.slice(listOffset, listOffset + h.list);
-      if (listOffset > 0) shown[0] = { ...shown[0], text: clip(`${shown[0].text.trimEnd()}  ↑ more`, cols) };
-      if (listOffset + h.list < list.length && shown.length) {
-        const last = shown.length - 1;
-        shown[last] = { ...shown[last], text: `${clip(shown[last].text.trimEnd(), cols - 8)}  ↓ more` };
-      }
+      // More above or below: an arrow in the first or last line's gutter (a heading gets it appended).
+      const arrow = (i, mark) => {
+        const line = shown[i];
+        if (line.selected) return;
+        shown[i] = line.row
+          ? { ...line, text: rowLine(line.row, cols, `${mark} `) }
+          : { ...line, text: clip(`${line.text}  ${mark} more`, cols) };
+      };
+      if (listOffset > 0) arrow(0, '↑');
+      if (listOffset + h.list < list.length) arrow(shown.length - 1, '↓');
       while (shown.length < h.list) shown.push({ text: '', style: 'text' });
-      lines.push(...shown);
+      lines.push(...shown.map(({ text, style }) => ({ text, style })));
     }
     const body = readerLines(view.selected, view.tab, cols - 2, view.document, view.project);
     readerMax = Math.max(0, body.length - h.reader);

@@ -2,6 +2,9 @@
 
 - `bin/org.mjs` is the CLI. `lib/store.mjs` owns the event log and lock, `lib/state.mjs` the fold and
   derived status, `lib/report.mjs` report parsing, `lib/render.mjs` every view and brief. No dependencies.
+- `console/` may depend on Ink, React and a markdown renderer. The core stays dependency-free. The console
+  writes only through the `org` CLI (child process, argument arrays) and never appends to `events.jsonl`
+  itself.
 - Run `npm test` before and after a change. Tests are offline and never call a model.
 
 Contract:

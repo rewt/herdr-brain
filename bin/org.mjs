@@ -28,7 +28,15 @@ Work
   org add <title> [--goal] [--role R] [--capability C] [--parent ID]
           [--blocked-by ID]... [--accept TEXT]... [--priority N] [--budget key=N]...
   org block <ID> --by <ID>                record that --by blocks ID (org unblock undoes it)
-  org note <ID> <text> [--decision]       attach a note or decision to an item or run
+  org note <ID> <text> [--decision [--summary TEXT]]
+                                          attach a note or decision (summary: one plain sentence)
+
+Questions for the operator
+  org ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT
+          [--on-yes T] [--on-no T] [--memo PATH] [--blocks ID]... [--priority N]
+                                          a role=human item; auto categories answer at once
+  org answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
+                                          a "no" keeps the work it blocks blocked
   org set <ID> key=value...               edit an item (title role capability priority parent
                                           budget.<key> meta.<key>) or record run metadata
                                           (e.g. org set R-3 tokens_in=48210 tokens_out=5120)
@@ -203,13 +211,133 @@ function block(argv, remove = false) {
 }
 
 function note(argv) {
-  const { values, positionals } = args(argv, { decision: { type: 'boolean' } }, { min: 2, usage: 'org note <ID> <text> [--decision]' });
+  const { values, positionals } = args(argv, { decision: { type: 'boolean' }, summary: { type: 'string' } },
+    { min: 2, usage: 'org note <ID> <text> [--decision [--summary TEXT]]' });
   const [id, ...words] = positionals;
+  const summary = values.summary?.replace(/\s+/g, ' ').trim();
+  if (values.summary != null && !values.decision) throw new UserError('--summary needs --decision (it is the plain sentence the operator reads)');
+  if (values.summary != null && !summary) throw new UserError('--summary cannot be empty');
   mutate(openOrg(), (s) => {
     if (!s.items.has(id) && !s.runs.has(id)) throw new UserError(`unknown item or run ${id}`);
-    return { add: [{ type: 'note.added', id, text: words.join(' ').trim(), decision: Boolean(values.decision) }] };
+    return { add: [{ type: 'note.added', id, text: words.join(' ').trim(), decision: Boolean(values.decision), ...(summary ? { summary } : {}) }] };
   });
   out(`${values.decision ? 'decision' : 'note'} recorded on ${id}\n`);
+  return 0;
+}
+
+function categoryPolicy(config, category) {
+  const { categories, default: fallback } = config.approvals;
+  if (!Object.hasOwn(categories, category)) {
+    throw new UserError(`unknown category "${category}" (known: ${Object.keys(categories).join(', ')})`);
+  }
+  const policy = categories[category] ?? fallback;
+  return policy === 'auto' ? 'auto' : 'ask';
+}
+
+function normalizeAnswer(text) {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  return /^(yes|no)$/i.test(t) ? t.toLowerCase() : t;
+}
+
+function ask(argv) {
+  const { values, positionals } = args(argv, {
+    parent: { type: 'string' },
+    category: { type: 'string' },
+    recommend: { type: 'string' },
+    why: { type: 'string' },
+    'on-yes': { type: 'string' },
+    'on-no': { type: 'string' },
+    memo: { type: 'string' },
+    blocks: { type: 'string', multiple: true },
+    priority: { type: 'string' },
+  }, { min: 1, usage: 'org ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT [options]' });
+  const title = positionals.join(' ').replace(/\s+/g, ' ').trim();
+  if (!title) throw new UserError('a question is required');
+  const text = (value) => value?.replace(/\s+/g, ' ').trim() || null;
+  const recommend = normalizeAnswer(values.recommend);
+  if (!recommend) throw new UserError('--recommend is required: never hand the operator an open question');
+  if (!values.category) throw new UserError('--category is required');
+  if (!values.parent) throw new UserError('--parent is required: say which work the question belongs to');
+  const why = text(values.why);
+  if (!why) throw new UserError('--why is required: two plain sentences the operator reads first');
+  const priority = values.priority == null ? null : Number(values.priority);
+  if (values.priority != null && !Number.isFinite(priority)) throw new UserError('--priority must be a number');
+  let memo = null;
+  if (values.memo) {
+    memo = path.resolve(values.memo);
+    if (!fs.existsSync(memo)) throw new UserError(`memo ${memo} does not exist`);
+  }
+  const ctx = openOrg();
+  const policy = categoryPolicy(ctx.config, values.category);
+  const actor = process.env.ORG_ACTOR || 'human';
+  const { result } = mutate(ctx, (s) => {
+    requireItem(s, values.parent);
+    const blocks = [...new Set(values.blocks ?? [])];
+    blocks.forEach((b) => requireItem(s, b));
+    const id = nextItemId(s, { kind: 'work', role: 'human' });
+    const meta = { category: values.category, recommend, memo, on_yes: text(values['on-yes']), on_no: text(values['on-no']) };
+    const events = [
+      { type: 'item.added', id, kind: 'work', title, role: 'human', capability: null, parent: values.parent, priority, accept: [], budget: {},
+        meta: Object.fromEntries(Object.entries(meta).filter(([, v]) => v != null)) },
+      { type: 'note.added', id, text: why, decision: false, kind: 'why' },
+    ];
+    for (const blocked of blocks) {
+      if (s.links.some((l) => l.blocker === id && l.blocked === blocked)) continue;
+      events.push({ type: 'link.added', blocker: id, blocked });
+    }
+    if (policy === 'auto') {
+      events.push(
+        { type: 'note.added', id, text: `Answered ${recommend} automatically (${values.category} is auto)`, decision: true, kind: 'answer' },
+        { type: 'item.updated', id, fields: { meta: { answer: recommend, answered_by: 'auto' } } },
+        { type: 'item.closed', id, as: 'done', note: 'answered automatically' },
+      );
+    }
+    return { add: events, result: id };
+  });
+  out(`${result}\n`);
+  if (policy === 'auto') err(`${result} answered ${recommend} automatically (${values.category} is auto); overrule with: org answer ${result} <answer> --overrule\n`);
+  else if (actor !== 'human') err(`${result} is waiting for the operator\n`);
+  return 0;
+}
+
+function answer(argv) {
+  const { values, positionals } = args(argv, { note: { type: 'string' }, overrule: { type: 'boolean' } },
+    { min: 2, usage: 'org answer <ID> yes|no|"<text>" [--note WHY] [--overrule]' });
+  const [id, ...words] = positionals;
+  const reply = normalizeAnswer(words.join(' '));
+  if (!reply) throw new UserError('an answer is required: yes, no or a short text');
+  const actor = process.env.ORG_ACTOR || 'human';
+  const note = values.note?.replace(/\s+/g, ' ').trim() || null;
+  const { result } = mutate(openOrg(), (s) => {
+    const item = requireItem(s, id);
+    if (item.role !== 'human') throw new UserError(`${id} is not a question (only role=human items are answered)`);
+    const answered = item.closed && item.meta.answer != null;
+    if (values.overrule && !answered) throw new UserError(`${id} has not been answered; nothing to overrule (drop --overrule)`);
+    if (!values.overrule && answered) {
+      throw new UserError(`${id} was already answered ${item.meta.answer} by ${item.meta.answered_by ?? 'unknown'}; to change it: org answer ${id} <answer> --overrule`);
+    }
+    if (!values.overrule && item.closed) throw new UserError(`${id} is closed (${item.closed.as}); reopen it first`);
+    const events = [];
+    if (item.closed) events.push({ type: 'item.reopened', id, note: 'reopened to overrule its answer' });
+    events.push(
+      { type: 'note.added', id, text: [`Answered ${reply}${values.overrule ? ` (overruling ${item.meta.answer})` : ''}`, note].filter(Boolean).join(': '), decision: true, kind: 'answer' },
+      { type: 'item.updated', id, fields: { meta: { answer: reply, answered_by: actor, ...(values.overrule ? { overruled: true } : {}) } } },
+      { type: 'item.closed', id, as: 'done', note },
+    );
+    return { add: events, result: { dependents: blockedBy(s, id) } };
+  });
+  out(`${id} answered ${reply}${values.overrule ? ' (overruled)' : ''}\n`);
+  const after = openOrg();
+  for (const blocked of result.dependents) {
+    const now = itemStatus(after.state, blocked);
+    if (reply === 'no') {
+      out(`${blocked} stays blocked: declined (re-plan it, then: org unblock ${blocked} --by ${id})\n`);
+    } else if (now !== 'blocked') {
+      out(`${blocked} is no longer blocked by ${id} (now ${now})\n`);
+    } else {
+      out(`${blocked} is still blocked by other work\n`);
+    }
+  }
   return 0;
 }
 
@@ -554,7 +682,7 @@ function log(argv) {
 }
 
 const COMMANDS = {
-  init, add, block, unblock: (argv) => block(argv, true), note, set, close, reopen,
+  init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, check, ingest, sync, abandon, brief, status, snapshot, show, log,
 };
 

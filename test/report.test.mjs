@@ -39,18 +39,20 @@ usage:
   });
 });
 
-test('the brief template becomes a valid report once outcome and summary are filled in', () => {
+test('the brief template becomes a valid report once outcome, summary and headline are filled in', () => {
   const blank = readReport(reportTemplate('R-1'));
   assert.match(blank.errors.join('\n'), /outcome is required/);
   const filled = reportTemplate('R-1')
     .replace('outcome:            #', 'outcome: done #')
-    .replace('(what you did and where things stand, in a few sentences)', 'Implemented it.');
+    .replace('(what you did and where things stand, in a few sentences)', 'Implemented it.')
+    .replace(/^headline:.*$/m, 'headline: It works');
   const r = readReport(filled);
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.warnings, []);
   assert.equal(r.report.run, 'R-1');
   assert.equal(r.report.outcome, 'done');
   assert.equal(r.report.summary, 'Implemented it.');
+  assert.equal(r.report.headline, 'It works');
   assert.deepEqual(r.report.proposals, []);
   assert.equal(r.body, '(free-form details: evidence, dead ends, anything worth keeping)');
 });

@@ -85,8 +85,38 @@ test('a declined question keeps its dependents blocked until the work is re-plan
   assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'blocked');
   assert.equal(t.json(['show', 'REV-1', '--json']).status, 'blocked');
   assert.match(t.ok(['status']), /ENG-1 .*declined: Adopt the theft fix once its review passes\?/);
+  assert.match(t.ok(['show', 'ENG-1']), /blocked by: HUM-1 \(declined \(answered no\)\)/);
+  // The brief of a run started anyway names the decline too.
+  t.ok(['block', 'REV-1', '--by', 'HUM-1']);
+  t.ok(['start', 'REV-1']);
+  const brief = fs.readFileSync(path.join(t.dir, 'runs/R-1/brief.md'), 'utf8');
+  assert.match(brief, /### Blockers\n(?:- .*\n(?: {2}- .*\n)*)*- \*\*HUM-1\*\* Adopt the theft fix once its review passes\? — declined \(answered no\)/);
   t.ok(['unblock', 'ENG-1', '--by', 'HUM-1']);
   assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'ready');
+});
+
+test('a reply that starts with yes or no is that answer, and the rest is kept as the note', () => {
+  for (const [reply, answer, note] of [
+    ['No.', 'no', null],
+    ['no, not yet', 'no', 'not yet'],
+    ['NO - wait for the freeze', 'no', 'wait for the freeze'],
+    ['Yes!', 'yes', null],
+    ['yes: ship it', 'yes', 'ship it'],
+    ['nothing yet', 'nothing yet', null],
+    ['yesterday\'s build', 'yesterday\'s build', null],
+  ]) {
+    const t = withWork();
+    t.ok(ASK(t.memo));
+    t.ok(['answer', 'HUM-1', reply, '--note', 'Operator.']);
+    const item = t.json(['show', 'HUM-1', '--json']);
+    assert.equal(item.meta.answer, answer, reply);
+    assert.equal(item.closed.note, [note, 'Operator.'].filter(Boolean).join('; '), reply);
+    assert.equal(t.json(['show', 'ENG-1', '--json']).status, answer === 'no' ? 'blocked' : 'ready', reply);
+  }
+  const t = withWork();
+  assert.match(t.fail(ASK(t.memo).map((a) => (a === 'yes' ? 'yes, after review' : a))), /--recommend should be just yes/);
+  t.ok(ASK(t.memo).map((a) => (a === 'yes' ? 'Yes.' : a)));
+  assert.equal(t.json(['show', 'HUM-1', '--json']).meta.recommend, 'yes');
 });
 
 test('a text answer releases the blocked work like yes', () => {
@@ -121,6 +151,8 @@ test('an auto category answers at once and the operator can still overrule it', 
   assert.equal(t.json(['show', 'HUM-2', '--json']).status, 'ready');
 
   assert.match(t.fail(['answer', 'HUM-2', 'no', '--overrule']), /HUM-2 has not been answered; nothing to overrule/);
+  assert.match(t.fail(['answer', 'HUM-1', 'Yes', '--overrule']), /HUM-1 is already answered yes; an overrule must change the answer/);
+  assert.equal(t.json(['show', 'HUM-1', '--json']).meta.overruled, undefined, 'a refused overrule records nothing');
   t.ok(['answer', 'HUM-1', 'no', '--overrule', '--note', 'Not before the freeze.']);
   item = t.json(['show', 'HUM-1', '--json']);
   assert.equal(item.status, 'done');

@@ -238,9 +238,12 @@ function categoryPolicy(config, category) {
   return policy === 'auto' ? 'auto' : 'ask';
 }
 
-function normalizeAnswer(text) {
+// A reply that starts with the word yes or no is that answer ("No." and "no, not yet"
+// decline); whatever follows the word is returned as `rest`. Anything else is a text answer.
+function parseReply(text) {
   const t = String(text ?? '').replace(/\s+/g, ' ').trim();
-  return /^(yes|no)$/i.test(t) ? t.toLowerCase() : t;
+  const m = /^(yes|no)(?![\p{L}\p{N}_])[\s\p{P}]*(.*)$/iu.exec(t);
+  return m ? { answer: m[1].toLowerCase(), rest: m[2].trim() || null } : { answer: t, rest: null };
 }
 
 function ask(argv) {
@@ -258,8 +261,9 @@ function ask(argv) {
   const title = positionals.join(' ').replace(/\s+/g, ' ').trim();
   if (!title) throw new UserError('a question is required');
   const text = (value) => value?.replace(/\s+/g, ' ').trim() || null;
-  const recommend = normalizeAnswer(values.recommend);
+  const { answer: recommend, rest: recommendRest } = parseReply(values.recommend);
   if (!recommend) throw new UserError('--recommend is required: never hand the operator an open question');
+  if (recommendRest) throw new UserError(`--recommend should be just ${recommend}; put "${recommendRest}" in --why`);
   if (!values.category) throw new UserError('--category is required');
   if (!values.parent) throw new UserError('--parent is required: say which work the question belongs to');
   const why = text(values.why);
@@ -308,10 +312,10 @@ function answer(argv) {
   const { values, positionals } = args(argv, { note: { type: 'string' }, overrule: { type: 'boolean' } },
     { min: 2, usage: 'org answer <ID> yes|no|"<text>" [--note WHY] [--overrule]' });
   const [id, ...words] = positionals;
-  const reply = normalizeAnswer(words.join(' '));
+  const { answer: reply, rest } = parseReply(words.join(' '));
   if (!reply) throw new UserError('an answer is required: yes, no or a short text');
   const actor = process.env.ORG_ACTOR || 'human';
-  const note = values.note?.replace(/\s+/g, ' ').trim() || null;
+  const note = [rest, values.note?.replace(/\s+/g, ' ').trim()].filter(Boolean).join('; ') || null;
   const { result } = mutate(openOrg(), (s) => {
     const item = requireItem(s, id);
     if (item.role !== 'human') throw new UserError(`${id} is not a question (only role=human items are answered)`);
@@ -319,6 +323,9 @@ function answer(argv) {
     if (values.overrule && !answered) throw new UserError(`${id} has not been answered; nothing to overrule (drop --overrule)`);
     if (!values.overrule && answered) {
       throw new UserError(`${id} was already answered ${item.meta.answer} by ${item.meta.answered_by ?? 'unknown'}; to change it: org answer ${id} <answer> --overrule`);
+    }
+    if (values.overrule && String(item.meta.answer).trim().toLowerCase() === reply.toLowerCase()) {
+      throw new UserError(`${id} is already answered ${item.meta.answer}; an overrule must change the answer`);
     }
     if (!values.overrule && item.closed) throw new UserError(`${id} is closed (${item.closed.as}); reopen it first`);
     const events = [];

@@ -667,9 +667,9 @@ function today(argv) {
 // The console is an isolated package with its own dependencies; the core only launches it.
 function consoleApp(argv) {
   const { values } = args(argv, { project: { type: 'string' } }, { max: 0, usage: 'org console [--project NAME]' });
-  const dir = path.join(path.dirname(BIN), '..', 'console');
+  const dir = path.resolve(process.env.HERDR_ORG_CONSOLE_DIR || path.join(path.dirname(BIN), '..', 'console'));
   if (!fs.existsSync(path.join(dir, 'node_modules', 'ink', 'package.json'))) {
-    throw new UserError(`the console's dependencies are not installed; run: npm --prefix ${shq(path.resolve(dir))} ci`);
+    throw new UserError(`the console's dependencies are not installed; run: npm --prefix ${shq(dir)} ci`);
   }
   const r = spawnSync(process.execPath, [path.join(dir, 'app.mjs'), ...(values.project ? ['--project', values.project] : [])], {
     stdio: 'inherit',

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import {
   wouldCycleBlock, wouldCycleParent,
 } from '../lib/state.mjs';
 import { readReport } from '../lib/report.mjs';
+import { renderToday, todayJson } from '../lib/today.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate,
@@ -56,6 +58,8 @@ Views (zero inference)
   org snapshot                            markdown state for a fresh session of any harness
   org show <ID> [--json]                  an item or run with its reports and history
   org log [--since 2h|09:00|DATE] [--limit N] [--json]
+  org today [--json]                      what waits on the operator, was decided, runs and finished today
+  org console [--project NAME]            the operator console (needs: npm --prefix console ci)
 
 The organization is found from $ORG_DIR or the nearest .org/ above the current directory.
 `;
@@ -652,6 +656,29 @@ function show(argv) {
   return 0;
 }
 
+function today(argv) {
+  const { values } = args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'org today [--json]' });
+  const ctx = openOrg();
+  const doc = todayJson(ctx.state, { orgDir: ctx.dir, config: ctx.config, now: ctx.now });
+  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderToday(doc));
+  return 0;
+}
+
+// The console is an isolated package with its own dependencies; the core only launches it.
+function consoleApp(argv) {
+  const { values } = args(argv, { project: { type: 'string' } }, { max: 0, usage: 'org console [--project NAME]' });
+  const dir = path.join(path.dirname(BIN), '..', 'console');
+  if (!fs.existsSync(path.join(dir, 'node_modules', 'ink', 'package.json'))) {
+    throw new UserError(`the console's dependencies are not installed; run: npm --prefix ${shq(path.resolve(dir))} ci`);
+  }
+  const r = spawnSync(process.execPath, [path.join(dir, 'app.mjs'), ...(values.project ? ['--project', values.project] : [])], {
+    stdio: 'inherit',
+    env: { ...process.env, HERDR_ORG_BIN: BIN },
+  });
+  if (r.error) throw r.error;
+  return r.status ?? 1;
+}
+
 export function parseSince(text, now) {
   const relative = /^(\d+)\s*([mhd])$/.exec(text);
   if (relative) return new Date(now.getTime() - Number(relative[1]) * { m: 60000, h: 3600000, d: 86400000 }[relative[2]]);
@@ -683,7 +710,7 @@ function log(argv) {
 
 const COMMANDS = {
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log,
+  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, console: consoleApp,
 };
 
 function main(argv) {

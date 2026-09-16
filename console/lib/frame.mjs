@@ -103,10 +103,12 @@ export function footerKeys(view, row) {
   const keys = [];
   for (const a of row?.actions ?? []) keys.push(ACTION_KEYS[a]);
   if (row?.doc?.path || row?.doc?.text) keys.push('o open');
-  keys.push(view.focus === 'list' ? 'Tab reader' : 'Tab list', view.expanded ? 'Enter shrink' : 'Enter expand', '1-3 tabs');
+  // Most important first: the footer drops keys from the end when the pane is narrow.
+  keys.push(view.focus === 'list' ? 'Tab reader' : 'Tab list', '? help');
+  keys.push(view.focus === 'list' && !view.expanded ? 'q quit' : 'Esc back');
+  keys.push(view.expanded ? 'Enter shrink' : 'Enter expand', '1-3 tabs');
   if (view.projectCount > 1) keys.push('p project');
-  keys.push('r reload', '? help');
-  if (view.focus === 'list') keys.push('q quit');
+  keys.push('r reload');
   return keys;
 }
 

@@ -167,3 +167,4 @@ Updated 2026-09-16 after the first bch-cloak pilot; evidence and numbers in
 
 **The supervisor is not gone until jobs 2–5 of the pilot write-up (exceptions,
 planning, operator window, oversight) have homes that are not a live chat.**
+Proposed homes: `design-M2-supervisor-homes.md`.

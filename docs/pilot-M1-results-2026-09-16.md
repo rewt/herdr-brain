@@ -116,6 +116,8 @@ Evidence for each gap:
 
 ## What would remove the chat (proposal, not decided)
 
+Worked out in detail in `design-M2-supervisor-homes.md`.
+
 Give jobs 2–5 homes that are not a live conversation:
 
 - **Exceptions → org.** Watchers and sessions write failures as ATTENTION items

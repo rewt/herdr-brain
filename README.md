@@ -214,7 +214,7 @@ WAITING ON YOU (3)
 …
 ─ Adopt the theft fix once its review passes? ─────────────── [1 Summary] 2 Document 3 Context
   Recommend: yes. O1 is the only option where the network itself refuses the theft.
-y approve   n decline   o open   Tab reader   Enter expand   1-3 tabs   r reload   ? help   q quit
+y approve   n decline   o open   Tab reader   ? help   q quit   Enter expand   1-3 tabs   r reload
 ```
 
 ### Install and run

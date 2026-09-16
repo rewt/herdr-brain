@@ -422,6 +422,10 @@ without the console dependencies installed.
 
 ## Cutover (after acceptance; the operator or an executive session does this, not the engineer)
 
+First update every `org` on PATH (and every checkout an agent runs it from)
+to this version before the first question is answered `no`. An older `org`
+treats a question answered `no` as resolved and releases the work it blocked.
+
 1. Run `npm --prefix console ci`, write `~/.config/herdr-org/console.json`,
    and run `contrib/console-pane.sh bch-cloak`.
 2. Set `approvals` in `bastian/.org/config.json` (all categories `ask`).

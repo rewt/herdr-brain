@@ -95,6 +95,19 @@ test('a declined question keeps its dependents blocked until the work is re-plan
   assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'ready');
 });
 
+test('a decline says so truthfully for a dependent that is already running', () => {
+  const t = withWork();
+  t.ok(ASK(t.memo));
+  t.ok(['block', 'REV-1', '--by', 'HUM-1']);
+  t.ok(['start', 'ENG-1']);
+  const out = t.ok(['answer', 'HUM-1', 'no']);
+  assert.match(out, /ENG-1 is already running \(R-1\); the decline does not stop it/);
+  assert.doesNotMatch(out, /ENG-1 stays blocked/);
+  assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'active');
+  assert.match(out, /REV-1 stays blocked: declined/);
+  assert.equal(t.json(['show', 'REV-1', '--json']).status, 'blocked');
+});
+
 test('a reply that starts with yes or no is that answer, and the rest is kept as the note', () => {
   for (const [reply, answer, note] of [
     ['No.', 'no', null],
@@ -205,4 +218,15 @@ test('older folds ignore the new fields', () => {
   assert.equal(statusV0(s, 'HUM-1'), 'done');
   assert.equal(statusV0(s, 'ENG-1'), 'ready');
   assert.equal(s.items.get('HUM-1').meta.answer, 'yes');
+});
+
+test('an older fold treats a "no" as resolved and releases the dependents', () => {
+  // This is why every org on PATH must be updated before the first "no" answer (spec, Cutover).
+  const t = withWork();
+  t.ok(ASK(t.memo));
+  t.ok(['answer', 'HUM-1', 'no']);
+  const s = foldV0(t.events());
+  assert.equal(statusV0(s, 'HUM-1'), 'done');
+  assert.equal(statusV0(s, 'ENG-1'), 'ready');
+  assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'blocked');
 });

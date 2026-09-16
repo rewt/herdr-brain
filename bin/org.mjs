@@ -341,7 +341,11 @@ function answer(argv) {
   const after = openOrg();
   for (const blocked of result.dependents) {
     const now = itemStatus(after.state, blocked);
-    if (reply === 'no') {
+    const running = openRuns(after.state, blocked);
+    if (reply === 'no' && running.length) {
+      // An open run counts before blockers in itemStatus, so the item is active, not blocked.
+      out(`${blocked} is already running (${running.map((r) => r.id).join(', ')}); the decline does not stop it\n`);
+    } else if (reply === 'no') {
       out(`${blocked} stays blocked: declined (re-plan it, then: org unblock ${blocked} --by ${id})\n`);
     } else if (now !== 'blocked') {
       out(`${blocked} is no longer blocked by ${id} (now ${now})\n`);

@@ -1,0 +1,18 @@
+{
+  "name": "herdr-org-console",
+  "version": "0.1.0",
+  "description": "Herdr Brain console: the operator's view of an organization, in one terminal pane.",
+  "type": "module",
+  "private": true,
+  "main": "app.mjs",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ink": "6.8.0",
+    "react": "19.3.0"
+  }
+}

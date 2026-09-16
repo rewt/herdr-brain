@@ -253,7 +253,8 @@ writes an example there and exits; edit it and delete its `"example"` line.
   assistant message of the transcript whose `agent-name` entry names the session; only transcripts
   modified today are read, and each is cached by modification time.
 - Herdr: `herdr agent list` on the same cadence. Runs are joined to agents by `meta.agent`; live
-  `settle-*`, `exec-*`, `plan-*` and `audit-*` agents are listed as executive sessions. Without
+  `settle-*`, `exec-*`, `plan-*` and `audit-*` agents working inside the project's `cwd` are
+  listed as executive sessions. Without
   Herdr the header says "Herdr unavailable" and states read "unknown".
 
 ### Screen

@@ -73,7 +73,15 @@ function nameTime(name) {
   return m ? `${m[1]}:${m[2]}` : '--:--';
 }
 
-export function buildRows({ today, herdr = null, sessions = null }) {
+function within(dir, root) {
+  if (!root) return true;
+  if (!dir) return false;
+  const r = root.replace(/\/+$/, '');
+  return dir === r || dir.startsWith(`${r}/`);
+}
+
+// cwd: the project's checkout; executive sessions elsewhere belong to other projects.
+export function buildRows({ today, herdr = null, sessions = null, cwd = null }) {
   const agentsByName = new Map((herdr?.agents ?? []).filter((a) => a.name).map((a) => [a.name, a]));
   const herdrOk = Boolean(herdr?.ok);
   const liveState = (name) => {
@@ -154,7 +162,7 @@ export function buildRows({ today, herdr = null, sessions = null }) {
   const ledgerByName = new Map((sessions?.sessions ?? []).map((s) => [s.name, s]));
   for (const a of herdr?.agents ?? []) {
     const kind = sessionKind(a.name);
-    if (!kind || runAgents.has(a.name)) continue;
+    if (!kind || runAgents.has(a.name) || !within(a.cwd, cwd)) continue;
     const entry = ledgerByName.get(a.name);
     const time = entry ? entry.time.slice(0, 5) : nameTime(a.name);
     sections.running.push({

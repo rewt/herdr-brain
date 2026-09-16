@@ -61,7 +61,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
 
   function rebuild({ reorder = false } = {}) {
     const previousKeys = flatRows(s.sections).map((r) => r.key);
-    const built = buildRows({ today: s.today, herdr: s.herdr, sessions: s.notes });
+    const built = buildRows({ today: s.today, herdr: s.herdr, sessions: s.notes, cwd: project().cwd });
     s.sections = reorder ? built : orderSections(built, s.order);
     s.order = orderKeys(s.sections);
     s.ui = { ...s.ui, selectedKey: keepSelection(s.ui.selectedKey, previousKeys, flatRows(s.sections)) };

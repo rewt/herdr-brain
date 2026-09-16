@@ -60,8 +60,10 @@ function today() {
 
 const HERDR = { ok: true, agents: [
   { name: 'lane-review', status: 'working', tab: 't1', pane: 'p1' },
-  { name: 'settle-r-12-1611', status: 'idle', tab: 't2', pane: 'p2' },
-  { name: 'exec-1700', status: 'working', tab: 't3', pane: 'p3' },
+  { name: 'settle-r-12-1611', status: 'idle', tab: 't2', pane: 'p2', cwd: '/tmp/proj' },
+  { name: 'exec-1700', status: 'working', tab: 't3', pane: 'p3', cwd: '/tmp/proj/sub' },
+  { name: 'exec-1701', status: 'working', tab: 't4', pane: 'p4', cwd: '/tmp/other-project' },
+  { name: 'plan-1702', status: 'working', tab: 't5', pane: 'p5', cwd: '/tmp/project' },
   { name: null, status: 'idle' },
 ] };
 
@@ -71,7 +73,7 @@ function sessions() {
 }
 
 function model() {
-  return buildRows({ today: today(), herdr: HERDR, sessions: sessions() });
+  return buildRows({ today: today(), herdr: HERDR, sessions: sessions(), cwd: '/tmp/proj' });
 }
 
 const CODE = /\b[A-Z][A-Z0-9]*-\d+\b|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b/i;
@@ -139,7 +141,7 @@ test('refreshes keep rows in place and selection on the same row', () => {
   // Next refresh: a new question ranks first, and two existing ones swap rank.
   const t = today();
   t.waiting = [{ ...t.waiting[1], id: 'HUM-9', title: 'New question?' }, t.waiting[2], t.waiting[1], t.waiting[0]];
-  const next = orderSections(buildRows({ today: t, herdr: HERDR, sessions: sessions() }), keys);
+  const next = orderSections(buildRows({ today: t, herdr: HERDR, sessions: sessions(), cwd: '/tmp/proj' }), keys);
   assert.deepEqual(next[0].rows.map((r) => r.question), ['HUM-9', 'HUM-5', 'HUM-6', 'HUM-7']);
   assert.deepEqual(stableOrder(['a', 'b'], [{ key: 'c' }, { key: 'b' }, { key: 'a' }]).map((r) => r.key), ['c', 'a', 'b']);
 

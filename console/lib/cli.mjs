@@ -34,7 +34,8 @@ export async function orgToday(project) {
 }
 
 export function answerArgs({ question, answer, note, overrule }) {
-  return ['answer', question, answer, ...(note ? ['--note', note] : []), ...(overrule ? ['--overrule'] : [])];
+  // --note=… keeps a reason that starts with a dash from reading as an option.
+  return ['answer', question, answer, ...(note ? [`--note=${note}`] : []), ...(overrule ? ['--overrule'] : [])];
 }
 
 export async function orgAnswer(project, request) {

@@ -13,7 +13,7 @@ export function initialState() {
     listOffset: 0,
     selectedKey: null,
     help: false,
-    mode: null, // { kind: 'reason' | 'confirm', action, question, headline, text }
+    mode: null, // { kind: 'reason' | 'confirm', action, answer, question, headline, text }
     message: '',
     messageStyle: 'status',
   };
@@ -21,15 +21,33 @@ export function initialState() {
 
 const VERB = { approve: 'Approve', decline: 'Decline', overrule: 'Overrule' };
 
-export function promptText(state) {
+// The answer an overrule records: the opposite of the recorded one (a text answer counts as yes).
+export function overruleAnswer(recorded) {
+  return String(recorded ?? '').trim().toLowerCase() === 'no' ? 'yes' : 'no';
+}
+
+function verb(m) {
+  return m.action === 'overrule' ? `Overrule to ${m.answer}` : VERB[m.action];
+}
+
+// The prompt in parts, so the frame can shorten the title and keep the reason,
+// its cursor and the keys in view: head + title + mid + reason + tail.
+// `keep` says which end of a long reason stays visible.
+export function promptParts(state) {
   const m = state.mode;
   if (!m) return null;
   if (m.kind === 'reason') {
-    return `${VERB[m.action]} “${m.headline}”. Reason (required): ${m.text}▏  Enter next · Esc cancel`;
+    return { head: `${verb(m)} “`, title: m.headline, mid: '”. Reason: ', reason: m.text, keep: 'end', tail: '▏  Enter next · Esc cancel' };
   }
-  const reason = m.text ? ` (reason: ${m.text})` : '';
   const question = /[?？]$/.test(m.headline) ? m.headline : `${m.headline}?`;
-  return `${VERB[m.action]}: ${question}${reason} Enter to confirm, Esc to cancel`;
+  return m.text
+    ? { head: `${verb(m)}: `, title: question, mid: ' (reason: ', reason: m.text, keep: 'start', tail: ') Enter to confirm, Esc to cancel' }
+    : { head: `${verb(m)}: `, title: question, mid: '', reason: '', keep: 'start', tail: ' Enter to confirm, Esc to cancel' };
+}
+
+export function promptText(state) {
+  const p = promptParts(state);
+  return p && `${p.head}${p.title}${p.mid}${p.reason}${p.tail}`;
 }
 
 function say(state, message, style = 'status') {
@@ -84,7 +102,7 @@ function modeKeys(state, input, key) {
     return { state, effects: [] };
   }
   if (key.return) {
-    const answer = m.action === 'approve' ? 'yes' : 'no';
+    const answer = m.answer;
     return {
       state: say({ ...state, mode: null }, `Recording ${answer}: ${m.headline}…`),
       effects: [{ type: 'answer', question: m.question, answer, note: m.text || null, overrule: m.action === 'overrule', headline: m.headline }],
@@ -128,12 +146,13 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
   }
   if (input === 'y') {
     if (!row?.actions.includes('approve')) return done(say(state, 'Nothing to approve here: select a question under Waiting on you.', 'warn'));
-    return done(say({ ...state, mode: { kind: 'confirm', action: 'approve', question: row.question, headline: row.headline, text: '' } }, ''));
+    return done(say({ ...state, mode: { kind: 'confirm', action: 'approve', answer: 'yes', question: row.question, headline: row.headline, text: '' } }, ''));
   }
   if (input === 'n') {
     const action = row?.actions.includes('decline') ? 'decline' : row?.actions.includes('overrule') ? 'overrule' : null;
     if (!action) return done(say(state, 'Nothing to decline here.', 'warn'));
-    return done(say({ ...state, mode: { kind: 'reason', action, question: row.question, headline: row.headline, text: '' } }, ''));
+    const answer = action === 'overrule' ? overruleAnswer(row.data?.answer) : 'no';
+    return done(say({ ...state, mode: { kind: 'reason', action, answer, question: row.question, headline: row.headline, text: '' } }, ''));
   }
   if (input === 'o') {
     if (!row?.doc?.path && !row?.doc?.text) return done(say(state, `No document to open: ${row?.doc?.missing ?? 'nothing selected'}.`, 'warn'));

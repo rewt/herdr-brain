@@ -72,8 +72,17 @@ test('approving and declining from the console record the operator\'s answers', 
     assert.equal(JSON.parse(t.org('show', 'DOC-1', '--json')).status, 'blocked', 'a declined question keeps its work blocked');
     assert.ok(session.sections.find((s) => s.key === 'decided').rows.some((r) => r.key === 'a:HUM-2' && r.state === 'no · you'));
 
+    // A reason that starts with a dash is recorded as written.
+    t.org('ask', 'Tidy the notes?', '--parent', 'G-1', '--category', 'other', '--recommend', 'yes', '--why', 'They are messy.');
+    await session.refresh();
+    session.ui = { ...session.ui, selectedKey: 'q:HUM-4' };
+    await keys(session, [['n'], ...[...'- not now'].map((ch) => [ch]), ['', { return: true }], ['', { return: true }]]);
+    assert.equal(session.ui.messageStyle, 'ok', session.ui.message);
+    assert.equal(JSON.parse(t.org('show', 'HUM-4', '--json')).closed.note, '- not now');
+
     // Answered behind the console's back: the CLI refuses, and nothing changes locally.
     t.org('answer', 'HUM-3', 'no');
+    session.ui = { ...session.ui, selectedKey: 'q:HUM-3' };
     await keys(session, [['y'], ['', { return: true }]]);
     assert.equal(session.ui.messageStyle, 'error');
     assert.match(session.ui.message, /^Not recorded: HUM-3 was already answered no/);
@@ -144,9 +153,68 @@ test('focus refuses a gone agent, open suspends for an editor, and a failed read
   down.stop();
 });
 
+test('overruling from the console records the opposite answer', async () => {
+  const t = tempOrg();
+  const configFile = path.join(t.dir, 'config.json');
+  const orgConfig = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  orgConfig.approvals = { default: 'ask', categories: { tooling: 'auto' } };
+  fs.writeFileSync(configFile, JSON.stringify(orgConfig));
+  t.org('ask', 'Skip the old tool?', '--parent', 'G-1', '--category', 'tooling', '--recommend', 'no', '--why', 'It still works.', '--blocks', 'DOC-1');
+  const session = createSession({ config: t.config, deps: { herdrAgents: noHerdr } });
+  await session.refresh({ reorder: true });
+  session.frame(100, 29);
+  session.ui = { ...session.ui, selectedKey: 'a:HUM-4' };
+  await keys(session, [['n']]);
+  assert.match(session.frame(100, 29).lines.at(-1).text, /^Overrule to yes “Skip the old tool\?”/);
+  await keys(session, [...[...'Replace it'].map((ch) => [ch]), ['', { return: true }], ['', { return: true }]]);
+  assert.equal(session.ui.messageStyle, 'ok', session.ui.message);
+  const hum4 = JSON.parse(t.org('show', 'HUM-4', '--json'));
+  assert.equal(hum4.meta.answer, 'yes');
+  assert.equal(hum4.meta.answered_by, 'human');
+  assert.equal(hum4.meta.overruled, true);
+  const row = flatRows(session.sections).find((r) => r.key === 'a:HUM-4');
+  assert.deepEqual(row.actions, [], 'an operator answer is not offered for overrule again');
+  session.stop();
+});
+
+test('a text document opens from a private file that is removed afterwards', async () => {
+  const t = tempOrg();
+  t.org('note', 'ENG-1', 'Keep the cells as they are.', '--decision');
+  const seen = [];
+  const inspect = (file) => {
+    const st = fs.lstatSync(file);
+    seen.push({ file, mode: st.mode & 0o777, dirMode: fs.statSync(path.dirname(file)).mode & 0o777, text: fs.readFileSync(file, 'utf8') });
+    return { ok: true };
+  };
+  let blocking = true;
+  const session = createSession({ config: t.config, deps: {
+    herdrAgents: noHerdr,
+    viewer: () => ({ cmd: 'x', args: [], blocking, label: 'x' }),
+    openBlocking: (viewer, file) => inspect(file),
+    openDetached: async (viewer, file) => inspect(file),
+  } });
+  await session.refresh({ reorder: true });
+  const note = flatRows(session.sections).find((r) => r.kind === 'decision');
+  assert.ok(note?.doc.text, 'the decision note has text to open');
+  session.ui = { ...session.ui, selectedKey: note.key };
+  await keys(session, [['o']]);
+  assert.equal(seen[0].mode, 0o600);
+  assert.equal(seen[0].dirMode, 0o700);
+  assert.equal(seen[0].text, note.doc.text);
+  assert.equal(fs.existsSync(path.dirname(seen[0].file)), false, 'removed once the editor returns');
+
+  blocking = false;
+  await keys(session, [['o']]);
+  assert.notEqual(path.dirname(seen[1].file), path.dirname(seen[0].file));
+  assert.equal(fs.existsSync(seen[1].file), true, 'kept while a detached viewer may read it');
+  session.stop();
+  assert.equal(fs.existsSync(path.dirname(seen[1].file)), false, 'removed when the console stops');
+});
+
 test('answers are passed as an argument array', () => {
   assert.deepEqual(answerArgs({ question: 'HUM-1', answer: 'no', note: "it's; rm -rf /", overrule: true }),
-    ['answer', 'HUM-1', 'no', '--note', "it's; rm -rf /", '--overrule']);
+    ['answer', 'HUM-1', 'no', "--note=it's; rm -rf /", '--overrule']);
+  assert.deepEqual(answerArgs({ question: 'HUM-1', answer: 'no', note: '--later' }), ['answer', 'HUM-1', 'no', '--note=--later']);
   assert.deepEqual(answerArgs({ question: 'HUM-1', answer: 'yes', note: null }), ['answer', 'HUM-1', 'yes']);
 });
 

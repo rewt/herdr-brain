@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
-import { initialState, promptText, reduce } from './controller.mjs';
+import { initialState, promptParts, reduce } from './controller.mjs';
 import { heights, renderFrame } from './frame.mjs';
 import { buildRows, flatRows, hhmm, keepSelection, orderKeys, orderSections } from './model.mjs';
 import { createSessionReader, stopFileExists } from './sources.mjs';
@@ -47,6 +47,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     timer: null,
     size: { cols: 100, rows: 30 },
     lastReaderMax: 0,
+    tempDirs: new Set(), // text documents handed to a viewer that returns at once
   };
   const project = () => config.projects[s.index];
 
@@ -166,15 +167,15 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       project: { org: project().org },
       message: s.ui.message,
       messageStyle: s.ui.messageStyle,
-      prompt: promptText(s.ui),
+      prompt: promptParts(s.ui),
       projectCount: config.projects.length,
       rows, cols,
     };
   }
 
-  function frame(cols, rows) {
+  function frame(cols, rows, options) {
     s.size = { cols, rows };
-    const out = renderFrame(view(cols, rows), cols, rows);
+    const out = renderFrame(view(cols, rows), cols, rows, options);
     s.ui = { ...s.ui, listOffset: out.listOffset, readerScroll: Math.min(s.ui.readerScroll, out.readerMax) };
     s.lastReaderMax = out.readerMax;
     return out;
@@ -232,14 +233,24 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
           say(`file not found: ${file}`, 'error');
           return;
         }
-        if (!file) {
-          file = path.join(os.tmpdir(), `herdr-console-${effect.row.replace(/[^\w-]+/g, '-')}.md`);
-          fs.writeFileSync(file, effect.text);
-        }
         const viewer = d.viewer();
-        const r = viewer.blocking
-          ? await d.suspend(() => d.openBlocking(viewer, file))
-          : await d.openDetached(viewer, file);
+        let dir = null;
+        if (!file) {
+          // A private folder and a new file: nothing else can own or redirect the name.
+          dir = fs.mkdtempSync(path.join(os.tmpdir(), 'herdr-console-'));
+          file = path.join(dir, `${effect.row.replace(/[^\w-]+/g, '-')}.md`);
+          fs.writeFileSync(file, effect.text, { mode: 0o600, flag: 'wx' });
+        }
+        let r;
+        try {
+          r = viewer.blocking
+            ? await d.suspend(() => d.openBlocking(viewer, file))
+            : await d.openDetached(viewer, file);
+        } finally {
+          // A detached viewer may still be loading the file; it goes when the console stops.
+          if (dir && viewer.blocking) fs.rmSync(dir, { recursive: true, force: true });
+          else if (dir) s.tempDirs.add(dir);
+        }
         say(r.ok ? `Opened in ${viewer.label}: ${file}` : `Could not open ${file}: ${r.error}`, r.ok ? 'status' : 'error');
         return;
       }
@@ -293,6 +304,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
   function stop() {
     s.watcher?.close();
     clearInterval(s.timer);
+    for (const dir of s.tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+    s.tempDirs.clear();
   }
 
   return {

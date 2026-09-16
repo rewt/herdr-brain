@@ -99,8 +99,13 @@ org answer HUM-5 yes|no|"<short text>" [--note "why"] [--overrule]
 - **`no` does not release the work.** A question closed with `meta.answer=no` counts as unresolved
   for the items it blocks: they stay `blocked` (status shows `declined: <question>`) until someone
   re-plans them and runs `org unblock <ID> --by HUM-5`. `yes` and text answers release them.
+- A reply whose first word is `yes` or `no` is that answer: `"No."` and `"no, not yet"` decline,
+  and whatever follows the word is kept in front of the `--note`. Other replies are text answers.
+  `org ask --recommend` takes the same word alone (`"Yes."` is fine; `"yes, after review"` is
+  refused: the rest belongs in `--why`).
 - A second answer is refused. `--overrule` re-answers an answered question (typically one answered
-  automatically) and records `meta.overruled=true`.
+  automatically) and records `meta.overruled=true`; it is refused when the answer would not change.
+- `org show` and run briefs list a declined blocker as `declined (answered no)`, not `done`.
 
 ### Categories and approval policy
 
@@ -279,7 +284,7 @@ hint. Every state is written as text; `NO_COLOR` turns color off entirely.
 | 1 / 2 / 3 | Reader tab: Summary, Document, Context |
 | Enter | Expand the reader to full height, or shrink it |
 | y | Approve the selected question; Enter confirms, Esc cancels |
-| n | Decline a question, or overrule an automatic answer: a one-line reason is required, then Enter confirms |
+| n | Decline a question, or overrule an agent's or automatic answer to its opposite (`no` becomes `yes`, anything else `no`; the prompt names it): a one-line reason is required, then Enter confirms |
 | o | Open the document with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open` |
 | f | Go to the agent's Herdr tab; refused visibly if the agent is gone |
 | p | Next project, when more than one is configured |
@@ -289,7 +294,10 @@ hint. Every state is written as text; `NO_COLOR` turns color off entirely.
 | q | Quit (only from the list) |
 
 The console records answers only through `org answer` (a child process with an argument array,
-`ORG_ACTOR` removed, so the answer is the operator's) and re-reads at once. It never appends to
+`ORG_ACTOR` removed, so the answer is the operator's; the reason goes as `--note=<reason>`) and
+re-reads at once. Everything agents wrote is shown with terminal escape sequences and control
+characters removed. A text document opened with `o` is written to a private temporary folder and
+removed when the editor returns (or, for macOS `open`, when the console quits). It never appends to
 `events.jsonl`, and never starts, stops or messages agents; its only action on agents is focusing
 a tab. Answers are acted on by the next executive pass.
 

@@ -149,8 +149,9 @@ function Console() {
       notify();
     });
   });
-  // One line short of the terminal, so Ink never has to clear the whole screen.
-  const { lines } = session.frame(dims.cols, Math.max(1, dims.rows - 1));
+  // One line short of the terminal, so Ink never has to clear the whole screen; the
+  // minimum-size check still applies to the terminal itself.
+  const { lines } = session.frame(dims.cols, Math.max(1, dims.rows - 1), { termRows: dims.rows });
   return h(Box, { flexDirection: 'column' },
     ...lines.map((line, i) => h(Text, { key: i, wrap: 'truncate-end', ...styleProps(line.style) }, line.text || ' ')));
 }

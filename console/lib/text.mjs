@@ -22,6 +22,17 @@ export function charWidth(ch) {
   return isWide(cp) ? 2 : 1;
 }
 
+// Agent-written text must not drive the terminal: escape sequences (CSI, OSC, DCS and
+// the like, 7- and 8-bit), other C0/C1 controls and bidi overrides are removed. Tabs
+// become spaces; newlines are kept only when `keepNewlines`.
+const ESCAPES = /(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]|(?:\x1b[\]PX^_]|[\x90\x98\x9d-\x9f])[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)?|\x1b[ -/]*[0-~]?/g;
+const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g;
+
+export function sanitize(text, { keepNewlines = false } = {}) {
+  const t = String(text ?? '').replace(ESCAPES, '').replace(/\r\n?/g, '\n').replace(/\t/g, ' ');
+  return (keepNewlines ? t : t.replace(/\n/g, ' ')).replace(CONTROLS, '');
+}
+
 export function cellWidth(text) {
   let w = 0;
   for (const ch of String(text)) w += charWidth(ch);
@@ -34,7 +45,7 @@ export function oneLine(text) {
 
 // Cut to at most width cells, ending in "…" when something was cut.
 export function clip(text, width) {
-  const t = String(text ?? '');
+  const t = sanitize(text);
   if (width <= 0) return '';
   if (cellWidth(t) <= width) return t;
   let out = '';
@@ -46,6 +57,23 @@ export function clip(text, width) {
     w += cw;
   }
   return out.trimEnd() + '…';
+}
+
+// Keeps the last cells instead: "…" then the end of the text.
+export function clipStart(text, width) {
+  const t = sanitize(text);
+  if (width <= 0) return '';
+  if (cellWidth(t) <= width) return t;
+  const chars = [...t];
+  let out = '';
+  let w = 0;
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const cw = charWidth(chars[i]);
+    if (w + cw > width - 1) break;
+    out = chars[i] + out;
+    w += cw;
+  }
+  return '…' + out.trimStart();
 }
 
 export function pad(text, width) {
@@ -63,7 +91,7 @@ export function padStart(text, width) {
 export function wrap(text, width, hang = '') {
   const out = [];
   const hangWidth = cellWidth(hang);
-  for (const para of String(text ?? '').split('\n')) {
+  for (const para of sanitize(text, { keepNewlines: true }).split('\n')) {
     const words = para.split(/\s+/).filter(Boolean);
     if (!words.length) {
       out.push('');

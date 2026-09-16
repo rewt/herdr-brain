@@ -1,10 +1,10 @@
-// The whole screen as lines: renderFrame(view, cols, rows) → { lines, listOffset, readerMax }.
+// The whole screen as lines: renderFrame(view, cols, rows[, { termRows }]) → { lines, listOffset, readerMax }.
 // Every line fits `cols` cells and there are at most `rows` lines. Each line is
 // { text, style }; the app maps styles to Ink props and drops color under NO_COLOR.
 // Nothing here depends on Ink, so the layout is tested at any size.
 import { renderMarkdown } from './markdown.mjs';
 import { NO_PLAIN, contextPairs, summaryParagraphs } from './model.mjs';
-import { cellWidth, clip, pad, padStart, wrap } from './text.mjs';
+import { cellWidth, clip, clipStart, pad, padStart, sanitize, wrap } from './text.mjs';
 
 export const MIN_COLS = 80;
 export const MIN_ROWS = 20;
@@ -122,6 +122,21 @@ function fitKeys(keys, cols) {
   return out.join('   ');
 }
 
+const PROMPT_TITLE_MIN = 10;
+
+// Only the title and, past its share, the reason are shortened: the verb, the
+// cursor and the Enter/Esc keys always fit.
+export function promptLine(p, cols) {
+  const room = cols - cellWidth(p.head) - cellWidth(p.mid) - cellWidth(p.tail);
+  if (room < 1) return clip(`${p.head}${p.mid}${p.tail}`, cols);
+  const titleShare = Math.min(cellWidth(p.title), PROMPT_TITLE_MIN);
+  const reasonRoom = room - titleShare;
+  const reason = cellWidth(p.reason) <= reasonRoom ? p.reason
+    : p.keep === 'end' ? clipStart(p.reason, reasonRoom) : clip(p.reason, reasonRoom);
+  const title = clip(p.title, room - cellWidth(reason));
+  return clip(`${p.head}${title}${p.mid}${reason}${p.tail}`, cols);
+}
+
 export const HELP = [
   'KEYS',
   '↑/↓ j/k  PgUp/PgDn  Home/End   move in the list (or scroll the reader)',
@@ -129,7 +144,7 @@ export const HELP = [
   '1 / 2 / 3                      reader tab: Summary, Document, Context',
   'Enter                          expand or shrink the reader',
   'y                              approve the selected question (then Enter to confirm)',
-  'n                              decline, or overrule an automatic answer (reason, then Enter)',
+  'n                              decline, or overrule an agent\'s answer to its opposite (reason, then Enter)',
   'o                              open the document in $VISUAL, $EDITOR or macOS open',
   'f                              go to the agent\'s Herdr tab',
   'p                              switch project        r   reload now',
@@ -153,13 +168,14 @@ export function headerText(view, cols) {
   return left + ' '.repeat(Math.max(1, cols - cellWidth(left) - cellWidth(right))) + right;
 }
 
-export function renderFrame(view, cols, rows) {
+// `termRows` is the terminal's height when the app draws fewer rows than it has.
+export function renderFrame(view, cols, rows, { termRows = rows } = {}) {
   const lines = [];
-  if (cols < MIN_COLS || rows < MIN_ROWS) {
+  if (cols < MIN_COLS || termRows < MIN_ROWS) {
     const row = view.selected;
     for (const text of [
       clip(`${view.header?.project ?? 'console'} · ${view.header?.clock ?? ''}`, cols),
-      ...wrap(`Resize to at least ${MIN_COLS}×${MIN_ROWS} (now ${cols}×${rows}).`, cols),
+      ...wrap(`Resize to at least ${MIN_COLS}×${MIN_ROWS} (now ${cols}×${termRows}).`, cols),
       row ? clip(`Selected: ${row.headline}`, cols) : '',
       ...wrap(view.message ?? '', cols),
       clip('q quit   Esc close', cols),
@@ -205,7 +221,8 @@ export function renderFrame(view, cols, rows) {
   }
 
   lines.push({ text: clip(view.message ?? '', cols), style: view.messageStyle ?? 'status' });
-  const footer = view.prompt ? clip(view.prompt, cols) : fitKeys(footerKeys(view, view.selected), cols);
+  const footer = view.prompt ? promptLine(view.prompt, cols) : fitKeys(footerKeys(view, view.selected), cols);
   lines.push({ text: footer, style: view.prompt ? 'prompt' : 'footer' });
-  return { lines, listOffset, readerMax };
+  // Every piece above is already clean; this keeps it so for any future line.
+  return { lines: lines.map((l) => ({ ...l, text: sanitize(l.text) })), listOffset, readerMax };
 }

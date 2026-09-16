@@ -2,6 +2,7 @@
 // and Herdr's agent list. Parsers are pure; file access goes through `fsApi` so tests
 // can use fixtures. Nothing here writes.
 import nodeFs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 // "HH:MM:SS name mode subject" per line (contrib/settle-watch.mjs writes it).
@@ -39,32 +40,44 @@ export function agentNames(jsonlText) {
   return names;
 }
 
-// The text of the last assistant message: its text blocks joined, tool calls ignored.
+// One transcript line as an assistant note ({ text, at }), or null: text blocks
+// joined, tool calls ignored.
+function assistantNote(line) {
+  if (!line.includes('"assistant"')) return null;
+  let e;
+  try {
+    e = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (e.type !== 'assistant' || e.isSidechain) return null;
+  const content = e.message?.content;
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content) ? content.filter((b) => b?.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n\n') : '';
+  return text.trim() ? { text: text.trim(), at: e.timestamp ?? null } : null;
+}
+
+// The text of the last assistant message.
 export function lastAssistantText(jsonlText) {
   const lines = String(jsonlText).split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
-    if (!line.includes('"assistant"')) continue;
-    let e;
-    try {
-      e = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (e.type !== 'assistant' || e.isSidechain) continue;
-    const content = e.message?.content;
-    const text = typeof content === 'string'
-      ? content
-      : Array.isArray(content) ? content.filter((b) => b?.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n\n') : '';
-    if (text.trim()) return { text: text.trim(), at: e.timestamp ?? null };
+    const note = assistantNote(lines[i]);
+    if (note) return note;
   }
   return null;
 }
 
-// Finds and reads session transcripts, caching per file by modification time.
+const CHUNK = 1 << 20;
+
+// Finds and reads session transcripts. Each file is read once, then only the bytes
+// appended since: agent names and the last assistant note are kept per file, so a
+// refresh costs a stat and the new lines. A name not found stays unsearched until a
+// transcript in the folders grows or appears.
 export function createSessionReader({ fsApi = nodeFs } = {}) {
-  const files = new Map(); // file → { mtimeMs, size, names, note }
-  const located = new Map(); // `${dirs}|${name}` → file
+  const files = new Map(); // file → { mtimeMs, size, offset, names, note }
+  const located = new Map(); // `${dirs}|${cwd}|${name}` → file
+  const missing = new Map(); // same key → candidate signature when last searched
 
   function stat(file) {
     try {
@@ -75,18 +88,46 @@ export function createSessionReader({ fsApi = nodeFs } = {}) {
     }
   }
 
-  function load(file) {
-    const st = stat(file);
-    if (!st) return null;
-    const cached = files.get(file);
-    if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached;
-    let text;
+  function readLines(file, entry, size) {
+    let fd;
     try {
-      text = fsApi.readFileSync(file, 'utf8');
+      fd = fsApi.openSync(file, 'r');
     } catch {
-      return null;
+      return false;
     }
-    const entry = { ...st, names: agentNames(text), note: lastAssistantText(text) };
+    try {
+      const buf = Buffer.alloc(CHUNK);
+      let carry = Buffer.alloc(0);
+      let pos = entry.offset;
+      while (pos < size) {
+        const n = fsApi.readSync(fd, buf, 0, Math.min(CHUNK, size - pos), pos);
+        if (n <= 0) break;
+        pos += n;
+        const data = Buffer.concat([carry, buf.subarray(0, n)]);
+        const end = data.lastIndexOf(10);
+        // A partly written last line is normal while the session runs: it is read next time.
+        carry = end < 0 ? data : data.subarray(end + 1);
+        if (end < 0) continue;
+        for (const line of data.subarray(0, end).toString('utf8').split('\n')) {
+          if (line.includes('agent-name')) agentNames(line).forEach((name) => entry.names.add(name));
+          entry.note = assistantNote(line) ?? entry.note;
+        }
+      }
+      entry.offset = pos - carry.length;
+      return true;
+    } finally {
+      fsApi.closeSync(fd);
+    }
+  }
+
+  function load(file, st = stat(file)) {
+    if (!st) return null;
+    let entry = files.get(file);
+    if (entry && entry.mtimeMs === st.mtimeMs && entry.size === st.size) return entry;
+    // A file that shrank was rewritten: start over.
+    if (!entry || st.size < entry.offset) entry = { offset: 0, names: new Set(), note: null };
+    if (!readLines(file, entry, st.size)) return null;
+    Object.assign(entry, st);
     files.set(file, entry);
     return entry;
   }
@@ -106,24 +147,30 @@ export function createSessionReader({ fsApi = nodeFs } = {}) {
           if (!n.endsWith('.jsonl')) continue;
           const file = path.join(folder, n);
           const st = stat(file);
-          if (st && st.mtimeMs >= sinceMs) out.push({ file, mtimeMs: st.mtimeMs });
+          if (st && st.mtimeMs >= sinceMs) out.push({ file, ...st });
         }
       }
     }
-    return out.sort((a, b) => b.mtimeMs - a.mtimeMs).map((c) => c.file);
+    return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
   }
 
   // Only transcripts touched since `sinceMs` are read: a session in today's ledger wrote today.
-  function find({ configDirs, cwd, name, sinceMs = 0 }) {
+  function find({ configDirs, cwd, name, sinceMs = 0 }, list = null) {
     const key = `${configDirs.join(':')}|${cwd}|${name}`;
     const known = located.get(key);
     if (known && load(known)?.names.has(name)) return known;
-    for (const file of candidates(configDirs, cwd, sinceMs)) {
-      if (load(file)?.names.has(name)) {
-        located.set(key, file);
-        return file;
+    located.delete(key);
+    const found = list ?? candidates(configDirs, cwd, sinceMs);
+    const signature = found.map((c) => `${c.file}:${c.size}`).join('|');
+    if (missing.get(key) === signature) return null;
+    for (const c of found) {
+      if (load(c.file, c)?.names.has(name)) {
+        located.set(key, c.file);
+        missing.delete(key);
+        return c.file;
       }
     }
+    missing.set(key, signature);
     return null;
   }
 
@@ -135,8 +182,13 @@ export function createSessionReader({ fsApi = nodeFs } = {}) {
       return { sessions: [], count: 0, error: error.code === 'ENOENT' ? null : `ledger unreadable: ${error.code ?? error.message}` };
     }
     const entries = parseLedger(text);
+    let list = null;
     const sessions = entries.map((entry) => {
-      const file = find({ configDirs, cwd, name: entry.name, sinceMs });
+      const args = { configDirs, cwd, name: entry.name, sinceMs };
+      // The folders are listed once per call, and only if some name is not located yet.
+      const known = located.get(`${configDirs.join(':')}|${cwd}|${entry.name}`);
+      if (!known) list ??= candidates(configDirs, cwd, sinceMs);
+      const file = find(args, known ? null : list);
       const note = file ? files.get(file)?.note ?? null : null;
       return { ...entry, transcript: file, note: note?.text ?? null, note_at: note?.at ?? null };
     });
@@ -167,8 +219,9 @@ export function parseAgentList(stdout) {
 
 export const EXECUTIVE_RE = /^(settle|exec|plan|audit)-/;
 
-// The first absolute markdown path in a note's text.
-export function firstMarkdownPath(text) {
+// The first absolute markdown path in a note's text; a leading ~/ means the home folder.
+export function firstMarkdownPath(text, home = os.homedir()) {
   const m = /(?:^|[\s(`'"])((?:\/|~\/)[^\s`'"()<>]+\.md)\b/.exec(String(text ?? ''));
-  return m ? m[1] : null;
+  if (!m) return null;
+  return m[1].startsWith('~/') ? path.join(home, m[1].slice(2)) : m[1];
 }

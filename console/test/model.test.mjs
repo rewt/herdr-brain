@@ -2,10 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initialState, promptText, reduce } from '../lib/controller.mjs';
-import { columns, renderFrame, rowLine, scrollWindow } from '../lib/frame.mjs';
+import { initialState, overruleAnswer, promptParts, promptText, reduce } from '../lib/controller.mjs';
+import { columns, promptLine, renderFrame, rowLine, scrollWindow } from '../lib/frame.mjs';
 import { renderMarkdown } from '../lib/markdown.mjs';
 import {
   NO_PLAIN, buildRows, decisionHeadline, flatRows, keepSelection, orderKeys, orderSections, stableOrder,
@@ -13,7 +14,7 @@ import {
 import {
   createSessionReader, firstMarkdownPath, lastAssistantText, parseAgentList, parseLedger, projectSlugs,
 } from '../lib/sources.mjs';
-import { cellWidth, stripCodes } from '../lib/text.mjs';
+import { cellWidth, clip, sanitize, stripCodes, wrap } from '../lib/text.mjs';
 
 process.env.TZ = 'America/Chicago';
 const FIX = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -185,6 +186,11 @@ test('rows and frames fit 80, 100 and 140 columns', () => {
   const small = renderFrame({ sections, selected: rows[0], header: { project: 'p' } }, 70, 18).lines;
   assert.match(small.map((l) => l.text).join('\n'), /Resize to at least 80×20 \(now 70×18\)/);
   assert.ok(small.length <= 18);
+  // The app draws one row short of the terminal; an 80×20 terminal is big enough.
+  const exact = renderFrame({ sections, selected: rows[0], header: { project: 'p' } }, 80, 19, { termRows: 20 }).lines;
+  assert.equal(exact.length, 19);
+  assert.doesNotMatch(exact.map((l) => l.text).join('\n'), /Resize/);
+  assert.match(renderFrame({ sections, header: {} }, 80, 18, { termRows: 19 }).lines[1].text, /now 80×19/);
 });
 
 test('the list scrolls only as far as the selection needs', () => {
@@ -226,13 +232,64 @@ test('transcripts are found by agent name across config dirs and give the last a
 
   // Cached by modification time: an unchanged file is not read twice.
   let reads = 0;
-  const fsApi = { ...nodeFs, readFileSync: (...a) => { if (String(a[0]).endsWith('.jsonl')) reads++; return nodeFs.readFileSync(...a); } };
+  const fsApi = { ...nodeFs, readSync: (...a) => { reads++; return nodeFs.readSync(...a); } };
   const cached = createSessionReader({ fsApi });
   const args = { ledgerDir: path.join(FIX, 'ledger'), date: '2026-09-16', configDirs: [path.join(FIX, 'claude-a'), path.join(FIX, 'claude-b')], cwd: '/tmp/proj' };
   cached.notes(args);
   const after = reads;
   cached.notes(args);
   assert.equal(reads, after);
+});
+
+test('a growing transcript is read only from where the last read stopped', () => {
+  const root = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'console-transcript-'));
+  const folder = path.join(root, 'cfg', 'projects', '-tmp-grow');
+  nodeFs.mkdirSync(folder, { recursive: true });
+  const ledgerDir = path.join(root, 'ledger');
+  nodeFs.mkdirSync(ledgerDir);
+  nodeFs.writeFileSync(path.join(ledgerDir, 'sessions-2026-09-16.log'), '10:00:00 exec-grow continue\n10:01:00 exec-never continue\n');
+  const file = path.join(folder, 's.jsonl');
+  const say = (text) => `${JSON.stringify({ type: 'assistant', timestamp: text, message: { content: [{ type: 'text', text }] } })}\n`;
+  nodeFs.writeFileSync(file, `${say('first')}${'{"type":"user","message":{"content":"x"}}\n'.repeat(3000)}`);
+  const bytes = [];
+  let whole = 0;
+  const fsApi = {
+    ...nodeFs,
+    readFileSync: (...a) => { if (String(a[0]).endsWith('.jsonl')) whole++; return nodeFs.readFileSync(...a); },
+    readSync: (fd, buf, off, len, pos) => { bytes.push([pos, len]); return nodeFs.readSync(fd, buf, off, len, pos); },
+  };
+  const reader = createSessionReader({ fsApi });
+  const args = { ledgerDir, date: '2026-09-16', configDirs: [path.join(root, 'cfg')], cwd: '/tmp/grow' };
+  let s = reader.notes(args);
+  assert.equal(s.sessions[0].transcript, null, 'no agent name yet');
+
+  const size = nodeFs.statSync(file).size;
+  bytes.length = 0;
+  // The name arrives, then half a line: the half is left for the next read.
+  const tail = say('second');
+  nodeFs.appendFileSync(file, `{"type":"agent-name","agentName":"exec-grow"}\n${tail.slice(0, 20)}`);
+  s = reader.notes(args);
+  assert.equal(s.sessions[0].transcript, file);
+  assert.equal(s.sessions[0].note, 'first');
+  assert.equal(s.sessions[1].transcript, null);
+  assert.ok(bytes.length && bytes.every(([pos]) => pos >= size), `only new bytes are read: ${JSON.stringify(bytes)}`);
+
+  bytes.length = 0;
+  nodeFs.appendFileSync(file, tail.slice(20));
+  s = reader.notes(args);
+  assert.equal(s.sessions[0].note, 'second');
+  assert.ok(bytes.length && bytes.every(([pos]) => pos >= size + 46), JSON.stringify(bytes));
+
+  // Nothing changed: nothing is read, and the missing name is not searched again.
+  bytes.length = 0;
+  reader.notes(args);
+  assert.deepEqual(bytes, []);
+
+  // A rewritten (shorter) file is read from the start.
+  nodeFs.writeFileSync(file, `{"type":"agent-name","agentName":"exec-grow"}\n${say('third')}`);
+  s = reader.notes(args);
+  assert.equal(s.sessions[0].note, 'third');
+  assert.equal(whole, 0, 'transcripts are never read whole into one string');
 });
 
 test('the ledger, Herdr output and note paths parse', () => {
@@ -247,6 +304,8 @@ test('the ledger, Herdr output and note paths parse', () => {
   assert.throws(() => parseAgentList('{"result":{}}'), /unexpected/);
   assert.equal(firstMarkdownPath('see /a/b.md and /c/d.md'), '/a/b.md');
   assert.equal(firstMarkdownPath('relative docs/x.md only'), null);
+  assert.equal(firstMarkdownPath('see ~/notes/DECISION.md', '/home/me'), '/home/me/notes/DECISION.md');
+  assert.equal(firstMarkdownPath('see ~/n.md'), path.join(os.homedir(), 'n.md'));
 });
 
 test('document paths follow the row kind', () => {
@@ -312,9 +371,67 @@ test('declining needs a one-line reason, then confirmation', () => {
   const auto = ROWS.find((row) => row.key === 'a:HUM-4');
   s = reduce({ ...initialState(), selectedKey: auto.key }, 'n', {}, ctx).state;
   assert.equal(s.mode.action, 'overrule');
+  assert.equal(s.mode.answer, 'no', 'an automatic yes is overruled to no');
+  assert.match(promptText(s), /^Overrule to no “Install storage tool v0\.3 now\?”/);
+  for (const ch of 'Freeze') s = k(s, ch).state;
+  s = k(s, '', { return: true }).state;
+  assert.match(promptText(s), /^Overrule to no: Install storage tool v0\.3 now\? \(reason: Freeze\) Enter to confirm/);
+  assert.deepEqual(k(s, '', { return: true }).effects[0], { type: 'answer', question: 'HUM-4', answer: 'no', note: 'Freeze', overrule: true, headline: 'Install storage tool v0.3 now?' });
+  assert.equal(overruleAnswer('no'), 'yes');
+  assert.equal(overruleAnswer(' No '), 'yes');
+  assert.equal(overruleAnswer('yes'), 'no');
+  assert.equal(overruleAnswer('the private relay'), 'no');
   assert.match(k({ ...initialState(), selectedKey: auto.key }, 'y').state.message, /Nothing to approve/);
   const note = ROWS.find((row) => row.kind === 'decision');
   assert.match(k({ ...initialState(), selectedKey: note.key }, 'n').state.message, /Nothing to decline/);
+});
+
+test('a long title never hides the reason, its cursor or the keys', () => {
+  const headline = `Adopt this ${'very '.repeat(8)}long fix?`;
+  assert.equal(headline.length, 60);
+  const row = { ...ROWS[0], headline };
+  const local = { ...ctx, rows: [row] };
+  const kk = (st, input, key = {}) => reduce(st, input, key, local);
+  let s = kk({ ...initialState(), selectedKey: row.key }, 'n').state;
+  const frame = (st) => renderFrame({ header: {}, sections: [{ key: 'waiting', title: 'Waiting', rows: [row] }], selected: row,
+    focus: 'list', tab: 0, prompt: promptParts(st) }, 80, 19, { termRows: 20 }).lines.at(-1).text;
+  for (const ch of 'Too risky now') s = kk(s, ch).state;
+  let line = frame(s);
+  assert.ok(cellWidth(line) <= 80, line);
+  assert.match(line, /^Decline “Adopt this.*…”\. Reason: Too risky now▏ {2}Enter next · Esc cancel$/);
+  // A reason longer than the room keeps its end, where the typing is.
+  for (const ch of ' because the relay test has not run yet') s = kk(s, ch).state;
+  line = frame(s);
+  assert.ok(cellWidth(line) <= 80, line);
+  assert.match(line, /^Decline “Adopt thi?s?…”\. Reason: ….*has not run yet▏ {2}Enter next · Esc cancel$/);
+  s = kk(s, '', { return: true }).state;
+  line = frame(s);
+  assert.ok(cellWidth(line) <= 80, line);
+  assert.match(line, /^Decline: Adopt thi?s?…? \(reason: Too risky now b.*…\) Enter to confirm, Esc to cancel$/);
+
+  s = kk({ ...initialState(), selectedKey: row.key }, 'y').state;
+  line = frame(s);
+  assert.match(line, /^Approve: Adopt this very .*… Enter to confirm, Esc to cancel$/);
+  assert.ok(cellWidth(line) <= 80, line);
+  // Short prompts are shown whole.
+  assert.equal(promptLine({ head: 'Approve: ', title: 'Go?', mid: '', reason: '', tail: ' Enter to confirm, Esc to cancel' }, 80),
+    'Approve: Go? Enter to confirm, Esc to cancel');
+});
+
+test('agent text cannot drive the terminal', () => {
+  const nasty = 'Adopt\x1b[31m red\x1b[0m \x1b]8;;http://x\x07link\x1b]8;;\x07 \x1b]0;title\x1b\\ ok\x9b2J\x07\x00\u202eevil\tend\r\nnext';
+  assert.equal(sanitize(nasty), 'Adopt red link  okevil end next');
+  assert.equal(sanitize(nasty, { keepNewlines: true }), 'Adopt red link  okevil end\nnext');
+  assert.equal(sanitize('lone \x1b'), 'lone ');
+  assert.equal(clip(nasty, 80), 'Adopt red link  okevil end next');
+  assert.deepEqual(wrap('a\x1b[2Kb\nc', 10), ['ab', 'c']);
+  const row = { ...ROWS[0], headline: nasty };
+  const doc = { status: 'ok', text: `# Title\x1b[8m\n\n\`\`\`\ncode \x1b]52;c;aGk=\x07here\n\`\`\`\n` };
+  for (const tab of [0, 1, 2]) {
+    const { lines } = renderFrame({ header: { project: 'p\x1b[2J' }, sections: [{ key: 'waiting', title: 'Waiting', rows: [row] }], selected: row,
+      focus: 'list', tab, document: doc, project: { org: '/tmp/org' }, message: 'm\x1b[1A' }, 100, 29);
+    for (const l of lines) assert.doesNotMatch(l.text, /[\x00-\x1f\x7f-\x9f]/, `tab ${tab}: ${JSON.stringify(l.text)}`);
+  }
 });
 
 test('Escape never quits and q quits only from the list', () => {

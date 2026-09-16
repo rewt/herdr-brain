@@ -27,15 +27,16 @@ Don't do the spec's "Cutover" section. The operator does it after review.
 - Every behavior change needs a test that you saw fail first.
 - Keep the core dependency-free. Only `console/` may add dependencies. Pin
   their versions and commit the lockfile.
-- Read `/Users/rewt/development/rewt/herdr-lanes/docs/design/CONSOLE-UX.md`
-  (state, density, width, keys) and `herdr-lanes/board/app.mjs` and
-  `board/view.mjs` for the house style of an Ink app split into pure modules.
-  Don't modify herdr-lanes.
+- Read `docs/reference/herdr-lanes/CONSOLE-UX.md` (state, density, width,
+  keys), and `board-app.mjs.txt` and `board-view.mjs.txt` in the same folder,
+  for the house style of an Ink app split into pure modules. These are copies,
+  so you don't need to read outside your worktree.
 - **Don't write to any live organization.** For manual checks, copy
-  `/Users/rewt/development/bastian/.org` to a temporary directory and point
-  `ORG_DIR` there. You may read the live transcripts and the bch-cloak ledger,
-  read-only, to check session-note extraction. Never print their contents
-  beyond a first line.
+  `/Users/rewt/development/bastian/.org` to a temporary directory with one
+  shell `cp -R` and point `ORG_DIR` there. Test session-note extraction with
+  fixture transcripts. Don't browse live transcripts. If any step asks for
+  permission to read outside the worktree, skip that step and say so in the
+  report.
 - Don't edit anything outside this worktree. That includes bch-cloak,
   `~/.config` and Claude settings. Don't push.
 - Commit your work on this lane's branch in small, reviewable commits.

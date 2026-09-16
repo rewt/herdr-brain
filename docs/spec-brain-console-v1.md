@@ -84,7 +84,7 @@ Section contents:
 | Session notes | Each executive session that ran today, with the plain first line of its final message | ledger + Claude transcripts |
 
 Rules carried over from the herdr-lanes console design
-(`herdr-lanes/docs/design/CONSOLE-UX.md`); read its sections on state,
+(`herdr-lanes/docs/design/CONSOLE-UX.md`, copied to `docs/reference/herdr-lanes/`); read its sections on state,
 density, width and keys:
 
 - **Layout:** fit 80, 100 and 140 columns without horizontal scrolling. Show a

@@ -56,7 +56,8 @@ const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${ms
 const die = (msg) => { log(`STOP: ${msg}`); notify(`settle-watch ${subject}: stopped`, msg); process.exit(1); };
 
 function run(cmd, args, { env, quiet } = {}) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', env: { ...process.env, ...env } });
+  // Node's default 1 MB output cap killed a watcher once the org record grew (ENOBUFS).
+  const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, ...env } });
   if (r.error) throw r.error;
   if (!quiet && r.status !== 0) log(`${cmd} ${args[0]} ${args[1] ?? ''} exited ${r.status}: ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
   return r;
@@ -84,10 +85,14 @@ function notify(title, body) {
 }
 
 const orgEnv = { ORG_DIR: opt.org };
+// Only the watched run: the whole status document grows with the organization.
 function orgRun() {
-  const r = run('org', ['status', '--json'], { env: orgEnv });
-  if (r.status !== 0) die(`org status failed for ${opt.org}`);
-  return JSON.parse(r.stdout).runs.find((x) => x.id === runId);
+  const r = run('org', ['show', runId, '--json'], { env: orgEnv, quiet: true });
+  if (r.status !== 0) {
+    if (/unknown item or run/.test(r.stderr)) return undefined;
+    die(`org show ${runId} failed for ${opt.org}: ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
+  }
+  return JSON.parse(r.stdout);
 }
 
 function agentStatus(name) {

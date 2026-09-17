@@ -90,7 +90,7 @@ export function isShellOnly(processInfo) {
 }
 
 function herdr(args) {
-  const r = spawnSync('herdr', args, { encoding: 'utf8' });
+  const r = spawnSync('herdr', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) return null;
   try { return JSON.parse(r.stdout).result; } catch { return null; }
 }
@@ -131,7 +131,7 @@ function main() {
 
   let reportedAgents = new Set();
   if (opt.org) {
-    const r = spawnSync('org', ['status', '--json'], { encoding: 'utf8', env: { ...process.env, ORG_DIR: opt.org } });
+    const r = spawnSync('org', ['status', '--json'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, ORG_DIR: opt.org } });
     if (r.status === 0) reportedAgents = new Set(JSON.parse(r.stdout).runs.filter((x) => x.report && x.meta?.agent).map((x) => x.meta.agent));
     else console.error(`tidy-tabs: org status failed for ${opt.org}; lane worker tabs are left alone`);
   }

@@ -37,12 +37,20 @@ the live bch-cloak organization at 2026-09-17 14:52:
 A fourth, smaller cause: every question reports `unblocks_prioritized: 0`, so
 the ranking signal is dead and all ten rows look equally urgent.
 
+A fifth cause, raised by the operator on the same review: **going to a session
+is a one-way trip.** `Enter` focuses the agent's Herdr tab, and getting back to
+the console means finding the workspace tab by hand. The operator wants to
+peek at a session, and possibly reply to it, without leaving the console —
+"a portal into Herdr". See "Peeking into a session" below; it is possible, and
+it also fixes something else that is missing.
+
 ## Operator decisions (2026-09-17)
 
 - A question that cannot be acted on is **filed, not refused**. It lands in its
   own group and never counts as waiting on the operator.
 - A waiting row offers four verbs: **pick one of N options**, **answer in my
   own words**, **work it up for me**, **show what it's holding up**.
+- Looking at a session must not cost the operator their place in the console.
 
 ## Readiness: when a question may ask for the operator's time
 
@@ -164,7 +172,7 @@ run's report lands, the mark is cleared by `org sync` as it records the report.
 ╭ herdr-org  ~/development/rewt/herdr-org ───────────────────────────────────────────────────────────────── 2 ╮
      …sessions as in 0.0.2…
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  1-9 pick  a answer in my own words  w work it up  b what it holds up  p not now  s summary  Enter go
+  1-9 pick  a answer  w work it up  b what it holds up  p not now  Enter peek  g go there  s summary
 ```
 
 Rules:
@@ -199,6 +207,10 @@ Rules:
 | `b` | what it holds up, as a popup | same |
 | `p` | not now | not now |
 | `s`, `Enter`, click | the summary popup | the summary popup |
+
+On a **session** row, in Waiting on you or in its repository group: `Enter` or a
+click opens the peek popup, `g` focuses the real Herdr pane, `s` opens the
+summary popup as in 0.0.2, `r` replies, `p` dismisses it for the day.
 
 - **Pick an option** confirms in the footer as approve does today, with the
   option's label in the sentence. Picking an option that is not the
@@ -242,6 +254,152 @@ will not decide it.
 That paragraph is the answer to the operator's question. **Memo** shows the
 file or `no memo recorded`. **Holds up** is the same list as `b`. **Context**
 keeps the 0.0.2 content and adds the stage and the work-up run.
+
+## Peeking into a session, and coming back
+
+Herdr's CLI already carries everything this needs. Verified against the
+installed `herdr` on 2026-09-17:
+
+| Command | What it gives the console |
+|---|---|
+| `herdr agent read <t> --source visible\|recent\|recent-unwrapped --lines N --format text\|ansi` | the session's screen, as text or with colour |
+| `herdr agent prompt <t> "<text>" [--wait --until <status>]` | send a message; **refused with `agent_blocked` before anything is sent** if the agent is stuck at a prompt |
+| `herdr agent send-keys <t> <key>...` | answer a prompt the session is blocked at (`esc` is the canonical Escape name) |
+| `herdr agent wait <t> --until <status>` | refresh when the session changes state |
+| `herdr agent focus <t>` / `herdr tab focus <t>` | the one-way trip 0.0.2 already does |
+
+So there are three answers, and 0.0.3 takes all three. They solve different
+halves of the problem.
+
+### 1. The peek popup: don't leave at all
+
+`Enter` on a session row **stops focusing the Herdr tab** and opens a **peek
+popup** instead. 0.0.2's behaviour moves to `g` ("go there for real"), which the
+footer names.
+
+The peek is a large centred popup — 90% of the screen, since it holds a
+terminal's worth of text — showing:
+
+- a one-line head: the session name, who runs it, where, how long, and its
+  state in words;
+- the session's screen, from `herdr agent read <name> --source recent-unwrapped
+  --lines 400`, re-wrapped by the console to the popup's width. `recent-unwrapped`
+  and not `visible`, because the agent's pane is a different width than the
+  popup and `visible` would arrive pre-wrapped to the wrong one;
+- scroll keys, `G` for the end, and the end is where it opens.
+
+`--format text` by default. `--format ansi` is behind `console.json`
+`"peek_colour": true`, off by default: the captured output may carry cursor
+moves and mouse-mode sequences that would corrupt the console's own screen, so
+the ansi path must strip everything except SGR colour before rendering.
+
+The peek refreshes on the console's normal tick while it is open, and keeps the
+operator's scroll position unless they are at the end, in which case it follows.
+
+### 2. Replying from the peek, and the sessions that are waiting on you
+
+From inside the peek:
+
+- `r` **reply** — opens the same own-words editor the `a` verb uses, then
+  `herdr agent prompt <name> "<text>"`. `prompt` refuses a blocked agent before
+  sending anything, so this can never jam a session; the refusal is reported in
+  the footer in plain words, with the advice to answer its prompt first.
+- On a **blocked** session, the peek shows the choice the session is waiting on,
+  read from its own screen, and the keys to answer it: `1`–`9` for a numbered
+  choice, `y`, `n`, `esc`, each sent with `herdr agent send-keys`. Sending a key
+  into someone else's session is confirmed in the footer first, naming the key
+  and the session, because it cannot be taken back.
+
+This is what the operator was asking about when they said *"Is there a pending
+session that I need to answer?"* — and it exposes a gap 0.0.2 has:
+
+**Waiting on you means org questions only. It should mean everything waiting on
+the operator.** Herdr reports `agent_status` for every session, and two of its
+values are the operator's problem:
+
+- `blocked` — the session is stuck at a prompt and cannot move until answered;
+- `done` — the session finished its turn and nobody has read the result.
+
+At 2026-09-17 15:45 there were no blocked sessions and **three `done`** ones,
+including one with an unsent draft sitting in its prompt box. None of them
+appeared in Waiting on you.
+
+So the group gains a second kind of row, above the decisions because a stuck
+session is costing time right now:
+
+```text
+╭ WAITING ON YOU · stage 1 ──────────────────────────────────────────────────────────────────────────────── 4 ╮
+ > ⧗ R-110 superseded-profile review          blocked 12m · asks to run a command   Enter peek · a answer
+   ✓ V1 fixture replay after seal v2 switch   finished 2h · nobody has read it       Enter peek
+   ✓ REV-49 seal v2 profile id review         finished 1h · nobody has read it       Enter peek
+   ! Confirm the zero-conf gate reading: batch B is built only after A settles       design · asked 09:41
+       1  yes   one clarifying sentence in the freeze checklist          ← recommended
+       2  no    allows batch B on an unconfirmed A, against the spec
+     holds up 1 thing in this stage · memo recorded
+```
+
+Session rows are ordered `blocked` before `done`, oldest first inside each, and
+they are **not** filtered by stage — a stuck session is stuck whatever stage it
+belongs to. A `done` session leaves the group once the operator has peeked at
+it (recorded per session id in the console's own state file, not in org) or
+once the settle watcher records its report. The header's waiting count includes
+them. `p` ("not now") on a session row dismisses it from the group for the day
+without touching the session.
+
+### 3. Coming back when the operator does go there
+
+The console cannot bring the operator back: once focus leaves its pane it
+receives no keys. That return has to come from Herdr, and Herdr has it —
+`last_pane`, which its own config calls a global back-and-forth and which is
+**unset by default**. The README gains a required setup line:
+
+```toml
+# ~/.config/herdr/config.toml
+[keys]
+last_pane = "prefix+tab"   # console → session → console, one key each way
+```
+
+With that bound, `g` and the return are symmetric and the console needs no code
+for it.
+
+### 4. The console as a summoned popup (recommended)
+
+Herdr custom commands support `type = "popup"`, *"a session-modal terminal
+without changing the tab layout"*. That inverts the operator's problem: the
+console stops being a tab to navigate to and from, and becomes a thing summoned
+over whatever they are looking at and dismissed back to it.
+
+```toml
+[[keys.command]]
+key = "prefix+alt+c"
+type = "popup"
+command = "org console --project bch-cloak"
+width = "90%"
+height = "90%"
+description = "Herdr Brain console"
+```
+
+One key opens it anywhere; closing it returns the operator exactly where they
+were, layout untouched. This is the recommended way to run the console, and the
+README documents it beside the tab method, which keeps working.
+
+It costs one thing: a popup starts a fresh process each time, so a console that
+keeps its UI state only in memory forgets the selection, the scope and any
+launch-bar draft between summons. **The console therefore persists its own UI
+state** — selected row identity, scope, history-or-sessions view, peeked
+sessions, and the launch-bar draft — to
+`~/.local/state/herdr-org/console-<project>.json`, written on change (debounced)
+and read at start. It holds no organizational state; org remains the only record
+of anything that matters. A missing or unreadable file is not an error: the
+console starts fresh.
+
+### What this is not
+
+Not a terminal emulator. The peek renders a snapshot of text; it does not run
+the session's terminal inside the console, and interactive programs in that
+pane will not be usable through it. When the operator needs the real thing, `g`
+takes them there and `last_pane` brings them back. The console still never
+stops, closes or kills an agent.
 
 ## `contrib/workup-question.mjs`
 
@@ -313,6 +471,30 @@ Console:
   itself; one test per result kind against fake `org`, `lane` and `herdr`
   binaries on `PATH`.
 
+The peek and the portal, all against a fake `herdr` on `PATH`:
+
+- the peek calls `agent read` with `recent-unwrapped`, and re-wraps to the
+  popup width: a fixture line longer than the popup wraps at a word boundary;
+- `Enter` on a session row peeks and does **not** call `agent focus`; `g`
+  calls `agent focus` and not `agent read`;
+- the peek opens at the end of the output, follows new output while at the end,
+  and holds position when scrolled up;
+- `peek_colour: false` strips every escape sequence; `true` keeps SGR colour
+  and still strips cursor moves and mouse-mode sequences (a fixture carries
+  `\x1b[?1000h` and `\x1b[2J`);
+- `r` on a blocked session reports the `agent_blocked` refusal in plain words
+  and sends nothing;
+- `r` on an idle session records the `agent prompt` call with the editor's text;
+- a key sent with `send-keys` is confirmed first, and cancelling sends nothing;
+- session rows in Waiting on you: `blocked` before `done`, oldest first, not
+  filtered by stage, counted in the header, and a peeked `done` session is gone
+  from the group on the next tick and stays gone across a restart;
+- the UI state file round-trips selection, scope, view, peeked sessions and the
+  launch draft; a missing, empty, or malformed file starts the console fresh
+  without an error;
+- a session that has gone away between the list and the read reports it in the
+  footer and closes the peek.
+
 ## Acceptance
 
 1. Against the live bch-cloak organization the top list holds only the
@@ -331,14 +513,33 @@ Console:
    four-in-one it lists four, each with its stage.
 6. An organization with no `stages` block behaves exactly as 0.0.2 did, except
    for readiness and the new verbs.
-7. The core stays dependency-free, no visible text carries a record code, and
-   all tests pass.
+7. `Enter` on a session row shows that session's recent screen inside the
+   console, scrollable and following new output, and `Esc` returns to the list
+   with the same row selected. The operator never leaves the console.
+8. A session sitting at a prompt appears in Waiting on you with the choice it
+   is waiting on, and can be answered from the peek. A session that has
+   finished a turn nobody has read appears there too, and leaves once peeked.
+9. `r` in the peek sends a reply to an idle session; on a blocked session it
+   refuses in plain words and sends nothing.
+10. With `last_pane` bound, `g` and one keypress return the operator to the
+    console; run as a `type = "popup"` custom command, the console opens over
+    any pane and closing it restores the layout, with the selection, scope and
+    launch draft the operator left behind.
+11. The core stays dependency-free, no visible text carries a record code, and
+    all tests pass.
 
 ## Build order
 
-One round on the lane, core first, then the console, then the work-up script.
-The core half is worth landing on its own: it repairs the ranking and stops
-parked work reaching the operator even before the new verbs exist.
+Four pieces on the same lane, in this order, each landing on its own:
+
+1. **Core** — stages, readiness, options, answers, the repaired ranking. Worth
+   landing alone: it stops parked work reaching the operator and shrinks the
+   screen to the truth before any new key exists.
+2. **The screen** — the three groups, options under the row, the never-empty
+   Decision tab, the four verbs, the UI state file.
+3. **The peek** — peek popup, session rows in Waiting on you, reply and
+   send-keys, `g`, the config lines in the README.
+4. **The work-up** — `contrib/workup-question.mjs`.
 
 ## Out of scope
 
@@ -346,4 +547,7 @@ parked work reaching the operator even before the new verbs exist.
 - Changing the stage order or opening stage 4.
 - Making `SETTLE.md` require the new fields — a separate change, once `org ask`
   prints what is missing.
-- Stopping, messaging or closing agents from the console.
+- Stopping, closing or killing agents from the console. Replying to one is now
+  in scope; ending one is not.
+- Running a session's terminal inside the console. The peek is a snapshot of
+  text.

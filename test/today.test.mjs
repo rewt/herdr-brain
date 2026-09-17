@@ -121,3 +121,36 @@ test('org today prints plain text with codes only in parentheses', () => {
     assert.doesNotMatch(line.replace(/\([^)]*\)$/, ''), /\b[A-Z]+-\d+\b/, line);
   }
 });
+
+test('org today --json names the latest run of each agent, finished runs included, so a front end can name idle agents', () => {
+  const t = setupOrg();
+  const at = (now) => ({ now });
+  t.ok(['add', 'Build the console', '--role', 'engineer'], at('2026-09-10T10:00:00Z')); // ENG-1
+  const start = (agent, now, extra = []) => t.ok(['start', 'ENG-1', '--harness', 'claude-code', '--model', 'opus', '--effort', 'high',
+    '--meta', `agent=${agent}`, '--meta', 'lane=brain-console', ...extra], at(now));
+  const finish = (run, now) => {
+    fs.writeFileSync(path.join(t.dir, `runs/${run}/report.md`), report(`run: ${run}\noutcome: done\nsummary: Done.`));
+    t.ok(['sync'], at(now));
+  };
+  start('lane-a', '2026-09-10T11:00:00Z'); // R-1
+  finish('R-1', '2026-09-10T12:00:00Z');
+  start('lane-b', '2026-09-11T11:00:00Z'); // R-2
+  finish('R-2', '2026-09-11T12:00:00Z');
+  start('lane-b', '2026-09-12T11:00:00Z'); // R-3: the same agent again
+  finish('R-3', '2026-09-12T12:00:00Z');
+  t.ok(['add', 'Untracked work'], at('2026-09-12T13:00:00Z'));
+  t.ok(['start', 'W-1'], at('2026-09-12T13:00:00Z')); // R-4: no agent
+  start('lane-c', '2026-09-12T14:00:00Z'); // R-5: still open
+
+  const doc = JSON.parse(t.ok(['today', '--json'], { now: '2026-09-12T15:00:00Z' }));
+  assert.deepEqual(doc.running.map((r) => r.run), ['R-4', 'R-5']);
+  assert.deepEqual(doc.agent_runs.map((r) => [r.agent, r.run, r.lane, r.round, r.model]), [
+    ['lane-b', 'R-3', 'brain-console', 3, 'opus'],
+    ['lane-a', 'R-1', 'brain-console', 1, 'opus'],
+  ]);
+  assert.equal(doc.agent_runs[0].started, '2026-09-12T11:00:00.000Z');
+  assert.equal(path.basename(doc.agent_runs[0].brief_path), 'brief.md');
+  // Reading it writes nothing.
+  const events = doc.project.events;
+  assert.equal(JSON.parse(t.ok(['today', '--json'], { now: '2026-09-12T15:00:00Z' })).project.events, events);
+});

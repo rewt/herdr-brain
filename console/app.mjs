@@ -7,6 +7,7 @@
 //   node console/app.mjs [--project NAME] [--config FILE]
 //   node console/app.mjs --print 140x40 [--select N] [--keys KEYS]   one frame as plain text
 import { parseArgs } from 'node:util';
+import { herdrRightClick } from './lib/cli.mjs';
 import { ConfigError, configPath, loadConfig } from './lib/config.mjs';
 import { lineText } from './lib/frame.mjs';
 import { MOUSE_OFF, MOUSE_ON, parseMouse } from './lib/mouse.mjs';
@@ -99,16 +100,21 @@ const notify = () => listeners.forEach((fn) => fn());
 
 const size = () => ({ cols: process.stdout.columns || 80, rows: process.stdout.rows || 24 });
 
+// Inside Herdr, right clicks come to this pane only while the console shows.
+const PANE = process.env.HERDR_PANE_ID || null;
+
 // The terminal's modes, taken and given back as a pair. Giving back is safe to repeat.
 function takeTerminal() {
   terminalTaken = true;
   process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${BLACK}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}`);
+  herdrRightClick(PANE, 'pane');
 }
 
 function giveBackTerminal() {
   if (!terminalTaken) return;
   terminalTaken = false;
   process.stdout.write(`${MOUSE_OFF}\x1b[0m${ALT_OFF}`);
+  herdrRightClick(PANE, 'herdr');
 }
 
 // Ink draws one row short of the terminal; this paints that last row black too.

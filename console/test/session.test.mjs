@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ORG_BIN, answerArgs, goArgs, herdrGo, herdrTabs } from '../lib/cli.mjs';
+import { ORG_BIN, answerArgs, goArgs, herdrGo, herdrRightClick, herdrTabs } from '../lib/cli.mjs';
 import { ConfigError, EXAMPLE, loadConfig } from '../lib/config.mjs';
 import { lineText } from '../lib/frame.mjs';
 import { createSession, VERSION } from '../lib/session.mjs';
@@ -174,11 +174,16 @@ exit 0
     assert.deepEqual(await herdrGo({ agent: 'refuse; rm -rf /' }), { ok: false, error: 'no such agent' });
     assert.deepEqual(await herdrGo({}), { ok: false, error: 'no Herdr agent or tab to go to' });
     assert.deepEqual(await herdrTabs(), [{ tab: 'w1:t1', label: 'cli', number: 1, workspace: 'w1' }]);
+    // Right clicks come to the console's own pane while it runs, and go back to Herdr after.
+    assert.equal(herdrRightClick('w1:p9', 'pane'), true);
+    assert.equal(herdrRightClick('w1:p9', 'herdr'), true);
+    assert.equal(herdrRightClick(null, 'pane'), false, 'outside Herdr nothing is asked');
   } finally {
     process.env.PATH = previous;
   }
   assert.deepEqual(fs.readFileSync(log, 'utf8').trim().split('\n'), [
     'agent focus lane-x', 'tab focus w1:t1', 'agent focus refuse; rm -rf /', 'tab list',
+    'pane input --right-click pane w1:p9', 'pane input --right-click herdr w1:p9',
   ]);
 });
 

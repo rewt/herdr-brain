@@ -77,6 +77,15 @@ export async function herdrGo(target) {
   return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || `herdr ${args.slice(0, 2).join(' ')} failed` };
 }
 
+// Herdr opens its own pane menu on a right click unless the pane asks for right clicks.
+// The console asks for its own pane (target "pane") while it runs and gives them back
+// ("herdr") when it stops. Synchronous, so it also works while the process exits.
+export function herdrRightClick(pane, target) {
+  if (!pane) return false;
+  const r = spawnSync('herdr', ['pane', 'input', '--right-click', target, pane], { stdio: 'ignore', timeout: 3000 });
+  return !r.error && r.status === 0;
+}
+
 // $VISUAL or $EDITOR run in this terminal (the caller suspends the UI first);
 // otherwise macOS `open -t` hands the file to the default text editor and returns at
 // once. Never plain `open`: a memo is agent-supplied, and Launch Services would run a

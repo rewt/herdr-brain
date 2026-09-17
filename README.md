@@ -126,8 +126,8 @@ org answer HUM-5 yes|no|"<short text>" [--note "why"] [--overrule]
 
 Missing entries fall back to these defaults, and configured categories are added to them. A
 category set to `auto` is answered with its recommendation as soon as it is asked
-(`meta.answered_by=auto`, the asking session as actor); it shows under *Decided today*, where the
-operator can still overrule it. Everything ships as `ask`. Relax a category only when its
+(`meta.answered_by=auto`, the asking session as actor); it shows in the console's history (`h`), where
+the operator can still overrule it. Everything ships as `ask`. Relax a category only when its
 `answered_as_recommended` count in `org today --json` shows the agents decide it well.
 
 | Category | Covers |
@@ -185,7 +185,9 @@ only view of the organization. It is deterministic for a fixed record, config, `
       "blocks": [{ "id", "title", "status", "open_runs": ["R-9"] }], "at", "by" },
     { "kind": "note", "id", "seq", "title", "summary": "…|null", "text", "at", "by" }
   ],
-  "running": [{ "run", "item", "title", "role", "started", "agent", "lane", "brief_path", "report_path" }],
+  "running": [{ "run", "item", "title", "role", "started", "agent", "lane",
+                "harness", "model", "effort", "workspace", "round",   // round: 1 for an item's first run
+                "brief_path", "report_path" }],
   "finished": [                       // newest first
     { "kind": "report", "run", "item", "seq", "title", "role", "outcome", "headline", "summary",
       "report_file": "/abs/.org/reports/R-n.md", "late", "at" },
@@ -206,18 +208,24 @@ only view of the organization. It is deterministic for a fixed record, config, `
 
 ## The console
 
-`org console` is a terminal app for a Herdr pane next to the agents. It costs no model tokens and
-answers four questions: what is waiting on me, what did the agents decide and why, what is
-running and what finished, and where can I read the whole thing.
+`org console` (version 0.0.2) is a terminal app for a Herdr tab. It costs no model tokens and
+answers three questions: which agent sessions are running, what they are doing, and what is
+waiting on me. From it the operator goes straight to any session's Herdr tab and answers the
+questions agents wait on. (Starting new work from its launch bar comes in the next round;
+the bar is drawn but `n` only says so.)
 
 ```text
-bch-cloak · 17:12 · 22/30 sessions today · 1 alert                                        ? help
-WAITING ON YOU (3)
-> Adopt the theft fix once its review passes?           design                    recommend: yes
-…
-─ Adopt the theft fix once its review passes? ─────────────── [1 Summary] 2 Document 3 Context
-  Recommend: yes. O1 is the only option where the network itself refuses the theft.
-y approve   n decline   o open   Tab reader   ? help   q quit   Enter expand   1-3 tabs   r reload
+ herdr-org  20:50  4/30 sessions today  1 waiting on you                       console 0.0.2  ? help
+ ( WAITING ON YOU ) ─────────────────────────────────────────────────────────────────────────── ( 1 )
+   ! Promote the Herdr Brain console into main?                  tooling · recommend yes · asked 19:19
+     SESSION                    WHO                    WHERE              UP      STATE     DOING
+ ( herdr-org ) ~/development/rewt/herdr-org ────────────────────────────────────────────────── ( 2 )
+ >   lane brain-console-v1 r3   Claude Opus 5 · high   lane-brain-consol… 44m     ● working Verifying…
+     settle-r-4-1912            Claude Fable 5.1       herdr-org          1h      ✓ done    no description
+ ─────────────────────────────────────────────────────────────────────────────────────────────────────
+ Task   n  Describe the outcome. Enter adds a line.
+        Where  choose repository    Who  choose route    Goal  choose goal          ( Review launch )
+ LIST   j/k select  Enter go to session  s summary  n new task  m menu  h history  / scope  ? help
 ```
 
 ### Install and run
@@ -226,11 +234,23 @@ y approve   n decline   o open   Tab reader   ? help   q quit   Enter expand   1
 npm --prefix console ci          # Ink and React, pinned by console/package-lock.json
 org console [--project NAME]     # or: node console/app.mjs [--project NAME] [--config FILE]
 contrib/console-pane.sh [NAME]   # an unfocused Herdr tab labelled "console" in the project's workspace
-node console/app.mjs --print 100x30 [--select N] [--tab 1|2|3]   # one frame as text, no terminal needed
+node console/app.mjs --print 140x40 [--select N] [--keys 'sh']   # one frame as text, no terminal needed
 ```
 
 The core stays dependency-free: only `console/` has dependencies, and root `npm test` passes
 without them. `npm --prefix console test` runs the console tests alone.
+
+### Font
+
+The terminal owns the font, so set Herdr's font to a **Nerd Font**: Maple Mono NF for a rounded
+look, or JetBrains Mono Nerd Font. The header and footer are powerline segments and the group
+headers have rounded caps; without a Nerd Font those glyphs show as boxes. If you cannot change
+the font, set `"glyphs": "plain"` in `console.json`: every powerline and icon glyph becomes ASCII
+(`>`, `<`, `|`) and the state dots go (each state is a word anyway). `NO_COLOR` implies `plain`
+and turns colour off; the `>` selection mark and every state word stay.
+
+The screen is painted black (`#000000`) on every row. Colours are true colour; Ink falls back to
+the nearest 256 colour on a terminal without it.
 
 ### Configuration
 
@@ -249,52 +269,87 @@ writes an example there and exits; edit it and delete its `"example"` line.
       "session_cap": 30
     }
   ],
-  "refresh_seconds": 5
+  "refresh_seconds": 5,
+  "glyphs": "nerd"
 }
 ```
 
 - `org`: read with `org today --json`, again whenever `events.jsonl` changes and every
   `refresh_seconds`. If a read fails, the last good data stays and the header shows its age.
-- `ledger_dir`: `sessions-YYYY-MM-DD.log` (session notes, and the count against `session_cap`) and
-  the `STOP` file.
-- `cwd` and `claude_config_dirs`: where session transcripts are found. A session note is the last
-  assistant message of the transcript whose `agent-name` entry names the session; only transcripts
-  modified today are read, and each is cached by modification time.
-- Herdr: `herdr agent list` on the same cadence. Runs are joined to agents by `meta.agent`; live
-  `settle-*`, `exec-*`, `plan-*` and `audit-*` agents working inside the project's `cwd` are
-  listed as executive sessions. Without
-  Herdr the header says "Herdr unavailable" and states read "unknown".
+- `ledger_dir`: `sessions-YYYY-MM-DD.log` (the count against `session_cap`) and the `STOP` file.
+- `claude_config_dirs` (of every project): where Claude session transcripts are found, by the
+  session id Herdr reports (in the folder named after the session's `cwd`, else in any project
+  folder), or by `agent-name` when Herdr gives no id. A transcript is read once and then only
+  its new lines.
+- `glyphs`: `nerd` (default) or `plain`.
+- Herdr: `herdr agent list` and `herdr tab list` on the same cadence.
 
 ### Screen
 
-Five sections: *Waiting on you*, *Decided today*, *Running*, *Finished today*, *Session notes*.
-Each row is one plain line: headline, category or role, then time and state. The reader below
-has three tabs: **Summary** (the explanation, recommendation and what happens on yes or no),
-**Document** (the memo, report, brief or session note, rendered from markdown) and **Context**
-(IDs, paths, agents, timestamps, links: the only place codes appear). Rows that have no plain text
-are shown with codes removed and marked `· no plain summary`.
+From the top:
 
-Selection follows the row, not its position, and rows do not reorder under the cursor when data
-refreshes (`r` re-ranks). The layout fits 80, 100 and 140 columns; below 80×20 it shows a resize
-hint. Every state is written as text; `NO_COLOR` turns color off entirely.
+1. **Header** segments: project, clock, sessions today against the cap, questions waiting (orange
+   when any), alerts, `STOP`, Herdr unavailable or stale org data, the scope when one is set, and
+   the version. `? help` on the right.
+2. **Waiting on you**, only when a question is open: the plain question, its category, the
+   recommendation and when it was asked, ranked as `org today` ranks them.
+3. **Sessions**: every Herdr agent, grouped by repository (a worktree belongs to its main
+   repository; git's common directory decides), groups ordered by their most urgent session
+   (blocked, working, idle, done), then by name. An org run whose agent has gone stays for an
+   hour as `gone`.
+4. **Launch bar**, resting (next round).
+5. **Footer**: the mode, then the keys that work now, or a message, or the answer prompt.
 
-### Keys
+| Column | Shows | From |
+|---|---|---|
+| SESSION | `lane <topic> r<round>`, else the agent's name, else the tab label (`tab 1` for a bare number) | org run `lane`/`round`, Herdr |
+| WHO | tool and model in words, plus effort: `Claude Opus 5 · high`, `Codex Astra · xhigh`; `Claude · unknown` without a model | org run `harness`/`model`/`effort`; else Herdr's `agent` and the transcript's last model. An alias recorded in org (`opus`) gives way to the exact model in the transcript. |
+| WHERE | the checkout folder | Herdr `cwd` (org `workspace` for a gone run) |
+| UP | `9m`, `2h`, `3d` or `unknown` | org run `started`, else the transcript's first entry |
+| STATE | `working`, `idle`, `blocked`, `done`, `gone`, `unknown` | Herdr `agent_status` |
+| DOING | at most ten words | Herdr's terminal title (unless it only repeats the agent's name), else the brief's first sentence, else the org item title, else `no description` |
+
+Model IDs are turned into words by a table in `console/lib/names.mjs`; an ID not in it is shown
+as it is. Codes (`ENG-7`, `R-12`, commit hashes) are stripped from SESSION and DOING; a title left
+with fewer than two words falls through to the next source. At 100 columns WHERE goes; at 80,
+WHERE and UP go and DOING takes a second line under each session. At 180 columns and wider a
+22-column scope rail sits on the left. Below 80×20 the console only asks for more room. The
+session list scrolls (`↑`/`↓` in the left edge say there is more); the header, launch bar and
+footer stay put. Selection follows the row, not its position, and rows and groups do not reorder
+under the cursor when data refreshes (`r` re-ranks).
+
+There is no reader pane and no Decided or Finished list on the main screen: the **summary popup**
+(`s`) and the **history view** (`h`) show them. The popup's tabs are **Message** (the session's
+last assistant message), **Brief** and **Context** for a session; **Summary**, **Memo** and
+**Context** for a question; **Summary**, **Document** and **Context** in the history. Context is
+the only place codes appear.
+
+### Keys and mouse
 
 | Key | Action |
 |---|---|
-| ↑/↓, j/k, PgUp/PgDn, Home/End | Move in the list (or scroll the reader when it has focus) |
-| Tab | Switch focus between the list and the reader |
-| 1 / 2 / 3 | Reader tab: Summary, Document, Context |
-| Enter | Expand the reader to full height, or shrink it |
+| ↑/↓, j/k, PgUp/PgDn, Home/End | Move in the list (or scroll the open summary) |
+| Enter, left click | On a session: go to its Herdr tab (`herdr agent focus <name>`, or `herdr tab focus <tab>` for an agent without a name). On a question or in the history: open the summary. The console stays open in its own tab; a gone session is refused visibly. |
+| f | Go to the session |
+| s | Summary popup: 1/2/3 tabs, j/k and page keys scroll, `o` opens the file, Enter goes to the session, y/n answer a question, Esc closes |
+| m, right click | Row menu at the row: Go to session, Summary, and on a question Approve and Decline. Arrows and Enter pick; Esc closes. |
 | y | Approve the selected question; Enter confirms, Esc cancels |
-| n | Decline a question, or overrule an agent's or automatic answer to its opposite (`no` becomes `yes`, anything else `no`; the prompt names it): a one-line reason is required, then Enter confirms |
-| o | Open the document with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open -t` (the default text editor) |
-| f | Go to the agent's Herdr tab; refused visibly if the agent is gone |
+| n | On a question: decline (a one-line reason is required, then Enter confirms). In the history: overrule an agent's or automatic answer to its opposite. Anywhere else: new task, which says `task launching comes in the next round`. |
+| Tab | New task (next round) |
+| h | Today's history, newest first: answers, decisions and finished work. `h` or Esc returns. |
+| / | Scope: all repositories, one repository, *needs you*, *working*, or the history |
+| ! / w | Show only what needs you / only working sessions (again to show all) |
+| wheel | Scroll the list, or the open summary |
+| o | Open the brief, memo, report or message with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open -t` (the default text editor) |
 | p | Next project, when more than one is configured |
 | r | Reload now |
 | ? | Help |
 | Esc | Close the innermost thing; never quits |
-| q | Quit (only from the list) |
+| q | Quit (from the list or the history) |
+
+The console turns on the terminal's mouse reporting (SGR mode) while it runs and turns it off
+when it quits, when it suspends for an editor, and when it crashes. The keyboard does everything
+the mouse does. If Herdr keeps right clicks for itself, `m` opens the same menu.
 
 The console records answers only through `org answer` (a child process with an argument array,
 `ORG_ACTOR` removed, so the answer is the operator's; the reason goes as `--note=<reason>`) and
@@ -302,7 +357,7 @@ re-reads at once. Everything agents wrote is shown with terminal escape sequence
 characters removed. A text document opened with `o` is written to a private temporary folder and
 removed when the editor returns (or, for macOS `open -t`, when the console quits). It never appends to
 `events.jsonl`, and never starts, stops or messages agents; its only action on agents is focusing
-a tab. Answers are acted on by the next executive pass.
+a tab.
 
 ## Guardrails are advisory
 

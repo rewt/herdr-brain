@@ -78,11 +78,15 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     }
   }
 
-  function transcriptOf(agent) {
+  // A lookup by name reads transcripts written since the run started, else since local midnight.
+  function transcriptOf(agent, run = null) {
     if (agent.tool && agent.tool !== 'claude') return null;
     if (!agent.session && !agent.name) return null;
+    const started = run?.started ? Date.parse(run.started) : NaN;
+    const midnight = Date.parse(s.today?.project?.day?.start ?? '') || new Date().setHours(0, 0, 0, 0);
+    const sinceMs = Number.isNaN(started) ? midnight : started;
     try {
-      return d.reader.transcript({ configDirs: configDirs(), cwd: agent.cwd, id: agent.session, name: agent.session ? null : agent.name });
+      return d.reader.transcript({ configDirs: configDirs(), cwd: agent.cwd, id: agent.session, name: agent.session ? null : agent.name, sinceMs });
     } catch {
       return null;
     }

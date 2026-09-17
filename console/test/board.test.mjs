@@ -144,3 +144,34 @@ test('the Context of a session names where everything is', () => {
   assert.equal(pairs.gate, 'not recorded');
   assert.equal(pairs.org, '/tmp/org');
 });
+
+test('an idle agent whose org run already finished is named after that run, and a finished run never adds a row', () => {
+  const today = boardToday();
+  const finishedRun = (run, agent, round) => ({
+    run, item: 'ENG-1', title: 'Build the console', role: 'engineer', started: at('12:00'), agent, lane: 'brain-console-v1',
+    harness: 'claude-code', model: 'opus', effort: 'high', workspace: '/w/herdr-org/lane-brain-console-v1', round,
+    brief_path: `/tmp/org/runs/${run}/brief.md`, report_path: '/tmp/r.md',
+  });
+  today.agent_runs = [
+    finishedRun('R-9', 'lane-console-a', 9), // the same agent as open R-4: the open run wins
+    finishedRun('R-8', 'lane-console-old-2', 2),
+    finishedRun('R-7', 'lane-console-old-1', 1),
+    finishedRun('R-5', 'lane-not-in-herdr', 5),
+  ];
+  const herdr = boardHerdr();
+  for (const name of ['lane-console-old-1', 'lane-console-old-2']) {
+    herdr.agents.push({ name, status: 'idle', tab: `w1:${name}`, pane: `w1:${name}`, cwd: '/w/herdr-org/lane-brain-console-v1',
+      workspace: 'w1', tool: 'claude', title: name, session: null });
+  }
+  const b = board({ today, herdr });
+  const rows = b.groups.flatMap((g) => g.rows);
+  const byAgent = new Map(rows.map((r) => [r.agent, r]));
+  assert.equal(byAgent.get('lane-console-a').key, 'r:R-4');
+  assert.equal(byAgent.get('lane-console-a').session, 'lane brain-console-v1 r3');
+  assert.deepEqual(['lane-console-old-1', 'lane-console-old-2'].map((n) => [byAgent.get(n).session, byAgent.get(n).state, byAgent.get(n).who.text]), [
+    ['lane brain-console-v1 r1', 'idle', 'Claude Opus · high'],
+    ['lane brain-console-v1 r2', 'idle', 'Claude Opus · high'],
+  ]);
+  assert.ok(!rows.some((r) => r.key === 'r:R-5' || r.key === 'r:R-9'), 'a finished run without a live agent is not a row');
+  assert.ok(!rows.some((r) => r.state === 'gone' && r.run?.round === 5));
+});

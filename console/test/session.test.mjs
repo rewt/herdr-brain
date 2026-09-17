@@ -329,3 +329,41 @@ test('a missing configuration becomes an example that must be edited', () => {
   fs.writeFileSync(file, JSON.stringify({ projects: [{ name: 'p' }] }));
   assert.throws(() => loadConfig(file), /needs "org"/);
 });
+
+test('DOING for a run with no usable title comes from the work in the brief org start wrote, never its fixed opening', async () => {
+  const t = tempOrg();
+  t.org('start', 'ENG-1', '--harness', 'claude-code', '--model', 'opus', '--meta', 'agent=lane-untitled', '--meta', 'lane=theft');
+  t.org('start', 'DOC-1', '--harness', 'codex', '--meta', 'agent=lane-codex', '--meta', 'lane=notes');
+  const brief = t.org('brief', 'R-1');
+  assert.match(brief, /You are a fresh session\./, 'the brief still opens with the fixed line');
+  const herdr = async () => ({ ok: true, agents: [
+    // A Codex agent with no title, and nothing in Herdr for R-1: gone.
+    { name: 'lane-codex', status: 'working', tool: 'codex', tab: 'w1:t1', pane: 'w1:p1', cwd: t.root, title: null },
+  ] });
+  for (const deps of [{ ...quiet, herdrAgents: herdr }, { ...quiet, herdrAgents: async () => ({ ok: false, agents: [], error: 'down' }) }]) {
+    const session = createSession({ config: t.config, deps });
+    await session.refresh({ reorder: true });
+    const rows = session.board.groups.flatMap((g) => g.rows);
+    assert.deepEqual(rows.map((r) => [r.session, r.doing]).sort(), [
+      ['lane notes r1', 'Publish the notes'],
+      ['lane theft r1', 'Implement the theft fix'],
+    ]);
+  }
+});
+
+test('transcripts are looked up by name from the run\'s start, else from local midnight', async () => {
+  const t = tempOrg();
+  t.org('start', 'ENG-1', '--meta', 'agent=lane-run');
+  const calls = [];
+  const reader = { transcript: (args) => { calls.push(args); return null; } };
+  const herdrAgents = async () => ({ ok: true, agents: [
+    { name: 'lane-run', status: 'working', tool: 'claude', tab: 'w1:t1', pane: 'w1:p1', cwd: t.root, title: 'Fixing the board now' },
+    { name: 'loose', status: 'idle', tool: 'claude', tab: 'w1:t2', pane: 'w1:p2', cwd: t.root, title: 'Something else here' },
+  ] });
+  const session = createSession({ config: t.config, deps: { ...quiet, herdrAgents, reader } });
+  await session.refresh({ reorder: true });
+  const today = JSON.parse(t.org('today', '--json'));
+  const since = Object.fromEntries(calls.map((c) => [c.name, c.sinceMs]));
+  assert.equal(since['lane-run'], Date.parse(today.running[0].started));
+  assert.equal(since.loose, Date.parse(today.project.day.start));
+});

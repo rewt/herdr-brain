@@ -168,7 +168,7 @@ function sessionName(run, agent, tabs, prefixes) {
 
 function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
   const { transcriptOf, repoOf, briefOf, nowMs, fallbackCwd } = deps;
-  const transcript = agent ? transcriptOf(agent) : null;
+  const transcript = agent ? transcriptOf(agent, run) : null;
   const cwd = agent?.cwd ?? run?.workspace ?? null;
   const repo = repoOf(cwd) ?? (agent ? null : repoOf(fallbackCwd)) ?? UNKNOWN_REPO;
   return {
@@ -203,7 +203,7 @@ function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
 //   today         org today --json
 //   herdr         { ok, agents, error } from herdr agent list
 //   tabs          herdr tab list (labels for agents without a name)
-//   transcriptOf  agent → { file, model, firstAt, note } | null
+//   transcriptOf  (agent, run) → { file, model, firstAt, note } | null
 //   repoOf        folder → { root, name, path, git } | null
 //   briefOf       brief path → text | null
 //   seen          agent name → when this console last saw it (ms)
@@ -222,7 +222,8 @@ export function buildBoard({
   const agents = herdrOk ? herdr.agents ?? [] : [];
   const byName = new Map(agents.filter((a) => a.name).map((a) => [a.name, a]));
   const runs = today?.running ?? [];
-  const runByAgent = new Map(runs.filter((r) => r.agent).map((r) => [r.agent, r]));
+  // An agent is named after its open run, else after the latest finished run it did.
+  const runByAgent = new Map([...(today?.agent_runs ?? []), ...runs].filter((r) => r.agent).map((r) => [r.agent, r]));
 
   const sessions = [];
   for (const agent of agents) {

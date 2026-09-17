@@ -66,9 +66,15 @@ function usable(text, prefixes) {
   return t.split(' ').filter(Boolean).length >= 2 ? t : null;
 }
 
-// The first sentence of a brief that is not a heading.
+// Every org brief opens with this fixed line (lib/render.mjs renderBrief); it says nothing.
+const BRIEF_OPENING = /^You are a fresh session\b/;
+
+// The first sentence of a brief's work: what follows its Work item heading when it has
+// one, else its first line that is neither a heading nor the fixed opening.
 function briefSentence(brief, prefixes) {
-  const body = String(brief ?? '').split('\n').filter((l) => !/^\s{0,3}#/.test(l)).join('\n');
+  const lines = String(brief ?? '').split('\n');
+  const work = lines.findIndex((l) => /^\s{0,3}#+\s*Work item\s*$/i.test(l));
+  const body = lines.slice(work + 1).filter((l) => !/^\s{0,3}#/.test(l) && !BRIEF_OPENING.test(l.trim())).join('\n');
   const line = firstLine(body);
   return line ? usable(firstSentence(stripCodes(line, prefixes)), prefixes) : null;
 }

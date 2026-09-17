@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createSessionReader, parseAgentList, parseTabList } from '../lib/sources.mjs';
@@ -61,4 +62,28 @@ test('a missing session id is not searched for again until the folders change', 
   clock = 61000;
   reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: 'nope' });
   assert.ok(listed > first, 'and searched again after a minute');
+});
+
+test('a transcript looked up by agent name reads only transcripts written since the lower bound', () => {
+  const dir = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'console-transcripts-'));
+  const folder = path.join(dir, 'projects', '-tmp-named');
+  nodeFs.mkdirSync(folder, { recursive: true });
+  const line = (e) => `${JSON.stringify(e)}\n`;
+  const old = path.join(folder, 'old.jsonl');
+  const fresh = path.join(folder, 'fresh.jsonl');
+  nodeFs.writeFileSync(old, line({ type: 'agent-name', agentName: 'someone-else' }));
+  nodeFs.writeFileSync(fresh, line({ type: 'agent-name', agentName: 'lane-named' }) + line({ type: 'user', timestamp: '2026-09-16T20:00:00.000Z' }));
+  const since = Date.parse('2026-09-16T05:00:00Z');
+  nodeFs.utimesSync(old, new Date(since - 86400000), new Date(since - 86400000));
+  nodeFs.utimesSync(fresh, new Date(since + 3600000), new Date(since + 3600000));
+  const opened = [];
+  const fsApi = { ...nodeFs, openSync: (file, ...a) => { opened.push(path.basename(file)); return nodeFs.openSync(file, ...a); } };
+  const reader = createSessionReader({ fsApi });
+  assert.equal(reader.transcript({ configDirs: [dir], cwd: '/tmp/named', name: 'lane-named', sinceMs: since }).file, fresh);
+  assert.equal(reader.transcript({ configDirs: [dir], cwd: '/tmp/named', name: 'nobody', sinceMs: since }), null);
+  assert.ok(!opened.includes('old.jsonl'), `opened: ${opened.join(', ')}`);
+  // Without a bound, both are read: the bound is what keeps old transcripts closed.
+  opened.length = 0;
+  createSessionReader({ fsApi }).transcript({ configDirs: [dir], cwd: '/tmp/named', name: 'nobody' });
+  assert.ok(opened.includes('old.jsonl'));
 });

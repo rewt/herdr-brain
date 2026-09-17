@@ -1,6 +1,13 @@
 // The console's only ways to touch the world: the org CLI (child process, argument
-// arrays), Herdr's agent and tab lists and focus, and an external viewer. It never
-// appends to events.jsonl and never starts, stops or messages agents.
+// arrays), Herdr's agent and tab lists and focus, Herdr's right-click routing for the
+// console's own pane, and an external viewer. It never appends to events.jsonl and
+// never starts, stops or messages agents.
+//
+// Right clicks: Herdr keeps them for its pane menu unless the pane asks. While the
+// console runs, app.mjs calls `herdr pane input --right-click pane $HERDR_PANE_ID`
+// (herdrRightClick) so right clicks reach the console, and gives them back with
+// `--right-click herdr` on quit, suspend and crash. Herdr's own pane menu is not
+// available in that pane meanwhile. Without HERDR_PANE_ID nothing is routed.
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

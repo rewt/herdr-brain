@@ -249,9 +249,10 @@ export function createSessionReader({ fsApi = nodeFs, now = Date.now } = {}) {
     return null;
   }
 
-  // transcript({ configDirs, cwd, id | name }) → { file, model, firstAt, note } or null.
-  function transcript({ configDirs, cwd, id = null, name = null }) {
-    const file = id ? findById(configDirs, cwd, id) : name ? find({ configDirs, cwd: cwd ?? '/', name }) : null;
+  // transcript({ configDirs, cwd, id | name, sinceMs }) → { file, model, firstAt, note } or null.
+  // A lookup by name reads only transcripts touched since `sinceMs`.
+  function transcript({ configDirs, cwd, id = null, name = null, sinceMs = 0 }) {
+    const file = id ? findById(configDirs, cwd, id) : name ? find({ configDirs, cwd: cwd ?? '/', name, sinceMs }) : null;
     const entry = file ? load(file) : null;
     if (!entry) return null;
     return { file, model: entry.model, firstAt: entry.firstAt, note: entry.note };

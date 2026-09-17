@@ -188,6 +188,7 @@ only view of the organization. It is deterministic for a fixed record, config, `
   "running": [{ "run", "item", "title", "role", "started", "agent", "lane",
                 "harness", "model", "effort", "workspace", "round",   // round: 1 for an item's first run
                 "brief_path", "report_path" }],
+  "agent_runs": [ … ],               // same fields: the latest finished run of each agent name, newest first (at most 50)
   "finished": [                       // newest first
     { "kind": "report", "run", "item", "seq", "title", "role", "outcome", "headline", "summary",
       "report_file": "/abs/.org/reports/R-n.md", "late", "at" },
@@ -302,12 +303,12 @@ From the top:
 
 | Column | Shows | From |
 |---|---|---|
-| SESSION | `lane <topic> r<round>`, else the agent's name, else the tab label (`tab 1` for a bare number) | org run `lane`/`round`, Herdr |
+| SESSION | `lane <topic> r<round>`, else the agent's name, else the tab label (`tab 1` for a bare number) | org run `lane`/`round` (the agent's open run, else the latest finished run with its name), Herdr |
 | WHO | tool and model in words, plus effort: `Claude Opus 5 · high`, `Codex Astra · xhigh`; `Claude · unknown` without a model | org run `harness`/`model`/`effort`; else Herdr's `agent` and the transcript's last model. An alias recorded in org (`opus`) gives way to the exact model in the transcript. |
 | WHERE | the checkout folder | Herdr `cwd` (org `workspace` for a gone run) |
 | UP | `9m`, `2h`, `3d` or `unknown` | org run `started`, else the transcript's first entry |
 | STATE | `working`, `idle`, `blocked`, `done`, `gone`, `unknown` | Herdr `agent_status` |
-| DOING | at most ten words | Herdr's terminal title (unless it only repeats the agent's name), else the brief's first sentence, else the org item title, else `no description` |
+| DOING | at most ten words | Herdr's terminal title (unless it only repeats the agent's name), else the first sentence of the brief's work (what follows its Work item heading; the fixed opening every org brief has is skipped), else the org item title, else `no description` |
 
 Model IDs are turned into words by a table in `console/lib/names.mjs`; an ID not in it is shown
 as it is. Codes (`ENG-7`, `R-12`, commit hashes) are stripped from SESSION and DOING; a title left
@@ -348,16 +349,21 @@ the only place codes appear.
 | q | Quit (from the list or the history) |
 
 The console turns on the terminal's mouse reporting (SGR mode) while it runs and turns it off
-when it quits, when it suspends for an editor, and when it crashes. The keyboard does everything
-the mouse does. If Herdr keeps right clicks for itself, `m` opens the same menu.
+when it quits, when it suspends for an editor, and when it crashes. Herdr keeps right clicks for
+its own pane menu unless the pane asks for them, so inside Herdr (where `HERDR_PANE_ID` is set)
+the console runs `herdr pane input --right-click pane $HERDR_PANE_ID` when it starts and
+`--right-click herdr` when it quits, suspends for an editor or crashes. While the console runs,
+Herdr's own pane menu is not available in that pane. Without `HERDR_PANE_ID`, or if that call
+fails, right clicks stay Herdr's; `m` opens the same menu. The keyboard does everything the mouse
+does.
 
 The console records answers only through `org answer` (a child process with an argument array,
 `ORG_ACTOR` removed, so the answer is the operator's; the reason goes as `--note=<reason>`) and
 re-reads at once. Everything agents wrote is shown with terminal escape sequences and control
 characters removed. A text document opened with `o` is written to a private temporary folder and
 removed when the editor returns (or, for macOS `open -t`, when the console quits). It never appends to
-`events.jsonl`, and never starts, stops or messages agents; its only action on agents is focusing
-a tab.
+`events.jsonl`, and never starts, stops or messages agents. Its only Herdr actions are reading the
+agent and tab lists, focusing a tab or agent, and routing right clicks in its own pane.
 
 ## Guardrails are advisory
 

@@ -63,6 +63,11 @@ test('DOING is at most ten words, cut at a word boundary, from the first usable 
   assert.equal(doingText({ title: 'REV-8 pstore retention design review' }), 'pstore retention design review');
   // The brief's first sentence, skipping headings.
   assert.equal(doingText({ brief: '# Brief: run R-5 on ENG-1\n\n## Work item\n- **ENG-1** Build the console. Then more.' }), 'Build the console.');
+  // The fixed opening every org brief has is skipped, with or without a Work item heading.
+  const opening = 'You are a fresh session. What earlier sessions established is summarized below.';
+  assert.equal(doingText({ brief: `# Brief: run R-5 on ENG-1\n\n${opening}\n\n## Work item\n- **ENG-1** Build the console\n- role: engineer`, itemTitle: 'X y' }), 'Build the console');
+  assert.equal(doingText({ brief: `# Brief\n\n${opening}\n\nPort the relay.`, itemTitle: 'X y' }), 'Port the relay.');
+  assert.equal(doingText({ brief: `# Brief\n\n${opening}\n`, itemTitle: 'Five-repository release map' }), 'Five-repository release map');
   assert.equal(doingText({ itemTitle: 'Five-repository release map' }), 'Five-repository release map');
   assert.equal(doingText({}), 'no description');
 });

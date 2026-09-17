@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #000000; }
+    .t { font-family: "JetBrains Mono", "Maple Mono NF", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; color: #e4e4e4; }
+    .muted { color: #8a8a8a; }
+    .kv { display: grid; grid-template-columns: 14ch minmax(0, 1fr); column-gap: 1ch; }
+    .btn { padding: 2px 14px; border-radius: 10px; border: 1px solid #3a3a3a; font: inherit; color: inherit; background: transparent; }
+    .step { display: grid; grid-template-columns: 3ch minmax(0, 1fr); column-gap: 1ch; }
+  </style>
+</helmet>
+<div class="t" style="width: 1132px; height: 840px; position: relative; background: #000000;">
+  <dc-import name="Main" compose="{{yes}}" hint-size="1132px,840px"></dc-import>
+  <div style="position: absolute; top: 0; left: 0; width: 1132px; height: 840px; background: rgba(0, 0, 0, 0.72); display: flex; align-items: center; justify-content: center;">
+    <section style="width: 780px; background: #121212; border: 1px solid #3a3a3a; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; height: 28px; background: #0087af; color: #ffffff; padding: 0 12px; font-weight: 700;">Review launch · one new session</div>
+      <div style="padding: 12px; display: flex; flex-direction: column; gap: 12px;">
+        <div class="kv">
+          <span class="muted">Task</span><span style="white-space: pre-wrap;">Add a --json flag to lane review so the console can read verdicts
+without parsing the markdown record. Keep the text output unchanged.</span>
+          <span class="muted">Where</span><span>herdr-lanes · ~/development/rewt/herdr-lanes</span>
+          <span class="muted">New worktree</span><span>~/development/rewt/.worktrees/herdr-lanes/lane-review-json-verdict</span>
+          <span class="muted">Who</span><span><span style="color: #d7875f;">Claude</span> Opus 5 · effort high · route engineer · Default engineering</span>
+          <span class="muted">Goal</span><span>Herdr Brain console: the operator sees and approves what agents decide</span>
+        </div>
+        <div style="color: #ffffff; font-weight: 700;">What happens on launch</div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div class="step"><span style="color: #5fd7ff;">1</span><span>The task is recorded in org under the goal, so its state and history live there.</span></div>
+          <div class="step"><span style="color: #5fd7ff;">2</span><span>A lane opens: its own worktree and branch.</span></div>
+          <div class="step"><span style="color: #5fd7ff;">3</span><span>A brief is written: this task, the goal and its notes, and where to report.</span></div>
+          <div class="step"><span style="color: #5fd7ff;">4</span><span>The agent starts in a new Herdr tab with that brief and the repo's AGENTS.md.</span></div>
+          <div class="step"><span style="color: #5fd7ff;">5</span><span>A watcher records its report when it stops. It appears here as a working row.</span></div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-top: 1px solid #2a2a2a;">
+        <button class="btn" style="outline: 1px solid #5fd7ff; color: #5fd7ff;">Back to draft</button>
+        <button class="btn" style="background: #0087af; border-color: #0087af; color: #ffffff; font-weight: 700;">Launch once</button>
+        <button class="btn">Edit brief, then launch</button>
+        <span style="flex-grow: 1;"></span>
+        <span class="muted">Back is selected, so a stray Enter never launches</span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1132,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() { return { yes: true }; }
+}
+</script>
+</body>
+</html>

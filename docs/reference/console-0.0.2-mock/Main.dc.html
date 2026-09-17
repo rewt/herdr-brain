@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #000000; }
+    .t { font-family: "JetBrains Mono", "Maple Mono NF", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; color: #e4e4e4; }
+    .line { height: 20px; display: flex; align-items: center; white-space: nowrap; }
+    .seg { height: 20px; display: flex; align-items: center; gap: 6px; padding: 0 8px; }
+    .arrow { width: 10px; height: 20px; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+    .larrow { width: 10px; height: 20px; clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+    .ic { width: 12px; height: 12px; flex: none; }
+    .row { height: 20px; display: grid; grid-template-columns: 3ch 26ch 22ch 20ch 5ch 8ch minmax(0, 1fr); column-gap: 1ch; align-items: center; white-space: nowrap; padding: 0 1ch; }
+    .row > span { overflow: hidden; text-overflow: ellipsis; }
+    .muted { color: #8a8a8a; }
+    .ghead { height: 20px; display: flex; align-items: center; gap: 1ch; padding: 0 1ch; margin-top: 4px; }
+    .pill { display: flex; align-items: center; gap: 6px; height: 18px; padding: 0 10px; border-radius: 9px; background: #1a1a1a; }
+    .rule { flex-grow: 1; height: 1px; background: #2a2a2a; }
+    .field { background: #121212; border-radius: 6px; }
+    .key { color: #000000; background: #5f5f5f; border-radius: 4px; padding: 0 5px; margin-right: 4px; }
+  </style>
+</helmet>
+<div class="t" style="width: 1132px; height: 840px; box-sizing: border-box; padding: 20px; background: #000000; display: flex; flex-direction: column; position: relative;">
+
+  <!-- header: powerline segments -->
+  <div class="line">
+    <div class="seg" style="background: #0087af; color: #ffffff; font-weight: 700;">
+      <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h4l1.5 1.5H14v7H2z"/></svg>herdr-org
+    </div>
+    <div class="arrow" style="background: #0087af;"></div>
+    <div class="seg" style="background: #303030; margin-left: -10px; padding-left: 16px;">
+      <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>20:50
+    </div>
+    <div class="arrow" style="background: #303030;"></div>
+    <div class="seg" style="background: #262626; margin-left: -10px; padding-left: 16px;">
+      <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M5 7l2 1.5L5 10M8.5 10.5H11"/></svg>4/30 sessions today
+    </div>
+    <div class="arrow" style="background: #262626;"></div>
+    <div class="seg" style="background: #d75f00; color: #000000; font-weight: 700; margin-left: -10px; padding-left: 16px;">
+      <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3M8 11.3v.2"/></svg>1 waiting on you
+    </div>
+    <div class="arrow" style="background: #d75f00;"></div>
+    <div style="flex-grow: 1;"></div>
+    <div class="larrow" style="background: #262626;"></div>
+    <div class="seg" style="background: #262626; color: #8a8a8a;">console 0.0.2</div>
+    <div class="larrow" style="background: #3a3a3a; margin-right: -10px; position: relative; z-index: 1;"></div>
+    <div class="seg" style="background: #3a3a3a; padding-left: 16px;">? help</div>
+  </div>
+
+  <!-- waiting on you -->
+  <div class="ghead" style="margin-top: 10px;">
+    <span class="pill" style="background: #3a1d00; color: #ffaf5f; font-weight: 700;">
+      <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.4M8 11.3v.2"/></svg>WAITING ON YOU
+    </span>
+    <span class="rule"></span><span class="pill" style="background: #3a1d00; color: #ffaf5f;">1</span>
+  </div>
+  <div class="line" style="background: {{waitBg}}; padding: 0 1ch; gap: 1ch;">
+    <span style="width: 3ch; color: #ffaf5f; font-weight: 700;">{{waitMark}}</span>
+    <span style="flex-grow: 1; overflow: hidden; text-overflow: ellipsis;">Let an agent read one real session transcript to check note lookup?</span>
+    <span class="muted">other</span><span class="muted">·</span>
+    <span style="color: #87d787;">recommend yes</span><span class="muted">·</span>
+    <span class="muted">asked 19:05</span>
+  </div>
+
+  <!-- column heads -->
+  <div class="row muted" style="margin-top: 10px;">
+    <span></span><span>SESSION</span><span>WHO</span><span>WHERE</span><span>UP</span><span>STATE</span><span>DOING</span>
+  </div>
+
+  <sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+    <div class="ghead">
+      <span class="pill">
+        <svg class="ic" viewBox="0 0 16 16" fill="none" stroke="#5fafd7" stroke-width="1.6"><circle cx="5" cy="4" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="11" cy="6" r="1.6"/><path d="M5 5.6v4.8M11 7.6c0 2-2 2.4-4.6 3.4"/></svg>
+        <span style="font-weight: 700;">{{g.name}}</span>
+      </span>
+      <span class="muted">{{g.path}}</span>
+      <span class="rule"></span>
+      <span class="pill muted">{{g.count}}</span>
+    </div>
+    <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="2">
+      <div class="row" style="background: {{r.bg}}; border-radius: 4px;">
+        <span style="color: #5fd7ff; font-weight: 700;">{{r.mark}}</span>
+        <span>{{r.session}}</span>
+        <span><span style="color: {{r.toolColor}};">{{r.tool}}</span> <span>{{r.model}}</span><span class="muted">{{r.effort}}</span></span>
+        <span class="muted">{{r.where}}</span>
+        <span>{{r.up}}</span>
+        <span style="color: {{r.stateColor}};">{{r.dot}} {{r.state}}</span>
+        <span style="color: #c6c6c6;">{{r.doing}}</span>
+      </div>
+    </sc-for>
+  </sc-for>
+
+  <div style="flex-grow: 1;"></div>
+
+  <!-- launch bar -->
+  <div style="border-top: 1px solid #2a2a2a; padding-top: 8px; display: flex; flex-direction: column; gap: 4px;">
+    <sc-if value="{{compose}}" hint-placeholder-val="{{ false }}">
+      <label class="line" style="gap: 1ch; align-items: flex-start; height: auto;">
+        <span style="width: 6ch; color: #5fd7ff; font-weight: 700;">Task</span>
+        <span class="field" style="flex-grow: 1; padding: 0 1ch; white-space: pre-wrap; height: 60px; outline: 1px solid #5fd7ff;">Add a --json flag to lane review so the console can read verdicts
+without parsing the markdown record. Keep the text output unchanged.<span style="background: #5fd7ff; color: #000;"> </span></span>
+      </label>
+      <div class="line" style="gap: 2ch; padding-left: 7ch;">
+        <span><span class="muted">Where </span><span class="field" style="padding: 0 1ch;">herdr-lanes</span></span>
+        <span><span class="muted">Who </span><span class="field" style="padding: 0 1ch;"><span style="color: #d7875f;">Claude</span> Opus 5 · high</span></span>
+        <span><span class="muted">Goal </span><span class="field" style="padding: 0 1ch;">Herdr Brain console</span></span>
+        <span><span class="muted">Topic </span><span class="field" style="padding: 0 1ch;">review-json-verdict</span></span>
+        <span style="flex-grow: 1;"></span>
+        <span style="background: #0087af; color: #fff; font-weight: 700; padding: 0 1.5ch; border-radius: 10px;">Review launch</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{idle}}" hint-placeholder-val="{{ true }}">
+      <div class="line" style="gap: 1ch;">
+        <span style="width: 6ch; color: #5fd7ff; font-weight: 700;">Task</span>
+        <span class="field muted" style="flex-grow: 1; padding: 0 1ch;">n  Describe the outcome. Enter adds a line.</span>
+      </div>
+      <div class="line" style="gap: 2ch; padding-left: 7ch;">
+        <span><span class="muted">Where </span><span class="field" style="padding: 0 1ch;">choose repository</span></span>
+        <span><span class="muted">Who </span><span class="field" style="padding: 0 1ch;">choose route</span></span>
+        <span><span class="muted">Goal </span><span class="field" style="padding: 0 1ch;">Herdr Brain console</span></span>
+        <span style="flex-grow: 1;"></span>
+        <span class="muted" style="border: 1px solid #3a3a3a; padding: 0 1.5ch; border-radius: 10px;">Review launch</span>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- footer: segments -->
+  <div class="line" style="margin-top: 8px;">
+    <div class="seg" style="background: #303030;">{{footerMode}}</div>
+    <div class="arrow" style="background: #303030;"></div>
+    <div class="seg" style="gap: 14px;">
+      <sc-for list="{{keys}}" as="k" hint-placeholder-count="6">
+        <span><span class="key">{{k.k}}</span><span class="muted">{{k.label}}</span></span>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"compose":{"editor":"boolean","default":false},"dim":{"editor":null},"$preview":{"width":1132,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const compose = this.props.compose ?? false;
+    const sel = '#1c2b3a';
+    const state = (s) => ({ working: ['#5fd7ff', '●'], idle: ['#8a8a8a', '○'], blocked: ['#ff5f5f', '■'], done: ['#87d787', '✓'], gone: ['#5f5f5f', '×'] }[s]);
+    const tool = (t) => (t === 'Codex' ? '#afafff' : '#d7875f');
+    const row = (o) => {
+      const [c, d] = state(o.state);
+      return { ...o, stateColor: c, dot: d, toolColor: tool(o.tool), effort: o.effort ? ' · ' + o.effort : '', bg: o.sel && !compose ? sel : 'transparent', mark: o.sel && !compose ? '>' : '' };
+    };
+    const groups = [
+      { name: 'herdr-org', path: '~/development/rewt/herdr-org', rows: [
+        { session: 'settle console-0.0.2', tool: 'Claude', model: 'Opus 5', effort: 'high', where: 'herdr-org', up: '2h', state: 'working', doing: 'Drafting the console 0.0.2 spec and mock', sel: true },
+        { session: 'lane brain-console-v1 r3', tool: 'Claude', model: 'Opus 5', effort: 'high', where: 'lane-brain-console-v1', up: '44m', state: 'done', doing: 'Fixed all five review round two findings' },
+      ]},
+      { name: 'herdr-lanes', path: '~/development/rewt/herdr-lanes', rows: [
+        { session: 'board-messages /eng+', tool: 'Codex', model: 'Astra', effort: 'xhigh', where: 'lane-board-messages', up: '9m', state: 'working', doing: 'Building the message rule table first' },
+        { session: 'review-cli-fix-3 r7', tool: 'Claude', model: 'Fable 5.1', effort: '', where: 'lane-review-cli-fix-3', up: '24m', state: 'blocked', doing: 'Waiting on approval to run the sweep' },
+        { session: 'herdr-lanes', tool: 'Claude', model: 'unknown', effort: '', where: 'herdr-lanes', up: '6h', state: 'idle', doing: 'Lane console keyboard study' },
+      ]},
+      { name: 'coach', path: '~/development/rewt/coach', rows: [
+        { session: 'coach', tool: 'Claude', model: 'Sonnet 5', effort: '', where: 'coach', up: '3h', state: 'idle', doing: 'Coach.me connector with Claude chat' },
+        { session: 'intervals-write-provider', tool: 'Codex', model: 'Sol', effort: 'high', where: 'lane-intervals-write-provider', up: '2h', state: 'working', doing: 'Wiring the provider write flag into config' },
+      ]},
+    ].map((g) => ({ ...g, count: String(g.rows.length), rows: g.rows.map(row) }));
+    const keys = compose
+      ? [{ k: 'Enter', label: 'new line' }, { k: 'Tab', label: 'next field' }, { k: 'Esc', label: 'keep draft, back to list' }]
+      : [{ k: 'j/k', label: 'select' }, { k: 'Enter', label: 'go to session' }, { k: 's', label: 'summary' }, { k: 'y/n', label: 'answer' }, { k: 'n', label: 'new task' }, { k: 'h', label: 'history' }, { k: '/', label: 'scope' }, { k: 'q', label: 'quit' }];
+    return {
+      compose, idle: !compose, groups, keys,
+      footerMode: compose ? 'COMPOSING' : 'LIST',
+      waitBg: 'transparent', waitMark: '!',
+    };
+  }
+}
+</script>
+</body>
+</html>

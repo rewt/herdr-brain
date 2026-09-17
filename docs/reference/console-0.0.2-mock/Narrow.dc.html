@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #000000; }
+    .t { font-family: "JetBrains Mono", "Maple Mono NF", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; color: #e4e4e4; }
+    .line { height: 20px; display: flex; align-items: center; white-space: nowrap; }
+    .seg { height: 20px; display: flex; align-items: center; padding: 0 8px; }
+    .arrow { width: 10px; height: 20px; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+    .muted { color: #8a8a8a; }
+    .row { display: grid; grid-template-columns: 2ch minmax(0, 1fr) 20ch 9ch; column-gap: 1ch; padding: 0 1ch; white-space: nowrap; }
+    .row > span { overflow: hidden; text-overflow: ellipsis; }
+    .pill { display: flex; align-items: center; height: 18px; padding: 0 10px; border-radius: 9px; background: #1a1a1a; font-weight: 700; }
+    .ghead { height: 20px; display: flex; align-items: center; gap: 1ch; padding: 0 1ch; margin-top: 4px; }
+    .rule { flex-grow: 1; height: 1px; background: #2a2a2a; }
+    .field { background: #121212; border-radius: 6px; padding: 0 1ch; }
+  </style>
+</helmet>
+<div class="t" style="width: 664px; height: 520px; box-sizing: border-box; padding: 20px; background: #000000; display: flex; flex-direction: column;">
+  <div class="line">
+    <div class="seg" style="background: #0087af; color: #fff; font-weight: 700;">herdr-org</div>
+    <div class="arrow" style="background: #0087af;"></div>
+    <div class="seg" style="background: #303030; margin-left: -10px; padding-left: 16px;">20:50 · 4/30</div>
+    <div class="arrow" style="background: #303030;"></div>
+    <div class="seg" style="background: #d75f00; color: #000; font-weight: 700; margin-left: -10px; padding-left: 16px;">1 waiting</div>
+    <div class="arrow" style="background: #d75f00;"></div>
+    <span style="flex-grow: 1;"></span><span class="muted">? help</span>
+  </div>
+  <div class="ghead" style="margin-top: 8px;"><span class="pill" style="background: #3a1d00; color: #ffaf5f;">WAITING ON YOU</span><span class="rule"></span></div>
+  <div class="line" style="padding: 0 1ch; gap: 1ch;"><span style="color: #ffaf5f; font-weight: 700;">!</span><span style="overflow: hidden; text-overflow: ellipsis;">Let an agent read one real session transcript…</span><span style="color: #87d787;">yes</span></div>
+
+  <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+    <div class="ghead"><span class="pill">{{g.name}}</span><span class="rule"></span><span class="muted">{{g.count}}</span></div>
+    <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="2">
+      <div style="background: {{r.bg}}; border-radius: 4px;">
+        <div class="row">
+          <span style="color: #5fd7ff; font-weight: 700;">{{r.mark}}</span>
+          <span>{{r.session}}</span>
+          <span><span style="color: {{r.toolColor}};">{{r.tool}}</span> {{r.model}}</span>
+          <span style="color: {{r.stateColor}};">{{r.state}}</span>
+        </div>
+        <div class="row"><span></span><span class="muted" style="grid-column: span 3;">{{r.doing}}</span></div>
+      </div>
+    </sc-for>
+  </sc-for>
+
+  <div style="flex-grow: 1;"></div>
+  <div style="border-top: 1px solid #2a2a2a; padding-top: 6px;">
+    <div class="line" style="gap: 1ch;"><span style="color: #5fd7ff; font-weight: 700;">Task</span><span class="field muted" style="flex-grow: 1;">n  Describe the outcome</span></div>
+  </div>
+  <div class="line" style="margin-top: 6px; gap: 12px;">
+    <span class="muted">j/k select · Enter go · s summary · n task · ? keys</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":664,"height":520}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const colors = { working: '#5fd7ff', done: '#87d787', idle: '#8a8a8a', blocked: '#ff5f5f' };
+    const mk = (o) => ({ ...o, stateColor: colors[o.state], toolColor: o.tool === 'Codex' ? '#afafff' : '#d7875f', bg: o.sel ? '#1c2b3a' : 'transparent', mark: o.sel ? '>' : '' });
+    const groups = [
+      { name: 'herdr-org', rows: [
+        { session: 'settle console-0.0.2', tool: 'Claude', model: 'Opus 5', state: 'working', doing: 'Drafting the console 0.0.2 spec and mock', sel: true },
+        { session: 'lane brain-console-v1 r3', tool: 'Claude', model: 'Opus 5', state: 'done', doing: 'Fixed all five review round two findings' },
+      ]},
+      { name: 'herdr-lanes', rows: [
+        { session: 'board-messages /eng+', tool: 'Codex', model: 'Astra', state: 'working', doing: 'Building the message rule table first' },
+        { session: 'review-cli-fix-3 r7', tool: 'Claude', model: 'Fable 5.1', state: 'blocked', doing: 'Waiting on approval to run the sweep' },
+      ]},
+    ].map((g) => ({ ...g, count: String(g.rows.length), rows: g.rows.map(mk) }));
+    return { groups };
+  }
+}
+</script>
+</body>
+</html>

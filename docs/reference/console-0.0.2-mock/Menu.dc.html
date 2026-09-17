@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #000000; }
+    .t { font-family: "JetBrains Mono", "Maple Mono NF", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; color: #e4e4e4; }
+    .item { display: flex; justify-content: space-between; gap: 3ch; padding: 2px 12px; border-radius: 6px; font: inherit; color: inherit; background: transparent; border: 0; text-align: left; width: 100%; }
+    .muted { color: #8a8a8a; }
+  </style>
+</helmet>
+<div class="t" style="width: 1132px; height: 840px; position: relative; background: #000000;">
+  <dc-import name="Main" hint-size="1132px,840px"></dc-import>
+  <div style="position: absolute; left: 360px; top: 150px; width: 250px; background: #121212; border: 1px solid #3a3a3a; border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 2px;">
+    <button class="item" style="background: #1c2b3a;"><span><span style="color: #5fd7ff;">&gt;</span> Go to session</span><span class="muted">Enter</span></button>
+    <button class="item"><span>  Summary</span><span class="muted">s</span></button>
+    <div style="height: 1px; background: #2a2a2a; margin: 4px 6px;"></div>
+    <button class="item"><span class="muted">  Open brief</span><span class="muted">o</span></button>
+  </div>
+  <svg style="position: absolute; left: 352px; top: 140px;" width="14" height="18" viewBox="0 0 14 18"><path d="M1 1v14l4-3.5 2.6 5.5 2.2-1-2.5-5.3H13z" fill="#ffffff" stroke="#000000" stroke-width="1"/></svg>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1132,"height":840}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

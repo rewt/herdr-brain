@@ -34,7 +34,8 @@ function busyOrg() {
   t.ok(['note', 'ENG-1', '--decision', '--summary', 'Skip the proof run', 'Skip per R-4 (deadbeef12)'], at('2026-09-15T16:09:00Z'));
   t.ok(['note', 'ENG-1', 'not a decision'], at('2026-09-15T16:10:00Z'));
 
-  t.ok(['start', 'ARCH-1', '--meta', 'agent=lane-release-map', '--meta', 'lane=release-map'], at('2026-09-15T16:06:00Z')); // R-1
+  t.ok(['start', 'ARCH-1', '--harness', 'claude-code', '--model', 'claude-opus-5', '--effort', 'high', '--workspace', '/tmp/lane-release-map',
+    '--meta', 'agent=lane-release-map', '--meta', 'lane=release-map'], at('2026-09-15T16:06:00Z')); // R-1
   t.ok(['start', 'ENG-2'], at(YESTERDAY)); // R-2
   fs.writeFileSync(path.join(t.dir, 'runs/R-2/report.md'), report('run: R-2\noutcome: done\nsummary: Finished.\nheadline: The old task is finished'));
   t.ok(['sync'], at('2026-09-15T16:14:00Z'));
@@ -85,6 +86,7 @@ test('org today --json builds the console read model deterministically', () => {
   assert.deepEqual({ ...doc.running[0], brief_path: path.basename(doc.running[0].brief_path) }, {
     run: 'R-1', item: 'ARCH-1', title: 'Five-repository release map', role: 'architect',
     started: '2026-09-15T16:06:00.000Z', agent: 'lane-release-map', lane: 'release-map',
+    harness: 'claude-code', model: 'claude-opus-5', effort: 'high', workspace: '/tmp/lane-release-map', round: 1,
     brief_path: 'brief.md', report_path: path.join(t.dir, 'runs/R-1/report.md'),
   });
 

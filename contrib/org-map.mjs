@@ -82,8 +82,38 @@ for (const i of open) {
 const ORDER = ['1', '2', '3', '4', 'keys', 'parked', 'unstaged'];
 const stageKeys = [...new Set([...ORDER.filter((k) => buckets.has(k)), ...buckets.keys()])];
 
+// The same rules as lib/state.mjs itemStatus, over the JSON view. A blocker that
+// reported done no longer blocks, even though its item is still open — counting
+// unclosed blockers instead inflates "blocked" badly (13 against 2 on 2026-09-17).
+const RESOLVED = new Set(['done', 'dropped']);
+const statusCache = new Map();
+function statusOf(id, visiting = new Set()) {
+  if (statusCache.has(id)) return statusCache.get(id);
+  const item = items.get(id);
+  if (!item) return 'unknown';
+  const value = (() => {
+    if (item.closed) return item.closed.as;
+    if (runsByItem.has(id)) return 'active';
+    if (item.kind === 'goal') return 'open';
+    if (visiting.has(id)) return 'blocked';
+    visiting.add(id);
+    const unresolved = (item.blocked_by ?? []).filter((b) => !RESOLVED.has(statusOf(b, visiting)));
+    visiting.delete(id);
+    if (unresolved.length) return 'blocked';
+    switch (item.outcome?.value) {
+      case 'done': return 'done';
+      case 'needs_human': return 'needs_human';
+      case 'blocked': return (item.blocked_by ?? []).length ? 'ready' : 'blocked';
+      default: return 'ready';
+    }
+  })();
+  if (!visiting.size) statusCache.set(id, value);
+  return value;
+}
+
+// Only blockers that are genuinely unresolved.
 function blockersOf(id) {
-  return (items.get(id)?.blocked_by ?? []).filter((b) => !items.get(b)?.closed);
+  return (items.get(id)?.blocked_by ?? []).filter((b) => !RESOLVED.has(statusOf(b)));
 }
 
 const model = {
@@ -124,6 +154,7 @@ const model = {
   // With no stage rule, every unstaged item is the working set.
   open_stage_items: (buckets.get(openStage ?? 'unstaged') ?? []).map((i) => ({
     id: i.id, title: i.title, role: i.role, priority: i.priority,
+    status: statusOf(i.id),
     running: (runsByItem.get(i.id) ?? []).map((r) => r.id),
     blocked_by: blockersOf(i.id).map((b) => ({ id: b, title: items.get(b)?.title ?? null, stage: stageOf(items.get(b)) })),
   })),

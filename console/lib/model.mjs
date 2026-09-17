@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { doingText, upText, whoFor } from './names.mjs';
 import { firstMarkdownPath } from './sources.mjs';
-import { firstSentence, hasCodes, oneLine, stripCodes } from './text.mjs';
+import { DEFAULT_PREFIXES, firstSentence, hasCodes, oneLine, stripCodes } from './text.mjs';
 
 export const NO_PLAIN = '· no plain summary';
 
@@ -215,6 +215,8 @@ export function buildBoard({
   const prefixes = today?.project?.item_prefixes ?? undefined;
   const visible = (text) => plain(text, prefixes);
   const deps = { transcriptOf, repoOf, briefOf, nowMs, fallbackCwd };
+  // Sessions may belong to other organizations, so their text also loses the default prefixes.
+  const sessionPrefixes = [...new Set([...(prefixes ?? []), ...DEFAULT_PREFIXES])];
   const tabMap = new Map((tabs ?? []).map((t) => [t.tab, t]));
   const herdrOk = Boolean(herdr?.ok);
   const agents = herdrOk ? herdr.agents ?? [] : [];
@@ -226,7 +228,7 @@ export function buildBoard({
   for (const agent of agents) {
     const run = agent.name ? runByAgent.get(agent.name) ?? null : null;
     const state = STATES.includes(agent.status) && agent.status !== 'gone' ? agent.status : 'unknown';
-    sessions.push(sessionRow({ run, agent, state, deps, tabs: tabMap, prefixes }));
+    sessions.push(sessionRow({ run, agent, state, deps, tabs: tabMap, prefixes: sessionPrefixes }));
   }
   for (const run of runs) {
     if (run.agent && byName.has(run.agent)) continue;
@@ -235,7 +237,7 @@ export function buildBoard({
       const since = last ?? Date.parse(run.started);
       if (!(nowMs - since < GONE_KEEP_MS)) continue;
     }
-    sessions.push(sessionRow({ run, agent: null, state: herdrOk ? 'gone' : 'unknown', deps, tabs: tabMap, prefixes }));
+    sessions.push(sessionRow({ run, agent: null, state: herdrOk ? 'gone' : 'unknown', deps, tabs: tabMap, prefixes: sessionPrefixes }));
   }
 
   const groups = new Map();

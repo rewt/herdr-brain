@@ -2,7 +2,7 @@
 // and reduceMouse(state, event, ctx) return { state, effects }. The session performs
 // the effects (quit, answer, open, go, reload, project) and never decides anything.
 //
-// ctx: { rows, scopeItems, listPage, popupPage, popupMax, projectCount,
+// ctx: { rows, scopeItems, listPage, popupPage, popupMax, projectCount, menuX,
 //        lineOf(key) → screen line, hitAt(x, y) → target }
 // rows are the rows of the current view in screen order; a target is
 // { type: 'row', key } | { type: 'menu', index } | { type: 'scope', index } |
@@ -256,7 +256,7 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
       return row ? done(summary(state, row.key)) : done(say(state, 'Nothing selected.', 'warn'));
     case 'm':
       if (!row) return done(say(state, 'Nothing selected.', 'warn'));
-      return done({ ...state, popup: { kind: 'menu', key: row.key, index: 0, x: 4, y: ctx.lineOf?.(row.key) ?? 2 } });
+      return done({ ...state, popup: { kind: 'menu', key: row.key, index: 0, x: ctx.menuX ?? 4, y: ctx.lineOf?.(row.key) ?? 2 } });
     case 'y':
       return ask(state, row, 'approve');
     case 'n':

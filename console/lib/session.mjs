@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
 import { initialState, promptParts, reduce, reduceMouse } from './controller.mjs';
-import { hitAt, renderFrame } from './frame.mjs';
+import { RAIL_COLS, hitAt, renderFrame } from './frame.mjs';
 import {
   boardKeys, boardRows, buildBoard, hhmm, keepSelection, orderBoard, scopeItems, visibleBoard,
 } from './model.mjs';
@@ -364,6 +364,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       popupPage: Math.max(1, s.last.bodyHeight - 6),
       popupMax: s.last.popupMax,
       projectCount: config.projects.length,
+      menuX: s.size.cols >= RAIL_COLS ? 27 : 4,
       lineOf: (key) => {
         const y = hits.findIndex((line) => line.some((h) => h.target?.type === 'row' && h.target.key === key));
         return y < 0 ? 2 : y;

@@ -80,6 +80,9 @@ test('SESSION and DOING never show codes', () => {
   }
   const titled = board({ herdr: { ok: true, agents: [{ ...boardHerdr().agents[0], title: 'REV-8 pstore retention design' }] } });
   assert.equal(titled.groups[0].rows[0].doing, 'pstore retention design');
+  // A session may belong to another organization: the prefixes org issues by default go too.
+  const other = board({ herdr: { ok: true, agents: [{ ...boardHerdr().agents[0], title: 'ARCH-28 successor wording fixes' }] } });
+  assert.equal(other.groups[0].rows[0].doing, 'successor wording fixes');
 });
 
 test('groups follow their most urgent session, then name; worktrees join their main repository', () => {

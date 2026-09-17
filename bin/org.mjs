@@ -274,6 +274,8 @@ function ask(argv) {
   if (values.memo) {
     memo = path.resolve(values.memo);
     if (!fs.existsSync(memo)) throw new UserError(`memo ${memo} does not exist`);
+    // The console opens the memo; a directory, app bundle or device is not a document.
+    if (!fs.statSync(memo).isFile()) throw new UserError(`memo ${memo} is not a regular file`);
   }
   const ctx = openOrg();
   const policy = categoryPolicy(ctx.config, values.category);
@@ -342,7 +344,11 @@ function answer(argv) {
   for (const blocked of result.dependents) {
     const now = itemStatus(after.state, blocked);
     const running = openRuns(after.state, blocked);
-    if (reply === 'no' && running.length) {
+    const closed = after.state.items.get(blocked)?.closed;
+    if (reply === 'no' && closed) {
+      // A closed item stays closed whatever its blockers say.
+      out(`${blocked} is already closed (${closed.as}); the decline does not reopen it\n`);
+    } else if (reply === 'no' && running.length) {
       // An open run counts before blockers in itemStatus, so the item is active, not blocked.
       out(`${blocked} is already running (${running.map((r) => r.id).join(', ')}); the decline does not stop it\n`);
     } else if (reply === 'no') {

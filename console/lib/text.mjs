@@ -136,17 +136,43 @@ function clipExact(text, width) {
   return out || [...text][0];
 }
 
-// Item codes (G-1, ENG-7, R-12, DECISION-THEFT-20260916) and commit-like hex runs
-// (7+ hex digits containing both a digit and a letter) are record codes, not plain words.
-const CODE_RE = /\b[A-Z][A-Z0-9_]*(?:-[A-Z0-9_]+)*-\d+\b/g;
-const HEX_RE = /\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b/gi;
+// Record codes are the identifiers the organization issues: item ids with a prefix in
+// use (G-1, ENG-7), run ids (R-12), DECISION memo names (DECISION-THEFT-20260916) and
+// commit-like hex runs (7+ hex digits with both a digit and a letter). Other names with
+// a number (CVE-2024-3094, SHA-256, BIP-340) are real words and stay. `prefixes` comes
+// from org today (project.item_prefixes); an older org that does not list them gets the
+// prefixes org issues by default.
+export const DEFAULT_PREFIXES = ['ARCH', 'DES', 'DOC', 'ENG', 'G', 'HUM', 'PLAN', 'RES', 'REV', 'TRI', 'W'];
+const HEX = String.raw`\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b`;
+const patterns = new Map();
 
-export function hasCodes(text) {
-  return new RegExp(CODE_RE.source).test(text) || new RegExp(HEX_RE.source, 'i').test(text);
+function codePatterns(prefixes) {
+  const list = [...new Set([...(prefixes ?? DEFAULT_PREFIXES), 'R'])].filter((p) => typeof p === 'string' && p).sort();
+  const key = list.join(' ');
+  if (!patterns.has(key)) {
+    const ids = list.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    patterns.set(key, {
+      code: new RegExp(String.raw`(?<![\w-])(?:(?:${ids})-\d+|DECISION(?:-[A-Z0-9_]+)*-\d+)(?![\w-])`, 'g'),
+      hex: new RegExp(HEX, 'gi'),
+    });
+  }
+  return patterns.get(key);
 }
 
-export function stripCodes(text) {
-  return oneLine(String(text ?? '').replace(CODE_RE, '').replace(HEX_RE, ''))
+export function hasCodes(text, prefixes) {
+  const { code, hex } = codePatterns(prefixes);
+  const t = String(text ?? '');
+  code.lastIndex = 0;
+  hex.lastIndex = 0;
+  const found = code.test(t) || hex.test(t);
+  code.lastIndex = 0;
+  hex.lastIndex = 0;
+  return found;
+}
+
+export function stripCodes(text, prefixes) {
+  const { code, hex } = codePatterns(prefixes);
+  return oneLine(String(text ?? '').replace(code, '').replace(hex, ''))
     .replace(/([([])(?:\s*[,;:/·])+\s*/g, '$1')
     .replace(/(?:\s*[,;:/·])+\s*([)\]])/g, '$1')
     .replace(/\(\s*\)|\[\s*\]/g, '')

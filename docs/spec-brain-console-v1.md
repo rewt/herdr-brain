@@ -108,7 +108,7 @@ density, width and keys:
 | Enter | Expand the reader to full height (toggle) |
 | `y` | Approve the selected question. Two steps: the footer shows "Approve: <headline>? Enter to confirm, Esc to cancel". Nothing happens without Enter |
 | `n` | Decline or overrule. Asks for a short reason (required, one line), then confirms |
-| `o` | Open the selected document outside the console with `$VISUAL`, `$EDITOR` or macOS `open`. Suspend Ink and restore it cleanly afterwards |
+| `o` | Open the selected document outside the console with `$VISUAL`, `$EDITOR` or macOS `open -t` (always a text editor, never the file's own app). Suspend Ink and restore it cleanly afterwards |
 | `f` | Focus the agent's Herdr tab (`herdr agent focus <name>`). Refuse visibly if the agent is gone |
 | `p` | Switch project when more than one is configured |
 | `r` | Reload now |

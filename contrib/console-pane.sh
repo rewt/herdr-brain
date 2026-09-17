@@ -51,7 +51,10 @@ if (existing) {
   process.exit(0);
 }
 
-const created = herdr('tab', 'create', '--workspace', ws, '--cwd', cwd, '--label', 'console', '--no-focus');
+// Herdr tabs do not inherit this environment (settle-watch passes what its tabs need
+// with --env), so a chosen configuration file is handed on explicitly.
+const env = process.env.HERDR_ORG_CONSOLE_CONFIG ? ['--env', `HERDR_ORG_CONSOLE_CONFIG=${path.resolve(configFile)}`] : [];
+const created = herdr('tab', 'create', '--workspace', ws, '--cwd', cwd, '--label', 'console', '--no-focus', ...env);
 const pane = created.root_pane?.pane_id;
 if (!pane) die('herdr opened the tab but returned no pane id');
 // A new tab's shell needs a moment to reach its prompt.

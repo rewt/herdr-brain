@@ -9,12 +9,14 @@ import { initialState, overruleAnswer, promptParts, promptText, reduce } from '.
 import { columns, promptLine, renderFrame, rowLine, scrollWindow } from '../lib/frame.mjs';
 import { renderMarkdown } from '../lib/markdown.mjs';
 import {
-  NO_PLAIN, buildRows, decisionHeadline, flatRows, keepSelection, orderKeys, orderSections, stableOrder,
+  NO_PLAIN, buildRows, contextPairs, decisionHeadline, flatRows, keepSelection, orderKeys, orderSections, stableOrder,
+  summaryParagraphs,
 } from '../lib/model.mjs';
 import {
   createSessionReader, firstMarkdownPath, lastAssistantText, parseAgentList, parseLedger, projectSlugs,
 } from '../lib/sources.mjs';
-import { cellWidth, clip, sanitize, stripCodes, wrap } from '../lib/text.mjs';
+import { cellWidth, clip, hasCodes, sanitize, stripCodes, wrap } from '../lib/text.mjs';
+import { viewerFor } from '../lib/cli.mjs';
 
 process.env.TZ = 'America/Chicago';
 const FIX = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -127,6 +129,77 @@ test('stripping codes keeps the sentence readable', () => {
   assert.equal(stripCodes('Skip per R-4 (deadbeef12): see ENG-7, and 35109079233; defaced.'), 'Skip per: see, and 35109079233; defaced.');
   assert.equal(decisionHeadline({ text: 'R-3 ENG-2' }).text, `decision recorded ${NO_PLAIN}`);
   assert.equal(stripCodes('Run the proof (ENG-1, optional) and the check (R-2; R-3).'), 'Run the proof (optional) and the check.');
+});
+
+test('only codes the organization issues are stripped; real names with numbers stay', () => {
+  const t = today();
+  t.project.item_prefixes = ['ENG', 'G', 'HUM'];
+  t.waiting = [
+    { ...t.waiting[0], id: 'HUM-8', title: 'Patch CVE-2024-3094 now?', why: 'SHA-256 and BIP-340 checks fail on the old build.' },
+    { ...t.waiting[0], id: 'HUM-9', title: 'Ship ENG-7 with the SHA-256 fix?', why: 'Per DECISION-THEFT-20260916 and R-4.' },
+    { ...t.waiting[0], id: 'HUM-10', title: 'Rename DES-3 now?' },
+  ];
+  const rows = buildRows({ today: t }).find((s) => s.key === 'waiting').rows;
+  assert.deepEqual(rows.map((r) => r.headline), [
+    'Patch CVE-2024-3094 now?',
+    `Ship with the SHA-256 fix? ${NO_PLAIN}`,
+    // DES is not a prefix this organization uses, so DES-3 is a name, not a code.
+    'Rename DES-3 now?',
+  ]);
+  assert.match(summaryParagraphs(rows[0]).join('\n'), /SHA-256 and BIP-340 checks fail on the old build\./);
+  assert.match(summaryParagraphs(rows[1]).join('\n'), /Recommend: yes\. Per and\. · no plain summary/);
+  // The raw title and reason are in the Context tab.
+  const context = Object.fromEntries(contextPairs(rows[1]));
+  assert.equal(context.title, 'Ship ENG-7 with the SHA-256 fix?');
+  assert.equal(context.why, 'Per DECISION-THEFT-20260916 and R-4.');
+  // Without a prefix list (an older org), the prefixes org issues by default apply.
+  assert.equal(stripCodes('Patch CVE-2024-3094 and ENG-2 per REV-1'), 'Patch CVE-2024-3094 and per');
+  assert.equal(hasCodes('SHA-256, BIP-340, CVE-2024-3094'), false);
+  assert.equal(hasCodes('see DECISION-CELLS-20260916.md'), true);
+});
+
+test('a decision summary is shown without codes, and marked when it had some', () => {
+  assert.deepEqual(decisionHeadline({ summary: 'Dispatched ENG-12 after a1b2c3d4', text: 'x' }),
+    { text: `Dispatched after ${NO_PLAIN}`, plain: true });
+  const t = today();
+  t.decided[0].summary = 'Dispatched ENG-12 after a1b2c3d4';
+  const row = buildRows({ today: t }).find((s) => s.key === 'decided').rows[0];
+  assert.equal(row.headline, `Dispatched after ${NO_PLAIN}`);
+  for (const p of summaryParagraphs(row)) assert.doesNotMatch(p.replace(NO_PLAIN, ''), CODE, p);
+});
+
+test('the Summary after a no says what happened to each dependent', () => {
+  const t = today();
+  t.decided = [{
+    kind: 'question', id: 'HUM-4', seq: 38, title: 'Adopt the theft fix?', category: 'design', recommend: 'yes',
+    answer: 'no', answered_by: 'human', overruled: false, note: null, at: at('16:05'), by: 'human',
+    blocks: [
+      { id: 'ENG-7', title: 'Implement the theft fix', status: 'active', open_runs: ['R-9'] },
+      { id: 'ENG-8', title: 'Port the relay', status: 'done', open_runs: [] },
+      { id: 'ENG-9', title: 'Drop the old path', status: 'dropped', open_runs: [] },
+      { id: 'REV-3', title: 'Review the theft fix', status: 'blocked', open_runs: [] },
+    ],
+  }];
+  const row = buildRows({ today: t }).find((s) => s.key === 'decided').rows[0];
+  const paragraphs = summaryParagraphs(row);
+  assert.deepEqual(paragraphs.filter((p) => /^(Still|Already)/.test(p)), [
+    'Still running, not stopped by the no: Implement the theft fix.',
+    'Already closed, not reopened: Port the relay.',
+    'Already dropped, not reopened: Drop the old path.',
+    'Still blocked: Review the theft fix.',
+  ]);
+  assert.equal(paragraphs.filter((p) => /Still blocked/.test(p)).length, 1);
+  assert.equal(Object.fromEntries(contextPairs(row)).blocks,
+    'ENG-7 Implement the theft fix (active R-9), ENG-8 Port the relay (done), ENG-9 Drop the old path (dropped), REV-3 Review the theft fix (blocked)');
+  // A yes releases them all, in one line.
+  t.decided[0].answer = 'yes';
+  const yes = summaryParagraphs(buildRows({ today: t }).find((s) => s.key === 'decided').rows[0]);
+  assert.ok(yes.includes('Released: Implement the theft fix; Port the relay; Drop the old path; Review the theft fix.'), yes.join('\n'));
+});
+
+test('the fallback viewer always opens a text editor, never the file itself', () => {
+  assert.deepEqual(viewerFor({}), { cmd: 'open', args: ['-t'], blocking: false, label: 'the default text editor' });
+  assert.deepEqual(viewerFor({ EDITOR: 'vim -R' }), { cmd: 'vim', args: ['-R'], blocking: true, label: 'vim' });
 });
 
 test('waiting rows keep the ranking org today gives', () => {

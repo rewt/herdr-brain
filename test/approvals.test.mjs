@@ -48,6 +48,9 @@ test('org ask refuses what would hand the operator an unusable question', () => 
   assert.match(t.fail([...base, '--category', 'weather', '--recommend', 'yes']), /unknown category "weather".*known: design, security, funds-and-chain/);
   assert.match(t.fail([...base, '--recommend', 'yes']), /--category is required/);
   assert.match(t.fail([...base, '--category', 'design', '--recommend', 'yes', '--memo', path.join(t.root, 'missing.md')]), /memo .*missing\.md does not exist/);
+  // A memo must be a regular file: the console opens it, so a directory or app bundle is refused.
+  fs.mkdirSync(path.join(t.root, 'Tool.app'));
+  assert.match(t.fail([...base, '--category', 'design', '--recommend', 'yes', '--memo', path.join(t.root, 'Tool.app')]), /memo .*Tool\.app is not a regular file/);
   assert.match(t.fail([...base, '--category', 'design', '--recommend', 'yes', '--blocks', 'NOPE-1']), /unknown item NOPE-1/);
   assert.match(t.fail(['ask', 'Ship it?', '--category', 'design', '--recommend', 'yes', '--why', 'x']), /--parent is required/);
   assert.match(t.fail(['ask', 'Ship it?', '--parent', 'G-1', '--category', 'design', '--recommend', 'yes']), /--why is required/);
@@ -106,6 +109,24 @@ test('a decline says so truthfully for a dependent that is already running', () 
   assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'active');
   assert.match(out, /REV-1 stays blocked: declined/);
   assert.equal(t.json(['show', 'REV-1', '--json']).status, 'blocked');
+  const decided = t.json(['today', '--json']).decided.find((d) => d.id === 'HUM-1');
+  assert.deepEqual(decided.blocks.map((b) => [b.id, b.status, b.open_runs]), [['ENG-1', 'active', ['R-1']], ['REV-1', 'blocked', []]]);
+});
+
+test('a decline says so truthfully for a dependent that is already closed', () => {
+  const t = withWork();
+  t.ok(ASK(t.memo));
+  t.ok(['block', 'REV-1', '--by', 'HUM-1']);
+  t.ok(['close', 'ENG-1']);
+  t.ok(['close', 'REV-1', '--dropped']);
+  const out = t.ok(['answer', 'HUM-1', 'no']);
+  assert.match(out, /ENG-1 is already closed \(done\); the decline does not reopen it/);
+  assert.match(out, /REV-1 is already closed \(dropped\); the decline does not reopen it/);
+  assert.doesNotMatch(out, /stays blocked/);
+  assert.equal(t.json(['show', 'ENG-1', '--json']).status, 'done');
+  assert.equal(t.json(['show', 'REV-1', '--json']).status, 'dropped');
+  const decided = t.json(['today', '--json']).decided.find((d) => d.id === 'HUM-1');
+  assert.deepEqual(decided.blocks.map((b) => [b.id, b.status, b.open_runs]), [['ENG-1', 'done', []], ['REV-1', 'dropped', []]]);
 });
 
 test('a reply that starts with yes or no is that answer, and the rest is kept as the note', () => {

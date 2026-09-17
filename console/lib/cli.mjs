@@ -59,14 +59,16 @@ export async function herdrFocus(name) {
 }
 
 // $VISUAL or $EDITOR run in this terminal (the caller suspends the UI first);
-// otherwise macOS `open` hands the file to its default app and returns at once.
+// otherwise macOS `open -t` hands the file to the default text editor and returns at
+// once. Never plain `open`: a memo is agent-supplied, and Launch Services would run a
+// .command script or launch an app bundle.
 export function viewerFor(env = process.env) {
   const editor = (env.VISUAL || env.EDITOR || '').trim();
   if (editor) {
     const [cmd, ...args] = editor.split(/\s+/);
     return { cmd, args, blocking: true, label: path.basename(cmd) };
   }
-  return { cmd: 'open', args: [], blocking: false, label: 'the default app' };
+  return { cmd: 'open', args: ['-t'], blocking: false, label: 'the default text editor' };
 }
 
 export function openBlocking(viewer, file) {

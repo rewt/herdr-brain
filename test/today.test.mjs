@@ -55,6 +55,7 @@ test('org today --json builds the console read model deterministically', () => {
   assert.equal(doc.project.day.start, '2026-09-15T05:00:00.000Z');
   assert.equal(doc.project.day.end, '2026-09-16T05:00:00.000Z');
   assert.equal(doc.project.day.date, '2026-09-15');
+  assert.deepEqual(doc.project.item_prefixes, ['ARCH', 'ENG', 'G', 'HUM', 'RES', 'REV', 'W']);
 
   // Ranked by prioritized work unblocked (transitively), then priority.
   assert.deepEqual(doc.waiting.map((w) => [w.id, w.unblocks_prioritized]), [

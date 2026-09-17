@@ -28,15 +28,15 @@ esac
 `, { mode: 0o755 });
   const config = path.join(root, 'console.json');
   fs.writeFileSync(config, JSON.stringify({ projects: [{ name: 'first', org: '/o1', cwd: '/nowhere' }, { name: 'bch-cloak', org: '/o2', cwd }] }));
-  const run = (args) => {
-    const r = spawnSync(PANE, args, {
-      encoding: 'utf8',
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, HERDR_ORG_CONSOLE_CONFIG: config, CONSOLE_PANE_WAIT: '0' },
-    });
+  const run = (args, { configVar = config, cwd: runCwd, home } = {}) => {
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, CONSOLE_PANE_WAIT: '0', ...(home ? { HOME: home } : {}) };
+    delete env.HERDR_ORG_CONSOLE_CONFIG;
+    if (configVar) env.HERDR_ORG_CONSOLE_CONFIG = configVar;
+    const r = spawnSync(PANE, args, { encoding: 'utf8', env, cwd: runCwd });
     const log = fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n') : [];
     return { code: r.status, out: r.stdout, err: r.stderr, calls: log };
   };
-  return { root, cwd, run };
+  return { root, cwd, config, run };
 }
 
 test('console-pane opens an unfocused console tab in the project\'s workspace', () => {
@@ -46,10 +46,19 @@ test('console-pane opens an unfocused console tab in the project\'s workspace', 
   assert.deepEqual(r.calls.slice(0, 3), [
     'workspace list',
     'tab list --workspace w1',
-    `tab create --workspace w1 --cwd ${t.cwd} --label console --no-focus`,
+    `tab create --workspace w1 --cwd ${t.cwd} --label console --no-focus --env HERDR_ORG_CONSOLE_CONFIG=${t.config}`,
   ]);
   assert.match(r.calls[3], new RegExp(`^pane run w1:p9 .*${BIN.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}.* console --project .?bch-cloak`));
   assert.match(r.out, /console tab w1:t9 opened in workspace w1/);
+});
+
+test('console-pane hands a relative configuration path to the new tab as an absolute one', () => {
+  const t = setup();
+  const r = t.run(['bch-cloak'], { configVar: 'console.json', cwd: t.root });
+  assert.equal(r.code, 0, r.err);
+  // The shell's working directory is the real path (macOS tmp dirs sit behind /var).
+  const config = path.join(fs.realpathSync(t.root), 'console.json');
+  assert.equal(r.calls[2], `tab create --workspace w1 --cwd ${t.cwd} --label console --no-focus --env HERDR_ORG_CONSOLE_CONFIG=${config}`);
 });
 
 test('console-pane leaves an existing console tab alone and refuses unknown projects', () => {
@@ -69,4 +78,14 @@ test('console-pane leaves an existing console tab alone and refuses unknown proj
 
   // Without an argument, the first configured project is used.
   assert.match(t.run([]).err, /\/nowhere/);
+});
+
+test('console-pane passes no configuration to the tab when none was chosen', () => {
+  const t = setup();
+  const home = path.join(t.root, 'home');
+  fs.mkdirSync(path.join(home, '.config', 'herdr-org'), { recursive: true });
+  fs.copyFileSync(t.config, path.join(home, '.config', 'herdr-org', 'console.json'));
+  const r = t.run(['bch-cloak'], { configVar: null, home });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.calls[2], `tab create --workspace w1 --cwd ${t.cwd} --label console --no-focus`);
 });

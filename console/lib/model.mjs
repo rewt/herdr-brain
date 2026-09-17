@@ -41,15 +41,17 @@ export function hhmm(iso) {
 }
 
 // Visible text never shows record codes. Text that has them is shown without them, marked.
-export function plain(text) {
+// prefixes: the item-id prefixes the organization uses (see text.mjs).
+export function plain(text, prefixes) {
   const t = oneLine(text);
-  return hasCodes(t) ? `${stripCodes(t) || 'text with only codes'} ${NO_PLAIN}` : t;
+  return hasCodes(t, prefixes) ? `${stripCodes(t, prefixes) || 'text with only codes'} ${NO_PLAIN}` : t;
 }
 
 // The plain line for a decision note: its summary, or its first sentence without codes, marked.
-export function decisionHeadline(note) {
-  if (note.summary && oneLine(note.summary)) return { text: oneLine(note.summary), plain: true };
-  const stripped = stripCodes(firstSentence(note.text));
+// `plain` says whether the agent recorded a summary; a summary with codes is still marked.
+export function decisionHeadline(note, prefixes) {
+  if (note.summary && oneLine(note.summary)) return { text: plain(note.summary, prefixes), plain: true };
+  const stripped = stripCodes(firstSentence(note.text), prefixes);
   return { text: `${stripped || 'decision recorded'} ${NO_PLAIN}`, plain: false };
 }
 
@@ -90,15 +92,17 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
     return agentsByName.get(name)?.status ?? 'agent gone';
   };
   const sections = Object.fromEntries(SECTIONS.map((s) => [s.key, []]));
+  const prefixes = today?.project?.item_prefixes ?? undefined;
+  const visible = (text) => plain(text, prefixes);
 
   for (const q of today?.waiting ?? []) {
     sections.waiting.push({
       key: `q:${q.id}`,
       kind: 'question',
-      headline: plain(q.title),
+      headline: visible(q.title),
       tag: q.category ?? 'no category',
       time: hhmm(q.created?.at),
-      state: q.recommend ? `recommend: ${plain(q.recommend)}` : 'no recommendation',
+      state: q.recommend ? `recommend: ${visible(q.recommend)}` : 'no recommendation',
       question: q.id,
       actions: ['approve', 'decline'],
       doc: q.memo ? { path: q.memo } : { missing: 'no memo recorded' },
@@ -112,7 +116,7 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
       sections.decided.push({
         key: `a:${d.id}`,
         kind: 'answer',
-        headline: plain(d.title),
+        headline: visible(d.title),
         tag: d.category ?? 'no category',
         time: hhmm(d.at),
         state: `${answerWords(d.answer)} · ${whoAnswered(d.answered_by)}${d.overruled ? ' · overruled' : ''}`,
@@ -123,7 +127,7 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
         data: d,
       });
     } else {
-      const h = decisionHeadline(d);
+      const h = decisionHeadline(d, prefixes);
       const doc = firstMarkdownPath(d.text);
       sections.decided.push({
         key: `n:${d.id}:${d.seq}`,
@@ -148,7 +152,7 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
     sections.running.push({
       key: `r:${r.run}`,
       kind: 'run',
-      headline: plain(r.title ?? 'untitled work'),
+      headline: visible(r.title ?? 'untitled work'),
       tag: roleWords(r.role),
       time: hhmm(r.started),
       state: `since ${hhmm(r.started)} · ${liveState(r.agent)}`,
@@ -185,7 +189,7 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
       sections.finished.push({
         key: `f:${f.run}`,
         kind: 'report',
-        headline: f.headline ? plain(f.headline) : `${plain(f.title ?? 'untitled work')}: ${outcomeWords(f.outcome)}`,
+        headline: f.headline ? visible(f.headline) : `${visible(f.title ?? 'untitled work')}: ${outcomeWords(f.outcome)}`,
         tag: roleWords(f.role),
         time: hhmm(f.at),
         state: outcomeWords(f.outcome),
@@ -199,7 +203,7 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
       sections.finished.push({
         key: `c:${f.item}:${f.seq}`,
         kind: 'closed',
-        headline: `${plain(f.title)}: ${f.as === 'dropped' ? 'dropped' : 'closed'}`,
+        headline: `${visible(f.title)}: ${f.as === 'dropped' ? 'dropped' : 'closed'}`,
         tag: roleWords(f.role),
         time: hhmm(f.at),
         state: f.as === 'dropped' ? 'dropped' : 'closed',
@@ -213,7 +217,7 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
   }
 
   for (const s of [...(sessions?.sessions ?? [])].reverse()) {
-    const line = s.note ? plain(firstLine(s.note)) : '';
+    const line = s.note ? visible(firstLine(s.note)) : '';
     sections.sessions.push({
       key: `s:${s.name}`,
       kind: 'session',
@@ -229,7 +233,7 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
     });
   }
 
-  return SECTIONS.map((s) => ({ ...s, rows: sections[s.key] }));
+  return SECTIONS.map((s) => ({ ...s, rows: sections[s.key].map((r) => ({ ...r, prefixes })) }));
 }
 
 // Keeps rows that were already on screen in their previous relative order; new rows
@@ -273,9 +277,19 @@ function listTitles(list) {
   return (list ?? []).map((b) => b.title ?? 'untitled work');
 }
 
+// What a no means for one dependent. An open run and a closed item both count before
+// blockers, so only the rest is really held. Older read models carry no status: unknown.
+function afterDecline(b) {
+  const name = b.title ?? 'untitled work';
+  if (b.open_runs?.length || b.status === 'active') return `Still running, not stopped by the no: ${name}.`;
+  if (b.status === 'done' || b.status === 'dropped') return `Already ${b.status === 'dropped' ? 'dropped' : 'closed'}, not reopened: ${name}.`;
+  if (b.status === 'blocked') return `Still blocked: ${name}.`;
+  return b.status ? `Not held by the no (now ${b.status}): ${name}.` : `Held by the no unless already running or closed: ${name}.`;
+}
+
 // Paragraphs for the Summary tab, without codes.
 export function summaryParagraphs(row) {
-  return rawParagraphs(row).map((p) => (p === row.headline ? p : plain(p)));
+  return rawParagraphs(row).map((p) => (p === row.headline ? p : plain(p, row.prefixes)));
 }
 
 function rawParagraphs(row) {
@@ -297,7 +311,7 @@ function rawParagraphs(row) {
         `Answer: ${d.answer}, by ${whoAnswered(d.answered_by)} at ${hhmm(d.at)}${d.overruled ? ' (overruled)' : ''}. Recommended: ${d.recommend ?? 'not recorded'}.`,
         d.note ? `Note: ${d.note}` : null,
         d.why ? `Why it was asked: ${d.why}` : null,
-        d.blocks?.length ? `${d.answer === 'no' ? 'Still blocked' : 'Released'}: ${listTitles(d.blocks).join('; ')}.` : null,
+        ...(d.answer === 'no' ? (d.blocks ?? []).map(afterDecline) : [d.blocks?.length ? `Released: ${listTitles(d.blocks).join('; ')}.` : null]),
         row.actions.includes('overrule') ? 'Answered without you. Press n to overrule.' : null,
       ].filter(Boolean);
     case 'decision':
@@ -349,12 +363,14 @@ export function contextPairs(row, project = {}) {
     case 'question':
     case 'answer':
       add('item', d.id);
+      add('title', d.title);
+      add('why', d.why);
       add('category', d.category);
       add('status', d.status);
       add('priority', d.priority);
       add('asked', d.created ? `${d.created.at} by ${d.created.by}` : null);
       add('answered', d.at ? `${d.at} by ${d.answered_by}` : null);
-      add('blocks', d.blocks?.map((b) => `${b.id} ${b.title ?? ''}`.trim()));
+      add('blocks', d.blocks?.map((b) => [b.id, b.title, b.status && `(${[b.status, ...(b.open_runs ?? [])].join(' ')})`].filter(Boolean).join(' ')));
       add('unblocks prioritized', d.unblocks_prioritized);
       add('memo', d.memo);
       break;

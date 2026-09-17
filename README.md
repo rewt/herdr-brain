@@ -87,8 +87,8 @@ org ask "Adopt the theft fix once its review passes?" --parent G-1 --category de
 - The question is an ordinary `role=human` item, so the work it `--blocks` waits and unrelated work
   keeps moving. `meta` holds `category`, `recommend`, `memo`, `on_yes` and `on_no`; a note holds
   `--why`. Everything is recorded in one transaction.
-- `--parent`, `--category`, `--recommend` and `--why` are required. `--memo` must exist (it is
-  stored as an absolute path). Unknown categories are refused with the list of known ones.
+- `--parent`, `--category`, `--recommend` and `--why` are required. `--memo` must be an existing
+  regular file (it is stored as an absolute path; directories and app bundles are refused). Unknown categories are refused with the list of known ones.
 
 ```sh
 org answer HUM-5 yes|no|"<short text>" [--note "why"] [--overrule]
@@ -99,6 +99,8 @@ org answer HUM-5 yes|no|"<short text>" [--note "why"] [--overrule]
 - **`no` does not release the work.** A question closed with `meta.answer=no` counts as unresolved
   for the items it blocks: they stay `blocked` (status shows `declined: <question>`) until someone
   re-plans them and runs `org unblock <ID> --by HUM-5`. `yes` and text answers release them.
+  A `no` does not stop a dependent that is already running, nor reopen one that is already
+  closed; `org answer` and the console Summary say so for each of them.
 - A reply whose first word is `yes` or `no` is that answer: `"No."` and `"no, not yet"` decline,
   and whatever follows the word is kept in front of the `--note`. Other replies are text answers.
   `org ask --recommend` takes the same word alone (`"Yes."` is fine; `"yes, after review"` is
@@ -167,6 +169,7 @@ only view of the organization. It is deterministic for a fixed record, config, `
 ```jsonc
 {
   "project": { "org": "/…/.org", "as_of": "ISO time", "events": 667,
+               "item_prefixes": ["ENG", "G", "HUM"],   // item-id prefixes in use; the console strips only these codes
                "day": { "date": "2026-09-16", "start": "ISO", "end": "ISO", "tz": "America/Chicago" } },
   "waiting": [{                       // open role=human items, ranked (see below)
     "id": "HUM-5", "title": "…?", "status": "ready|blocked|…",
@@ -179,7 +182,7 @@ only view of the organization. It is deterministic for a fixed record, config, `
   "decided": [                        // newest first
     { "kind": "question", "id", "seq", "title", "category", "recommend", "answer",
       "answered_by": "human|auto|<session>", "overruled": false, "note", "why", "memo",
-      "blocks": [{ "id", "title" }], "at", "by" },
+      "blocks": [{ "id", "title", "status", "open_runs": ["R-9"] }], "at", "by" },
     { "kind": "note", "id", "seq", "title", "summary": "…|null", "text", "at", "by" }
   ],
   "running": [{ "run", "item", "title", "role", "started", "agent", "lane", "brief_path", "report_path" }],
@@ -285,7 +288,7 @@ hint. Every state is written as text; `NO_COLOR` turns color off entirely.
 | Enter | Expand the reader to full height, or shrink it |
 | y | Approve the selected question; Enter confirms, Esc cancels |
 | n | Decline a question, or overrule an agent's or automatic answer to its opposite (`no` becomes `yes`, anything else `no`; the prompt names it): a one-line reason is required, then Enter confirms |
-| o | Open the document with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open` |
+| o | Open the document with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open -t` (the default text editor) |
 | f | Go to the agent's Herdr tab; refused visibly if the agent is gone |
 | p | Next project, when more than one is configured |
 | r | Reload now |
@@ -297,7 +300,7 @@ The console records answers only through `org answer` (a child process with an a
 `ORG_ACTOR` removed, so the answer is the operator's; the reason goes as `--note=<reason>`) and
 re-reads at once. Everything agents wrote is shown with terminal escape sequences and control
 characters removed. A text document opened with `o` is written to a private temporary folder and
-removed when the editor returns (or, for macOS `open`, when the console quits). It never appends to
+removed when the editor returns (or, for macOS `open -t`, when the console quits). It never appends to
 `events.jsonl`, and never starts, stops or messages agents; its only action on agents is focusing
 a tab. Answers are acted on by the next executive pass.
 

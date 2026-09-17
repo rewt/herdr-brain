@@ -1,9 +1,11 @@
 # Waiting on you, made actionable (console 0.0.3)
 
 Date: 2026-09-17, America/Chicago. Status: **drafted from the operator's 0.0.2
-review**, decisions recorded below. Revision 2, after measuring where the
-questions on the operator's screen actually come from. Extends
-`spec-brain-console-0.0.2.md`; it replaces nothing else in it.
+review**, decisions recorded below. Revision 3: revision 2 measured where the
+questions on the operator's screen actually come from; revision 3 folds in
+0.0.2b, the launch bar, which the operator approved the screen for on the same
+day. Extends `spec-brain-console-0.0.2.md` and takes over its 0.0.2b round; it
+replaces nothing else in it.
 
 ## Why
 
@@ -151,6 +153,21 @@ These are **errors in `org check`** — the session runs it itself and is right
 there with the context — but only **not-ready marks in `org ingest`**, which
 records the report regardless. A session that has already stopped must never
 lose its report to a validation rule.
+
+**The new rules ship warn-only.** `~/.local/bin/org` is a symlink into the main
+checkout, so the moment this lands on main it is the `org` that bch-cloak's
+live 24/7 loop runs, and that loop's `SETTLE.md` line 129 says
+`org check <report path>   # must pass`. Turning the rules into errors on
+promotion would fail every live settle session mid-freeze. So:
+
+- the rules are **warnings** unless `.org/config.json` carries
+  `"decisions": { "check": "error" }`;
+- `org check --strict` errors regardless, for a session that wants to know;
+- the work-up brief and the report template tell sessions to write the fields
+  from the start, so reports catch up while the rules are still quiet;
+- the flag is flipped to `error` per organization, by the operator, once
+  `org decisions` shows no new not-ready decisions arriving. That flip is a
+  one-line change and is **not** part of this build.
 
 ### `org ingest` stops creating items for decisions
 
@@ -579,18 +596,41 @@ Console, with a fake `herdr` and fake `org` on `PATH`:
 
 ## Build order
 
-Four pieces on the same lane, each landing on its own:
+**0.0.2b is folded in here.** The operator approved the 0.0.2a screen on
+2026-09-17 and found the launch bar inert, which it is: 0.0.2a draws it with
+hardcoded placeholders and `Tab` answers *"task launching comes in the next
+round"*. Rather than run 0.0.2b as its own round and then rewrite the same
+screen again, its work becomes pieces 2 and 4 below. Nothing is dropped from
+`spec-brain-console-0.0.2.md`'s launch-bar section; it is built here, against
+one shared dispatch chain.
 
-1. **The report decision and the core** — the format, `org check`,
-   `org ingest` no longer making items, `org decisions`, `org decide`, stages,
-   the repaired ranking. Worth landing alone: it turns six reports' worth of
-   real decisions into a readable list and shrinks the screen to the truth
-   before any new key exists.
-2. **The screen** — the groups, options under the row, the never-empty
+The reason to fold rather than sequence: **the launch bar and the work-up verb
+are the same operation.** Both take a decision from the operator, dispatch a
+session, and report one of five result kinds. The first revision of this spec
+said "whichever is built first extracts `contrib/lib/dispatch.mjs`", which is a
+seam deferred rather than designed. Built together, it is designed once, with
+one confirmation flow and one set of result messages.
+
+Five pieces on the same lane. Piece 1 touches no console code and can run in
+parallel with the rest.
+
+1. **The report decision and the core** — the format, `org check` (warn-only),
+   `org ingest` no longer making items for decisions, `org decisions`,
+   `org decide`, stages, the repaired ranking. Worth landing alone: it turns
+   six reports' worth of real decisions into a readable list and shrinks the
+   screen to the truth before any new key exists. No console dependency.
+2. **The dispatch chain** — `contrib/lib/dispatch.mjs`, and both callers:
+   `contrib/launch-task.mjs` (a task the operator typed) and
+   `contrib/workup-question.mjs` (a study of a question nobody has done). One
+   argument shape, one JSON result, the same five result kinds, fully testable
+   against fake `org`, `lane` and `herdr` binaries with no UI.
+3. **The screen** — the groups, options under the row, the never-empty
    Decision tab, the four verbs, the UI state file.
-3. **The peek** — peek popup, session rows, reply and send-keys, `g`, the two
+4. **The launch bar** — Task, and the Where, Who and Goal pickers that
+   currently do nothing; the review popup; `routes` in `console.json`; wired to
+   piece 2. `Tab` stops apologising.
+5. **The peek** — peek popup, session rows, reply and send-keys, `g`, the two
    config lines in the README.
-4. **The work-up** — `contrib/workup-question.mjs`.
 
 ## Out of scope
 

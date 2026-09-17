@@ -1,10 +1,10 @@
 // The console's only ways to touch the world: the org CLI (child process, argument
-// arrays), Herdr's agent list and focus, and an external viewer. It never appends to
-// events.jsonl and never starts, stops or messages agents.
+// arrays), Herdr's agent and tab lists and focus, and an external viewer. It never
+// appends to events.jsonl and never starts, stops or messages agents.
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseAgentList } from './sources.mjs';
+import { parseAgentList, parseTabList } from './sources.mjs';
 
 export const ORG_BIN = process.env.HERDR_ORG_BIN || fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 
@@ -53,9 +53,28 @@ export async function herdrAgents() {
   }
 }
 
-export async function herdrFocus(name) {
-  const r = await run('herdr', ['agent', 'focus', name], { timeout: 4000 });
-  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || 'herdr agent focus failed' };
+export async function herdrTabs() {
+  const r = await run('herdr', ['tab', 'list'], { timeout: 4000 });
+  if (!r.ok) return [];
+  try {
+    return parseTabList(r.stdout);
+  } catch {
+    return [];
+  }
+}
+
+// Going to a session: its agent by name, or its tab when Herdr gives the agent no name.
+export function goArgs({ agent, tab }) {
+  if (agent) return ['agent', 'focus', agent];
+  if (tab) return ['tab', 'focus', tab];
+  return null;
+}
+
+export async function herdrGo(target) {
+  const args = goArgs(target);
+  if (!args) return { ok: false, error: 'no Herdr agent or tab to go to' };
+  const r = await run('herdr', args, { timeout: 4000 });
+  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || `herdr ${args.slice(0, 2).join(' ')} failed` };
 }
 
 // $VISUAL or $EDITOR run in this terminal (the caller suspends the UI first);

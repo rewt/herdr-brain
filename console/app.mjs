@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 // Herdr Brain console: the Ink entry point. Everything it shows comes from
-// lib/session.mjs (data and keys) and lib/frame.mjs (lines); this file only draws
-// those lines and forwards keys.
+// lib/session.mjs (data, keys and clicks) and lib/frame.mjs (lines of coloured
+// spans); this file only draws those spans, forwards keys and mouse reports, and
+// keeps the terminal's modes (alternate screen, mouse reporting) balanced.
 //
 //   node console/app.mjs [--project NAME] [--config FILE]
-//   node console/app.mjs --print 100x30 [--select N] [--tab 1|2|3]   one frame as plain text
+//   node console/app.mjs --print 140x40 [--select N] [--keys KEYS]   one frame as plain text
 import { parseArgs } from 'node:util';
 import { ConfigError, configPath, loadConfig } from './lib/config.mjs';
-import { createSession } from './lib/session.mjs';
+import { lineText } from './lib/frame.mjs';
+import { MOUSE_OFF, MOUSE_ON, parseMouse } from './lib/mouse.mjs';
+import { VERSION, createSession } from './lib/session.mjs';
+import { PALETTE } from './lib/theme.mjs';
 
 const { values: opt } = parseArgs({
   options: {
@@ -15,13 +19,21 @@ const { values: opt } = parseArgs({
     config: { type: 'string' },
     print: { type: 'string' },
     select: { type: 'string' },
-    tab: { type: 'string' },
+    keys: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
+    version: { type: 'boolean' },
   },
 });
 
 if (opt.help) {
-  process.stdout.write('usage: org console [--project NAME]   (node console/app.mjs [--project NAME] [--config FILE] [--print COLSxROWS])\n');
+  process.stdout.write(`Herdr Brain console ${VERSION}
+usage: org console [--project NAME]
+       node console/app.mjs [--project NAME] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
+`);
+  process.exit(0);
+}
+if (opt.version) {
+  process.stdout.write(`${VERSION}\n`);
   process.exit(0);
 }
 
@@ -45,51 +57,30 @@ if (opt.project) {
 
 const NO_COLOR = Boolean(process.env.NO_COLOR);
 
-// Style names from lib/frame.mjs to Ink <Text> props. Color is never the only signal:
-// every state is written as text, and NO_COLOR drops color and inverse entirely.
-function styleProps(style) {
-  const color = {
-    header: { bold: true, color: 'cyan' },
-    section: { bold: true },
-    selected: { bold: true, inverse: true },
-    title: {},
-    titleFocus: { bold: true, color: 'yellow' },
-    strong: { bold: true },
-    heading: { bold: true },
-    subheading: { bold: true },
-    code: { color: 'green' },
-    meta: { dimColor: true },
-    dim: { dimColor: true },
-    rule: { dimColor: true },
-    quote: { italic: true },
-    warn: { bold: true, color: 'yellow' },
-    error: { bold: true, color: 'red' },
-    ok: { color: 'green' },
-    prompt: { bold: true, color: 'magenta' },
-  }[style] ?? {};
-  if (!NO_COLOR) return color;
-  const { color: _c, inverse: _i, ...rest } = color;
-  return rest;
-}
-
 if (opt.print) {
   const m = /^(\d+)x(\d+)$/.exec(opt.print);
   if (!m) {
-    process.stderr.write('org console: --print expects COLSxROWS, e.g. 100x30\n');
+    process.stderr.write('org console: --print expects COLSxROWS, e.g. 140x40\n');
     process.exit(1);
   }
   const session = createSession({ config, projectIndex });
   await session.refresh({ reorder: true });
-  session.frame(Number(m[1]), Number(m[2]));
+  const [cols, rows] = [Number(m[1]), Number(m[2])];
+  session.frame(cols, rows);
   for (let i = 0; i < Number(opt.select ?? 0); i++) await session.key('j', {});
-  if (opt.tab) await session.key(opt.tab, {});
-  const { lines } = session.frame(Number(m[1]), Number(m[2]));
-  process.stdout.write(lines.map((l) => l.text.trimEnd()).join('\n') + '\n');
+  // --keys: characters sent one by one; "\n" is Enter and "\e" is Escape.
+  for (const k of (opt.keys ?? '').replace(/\\n/g, '\n').replace(/\\e/g, '\x1b')) {
+    await session.key(k === '\n' || k === '\x1b' ? '' : k, { return: k === '\n', escape: k === '\x1b' });
+    session.frame(cols, rows);
+  }
+  const { lines } = session.frame(cols, rows);
+  process.stdout.write(lines.map((l) => lineText(l).trimEnd()).join('\n') + '\n');
+  session.stop();
   process.exit(0);
 }
 
 if (!process.stdin.isTTY || !process.stdout.isTTY) {
-  process.stderr.write('org console: needs an interactive terminal (try --print 100x30 for a snapshot)\n');
+  process.stderr.write('org console: needs an interactive terminal (try --print 140x40 for a snapshot)\n');
   process.exit(1);
 }
 
@@ -98,25 +89,46 @@ const h = React.createElement;
 
 const ALT_ON = '\x1b[?1049h';
 const ALT_OFF = '\x1b[?1049l';
+const BLACK = '\x1b[48;2;0;0;0m';
 let instance = null;
 let remount = null;
 let suspending = false;
+let terminalTaken = false;
 const listeners = new Set();
 const notify = () => listeners.forEach((fn) => fn());
 
 const size = () => ({ cols: process.stdout.columns || 80, rows: process.stdout.rows || 24 });
 
-// Suspends Ink for an editor in this terminal, then restores the screen and keys.
+// The terminal's modes, taken and given back as a pair. Giving back is safe to repeat.
+function takeTerminal() {
+  terminalTaken = true;
+  process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${BLACK}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}`);
+}
+
+function giveBackTerminal() {
+  if (!terminalTaken) return;
+  terminalTaken = false;
+  process.stdout.write(`${MOUSE_OFF}\x1b[0m${ALT_OFF}`);
+}
+
+// Ink draws one row short of the terminal; this paints that last row black too.
+function paintLastRow() {
+  if (NO_COLOR || !terminalTaken || suspending) return;
+  const { rows } = size();
+  process.stdout.write(`\x1b7\x1b[${rows};1H${BLACK}\x1b[2K\x1b[0m\x1b8`);
+}
+
+// Suspends Ink for an editor in this terminal, then restores the screen, mouse and keys.
 async function suspend(fn) {
   suspending = true;
   instance?.unmount();
   await instance?.waitUntilExit().catch(() => {});
-  process.stdout.write(ALT_OFF);
+  giveBackTerminal();
   let result;
   try {
     result = fn();
   } finally {
-    process.stdout.write(ALT_ON);
+    takeTerminal();
     suspending = false;
     remount();
   }
@@ -124,6 +136,19 @@ async function suspend(fn) {
 }
 
 const session = createSession({ config, projectIndex, deps: { suspend }, onChange: notify });
+
+function color(token) {
+  return NO_COLOR ? undefined : PALETTE[token];
+}
+
+function Line({ spans }) {
+  return h(Text, { wrap: 'truncate-end' }, ...spans.map((s, j) => h(Text, {
+    key: j,
+    color: color(s.fg),
+    backgroundColor: color(s.bg),
+    bold: s.bold || undefined,
+  }, s.text)));
+}
 
 function Console() {
   const { exit } = useApp();
@@ -141,8 +166,14 @@ function Console() {
       clearInterval(clock);
     };
   }, []);
+  useEffect(() => {
+    const t = setTimeout(paintLastRow, 20);
+    return () => clearTimeout(t);
+  });
   useInput((input, key) => {
-    session.key(input, key).then((quit) => {
+    const event = parseMouse(input);
+    const done = event ? session.mouse(event) : session.key(input, key);
+    done.then((quit) => {
       if (quit) exit();
     }, (error) => {
       session.ui = { ...session.ui, message: `error: ${error.message}`, messageStyle: 'error' };
@@ -152,8 +183,7 @@ function Console() {
   // One line short of the terminal, so Ink never has to clear the whole screen; the
   // minimum-size check still applies to the terminal itself.
   const { lines } = session.frame(dims.cols, Math.max(1, dims.rows - 1), { termRows: dims.rows });
-  return h(Box, { flexDirection: 'column' },
-    ...lines.map((line, i) => h(Text, { key: i, wrap: 'truncate-end', ...styleProps(line.style) }, line.text || ' ')));
+  return h(Box, { flexDirection: 'column' }, ...lines.map((line, i) => h(Line, { key: i, spans: line.spans })));
 }
 
 // Ink exits on q and on Ctrl-C; an unmount for an editor is not an exit.
@@ -166,14 +196,22 @@ remount = () => {
 
 function finish(code) {
   session.stop();
-  process.stdout.write(ALT_OFF);
+  giveBackTerminal();
   process.exit(code);
 }
 
-for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => finish(0));
-process.on('exit', () => process.stdout.write(ALT_OFF));
+for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, () => finish(0));
+process.on('exit', giveBackTerminal);
+// A crash must not leave the terminal reporting mouse movements into the shell.
+for (const event of ['uncaughtException', 'unhandledRejection']) {
+  process.on(event, (error) => {
+    giveBackTerminal();
+    process.stderr.write(`org console crashed: ${error?.stack ?? error}\n`);
+    process.exit(1);
+  });
+}
 
-process.stdout.write(ALT_ON);
+takeTerminal();
 remount();
 session.start().catch((error) => {
   session.ui = { ...session.ui, message: `error: ${error.message}`, messageStyle: 'error' };

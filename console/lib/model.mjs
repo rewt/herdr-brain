@@ -1,16 +1,10 @@
-// Rows from the read model (org today --json), Herdr's agent list and session notes.
-// Pure: deterministic given its inputs. Rows carry no codes in their visible text;
-// codes live in `context`, which only the Context tab shows.
-import { EXECUTIVE_RE, firstMarkdownPath } from './sources.mjs';
-import { firstLine, firstSentence, hasCodes, oneLine, stripCodes } from './text.mjs';
-
-export const SECTIONS = [
-  { key: 'waiting', title: 'WAITING ON YOU' },
-  { key: 'decided', title: 'DECIDED TODAY' },
-  { key: 'running', title: 'RUNNING' },
-  { key: 'finished', title: 'FINISHED TODAY' },
-  { key: 'sessions', title: 'SESSION NOTES' },
-];
+// The board from the read model (org today --json), Herdr's agents and session
+// transcripts. Pure: deterministic given its inputs. Rows carry no codes in their
+// visible text; codes live only in what the Context tab shows.
+import path from 'node:path';
+import { doingText, upText, whoFor } from './names.mjs';
+import { firstMarkdownPath } from './sources.mjs';
+import { firstSentence, hasCodes, oneLine, stripCodes } from './text.mjs';
 
 export const NO_PLAIN = '· no plain summary';
 
@@ -30,8 +24,6 @@ const OUTCOME_WORDS = { done: 'finished', blocked: 'blocked', needs_human: 'need
 export function outcomeWords(outcome) {
   return OUTCOME_WORDS[outcome] ?? 'outcome not recorded';
 }
-
-const SESSION_WORDS = { settle: 'Settling a finished task', exec: 'Executive session', plan: 'Planning session', audit: 'Audit session' };
 
 export function hhmm(iso) {
   if (!iso) return '--:--';
@@ -65,55 +57,31 @@ function answerWords(answer) {
   return ['yes', 'no'].includes(answer) ? answer : 'answered';
 }
 
-function sessionKind(name) {
-  return EXECUTIVE_RE.exec(name ?? '')?.[1] ?? null;
-}
-
-// Time from a session name's HHMM suffix ("exec-1610").
-function nameTime(name) {
-  const m = /-(\d{2})(\d{2})$/.exec(name ?? '');
-  return m ? `${m[1]}:${m[2]}` : '--:--';
-}
-
-function within(dir, root) {
-  if (!root) return true;
-  if (!dir) return false;
-  const r = root.replace(/\/+$/, '');
-  return dir === r || dir.startsWith(`${r}/`);
-}
-
-// cwd: the project's checkout; executive sessions elsewhere belong to other projects.
-export function buildRows({ today, herdr = null, sessions = null, cwd = null }) {
-  const agentsByName = new Map((herdr?.agents ?? []).filter((a) => a.name).map((a) => [a.name, a]));
-  const herdrOk = Boolean(herdr?.ok);
-  const liveState = (name) => {
-    if (!name) return 'agent not recorded';
-    if (!herdrOk) return 'unknown';
-    return agentsByName.get(name)?.status ?? 'agent gone';
+function questionRow(q, visible) {
+  return {
+    key: `q:${q.id}`,
+    kind: 'question',
+    headline: visible(q.title),
+    category: q.category ?? 'no category',
+    recommend: q.recommend ? visible(q.recommend) : null,
+    asked: hhmm(q.created?.at),
+    tag: q.category ?? 'no category',
+    time: hhmm(q.created?.at),
+    state: q.recommend ? `recommend: ${visible(q.recommend)}` : 'no recommendation',
+    question: q.id,
+    actions: ['approve', 'decline'],
+    doc: q.memo ? { path: q.memo } : { missing: 'no memo recorded' },
+    agent: null,
+    data: q,
   };
-  const sections = Object.fromEntries(SECTIONS.map((s) => [s.key, []]));
-  const prefixes = today?.project?.item_prefixes ?? undefined;
-  const visible = (text) => plain(text, prefixes);
+}
 
-  for (const q of today?.waiting ?? []) {
-    sections.waiting.push({
-      key: `q:${q.id}`,
-      kind: 'question',
-      headline: visible(q.title),
-      tag: q.category ?? 'no category',
-      time: hhmm(q.created?.at),
-      state: q.recommend ? `recommend: ${visible(q.recommend)}` : 'no recommendation',
-      question: q.id,
-      actions: ['approve', 'decline'],
-      doc: q.memo ? { path: q.memo } : { missing: 'no memo recorded' },
-      agent: null,
-      data: q,
-    });
-  }
-
+// Today's answers, decisions and finished work, newest first.
+function historyRows(today, visible, prefixes) {
+  const rows = [];
   for (const d of today?.decided ?? []) {
     if (d.kind === 'question') {
-      sections.decided.push({
+      rows.push({
         key: `a:${d.id}`,
         kind: 'answer',
         headline: visible(d.title),
@@ -124,12 +92,13 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
         actions: d.answered_by === 'human' ? [] : ['overrule'],
         doc: d.memo ? { path: d.memo } : { missing: 'no memo recorded' },
         agent: null,
+        at: d.at,
         data: d,
       });
     } else {
       const h = decisionHeadline(d, prefixes);
       const doc = firstMarkdownPath(d.text);
-      sections.decided.push({
+      rows.push({
         key: `n:${d.id}:${d.seq}`,
         kind: 'decision',
         headline: h.text,
@@ -141,52 +110,14 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
         actions: [],
         doc: doc ? { path: doc } : { text: d.text },
         agent: null,
+        at: d.at,
         data: d,
       });
     }
   }
-
-  const runAgents = new Set();
-  for (const r of today?.running ?? []) {
-    if (r.agent) runAgents.add(r.agent);
-    sections.running.push({
-      key: `r:${r.run}`,
-      kind: 'run',
-      headline: visible(r.title ?? 'untitled work'),
-      tag: roleWords(r.role),
-      time: hhmm(r.started),
-      state: `since ${hhmm(r.started)} · ${liveState(r.agent)}`,
-      question: null,
-      actions: r.agent ? ['focus'] : [],
-      doc: r.brief_path ? { path: r.brief_path } : { missing: 'no brief recorded' },
-      agent: r.agent,
-      data: r,
-    });
-  }
-  const ledgerByName = new Map((sessions?.sessions ?? []).map((s) => [s.name, s]));
-  for (const a of herdr?.agents ?? []) {
-    const kind = sessionKind(a.name);
-    if (!kind || runAgents.has(a.name) || !within(a.cwd, cwd)) continue;
-    const entry = ledgerByName.get(a.name);
-    const time = entry ? entry.time.slice(0, 5) : nameTime(a.name);
-    sections.running.push({
-      key: `x:${a.name}`,
-      kind: 'executive',
-      headline: SESSION_WORDS[kind],
-      tag: 'executive',
-      time,
-      state: `since ${time} · ${a.status}`,
-      question: null,
-      actions: ['focus'],
-      doc: entry?.note ? { text: entry.note } : { missing: 'no final message yet' },
-      agent: a.name,
-      data: { ...a, ledger: entry ?? null },
-    });
-  }
-
   for (const f of today?.finished ?? []) {
     if (f.kind === 'report') {
-      sections.finished.push({
+      rows.push({
         key: `f:${f.run}`,
         kind: 'report',
         headline: f.headline ? visible(f.headline) : `${visible(f.title ?? 'untitled work')}: ${outcomeWords(f.outcome)}`,
@@ -197,10 +128,11 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
         actions: [],
         doc: { path: f.report_file },
         agent: null,
+        at: f.at,
         data: f,
       });
     } else {
-      sections.finished.push({
+      rows.push({
         key: `c:${f.item}:${f.seq}`,
         kind: 'closed',
         headline: `${visible(f.title)}: ${f.as === 'dropped' ? 'dropped' : 'closed'}`,
@@ -211,29 +143,194 @@ export function buildRows({ today, herdr = null, sessions = null, cwd = null }) 
         actions: [],
         doc: f.note ? { text: f.note } : { missing: 'no closing note recorded' },
         agent: null,
+        at: f.at,
         data: f,
       });
     }
   }
+  // Stable for equal times: the order org today gave.
+  return rows.map((r, i) => [r, i]).sort(([a, i], [b, j]) => (a.at === b.at ? i - j : a.at < b.at ? 1 : -1)).map(([r]) => r);
+}
 
-  for (const s of [...(sessions?.sessions ?? [])].reverse()) {
-    const line = s.note ? visible(firstLine(s.note)) : '';
-    sections.sessions.push({
-      key: `s:${s.name}`,
-      kind: 'session',
-      headline: line || (s.transcript ? 'no final message yet' : 'transcript not found'),
-      tag: s.mode ?? 'session',
-      time: s.time.slice(0, 5),
-      state: agentsByName.has(s.name) ? agentsByName.get(s.name).status : herdrOk ? 'closed' : 'unknown',
-      question: null,
-      actions: agentsByName.has(s.name) ? ['focus'] : [],
-      doc: s.note ? { text: s.note } : { missing: s.transcript ? 'the session has no final message yet' : `no transcript names ${s.name}` },
-      agent: s.name,
-      data: s,
-    });
+export const STATES = ['working', 'idle', 'blocked', 'done', 'gone', 'unknown'];
+const URGENCY = { blocked: 0, working: 1, idle: 2, done: 3, unknown: 4, gone: 5 };
+const GONE_KEEP_MS = 3600000;
+const UNKNOWN_REPO = { root: '', name: 'unknown repository', path: '', git: false };
+
+function sessionName(run, agent, tabs, prefixes) {
+  if (run?.lane) return stripCodes(`lane ${run.lane}${run.round ? ` r${run.round}` : ''}`, prefixes);
+  if (agent?.name) return stripCodes(agent.name, prefixes) || agent.name;
+  const tab = agent?.tab ? tabs.get(agent.tab) : null;
+  if (tab?.label) return /^\d+$/.test(tab.label) ? `tab ${tab.label}` : stripCodes(tab.label, prefixes) || `tab ${tab.number ?? ''}`.trim();
+  if (run) return `run r${run.round ?? ''}`.trim();
+  return agent?.pane ? `pane ${agent.pane}` : 'unnamed session';
+}
+
+function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
+  const { transcriptOf, repoOf, briefOf, nowMs, fallbackCwd } = deps;
+  const transcript = agent ? transcriptOf(agent) : null;
+  const cwd = agent?.cwd ?? run?.workspace ?? null;
+  const repo = repoOf(cwd) ?? (agent ? null : repoOf(fallbackCwd)) ?? UNKNOWN_REPO;
+  return {
+    key: run ? `r:${run.run}` : agent.name ? `h:${agent.name}` : `h:pane:${agent.pane}`,
+    kind: 'session',
+    session: sessionName(run, agent, tabs, prefixes),
+    who: whoFor({ harness: run?.harness, model: run?.model, effort: run?.effort, agentTool: agent?.tool, transcriptModel: transcript?.model }),
+    where: cwd ? path.basename(cwd) : 'unknown',
+    up: upText(run?.started ?? transcript?.firstAt ?? null, nowMs),
+    state,
+    doing: doingText({
+      title: agent?.title, agentName: agent?.name, prefixes,
+      brief: run?.brief_path ? () => briefOf(run.brief_path) : null,
+      itemTitle: run?.title,
+    }),
+    // A row with a live agent can be gone to: by its name, or by its tab.
+    go: agent && state !== 'gone' ? { agent: agent.name ?? null, tab: agent.tab ?? null } : null,
+    agent: agent?.name ?? run?.agent ?? null,
+    cwd,
+    repo,
+    run: run ?? null,
+    transcript,
+    live: agent ?? null,
+    actions: agent ? ['go'] : [],
+    doc: run?.brief_path ? { path: run.brief_path } : { missing: 'no brief recorded' },
+    question: null,
+    data: agent ?? run,
+  };
+}
+
+// The whole board. Pure given its inputs:
+//   today         org today --json
+//   herdr         { ok, agents, error } from herdr agent list
+//   tabs          herdr tab list (labels for agents without a name)
+//   transcriptOf  agent → { file, model, firstAt, note } | null
+//   repoOf        folder → { root, name, path, git } | null
+//   briefOf       brief path → text | null
+//   seen          agent name → when this console last saw it (ms)
+//   fallbackCwd   the project's checkout, for a run with no known folder
+export function buildBoard({
+  today, herdr = null, tabs = [], transcriptOf = () => null, repoOf = () => null, briefOf = () => null,
+  nowMs = Date.now(), seen = new Map(), fallbackCwd = null,
+}) {
+  const prefixes = today?.project?.item_prefixes ?? undefined;
+  const visible = (text) => plain(text, prefixes);
+  const deps = { transcriptOf, repoOf, briefOf, nowMs, fallbackCwd };
+  const tabMap = new Map((tabs ?? []).map((t) => [t.tab, t]));
+  const herdrOk = Boolean(herdr?.ok);
+  const agents = herdrOk ? herdr.agents ?? [] : [];
+  const byName = new Map(agents.filter((a) => a.name).map((a) => [a.name, a]));
+  const runs = today?.running ?? [];
+  const runByAgent = new Map(runs.filter((r) => r.agent).map((r) => [r.agent, r]));
+
+  const sessions = [];
+  for (const agent of agents) {
+    const run = agent.name ? runByAgent.get(agent.name) ?? null : null;
+    const state = STATES.includes(agent.status) && agent.status !== 'gone' ? agent.status : 'unknown';
+    sessions.push(sessionRow({ run, agent, state, deps, tabs: tabMap, prefixes }));
+  }
+  for (const run of runs) {
+    if (run.agent && byName.has(run.agent)) continue;
+    if (herdrOk) {
+      const last = run.agent ? seen.get(run.agent) : undefined;
+      const since = last ?? Date.parse(run.started);
+      if (!(nowMs - since < GONE_KEEP_MS)) continue;
+    }
+    sessions.push(sessionRow({ run, agent: null, state: herdrOk ? 'gone' : 'unknown', deps, tabs: tabMap, prefixes }));
   }
 
-  return SECTIONS.map((s) => ({ ...s, rows: sections[s.key].map((r) => ({ ...r, prefixes })) }));
+  const groups = new Map();
+  for (const row of sessions) {
+    const g = groups.get(row.repo.root) ?? { key: row.repo.root, name: row.repo.name, path: row.repo.path, rows: [] };
+    g.rows.push(row);
+    groups.set(row.repo.root, g);
+  }
+  const rank = (row) => URGENCY[row.state] ?? 9;
+  const byUrgency = (a, b) => rank(a) - rank(b) || a.session.localeCompare(b.session);
+  const list = [...groups.values()].map((g) => ({ ...g, rows: g.rows.sort(byUrgency) }));
+  list.sort((a, b) => rank(a.rows[0]) - rank(b.rows[0]) || a.name.localeCompare(b.name));
+
+  const tag = (r) => ({ ...r, prefixes });
+  return {
+    waiting: (today?.waiting ?? []).map((q) => tag(questionRow(q, visible))),
+    groups: list.map((g) => ({ ...g, rows: g.rows.map(tag) })),
+    history: historyRows(today, visible, prefixes).map(tag),
+    prefixes,
+  };
+}
+
+// The rows a view moves through, in screen order.
+export function boardRows(board, view = 'list') {
+  if (!board) return [];
+  return view === 'history' ? board.history : [...board.waiting, ...board.groups.flatMap((g) => g.rows)];
+}
+
+// scope: { repo: root | null, view: 'all' | 'needs' | 'working' }. Questions show in every scope.
+export function visibleBoard(board, scope = {}) {
+  const keep = (row) => (scope.view === 'needs' ? row.state === 'blocked' : scope.view === 'working' ? row.state === 'working' : true);
+  const groups = board.groups
+    .filter((g) => !scope.repo || g.key === scope.repo)
+    .map((g) => ({ ...g, rows: g.rows.filter(keep) }))
+    .filter((g) => g.rows.length);
+  return { ...board, groups };
+}
+
+// The scope choices, with counts: every repository, then the views.
+export function scopeItems(board) {
+  const rows = board.groups.flatMap((g) => g.rows);
+  const count = (state) => rows.filter((r) => r.state === state).length;
+  return [
+    { label: 'All repositories', count: rows.length, repo: null, view: 'all' },
+    ...board.groups.map((g) => ({ label: g.name, count: g.rows.length, repo: g.key, view: 'all' })),
+    { label: 'needs you', count: board.waiting.length + count('blocked'), repo: null, view: 'needs', key: '!' },
+    { label: 'working', count: count('working'), repo: null, view: 'working', key: 'w' },
+    { label: 'history', count: board.history.length, repo: null, view: 'history', key: 'h' },
+  ];
+}
+
+export function boardKeys(board) {
+  return {
+    waiting: board.waiting.map((r) => r.key),
+    groups: board.groups.map((g) => g.key),
+    rows: Object.fromEntries(board.groups.map((g) => [g.key, g.rows.map((r) => r.key)])),
+  };
+}
+
+// Rows and groups already on screen keep their places on refresh.
+export function orderBoard(board, previous) {
+  if (!previous) return board;
+  const groups = stableOrder(previous.groups, board.groups);
+  return {
+    ...board,
+    waiting: stableOrder(previous.waiting, board.waiting),
+    groups: groups.map((g) => ({ ...g, rows: stableOrder(previous.rows?.[g.key], g.rows) })),
+  };
+}
+
+// Key/value lines for a session's Context tab: the only place codes appear.
+export function sessionContext(row, project = {}) {
+  const pairs = [];
+  const add = (k, v) => {
+    if (v !== undefined && v !== null && v !== '') pairs.push([k, String(v)]);
+  };
+  const a = row.live;
+  const r = row.run;
+  add('row', row.key);
+  add('checkout', row.cwd ?? 'unknown');
+  add('repository', row.repo?.path || row.repo?.name);
+  add('agent', a ? `${a.name ?? 'unnamed'}${a.tool ? ` (${a.tool})` : ''}` : row.agent ? `${row.agent} (gone)` : 'none');
+  if (a) add('herdr', [a.workspace && `workspace ${a.workspace}`, a.tab && `tab ${a.tab}`, a.pane && `pane ${a.pane}`, a.status].filter(Boolean).join(' · '));
+  add('session id', a?.session);
+  add('run', r ? `${r.run} on ${r.item}: ${r.title ?? 'untitled work'}` : 'no org run');
+  add('started', r?.started ?? row.transcript?.firstAt);
+  add('brief', r?.brief_path);
+  add('report', r?.report_path);
+  add('transcript', row.transcript?.file ?? 'not found');
+  const models = [row.transcript?.model && `${row.transcript.model} (transcript)`, r?.model && `${r.model} (org)`].filter(Boolean);
+  add('model', models.length ? models.join(' · ') : 'unknown');
+  add('effort', r?.effort);
+  add('gate', 'not recorded');
+  add('org', project.org);
+  return pairs;
 }
 
 // Keeps rows that were already on screen in their previous relative order; new rows
@@ -244,18 +341,6 @@ export function stableOrder(previousKeys, rows) {
   const old = rows.filter((r) => rank.has(r.key)).sort((a, b) => rank.get(a.key) - rank.get(b.key));
   let next = 0;
   return rows.map((r) => (rank.has(r.key) ? old[next++] : r));
-}
-
-export function orderSections(sections, previous) {
-  return sections.map((s) => ({ ...s, rows: stableOrder(previous?.[s.key], s.rows) }));
-}
-
-export function orderKeys(sections) {
-  return Object.fromEntries(sections.map((s) => [s.key, s.rows.map((r) => r.key)]));
-}
-
-export function flatRows(sections) {
-  return sections.flatMap((s) => s.rows);
 }
 
 // Selection follows identity: the same row if it still exists, otherwise its nearest
@@ -320,18 +405,6 @@ function rawParagraphs(row) {
         `Decided by ${d.by === 'human' ? 'you' : 'an agent'} at ${hhmm(d.at)}, on: ${d.title ?? 'untitled work'}.`,
         row.plain ? `Detail: ${d.text}` : 'The agent did not record a plain summary. The Document tab has the full note.',
       ];
-    case 'run':
-      return [
-        row.headline,
-        `${row.tag[0].toUpperCase()}${row.tag.slice(1)} work, started at ${hhmm(d.started)}. Agent: ${row.state.split(' · ')[1]}.`,
-        'The Document tab shows the brief the agent was given.',
-      ];
-    case 'executive':
-      return [
-        row.headline,
-        `Started at ${row.time}; now ${d.status}.`,
-        d.ledger?.note ? `Latest message: ${firstLine(d.ledger.note)}` : 'No final message yet.',
-      ];
     case 'report':
       return [
         row.headline,
@@ -341,12 +414,6 @@ function rawParagraphs(row) {
       ].filter(Boolean);
     case 'closed':
       return [row.headline, `Closed as ${d.as} at ${hhmm(d.at)}.`, d.note ? `Note: ${d.note}` : null].filter(Boolean);
-    case 'session':
-      return [
-        row.headline,
-        `A ${d.mode} session started at ${row.time}${d.note_at ? `; its last message came at ${hhmm(d.note_at)}` : ''}.`,
-        'The Document tab has its full final message.',
-      ];
     default:
       return [row.headline];
   }
@@ -379,23 +446,6 @@ export function contextPairs(row, project = {}) {
       add('note', `#${d.seq} at ${d.at} by ${d.by}`);
       add('text', d.text);
       break;
-    case 'run':
-      add('run', d.run);
-      add('item', d.item);
-      add('agent', d.agent);
-      add('lane', d.lane);
-      add('started', d.started);
-      add('brief', d.brief_path);
-      add('report path', d.report_path);
-      break;
-    case 'executive':
-      add('agent', d.name);
-      add('status', d.status);
-      add('tab', d.tab);
-      add('pane', d.pane);
-      add('ledger', d.ledger ? `${d.ledger.time} ${d.ledger.mode} ${d.ledger.subject ?? ''}`.trim() : 'not in today\'s ledger');
-      add('transcript', d.ledger?.transcript);
-      break;
     case 'report':
       add('run', d.run);
       add('item', d.item);
@@ -406,14 +456,6 @@ export function contextPairs(row, project = {}) {
     case 'closed':
       add('item', d.item);
       add('closed', `${d.as} at ${d.at} by ${d.by}`);
-      break;
-    case 'session':
-      add('agent', d.name);
-      add('mode', d.mode);
-      add('subject', d.subject);
-      add('started', d.time);
-      add('transcript', d.transcript ?? 'not found');
-      add('last message', d.note_at);
       break;
     default:
       break;

@@ -1,0 +1,64 @@
+// What the 0.0.2 screen reads besides org: Herdr's agents and tabs, and transcripts
+// found by their session id. Fixtures only; nothing here runs Herdr.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import nodeFs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createSessionReader, parseAgentList, parseTabList } from '../lib/sources.mjs';
+
+const FIX = fileURLToPath(new URL('./fixtures/', import.meta.url));
+const DIRS = [path.join(FIX, 'claude-a'), path.join(FIX, 'claude-b')];
+
+test('Herdr agents keep their tool, title and session id; tabs keep their labels', () => {
+  const agents = parseAgentList(JSON.stringify({ result: { agents: [
+    { agent: 'claude', agent_status: 'working', cwd: '/tmp/lane', pane_id: 'w1:p2', tab_id: 'w1:t2', workspace_id: 'w1',
+      terminal_title: '✳ Building the screen', terminal_title_stripped: 'Building the screen',
+      agent_session: { agent: 'claude', kind: 'id', value: '5e55-0001' }, name: 'lane-x' },
+    { agent: 'codex', agent_status: 'idle', pane_id: 'w2:p1', tab_id: 'w2:t1' },
+  ] } }));
+  assert.deepEqual(agents, [
+    { name: 'lane-x', status: 'working', tab: 'w1:t2', pane: 'w1:p2', cwd: '/tmp/lane', workspace: 'w1', tool: 'claude', title: 'Building the screen', session: '5e55-0001' },
+    { name: null, status: 'idle', tab: 'w2:t1', pane: 'w2:p1', cwd: null, workspace: null, tool: 'codex', title: null, session: null },
+  ]);
+  assert.deepEqual(parseTabList('{"result":{"tabs":[{"tab_id":"w1:t2","label":"cli","number":2,"workspace_id":"w1"}]}}'),
+    [{ tab: 'w1:t2', label: 'cli', number: 2, workspace: 'w1' }]);
+  assert.throws(() => parseTabList('{"result":{}}'), /unexpected/);
+});
+
+test('a transcript is found by session id, in its folder or any other, and gives model, start and last message', () => {
+  const reader = createSessionReader();
+  const here = reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: '5e55-0001' });
+  assert.deepEqual(here, {
+    file: path.join(FIX, 'claude-a/projects/-tmp-lane/5e55-0001.jsonl'),
+    model: 'claude-fable-5-1',
+    firstAt: '2026-09-16T19:30:00.000Z',
+    note: { text: '## Done\n\nThe screen is **built**.', at: '2026-09-16T20:49:00.000Z' },
+  });
+  // The session started in another folder than the agent's cwd now.
+  const there = reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: '5e55-0002' });
+  assert.equal(there.file, path.join(FIX, 'claude-b/projects/-tmp-elsewhere/5e55-0002.jsonl'));
+  assert.equal(there.model, 'claude-sonnet-5');
+  assert.equal(reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: 'nope' }), null);
+  assert.equal(reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: '../x' }), null, 'an id is a file name, never a path');
+  // By agent name when Herdr gives no session id.
+  const named = reader.transcript({ configDirs: DIRS, cwd: '/tmp/proj', name: 'settle-r-12-1611' });
+  assert.equal(named.file, path.join(FIX, 'claude-b/projects/-tmp-proj/abc.jsonl'));
+  assert.equal(named.firstAt, '2026-09-16T16:00:00.000Z');
+  assert.equal(named.model, null);
+});
+
+test('a missing session id is not searched for again until the folders change', () => {
+  let listed = 0;
+  const fsApi = { ...nodeFs, readdirSync: (...a) => { listed++; return nodeFs.readdirSync(...a); } };
+  let clock = 0;
+  const reader = createSessionReader({ fsApi, now: () => clock });
+  reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: 'nope' });
+  const first = listed;
+  assert.ok(first > 0);
+  reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: 'nope' });
+  assert.equal(listed, first, 'a miss is remembered');
+  clock = 61000;
+  reader.transcript({ configDirs: DIRS, cwd: '/tmp/lane', id: 'nope' });
+  assert.ok(listed > first, 'and searched again after a minute');
+});

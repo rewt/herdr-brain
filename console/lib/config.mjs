@@ -18,6 +18,7 @@ export const EXAMPLE = {
     'projects[].claude_config_dirs  Claude config dirs to search for session transcripts',
     'projects[].session_cap  the daily session limit shown in the header',
     'refresh_seconds         how often to re-read when nothing changed',
+    'glyphs                  "nerd" (a Nerd Font is set in Herdr) or "plain" (ASCII only)',
   ],
   example: true,
   projects: [
@@ -31,6 +32,7 @@ export const EXAMPLE = {
     },
   ],
   refresh_seconds: 5,
+  glyphs: 'nerd',
 };
 
 function expand(p) {
@@ -55,7 +57,9 @@ export function normalizeConfig(raw, file) {
     };
   });
   const refresh = Number(raw.refresh_seconds);
-  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5 };
+  const glyphs = raw.glyphs ?? 'nerd';
+  if (!['nerd', 'plain'].includes(glyphs)) throw new ConfigError(`${file}: "glyphs" is "nerd" or "plain", not ${JSON.stringify(glyphs)}`);
+  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs };
 }
 
 export function loadConfig(file = configPath()) {

@@ -1,13 +1,19 @@
 // One console session: data for the current project, the UI state, and the effects
-// keys ask for. No Ink here; the app renders session.frame() and forwards keys.
+// keys and clicks ask for. No Ink here; the app renders session.frame() and forwards
+// keys and mouse events.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
-import { initialState, promptParts, reduce } from './controller.mjs';
-import { heights, renderFrame } from './frame.mjs';
-import { buildRows, flatRows, hhmm, keepSelection, orderKeys, orderSections } from './model.mjs';
-import { createSessionReader, stopFileExists } from './sources.mjs';
+import { initialState, promptParts, reduce, reduceMouse } from './controller.mjs';
+import { hitAt, renderFrame } from './frame.mjs';
+import {
+  boardKeys, boardRows, buildBoard, hhmm, keepSelection, orderBoard, scopeItems, visibleBoard,
+} from './model.mjs';
+import { createRepoResolver } from './repos.mjs';
+import { createSessionReader, ledgerFile, parseLedger, stopFileExists } from './sources.mjs';
+
+export const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 function ago(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -16,20 +22,25 @@ function ago(ms) {
   return m < 90 ? `${m}m` : `${Math.round(m / 60)}h`;
 }
 
-export function createSession({ config, projectIndex = 0, deps = {}, onChange = () => {} }) {
+const EMPTY = { waiting: [], groups: [], history: [], prefixes: undefined };
+
+export function createSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = {
     orgToday: cli.orgToday,
     orgAnswer: cli.orgAnswer,
     herdrAgents: cli.herdrAgents,
-    herdrFocus: cli.herdrFocus,
+    herdrTabs: cli.herdrTabs,
+    herdrGo: cli.herdrGo,
     viewer: () => cli.viewerFor(),
     openBlocking: cli.openBlocking,
     openDetached: cli.openDetached,
     suspend: async (fn) => fn(),
     now: () => new Date(),
+    repoOf: createRepoResolver(),
+    reader: createSessionReader(),
     ...deps,
   };
-  const reader = createSessionReader();
+  const noColor = Boolean(env.NO_COLOR);
   const s = {
     index: projectIndex,
     ui: initialState(),
@@ -37,42 +48,104 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     todayAt: null,
     todayError: null,
     herdr: null,
-    notes: null,
-    sections: [],
-    order: null,
+    tabs: [],
+    seen: new Map(), // agent name → when Herdr last listed it
+    ledger: null,
+    board: EMPTY,
+    keys: null,
+    listKeys: [],
+    historyKeys: [],
     docs: new Map(),
     inflight: null,
     again: false,
     watcher: null,
     timer: null,
     size: { cols: 100, rows: 30 },
-    lastReaderMax: 0,
+    last: { hits: [], popupMax: 0, bodyHeight: 10 },
     tempDirs: new Set(), // text documents handed to a viewer that returns at once
   };
   const project = () => config.projects[s.index];
+  const configDirs = () => [...new Set(config.projects.flatMap((p) => p.claude_config_dirs ?? []))];
 
-  function readSessions(now) {
+  function readLedger(now) {
     const p = project();
     if (!p.ledger_dir) return null;
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    const date = s.today?.project?.day?.date ?? start.toLocaleDateString('sv');
-    return reader.notes({ ledgerDir: p.ledger_dir, date, configDirs: p.claude_config_dirs, cwd: p.cwd ?? '/', sinceMs: start.getTime() });
+    const date = s.today?.project?.day?.date ?? now.toLocaleDateString('sv');
+    try {
+      return { count: parseLedger(fs.readFileSync(ledgerFile(p.ledger_dir, date), 'utf8')).length, error: null };
+    } catch (error) {
+      return error.code === 'ENOENT' ? { count: 0, error: null } : { count: 0, error: `ledger unreadable: ${error.code ?? error.message}` };
+    }
+  }
+
+  function transcriptOf(agent) {
+    if (agent.tool && agent.tool !== 'claude') return null;
+    if (!agent.session && !agent.name) return null;
+    try {
+      return d.reader.transcript({ configDirs: configDirs(), cwd: agent.cwd, id: agent.session, name: agent.session ? null : agent.name });
+    } catch {
+      return null;
+    }
+  }
+
+  function readText(file) {
+    let st;
+    try {
+      st = fs.statSync(file);
+    } catch {
+      return null;
+    }
+    const cached = s.docs.get(file);
+    if (cached && cached.mtimeMs === st.mtimeMs) return cached.text;
+    let text = null;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      text = null;
+    }
+    s.docs.set(file, { mtimeMs: st.mtimeMs, text });
+    return text;
+  }
+
+  const visible = () => visibleBoard(s.board, s.ui.scope);
+  const rowsOf = (view) => boardRows(view === 'history' ? s.board : visible(), view);
+
+  // Selection follows identity; a row that left the view gives way to its nearest neighbour.
+  function keepCursor() {
+    const list = rowsOf('list');
+    const history = rowsOf('history');
+    s.ui = {
+      ...s.ui,
+      selectedKey: keepSelection(s.ui.selectedKey, s.listKeys, list),
+      historyKey: keepSelection(s.ui.historyKey, s.historyKeys, history),
+    };
+    s.listKeys = list.map((r) => r.key);
+    s.historyKeys = history.map((r) => r.key);
   }
 
   function rebuild({ reorder = false } = {}) {
-    const previousKeys = flatRows(s.sections).map((r) => r.key);
-    const built = buildRows({ today: s.today, herdr: s.herdr, sessions: s.notes, cwd: project().cwd });
-    s.sections = reorder ? built : orderSections(built, s.order);
-    s.order = orderKeys(s.sections);
-    s.ui = { ...s.ui, selectedKey: keepSelection(s.ui.selectedKey, previousKeys, flatRows(s.sections)) };
+    const built = buildBoard({
+      today: s.today,
+      herdr: s.herdr,
+      tabs: s.tabs,
+      transcriptOf,
+      repoOf: d.repoOf,
+      briefOf: readText,
+      nowMs: d.now().getTime(),
+      seen: s.seen,
+      fallbackCwd: project().cwd,
+    });
+    s.board = reorder || !s.keys ? built : orderBoard(built, s.keys);
+    s.keys = boardKeys(s.board);
+    keepCursor();
   }
 
   async function load({ reorder }) {
     const now = d.now();
-    const [today, herdr] = await Promise.all([
+    const [today, herdr, tabs] = await Promise.all([
       d.orgToday(project()).then((doc) => ({ doc }), (error) => ({ error })),
       d.herdrAgents(),
+      d.herdrTabs(),
     ]);
     if (today.doc) {
       s.today = today.doc;
@@ -82,7 +155,9 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       s.todayError = today.error.message;
     }
     s.herdr = herdr;
-    s.notes = readSessions(now);
+    s.tabs = tabs ?? [];
+    if (herdr.ok) for (const a of herdr.agents) if (a.name) s.seen.set(a.name, now.getTime());
+    s.ledger = readLedger(now);
     rebuild({ reorder });
   }
 
@@ -107,77 +182,70 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     return s.inflight;
   }
 
-  function selectedRow() {
-    return flatRows(s.sections).find((r) => r.key === s.ui.selectedKey) ?? null;
+  function findRow(key) {
+    if (!key) return null;
+    return boardRows(s.board, 'list').find((r) => r.key === key) ?? s.board.history.find((r) => r.key === key) ?? null;
   }
 
-  function document(row) {
+  function document(file, text) {
+    if (text) return { status: 'ok', text };
+    if (!file) return null;
+    const body = readText(file);
+    return body === null ? { status: 'missing', message: fs.existsSync(file) ? `cannot read ${file}` : `file not found: ${file}` } : { status: 'ok', text: body };
+  }
+
+  function rowDocument(row) {
     if (!row) return null;
     if (row.doc.missing) return { status: 'missing', message: row.doc.missing };
-    if (row.doc.text) return { status: 'ok', text: row.doc.text };
-    const file = row.doc.path;
-    let st;
-    try {
-      st = fs.statSync(file);
-    } catch {
-      return { status: 'missing', message: `file not found: ${file}` };
-    }
-    const cached = s.docs.get(file);
-    if (cached && cached.mtimeMs === st.mtimeMs) return cached.doc;
-    let doc;
-    try {
-      doc = { status: 'ok', text: fs.readFileSync(file, 'utf8'), path: file };
-    } catch (error) {
-      doc = { status: 'missing', message: `cannot read ${file}: ${error.code ?? error.message}` };
-    }
-    s.docs.set(file, { mtimeMs: st.mtimeMs, doc });
-    return doc;
+    return document(row.doc.path, row.doc.text);
   }
 
   function header(now) {
     const p = project();
-    const h = { project: p.name, clock: hhmm(now.toISOString()) };
-    if (!p.ledger_dir) h.sessions = 'no session ledger configured';
-    else if (s.notes?.error) h.sessions = s.notes.error;
-    else if (s.notes) h.sessions = `${s.notes.count}${p.session_cap ? `/${p.session_cap}` : ''} sessions today`;
+    const h = { project: p.name, clock: hhmm(now.toISOString()), waiting: s.board.waiting.length };
+    if (!p.ledger_dir) h.sessionsNote = 'no session ledger';
+    else if (s.ledger?.error) h.sessionsNote = s.ledger.error;
+    else if (s.ledger) h.sessions = `${s.ledger.count}${p.session_cap ? `/${p.session_cap}` : ''}`;
     h.stop = stopFileExists(p.ledger_dir);
     h.alerts = s.today?.attention?.length ?? 0;
     if (s.herdr && !s.herdr.ok) h.herdr = 'Herdr unavailable';
-    if (!s.today && s.todayError) h.age = `org unreadable: ${s.todayError}`;
-    else if (!s.today) h.age = 'loading…';
-    else if (s.todayError) h.age = `org data ${ago(now - s.todayAt)} old (${s.todayError})`;
-    else if (now - s.todayAt > 3 * config.refresh_seconds * 1000) h.age = `org data ${ago(now - s.todayAt)} old`;
+    if (!s.today && s.todayError) h.stale = `org unreadable: ${s.todayError}`;
+    else if (!s.today) h.stale = 'loading…';
+    else if (s.todayError) h.stale = `org data ${ago(now - s.todayAt)} old (${s.todayError})`;
+    else if (now - s.todayAt > 3 * config.refresh_seconds * 1000) h.stale = `org data ${ago(now - s.todayAt)} old`;
+    const scope = s.ui.scope;
+    if (scope.repo) h.scope = s.board.groups.find((g) => g.key === scope.repo)?.name ?? 'a repository';
+    if (scope.view !== 'all') h.scope = `${h.scope ? `${h.scope}, ` : ''}${scope.view === 'needs' ? 'needs you' : 'working'}`;
     return h;
   }
 
-  function view(cols, rows) {
+  function view() {
     const now = d.now();
-    const row = selectedRow();
+    const ui = s.ui;
+    const popupRow = ui.popup?.key ? findRow(ui.popup.key) : null;
+    const shownRepo = ui.scope.repo ? s.board.groups.find((g) => g.key === ui.scope.repo) : null;
     return {
+      glyphs: noColor ? 'plain' : config.glyphs ?? 'nerd',
+      version: VERSION,
       header: header(now),
-      sections: s.sections,
-      selected: row,
-      focus: s.ui.focus,
-      tab: s.ui.tab,
-      expanded: s.ui.expanded,
-      readerScroll: s.ui.readerScroll,
-      listOffset: s.ui.listOffset,
-      help: s.ui.help,
-      document: s.ui.tab === 1 ? document(row) : null,
+      board: visible(),
+      scopeItems: scopeItems(s.board),
+      state: ui,
+      prompt: promptParts(ui),
+      selectedRow: findRow(ui.view === 'history' ? ui.historyKey : ui.selectedKey),
+      popupRow,
+      popupDoc: ui.popup?.kind === 'summary' && ui.popup.tab === 1 ? rowDocument(popupRow) : null,
       project: { org: project().org },
-      message: s.ui.message,
-      messageStyle: s.ui.messageStyle,
-      prompt: promptParts(s.ui),
-      projectCount: config.projects.length,
-      rows, cols,
+      launch: { where: shownRepo && ui.scope.view === 'all' ? shownRepo.name : null },
     };
   }
 
   function frame(cols, rows, options) {
     s.size = { cols, rows };
-    const out = renderFrame(view(cols, rows), cols, rows, options);
-    s.ui = { ...s.ui, listOffset: out.listOffset, readerScroll: Math.min(s.ui.readerScroll, out.readerMax) };
-    s.lastReaderMax = out.readerMax;
+    const out = renderFrame(view(), cols, rows, options);
+    const popup = s.ui.popup?.kind === 'summary' ? { ...s.ui.popup, scroll: Math.min(s.ui.popup.scroll, out.popupMax) } : s.ui.popup;
+    s.ui = { ...s.ui, listOffset: out.listOffset, popup };
+    s.last = { hits: out.hits, popupMax: out.popupMax, bodyHeight: Math.max(1, rows - 5) };
     return out;
   }
 
@@ -185,6 +253,32 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     s.ui = { ...s.ui, message, messageStyle };
     onChange();
   };
+
+  async function open(file, text, label) {
+    if (file && !fs.existsSync(file)) {
+      say(`file not found: ${file}`, 'error');
+      return;
+    }
+    const viewer = d.viewer();
+    let dir = null;
+    if (!file) {
+      // A private folder and a new file: nothing else can own or redirect the name.
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'herdr-console-'));
+      file = path.join(dir, `${label.replace(/[^\w-]+/g, '-')}.md`);
+      fs.writeFileSync(file, text, { mode: 0o600, flag: 'wx' });
+    }
+    let r;
+    try {
+      r = viewer.blocking
+        ? await d.suspend(() => d.openBlocking(viewer, file))
+        : await d.openDetached(viewer, file);
+    } finally {
+      // A detached viewer may still be loading the file; it goes when the console stops.
+      if (dir && viewer.blocking) fs.rmSync(dir, { recursive: true, force: true });
+      else if (dir) s.tempDirs.add(dir);
+    }
+    say(r.ok ? `Opened in ${viewer.label}: ${file}` : `Could not open ${file}: ${r.error}`, r.ok ? 'status' : 'error');
+  }
 
   async function perform(effect) {
     const p = project();
@@ -197,8 +291,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
         s.index = (s.index + 1) % config.projects.length;
         s.today = null;
         s.todayError = null;
-        s.sections = [];
-        s.order = null;
+        s.board = EMPTY;
+        s.keys = null;
         s.ui = { ...initialState(), message: `Project: ${project().name}` };
         restartWatch();
         onChange();
@@ -214,44 +308,44 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
         say(`Recorded ${effect.answer} for “${effect.headline}”. The next executive pass acts on it.`, 'ok');
         return;
       }
-      case 'focus': {
+      case 'go': {
+        const row = findRow(effect.key);
+        if (!row) {
+          say('That session is no longer listed; nothing to go to.', 'error');
+          return;
+        }
         if (!s.herdr?.ok) {
-          say(`Cannot go to the agent: Herdr unavailable${s.herdr?.error ? ` (${s.herdr.error})` : ''}.`, 'error');
+          say(`Cannot go to ${row.session}: Herdr unavailable${s.herdr?.error ? ` (${s.herdr.error})` : ''}.`, 'error');
           return;
         }
-        if (!s.herdr.agents.some((a) => a.name === effect.agent)) {
-          say(`That agent is gone (${effect.agent}); nothing to focus.`, 'error');
+        if (!row.go) {
+          say(`${row.session} is gone; there is no Herdr tab to go to.`, 'error');
           return;
         }
-        const r = await d.herdrFocus(effect.agent);
-        say(r.ok ? `Focused ${effect.agent}.` : `Herdr refused to focus ${effect.agent}: ${r.error}`, r.ok ? 'ok' : 'error');
+        const r = await d.herdrGo(row.go);
+        say(r.ok ? `Went to ${row.session} in Herdr.` : `Herdr refused to go to ${row.session}: ${r.error}`, r.ok ? 'ok' : 'error');
         return;
       }
       case 'open': {
-        let file = effect.path;
-        if (file && !fs.existsSync(file)) {
-          say(`file not found: ${file}`, 'error');
+        const row = findRow(effect.key);
+        if (!row) {
+          say('That row is no longer listed.', 'warn');
           return;
         }
-        const viewer = d.viewer();
-        let dir = null;
-        if (!file) {
-          // A private folder and a new file: nothing else can own or redirect the name.
-          dir = fs.mkdtempSync(path.join(os.tmpdir(), 'herdr-console-'));
-          file = path.join(dir, `${effect.row.replace(/[^\w-]+/g, '-')}.md`);
-          fs.writeFileSync(file, effect.text, { mode: 0o600, flag: 'wx' });
+        if (row.kind === 'session' && effect.tab === 0) {
+          const note = row.transcript?.note;
+          if (!note) {
+            say('No message to open for this session.', 'warn');
+            return;
+          }
+          await open(null, note.text, `${row.session}-message`);
+          return;
         }
-        let r;
-        try {
-          r = viewer.blocking
-            ? await d.suspend(() => d.openBlocking(viewer, file))
-            : await d.openDetached(viewer, file);
-        } finally {
-          // A detached viewer may still be loading the file; it goes when the console stops.
-          if (dir && viewer.blocking) fs.rmSync(dir, { recursive: true, force: true });
-          else if (dir) s.tempDirs.add(dir);
+        if (row.doc.missing) {
+          say(`No document to open: ${row.doc.missing}.`, 'warn');
+          return;
         }
-        say(r.ok ? `Opened in ${viewer.label}: ${file}` : `Could not open ${file}: ${r.error}`, r.ok ? 'status' : 'error');
+        await open(row.doc.path ?? null, row.doc.text ?? null, row.key);
         return;
       }
       default:
@@ -259,18 +353,28 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     }
   }
 
-  // Returns true when the console should quit.
-  async function key(input, k = {}) {
-    const rows = flatRows(s.sections);
-    const h = heights(Math.max(1, s.size.rows), s.ui.expanded);
-    const { state, effects } = reduce(s.ui, input, k, {
+  function ctx() {
+    const rows = rowsOf(s.ui.view);
+    const hits = s.last.hits;
+    return {
       rows,
-      listPage: Math.max(1, h.list - 2),
-      readerPage: Math.max(1, h.reader - 1),
-      readerMax: s.lastReaderMax,
+      historyRows: rowsOf('history'),
+      scopeItems: scopeItems(s.board),
+      listPage: Math.max(1, s.last.bodyHeight - 2),
+      popupPage: Math.max(1, s.last.bodyHeight - 6),
+      popupMax: s.last.popupMax,
       projectCount: config.projects.length,
-    });
+      lineOf: (key) => {
+        const y = hits.findIndex((line) => line.some((h) => h.target?.type === 'row' && h.target.key === key));
+        return y < 0 ? 2 : y;
+      },
+      hitAt: (x, y) => hitAt(hits, x, y),
+    };
+  }
+
+  async function apply({ state, effects }) {
     s.ui = state;
+    keepCursor();
     onChange();
     let quit = false;
     for (const effect of effects) {
@@ -279,6 +383,10 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     }
     return quit;
   }
+
+  // Each returns true when the console should quit.
+  const key = (input, k = {}) => apply(reduce(s.ui, input, k, ctx()));
+  const mouse = (event) => apply(reduceMouse(s.ui, event, ctx()));
 
   function restartWatch() {
     s.watcher?.close();
@@ -309,10 +417,11 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
   }
 
   return {
-    start, stop, refresh, key, frame, perform,
+    start, stop, refresh, key, mouse, frame, perform,
     get ui() { return s.ui; },
     set ui(value) { s.ui = value; },
-    get sections() { return s.sections; },
+    get board() { return s.board; },
     get project() { return project(); },
+    rows: (view = s.ui.view) => rowsOf(view),
   };
 }

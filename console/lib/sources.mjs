@@ -40,9 +40,10 @@ export function agentNames(jsonlText) {
   return names;
 }
 
-// One transcript line as an assistant note ({ text, at }), or null: text blocks
-// joined, tool calls ignored.
-function assistantNote(line) {
+// One transcript line as an assistant entry ({ note, model }), or null. The note is
+// its text blocks joined ({ text, at }, tool calls ignored) or null; the model is
+// the one that answered (never a synthetic one).
+function assistantEntry(line) {
   if (!line.includes('"assistant"')) return null;
   let e;
   try {
@@ -55,7 +56,22 @@ function assistantNote(line) {
   const text = typeof content === 'string'
     ? content
     : Array.isArray(content) ? content.filter((b) => b?.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n\n') : '';
-  return text.trim() ? { text: text.trim(), at: e.timestamp ?? null } : null;
+  const model = typeof e.message?.model === 'string' && !e.message.model.startsWith('<') ? e.message.model : null;
+  return { note: text.trim() ? { text: text.trim(), at: e.timestamp ?? null } : null, model };
+}
+
+function assistantNote(line) {
+  return assistantEntry(line)?.note ?? null;
+}
+
+function firstTimestamp(line) {
+  if (!line.includes('"timestamp"')) return null;
+  try {
+    const t = JSON.parse(line).timestamp;
+    return typeof t === 'string' ? t : null;
+  } catch {
+    return null;
+  }
 }
 
 // The text of the last assistant message.
@@ -74,7 +90,7 @@ const CHUNK = 1 << 20;
 // appended since: agent names and the last assistant note are kept per file, so a
 // refresh costs a stat and the new lines. A name not found stays unsearched until a
 // transcript in the folders grows or appears.
-export function createSessionReader({ fsApi = nodeFs } = {}) {
+export function createSessionReader({ fsApi = nodeFs, now = Date.now } = {}) {
   const files = new Map(); // file → { mtimeMs, size, offset, names, note }
   const located = new Map(); // `${dirs}|${cwd}|${name}` → file
   const missing = new Map(); // same key → candidate signature when last searched
@@ -110,7 +126,12 @@ export function createSessionReader({ fsApi = nodeFs } = {}) {
         if (end < 0) continue;
         for (const line of data.subarray(0, end).toString('utf8').split('\n')) {
           if (line.includes('agent-name')) agentNames(line).forEach((name) => entry.names.add(name));
-          entry.note = assistantNote(line) ?? entry.note;
+          entry.firstAt ??= firstTimestamp(line);
+          const said = assistantEntry(line);
+          if (said) {
+            entry.note = said.note ?? entry.note;
+            entry.model = said.model ?? entry.model;
+          }
         }
       }
       entry.offset = pos - carry.length;
@@ -125,7 +146,7 @@ export function createSessionReader({ fsApi = nodeFs } = {}) {
     let entry = files.get(file);
     if (entry && entry.mtimeMs === st.mtimeMs && entry.size === st.size) return entry;
     // A file that shrank was rewritten: start over.
-    if (!entry || st.size < entry.offset) entry = { offset: 0, names: new Set(), note: null };
+    if (!entry || st.size < entry.offset) entry = { offset: 0, names: new Set(), note: null, model: null, firstAt: null };
     if (!readLines(file, entry, st.size)) return null;
     Object.assign(entry, st);
     files.set(file, entry);
@@ -195,14 +216,55 @@ export function createSessionReader({ fsApi = nodeFs } = {}) {
     return { sessions, count: entries.length, error: null };
   }
 
-  return { find, notes, load };
+  // A session id is a transcript's file name. It is looked for in the folders named
+  // after cwd first, then in every project folder (the session may have started
+  // elsewhere). A miss is remembered for a minute.
+  const byId = new Map(); // `${dirs}|${id}` → file | { missedAt }
+  function findById(configDirs, cwd, id) {
+    if (!/^[\w.-]+$/.test(id)) return null;
+    const key = `${configDirs.join(':')}|${id}`;
+    const known = byId.get(key);
+    if (typeof known === 'string' && stat(known)) return known;
+    if (known?.missedAt !== undefined && now() - known.missedAt < 60000) return null;
+    const name = `${id}.jsonl`;
+    for (const dir of configDirs) {
+      for (const slug of projectSlugs(cwd ?? '/')) {
+        const file = path.join(dir, 'projects', slug, name);
+        if (stat(file)) return byId.set(key, file).get(key);
+      }
+    }
+    for (const dir of configDirs) {
+      let folders;
+      try {
+        folders = fsApi.readdirSync(path.join(dir, 'projects'));
+      } catch {
+        continue;
+      }
+      for (const folder of folders) {
+        const file = path.join(dir, 'projects', folder, name);
+        if (stat(file)) return byId.set(key, file).get(key);
+      }
+    }
+    byId.set(key, { missedAt: now() });
+    return null;
+  }
+
+  // transcript({ configDirs, cwd, id | name }) → { file, model, firstAt, note } or null.
+  function transcript({ configDirs, cwd, id = null, name = null }) {
+    const file = id ? findById(configDirs, cwd, id) : name ? find({ configDirs, cwd: cwd ?? '/', name }) : null;
+    const entry = file ? load(file) : null;
+    if (!entry) return null;
+    return { file, model: entry.model, firstAt: entry.firstAt, note: entry.note };
+  }
+
+  return { find, notes, load, transcript };
 }
 
 export function stopFileExists(ledgerDir, fsApi = nodeFs) {
   return Boolean(ledgerDir) && fsApi.existsSync(path.join(ledgerDir, 'STOP'));
 }
 
-// herdr agent list → [{ name, status, tab, pane, cwd, workspace }]
+// herdr agent list → [{ name, status, tab, pane, cwd, workspace, tool, title, session }]
 export function parseAgentList(stdout) {
   const body = JSON.parse(stdout);
   const agents = body?.result?.agents;
@@ -214,10 +276,18 @@ export function parseAgentList(stdout) {
     pane: a.pane_id ?? null,
     cwd: a.cwd ?? null,
     workspace: a.workspace_id ?? null,
+    tool: a.agent ?? null,
+    title: a.terminal_title_stripped ?? null,
+    session: a.agent_session?.value ?? null,
   }));
 }
 
-export const EXECUTIVE_RE = /^(settle|exec|plan|audit)-/;
+// herdr tab list → [{ tab, label, number, workspace }]
+export function parseTabList(stdout) {
+  const tabs = JSON.parse(stdout)?.result?.tabs;
+  if (!Array.isArray(tabs)) throw new Error('unexpected herdr tab list output');
+  return tabs.map((t) => ({ tab: t.tab_id ?? null, label: t.label ?? null, number: t.number ?? null, workspace: t.workspace_id ?? null }));
+}
 
 // The first absolute markdown path in a note's text; a leading ~/ means the home folder.
 export function firstMarkdownPath(text, home = os.homedir()) {

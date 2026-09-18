@@ -224,3 +224,28 @@ export async function explainQuestion(bin, orgDir, id, { orgBin, timeout = 24000
   if (!r.ok || !body || body.error) return { ok: false, error: body?.error ?? r.error };
   return { ok: true, ...body };
 }
+
+// ---- the loop itself -------------------------------------------------------
+
+// Whether the brain loop is alive: { service, running, pid, tick, age, every }.
+export async function loopStatus(bin) {
+  if (!bin) return null;
+  const r = await brainAct(bin, ['status', '--json'], { timeout: 8000 });
+  try { return r.ok ? JSON.parse(r.output) : null; } catch { return null; }
+}
+
+// Words for the header: ok, down (and for how long), or off.
+export function loopWords(st) {
+  if (!st) return null;
+  const every = st.every ?? 5;
+  if (st.running && st.age != null && st.age <= Math.max(30, every * 6)) return { text: 'loop ok', ok: true };
+  if (st.running) return { text: `loop stalled ${Math.round(st.age / 60)}m`, ok: false };
+  if (st.service) return { text: 'loop down', ok: false };
+  return { text: 'loop off', ok: false };
+}
+
+export async function setLoop(bin, on) {
+  const r = await brainAct(bin, ['service', on ? 'start' : 'stop'], { timeout: 30000 });
+  if (!r.ok) return { ok: false, error: r.error };
+  try { return { ok: true, status: JSON.parse(r.output) }; } catch { return { ok: true, status: null }; }
+}

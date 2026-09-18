@@ -3,7 +3,7 @@
 // fold into one line, and the peek follows a session once its row is answered.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { brainArgs, choicesOf, workUpArgs, workUpBrief } from '../lib/brain.mjs';
+import { brainArgs, choicesOf, loopWords, workUpArgs, workUpBrief } from '../lib/brain.mjs';
 import { initialState, promptText, reduce, reduceMouse } from '../lib/controller.mjs';
 import { hitAt, lineText, renderFrame } from '../lib/frame.mjs';
 import { boardRows, buildBoard, scopeItems, visibleBoard } from '../lib/model.mjs';
@@ -387,5 +387,38 @@ test('i records an instruction for the whole project where its sessions read dir
   assert.match(session.ui.message, /^Recorded on the project's top goal \(G-1\)/);
   const screen = session.frame(140, 40).lines.map(lineText).join('\n');
   assert.match(screen, /Your instruction to the project, 21:14: “ok, please close the hole and pause work after it completes”/);
+  session.stop();
+});
+
+test('the header says whether the loop is alive, and L turns it off or on after asking', async () => {
+  assert.deepEqual(loopWords({ service: true, running: true, age: 3, every: 5 }), { text: 'loop ok', ok: true });
+  assert.deepEqual(loopWords({ service: true, running: true, age: 600, every: 5 }), { text: 'loop stalled 10m', ok: false });
+  assert.deepEqual(loopWords({ service: true, running: false }), { text: 'loop down', ok: false });
+  assert.deepEqual(loopWords({ service: false, running: false }), { text: 'loop off', ok: false });
+  assert.equal(loopWords(null), null, 'no brain configured: nothing to say');
+
+  let loop = { service: true, running: true, age: 2, every: 5 };
+  const calls = [];
+  const config = { projects: [{ name: 'bch', org: '/r/.org', cwd: '/r/bch', ledger_dir: null, claude_config_dirs: [] }], refresh_seconds: 60, brain_bin: '/x/brain.mjs', explain: false };
+  const session = createSession({
+    config,
+    deps: {
+      orgToday: async () => today, herdrAgents: async () => ({ ok: true, agents }), herdrTabs: async () => [], repoOf: () => null,
+      brainQueue: async () => ({ rows: [] }), loopStatus: async () => loop,
+      setLoop: async (on) => { calls.push(on); loop = { service: on, running: on, age: on ? 1 : null, every: 5 }; return { ok: true, status: loop }; },
+    },
+  });
+  await session.refresh({ reorder: true });
+  assert.match(session.frame(140, 40).lines.map(lineText)[0], /loop ok/);
+  await session.key('L', {});
+  assert.match(promptText(session.ui), /^Turn the loop off\? Nothing new reaches Waiting on you until you turn it back on\./);
+  assert.deepEqual(calls, [], 'nothing changes before Enter');
+  await session.key('', { return: true });
+  assert.deepEqual(calls, [false]);
+  assert.match(session.frame(140, 40).lines.map(lineText)[0], /loop off/);
+  await session.key('L', {});
+  assert.match(promptText(session.ui), /^Turn the loop on\?/);
+  await session.key('', { return: true });
+  assert.deepEqual(calls, [false, true]);
   session.stop();
 });

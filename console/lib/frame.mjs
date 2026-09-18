@@ -130,6 +130,7 @@ function headerSegments(view, G) {
   left.push(waiting
     ? { icon: G.waiting, text: `${waiting} waiting on you`, short: `${waiting} waiting`, bg: 'segAlert', fg: 'ink', bold: true }
     : { text: 'nothing waiting', short: '0 waiting', bg: 'segCount', fg: 'muted' });
+  if (h.loop) left.push(h.loop.ok ? { text: h.loop.text, short: 'loop', bg: 'segCount', fg: 'done' } : alert(h.loop.text, 'loop!'));
   if (h.alerts) left.push({ ...alert(`${h.alerts} alert${h.alerts === 1 ? '' : 's'}`, `${h.alerts}!`), icon: G.alert });
   if (h.stop) left.push({ ...alert('STOP', 'STOP'), icon: G.stop });
   if (h.herdr) left.push(alert(h.herdr, 'Herdr?'));
@@ -714,6 +715,7 @@ export function helpLines(version) {
     'd                            start a session to work it out; it comes back here',
     '',
     'i                            give the whole project an instruction; its sessions read it first',
+    'L                            turn the loop off or on (the header says loop ok / down / off)',
     'n, Tab                       new task (comes in the next round)',
     'h                            today\'s history (h or Esc returns)',
     '/                            scope: a repository or a view',

@@ -77,6 +77,10 @@ function actParts(m) {
       return m.report
         ? { head: 'Clear “', title: m.headline, mid: '” from the list?', reason: '', keep: 'start', tail: confirm }
         : { head: 'Drop “', title: m.headline, mid: '” for good? It will not come back.', reason: '', keep: 'start', tail: confirm };
+    case 'loop':
+      return m.on
+        ? { head: 'Turn the loop on? ', title: '', mid: 'Stopped sessions reach Waiting on you again.', reason: '', keep: 'start', tail: confirm }
+        : { head: 'Turn the loop off? ', title: '', mid: 'Nothing new reaches Waiting on you until you turn it back on.', reason: '', keep: 'start', tail: confirm };
     case 'dispatch':
       return { head: 'Start a session to work out “', title: m.headline, mid: '”? It comes back here with the choices.', reason: '', keep: 'start', tail: confirm };
     default:
@@ -350,6 +354,7 @@ function modeKeys(state, input, key) {
   }
   if (m.kind === 'act') {
     if (key.escape) return done(say({ ...state, mode: null }, m.verb === 'drop' || m.verb === 'dispatch' ? 'Cancelled; nothing changed.' : 'Cancelled; nothing was sent.'));
+    if (key.return && m.verb === 'loop') return done(say({ ...state, mode: null }, m.on ? 'Turning the loop on…' : 'Turning the loop off…'), [{ type: 'loop', on: m.on }]);
     if (key.return) {
       const effect = { type: 'act', verb: m.verb, key: m.key };
       if (m.verb === 'pick') effect.option = m.option;
@@ -504,6 +509,8 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
       return done(state, [{ type: 'open', key: row.key, tab: null }]);
     case 'i':
       return done(say({ ...state, mode: { kind: 'instruct', project: ctx.projectName ?? null, text: '' } }, ''));
+    case 'L':
+      return done(say({ ...state, mode: { kind: 'act', verb: 'loop', on: !ctx.loopOn } }, ''));
     case '?':
       return done({ ...state, help: true });
     case 'q':

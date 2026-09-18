@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
-import { brainAct, brainArgs, explainQuestion, readQueue, startWorkUp } from './brain.mjs';
+import { brainAct, brainArgs, explainQuestion, loopStatus, loopWords, readQueue, setLoop, startWorkUp } from './brain.mjs';
 import { initialState, promptParts, reduce, reduceMouse } from './controller.mjs';
 import { RAIL_COLS, hitAt, renderFrame } from './frame.mjs';
 import {
@@ -33,6 +33,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     herdrTabs: cli.herdrTabs,
     brainQueue: config?.brain_bin ? () => readQueue(config.brain_bin) : null,
     brainAct: (args) => brainAct(config?.brain_bin, args),
+    loopStatus: config?.brain_bin ? () => loopStatus(config.brain_bin) : async () => null,
+    setLoop: (on) => setLoop(config?.brain_bin, on),
     herdrGo: cli.herdrGo,
     herdrRead: cli.herdrRead,
     herdrPrompt: cli.herdrPrompt,
@@ -166,12 +168,14 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
 
   async function load({ reorder }) {
     const now = d.now();
-    const [today, herdr, tabs, brain] = await Promise.all([
+    const [today, herdr, tabs, brain, loop] = await Promise.all([
       d.orgToday(project()).then((doc) => ({ doc }), (error) => ({ error })),
       d.herdrAgents(),
       d.herdrTabs(),
       d.brainQueue ? d.brainQueue() : Promise.resolve({ rows: [], off: true }),
+      d.loopStatus().catch(() => null),
     ]);
+    s.loop = loop;
     if (today.doc) {
       s.today = today.doc;
       s.todayAt = now;
@@ -316,6 +320,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     else if (s.ledger) h.sessions = `${s.ledger.count}${p.session_cap ? `/${p.session_cap}` : ''}`;
     h.stop = stopFileExists(p.ledger_dir);
     h.alerts = s.today?.attention?.length ?? 0;
+    h.loop = loopWords(s.loop);
     if (s.herdr && !s.herdr.ok) h.herdr = 'Herdr unavailable';
     if (!s.today && s.todayError) h.stale = `org unreadable: ${s.todayError}`;
     else if (!s.today) h.stale = 'loading…';
@@ -421,6 +426,17 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       }
       case 'act':
         return act(effect);
+      case 'loop': {
+        const r = await d.setLoop(effect.on);
+        if (!r.ok) {
+          say(`The loop did not ${effect.on ? 'start' : 'stop'}: ${r.error}`, 'error');
+          return;
+        }
+        s.loop = r.status ?? s.loop;
+        await refresh();
+        say(effect.on ? 'The loop is on: stopped sessions reach Waiting on you again.' : 'The loop is off. Nothing new reaches Waiting on you until you turn it on (L).', 'ok');
+        return;
+      }
       case 'instruct': {
         const goal = s.today?.project?.top_goal?.id;
         if (!goal) {
@@ -556,6 +572,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       popupMax: s.last.popupMax,
       projectCount: config.projects.length,
       projectName: project().name,
+      loopOn: Boolean(s.loop?.service || s.loop?.running),
       popupMode,
       menuX: s.size.cols >= RAIL_COLS ? 27 : 4,
       lineOf: (key) => {

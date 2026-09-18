@@ -349,6 +349,7 @@ Enter opens a fold. The project's newest instruction from the operator sits abov
 | l | Save a result for later: it leaves the list and waits under the *saved for later* fold. |
 | x | Drop a result for good (`brain never`), or clear a finished report you have read (`brain dismiss`). Confirmed first. |
 | i | Give the whole project an instruction in your own words. It is recorded as an operator decision note on the project's top goal (`OPERATOR DIRECTION <date time>: …`), which its sessions read first, newest first, before deciding anything. Nothing is sent into a running session. |
+| L | Turn the brain loop off or on (`brain service stop|start`), after a confirmation. The header says `loop ok`, `loop stalled`, `loop down` or `loop off`. |
 | 1–9 on an org question | When the question has been read, its worked-out answers are choices too: the number records that answer with `org answer`, after a confirmation. |
 | d | On an org question: start a session that works it out (`brain start`: a new Herdr tab in the project's checkout, on the folder's Claude account, with a brief that asks for the real choices and a recommendation and forbids deciding). When it stops, its choices come back to Waiting on you. The question gets an org note naming the session. |
 | s | Summary popup: 1/2/3 tabs, j/k and page keys scroll, `o` opens the file, Enter peeks, Esc closes |

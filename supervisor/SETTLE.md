@@ -116,10 +116,23 @@ and correction rounds with the send-back cap you just read from `org show
   `org add … --role human`. Give the findings and recommend whether to keep
   going, change scope, or stop.
 - **PASS, and your own checks agree:** evaluate every promotion condition in
-  the goal's decision notes against current evidence. In particular, inspect
-  the exact reviewed commit and commits after it, both test suites, rebase and
-  worktree state, the report's Cutover section, the paths changed against main,
-  and the number of send-back rounds.
+  the goal's decision notes against current evidence. First, take the public
+  review record path printed by `lane review`, verify that it is the only
+  uncommitted path, and commit only that record:
+
+  ```sh
+  REVIEW_RECORD=<path printed by lane review>
+  git -C "$WT" add -- "$REVIEW_RECORD"
+  git -C "$WT" diff --cached --check
+  git -C "$WT" commit -m "Add $LANE review record"
+  ```
+
+  Then inspect the exact reviewed commit and commits after it, both test suites,
+  rebase and worktree state, the report's Cutover section, the paths changed
+  against main, and the number of send-back rounds. Under the current promotion
+  policy, the record-only commit is still a commit after the reviewed commit,
+  so condition 1 fails unless a later decision note on the goal explicitly
+  permits that record-only commit. Do not silently reinterpret the goal note.
   - If **all conditions hold**, record one decision note naming each numbered
     condition and exactly how you checked it, then run `lane promote "$LANE"`.
     Close the item done with a note naming the promoted commit and review
@@ -129,7 +142,15 @@ and correction rounds with the send-back cap you just read from `org show
     yes/no question under `$GOAL`, with the review record, your recommendation,
     and each failed condition in its note. A diff touching `supervisor/`,
     `.claude/`, or `.lane.json` fails the rules-path condition and therefore
-    always takes this branch.
+    always takes this branch. File the question in this form so the console can
+    act on it and a later continue session knows exactly what each answer means:
+
+    ```sh
+    Q=$(org add "<plain yes/no question>" --parent "$GOAL" --role human \
+          --meta category=<category> --meta recommend=<yes|no> \
+          --meta memo="$REVIEW_RECORD")
+    org note "$Q" "Recommend: <yes|no>. Why: <two plain sentences>. On yes: <exact action authorized>. On no: <what remains or happens next>."
+    ```
 
 ## 7. Continue mode
 
@@ -143,11 +164,16 @@ and correction rounds with the send-back cap you just read from `org show
    On any no, re-plan the blocked work, record why, and `org unblock` only what
    the new plan allows.
 3. **Start the next work.** Take ready items in priority order and skip an item
-   whose run is already open. Never run lanes that edit the same files at the
-   same time. Give each new item its own lane and brief, then use `org start`
-   with `--meta route=engineer`, `lane dispatch --route engineer`, `org set`,
-   and `supervisor/arm-watch.sh` as in section 5. Work that needs authority only
-   the operator can grant becomes a human question instead of a dispatch.
+   whose run is already open. At most two engineering lanes may be open at
+   once. Never run lanes that edit the same files at the same time; `lib/`,
+   `bin/`, `console/`, and `test/` overlap often, so when in doubt run those
+   lanes one after another. Give each item a new lane with `lane open <topic>`
+   and put its brief at `$WT/.lane/BRIEF-<topic>.md`, starting with one plain
+   sentence. Then use `org start` with `--meta route=engineer`, `lane dispatch
+   --route engineer`, `org set`, and `supervisor/arm-watch.sh` as in section 5.
+   Work that needs authority only the operator can grant becomes a human
+   question instead of a dispatch; file it with the `org add`/`org note`
+   template in section 5 so its metadata and yes/no actions are complete.
 
 ## 6. Stop
 

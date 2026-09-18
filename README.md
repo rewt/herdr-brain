@@ -460,8 +460,8 @@ Derived, never stored, checked in this order:
 4. otherwise from the latest report: `done`, `needs_human`, `blocked` (nothing linked yet), or
    `ready` (blockers resolved, last run failed, or nothing reported yet).
 
-Goals roll up their descendants. An abandoned run frees its item; a report that arrives later is
-still recorded and marked late.
+Goals roll up their descendants. An abandoned run frees its item; `org sync` and `org ingest` skip
+any report that arrives later, and `org abandon` says that late reports will not be ingested.
 
 ## Measuring cost
 

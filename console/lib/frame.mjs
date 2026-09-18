@@ -225,11 +225,16 @@ function questionLine(row, L, cols, selected) {
   const right = waitingRight(row, L, bg);
   const rightWidth = spansWidth(right);
   const room = cols - 1 - cellWidth(markText) - 1 - 1 - rightWidth - 1;
+  // The id is the handle, in bold; the rest is what is at stake.
+  const lead = row.handle && row.headline.startsWith(`${row.handle} — `) ? `${row.handle}` : '';
+  const title = lead
+    ? [span(lead, 'bright', bg, true), span(pad(row.headline.slice(lead.length), room - cellWidth(lead)), 'fg', bg)]
+    : [span(pad(row.headline, room), 'fg', bg)];
   return [
     span(' ', 'fg', bg),
     span(markText, 'waitFg', bg, true),
     span(' ', 'fg', bg),
-    span(pad(row.headline, room), 'fg', bg),
+    ...title,
     span(' ', 'fg', bg),
     ...right,
     span(' ', 'fg', bg),
@@ -247,6 +252,16 @@ function detailLines(row, width, selected) {
   const out = [];
   const add = (spans, hit) => out.push({ spans: fit([span(' '.repeat(indent), 'fg', bg), ...spans], width, bg), key: row.key, hit });
   const options = row.options ?? [];
+  // What is at stake, in the operator's words: all of it on the selected row,
+  // two lines on the others (s shows the rest).
+  if (row.explain) {
+    const lines = wrap(row.explain, width - indent - 1);
+    const keep = selected ? lines.slice(0, 10) : lines.slice(0, 2);
+    const cut = lines.length > keep.length;
+    keep.forEach((t, i) => add([span(i === keep.length - 1 && cut ? `${clip(t, width - indent - 3)} …` : t, 'doing', bg)]));
+  } else if (row.explaining) {
+    add([span('reading it…', 'faint', bg)]);
+  }
   const labelWidth = Math.min(34, Math.max(0, ...options.map((o) => cellWidth(o.label))));
   for (const o of options.slice(0, MAX_OPTIONS)) {
     const rec = row.recommendKey === o.key ? '  ← recommended' : '';
@@ -261,6 +276,7 @@ function detailLines(row, width, selected) {
     ], { type: 'option', key: row.key, option: o.key });
   }
   if (options.length > MAX_OPTIONS) add([span(`…and ${options.length - MAX_OPTIONS} more: s shows them all`, 'muted', bg)]);
+  if (selected && row.why && row.recommendKey) add([span(`why ${row.recommendKey}: `, 'done', bg), span(row.why, 'muted', bg)]);
   if (row.unsent) add([span('you typed, never sent: ', 'blocked', bg), span(`“${row.unsent.split('\n')[0]}”`, 'fg', bg)]);
   if (row.suggestion) {
     add([span('Claude drafted, not sent: ', 'muted', bg), span(`“${row.suggestion.split('\n')[0]}”`, 'fg', bg), span('   y sends it · r writes your own', 'muted', bg)]);
@@ -311,6 +327,10 @@ function listBody(view, width, G) {
     return out;
   }
   const L = layoutFor(width);
+  if (board.direction) {
+    const d = board.direction;
+    out.push({ spans: [span(' '), span(`Your instruction to the project, ${hhmm(d.at)}: `, 'muted'), span(`“${d.text}”`, 'fg')] });
+  }
   if (board.waiting.length) {
     const count = board.waitingCount ?? board.waiting.length;
     out.push({ spans: capLine(width, G, { name: 'WAITING ON YOU', count, icon: G.question, pillBg: 'waitPill', pillFg: 'waitFg', countFg: 'waitFg' }) });
@@ -383,7 +403,11 @@ function verbKeys(row, short) {
     if (has('draft')) keys.push(['y', 'send draft']);
     else if (row.recommendKey) keys.push(['y', 'recommended']);
   }
-  if (row?.kind === 'question') keys.push(['y/n', 'answer'], ['d', short ? 'work out' : 'work it out']);
+  if (row?.kind === 'question') {
+    const n = row.via === 'answer' ? row.options?.length ?? 0 : 0;
+    if (n) keys.push([n === 1 ? '1' : `1-${Math.min(n, 9)}`, 'pick']);
+    keys.push(['y/n', 'answer'], ['d', short ? 'work out' : 'work it out']);
+  }
   if (has('reply')) keys.push(['r', 'reply']);
   if (has('later')) keys.push(['l', 'later']);
   if (has('drop')) keys.push(['x', ['finished', 'report'].includes(row.category) ? 'clear' : 'drop']);
@@ -400,6 +424,7 @@ const KEYS = {
     else if (row) keys.push(['Enter', 'summary']);
     keys.push(...verbKeys(row, short));
     if (row?.kind !== 'fold') keys.push(['s', 'summary']);
+    keys.push(['i', 'instruct']);
     if (!row || row.kind === 'session') keys.push(['n', short ? 'task' : 'new task']);
     keys.push(['m', 'menu'], ['h', 'history'], ['/', 'scope'], ['?', 'help'], ['q', 'quit']);
     return short ? keys.filter(([k]) => !['m', 'h', '/'].includes(k)) : keys;
@@ -684,9 +709,11 @@ export function helpLines(version) {
     'l                            save for later      x  drop it, or clear a finished one',
     '',
     'A question filed in org:',
+    '1-9                          record one of the worked-out answers',
     'y / n                        approve / decline (n in history: overrule)',
     'd                            start a session to work it out; it comes back here',
     '',
+    'i                            give the whole project an instruction; its sessions read it first',
     'n, Tab                       new task (comes in the next round)',
     'h                            today\'s history (h or Esc returns)',
     '/                            scope: a repository or a view',
@@ -777,7 +804,7 @@ export function renderFrame(view, cols, rows, { termRows = rows } = {}) {
 
   const row = view.selectedRow ?? null;
   const p = st.popup;
-  const mode = view.prompt ? (st.mode?.kind === 'reply' ? 'REPLY' : 'ANSWER') : st.help ? 'HELP' : p ? p.kind.toUpperCase() : st.view === 'history' ? 'HISTORY' : 'LIST';
+  const mode = view.prompt ? ({ reply: 'REPLY', instruct: 'INSTRUCT' }[st.mode?.kind] ?? 'ANSWER') : st.help ? 'HELP' : p ? p.kind.toUpperCase() : st.view === 'history' ? 'HISTORY' : 'LIST';
   out.push(footerLine(view, cols, G, mode, p ? view.popupRow : row));
 
   let popupMax = 0;

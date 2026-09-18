@@ -97,10 +97,11 @@ const CODE = /\b[A-Z][A-Z0-9]*-\d+\b|\b(?=[0-9a-fA-F]*\d)(?=[0-9a-fA-F]*[a-fA-F]
 
 test('rows use plain language and mark records without it', () => {
   const b = model();
-  assert.equal(b.waiting[0].headline, 'Adopt the theft fix once its review passes?');
+  assert.equal(b.waiting[0].headline, 'HUM-5 — Adopt the theft fix once its review passes?', 'a waiting row leads with its id as a handle');
+  assert.equal(b.waiting[0].title, 'Adopt the theft fix once its review passes?');
   assert.equal(b.waiting[0].category, 'design');
   assert.equal(b.waiting[0].recommend, 'yes');
-  assert.equal(b.waiting[2].headline, `Merge at? ${NO_PLAIN}`);
+  assert.equal(b.waiting[2].title, `Merge at? ${NO_PLAIN}`);
 
   // History: newest first, across decisions, answers and finished work.
   assert.deepEqual(b.history.map((r) => [r.kind, r.headline, r.state, r.time]), [
@@ -114,7 +115,7 @@ test('rows use plain language and mark records without it', () => {
   assert.deepEqual(b.history[3].actions, ['overrule']);
 
   for (const row of allRows(b)) {
-    assert.doesNotMatch((row.headline ?? row.session).replace(NO_PLAIN, ''), CODE, row.key);
+    assert.doesNotMatch((row.title ?? row.headline ?? row.session).replace(NO_PLAIN, ''), CODE, row.key);
     assert.doesNotMatch(`${row.tag ?? ''} ${row.state ?? ''} ${row.doing ?? ''}`, CODE, row.key);
   }
 });
@@ -134,7 +135,7 @@ test('only codes the organization issues are stripped; real names with numbers s
     { ...t.waiting[0], id: 'HUM-10', title: 'Rename DES-3 now?' },
   ];
   const rows = buildBoard({ today: t }).waiting;
-  assert.deepEqual(rows.map((r) => r.headline), [
+  assert.deepEqual(rows.map((r) => r.title), [
     'Patch CVE-2024-3094 now?',
     `Ship with the SHA-256 fix? ${NO_PLAIN}`,
     // DES is not a prefix this organization uses, so DES-3 is a name, not a code.
@@ -213,14 +214,15 @@ test('rows keep their places, and selection its row or nearest neighbour', () =>
   assert.equal(keepSelection('q:HUM-6', before, []), null);
 });
 
-test('no codes appear outside the Context tab', () => {
+test('no codes appear outside the Context tab, except a waiting row\'s own id as its handle', () => {
   const b = model();
   for (const row of allRows(b)) {
     const view = row.kind === 'answer' || row.kind === 'decision' || row.kind === 'report' ? 'history' : 'list';
     const base = { view, selectedKey: row.key, historyKey: row.key };
-    assert.doesNotMatch(screenText(renderFrame(frameView(b, base), 140, 40)).replace(new RegExp(NO_PLAIN, 'g'), ''), CODE, row.key);
+    const handles = (text) => text.replace(/\b[A-Z]+-\d+ — /g, '');
+    assert.doesNotMatch(handles(screenText(renderFrame(frameView(b, base), 140, 40))).replace(new RegExp(NO_PLAIN, 'g'), ''), CODE, row.key);
     const summary = renderFrame(frameView(b, { ...base, popup: { kind: 'summary', key: row.key, tab: 0, scroll: 0 } }), 140, 40);
-    assert.doesNotMatch(screenText(summary).replace(new RegExp(NO_PLAIN, 'g'), ''), CODE, `${row.key} summary`);
+    assert.doesNotMatch(handles(screenText(summary)).replace(new RegExp(NO_PLAIN, 'g'), ''), CODE, `${row.key} summary`);
   }
   const context = renderFrame(frameView(b, { selectedKey: 'q:HUM-5', popup: { kind: 'summary', key: 'q:HUM-5', tab: 2, scroll: 0 } }), 100, 40);
   assert.match(screenText(context), /item +HUM-5[\s\S]*blocks +ENG-7 Implement the theft fix/);

@@ -53,7 +53,8 @@ test('at 140 × 40 the screen has the segment header, Waiting, grouped sessions 
   const t = text(f);
   assert.match(t[0], /^ \S* ?herdr-org \ue0b0 \S* ?20:50 \ue0b0 \S* ?4\/30 sessions today \ue0b0 \S* ?1 waiting on you \ue0b0 +\ue0b2 console 0\.0\.2 \ue0b2 \? help $/);
   assert.match(t[1], /^ \ue0b6 \S* ?WAITING ON YOU \ue0b4 ─+ \ue0b6 1 \ue0b4 $/);
-  assert.match(t[2], /^ {3}! Promote the Herdr Brain console into main\? +tooling · recommend yes · asked 19:19 $/);
+  assert.match(t[2], /^ {3}! HUM-5 — Promote the Herdr Brain console into main\? +tooling · recommend yes · asked 19:19 $/, 'the id is the handle, then the plain title');
+  assert.equal(f.lines[2].spans.find((s) => s.text === 'HUM-5').bold, true);
   // What each answer does sits under the question, so it can be decided without opening anything.
   assert.match(t[3], /^ {7}y {3}yes  Merged\.  ← recommended +$/);
   assert.match(t[4], /^ {7}n {3}no {3}Stays in its lane\. +$/);
@@ -72,9 +73,9 @@ test('at 140 × 40 the screen has the segment header, Waiting, grouped sessions 
   assert.match(t[36], /^─{140}$/);
   assert.match(t[37], /^ Task {3}n {2}Describe the outcome\. Enter adds a line\. +$/);
   assert.match(t[38], /^ {8}Where {2}choose repository {4}Who {2}choose route {4}Goal {2}choose goal +\ue0b6 Review launch \ue0b4 $/);
-  assert.match(t[39], /^ LIST \ue0b0 {2}j\/k {2}select {3}Enter {2}peek {3}r {2}reply {3}g {2}go there {3}s {2}summary {3}n {2}new task {3}m {2}menu {3}h {2}history {3}\? {2}help {3}q {2}quit/);
+  assert.match(t[39], /^ LIST \ue0b0 {2}j\/k {2}select {3}Enter {2}peek {3}r {2}reply {3}g {2}go there {3}s {2}summary {3}i {2}instruct {3}n {2}new task {3}m {2}menu {3}\? {2}help {3}q {2}quit/);
   assert.doesNotMatch(t.join('\n'), /DECIDED|FINISHED|SESSION NOTES/, 'no Decided or Finished list and no reader on the main screen');
-  assert.doesNotMatch(t.join('\n'), CODE);
+  assert.doesNotMatch(t.join('\n').replace(/\b[A-Z]+-\d+ — /g, ''), CODE, 'codes appear only as a waiting row\'s handle');
   // No rail below 180 columns.
   assert.doesNotMatch(t.join('\n'), /SCOPE|All repositories/);
 });
@@ -93,7 +94,7 @@ test('at 100 columns WHERE goes; at 80 WHERE and UP go and DOING takes a second 
   assertCanvas(narrow, 80, 24, '80');
   const n = text(narrow);
   assert.match(n[0], /herdr-org .*20:50 .*4\/30 .*1 waiting .*\? help $/);
-  assert.match(n[2], /^ {2}! Promote the Herdr Brain console into main\? +yes $/);
+  assert.match(n[2], /^ {2}! HUM-5 — Promote the Herdr Brain console into main\? +yes $/);
   assert.match(n[3], /^ {5}y {3}yes +← recommended $/, 'at 80 columns a choice shows its label, not what it causes');
   assert.doesNotMatch(n.join('\n'), /SESSION +WHO|WHERE|44m/);
   const at = n.findIndex((l) => l.includes('lane brain-console-v1 r3'));
@@ -188,7 +189,7 @@ test('s shows the summary over a dimmed screen; tabs, scrolling and the Context 
   assert.match(t.join('\n'), /\[1 Summary\] {3}2 Memo {4}3 Context/);
   assert.match(t.join('\n'), /Recommend: yes\. It works\./);
   assert.match(t.at(-1), /y\/n +answer/);
-  const summaryOnly = t.join('\n').replace(/3 Context/, '');
+  const summaryOnly = t.join('\n').replace(/3 Context/, '').replace(/\bHUM-5 — /g, '');
   assert.doesNotMatch(summaryOnly, CODE);
 
   // A session with no transcript says why.
@@ -264,7 +265,7 @@ test('messages and prompts take the footer; a long title never hides the reason 
   st = reduce(st, 'n', {}, { rows: boardRows(B, 'list') }).state;
   for (const ch of 'not now') st = reduce(st, ch, {}, { rows: boardRows(B, 'list') }).state;
   let t = text(renderFrame(view(st), 80, 24));
-  assert.match(t.at(-1), /^ ANSWER \ue0b0 Decline “Promote.*”\. Reason: not now▏ {2}Enter next · Esc cancel/);
+  assert.match(t.at(-1), /^ ANSWER \ue0b0 Decline “HUM-5 — Promote.*”\. Reason: not now▏ {2}Enter next · Esc cancel/);
   t = text(renderFrame(view({ message: 'task launching comes in the next round' }), 80, 24));
   assert.match(t.at(-1), /LIST \ue0b0 task launching comes in the next round/);
 });

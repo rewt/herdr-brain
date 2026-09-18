@@ -102,6 +102,10 @@ export function asQuestions(rows) {
         options: choices.options,
         via: choices.via,
         recommendKey: choices.recommend,
+        item: d?.item ?? null,
+        gist: d?.gist ?? null,
+        explain: d?.explain ?? d?.what_happened ?? null,
+        why: d?.why ?? null,
         // Carried through for the detail view and the verbs.
         brain: r,
       };
@@ -206,4 +210,17 @@ export async function startWorkUp(bin, project, row, { timeout = 240000 } = {}) 
     }
   }
   return { ok: true, name };
+}
+
+// ---- an org question in plain words ---------------------------------------
+
+// One reading per question, cached by brain against the item's content, so it
+// is paid again only when the question changes.
+export async function explainQuestion(bin, orgDir, id, { orgBin, timeout = 240000 } = {}) {
+  const args = ['explain', '--json', '--org', orgDir, ...(orgBin ? ['--org-bin', orgBin] : []), id];
+  const r = await brainAct(bin, args, { timeout });
+  let body = null;
+  try { body = JSON.parse(r.ok ? r.output : r.error); } catch { body = null; }
+  if (!r.ok || !body || body.error) return { ok: false, error: body?.error ?? r.error };
+  return { ok: true, ...body };
 }

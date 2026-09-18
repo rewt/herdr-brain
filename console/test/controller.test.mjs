@@ -70,10 +70,10 @@ test('s opens the summary; inside it 1-3 switch tabs, keys scroll, Enter goes, E
 
 test('approving from the summary or the list needs Enter to confirm, and Esc cancels', () => {
   let { state, effects } = press(start(), 's', 'y');
-  assert.equal(promptText(state), 'Approve: Promote the Herdr Brain console into main? Enter to confirm, Esc to cancel');
+  assert.equal(promptText(state), 'Approve: HUM-5 — Promote the Herdr Brain console into main? Enter to confirm, Esc to cancel');
   assert.deepEqual(effects, []);
   ({ state, effects } = press(state, { return: true }));
-  assert.deepEqual(effects, [{ type: 'answer', question: 'HUM-5', answer: 'yes', note: null, overrule: false, headline: 'Promote the Herdr Brain console into main?' }]);
+  assert.deepEqual(effects, [{ type: 'answer', question: 'HUM-5', answer: 'yes', note: null, overrule: false, headline: 'HUM-5 — Promote the Herdr Brain console into main?' }]);
   assert.equal(state.popup, null, 'the answered question closes its popup');
 
   ({ state } = press(start(), 'y', { escape: true }));
@@ -85,7 +85,7 @@ test('declining needs a one-line reason, then confirmation; n elsewhere says tas
   let { state, effects } = press(start(), 'n', { return: true });
   assert.match(state.message, /reason is required/);
   ({ state, effects } = press(state, 'N', 'o', 't', ' ', 'y', 'e', 't', { return: true }));
-  assert.equal(promptText(state), 'Decline: Promote the Herdr Brain console into main? (reason: Not yet) Enter to confirm, Esc to cancel');
+  assert.equal(promptText(state), 'Decline: HUM-5 — Promote the Herdr Brain console into main? (reason: Not yet) Enter to confirm, Esc to cancel');
   ({ state, effects } = press(state, { return: true }));
   assert.equal(effects[0].answer, 'no');
   assert.equal(effects[0].note, 'Not yet');

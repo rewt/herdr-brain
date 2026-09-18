@@ -51,6 +51,9 @@ export function promptParts(state) {
   if (m.kind === 'reply') {
     return { head: `Reply to ${m.session}: `, title: '', mid: '', reason: m.text, keep: 'end', tail: '▏  Enter send · Esc cancel' };
   }
+  if (m.kind === 'instruct') {
+    return { head: `Instruction to ${m.project ?? 'the project'}: `, title: '', mid: '', reason: m.text, keep: 'end', tail: '▏  Enter records it · Esc cancel' };
+  }
   if (m.kind === 'act') return actParts(m);
   if (m.kind === 'reason') {
     return { head: `${verb(m)} “`, title: m.headline, mid: '”. Reason: ', reason: m.text, keep: 'end', tail: '▏  Enter next · Esc cancel' };
@@ -65,6 +68,7 @@ function actParts(m) {
   const confirm = ' Enter to confirm, Esc to cancel';
   switch (m.verb) {
     case 'pick':
+      if (m.via === 'answer') return { head: 'Record the answer “', title: m.label, mid: '”?', reason: '', keep: 'start', tail: ' The next pass acts on it. Enter to confirm, Esc to cancel' };
       if (m.via === 'key') return { head: `Press ${m.option} in ${m.session} (“`, title: m.label, mid: '”)?', reason: '', keep: 'start', tail: confirm };
       return { head: `Send to ${m.session}: “`, title: m.text, mid: '”', reason: '', keep: 'start', tail: '  Enter send · e edit · Esc cancel' };
     case 'send':
@@ -186,7 +190,7 @@ function pick(state, row, option) {
   if (row.kind === 'question') {
     if (option === 'y') return ask(state, row, 'approve');
     if (option === 'n') return ask(state, row, 'decline');
-    return done(say(state, 'This question is answered with y or n.', 'warn'));
+    if (row.via !== 'answer') return done(say(state, 'This question is answered with y or n.', 'warn'));
   }
   const o = row.options?.find((x) => x.key === String(option));
   if (!o) {
@@ -242,7 +246,7 @@ function refuse(state, row) {
 
 // The keys that act on a row, shared by the list and the peek.
 function rowVerb(state, row, input) {
-  if (/^[1-9]$/.test(input)) return row?.kind === 'result' ? pick(state, row, input) : null;
+  if (/^[1-9]$/.test(input)) return row?.kind === 'result' || (row?.kind === 'question' && row.via === 'answer') ? pick(state, row, input) : null;
   switch (input) {
     case 'g':
       return goTo(state, row);
@@ -331,6 +335,15 @@ function modeKeys(state, input, key) {
     if (key.return) {
       if (!m.text.trim()) return done(say(state, 'Type the reply first, or Esc to cancel.', 'warn'));
       return done(say({ ...state, mode: null }, `Sending to ${m.session}…`), [{ type: 'act', verb: 'send', key: m.key, text: m.text.trim() }]);
+    }
+    const text = typed(m.text, input, key, 2000);
+    return done(text === null ? state : { ...state, mode: { ...m, text } });
+  }
+  if (m.kind === 'instruct') {
+    if (key.escape) return done(say({ ...state, mode: null }, 'Cancelled; nothing was recorded.'));
+    if (key.return) {
+      if (!m.text.trim()) return done(say(state, 'Type the instruction first, or Esc to cancel.', 'warn'));
+      return done(say({ ...state, mode: null }, 'Recording the instruction…'), [{ type: 'instruct', text: m.text.trim() }]);
     }
     const text = typed(m.text, input, key, 2000);
     return done(text === null ? state : { ...state, mode: { ...m, text } });
@@ -489,6 +502,8 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
     case 'o':
       if (!row) return done(say(state, 'Nothing selected.', 'warn'));
       return done(state, [{ type: 'open', key: row.key, tab: null }]);
+    case 'i':
+      return done(say({ ...state, mode: { kind: 'instruct', project: ctx.projectName ?? null, text: '' } }, ''));
     case '?':
       return done({ ...state, help: true });
     case 'q':

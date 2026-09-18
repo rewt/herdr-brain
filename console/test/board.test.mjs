@@ -12,8 +12,8 @@ const rowsOf = (b) => b.groups.map((g) => [g.name, g.path, g.rows.map((r) => [r.
 
 test('every Herdr agent is a row in its repository group, with all six columns filled or unknown', () => {
   const b = board();
-  assert.deepEqual(b.waiting.map((q) => [q.key, q.headline, q.category, q.recommend, q.asked]), [
-    ['q:HUM-5', 'Promote the Herdr Brain console into main?', 'tooling', 'yes', '19:19'],
+  assert.deepEqual(b.waiting.map((q) => [q.key, q.headline, q.title, q.category, q.recommend, q.asked]), [
+    ['q:HUM-5', 'HUM-5 — Promote the Herdr Brain console into main?', 'Promote the Herdr Brain console into main?', 'tooling', 'yes', '19:19'],
   ]);
   assert.deepEqual(rowsOf(b), [
     // Blocked first, then working (herdr-org and zeta by name), then idle.

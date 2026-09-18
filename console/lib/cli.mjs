@@ -52,8 +52,8 @@ export async function orgAnswer(project, request) {
 }
 
 // A plain note on an item, as the operator. Best effort: a failure is reported, never fatal.
-export async function orgNote(project, id, text) {
-  const r = await run(process.execPath, [ORG_BIN, 'note', id, text], { env: orgEnv(project) });
+export async function orgNote(project, id, text, { decision = false } = {}) {
+  const r = await run(process.execPath, [ORG_BIN, 'note', id, text, ...(decision ? ['--decision'] : [])], { env: orgEnv(project) });
   return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || 'org note failed' };
 }
 

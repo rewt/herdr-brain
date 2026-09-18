@@ -58,6 +58,7 @@ test('org today --json builds the console read model deterministically', () => {
   assert.equal(doc.project.day.date, '2026-09-15');
   assert.deepEqual(doc.project.item_prefixes, ['ARCH', 'ENG', 'G', 'HUM', 'RES', 'REV', 'W']);
   assert.equal(doc.project.open_stage, null, 'no goal carries stage_now, so no stage is open');
+  assert.deepEqual(doc.project.top_goal, { id: 'G-1', title: 'Theft fix shipped' }, 'instructions to the project go on its top goal');
 
   // Ranked by prioritized work unblocked (transitively), then priority.
   assert.deepEqual(doc.waiting.map((w) => [w.id, w.unblocks_prioritized]), [

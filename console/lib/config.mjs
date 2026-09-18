@@ -64,7 +64,8 @@ export function normalizeConfig(raw, file) {
   // Optional: with it, what stopped sessions left behind joins Waiting on you.
   const brainBin = expand(raw.brain_bin);
   if (raw.brain_bin && !brainBin) throw new ConfigError(`${file}: "brain_bin" must be a path`);
-  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs, brain_bin: brainBin };
+  // explain: false turns off the plain-words reading of org questions (one small model call each, cached).
+  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs, brain_bin: brainBin, explain: raw.explain !== false };
 }
 
 export function loadConfig(file = configPath()) {

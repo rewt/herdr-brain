@@ -67,11 +67,20 @@ function yesNoOptions(q, visible) {
   ];
 }
 
-function questionRow(q, visible) {
+function questionRow(q, visible, ex = null) {
   const rec = String(q.recommend ?? '').trim().toLowerCase();
+  // A reading of the question (brain explain) brings the operator's format:
+  // a quoted gist, plain sentences on what is at stake, and actions to pick.
+  const options = ex?.options?.length
+    ? ex.options.filter((o) => o?.key != null && o.label).slice(0, 9).map((o) => ({ key: String(o.key), label: o.label, causes: o.causes ?? '' }))
+    : null;
   return {
     key: `q:${q.id}`,
     kind: 'question',
+    handle: q.id,
+    gist: ex?.gist ?? null,
+    explain: ex?.explain ?? null,
+    why: ex?.why ?? null,
     headline: visible(q.title),
     category: q.category ?? 'no category',
     recommend: q.recommend ? visible(q.recommend) : null,
@@ -80,8 +89,10 @@ function questionRow(q, visible) {
     time: hhmm(q.created?.at),
     state: q.recommend ? `recommend: ${visible(q.recommend)}` : 'no recommendation',
     question: q.id,
-    options: yesNoOptions(q, visible),
-    recommendKey: rec === 'yes' ? 'y' : rec === 'no' ? 'n' : null,
+    options: options ?? yesNoOptions(q, visible),
+    via: options ? 'answer' : 'yesno',
+    recommendKey: options ? (ex.recommend != null && options.some((o) => o.key === String(ex.recommend)) ? String(ex.recommend) : null)
+      : rec === 'yes' ? 'y' : rec === 'no' ? 'n' : null,
     actions: ['approve', 'decline', 'dispatch'],
     doc: q.memo ? { path: q.memo } : { missing: 'no memo recorded' },
     agent: null,
@@ -92,7 +103,33 @@ function questionRow(q, visible) {
 // What a stopped session left behind: its question, the choices and how a
 // choice reaches it, Claude's draft if there is one, and whether the session
 // is still there to peek at, reply to or go to.
-function resultRow(q, visible, agents) {
+// The work item a session was on: what the reading named, else the run the
+// session belongs to (a worker by its agent name, a settle session by its run).
+function itemForSession(today, session) {
+  const runs = [...(today?.running ?? []), ...(today?.agent_runs ?? [])];
+  const byAgent = runs.find((r) => r.agent === session);
+  if (byAgent?.item) return byAgent.item;
+  const m = /^settle-r-(\d+)/.exec(session ?? '');
+  if (!m) return null;
+  const run = `R-${m[1]}`;
+  return runs.find((r) => r.run === run)?.item ?? (today?.finished ?? []).find((f) => f.run === run)?.item ?? null;
+}
+
+// A run code is not what the operator calls the work: R-136 becomes the item it ran.
+function itemHandle(today, id) {
+  if (!id || !/^R-\d+$/.test(id)) return id ?? null;
+  const runs = [...(today?.running ?? []), ...(today?.agent_runs ?? []), ...(today?.finished ?? [])];
+  return runs.find((r) => r.run === id)?.item ?? id;
+}
+
+function leadSentence(text, max = 90) {
+  const t = String(text ?? '').trim();
+  const stop = t.search(/[.!?](\s|$)/);
+  const s = stop > 0 ? t.slice(0, stop + 1) : t;
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function resultRow(q, visible, agents, today) {
   const d = q.brain;
   const agent = agents.get(d.session) ?? null;
   const suggestion = d.suggestion ?? d.digest?.suggestion ?? null;
@@ -108,6 +145,12 @@ function resultRow(q, visible, agents) {
     headline: q.title,
     category: q.category,
     categoryWords: CATEGORY_WORDS[q.category] ?? q.category,
+    handle: itemHandle(today, q.item) ?? itemForSession(today, d.session),
+    // A finished session's own first line is often terminal chrome; without a
+    // gist, the reading's first sentence says it better.
+    gist: q.gist ?? (!q.options.length && !d.digest?.question && q.explain ? leadSentence(q.explain) : null),
+    explain: q.explain,
+    why: q.why,
     from: d.tab_label ?? d.session,
     session: d.tab_label ?? d.session,
     options: q.options,
@@ -123,6 +166,14 @@ function resultRow(q, visible, agents) {
     data: d,
     doc: d.screen ? { text: d.screen } : { missing: 'nothing was on its screen' },
   };
+}
+
+// A waiting row's line, the way the operator reads work: the item's id, then a
+// quoted gist of what is at stake (or its title when nothing has been read yet).
+function titled(row) {
+  const gist = row.gist ? `“${String(row.gist).trim().replace(/^["“']+|["”']+$/g, '')}”` : null;
+  const text = gist ?? row.headline;
+  return { ...row, title: row.headline, headline: row.handle ? `${row.handle} — ${text}` : text };
 }
 
 // A folded group inside Waiting on you: one line until it is opened.
@@ -264,7 +315,7 @@ function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
 //   fallbackCwd   the project's checkout, for a run with no known folder
 export function buildBoard({
   today, brain = null, herdr = null, tabs = [], transcriptOf = () => null, repoOf = () => null, briefOf = () => null,
-  nowMs = Date.now(), seen = new Map(), fallbackCwd = null,
+  nowMs = Date.now(), seen = new Map(), fallbackCwd = null, explanations = new Map(), explaining = null,
 }) {
   const prefixes = today?.project?.item_prefixes ?? undefined;
   const visible = (text) => plain(text, prefixes);
@@ -307,13 +358,13 @@ export function buildBoard({
   list.sort((a, b) => rank(a.rows[0]) - rank(b.rows[0]) || a.name.localeCompare(b.name));
 
   const tag = (r) => ({ ...r, prefixes });
-  const results = asQuestions(brain?.rows ?? []).map((q) => resultRow(q, visible, byName));
+  const results = asQuestions(brain?.rows ?? []).map((q) => titled(resultRow(q, visible, byName, today)));
   const now = results.filter((r) => !r.later);
   const saved = results.filter((r) => r.later);
   // Questions for a stage the project is not working on yet, or parked, are
   // not the operator's problem today: one line, opened on demand.
   const open = today?.project?.open_stage ?? null;
-  const questions = (today?.waiting ?? []).map((q) => questionRow(q, visible));
+  const questions = (today?.waiting ?? []).map((q) => titled({ ...questionRow(q, visible, explanations.get(q.id) ?? null), explaining: explaining === q.id }));
   const current = (q) => open === null || q.data.stage === null || q.data.stage === undefined || String(q.data.stage) === String(open);
   const parked = questions.filter((q) => !current(q));
   const waiting = [...now, ...questions.filter(current)];
@@ -330,10 +381,21 @@ export function buildBoard({
     // session is costing time now, while an org question waits patiently.
     waiting: [...waiting, ...folded].map(tag),
     waitingCount: waiting.length,
+    direction: latestDirection(today),
     groups: list.map((g) => ({ ...g, rows: g.rows.map(tag) })),
     history: historyRows(today, visible, prefixes).map(tag),
     prefixes,
   };
+}
+
+// The operator's newest instruction to the whole project today: a decision
+// note of theirs on the project's top goal.
+function latestDirection(today) {
+  const goal = today?.project?.top_goal?.id;
+  if (!goal) return null;
+  const notes = (today?.decided ?? []).filter((d) => d.kind === 'note' && d.id === goal && d.by === 'human');
+  const newest = notes.sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+  return newest ? { text: String(newest.text).replace(/^OPERATOR DIRECTION(?: \d{4}-\d{2}-\d{2} \d{2}:\d{2})?:\s*/, ''), at: newest.at, goal } : null;
 }
 
 // The rows a view moves through, in screen order.
@@ -467,6 +529,18 @@ function rawParagraphs(row) {
   const d = row.data;
   switch (row.kind) {
     case 'question':
+      if (row.gist || row.explain) {
+        return [
+          row.headline,
+          row.explain,
+          row.options?.length && row.via === 'answer'
+            ? ['What you can do:', ...row.options.map((o) => `  ${o.key}  ${o.label}${o.causes ? ` — ${o.causes}` : ''}${row.recommendKey === o.key ? '   ← recommended' : ''}`), 'Press its number to record that answer.'].join('\n')
+            : null,
+          row.why ? `Why that one: ${row.why}` : null,
+          `As filed: ${d.title}`,
+          `Asked at ${hhmm(d.created?.at)}.`,
+        ].filter(Boolean);
+      }
       return [
         row.headline,
         `Recommend: ${d.recommend ?? 'not recorded'}. ${d.why ?? 'No reason recorded.'}`,
@@ -488,7 +562,8 @@ function rawParagraphs(row) {
         row.suggestion
           ? `Claude drafted a reply for you. You did not write it and nobody has sent it:\n\n    "${row.suggestion}"\n\nPress y to send it as it is, or r to write your own.`
           : null,
-        g.what_happened ?? 'No summary was made of this one. The Screen tab has what it actually said.',
+        row.explain ?? 'No summary was made of this one. The Screen tab has what it actually said.',
+        g.explain && g.what_happened ? `What the session did: ${g.what_happened}` : null,
         row.options?.length
           ? ['What you can do:', ...row.options.map((o) => `  ${o.key}  ${o.label}${o.causes ? ` — ${o.causes}` : ''}${row.recommendKey === o.key ? '   ← recommended' : ''}`), how].join('\n')
           : null,

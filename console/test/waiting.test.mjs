@@ -172,7 +172,7 @@ test('r replies in the operator\'s words; l saves for later at once; x asks befo
 
   // d on an org question sends it off to be worked out, after asking.
   r = press({ ...initialState(), selectedKey: 'q:HUM-30' }, 'd');
-  assert.match(promptText(r.state), /^Start a session to work out “A question with no stage”\? It comes back here with the choices\./);
+  assert.match(promptText(r.state), /^Start a session to work out “HUM-30 — A question with no stage”\? It comes back here with the choices\./);
   assert.deepEqual(press(r.state, { return: true }).effects, [{ type: 'act', verb: 'dispatch', key: 'q:HUM-30' }]);
 });
 
@@ -209,9 +209,11 @@ test('the screen shows each choice under its row, Claude\'s draft, and a click o
   const t = f.lines.map(lineText);
   const at = t.findIndex((l) => l.includes('Do you confirm the zero-conf reading?'));
   assert.match(t[at], /^ > \? Do you confirm the zero-conf reading\? +needs your decision · settle R-131 · \d\d:\d\d $/);
-  assert.match(t[at + 1], /^ {7}1 {3}Yes, confirm the zero-conf reading {2}work proceeds on that basis +$/);
-  assert.match(t[at + 2], /^ {7}2 {3}No \/ need more detail first {9}you read the question first  ← recommended +$/);
-  assert.match(t[at + 3], /^ {7}Claude drafted, not sent: “yes to the zero-conf reading” {3}y sends it · r writes your own +$/);
+  assert.match(t[at + 1], /^ {7}It accepted the measurement\. +$/, 'what is at stake comes first');
+  assert.match(t[at + 2], /^ {7}1 {3}Yes, confirm the zero-conf reading {2}work proceeds on that basis +$/);
+  assert.match(t[at + 3], /^ {7}2 {3}No \/ need more detail first {9}you read the question first  ← recommended +$/);
+  assert.match(t[at + 4], /^ {7}why 2: It is Claude’s draft, not yours\. +$/, 'the selected row says why');
+  assert.match(t[at + 5], /^ {7}Claude drafted, not sent: “yes to the zero-conf reading” {3}y sends it · r writes your own +$/);
   assert.match(t.join('\n'), /■ Teach auto mode about your environment\? +stuck at a prompt · settle R-119/);
   assert.match(t.join('\n'), /✓ The review that just finished passed.* finished · settle R-133/);
   assert.match(t.join('\n'), /next: Nothing to do right now\./);
@@ -219,9 +221,9 @@ test('the screen shows each choice under its row, Claude\'s draft, and a click o
   assert.match(t.join('\n'), /▸ 2 older questions are parked or wait for a later stage \(stage 1 is open now\) +Enter shows them/);
   assert.match(t[1], /WAITING ON YOU .* 5 /);
   assert.match(t.at(-1), /Enter +peek .*1-2 +pick .*y +send draft .*r +reply .*l +later .*x +drop .*g +go there/);
-  assert.deepEqual(hitAt(f.hits, 20, at + 2), { type: 'option', key: `q:${decision.id}`, option: '2' });
+  assert.deepEqual(hitAt(f.hits, 20, at + 3), { type: 'option', key: `q:${decision.id}`, option: '2' });
   const ctx = { rows: boardRows(v.board, 'list'), historyRows: [], scopeItems: [], hitAt: (x, y) => hitAt(f.hits, x, y) };
-  const click = reduceMouse(st, { button: 'left', x: 20, y: at + 2, press: true }, ctx);
+  const click = reduceMouse(st, { button: 'left', x: 20, y: at + 3, press: true }, ctx);
   assert.equal(click.state.mode.verb, 'pick');
   assert.equal(click.state.mode.option, '2');
 });
@@ -323,4 +325,67 @@ test('summoned as a Herdr popup, going to a session closes the console so the se
   assert.equal(await pane.key('g', {}), false, 'in its own pane it stays open');
   assert.match(pane.ui.message, /Back here: Ctrl\+Alt\+B/);
   pane.stop();
+});
+
+test('rows read like the operator reads work: the id, a quoted gist, what is at stake, then actions', () => {
+  const read = { ...decision, digest: { ...decision.digest, item: 'ENG-89', gist: 'note #7 must not make the same keys twice', explain: 'The protocol version is not in the recipe, so note #7 gives the same keys under both.' } };
+  const lane = { ...report, id: 'lane-1', session: 'lane-anchor-005004', tab_label: 'agent:anchor', digest: { ...report.digest, gist: 'old replays now name version 1', explain: 'They cannot be re-pointed by the switch.' } };
+  const withRun = { ...today, agent_runs: [{ run: 'R-134', item: 'ENG-85', agent: 'lane-anchor-005004' }] };
+  const explanations = new Map([['HUM-8', {
+    ok: true, gist: 'decide the licence before the repos open', explain: 'Five repositories open at release and none has a licence yet.',
+    options: [{ key: '1', label: 'Adopt the recommended licences', causes: 'The release review can start.' }, { key: '2', label: 'Keep all five private for now', causes: 'Nothing opens.' }],
+    recommend: '1', why: 'It is what the study recommended.',
+  }]]);
+  const b = buildBoard({ today: withRun, brain: { rows: [read, lane] }, herdr: { ok: true, agents }, explanations });
+  const row = (key) => b.waiting.find((r) => r.key === key);
+  assert.equal(row(`q:${read.id}`).headline, 'ENG-89 — “note #7 must not make the same keys twice”', 'the id the reading named');
+  assert.equal(row('q:lane-1').headline, 'ENG-85 — “old replays now name version 1”', 'else the item of the run the session belongs to');
+  const q = b.waiting.find((r) => r.question === 'HUM-8');
+  assert.equal(q.headline, 'HUM-8 — “decide the licence before the repos open”');
+  assert.equal(q.via, 'answer');
+  assert.equal(q.recommendKey, '1');
+  assert.equal(b.waiting.find((r) => r.question === 'ARCH-67').headline, 'ARCH-67 — Should the packet stop carrying four fields?', 'not read yet: its title');
+
+  // A worked-out answer on an org question is recorded with org answer, after a confirmation.
+  const press = keysOn(b, ['stages']);
+  let r = press({ ...initialState(), selectedKey: 'q:HUM-8' }, '1');
+  assert.equal(promptText(r.state), 'Record the answer “Adopt the recommended licences”? The next pass acts on it. Enter to confirm, Esc to cancel');
+  assert.deepEqual(press(r.state, { return: true }).effects, [{ type: 'act', verb: 'pick', key: 'q:HUM-8', option: '1' }]);
+
+  const v = {
+    glyphs: 'nerd', version: '0.0.2', header: { project: 'bch', clock: '21:20', waiting: b.waitingCount }, board: visibleBoard(b, {}, []),
+    scopeItems: scopeItems(b), state: { ...initialState(), selectedKey: `q:${read.id}` }, prompt: null, selectedRow: null, popupRow: null, project: {}, launch: {},
+  };
+  const t = renderFrame(v, 140, 40).lines.map(lineText);
+  const at = t.findIndex((l) => l.includes('ENG-89 — “note #7'));
+  assert.match(t[at + 1], /^ {7}The protocol version is not in the recipe, so note #7 gives the same keys under both\. +$/);
+});
+
+test('i records an instruction for the whole project where its sessions read direction first', async () => {
+  const withGoal = { ...today, project: { ...today.project, top_goal: { id: 'G-1', title: 'Ship it' } } };
+  const notes = [];
+  let doc = withGoal;
+  const config = { projects: [{ name: 'bch-cloak', org: '/r/.org', cwd: '/r/bch', ledger_dir: null, claude_config_dirs: [] }], refresh_seconds: 60, brain_bin: '/x/brain.mjs', explain: false };
+  const session = createSession({
+    config,
+    deps: {
+      orgToday: async () => doc, herdrAgents: async () => ({ ok: true, agents }), herdrTabs: async () => [], repoOf: () => null,
+      brainQueue: async () => ({ rows: [] }), now: () => new Date(2026, 8, 17, 21, 14),
+      orgNote: async (project, id, text, opts) => {
+        notes.push([id, text, opts]);
+        doc = { ...withGoal, decided: [{ kind: 'note', id, seq: 9, text, at: new Date(2026, 8, 17, 21, 14).toISOString(), by: 'human' }] };
+        return { ok: true };
+      },
+    },
+  });
+  await session.refresh({ reorder: true });
+  await session.key('i', {});
+  assert.equal(promptText(session.ui).startsWith('Instruction to bch-cloak: ▏'), true);
+  for (const ch of 'ok, please close the hole and pause work after it completes') await session.key(ch, {});
+  await session.key('', { return: true });
+  assert.deepEqual(notes, [['G-1', 'OPERATOR DIRECTION 2026-09-17 21:14: ok, please close the hole and pause work after it completes', { decision: true }]]);
+  assert.match(session.ui.message, /^Recorded on the project's top goal \(G-1\)/);
+  const screen = session.frame(140, 40).lines.map(lineText).join('\n');
+  assert.match(screen, /Your instruction to the project, 21:14: “ok, please close the hole and pause work after it completes”/);
+  session.stop();
 });

@@ -55,7 +55,7 @@ test('approving and declining from the console record the operator\'s answers', 
     assert.equal(session.ui.selectedKey, 'q:HUM-1');
 
     await keys(session, [['y']]);
-    assert.match(screen(session).at(-1), /ANSWER .*Approve: Adopt the theft fix\? Enter to confirm, Esc to cancel/);
+    assert.match(screen(session).at(-1), /ANSWER .*Approve: HUM-1 — Adopt the theft fix\? Enter to confirm, Esc to cancel/);
     assert.equal(JSON.parse(t.org('show', 'HUM-1', '--json')).status, 'ready', 'nothing is recorded before Enter');
     await keys(session, [['', { return: true }]]);
     let hum1 = JSON.parse(t.org('show', 'HUM-1', '--json'));
@@ -64,7 +64,7 @@ test('approving and declining from the console record the operator\'s answers', 
     assert.equal(JSON.parse(t.org('show', 'ENG-1', '--json')).status, 'ready');
     assert.deepEqual(session.board.history.map((r) => [r.key, r.state]), [['a:HUM-1', 'yes · you']]);
     assert.equal(session.ui.selectedKey, 'q:HUM-2', 'selection moves to the next question');
-    assert.match(session.ui.message, /^Recorded yes for “Adopt the theft fix\?”\. The next executive pass acts on it\.$/);
+    assert.match(session.ui.message, /^Recorded yes for “HUM-1 — Adopt the theft fix\?”\. The next executive pass acts on it\.$/);
 
     // From the summary popup: n, a reason, Enter, Enter.
     await keys(session, [['s'], ['n'], ['', { return: true }]]);

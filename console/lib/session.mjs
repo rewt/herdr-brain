@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
-import { brainAct, brainArgs, readQueue, startWorkUp } from './brain.mjs';
+import { brainAct, brainArgs, explainQuestion, readQueue, startWorkUp } from './brain.mjs';
 import { initialState, promptParts, reduce, reduceMouse } from './controller.mjs';
 import { RAIL_COLS, hitAt, renderFrame } from './frame.mjs';
 import {
@@ -38,6 +38,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     herdrPrompt: cli.herdrPrompt,
     dispatch: config?.brain_bin ? (project, row) => startWorkUp(config.brain_bin, project, row) : null,
     orgNote: cli.orgNote,
+    explain: config?.brain_bin && config.explain !== false ? (project, id) => explainQuestion(config.brain_bin, project.org, id, { orgBin: cli.ORG_BIN }) : null,
     viewer: () => cli.viewerFor(),
     openBlocking: cli.openBlocking,
     openDetached: cli.openDetached,
@@ -76,6 +77,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     tempDirs: new Set(), // text documents handed to a viewer that returns at once
     peek: null, // { key, target, text, error, gone, at } while a peek is open
     peekTimer: null,
+    explanations: new Map(), // org question id → its reading in plain words (brain explain)
+    explaining: null,
   };
   const project = () => config.projects[s.index];
   const configDirs = () => [...new Set(config.projects.flatMap((p) => p.claude_config_dirs ?? []))];
@@ -153,6 +156,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       nowMs: d.now().getTime(),
       seen: s.seen,
       fallbackCwd: project().cwd,
+      explanations: s.explanations,
+      explaining: s.explaining,
     });
     s.board = reorder || !s.keys ? built : orderBoard(built, s.keys);
     s.keys = boardKeys(s.board);
@@ -180,6 +185,30 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     if (herdr.ok) for (const a of herdr.agents) if (a.name) s.seen.set(a.name, now.getTime());
     s.ledger = readLedger(now);
     rebuild({ reorder });
+    wantExplanations();
+  }
+
+  // Questions on screen that nobody has read in plain words get one reading
+  // each, one at a time, in the background. brain caches them, so a restart
+  // costs nothing; parked questions are read only once their fold is opened.
+  function wantExplanations() {
+    if (!d.explain || s.explaining) return;
+    const next = visible().waiting.find((r) => r.kind === 'question' && !s.explanations.has(r.question));
+    if (!next) return;
+    const id = next.question;
+    const index = s.index;
+    s.explaining = id;
+    rebuild();
+    onChange();
+    d.explain(project(), id).then((r) => r, (error) => ({ ok: false, error: error.message })).then((r) => {
+      s.explaining = null;
+      if (s.index !== index) return;
+      // A failed reading is remembered as failed, so it is not retried every tick.
+      s.explanations.set(id, r?.ok ? r : { failed: true, error: r?.error });
+      rebuild();
+      onChange();
+      wantExplanations();
+    });
   }
 
   // Coalesces overlapping refreshes: one runs, and one more follows if asked meanwhile.
@@ -392,6 +421,22 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       }
       case 'act':
         return act(effect);
+      case 'instruct': {
+        const goal = s.today?.project?.top_goal?.id;
+        if (!goal) {
+          say('This project has no top goal to record an instruction on.', 'error');
+          return;
+        }
+        const stamp = `${d.now().toLocaleDateString('sv')} ${hhmm(d.now().toISOString())}`;
+        const r = await d.orgNote(p, goal, `OPERATOR DIRECTION ${stamp}: ${effect.text}`, { decision: true });
+        if (!r?.ok) {
+          say(`Not recorded: ${r?.error ?? 'org note failed'}`, 'error');
+          return;
+        }
+        await refresh();
+        say(`Recorded on the project's top goal (${goal}), where its sessions read direction first. The next session to start acts on it.`, 'ok');
+        return;
+      }
       case 'go': {
         const row = findRow(effect.key);
         if (!row) {
@@ -465,6 +510,18 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       say(r.ok ? `Sent to ${row.session}.` : r.blocked ? `${row.session} is stuck at a prompt and refused the message; answer the prompt first.` : `Not sent: ${r.error}`, r.ok ? 'ok' : 'error');
       return;
     }
+    if (row.kind === 'question') {
+      const option = row.options?.find((o) => o.key === String(effect.option));
+      if (effect.verb !== 'pick' || row.via !== 'answer' || !option) return;
+      const r = await d.orgAnswer(project(), { question: row.question, answer: option.label, note: null, overrule: false, headline: row.headline });
+      if (!r.ok) {
+        say(`Not recorded: ${r.error}`, 'error');
+        return;
+      }
+      await refresh();
+      say(`Recorded “${option.label}”. The next pass acts on it.`, 'ok');
+      return;
+    }
     if (row.kind !== 'result') return;
     const args = brainArgs(effect.verb, row, { key: effect.option, text: effect.text });
     if (!args) {
@@ -498,6 +555,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       popupPage: Math.max(1, s.last.bodyHeight - 6),
       popupMax: s.last.popupMax,
       projectCount: config.projects.length,
+      projectName: project().name,
       popupMode,
       menuX: s.size.cols >= RAIL_COLS ? 27 : 4,
       lineOf: (key) => {
@@ -512,6 +570,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     s.ui = state;
     keepCursor();
     syncPeek();
+    wantExplanations();
     onChange();
     let quit = false;
     for (const effect of effects) {

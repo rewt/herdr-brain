@@ -148,7 +148,11 @@ function resultRow(q, visible, agents, today) {
   return {
     ...questionRow(q, visible),
     kind: 'result',
-    headline: questionTitle(q.title, visible),
+    // A result title is session text, not an org question title. Preserve it:
+    // stripping record-shaped text mangles honest questions such as "Merge
+    // R-9's fixes?" and commit hashes. The original asked text is also kept in
+    // Context below.
+    headline: q.title,
     category: q.category,
     categoryWords: CATEGORY_WORDS[q.category] ?? q.category,
     handle: itemHandle(today, q.item) ?? itemForSession(today, d.session),
@@ -646,6 +650,7 @@ export function contextPairs(row, project = {}) {
       add('memo', d.memo);
       break;
     case 'result':
+      add('asked', d.digest?.question ?? row.title);
       add('session', d.session);
       add('state', d.state);
       add('captured', d.at);

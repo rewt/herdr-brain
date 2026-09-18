@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { asQuestions, categoryOf, titleFor } from '../lib/brain.mjs';
-import { buildBoard } from '../lib/model.mjs';
+import { buildBoard, contextPairs } from '../lib/model.mjs';
 
 const stranded = {
   id: '2026091723594-settle-r-124', at: '2026-09-17T23:59:40.000Z', session: 'settle-r-124-1814',
@@ -76,6 +76,23 @@ test('results come before org questions, and org rows are untouched', () => {
   assert.equal(board.waiting[0].headline, 'Teach auto mode about your environment?');
   assert.equal(board.waiting[1].kind, 'question');
   assert.equal(board.waiting[1].question, 'HUM-26');
+});
+
+test('a result title preserves run codes, commit hashes and possessive codes', () => {
+  const question = "Merge R-9's fixes at d3a5751?";
+  const coded = {
+    ...obstacle,
+    id: 'coded-result',
+    digest: { ...obstacle.digest, question },
+  };
+  const row = buildBoard({
+    today: { project: { item_prefixes: ['ENG'] }, waiting: [] },
+    brain: { rows: [coded] },
+  }).waiting[0];
+  assert.equal(row.kind, 'result');
+  assert.equal(row.title, question);
+  assert.equal(row.headline, question);
+  assert.equal(Object.fromEntries(contextPairs(row)).asked, question);
 });
 
 test('no brain configured leaves the board exactly as it was', () => {

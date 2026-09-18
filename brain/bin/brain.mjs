@@ -22,6 +22,7 @@ import { classifyLocally } from '../lib/classify.mjs';
 import { startSession } from '../lib/start.mjs';
 import { explainItem } from '../lib/explain.mjs';
 import * as service from '../lib/service.mjs';
+import { loadProjects, withProject } from '../lib/projects.mjs';
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';
@@ -58,6 +59,7 @@ async function capture(agent, labels) {
     title: agent.terminal_title_stripped ?? null,
     ...parsed,
   };
+  entry.project = withProject(entry).project;
   entry.headline = headline(entry);
   append(entry);
   return entry;
@@ -131,7 +133,8 @@ async function watch() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function queue() {
-  const rows = has('--all') ? fold() : openRows();
+  const projects = loadProjects();
+  const rows = (has('--all') ? fold() : openRows()).map((r) => withProject(r, projects));
   if (has('--json')) { process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`); return; }
   if (!rows.length) { process.stdout.write('nothing waiting\n'); return; }
 
@@ -155,7 +158,7 @@ function queue() {
     process.stdout.write(`\n${title} (${list.length})\n`);
     for (const r of list) {
       const d = r.digest;
-      process.stdout.write(`  ${cut(handleOf(r), 16).padEnd(17)}${ago(r.at).padStart(4)}  ${cut(r.tab_label ?? r.session, 24).padEnd(25)}${cut(d?.question ?? d?.what_happened ?? r.headline, 62)}\n`);
+      process.stdout.write(`  ${cut(handleOf(r), 16).padEnd(17)}${ago(r.at).padStart(4)}  ${cut(r.project, 16).padEnd(17)}${cut(r.tab_label ?? r.session, 24).padEnd(25)}${cut(d?.question ?? d?.what_happened ?? r.headline, 62)}\n`);
       if (r.unsent) process.stdout.write(`                      you already typed: "${cut(r.unsent, 56)}"\n`);
       if (r.suggestion) process.stdout.write(`                      Claude drafted, not sent: "${cut(r.suggestion, 52)}"\n`);
       for (const o of d?.options ?? []) {
@@ -174,10 +177,11 @@ function queue() {
 }
 
 function show(id) {
-  const r = get(id);
+  const found = get(id);
+  const r = found && withProject(found);
   if (!r) { process.stderr.write(`no such result: ${id}\n`); process.exit(1); }
   const d = r.digest;
-  process.stdout.write(`${r.tab_label ?? r.session}  ·  ${r.state}  ·  ${hhmm(r.at)} (${ago(r.at)} ago)\n`);
+  process.stdout.write(`${r.project}  ·  ${r.tab_label ?? r.session}  ·  ${r.state}  ·  ${hhmm(r.at)} (${ago(r.at)} ago)\n`);
   if (r.where) process.stdout.write(`${r.where}\n`);
   if (d) {
     process.stdout.write(`\n${d.what_happened ?? ''}\n`);

@@ -14,7 +14,7 @@
 import process from 'node:process';
 import { agents, read, tabLabels, sendKeys, prompt, HerdrDown } from '../lib/herdr.mjs';
 import { parseScreen, headline } from '../lib/capture.mjs';
-import { append, fold, open as openRows, get, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
+import { append, fold, open as openRows, get, handleOf, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
 import { digest as runDigest } from '../lib/digest.mjs';
 import { classifyLocally } from '../lib/classify.mjs';
 
@@ -143,7 +143,7 @@ function queue() {
     process.stdout.write(`\n${title} (${list.length})\n`);
     for (const r of list) {
       const d = r.digest;
-      process.stdout.write(`  ${r.id.slice(0, 13)}  ${ago(r.at).padStart(4)}  ${cut(r.tab_label ?? r.session, 24).padEnd(25)}${cut(d?.question ?? d?.what_happened ?? r.headline, 62)}\n`);
+      process.stdout.write(`  ${cut(handleOf(r), 16).padEnd(17)}${ago(r.at).padStart(4)}  ${cut(r.tab_label ?? r.session, 24).padEnd(25)}${cut(d?.question ?? d?.what_happened ?? r.headline, 62)}\n`);
       if (r.unsent) process.stdout.write(`                      you already typed: "${cut(r.unsent, 56)}"\n`);
       if (r.suggestion) process.stdout.write(`                      Claude drafted, not sent: "${cut(r.suggestion, 52)}"\n`);
       for (const o of d?.options ?? []) {
@@ -217,13 +217,13 @@ async function main() {
       const text = argv.slice(2).join(' ') || r.unsent || r.suggestion;
       if (!text) { process.stderr.write('nothing to send: pass the text\n'); process.exit(1); }
       if (!r.unsent && r.suggestion && !argv[2]) {
-        process.stderr.write(`that text is Claude's suggestion, not yours:\n  "${r.suggestion}"\nsend it with: brain send ${r.id.slice(0, 13)} "${r.suggestion}"\n`);
+        process.stderr.write(`that text is Claude's suggestion, not yours:\n  "${r.suggestion}"\nsend it with: brain send ${handleOf(r)} "${r.suggestion}"\n`);
         process.exit(1);
       }
       const res = await prompt(r.session, text);
       if (!res.ok) {
         process.stderr.write(res.blocked
-          ? `${r.tab_label ?? r.session} is stuck at a dialog and refused the message. Clear it first:\n  brain key ${r.id.slice(0, 13)} 2\n`
+          ? `${r.tab_label ?? r.session} is stuck at a dialog and refused the message. Clear it first:\n  brain key ${handleOf(r)} 2\n`
           : `could not send: ${res.error}\n`);
         process.exit(1);
       }

@@ -12,6 +12,16 @@ Watching and reading need nothing from you. It sends into a session (`send`, `ke
 
 ## Run it
 
+As an always-on service (a LaunchAgent that restarts it and starts it at login):
+
+```sh
+node bin/brain.mjs service start     # or stop; the console's L key does the same
+node bin/brain.mjs status            # is it alive, and when did it last look
+```
+
+Only one watcher runs at a time (`~/.local/state/herdr-brain/watch.pid`); a second one refuses
+to start. By hand, in a terminal:
+
 ```sh
 node bin/brain.mjs watch --catch-up --digest
 ```

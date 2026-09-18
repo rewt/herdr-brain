@@ -21,6 +21,7 @@ import { digest as runDigest } from '../lib/digest.mjs';
 import { classifyLocally } from '../lib/classify.mjs';
 import { startSession } from '../lib/start.mjs';
 import { explainItem } from '../lib/explain.mjs';
+import * as service from '../lib/service.mjs';
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';
@@ -63,6 +64,11 @@ async function capture(agent, labels) {
 }
 
 async function watch() {
+  const other = service.claim();
+  if (other) {
+    process.stderr.write(`another watcher is already running (pid ${other}); stop it first (brain service stop, or Ctrl-C in its tab)\n`);
+    process.exit(1);
+  }
   const every = Number(val('--every', '5')) * 1000;
   const wantDigest = has('--digest');
   const includeUnnamed = has('--include-unnamed');
@@ -115,6 +121,8 @@ async function watch() {
     }
     catchUp = false;   // only the first tick
     for (const name of Object.keys(seen.states)) if (!live.has(name)) delete seen.states[name];
+    // The heartbeat the console reads to say whether the loop is alive.
+    Object.assign(seen, { tick: new Date().toISOString(), pid: process.pid, every: every / 1000, digest: wantDigest });
     saveSeen(seen);
     await sleep(every);
   }
@@ -263,6 +271,19 @@ async function main() {
       }
       return;
     }
+    case 'status': {
+      const st = service.status();
+      if (has('--json')) { process.stdout.write(`${JSON.stringify(st)}\n`); return; }
+      process.stdout.write(`${st.running ? `watching (pid ${st.pid}), last tick ${st.age}s ago` : 'not watching'} · service ${st.service ? 'on' : st.installed ? 'off' : 'not installed'}\n`);
+      return;
+    }
+    case 'service': {
+      const sub = argv[1];
+      const r = sub === 'start' ? service.start() : sub === 'stop' ? service.stop() : sub === 'install' ? service.install() : sub === 'status' ? service.status() : null;
+      if (!r) { process.stderr.write('usage: brain service start|stop|install|status\n'); process.exit(2); }
+      process.stdout.write(`${JSON.stringify(r)}\n`);
+      return;
+    }
     case 'explain': {
       const id = argv.slice(1).find((a, i, all) => !a.startsWith('--') && !['--org', '--org-bin', '--model'].includes(all[i - 1]));
       const orgDir = val('--org', process.env.ORG_DIR);
@@ -301,6 +322,8 @@ async function main() {
         '  brain answer <id> "…"                 record what you decided',
         '  brain digest <id>                     run the reading pass by hand',
         '  brain explain --org DIR ID            an org item in plain words, with actions (cached)',
+        '  brain status [--json]                 is the loop alive',
+        '  brain service start|stop|install      the loop as an always-on LaunchAgent',
         '  brain start --cwd DIR --name NAME [--label TEXT] [--model opus] [--effort high] [--add-dir DIR]... -- "brief"',
         '                                        open a session in Herdr on the folder\'s account and give it the brief',
       ].join('\n') + '\n');

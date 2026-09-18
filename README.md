@@ -13,6 +13,21 @@ inference tokens, and a completely fresh session of any harness can continue fro
 Node ≥ 20, no dependencies (the optional `console/` has its own). Put `bin/org.mjs` on your PATH as `org` (`npm link`, or
 `alias org="node /path/to/herdr-org/bin/org.mjs"`).
 
+## Where things live
+
+| Piece | What lives there |
+|---|---|
+| `bin/org.mjs` | The command-line entry point for reading and changing organizational state. |
+| `lib/` | The dependency-free core: event storage, state folding, reports and views. |
+| `brain/` | The Herdr watcher, operator queue and commands that start or answer sessions. |
+| `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
+| `contrib/settle-watch.mjs` | Waits for a worker to stop, then opens a fresh settle session. |
+| `contrib/tidy-tabs.mjs` | Closes finished Herdr tabs after their results are safely recorded. |
+| `supervisor/` | The prompt each settle session gets and the scripts that arm or continue it. |
+| `.lane/` | Ignored runtime state, including session ledgers and the emergency `STOP` file. |
+| `~/.config/herdr-org/console.json` | The operator's local console project and Brain-path configuration. |
+| `~/Library/LaunchAgents/com.rewt.herdr-brain.plist` | The operator's local service definition for the always-on Brain watcher. |
+
 ## The loop (you are the scheduler)
 
 ```sh
@@ -271,6 +286,7 @@ writes an example there and exits; edit it and delete its `"example"` line.
     }
   ],
   "refresh_seconds": 5,
+  "brain_bin": "/Users/rewt/development/rewt/herdr-org/brain/bin/brain.mjs",
   "glyphs": "nerd"
 }
 ```
@@ -282,6 +298,7 @@ writes an example there and exits; edit it and delete its `"example"` line.
   session id Herdr reports (in the folder named after the session's `cwd`, else in any project
   folder), or by `agent-name` when Herdr gives no id. A transcript is read once and then only
   its new lines.
+- `brain_bin`: the folded-in Brain CLI; its queue and service controls join the console.
 - `glyphs`: `nerd` (default) or `plain`.
 - Herdr: `herdr agent list` and `herdr tab list` on the same cadence.
 

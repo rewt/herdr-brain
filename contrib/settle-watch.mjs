@@ -6,12 +6,13 @@
 // No model is involved while waiting. `herdr agent wait` blocks inside the Herdr
 // server, so there is no polling loop here.
 //
-//   settle-watch.mjs R-n --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--dry-run]
+//   settle-watch.mjs R-n --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--ledger-dir DIR] [--dry-run]
 //   settle-watch.mjs R-n ... --spawn     # open a visible "watch R-n" tab and run there
 //   settle-watch.mjs --open [--focus TEXT] ...   # open a "continue" executive session now
 //
-// Brakes: a STOP file next to the checklist blocks every new session, and at most
-// --max-sessions-per-day sessions are opened per local day (ledger next to the checklist).
+// Brakes: a STOP file in --ledger-dir blocks every new session, and at most
+// --max-sessions-per-day sessions are opened per local day there. The ledger
+// defaults to the checklist's directory for compatibility with older callers.
 
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -29,6 +30,7 @@ const { values: opt, positionals } = parseArgs({
     cwd: { type: 'string' },
     'lane-config': { type: 'string' },
     checklist: { type: 'string' },
+    'ledger-dir': { type: 'string' },
     model: { type: 'string' },
     effort: { type: 'string' },
     account: { type: 'string' },
@@ -47,7 +49,7 @@ const { values: opt, positionals } = parseArgs({
 
 const runId = positionals[0];
 if ((opt.open ? runId !== undefined : !/^R-\d+$/.test(runId ?? '')) || !opt.org || !opt.cwd || !opt['lane-config'] || !opt.checklist) {
-  console.error('usage: settle-watch.mjs (R-n [--spawn] | --open [--focus TEXT]) --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--account NAME] [--model M] [--effort E] [--dry-run]');
+  console.error('usage: settle-watch.mjs (R-n [--spawn] | --open [--focus TEXT]) --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--ledger-dir DIR] [--account NAME] [--model M] [--effort E] [--dry-run]');
   process.exit(2);
 }
 const dry = opt['dry-run'];
@@ -246,7 +248,7 @@ function launchSettings() {
 }
 
 // Brakes checked before any session opens.
-const supervisorDir = path.dirname(path.resolve(opt.checklist));
+const supervisorDir = path.resolve(opt['ledger-dir'] ?? path.dirname(path.resolve(opt.checklist)));
 function brakes() {
   const stop = path.join(supervisorDir, 'STOP');
   if (fs.existsSync(stop)) die(`${stop} exists, so no session was opened (delete it to resume; the work is untouched)`);

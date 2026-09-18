@@ -42,4 +42,16 @@ esac`);
   assert.ok(openTab, r.stdout);
   assert.match(openTab, /--env ORG_DIR=\S+/);
   assert.match(openTab, /--env ORG_ACTOR=exec-\d{4}\b/);
+
+  const runtime = path.join(root, 'runtime');
+  fs.mkdirSync(runtime);
+  fs.writeFileSync(path.join(runtime, 'STOP'), 'stop\n');
+  const stopped = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+    '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', runtime,
+    '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(stopped.status, 1, stopped.stdout + stopped.stderr);
+  assert.match(stopped.stdout, new RegExp(`${runtime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/STOP exists`));
 });

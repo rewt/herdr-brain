@@ -33,7 +33,7 @@ export const EXAMPLE = {
     },
   ],
   refresh_seconds: 5,
-  brain_bin: null,
+  brain_bin: '/Users/rewt/development/rewt/herdr-org/brain/bin/brain.mjs',
   glyphs: 'nerd',
 };
 

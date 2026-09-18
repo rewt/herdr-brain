@@ -332,7 +332,7 @@ function listBody(view, width, G) {
     const d = board.direction;
     out.push({ spans: [span(' '), span(`Your instruction to the project, ${hhmm(d.at)}: `, 'muted'), span(`“${d.text}”`, 'fg')] });
   }
-  if (board.waiting.length) {
+  if (board.waiting.length || board.otherWaiting?.length) {
     const count = board.waitingCount ?? board.waiting.length;
     out.push({ spans: capLine(width, G, { name: 'WAITING ON YOU', count, icon: G.question, pillBg: 'waitPill', pillFg: 'waitFg', countFg: 'waitFg' }) });
     if (!count) out.push({ spans: [span('   Nothing needs you right now.', 'muted')] });
@@ -344,6 +344,11 @@ function listBody(view, width, G) {
       }
       out.push({ spans: questionLine(row, L, width, selected), key: row.key });
       out.push(...detailLines(row, width, selected));
+    }
+    if (board.otherWaiting?.length) {
+      const [first, ...rest] = board.otherWaiting;
+      const summary = `${first.count} waiting in ${first.project}${rest.map((r) => `, ${r.count} in ${r.project}`).join('')}`;
+      out.push({ spans: [span(`   ${summary}`, 'muted')] });
     }
   }
   if (board.groups.length && L.kind !== 'narrow') out.push({ ...headsLine(L, width), key: null });

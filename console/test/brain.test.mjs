@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { asQuestions, categoryOf, titleFor } from '../lib/brain.mjs';
 import { buildBoard, contextPairs } from '../lib/model.mjs';
+import { lineText, renderFrame } from '../lib/frame.mjs';
+import { initialState } from '../lib/controller.mjs';
 
 const stranded = {
   id: '2026091723594-settle-r-124', at: '2026-09-17T23:59:40.000Z', session: 'settle-r-124-1814',
@@ -99,4 +101,29 @@ test('no brain configured leaves the board exactly as it was', () => {
   const today = { project: {}, waiting: [{ id: 'HUM-1', title: 'q', created: { at: '2026-09-17T20:00:00.000Z' } }] };
   assert.equal(buildBoard({ today }).waiting.length, 1);
   assert.equal(buildBoard({ today, brain: { rows: [], off: true } }).waiting.length, 1);
+});
+
+test('Waiting on you shows this project and counts results waiting in the others', () => {
+  const alpha = { ...obstacle, id: 'alpha-row', project: 'alpha' };
+  const beta = { ...finished, id: 'beta-row', project: 'beta' };
+  const elsewhere = { ...finished, id: 'other-row', project: 'other', session: 'elsewhere' };
+  const legacy = { ...finished, id: 'legacy-row', session: 'legacy' };
+  const today = { project: { item_prefixes: [] }, waiting: [] };
+  const board = buildBoard({
+    today,
+    brain: { rows: [alpha, beta, elsewhere, legacy] },
+    projectName: 'alpha',
+    projectNames: ['alpha', 'beta'],
+  });
+
+  assert.deepEqual(board.waiting.filter((r) => r.kind === 'result').map((r) => r.data.id), ['alpha-row']);
+  assert.deepEqual(board.otherWaiting, [{ project: 'beta', count: 1 }, { project: 'other', count: 2 }]);
+  const frame = renderFrame({
+    glyphs: 'plain', version: 'test', header: { project: 'alpha' }, board, scopeItems: [], state: initialState(), project: {}, launch: {},
+  }, 140, 30);
+  assert.match(frame.lines.map(lineText).join('\n'), /1 waiting in beta, 2 in other/);
+
+  const switched = buildBoard({ today, brain: { rows: [alpha, beta, elsewhere, legacy] }, projectName: 'beta', projectNames: ['alpha', 'beta'] });
+  assert.deepEqual(switched.waiting.filter((r) => r.kind === 'result').map((r) => r.data.id), ['beta-row']);
+  assert.deepEqual(switched.otherWaiting, [{ project: 'alpha', count: 1 }, { project: 'other', count: 2 }]);
 });

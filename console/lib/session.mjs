@@ -23,7 +23,7 @@ function ago(ms) {
   return m < 90 ? `${m}m` : `${Math.round(m / 60)}h`;
 }
 
-const EMPTY = { waiting: [], groups: [], history: [], prefixes: undefined };
+const EMPTY = { waiting: [], otherWaiting: [], groups: [], history: [], prefixes: undefined };
 
 export function createSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = {
@@ -169,6 +169,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       fallbackCwd: project().cwd,
       explanations: s.explanations,
       explaining: s.explaining,
+      projectName: project().name,
+      projectNames: config.projects.map((p) => p.name),
     });
     s.board = reorder || !s.keys ? built : orderBoard(built, s.keys);
     s.keys = boardKeys(s.board);

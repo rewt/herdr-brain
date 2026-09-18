@@ -343,6 +343,7 @@ export function buildBoard({
   today, brain = null, herdr = null, tabs = [], transcriptOf = () => null, repoOf = () => null, briefOf = () => null,
   laneSessionOf = () => null,
   nowMs = Date.now(), seen = new Map(), fallbackCwd = null, explanations = new Map(), explaining = null,
+  projectName = null, projectNames = [],
 }) {
   const prefixes = today?.project?.item_prefixes ?? undefined;
   const visible = (text) => plain(text, prefixes);
@@ -385,7 +386,22 @@ export function buildBoard({
   list.sort((a, b) => rank(a.rows[0]) - rank(b.rows[0]) || a.name.localeCompare(b.name));
 
   const tag = (r) => ({ ...r, prefixes });
-  const results = asQuestions(brain?.rows ?? []).map((q) => titled(resultRow(q, visible, byName, today)));
+  const allResults = asQuestions(brain?.rows ?? []);
+  const resultProject = (q) => q.brain?.project ?? 'other';
+  const results = allResults
+    .filter((q) => !projectName || resultProject(q) === projectName)
+    .map((q) => titled(resultRow(q, visible, byName, today)));
+  const otherCounts = new Map();
+  if (projectName) {
+    for (const q of allResults) {
+      const name = resultProject(q);
+      if (name !== projectName) otherCounts.set(name, (otherCounts.get(name) ?? 0) + 1);
+    }
+  }
+  const projectOrder = new Map([...projectNames, 'other'].map((name, i) => [name, i]));
+  const otherWaiting = [...otherCounts].map(([project, count]) => ({ project, count }))
+    .sort((a, b) => (projectOrder.get(a.project) ?? projectOrder.size) - (projectOrder.get(b.project) ?? projectOrder.size)
+      || a.project.localeCompare(b.project));
   const now = results.filter((r) => !r.later);
   const saved = results.filter((r) => r.later);
   // Questions for a stage the project is not working on yet, or parked, are
@@ -408,6 +424,7 @@ export function buildBoard({
     // session is costing time now, while an org question waits patiently.
     waiting: [...waiting, ...folded].map(tag),
     waitingCount: waiting.length,
+    otherWaiting,
     direction: latestDirection(today),
     groups: list.map((g) => ({ ...g, rows: g.rows.map(tag) })),
     history: historyRows(today, visible, prefixes).map(tag),

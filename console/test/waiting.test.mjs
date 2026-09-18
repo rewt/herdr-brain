@@ -15,6 +15,7 @@ const testSession = (options) => createSession({ env: {}, ...options });
 // A settle session that finished and asked a yes/no question in prose; Claude drafted an answer.
 const decision = {
   id: '2026091801135-settle-r-131-1945', at: AT, session: 'settle-r-131-1945', tab_label: 'settle R-131', tab: 'w1:t86', pane: 'w1:p86',
+  project: 'bch',
   state: 'done', status: 'digested', unsent: null, suggestion: 'yes to the zero-conf reading', headline: 'The review passed.',
   screen: 'The review passed.\n❯ yes to the zero-conf reading',
   digest: {
@@ -26,6 +27,7 @@ const decision = {
 // A session stuck at a dialog: its choices are the dialog's own keys.
 const stuck = {
   id: '2026091801140-settle-r-119-1717', at: AT, session: 'settle-r-119-1717', tab_label: 'settle R-119', tab: 'w1:t70', pane: 'w1:p70',
+  project: 'bch',
   state: 'blocked', status: 'digested', unsent: null, suggestion: null, headline: 'Teach auto mode about your environment?',
   dialog: { question: 'Teach auto mode about your environment?', options: [{ key: '1', label: 'Yes' }, { key: '2', label: 'Not now' }, { key: '3', label: "Don't show again" }] },
   digest: { kind: 'obstacle', source: 'parser', question: 'Teach auto mode about your environment?', options: [{ key: '2', label: 'Not now', causes: 'Clears the dialog.' }], recommend: '2' },
@@ -33,6 +35,7 @@ const stuck = {
 // A report: finished, nothing asked.
 const report = {
   id: '2026091801135-settle-r-133-1946', at: AT, session: 'settle-r-133-1946', tab_label: 'settle R-133', state: 'done', status: 'digested',
+  project: 'bch',
   headline: 'The review that just finished passed, and the work it covered is accepted.',
   digest: { kind: 'report', question: null, options: [], recommend: null, next_step: 'Nothing to do right now.' },
 };

@@ -281,9 +281,11 @@ function sessionName(run, agent, tabs, prefixes, laneSession) {
   }
   const folder = agent?.cwd ? path.basename(agent.cwd) : '';
   const laneTopic = /^lane-([a-z0-9][a-z0-9-]*)$/i.exec(folder)?.[1] ?? null;
-  const generatedTopic = /^lane-(.+)-[0-9a-f]{6}-[0-9a-f]{6}$/i.exec(agent?.name ?? '')?.[1] ?? null;
-  const generatedForLane = laneTopic && generatedTopic
-    && (generatedTopic === laneTopic || laneTopic.startsWith(`${generatedTopic}-`));
+  const generatedStem = /^(lane-.+)-[0-9a-f]{6}-[0-9a-f]{6}$/i.exec(agent?.name ?? '')?.[1] ?? null;
+  // herdr-lanes cuts `lane-<topic>` to 18 characters before appending the
+  // random suffixes, so a long topic can be cut in the middle of a word.
+  const generatedForLane = generatedStem && (generatedStem === folder
+    || (generatedStem.length === 18 && folder.startsWith(generatedStem)));
   if (laneTopic && (!agent?.name || agent.name.startsWith(`${folder}-`) || generatedForLane)) {
     return `lane ${laneTopic}`;
   }

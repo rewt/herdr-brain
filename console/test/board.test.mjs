@@ -186,11 +186,16 @@ test('an unregistered lane session is named from its worktree instead of a raw H
       name: null, status: 'working', tab: 'w2:t1', pane: 'w2:p1',
       cwd: '/worktrees/herdr-org/lane-console-polish', workspace: 'w2', tool: 'codex',
     },
+    {
+      name: 'lane-successor-wor-a1b2c3-d4e5f6', status: 'idle', tab: 'w3:t1', pane: 'w3:p1',
+      cwd: '/worktrees/herdr-org/lane-successor-wording-family', workspace: 'w3', tool: 'codex',
+    },
   ] };
   const b = board({ today: { ...boardToday(), running: [], agent_runs: [] }, herdr, tabs: [] });
   assert.deepEqual(boardRows(b).filter((r) => r.kind === 'session').map((r) => r.session).sort(), [
     'lane brain-console-v1',
     'lane console-polish',
+    'lane successor-wording-family',
   ]);
 });
 

@@ -321,9 +321,11 @@ session list scrolls (`↑`/`↓` in the left edge say there is more); the heade
 footer stay put. Selection follows the row, not its position, and rows and groups do not reorder
 under the cursor when data refreshes (`r` re-ranks).
 
-Question titles also hide record codes. If removing a possessive code would leave broken text,
-the list and history show `Question title depends on a record code · no plain summary`; the
-untouched title remains available in the Context tab.
+Organization question titles also hide record codes. If removing a possessive code would leave
+broken text, the list and history show
+`Question title depends on a record code · no plain summary`; the untouched title remains
+available in the Context tab. Brain result titles are session text, so they are shown unchanged;
+their original asked text is also available in Context.
 
 There is no reader pane and no Decided or Finished list on the main screen: the **summary popup**
 (`s`) and the **history view** (`h`) show them. The popup's tabs are **Message** (the session's

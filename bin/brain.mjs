@@ -16,6 +16,7 @@ import { agents, read, tabLabels, HerdrDown } from '../lib/herdr.mjs';
 import { parseScreen, headline } from '../lib/capture.mjs';
 import { append, fold, open as openRows, get, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
 import { digest as runDigest } from '../lib/digest.mjs';
+import { classifyLocally } from '../lib/classify.mjs';
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';
@@ -61,7 +62,7 @@ async function watch() {
   const wantDigest = has('--digest');
   const includeUnnamed = has('--include-unnamed');
   let catchUp = has('--catch-up');
-  const model = val('--model', 'claude-fable-5-1');
+  const model = val('--model', 'claude-sonnet-5');
   const seen = loadSeen();
   let down = false;
 
@@ -97,7 +98,11 @@ async function watch() {
       const entry = await capture({ ...a, name }, labels);
       line(`${now.toUpperCase()}  ${name}  ${cut(entry.headline, 72)}`);
       if (entry.unsent) line(`      ↑ unsent text in its prompt box: ${cut(entry.unsent, 60)}`);
-      if (wantDigest) {
+      const local = classifyLocally(entry);
+      if (local) {
+        append({ type: 'digest', id: entry.id, digest: local });
+        line(`      read from its own screen, no model call`);
+      } else if (wantDigest) {
         runDigest(entry, { model })
           .then((d) => { append({ type: 'digest', id: entry.id, digest: d }); line(`      digested: ${cut(d.question ?? d.next_step ?? d.what_happened ?? '', 70)}`); })
           .catch((e) => line(`      digest failed: ${e.message.split('\n')[0]}`));
@@ -193,7 +198,7 @@ async function main() {
     case 'digest': {
       const r = get(argv[1]);
       if (!r) { process.stderr.write('no such result\n'); process.exit(1); }
-      const d = await runDigest(r, { model: val('--model', 'claude-fable-5-1') });
+      const d = await runDigest(r, { model: val('--model', 'claude-sonnet-5') });
       append({ type: 'digest', id: r.id, digest: d });
       return show(r.id);
     }

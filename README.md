@@ -17,10 +17,20 @@ node bin/brain.mjs watch --catch-up --digest
 
 - `--catch-up` takes whatever is already stopped on the first tick. Without it,
   only transitions count, so a restart is quiet.
-- `--digest` sends each result to one ephemeral headless session
-  (`claude -p`, Fable by default) that turns it into a plain summary, a
-  question, options with consequences, and a recommendation. No pane, no tools,
-  one small call.
+- `--digest` turns on the reading pass for results the parser cannot resolve
+  on its own. One ephemeral headless session (`claude -p`, Sonnet 5), no pane,
+  no tools, one small call.
+
+  Most stopped sessions never reach it. When the parser found a dialog it
+  already holds the question and the options verbatim, so the entry is built
+  locally and nothing is spent. On the first live run that was 5 of 8. A model
+  reads only what is meaning in prose — a finished session whose conclusion is
+  a real decision.
+
+  Model choice is measured, not assumed: Haiku handles an obstacle as well as
+  anything, but on a finished session carrying a genuine two-route decision it
+  collapsed the choice into "send your answer" and lost it. Sonnet 5 kept both
+  routes and their consequences.
 - `--every N` seconds (default 5), `--model`, `--include-unnamed`.
 
 Then, from anywhere:

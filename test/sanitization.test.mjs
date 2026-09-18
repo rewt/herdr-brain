@@ -2,9 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { setupOrg } from './helpers.mjs';
 
 const ESCAPE = /\x1b|\x9b|\x9d/;
+
+test('many unterminated string-control introducers sanitize independently', () => {
+  const repeated = `${'\x1b]'.repeat(20_000)}still visible${'\x9d'.repeat(20_000)}`;
+  assert.equal(sanitizeTerminal(repeated), 'still visible');
+});
 
 test('human-readable CLI views and generated briefs strip terminal control sequences', () => {
   const t = setupOrg();

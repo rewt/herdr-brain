@@ -12,7 +12,7 @@
 // said, and puts it in a queue. It never starts, prompts, keys or closes a
 // session.
 import process from 'node:process';
-import { agents, read, tabLabels, HerdrDown } from '../lib/herdr.mjs';
+import { agents, read, tabLabels, sendKeys, prompt, HerdrDown } from '../lib/herdr.mjs';
 import { parseScreen, headline } from '../lib/capture.mjs';
 import { append, fold, open as openRows, get, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
 import { digest as runDigest } from '../lib/digest.mjs';
@@ -48,6 +48,7 @@ async function capture(agent, labels) {
     where: agent.cwd ?? null,
     workspace: agent.workspace_id ?? null,
     tab: agent.tab_id ?? null,
+    pane: agent.pane_id ?? null,
     tab_label: labels.get(agent.tab_id) ?? null,
     title: agent.terminal_title_stripped ?? null,
     ...parsed,
@@ -125,14 +126,16 @@ function queue() {
   // Stranded first: the operator already answered and it never got delivered.
   // Then real decisions, then things merely in the way, then finished work.
   const bucket = (r) => {
+    if (r.status === 'later') return 'later';
     if (r.unsent) return 'stranded';
+    if (r.suggestion) return 'suggested';
     const k = r.digest?.kind;
     if (k === 'decision') return 'decision';
     if (k === 'obstacle') return 'obstacle';
     if (k === 'report') return 'finished';
     return r.state === 'blocked' ? 'obstacle' : 'finished';
   };
-  const groups = { stranded: [], decision: [], obstacle: [], finished: [] };
+  const groups = { stranded: [], decision: [], suggested: [], obstacle: [], finished: [], later: [] };
   for (const r of rows) groups[bucket(r)].push(r);
 
   const section = (title, list) => {
@@ -142,6 +145,7 @@ function queue() {
       const d = r.digest;
       process.stdout.write(`  ${r.id.slice(0, 13)}  ${ago(r.at).padStart(4)}  ${cut(r.tab_label ?? r.session, 24).padEnd(25)}${cut(d?.question ?? d?.what_happened ?? r.headline, 62)}\n`);
       if (r.unsent) process.stdout.write(`                      you already typed: "${cut(r.unsent, 56)}"\n`);
+      if (r.suggestion) process.stdout.write(`                      Claude drafted, not sent: "${cut(r.suggestion, 52)}"\n`);
       for (const o of d?.options ?? []) {
         process.stdout.write(`                      ${o.key}  ${cut(o.label, 28).padEnd(29)}${cut(o.causes, 50)}${d.recommend === o.key ? '  ← recommended' : ''}\n`);
       }
@@ -150,9 +154,11 @@ function queue() {
   };
   section('YOUR ANSWER NEVER LANDED', groups.stranded);
   section('DECISIONS — the work needs you', groups.decision);
+  section('CLAUDE DRAFTED A REPLY — yours to accept or not', groups.suggested);
   section('IN THE WAY — clear these', groups.obstacle);
   section('FINISHED — nobody has read these', groups.finished);
-  process.stdout.write(`\n  brain show <id> · brain answer <id> "…" · brain dismiss <id>\n`);
+  section('LATER', groups.later);
+  process.stdout.write('\n  send <id> · key <id> 2 · later <id> · never <id> · show <id>\n');
 }
 
 function show(id) {
@@ -188,6 +194,43 @@ async function main() {
       process.stdout.write(`recorded against ${r.tab_label ?? r.session}\n`);
       return;
     }
+    case 'later': case 'never': {
+      const r = get(argv[1]);
+      if (!r) { process.stderr.write('no such result\n'); process.exit(1); }
+      append({ type: 'status', id: r.id, status: cmd === 'later' ? 'later' : 'never', note: argv.slice(2).join(' ') || null });
+      process.stdout.write(cmd === 'later' ? 'moved to later; it stays in the queue under LATER\n' : 'marked never; it will not come back\n');
+      return;
+    }
+    case 'key': {
+      const r = get(argv[1]);
+      const k = argv[2];
+      if (!r || !k) { process.stderr.write('usage: brain key <id> <1|2|esc|y|n>\n'); process.exit(1); }
+      process.stdout.write(`sending "${k}" to ${r.tab_label ?? r.session}\n`);
+      const out = await sendKeys(r.session, [k]);
+      append({ type: 'status', id: r.id, status: 'acted', note: `sent key ${k}` });
+      process.stdout.write(`${out || 'sent'}\n`);
+      return;
+    }
+    case 'send': {
+      const r = get(argv[1]);
+      if (!r) { process.stderr.write('no such result\n'); process.exit(1); }
+      const text = argv.slice(2).join(' ') || r.unsent || r.suggestion;
+      if (!text) { process.stderr.write('nothing to send: pass the text\n'); process.exit(1); }
+      if (!r.unsent && r.suggestion && !argv[2]) {
+        process.stderr.write(`that text is Claude's suggestion, not yours:\n  "${r.suggestion}"\nsend it with: brain send ${r.id.slice(0, 13)} "${r.suggestion}"\n`);
+        process.exit(1);
+      }
+      const res = await prompt(r.session, text);
+      if (!res.ok) {
+        process.stderr.write(res.blocked
+          ? `${r.tab_label ?? r.session} is stuck at a dialog and refused the message. Clear it first:\n  brain key ${r.id.slice(0, 13)} 2\n`
+          : `could not send: ${res.error}\n`);
+        process.exit(1);
+      }
+      append({ type: 'answer', id: r.id, text });
+      process.stdout.write(`sent to ${r.tab_label ?? r.session}\n`);
+      return;
+    }
     case 'dismiss': {
       const r = get(argv[1]);
       if (!r) { process.stderr.write('no such result\n'); process.exit(1); }
@@ -203,7 +246,18 @@ async function main() {
       return show(r.id);
     }
     default:
-      process.stderr.write('usage: brain watch [--digest] | queue | show <id> | answer <id> "…" | dismiss <id> | digest <id>\n');
+      process.stderr.write([
+        'usage:',
+        '  brain watch [--digest] [--catch-up]   keep the queue current',
+        '  brain queue [--all] [--json]          what is waiting',
+        '  brain show <id>                       one result in full',
+        '  brain send <id> ["text"]              send a reply to that session',
+        '  brain key <id> <1|2|esc|y|n>          answer the dialog it is stuck at',
+        '  brain later <id> ["why"]              not now, keep it',
+        '  brain never <id> ["why"]              drop it for good',
+        '  brain answer <id> "…"                 record what you decided',
+        '  brain digest <id>                     run the reading pass by hand',
+      ].join('\n') + '\n');
       process.exit(2);
   }
 }

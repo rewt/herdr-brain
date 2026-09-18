@@ -88,7 +88,7 @@ test('a transcript looked up by agent name reads only transcripts written since 
   assert.ok(opened.includes('old.jsonl'));
 });
 
-test('a lane session record is found by Herdr name or transcript session id', () => {
+test('a live lane session record is found by name or transcript id; completed records are ignored', () => {
   const repo = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'console-lane-registry-'));
   const directory = path.join(repo, '.lane', 'sessions.json.d');
   nodeFs.mkdirSync(directory, { recursive: true });
@@ -105,4 +105,12 @@ test('a lane session record is found by Herdr name or transcript session id', ()
   assert.deepEqual(reader.laneSession({ repoRoot: repo, name: record.name }), record);
   assert.deepEqual(reader.laneSession({ repoRoot: repo, sessionId: record.agent_session_id }), record);
   assert.equal(reader.laneSession({ repoRoot: repo, name: 'not-there' }), null);
+
+  nodeFs.writeFileSync(path.join(directory, `${record.session_id}.done.json`), '{}');
+  assert.equal(reader.laneSession({ repoRoot: repo, name: record.name }), null);
+  assert.equal(reader.laneSession({ repoRoot: repo, sessionId: record.agent_session_id }), null);
+
+  const doneRecord = { session_id: 'done-in-record', name: 'lane-done-a1b2c3-d4e5f6', topic: 'done', done: true };
+  nodeFs.writeFileSync(path.join(directory, `${doneRecord.session_id}.json`), JSON.stringify(doneRecord));
+  assert.equal(reader.laneSession({ repoRoot: repo, name: doneRecord.name }), null);
 });

@@ -277,6 +277,9 @@ export function createSessionReader({ fsApi = nodeFs, now = Date.now } = {}) {
     try {
       filesInDirectory = fsApi.readdirSync(directory);
     } catch {}
+    const completed = new Set(filesInDirectory
+      .filter((file) => file.endsWith('.done.json'))
+      .map((file) => file.slice(0, -'.done.json'.length)));
     for (const file of filesInDirectory.sort()) {
       if (!file.endsWith('.json') || file.endsWith('.done.json')) continue;
       try {
@@ -284,7 +287,8 @@ export function createSessionReader({ fsApi = nodeFs, now = Date.now } = {}) {
       } catch {}
     }
     return records.find((record) =>
-      (sessionId && record.agent_session_id === sessionId) || (name && record.name === name)) ?? null;
+      record.done !== true && !completed.has(record.session_id)
+      && ((sessionId && record.agent_session_id === sessionId) || (name && record.name === name))) ?? null;
   }
 
   return { find, notes, load, transcript, laneSession };

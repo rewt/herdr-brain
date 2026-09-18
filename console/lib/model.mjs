@@ -5,6 +5,7 @@ import path from 'node:path';
 import { doingText, upText, whoFor } from './names.mjs';
 import { firstMarkdownPath } from './sources.mjs';
 import { DEFAULT_PREFIXES, firstSentence, hasCodes, oneLine, stripCodes } from './text.mjs';
+import { asQuestions } from './brain.mjs';
 
 export const NO_PLAIN = '· no plain summary';
 
@@ -209,7 +210,7 @@ function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
 //   seen          agent name → when this console last saw it (ms)
 //   fallbackCwd   the project's checkout, for a run with no known folder
 export function buildBoard({
-  today, herdr = null, tabs = [], transcriptOf = () => null, repoOf = () => null, briefOf = () => null,
+  today, brain = null, herdr = null, tabs = [], transcriptOf = () => null, repoOf = () => null, briefOf = () => null,
   nowMs = Date.now(), seen = new Map(), fallbackCwd = null,
 }) {
   const prefixes = today?.project?.item_prefixes ?? undefined;
@@ -254,7 +255,12 @@ export function buildBoard({
 
   const tag = (r) => ({ ...r, prefixes });
   return {
-    waiting: (today?.waiting ?? []).map((q) => tag(questionRow(q, visible))),
+    // What sessions left behind comes first: a stranded reply or a stuck
+    // session is costing time now, while an org question waits patiently.
+    waiting: [
+      ...asQuestions(brain?.rows ?? []).map((q) => tag({ ...questionRow(q, visible), kind: 'result', brain: q.brain })),
+      ...(today?.waiting ?? []).map((q) => tag(questionRow(q, visible))),
+    ],
     groups: list.map((g) => ({ ...g, rows: g.rows.map(tag) })),
     history: historyRows(today, visible, prefixes).map(tag),
     prefixes,

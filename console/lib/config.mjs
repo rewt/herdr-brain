@@ -18,6 +18,7 @@ export const EXAMPLE = {
     'projects[].claude_config_dirs  Claude config dirs to search for session transcripts',
     'projects[].session_cap  the daily session limit shown in the header',
     'refresh_seconds         how often to re-read when nothing changed',
+    'brain_bin               path to brain.mjs; its queue of stopped sessions joins Waiting on you',
     'glyphs                  "nerd" (a Nerd Font is set in Herdr) or "plain" (ASCII only)',
   ],
   example: true,
@@ -32,6 +33,7 @@ export const EXAMPLE = {
     },
   ],
   refresh_seconds: 5,
+  brain_bin: null,
   glyphs: 'nerd',
 };
 
@@ -59,7 +61,10 @@ export function normalizeConfig(raw, file) {
   const refresh = Number(raw.refresh_seconds);
   const glyphs = raw.glyphs ?? 'nerd';
   if (!['nerd', 'plain'].includes(glyphs)) throw new ConfigError(`${file}: "glyphs" is "nerd" or "plain", not ${JSON.stringify(glyphs)}`);
-  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs };
+  // Optional: with it, what stopped sessions left behind joins Waiting on you.
+  const brainBin = expand(raw.brain_bin);
+  if (raw.brain_bin && !brainBin) throw new ConfigError(`${file}: "brain_bin" must be a path`);
+  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs, brain_bin: brainBin };
 }
 
 export function loadConfig(file = configPath()) {

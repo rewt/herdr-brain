@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
+import { readQueue } from './brain.mjs';
 import { initialState, promptParts, reduce, reduceMouse } from './controller.mjs';
 import { RAIL_COLS, hitAt, renderFrame } from './frame.mjs';
 import {
@@ -30,6 +31,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     orgAnswer: cli.orgAnswer,
     herdrAgents: cli.herdrAgents,
     herdrTabs: cli.herdrTabs,
+    brainQueue: config?.brain_bin ? () => readQueue(config.brain_bin) : null,
     herdrGo: cli.herdrGo,
     viewer: () => cli.viewerFor(),
     openBlocking: cli.openBlocking,
@@ -45,6 +47,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     index: projectIndex,
     ui: initialState(),
     today: null,
+    brain: { rows: [], off: true },
     todayAt: null,
     todayError: null,
     herdr: null,
@@ -130,6 +133,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
   function rebuild({ reorder = false } = {}) {
     const built = buildBoard({
       today: s.today,
+      brain: s.brain,
       herdr: s.herdr,
       tabs: s.tabs,
       transcriptOf,
@@ -146,10 +150,11 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
 
   async function load({ reorder }) {
     const now = d.now();
-    const [today, herdr, tabs] = await Promise.all([
+    const [today, herdr, tabs, brain] = await Promise.all([
       d.orgToday(project()).then((doc) => ({ doc }), (error) => ({ error })),
       d.herdrAgents(),
       d.herdrTabs(),
+      d.brainQueue ? d.brainQueue() : Promise.resolve({ rows: [], off: true }),
     ]);
     if (today.doc) {
       s.today = today.doc;
@@ -160,6 +165,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     }
     s.herdr = herdr;
     s.tabs = tabs ?? [];
+    s.brain = brain ?? { rows: [], off: true };
     if (herdr.ok) for (const a of herdr.agents) if (a.name) s.seen.set(a.name, now.getTime());
     s.ledger = readLedger(now);
     rebuild({ reorder });

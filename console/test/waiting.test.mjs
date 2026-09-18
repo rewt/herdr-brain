@@ -10,6 +10,7 @@ import { boardRows, buildBoard, scopeItems, visibleBoard } from '../lib/model.mj
 import { createSession } from '../lib/session.mjs';
 
 const AT = '2026-09-18T01:13:54.000Z';
+const testSession = (options) => createSession({ env: {}, ...options });
 
 // A settle session that finished and asked a yes/no question in prose; Claude drafted an answer.
 const decision = {
@@ -239,7 +240,7 @@ test('answering goes through the brain CLI, refreshes, and the peek moves to the
   };
   const config = { projects: [{ name: 'bch', org: '/tmp/none', cwd: '/r/bch', ledger_dir: null, claude_config_dirs: [] }], refresh_seconds: 60, brain_bin: '/x/brain.mjs' };
   const reads = [];
-  const session = createSession({
+  const session = testSession({
     config,
     deps: {
       orgToday: async () => today, herdrAgents: async () => ({ ok: true, agents }), herdrTabs: async () => [], repoOf: () => null,
@@ -286,7 +287,7 @@ test('d sends a question to a new session with a plain brief, on the project\'s 
   const started = [];
   const notes = [];
   const config = { projects: [{ name: 'bch', org: '/r/.org', cwd: '/r/bch', ledger_dir: null, claude_config_dirs: [] }], refresh_seconds: 60, brain_bin: '/x/brain.mjs' };
-  const session = createSession({
+  const session = testSession({
     config,
     deps: {
       orgToday: async () => today, herdrAgents: async () => ({ ok: true, agents }), herdrTabs: async () => [], repoOf: () => null,
@@ -312,13 +313,13 @@ test('summoned as a Herdr popup, going to a session closes the console so the se
     orgToday: async () => today, herdrAgents: async () => ({ ok: true, agents }), herdrTabs: async () => [], repoOf: () => null,
     brainQueue: async () => ({ rows: [decision] }), herdrGo: async () => ({ ok: true }),
   };
-  const popup = createSession({ config, deps, env: { HERDR_ACTIVE_PANE_ID: 'w1:p3' } });
+  const popup = testSession({ config, deps, env: { HERDR_ACTIVE_PANE_ID: 'w1:p3' } });
   assert.equal(popup.popupMode, true);
   await popup.refresh({ reorder: true });
   popup.ui = { ...popup.ui, selectedKey: `q:${decision.id}` };
   assert.equal(await popup.key('g', {}), true, 'the console quits, which closes the popup');
   popup.stop();
-  const pane = createSession({ config, deps, env: { HERDR_PANE_ID: 'w1:p9' } });
+  const pane = testSession({ config, deps, env: { HERDR_PANE_ID: 'w1:p9' } });
   assert.equal(pane.popupMode, false);
   await pane.refresh({ reorder: true });
   pane.ui = { ...pane.ui, selectedKey: `q:${decision.id}` };
@@ -366,7 +367,7 @@ test('i records an instruction for the whole project where its sessions read dir
   const notes = [];
   let doc = withGoal;
   const config = { projects: [{ name: 'bch-cloak', org: '/r/.org', cwd: '/r/bch', ledger_dir: null, claude_config_dirs: [] }], refresh_seconds: 60, brain_bin: '/x/brain.mjs', explain: false };
-  const session = createSession({
+  const session = testSession({
     config,
     deps: {
       orgToday: async () => doc, herdrAgents: async () => ({ ok: true, agents }), herdrTabs: async () => [], repoOf: () => null,
@@ -400,7 +401,7 @@ test('the header says whether the loop is alive, and L turns it off or on after 
   let loop = { service: true, running: true, age: 2, every: 5 };
   const calls = [];
   const config = { projects: [{ name: 'bch', org: '/r/.org', cwd: '/r/bch', ledger_dir: null, claude_config_dirs: [] }], refresh_seconds: 60, brain_bin: '/x/brain.mjs', explain: false };
-  const session = createSession({
+  const session = testSession({
     config,
     deps: {
       orgToday: async () => today, herdrAgents: async () => ({ ok: true, agents }), herdrTabs: async () => [], repoOf: () => null,

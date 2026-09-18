@@ -38,7 +38,6 @@ export function boardToday() {
     attention: [],
   };
 }
-
 export const boardHerdr = () => ({ ok: true, agents: [
   { name: 'lane-console-a', status: 'working', tab: 'w1:t2', pane: 'w1:p2', cwd: '/w/herdr-org/lane-brain-console-v1', workspace: 'w1',
     tool: 'claude', title: 'Verifying correction round three', session: 's-console' },
@@ -80,4 +79,3 @@ export function board(overrides = {}) {
     ...overrides,
   });
 }
-

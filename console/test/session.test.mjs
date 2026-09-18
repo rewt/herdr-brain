@@ -38,6 +38,7 @@ function tempOrg() {
 
 const noHerdr = async () => ({ ok: true, agents: [{ name: 'lane-x', status: 'idle', tool: 'claude', tab: 'w1:t1', pane: 'w1:p1', cwd: '/tmp/nowhere' }] });
 const quiet = { herdrAgents: noHerdr, herdrTabs: async () => [], repoOf: () => null };
+const testSession = (options) => createSession({ env: {}, ...options });
 const screen = (session, cols = 100, rows = 29) => session.frame(cols, rows).lines.map(lineText);
 const keys = async (session, sequence) => {
   for (const [input, key] of sequence) await session.key(input, key ?? {});
@@ -48,7 +49,7 @@ test('approving and declining from the console record the operator\'s answers', 
   const previousActor = process.env.ORG_ACTOR;
   process.env.ORG_ACTOR = 'exec-9999'; // the console must not pass this on
   try {
-    const session = createSession({ config: t.config, deps: quiet });
+    const session = testSession({ config: t.config, deps: quiet });
     await session.refresh({ reorder: true });
     screen(session);
     assert.deepEqual(session.board.waiting.map((r) => r.key), ['q:HUM-1', 'q:HUM-2', 'q:HUM-3']);
@@ -113,7 +114,7 @@ test('Enter and a click peek at a live session; g goes; a gone one says so; Herd
   const went = [];
   const reads = [];
   const herdrRead = async (target) => { reads.push(target); return { ok: true, text: 'line one\n  indented two\nthe last line it drew' }; };
-  const session = createSession({ config: t.config, deps: { ...quiet, herdrRead, herdrGo: async (target) => { went.push(target); return { ok: true }; } } });
+  const session = testSession({ config: t.config, deps: { ...quiet, herdrRead, herdrGo: async (target) => { went.push(target); return { ok: true }; } } });
   await session.refresh({ reorder: true });
   assert.deepEqual(session.rows('list').filter((r) => r.kind === 'session').map((r) => [r.key, r.session, r.state]), [
     ['r:R-1', 'lane theft-fix r1', 'idle'], ['r:R-2', 'run r1', 'gone'],
@@ -160,7 +161,7 @@ test('Enter and a click peek at a live session; g goes; a gone one says so; Herd
   assert.match(screen(session, 140, 40).join('\n'), /Brief: run R-1 on ENG-1|# Brief|Brief/);
   session.stop();
 
-  const down = createSession({ config: t.config, deps: { ...quiet, herdrAgents: async () => ({ ok: false, agents: [], error: 'no server' }) } });
+  const down = testSession({ config: t.config, deps: { ...quiet, herdrAgents: async () => ({ ok: false, agents: [], error: 'no server' }) } });
   await down.refresh({ reorder: true });
   assert.match(screen(down)[0], /Herdr unavailable/);
   assert.deepEqual(down.rows('list').filter((r) => r.kind === 'session').map((r) => r.state), ['unknown', 'unknown']);
@@ -225,7 +226,7 @@ test('open suspends for an editor, a failed read keeps the last data, and the he
     if (failRead) throw new Error('events.jsonl line 3 is not valid JSON');
     return orgToday(p);
   };
-  const session = createSession({ config: t.config, deps });
+  const session = testSession({ config: t.config, deps });
   await session.refresh({ reorder: true });
   assert.match(screen(session, 140, 40)[0], new RegExp(`console ${VERSION.replace(/\./g, '\\.')}`));
   assert.equal(VERSION, '0.0.2');
@@ -251,7 +252,7 @@ test('open suspends for an editor, a failed read keeps the last data, and the he
 
 test('NO_COLOR draws plain glyphs, and a scope narrows the list and prefills nothing else', async () => {
   const t = tempOrg();
-  const session = createSession({ config: t.config, deps: quiet, env: { NO_COLOR: '1' } });
+  const session = testSession({ config: t.config, deps: quiet, env: { NO_COLOR: '1' } });
   await session.refresh({ reorder: true });
   for (const l of screen(session, 140, 40)) assert.match(l, /^[\x20-\x7e]*$/, l);
   await keys(session, [['w']]);
@@ -269,7 +270,7 @@ test('overruling from the history records the opposite answer', async () => {
   orgConfig.approvals = { default: 'ask', categories: { tooling: 'auto' } };
   fs.writeFileSync(configFile, JSON.stringify(orgConfig));
   t.org('ask', 'Skip the old tool?', '--parent', 'G-1', '--category', 'tooling', '--recommend', 'no', '--why', 'It still works.', '--blocks', 'DOC-1');
-  const session = createSession({ config: t.config, deps: quiet });
+  const session = testSession({ config: t.config, deps: quiet });
   await session.refresh({ reorder: true });
   await keys(session, [['h']]);
   assert.equal(session.ui.historyKey, 'a:HUM-4');
@@ -296,7 +297,7 @@ test('a text document opens from a private file that is removed afterwards', asy
     return { ok: true };
   };
   let blocking = true;
-  const session = createSession({ config: t.config, deps: {
+  const session = testSession({ config: t.config, deps: {
     ...quiet,
     viewer: () => ({ cmd: 'x', args: [], blocking, label: 'x' }),
     openBlocking: (viewer, file) => inspect(file),
@@ -357,7 +358,7 @@ test('DOING for a run with no usable title comes from the work in the brief org 
     { name: 'lane-codex', status: 'working', tool: 'codex', tab: 'w1:t1', pane: 'w1:p1', cwd: t.root, title: null },
   ] });
   for (const deps of [{ ...quiet, herdrAgents: herdr }, { ...quiet, herdrAgents: async () => ({ ok: false, agents: [], error: 'down' }) }]) {
-    const session = createSession({ config: t.config, deps });
+    const session = testSession({ config: t.config, deps });
     await session.refresh({ reorder: true });
     const rows = session.board.groups.flatMap((g) => g.rows);
     assert.deepEqual(rows.map((r) => [r.session, r.doing]).sort(), [
@@ -376,7 +377,7 @@ test('transcripts are looked up by name from the run\'s start, else from local m
     { name: 'lane-run', status: 'working', tool: 'claude', tab: 'w1:t1', pane: 'w1:p1', cwd: t.root, title: 'Fixing the board now' },
     { name: 'loose', status: 'idle', tool: 'claude', tab: 'w1:t2', pane: 'w1:p2', cwd: t.root, title: 'Something else here' },
   ] });
-  const session = createSession({ config: t.config, deps: { ...quiet, herdrAgents, reader } });
+  const session = testSession({ config: t.config, deps: { ...quiet, herdrAgents, reader } });
   await session.refresh({ reorder: true });
   const today = JSON.parse(t.org('today', '--json'));
   const since = Object.fromEntries(calls.map((c) => [c.name, c.sinceMs]));

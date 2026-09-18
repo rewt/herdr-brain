@@ -153,6 +153,20 @@ test('only codes the organization issues are stripped; real names with numbers s
   assert.equal(hasCodes('see DECISION-CELLS-20260916.md'), true);
 });
 
+test('a possessive record code does not leave a broken question title', () => {
+  const t = today();
+  t.project.item_prefixes = ['ENG', 'G', 'HUM'];
+  t.waiting = [{
+    ...t.waiting[0],
+    id: 'HUM-8',
+    title: "Confirm that ENG-12's openspec exclusion covers generated files?",
+  }];
+  const row = buildBoard({ today: t }).waiting[0];
+  assert.equal(row.title, `Question title depends on a record code ${NO_PLAIN}`);
+  assert.equal(row.headline, `HUM-8 — Question title depends on a record code ${NO_PLAIN}`);
+  assert.equal(Object.fromEntries(contextPairs(row)).title, "Confirm that ENG-12's openspec exclusion covers generated files?");
+});
+
 test('a decision summary is shown without codes, and marked when it had some', () => {
   assert.deepEqual(decisionHeadline({ summary: 'Dispatched ENG-12 after a1b2c3d4', text: 'x' }),
     { text: `Dispatched after ${NO_PLAIN}`, plain: true });
@@ -399,4 +413,3 @@ test('agent text cannot drive the terminal', () => {
     for (const l of lines) assert.doesNotMatch(lineText(l), /[\x00-\x1f\x7f-\x9f]/, `${popup?.tab}: ${JSON.stringify(lineText(l))}`);
   }
 });
-

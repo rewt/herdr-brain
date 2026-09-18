@@ -67,6 +67,12 @@ function yesNoOptions(q, visible) {
   ];
 }
 
+function questionTitle(text, visible) {
+  const title = visible(text);
+  const stripped = title.endsWith(` ${NO_PLAIN}`) ? title.slice(0, -(` ${NO_PLAIN}`.length)) : title;
+  return /(^|\s)['’]s\b/i.test(stripped) ? `Question title depends on a record code ${NO_PLAIN}` : title;
+}
+
 function questionRow(q, visible, ex = null) {
   const rec = String(q.recommend ?? '').trim().toLowerCase();
   // A reading of the question (brain explain) brings the operator's format:
@@ -81,7 +87,7 @@ function questionRow(q, visible, ex = null) {
     gist: ex?.gist ?? null,
     explain: ex?.explain ?? null,
     why: ex?.why ?? null,
-    headline: visible(q.title),
+    headline: questionTitle(q.title, visible),
     category: q.category ?? 'no category',
     recommend: q.recommend ? visible(q.recommend) : null,
     asked: hhmm(q.created?.at),

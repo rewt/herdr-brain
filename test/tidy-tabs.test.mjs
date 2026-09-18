@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isShellOnly, planTidy, sessionOrderFromLedgers } from '../contrib/tidy-tabs.mjs';
+import { isShellOnly, planTidy, reviewedAgentsFromRecords, sessionOrderFromLedgers } from '../contrib/tidy-tabs.mjs';
 
 const tab = (tab_id, label, lane = false) => ({ tab_id, label, workspace_id: lane ? 'wL' : 'wM', lane });
 const pane = (pane_id, tab_id, shellOnly = true) => ({ pane_id, tab_id, shellOnly });
@@ -65,6 +65,35 @@ test('closes lane worker tabs only when every worker there has a recorded report
   assert.deepEqual(ids(plan.close), ['t1']);
   assert.match(plan.keep.find((k) => k.tab_id === 't2').why, /no recorded report for lane-b-1/);
   assert.match(plan.keep.find((k) => k.tab_id === 't3').why, /not a tab this tool manages/);
+});
+
+test('a newer lane review verdict finishes its idle review tab, but an older verdict does not', () => {
+  const reviewedAgents = reviewedAgentsFromRecords([
+    { name: 'lane-topic-review-old', role: 'review', topic: 'topic', created_at: '2026-09-18T15:00:00Z' },
+    { name: 'lane-topic-review-new', role: 'review', topic: 'topic', created_at: '2026-09-18T17:00:00Z' },
+    { name: 'lane-topic-engineer', role: 'engineer', topic: 'topic', created_at: '2026-09-18T15:00:00Z' },
+  ], [
+    { topic: 'topic', verdict: true, mtimeMs: Date.parse('2026-09-18T16:00:00Z') },
+    { topic: 'not-a-verdict', verdict: false, mtimeMs: Date.parse('2026-09-18T18:00:00Z') },
+  ]);
+  assert.deepEqual([...reviewedAgents], ['lane-topic-review-old']);
+
+  const plan = planTidy({
+    tabs: [tab('t1', 'review old', true), tab('t2', 'review new', true), tab('t3', 'engineer', true), tab('t4', 'working', true)],
+    panes: [pane('p1', 't1'), pane('p2', 't2'), pane('p3', 't3'), pane('p4', 't4')],
+    agents: [
+      { name: 'lane-topic-review-old', status: 'idle', pane_id: 'p1' },
+      { name: 'lane-topic-review-new', status: 'done', pane_id: 'p2' },
+      { name: 'lane-topic-engineer', status: 'idle', pane_id: 'p3' },
+      { name: 'lane-topic-working', status: 'working', pane_id: 'p4' },
+    ],
+    reportedAgents: new Set(['lane-topic-engineer']),
+    reviewedAgents,
+  });
+  assert.deepEqual(ids(plan.close), ['t1', 't3']);
+  assert.match(plan.close.find((c) => c.tab_id === 't1').why, /review verdict is recorded/);
+  assert.match(plan.keep.find((k) => k.tab_id === 't2').why, /no recorded report/);
+  assert.match(plan.keep.find((k) => k.tab_id === 't4').why, /still active/);
 });
 
 test('a watcher label in a lane workspace or with an agent inside is left alone', () => {

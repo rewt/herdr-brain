@@ -9,7 +9,8 @@
 //   - finished session tabs ("settle R-n", "executive", "plan", "audit") whose
 //     settle-/exec-/plan-/audit- agent is idle or done, keeping the newest N (default 1);
 //   - lane worker tabs whose lane-* agents are idle or done and whose runs have a
-//     recorded report in org (needs --org).
+//     recorded report in org (needs --org), or whose review sessions have a
+//     newer verdict record under docs/reviews/<topic>/.
 // Never closes a tab with a working, blocked or unnamed agent (an operator's chat),
 // a tab with any other running program, an unrecognized tab, or the tab it runs in.
 
@@ -27,10 +28,14 @@ const SHELLS = new Set(['zsh', '-zsh', 'bash', '-bash', 'sh', '-sh', 'fish', '-f
 
 // Pure: decide which tabs to close from one observation of Herdr, org and the ledger.
 // snapshot = { tabs: [{tab_id, label, workspace_id, lane}], panes: [{pane_id, tab_id, shellOnly}],
-//   agents: [{name, status, pane_id}], reportedAgents: Set<name>, sessionOrder: Map<name, sortKey>,
+//   agents: [{name, status, pane_id}], reportedAgents: Set<name>, reviewedAgents: Set<name>,
+//   sessionOrder: Map<name, sortKey>,
 //   selfTab, keepSessions }
 export function planTidy(snapshot) {
-  const { tabs, panes, agents, reportedAgents = new Set(), sessionOrder = new Map(), selfTab = null, keepSessions = 1 } = snapshot;
+  const {
+    tabs, panes, agents, reportedAgents = new Set(), reviewedAgents = new Set(),
+    sessionOrder = new Map(), selfTab = null, keepSessions = 1,
+  } = snapshot;
   const close = [];
   const keep = [];
   const sessionCandidates = [];
@@ -57,9 +62,13 @@ export function planTidy(snapshot) {
       continue;
     }
     if (tab.lane && tabAgents.length && tabAgents.every((a) => a.name.startsWith('lane-'))) {
-      const unrecorded = tabAgents.filter((a) => !reportedAgents.has(a.name));
+      const unrecorded = tabAgents.filter((a) => !reportedAgents.has(a.name) && !reviewedAgents.has(a.name));
       if (unrecorded.length) skip(`no recorded report for ${unrecorded.map((a) => a.name).join(', ')}`);
-      else close.push({ tab_id: tab.tab_id, label: tab.label, why: `worker finished and its report is recorded (${tabAgents.map((a) => a.name).join(', ')})` });
+      else {
+        const reviews = tabAgents.filter((a) => reviewedAgents.has(a.name) && !reportedAgents.has(a.name));
+        const record = reviews.length === tabAgents.length ? 'review verdict' : 'result';
+        close.push({ tab_id: tab.tab_id, label: tab.label, why: `worker finished and its ${record} is recorded (${tabAgents.map((a) => a.name).join(', ')})` });
+      }
       continue;
     }
     skip('not a tab this tool manages');
@@ -70,6 +79,54 @@ export function planTidy(snapshot) {
     else close.push({ tab_id: c.tab.tab_id, label: c.tab.label, why: `session finished (${c.names.join(', ')})` });
   });
   return { close, keep };
+}
+
+// Pure: a review session is complete only when a verdict for its lane topic is
+// newer than the session. This prevents an earlier review round from closing a
+// later review tab on the same lane.
+export function reviewedAgentsFromRecords(sessions, reviewRecords) {
+  const newest = new Map();
+  for (const r of reviewRecords) {
+    if (!r?.topic || !r.verdict || !Number.isFinite(r.mtimeMs)) continue;
+    newest.set(r.topic, Math.max(newest.get(r.topic) ?? -Infinity, r.mtimeMs));
+  }
+  return new Set(sessions
+    .filter((s) => s?.role === 'review' && s?.name && s?.topic && Number.isFinite(Date.parse(s.created_at)))
+    .filter((s) => (newest.get(s.topic) ?? -Infinity) > Date.parse(s.created_at))
+    .map((s) => s.name));
+}
+
+function laneSessions(checkout) {
+  const dir = path.join(checkout, '.lane', 'sessions.json.d');
+  const sessions = [];
+  try {
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith('.json') || file.endsWith('.done.json')) continue;
+      try { sessions.push(JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'))); } catch { /* incomplete session record */ }
+    }
+  } catch { /* no lane registry */ }
+  return sessions;
+}
+
+function reviewRecords(roots) {
+  const records = [];
+  for (const root of new Set(roots)) {
+    const reviews = path.join(root, 'docs', 'reviews');
+    let topics;
+    try { topics = fs.readdirSync(reviews, { withFileTypes: true }).filter((e) => e.isDirectory()); } catch { continue; }
+    for (const topic of topics) {
+      const dir = path.join(reviews, topic.name);
+      for (const file of fs.readdirSync(dir)) {
+        if (!file.endsWith('.md')) continue;
+        const full = path.join(dir, file);
+        try {
+          const verdict = /^\*\*(PASS|NEEDS-WORK)\*\*/.test(fs.readFileSync(full, 'utf8'));
+          records.push({ topic: topic.name, verdict, mtimeMs: fs.statSync(full).mtimeMs });
+        } catch { /* a disappearing or unreadable record proves nothing */ }
+      }
+    }
+  }
+  return records;
 }
 
 // Ledger lines look like "HH:MM:SS name mode subject" in sessions-YYYY-MM-DD.log.
@@ -135,6 +192,10 @@ function main() {
     if (r.status === 0) reportedAgents = new Set(JSON.parse(r.stdout).runs.filter((x) => x.report && x.meta?.agent).map((x) => x.meta.agent));
     else console.error(`tidy-tabs: org status failed for ${opt.org}; lane worker tabs are left alone`);
   }
+  const reviewedAgents = reviewedAgentsFromRecords(
+    laneSessions(checkout),
+    reviewRecords([checkout, ...mine.filter((w) => w.worktree?.is_linked_worktree).map((w) => w.worktree.checkout_path)]),
+  );
 
   const ledgerDir = opt['ledger-dir'] ?? path.join(checkout, '.lane/supervisor');
   const ledgers = [];
@@ -146,7 +207,7 @@ function main() {
   } catch { /* no ledger: sessions are ordered as unknown */ }
 
   const { close } = planTidy({
-    tabs, panes, agents, reportedAgents,
+    tabs, panes, agents, reportedAgents, reviewedAgents,
     sessionOrder: sessionOrderFromLedgers(ledgers),
     selfTab: process.env.HERDR_TAB_ID ?? null,
     keepSessions: Number(opt['keep-sessions']),

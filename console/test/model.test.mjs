@@ -156,15 +156,27 @@ test('only codes the organization issues are stripped; real names with numbers s
 test('a possessive record code does not leave a broken question title', () => {
   const t = today();
   t.project.item_prefixes = ['ENG', 'G', 'HUM'];
-  t.waiting = [{
+  const question = {
     ...t.waiting[0],
     id: 'HUM-8',
     title: "Confirm that ENG-12's openspec exclusion covers generated files?",
+  };
+  t.waiting = [question];
+  t.decided = [{
+    ...question,
+    kind: 'question',
+    answer: 'yes',
+    answered_by: 'human',
+    overruled: false,
+    at: at('17:00'),
   }];
-  const row = buildBoard({ today: t }).waiting[0];
+  const board = buildBoard({ today: t });
+  const row = board.waiting[0];
   assert.equal(row.title, `Question title depends on a record code ${NO_PLAIN}`);
   assert.equal(row.headline, `HUM-8 — Question title depends on a record code ${NO_PLAIN}`);
   assert.equal(Object.fromEntries(contextPairs(row)).title, "Confirm that ENG-12's openspec exclusion covers generated files?");
+  assert.equal(board.history[0].headline, `Question title depends on a record code ${NO_PLAIN}`);
+  assert.equal(Object.fromEntries(contextPairs(board.history[0])).title, "Confirm that ENG-12's openspec exclusion covers generated files?");
 });
 
 test('a decision summary is shown without codes, and marked when it had some', () => {

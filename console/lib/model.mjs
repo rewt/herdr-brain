@@ -148,7 +148,7 @@ function resultRow(q, visible, agents, today) {
   return {
     ...questionRow(q, visible),
     kind: 'result',
-    headline: q.title,
+    headline: questionTitle(q.title, visible),
     category: q.category,
     categoryWords: CATEGORY_WORDS[q.category] ?? q.category,
     handle: itemHandle(today, q.item) ?? itemForSession(today, d.session),
@@ -195,7 +195,7 @@ function historyRows(today, visible, prefixes) {
       rows.push({
         key: `a:${d.id}`,
         kind: 'answer',
-        headline: visible(d.title),
+        headline: questionTitle(d.title, visible),
         tag: d.category ?? 'no category',
         time: hhmm(d.at),
         state: `${answerWords(d.answer)} · ${whoAnswered(d.answered_by)}${d.overruled ? ' · overruled' : ''}`,

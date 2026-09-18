@@ -276,8 +276,12 @@ function sessionName(run, agent, tabs, prefixes, laneSession) {
     return stripCodes(`${kind} ${topic}`, prefixes);
   }
   const folder = agent?.cwd ? path.basename(agent.cwd) : '';
-  if (/^lane-[a-z0-9][a-z0-9-]*$/i.test(folder) && (!agent?.name || agent.name.startsWith(`${folder}-`))) {
-    return `lane ${folder.slice('lane-'.length)}`;
+  const laneTopic = /^lane-([a-z0-9][a-z0-9-]*)$/i.exec(folder)?.[1] ?? null;
+  const generatedTopic = /^lane-(.+)-[0-9a-f]{6}-[0-9a-f]{6}$/i.exec(agent?.name ?? '')?.[1] ?? null;
+  const generatedForLane = laneTopic && generatedTopic
+    && (generatedTopic === laneTopic || laneTopic.startsWith(`${generatedTopic}-`));
+  if (laneTopic && (!agent?.name || agent.name.startsWith(`${folder}-`) || generatedForLane)) {
+    return `lane ${laneTopic}`;
   }
   if (agent?.name) return stripCodes(agent.name, prefixes) || agent.name;
   const tab = agent?.tab ? tabs.get(agent.tab) : null;

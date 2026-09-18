@@ -179,8 +179,8 @@ test('an idle agent whose org run already finished is named after that run, and 
 test('an unregistered lane session is named from its worktree instead of a raw Herdr name', () => {
   const herdr = { ok: true, agents: [
     {
-      name: 'lane-seal-selector-mal-02a9f4', status: 'idle', tab: 'w1:t1', pane: 'w1:p1',
-      cwd: '/worktrees/bch-cloak/lane-seal-selector', workspace: 'w1', tool: 'claude',
+      name: 'lane-brain-console-9621c9-ebe725', status: 'idle', tab: 'w1:t1', pane: 'w1:p1',
+      cwd: '/worktrees/herdr-org/lane-brain-console-v1', workspace: 'w1', tool: 'claude',
     },
     {
       name: null, status: 'working', tab: 'w2:t1', pane: 'w2:p1',
@@ -189,8 +189,8 @@ test('an unregistered lane session is named from its worktree instead of a raw H
   ] };
   const b = board({ today: { ...boardToday(), running: [], agent_runs: [] }, herdr, tabs: [] });
   assert.deepEqual(boardRows(b).filter((r) => r.kind === 'session').map((r) => r.session).sort(), [
+    'lane brain-console-v1',
     'lane console-polish',
-    'lane seal-selector',
   ]);
 });
 

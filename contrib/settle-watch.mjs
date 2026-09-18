@@ -29,8 +29,9 @@ const { values: opt, positionals } = parseArgs({
     cwd: { type: 'string' },
     'lane-config': { type: 'string' },
     checklist: { type: 'string' },
-    model: { type: 'string', default: 'opus' },
-    effort: { type: 'string', default: 'high' },
+    model: { type: 'string' },
+    effort: { type: 'string' },
+    account: { type: 'string' },
     'permission-mode': { type: 'string', default: 'auto' },
     launcher: { type: 'string', default: path.join(os.homedir(), 'bin/ai') },
     'cmem-domain': { type: 'string', default: path.join(os.homedir(), 'development/claude-mem/bin/cmem-domain') },
@@ -46,7 +47,7 @@ const { values: opt, positionals } = parseArgs({
 
 const runId = positionals[0];
 if ((opt.open ? runId !== undefined : !/^R-\d+$/.test(runId ?? '')) || !opt.org || !opt.cwd || !opt['lane-config'] || !opt.checklist) {
-  console.error('usage: settle-watch.mjs (R-n [--spawn] | --open [--focus TEXT]) --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--dry-run]');
+  console.error('usage: settle-watch.mjs (R-n [--spawn] | --open [--focus TEXT]) --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--account NAME] [--model M] [--effort E] [--dry-run]');
   process.exit(2);
 }
 const dry = opt['dry-run'];
@@ -54,6 +55,22 @@ const subject = runId ?? 'executive';
 
 const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${msg}`);
 const die = (msg) => { log(`STOP: ${msg}`); notify(`settle-watch ${subject}: stopped`, msg); process.exit(1); };
+
+// Model and effort come from the lane config's route table so there is one place
+// to tune what each role costs, and the console can show the same names. --model
+// and --effort still override for a single launch; the old flat opus/high remains
+// the fallback when a route is missing, so a stale config never silently downgrades.
+const ROUTE_FOR = { settle: 'settle', continue: 'executive' };
+function route(mode) {
+  const key = ROUTE_FOR[mode] ?? mode;
+  let routes = {};
+  try { routes = JSON.parse(fs.readFileSync(opt['lane-config'], 'utf8')).routes ?? {}; }
+  catch (err) { log(`route table unreadable (${err.message}); using opus/high`); }
+  const r = routes[key] ?? {};
+  if (r.kind && r.kind !== 'claude') die(`route "${key}" is kind "${r.kind}", but settle-watch only starts claude sessions`);
+  if (!routes[key]) log(`no "${key}" route in ${opt['lane-config']}; using opus/high`);
+  return { key, model: opt.model ?? r.model ?? 'opus', effort: opt.effort ?? r.effort ?? 'high' };
+}
 
 function run(cmd, args, { env, quiet } = {}) {
   // Node's default 1 MB output cap killed a watcher once the org record grew (ENOBUFS).
@@ -205,10 +222,11 @@ const PERSONA_VARS = ['AI_PERSONA', 'CLAUDE_CONFIG_DIR', 'GH_CONFIG_DIR', 'CODEX
 function launchSettings() {
   const clean = { ...process.env };
   for (const v of PERSONA_VARS) delete clean[v];
-  const persona = spawnSync(opt.launcher, ['env'], { cwd: opt.cwd, env: clean, encoding: 'utf8' });
+  const personaArgs = opt.account ? ['env', opt.account] : ['env'];
+  const persona = spawnSync(opt.launcher, personaArgs, { cwd: opt.cwd, env: clean, encoding: 'utf8' });
   const env = (persona.stdout ?? '').split('\n').filter((l) => PERSONA_VARS.some((v) => l.startsWith(`${v}=`)));
   if (persona.status !== 0 || !env.some((l) => l.startsWith('CLAUDE_CONFIG_DIR='))) {
-    die(`${opt.launcher} env did not yield CLAUDE_CONFIG_DIR for ${opt.cwd}; refusing to start a session on an unknown account`);
+    die(`${opt.launcher} env ${opt.account ?? ''} did not yield CLAUDE_CONFIG_DIR for ${opt.cwd}; refusing to start a session on an unknown account`);
   }
   const args = [];
   const mem = spawnSync(opt['cmem-domain'], ['launch-args', 'claude', opt.cwd], { encoding: 'utf8' });
@@ -281,10 +299,13 @@ function openSession({ mode, r }) {
   const name = mode === 'settle' ? `settle-${runId.toLowerCase()}-${hhmm}` : `exec-${hhmm}`;
   const label = mode === 'settle' ? `settle ${runId}` : 'executive';
 
+  const pick = route(mode);
+  log(`route ${pick.key}: model ${pick.model}, effort ${pick.effort}${opt.account ? `, account ${opt.account}` : ''}`);
+
   const pane = newTab(label, env);
   const startArgs = ['agent', 'start', name, '--kind', 'claude', '--pane', pane, '--timeout', '120000', '--',
     ...extra, ...opt['add-dir'].flatMap((d) => ['--add-dir', d]),
-    '--model', opt.model, '--effort', opt.effort, '--permission-mode', opt['permission-mode'], '--name', name];
+    '--model', pick.model, '--effort', pick.effort, '--permission-mode', opt['permission-mode'], '--name', name];
   let started;
   for (let attempt = 1; attempt <= 4; attempt++) {
     if (!dry) sleep(3_000); // a new tab's shell needs a moment to reach its prompt

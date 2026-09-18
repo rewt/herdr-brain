@@ -191,7 +191,10 @@ test('an abandoned run frees its item and a late report is not ingested', () => 
   assert.match(ok(['abandon', 'R-1', '--note', 'session died']), /a later report will not be ingested/);
   assert.match(ok(['status']), /READY\n\s+RES-1/);
   ok(['start', 'RES-1', '--harness', 'claude-code']);
-  fs.writeFileSync(path.join(dir, 'runs/R-1/report.md'), report('run: R-1\noutcome: done\nsummary: Finished after all.'));
+  const late = path.join(dir, 'runs/R-1/report.md');
+  fs.writeFileSync(late, report('run: R-1\noutcome: done\nsummary: Finished after all.'));
+  assert.match(ok(['ingest', late, '--run', 'R-1']), /R-1: report skipped because the run was abandoned/);
+  fs.writeFileSync(late, 'not even a valid report\n');
   assert.match(ok(['sync']), /R-1: report skipped because the run was abandoned; it will not be ingested/);
   assert.match(ok(['show', 'RES-1']), /R-1 .*abandoned/);
   assert.equal(fs.existsSync(path.join(dir, 'reports/R-1.md')), false);

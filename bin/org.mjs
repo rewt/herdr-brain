@@ -543,6 +543,10 @@ function ingestFile(ctx, file, runHint) {
   return { ok: true, file: abs, warnings: parsed.warnings, ...result };
 }
 
+function printSkippedReport(runId) {
+  safeOut(`${runId}: report skipped because the run was abandoned; it will not be ingested\n`);
+}
+
 function printIngest(res) {
   if (!res.ok) {
     err(`${res.file}: not recorded\n`);
@@ -551,7 +555,7 @@ function printIngest(res) {
     return false;
   }
   if (res.skipped) {
-    safeOut(`${res.runId}: report skipped because the run was abandoned; it will not be ingested\n`);
+    printSkippedReport(res.runId);
     return true;
   }
   if (res.already) {
@@ -596,6 +600,10 @@ function sync(argv) {
   }
   let failed = 0;
   for (const run of waiting) {
+    if (run.abandoned) {
+      printSkippedReport(run.id);
+      continue;
+    }
     if (!printIngest(ingestFile(openOrg(), run.report_path, run.id))) failed++;
   }
   return failed ? 1 : 0;

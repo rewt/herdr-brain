@@ -31,11 +31,15 @@ function press(state, ...keys) {
   return { state: s, effects };
 }
 
-test('Enter on a session goes straight to it; on a question it opens the summary', () => {
+test('Enter on a session peeks at it without leaving; g goes there; on a question it opens the summary', () => {
   const onSession = press(start({ selectedKey: 'r:R-4' }), { return: true });
-  assert.deepEqual(onSession.effects, [{ type: 'go', key: 'r:R-4' }]);
-  assert.equal(onSession.state.popup, null);
+  assert.deepEqual(onSession.effects, []);
+  assert.deepEqual(onSession.state.popup, { kind: 'peek', key: 'r:R-4', scroll: 0, follow: true });
+  assert.deepEqual(press(start({ selectedKey: 'r:R-4' }), 'g').effects, [{ type: 'go', key: 'r:R-4' }]);
   assert.deepEqual(press(start({ selectedKey: 'r:R-4' }), 'f').effects, [{ type: 'go', key: 'r:R-4' }], 'f is kept as an alias');
+  const back = press(onSession.state, { escape: true });
+  assert.equal(back.state.popup, null, 'Esc comes back from the peek');
+  assert.equal(back.state.selectedKey, 'r:R-4', 'with the same row selected');
 
   const onQuestion = press(start(), { return: true });
   assert.deepEqual(onQuestion.effects, []);
@@ -55,8 +59,9 @@ test('s opens the summary; inside it 1-3 switch tabs, keys scroll, Enter goes, E
   const q = press(state, 'q');
   assert.ok(q.state.popup, 'q does not quit from a popup');
   assert.deepEqual(q.effects, []);
-  const go = press(state, { return: true });
-  assert.deepEqual(go.effects, [{ type: 'go', key: 'r:R-4' }]);
+  const enter = press(state, { return: true });
+  assert.deepEqual(enter.state.popup, { kind: 'peek', key: 'r:R-4', scroll: 0, follow: true }, 'Enter in the summary peeks');
+  assert.deepEqual(press(state, 'g').effects, [{ type: 'go', key: 'r:R-4' }]);
   assert.deepEqual(press(state, 'o').effects, [{ type: 'open', key: 'r:R-4', tab: 2 }]);
   ({ state } = press(state, { escape: true }));
   assert.equal(state.popup, null);
@@ -98,17 +103,19 @@ test('declining needs a one-line reason, then confirmation; n elsewhere says tas
 test('m and a right click open the row menu; its items depend on the row', () => {
   const session = B.groups[1].rows[0];
   const question = B.waiting[0];
-  assert.deepEqual(menuItems(session).map((i) => [i.label, i.hint]), [['Go to session', 'Enter'], ['Summary', 's']]);
-  assert.deepEqual(menuItems(question).map((i) => [i.label, i.hint]), [['Summary', 's'], ['Approve', 'y'], ['Decline', 'n']]);
+  assert.deepEqual(menuItems(session).map((i) => [i.label, i.hint]), [['Peek at its screen', 'Enter'], ['Reply in your words', 'r'], ['Go to session', 'g'], ['Summary', 's']]);
+  assert.deepEqual(menuItems(question).map((i) => [i.label, i.hint]), [['Summary', 's'], ['Approve', 'y'], ['Decline', 'n'], ['Have a session work it out', 'd']]);
   assert.deepEqual(menuItems(B.history[2]).map((i) => i.label), ['Summary', 'Overrule']);
 
   let { state, effects } = press(start({ selectedKey: 'r:R-4' }), 'm');
   assert.deepEqual(state.popup, { kind: 'menu', key: 'r:R-4', index: 0, x: 4, y: 7 });
-  ({ state, effects } = press(state, 'j', { return: true }));
+  ({ state, effects } = press(state, 'j', 'j', 'j', { return: true }));
   assert.deepEqual(state.popup, { kind: 'summary', key: 'r:R-4', tab: 0, scroll: 0 });
-  ({ state, effects } = press(start({ selectedKey: 'r:R-4' }), 'm', { return: true }));
+  ({ state, effects } = press(start({ selectedKey: 'r:R-4' }), 'm', 'j', 'j', { return: true }));
   assert.deepEqual(effects, [{ type: 'go', key: 'r:R-4' }]);
   assert.equal(state.popup, null);
+  ({ state } = press(start({ selectedKey: 'r:R-4' }), 'm', { return: true }));
+  assert.equal(state.popup.kind, 'peek');
   ({ state } = press(start(), 'm', { downArrow: true }, { return: true }));
   assert.equal(promptText(state).startsWith('Approve:'), true);
   ({ state } = press(start(), 'm', { escape: true }));
@@ -119,19 +126,20 @@ test('m and a right click open the row menu; its items depend on the row', () =>
   assert.equal(right.state.selectedKey, 'r:R-4');
   assert.deepEqual(right.state.popup, { kind: 'menu', key: 'r:R-4', index: 0, x: 30, y: 9 });
   const pick = reduceMouse(right.state, { button: 'left', x: 32, y: 11, press: true },
-    ctx(right.state, { hitAt: () => ({ type: 'menu', index: 1 }) }));
+    ctx(right.state, { hitAt: () => ({ type: 'menu', index: 3 }) }));
   assert.equal(pick.state.popup.kind, 'summary');
   const outside = reduceMouse(right.state, { button: 'left', x: 0, y: 0, press: true }, ctx(right.state));
   assert.equal(outside.state.popup, null);
   assert.deepEqual(outside.effects, [], 'a click outside a popup only closes it');
 });
 
-test('a left click on a session row goes to it; on a question it opens the summary; releases do nothing', () => {
+test('a left click on a session row peeks at it; on a question it opens the summary; releases do nothing', () => {
   const hitAt = (x, y) => ({ 3: { type: 'row', key: 'q:HUM-5' }, 9: { type: 'row', key: 'h:pane:w2:p1' } }[y] ?? null);
   const c = (s) => ctx(s, { hitAt });
   let r = reduceMouse(start(), { button: 'left', x: 5, y: 9, press: true }, c(start()));
   assert.equal(r.state.selectedKey, 'h:pane:w2:p1');
-  assert.deepEqual(r.effects, [{ type: 'go', key: 'h:pane:w2:p1' }]);
+  assert.deepEqual(r.effects, []);
+  assert.equal(r.state.popup.kind, 'peek');
   r = reduceMouse(start({ selectedKey: 'r:R-4' }), { button: 'left', x: 5, y: 3, press: true }, c(start()));
   assert.equal(r.state.popup.kind, 'summary');
   assert.equal(r.state.popup.key, 'q:HUM-5');
@@ -209,8 +217,11 @@ test('Escape never quits, q quits only from the list or history, and ? shows hel
   assert.equal(r.state.help, true);
   assert.deepEqual(press(r.state, 'q').effects, []);
   assert.equal(press(r.state, { escape: true }).state.help, false);
-  r = press(start(), 'r');
-  assert.deepEqual(r.effects, [{ type: 'reload' }]);
+  r = press(start(), 'R');
+  assert.deepEqual(r.effects, [{ type: 'reload' }], 'reload moved to R; r replies');
+  assert.deepEqual(press(start(), { escape: true }).effects, [], 'in a pane of its own, Esc never quits');
+  const popupCtx = (st) => ({ ...ctx(st), popupMode: true });
+  assert.deepEqual(reduce(start(), '', { escape: true }, popupCtx(start())).effects, [{ type: 'quit' }], 'summoned as a popup, Esc on the list closes it');
   assert.match(press(start(), 'p').state.message, /Only one project/);
   // Moving: arrows, j/k, pages, Home/End.
   assert.equal(press(start(), 'j', 'j').state.selectedKey, 'r:R-4');

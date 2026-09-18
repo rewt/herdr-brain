@@ -54,21 +54,25 @@ test('at 140 × 40 the screen has the segment header, Waiting, grouped sessions 
   assert.match(t[0], /^ \S* ?herdr-org \ue0b0 \S* ?20:50 \ue0b0 \S* ?4\/30 sessions today \ue0b0 \S* ?1 waiting on you \ue0b0 +\ue0b2 console 0\.0\.2 \ue0b2 \? help $/);
   assert.match(t[1], /^ \ue0b6 \S* ?WAITING ON YOU \ue0b4 ─+ \ue0b6 1 \ue0b4 $/);
   assert.match(t[2], /^ {3}! Promote the Herdr Brain console into main\? +tooling · recommend yes · asked 19:19 $/);
-  assert.match(t[3], /^ {5}SESSION {20}WHO {20}WHERE {14}UP {6}STATE {5}DOING/);
-  assert.match(t[4], /herdr-lanes \ue0b4 ~\/herdr-lanes ─+ \ue0b6 1 \ue0b4 $/);
-  assert.match(t[5], /^ {5}board-messages {13}Codex · unknown {8}lane-board-messag… unknown ■ blocked no description/);
-  assert.match(t[6], /herdr-org \ue0b4 ~\/herdr-org ─+ \ue0b6 3 \ue0b4 $/);
-  assert.match(t[7], /^ > {3}lane brain-console-v1 r3 {3}Claude Opus 5 · high {3}lane-brain-consol… 44m {5}● working Verifying correction round three +$/);
-  assert.match(t[8], /settle-r-4-1912 +Claude Fable 5\.1 +herdr-org +1h +✓ done +no description/);
-  assert.match(t[9], /lane relay r1 +Codex Astra · xhigh +lane-relay +20m +× gone +Port the relay to the new rules\./);
-  assert.ok(f.lines[7].spans.every((s) => s.bg === 'selected'), 'the selected row is one band');
-  assert.equal(f.lines[7].spans.find((s) => s.text === 'Claude').fg, 'claude');
-  assert.equal(f.lines[5].spans.find((s) => s.text.startsWith('■')).fg, 'blocked');
+  // What each answer does sits under the question, so it can be decided without opening anything.
+  assert.match(t[3], /^ {7}y {3}yes  Merged\.  ← recommended +$/);
+  assert.match(t[4], /^ {7}n {3}no {3}Stays in its lane\. +$/);
+  assert.equal(f.lines[3].spans.find((s) => s.text.includes('recommended')).fg, 'done');
+  assert.match(t[5], /^ {5}SESSION {20}WHO {20}WHERE {14}UP {6}STATE {5}DOING/);
+  assert.match(t[6], /herdr-lanes \ue0b4 ~\/herdr-lanes ─+ \ue0b6 1 \ue0b4 $/);
+  assert.match(t[7], /^ {5}board-messages {13}Codex · unknown {8}lane-board-messag… unknown ■ blocked no description/);
+  assert.match(t[8], /herdr-org \ue0b4 ~\/herdr-org ─+ \ue0b6 3 \ue0b4 $/);
+  assert.match(t[9], /^ > {3}lane brain-console-v1 r3 {3}Claude Opus 5 · high {3}lane-brain-consol… 44m {5}● working Verifying correction round three +$/);
+  assert.match(t[10], /settle-r-4-1912 +Claude Fable 5\.1 +herdr-org +1h +✓ done +no description/);
+  assert.match(t[11], /lane relay r1 +Codex Astra · xhigh +lane-relay +20m +× gone +Port the relay to the new rules\./);
+  assert.ok(f.lines[9].spans.every((s) => s.bg === 'selected'), 'the selected row is one band');
+  assert.equal(f.lines[9].spans.find((s) => s.text === 'Claude').fg, 'claude');
+  assert.equal(f.lines[7].spans.find((s) => s.text.startsWith('■')).fg, 'blocked');
   // Pinned bottom: rule, Task, Where/Who/Goal and Review launch, footer.
   assert.match(t[36], /^─{140}$/);
   assert.match(t[37], /^ Task {3}n {2}Describe the outcome\. Enter adds a line\. +$/);
   assert.match(t[38], /^ {8}Where {2}choose repository {4}Who {2}choose route {4}Goal {2}choose goal +\ue0b6 Review launch \ue0b4 $/);
-  assert.match(t[39], /^ LIST \ue0b0 {2}j\/k {2}select {3}Enter {2}go to session {3}s {2}summary {3}n {2}new task {3}m {2}menu {3}h {2}history {3}\/ {2}scope {3}\? {2}help {3}q {2}quit/);
+  assert.match(t[39], /^ LIST \ue0b0 {2}j\/k {2}select {3}Enter {2}peek {3}r {2}reply {3}g {2}go there {3}s {2}summary {3}n {2}new task {3}m {2}menu {3}h {2}history {3}\? {2}help {3}q {2}quit/);
   assert.doesNotMatch(t.join('\n'), /DECIDED|FINISHED|SESSION NOTES/, 'no Decided or Finished list and no reader on the main screen');
   assert.doesNotMatch(t.join('\n'), CODE);
   // No rail below 180 columns.
@@ -79,8 +83,8 @@ test('at 100 columns WHERE goes; at 80 WHERE and UP go and DOING takes a second 
   const mid = renderFrame(view(), 100, 30);
   assertCanvas(mid, 100, 30, '100');
   const m = text(mid);
-  assert.match(m[3], /^ {5}SESSION {16}WHO {20}UP {6}STATE {5}DOING/);
-  assert.match(m[7], /^ > {3}lane brain-console-v1… Claude Opus 5 · high {3}44m {5}● working Verifying correction round th… $/);
+  assert.match(m[5], /^ {5}SESSION {16}WHO {20}UP {6}STATE {5}DOING/);
+  assert.match(m[9], /^ > {3}lane brain-console-v1… Claude Opus 5 · high {3}44m {5}● working Verifying correction round th… $/);
   assert.doesNotMatch(m.join('\n'), /WHERE|lane-brain-console-v1 /);
   assert.match(m[26], /^─{100}$/);
   assert.match(m[28], /Where +choose repository +Who +choose route +Goal +choose goal +\ue0b6 Review launch \ue0b4 $/);
@@ -90,6 +94,7 @@ test('at 100 columns WHERE goes; at 80 WHERE and UP go and DOING takes a second 
   const n = text(narrow);
   assert.match(n[0], /herdr-org .*20:50 .*4\/30 .*1 waiting .*\? help $/);
   assert.match(n[2], /^ {2}! Promote the Herdr Brain console into main\? +yes $/);
+  assert.match(n[3], /^ {5}y {3}yes +← recommended $/, 'at 80 columns a choice shows its label, not what it causes');
   assert.doesNotMatch(n.join('\n'), /SESSION +WHO|WHERE|44m/);
   const at = n.findIndex((l) => l.includes('lane brain-console-v1 r3'));
   assert.match(n[at], /^ > ?lane brain-console-v1 r3 +Claude Opus 5 · high +● working $/);
@@ -97,7 +102,7 @@ test('at 100 columns WHERE goes; at 80 WHERE and UP go and DOING takes a second 
   assert.ok(narrow.lines[at + 1].spans.every((s) => s.bg === 'selected'), 'both lines of the selected row are banded');
   assert.match(n[21], /^─{80}$/);
   assert.match(n[22], /^ Task /);
-  assert.match(n[23], /^ LIST \ue0b0 {2}j\/k {2}select {3}Enter {2}go {3}s {2}summary {3}n {2}task {3}\? {2}help {3}q {2}quit/);
+  assert.match(n[23], /^ LIST \ue0b0 {2}j\/k {2}select {3}Enter {2}peek {3}r {2}reply {3}g {2}go {3}\? {2}help {3}q {2}quit/, 'help and quit always fit');
   assert.deepEqual(layoutFor(80), { kind: 'narrow', mark: 2, session: 45, who: 20, where: 0, up: 0, state: 9, doing: 76 });
 });
 
@@ -120,7 +125,8 @@ test('the rail appears only at 180 columns, and its choices are clickable', () =
 test('clicks map to the rows under them, including both lines of a narrow row', () => {
   const f = renderFrame(view(), 140, 40);
   assert.deepEqual(hitAt(f.hits, 20, 2), { type: 'row', key: 'q:HUM-5' });
-  assert.deepEqual(hitAt(f.hits, 20, 7), { type: 'row', key: 'r:R-4' });
+  assert.deepEqual(hitAt(f.hits, 20, 3), { type: 'option', key: 'q:HUM-5', option: 'y' }, 'a click on a choice picks it');
+  assert.deepEqual(hitAt(f.hits, 20, 9), { type: 'row', key: 'r:R-4' });
   assert.equal(hitAt(f.hits, 20, 1), null, 'a group header is not a row');
   assert.equal(hitAt(f.hits, 20, 0), null);
   assert.equal(hitAt(f.hits, 20, 39), null);
@@ -143,7 +149,8 @@ test('plain glyphs and NO_COLOR give a readable screen with no character outside
   const t = text(renderFrame(view({}, { glyphs: 'plain' }), 140, 40));
   assert.match(t[0], /^ herdr-org > 20:50 > 4\/30 sessions today > ! 1 waiting on you > +< console 0\.0\.2 < \? help $/);
   assert.match(t[1], /^ \| WAITING ON YOU \| -+ \| 1 \| $/);
-  assert.match(t[7], / > {3}lane brain-console-v1 r3 {3}Claude Opus 5 - high {3}lane-brain-consol~ 44m {5}working {3}Verifying/);
+  assert.match(t[3], /^ {7}y {3}yes  Merged\.  < recommended +$/);
+  assert.match(t[9], / > {3}lane brain-console-v1 r3 {3}Claude Opus 5 - high {3}lane-brain-consol~ 44m {5}working {3}Verifying/);
 });
 
 test('s shows the summary over a dimmed screen; tabs, scrolling and the Context codes stay inside it', () => {
@@ -162,7 +169,7 @@ test('s shows the summary over a dimmed screen; tabs, scrolling and the Context 
   assert.deepEqual(hitAt(f.hits, 70, top + 5), { type: 'popup' });
   assert.equal(hitAt(f.hits, 2, top + 5).type, 'row', 'beside the popup a click lands on the screen behind (which closes the popup)');
   assert.equal(f.lines.at(-1).spans.map((s) => s.text).join('').includes('SUMMARY'), true);
-  assert.match(t.at(-1), /1-3 +tabs .*Enter +go to session .*Esc +close/);
+  assert.match(t.at(-1), /1-3 +tabs .*Enter +peek .*Esc +close/);
 
   f = renderFrame(view({ popup: { kind: 'summary', key: 'r:R-4', tab: 1, scroll: 5 } }), 140, 40);
   t = text(f);
@@ -190,15 +197,17 @@ test('s shows the summary over a dimmed screen; tabs, scrolling and the Context 
 });
 
 test('the menu opens at its row; the scope and help popups list their choices', () => {
-  let f = renderFrame(view({ popup: { kind: 'menu', key: 'r:R-4', index: 1, x: 30, y: 7 } }), 140, 40);
+  let f = renderFrame(view({ popup: { kind: 'menu', key: 'r:R-4', index: 3, x: 30, y: 9 } }), 140, 40);
   let t = text(f);
-  assert.match(t[8].slice(30), /^╭─+╮/);
-  assert.match(t[9].slice(30), /^│ {3}Go to session +Enter │/);
-  assert.match(t[10].slice(30), /^│ > Summary +s │/);
+  assert.match(t[10].slice(30), /^╭─+╮/);
+  assert.match(t[11].slice(30), /^│ {3}Peek at its screen +Enter │/);
+  assert.match(t[12].slice(30), /^│ {3}Reply in your words +r │/);
+  assert.match(t[13].slice(30), /^│ {3}Go to session +g │/);
+  assert.match(t[14].slice(30), /^│ > Summary +s │/);
   assert.equal(f.lines[0].spans[0].fg, renderFrame(view(), 140, 40).lines[0].spans[0].fg, 'the menu does not dim the screen');
-  assert.deepEqual(hitAt(f.hits, 35, 9), { type: 'menu', index: 0 });
-  assert.deepEqual(hitAt(f.hits, 35, 8), { type: 'popup' });
-  assert.deepEqual(hitAt(f.hits, 5, 9), { type: 'row', key: 'r:R-6' }, 'the row beside the menu still maps');
+  assert.deepEqual(hitAt(f.hits, 35, 11), { type: 'menu', index: 0 });
+  assert.deepEqual(hitAt(f.hits, 35, 10), { type: 'popup' });
+  assert.deepEqual(hitAt(f.hits, 5, 11), { type: 'row', key: 'r:R-6' }, 'the row beside the menu still maps');
   // Near the bottom it opens above the row.
   f = renderFrame(view({ popup: { kind: 'menu', key: 'r:R-4', index: 0, x: 130, y: 34 } }), 140, 40);
   t = text(f);
@@ -215,7 +224,8 @@ test('the menu opens at its row; the scope and help popups list their choices', 
   f = renderFrame(view({ help: true }), 100, 30);
   t = text(f).join('\n');
   assert.match(t, /Herdr Brain console 0\.0\.2/);
-  assert.match(t, /Enter, left click +go to the session/);
+  assert.match(t, /Enter, left click +peek at the session here/);
+  assert.match(t, /Ctrl\+Alt\+B, or Ctrl\+B then `/);
   assert.match(t, /m, right click +row menu/);
 });
 

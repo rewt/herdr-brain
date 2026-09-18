@@ -1,12 +1,16 @@
 // Keys and clicks to state changes and effects. Pure: reduce(state, input, key, ctx)
 // and reduceMouse(state, event, ctx) return { state, effects }. The session performs
-// the effects (quit, answer, open, go, reload, project) and never decides anything.
+// the effects (quit, answer, act, open, go, reload, project) and never decides anything.
 //
-// ctx: { rows, scopeItems, listPage, popupPage, popupMax, projectCount, menuX,
+// ctx: { rows, scopeItems, listPage, popupPage, popupMax, projectCount, menuX, popupMode,
 //        lineOf(key) → screen line, hitAt(x, y) → target }
 // rows are the rows of the current view in screen order; a target is
-// { type: 'row', key } | { type: 'menu', index } | { type: 'scope', index } |
-// { type: 'tab', tab } | { type: 'popup' } | null.
+// { type: 'row', key } | { type: 'option', key, option } | { type: 'menu', index } |
+// { type: 'scope', index } | { type: 'tab', tab } | { type: 'popup' } | null.
+//
+// Acting on what a session left behind (a 'result' row) is one `act` effect:
+//   { type: 'act', verb: 'pick' | 'send' | 'later' | 'drop' | 'dispatch', key, option?, text? }
+// Every verb that reaches into a session or cannot be taken back is confirmed first.
 
 export function initialState() {
   return {
@@ -15,9 +19,10 @@ export function initialState() {
     historyKey: null,
     listOffset: 0,
     follow: true, // keep the selection in view; the wheel turns this off
-    popup: null, // { kind: 'summary', key, tab, scroll } | { kind: 'menu', key, index, x, y } | { kind: 'scope', index }
+    popup: null, // { kind: 'summary', key, tab, scroll } | { kind: 'peek', key, scroll, follow } | { kind: 'menu', key, index, x, y } | { kind: 'scope', index }
     help: false,
-    mode: null, // { kind: 'reason' | 'confirm', action, answer, question, headline, text }
+    mode: null, // { kind: 'reason' | 'confirm', action, answer, question, headline, text } | { kind: 'reply' | 'act', ... }
+    unfolded: [], // folds inside Waiting on you that are open: 'later', 'stages'
     scope: { repo: null, view: 'all' },
     message: '',
     messageStyle: 'status',
@@ -43,6 +48,10 @@ function verb(m) {
 export function promptParts(state) {
   const m = state.mode;
   if (!m) return null;
+  if (m.kind === 'reply') {
+    return { head: `Reply to ${m.session}: `, title: '', mid: '', reason: m.text, keep: 'end', tail: '▏  Enter send · Esc cancel' };
+  }
+  if (m.kind === 'act') return actParts(m);
   if (m.kind === 'reason') {
     return { head: `${verb(m)} “`, title: m.headline, mid: '”. Reason: ', reason: m.text, keep: 'end', tail: '▏  Enter next · Esc cancel' };
   }
@@ -50,6 +59,25 @@ export function promptParts(state) {
   return m.text
     ? { head: `${verb(m)}: `, title: question, mid: ' (reason: ', reason: m.text, keep: 'start', tail: ') Enter to confirm, Esc to cancel' }
     : { head: `${verb(m)}: `, title: question, mid: '', reason: '', keep: 'start', tail: ' Enter to confirm, Esc to cancel' };
+}
+
+function actParts(m) {
+  const confirm = ' Enter to confirm, Esc to cancel';
+  switch (m.verb) {
+    case 'pick':
+      if (m.via === 'key') return { head: `Press ${m.option} in ${m.session} (“`, title: m.label, mid: '”)?', reason: '', keep: 'start', tail: confirm };
+      return { head: `Send to ${m.session}: “`, title: m.text, mid: '”', reason: '', keep: 'start', tail: '  Enter send · e edit · Esc cancel' };
+    case 'send':
+      return { head: `Send ${m.draft ? 'Claude’s draft ' : ''}to ${m.session}: “`, title: m.text, mid: '”', reason: '', keep: 'start', tail: '  Enter send · e edit · Esc cancel' };
+    case 'drop':
+      return m.report
+        ? { head: 'Clear “', title: m.headline, mid: '” from the list?', reason: '', keep: 'start', tail: confirm }
+        : { head: 'Drop “', title: m.headline, mid: '” for good? It will not come back.', reason: '', keep: 'start', tail: confirm };
+    case 'dispatch':
+      return { head: 'Start a session to work out “', title: m.headline, mid: '”? It comes back here with the choices.', reason: '', keep: 'start', tail: confirm };
+    default:
+      return { head: `${m.verb} “`, title: m.headline ?? '', mid: '”?', reason: '', keep: 'start', tail: confirm };
+  }
 }
 
 export function promptText(state) {
@@ -60,12 +88,23 @@ export function promptText(state) {
 // The row menu (right click or m).
 export function menuItems(row) {
   if (!row) return [];
+  const has = (a) => row.actions?.includes(a);
   const items = [];
-  if (row.kind === 'session') items.push({ label: 'Go to session', hint: 'Enter', action: 'go' });
+  if (row.kind === 'fold') return [{ label: row.open ? 'Hide them' : 'Show them', hint: 'Enter', action: 'fold' }];
+  if (has('peek')) items.push({ label: 'Peek at its screen', hint: 'Enter', action: 'peek' });
+  if (row.kind === 'result') {
+    for (const o of (row.options ?? []).slice(0, 9)) items.push({ label: `${o.key}  ${o.label}`, hint: o.key, action: 'pick', option: o.key });
+    if (has('draft')) items.push({ label: 'Send Claude’s draft', hint: 'y', action: 'draft' });
+  }
+  if (has('reply')) items.push({ label: 'Reply in your words', hint: 'r', action: 'reply' });
+  if (has('go')) items.push({ label: 'Go to session', hint: 'g', action: 'go' });
   items.push({ label: 'Summary', hint: 's', action: 'summary' });
-  if (row.actions?.includes('approve')) items.push({ label: 'Approve', hint: 'y', action: 'approve' });
-  if (row.actions?.includes('decline')) items.push({ label: 'Decline', hint: 'n', action: 'decline' });
-  if (row.actions?.includes('overrule')) items.push({ label: 'Overrule', hint: 'n', action: 'overrule' });
+  if (has('approve')) items.push({ label: 'Approve', hint: 'y', action: 'approve' });
+  if (has('decline')) items.push({ label: 'Decline', hint: 'n', action: 'decline' });
+  if (has('dispatch')) items.push({ label: 'Have a session work it out', hint: 'd', action: 'dispatch' });
+  if (has('overrule')) items.push({ label: 'Overrule', hint: 'n', action: 'overrule' });
+  if (has('later')) items.push({ label: 'Save for later', hint: 'l', action: 'later' });
+  if (has('drop')) items.push({ label: ['finished', 'report'].includes(row.category) ? 'Clear, I have read it' : 'Drop it', hint: 'x', action: 'drop' });
   return items;
 }
 
@@ -110,16 +149,118 @@ function summary(state, key) {
   return { ...state, popup: { kind: 'summary', key, tab: 0, scroll: 0 }, message: '' };
 }
 
+// A session row always asks: the session says why it cannot go (gone, Herdr down).
 function goTo(state, row) {
-  if (row?.kind !== 'session') return done(say(state, 'A question has no session to go to; y or n answers it.', 'warn'));
-  return done(state, [{ type: 'go', key: row.key }]);
+  if (row?.kind === 'session' || row?.actions?.includes('go')) return done(state, [{ type: 'go', key: row.key }]);
+  const why = row?.kind === 'question' ? 'A question has no session to go to; y or n answers it.'
+    : row?.kind === 'result' ? 'That session is no longer in Herdr; there is nothing to go to.'
+      : 'Nothing to go to here.';
+  return done(say(state, why, 'warn'));
 }
 
-// Enter or a left click on a row.
+function peek(state, row) {
+  return { ...state, popup: { kind: 'peek', key: row.key, scroll: 0, follow: true }, message: '' };
+}
+
+function toggleFold(state, row) {
+  const open = state.unfolded ?? [];
+  const unfolded = open.includes(row.fold) ? open.filter((f) => f !== row.fold) : [...open, row.fold];
+  return { ...state, unfolded, follow: true, message: '' };
+}
+
+// Enter or a left click on a row: a session is peeked at without leaving the
+// console; a question opens its summary; a fold opens or closes.
 function activate(state, row) {
   if (!row) return done(state);
-  if (row.kind === 'session') return goTo(state, row);
+  if (row.kind === 'fold') return done(toggleFold(state, row));
+  if (row.actions?.includes('peek')) return done(peek(state, row));
   return done(summary(state, row.key));
+}
+
+const isReport = (row) => ['finished', 'report'].includes(row?.category);
+
+// The verbs on what a session left behind. Each returns null when it does not
+// apply to the row, so the caller can fall back to what the key meant before.
+function pick(state, row, option) {
+  if (row?.kind !== 'result' && row?.kind !== 'question') return null;
+  if (row.kind === 'question') {
+    if (option === 'y') return ask(state, row, 'approve');
+    if (option === 'n') return ask(state, row, 'decline');
+    return done(say(state, 'This question is answered with y or n.', 'warn'));
+  }
+  const o = row.options?.find((x) => x.key === String(option));
+  if (!o) {
+    const keys = (row.options ?? []).map((x) => x.key);
+    return done(say(state, keys.length ? `Pick ${keys.join(', ')}.` : 'No choices were worked out for this one; r replies in your own words.', 'warn'));
+  }
+  const mode = { kind: 'act', verb: 'pick', key: row.key, option: o.key, label: o.label, via: row.via, session: row.session, headline: row.headline, text: o.label };
+  return done(say({ ...state, mode }, ''));
+}
+
+function sendDraft(state, row) {
+  if (!row?.suggestion) return null;
+  return done(say({ ...state, mode: { kind: 'act', verb: 'send', draft: true, key: row.key, session: row.session, headline: row.headline, text: row.suggestion } }, ''));
+}
+
+function reply(state, row, text = '') {
+  if (!row?.actions?.includes('reply')) {
+    return done(say(state, row?.kind === 'result' ? 'That session is no longer in Herdr, so nothing can be sent to it.' : 'Nothing to reply to here.', 'warn'));
+  }
+  return done(say({ ...state, mode: { kind: 'reply', key: row.key, session: row.session, text } }, ''));
+}
+
+function later(state, row) {
+  if (!row?.actions?.includes('later')) return done(say(state, row?.later ? 'It is already saved for later.' : 'Only what a session left behind can be saved for later.', 'warn'));
+  return done(say(state, `Saving for later: ${row.headline}…`), [{ type: 'act', verb: 'later', key: row.key }]);
+}
+
+function drop(state, row) {
+  if (!row?.actions?.includes('drop')) return done(say(state, 'Only what a session left behind can be dropped from here.', 'warn'));
+  return done(say({ ...state, mode: { kind: 'act', verb: 'drop', key: row.key, report: isReport(row), session: row.session, headline: row.headline } }, ''));
+}
+
+function dispatch(state, row) {
+  if (!row?.actions?.includes('dispatch')) return done(say(state, 'Only a question can be sent off to be worked out.', 'warn'));
+  return done(say({ ...state, mode: { kind: 'act', verb: 'dispatch', key: row.key, headline: row.headline } }, ''));
+}
+
+// y on a result: Claude's draft when there is one, else the recommended choice.
+function accept(state, row) {
+  if (row?.kind !== 'result') return null;
+  if (row.suggestion) return sendDraft(state, row);
+  if (row.recommendKey) return pick(state, row, row.recommendKey);
+  return done(say(state, row.options?.length ? 'Nothing is recommended; pick a number.' : 'Nothing to accept here; r replies, x clears it.', 'warn'));
+}
+
+// n on a result: the choice that says no, when there is exactly one.
+function refuse(state, row) {
+  if (row?.kind !== 'result') return null;
+  const no = (row.options ?? []).filter((o) => /^no\b/i.test(o.label.trim()));
+  if (no.length === 1) return pick(state, row, no[0].key);
+  return done(say(state, 'Pick a number, or r to reply in your own words.', 'warn'));
+}
+
+// The keys that act on a row, shared by the list and the peek.
+function rowVerb(state, row, input) {
+  if (/^[1-9]$/.test(input)) return row?.kind === 'result' ? pick(state, row, input) : null;
+  switch (input) {
+    case 'g':
+      return goTo(state, row);
+    case 'r':
+      return row?.kind === 'result' || row?.kind === 'session' ? reply(state, row) : null;
+    case 'l':
+      return row?.kind === 'result' ? later(state, row) : null;
+    case 'x':
+      return row?.kind === 'result' ? drop(state, row) : null;
+    case 'd':
+      return row?.kind === 'question' ? dispatch(state, row) : null;
+    case 'y':
+      return accept(state, row);
+    case 'n':
+      return refuse(state, row);
+    default:
+      return null;
+  }
 }
 
 function ask(state, row, action) {
@@ -138,9 +279,19 @@ function pickMenu(state, ctx, index) {
   const item = menuItems(row)[index];
   const closed = { ...state, popup: null };
   if (!item) return done(closed);
-  if (item.action === 'go') return goTo(closed, row);
-  if (item.action === 'summary') return done(summary(closed, row.key));
-  return ask(closed, row, item.action) ?? done(closed);
+  switch (item.action) {
+    case 'go': return goTo(closed, row);
+    case 'summary': return done(summary(closed, row.key));
+    case 'peek': return done(peek(closed, row));
+    case 'fold': return done(toggleFold(closed, row));
+    case 'pick': return pick(closed, row, item.option) ?? done(closed);
+    case 'draft': return sendDraft(closed, row) ?? done(closed);
+    case 'reply': return reply(closed, row);
+    case 'later': return later(closed, row);
+    case 'drop': return drop(closed, row);
+    case 'dispatch': return dispatch(closed, row);
+    default: return ask(closed, row, item.action) ?? done(closed);
+  }
 }
 
 function pickScope(state, ctx, index) {
@@ -165,20 +316,48 @@ function toHistory(state, ctx, on) {
   return { ...state, view: 'history', historyKey: first, listOffset: 0, follow: true, message: '' };
 }
 
+function typed(text, input, key, max) {
+  if (key.backspace || key.delete) return [...text].slice(0, -1).join('');
+  if (input && !key.ctrl && !key.meta && !key.tab && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow) {
+    return (text + input).replace(/[\r\n\t]+/g, ' ').replace(/[\x00-\x1f\x7f]/g, '').slice(0, max);
+  }
+  return null;
+}
+
 function modeKeys(state, input, key) {
   const m = state.mode;
+  if (m.kind === 'reply') {
+    if (key.escape) return done(say({ ...state, mode: null }, 'Cancelled; nothing was sent.'));
+    if (key.return) {
+      if (!m.text.trim()) return done(say(state, 'Type the reply first, or Esc to cancel.', 'warn'));
+      return done(say({ ...state, mode: null }, `Sending to ${m.session}…`), [{ type: 'act', verb: 'send', key: m.key, text: m.text.trim() }]);
+    }
+    const text = typed(m.text, input, key, 2000);
+    return done(text === null ? state : { ...state, mode: { ...m, text } });
+  }
+  if (m.kind === 'act') {
+    if (key.escape) return done(say({ ...state, mode: null }, m.verb === 'drop' || m.verb === 'dispatch' ? 'Cancelled; nothing changed.' : 'Cancelled; nothing was sent.'));
+    if (key.return) {
+      const effect = { type: 'act', verb: m.verb, key: m.key };
+      if (m.verb === 'pick') effect.option = m.option;
+      if (m.verb === 'send') effect.text = m.text;
+      const busy = { pick: m.via === 'key' ? `Pressing ${m.option} in ${m.session}…` : `Sending to ${m.session}…`, send: `Sending to ${m.session}…`, drop: 'Updating the list…', dispatch: 'Starting a session…' };
+      return done(say({ ...state, mode: null, popup: m.verb === 'drop' ? null : state.popup }, busy[m.verb] ?? ''), [effect]);
+    }
+    // e turns a proposed message into a reply to edit before sending.
+    if (input === 'e' && (m.verb === 'send' || (m.verb === 'pick' && m.via !== 'key'))) {
+      return done(say({ ...state, mode: { kind: 'reply', key: m.key, session: m.session, text: m.text } }, ''));
+    }
+    return done(say(state, 'Enter to confirm, Esc to cancel.'));
+  }
   if (key.escape) return done(say({ ...state, mode: null }, 'Cancelled; nothing was recorded.'));
   if (m.kind === 'reason') {
     if (key.return) {
       if (!m.text.trim()) return done(say(state, 'A reason is required (one line).', 'warn'));
       return done(say({ ...state, mode: { ...m, kind: 'confirm', text: m.text.trim() } }, ''));
     }
-    if (key.backspace || key.delete) return done({ ...state, mode: { ...m, text: [...m.text].slice(0, -1).join('') } });
-    if (input && !key.ctrl && !key.meta && !key.tab && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow) {
-      const text = (m.text + input).replace(/[\r\n\t]+/g, ' ').replace(/[\x00-\x1f\x7f]/g, '');
-      return done({ ...state, mode: { ...m, text: text.slice(0, 300) } });
-    }
-    return done(state);
+    const text = typed(m.text, input, key, 300);
+    return done(text === null ? state : { ...state, mode: { ...m, text } });
   }
   if (key.return) {
     const popup = state.popup?.key === `q:${m.question}` || state.popup?.key === `a:${m.question}` ? null : state.popup;
@@ -198,12 +377,40 @@ function summaryKeys(state, input, key, ctx) {
   if (['1', '2', '3'].includes(input)) return done({ ...state, popup: { ...p, tab: Number(input) - 1, scroll: 0 } });
   const nav = navKey(input, key, page);
   if (nav) return done({ ...state, popup: { ...p, scroll: Math.min(max, Math.max(0, nav(p.scroll, max))) } });
-  if (key.return || input === 'f') return row?.kind === 'session' ? goTo(state, row) : done(say(state, 'A question has no session to go to; y or n answers it.', 'warn'));
+  if (key.return) return row?.actions?.includes('peek') ? done(peek({ ...state, popup: null }, row)) : goTo(state, row);
+  if (input === 'f') return goTo(state, row);
   if (input === 'o') return done(state, [{ type: 'open', key: p.key, tab: p.tab }]);
-  if (input === 'y') return ask(state, row, 'approve');
-  if (input === 'n') return ask(state, row, 'decline') ?? done(say(state, 'Nothing to decline here.', 'warn'));
+  if (input === 'y' && row?.kind !== 'result') return ask(state, row, 'approve');
+  if (input === 'n' && row?.kind !== 'result') return ask(state, row, 'decline') ?? done(say(state, 'Nothing to decline here.', 'warn'));
+  const verb = rowVerb(state, row, input);
+  if (verb) return verb;
   if (input === 'q') return done(say(state, 'q quits from the list; press Esc first.'));
   if (input === '?') return done({ ...state, help: true });
+  return done(state);
+}
+
+// The peek: a session's own screen inside the console. It follows the end
+// until the operator scrolls up; End or G follows again. Esc comes back to
+// the list with the same row selected.
+function peekKeys(state, input, key, ctx) {
+  const p = state.popup;
+  const row = rowByKey(ctx, p.key);
+  const page = Math.max(1, ctx.popupPage ?? 10);
+  const max = Math.max(0, ctx.popupMax ?? 0);
+  if (key.escape) return done({ ...state, popup: null });
+  if (key.end || input === 'G') return done({ ...state, popup: { ...p, scroll: max, follow: true } });
+  const at = p.follow ? max : p.scroll;
+  const nav = key.home ? () => 0 : navKey(input, key, page);
+  if (nav) {
+    const scroll = Math.min(max, Math.max(0, nav(at, max)));
+    return done({ ...state, popup: { ...p, scroll, follow: scroll >= max } });
+  }
+  if (input === 's') return done(summary({ ...state, popup: null }, p.key));
+  if (input === 'q') return done(say(state, 'q quits from the list; Esc goes back to it.'));
+  if (input === '?') return done({ ...state, help: true });
+  const verb = rowVerb(state, row, input);
+  if (verb) return verb;
+  if (key.return) return goTo(state, row);
   return done(state);
 }
 
@@ -226,6 +433,7 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
 
   const p = state.popup;
   if (p?.kind === 'summary') return summaryKeys(state, input, key, ctx);
+  if (p?.kind === 'peek') return peekKeys(state, input, key, ctx);
   if (p?.kind === 'menu') {
     const row = rowByKey(ctx, p.key);
     const items = menuItems(row);
@@ -240,6 +448,8 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
 
   if (key.escape) {
     if (state.view === 'history') return done(toHistory(state, ctx, false));
+    // Summoned as a Herdr popup, Esc on the list closes it, back to the pane below.
+    if (ctx.popupMode) return done(state, [{ type: 'quit' }]);
     return done(state.message ? say(state, '') : state);
   }
 
@@ -249,6 +459,10 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
   const row = rowByKey(ctx, cursorKey(state));
   if (key.return) return activate(state, row);
   if (key.tab) return done(say(state, LAUNCH_LATER));
+  if (state.view !== 'history') {
+    const verb = rowVerb(state, row, input);
+    if (verb) return verb;
+  }
   switch (input) {
     case 'f':
       return goTo(state, row);
@@ -279,7 +493,7 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
       return done({ ...state, help: true });
     case 'q':
       return done(state, [{ type: 'quit' }]);
-    case 'r':
+    case 'R':
       return done(say(state, 'Reloading…'), [{ type: 'reload' }]);
     case 'p':
       if ((ctx.projectCount ?? 1) < 2) return done(say(state, 'Only one project is configured.'));
@@ -298,6 +512,11 @@ export function reduceMouse(state, event, ctx = { rows: [] }) {
       const max = Math.max(0, ctx.popupMax ?? 0);
       return done({ ...state, popup: { ...p, scroll: Math.min(max, Math.max(0, p.scroll + step)) } });
     }
+    if (p?.kind === 'peek') {
+      const max = Math.max(0, ctx.popupMax ?? 0);
+      const scroll = Math.min(max, Math.max(0, (p.follow ? max : p.scroll) + step));
+      return done({ ...state, popup: { ...p, scroll, follow: scroll >= max } });
+    }
     if (p || state.help) return done(state);
     return done({ ...state, listOffset: Math.max(0, (state.listOffset ?? 0) + step), follow: false });
   }
@@ -314,6 +533,12 @@ export function reduceMouse(state, event, ctx = { rows: [] }) {
     return done({ ...state, popup: null });
   }
   if (target?.type === 'scope') return left ? pickScope(state, ctx, target.index) : done(state);
+  if (target?.type === 'option') {
+    const row = rowByKey(ctx, target.key);
+    if (!row) return done(state);
+    const selected = { ...withCursor(state, row.key), follow: true, message: '' };
+    return left ? pick(selected, row, target.option) ?? done(selected) : done({ ...selected, popup: { kind: 'menu', key: row.key, index: 0, x: event.x, y: event.y } });
+  }
   if (target?.type !== 'row') return done(state);
   const row = rowByKey(ctx, target.key);
   if (!row) return done(state);

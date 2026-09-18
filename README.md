@@ -327,26 +327,61 @@ the only place codes appear.
 
 ### Keys and mouse
 
+Waiting on you is a work queue. At the top: what stopped sessions left behind (from the brain
+queue, when `brain_bin` is set): a session stuck at a prompt, a finished session that asked
+something, a reply Claude drafted, a finished report. Under them, org questions for the stage the
+project is working on now (`G-1 meta.stage_now`). Each row shows its choices underneath, one line
+each, with what each one causes and `← recommended`. Items saved for later, and org questions that
+are parked or belong to a later stage, fold into one line each; Enter opens a fold.
+
 | Key | Action |
 |---|---|
-| ↑/↓, j/k, PgUp/PgDn, Home/End | Move in the list (or scroll the open summary) |
-| Enter, left click | On a session: go to its Herdr tab (`herdr agent focus <name>`, or `herdr tab focus <tab>` for an agent without a name). On a question or in the history: open the summary. The console stays open in its own tab; a gone session is refused visibly. |
-| f | Go to the session |
-| s | Summary popup: 1/2/3 tabs, j/k and page keys scroll, `o` opens the file, Enter goes to the session, y/n answer a question, Esc closes |
-| m, right click | Row menu at the row: Go to session, Summary, and on a question Approve and Decline. Arrows and Enter pick; Esc closes. |
-| y | Approve the selected question; Enter confirms, Esc cancels |
-| n | On a question: decline (a one-line reason is required, then Enter confirms). In the history: overrule an agent's or automatic answer to its opposite. Anywhere else: new task, which says `task launching comes in the next round`. |
+| ↑/↓, j/k, PgUp/PgDn, Home/End | Move in the list (or scroll the open popup) |
+| Enter, left click | On a session, or a result whose session is still in Herdr: **peek**, the session's own screen inside the console (`herdr agent read --source recent-unwrapped`), re-read every 1.5 s and following the end. Esc comes back with the same row selected. On a question or a gone session: the summary. On a fold: open or close it. |
+| g | Go to the session in Herdr (`herdr agent focus`). Back: `last_pane`, bound below. Run as a popup, the console closes itself after going. |
+| 1–9, click a choice | Pick that choice. A session stuck at a prompt gets that key pressed (`brain key`); a finished session gets the choice's words sent as a reply (`brain send`). Always confirmed first; on a sent reply, `e` edits it before sending. |
+| y | On a result: send Claude's draft (`y` shows it, Enter sends, `e` edits), else pick the recommended choice. On a question: approve. |
+| n | On a result: pick the one choice that says no. On a question: decline (a one-line reason is required). In the history: overrule. |
+| r | Reply to the session in your own words (`brain send`, or `herdr agent prompt` for a plain session). Herdr refuses a session stuck at a prompt before sending anything; the footer says so. |
+| l | Save a result for later: it leaves the list and waits under the *saved for later* fold. |
+| x | Drop a result for good (`brain never`), or clear a finished report you have read (`brain dismiss`). Confirmed first. |
+| d | On an org question: start a session that works it out (`brain start`: a new Herdr tab in the project's checkout, on the folder's Claude account, with a brief that asks for the real choices and a recommendation and forbids deciding). When it stops, its choices come back to Waiting on you. The question gets an org note naming the session. |
+| s | Summary popup: 1/2/3 tabs, j/k and page keys scroll, `o` opens the file, Enter peeks, Esc closes |
+| m, right click | Row menu with the verbs the row offers. Arrows and Enter pick; Esc closes. |
 | Tab | New task (next round) |
 | h | Today's history, newest first: answers, decisions and finished work. `h` or Esc returns. |
 | / | Scope: all repositories, one repository, *needs you*, *working*, or the history |
 | ! / w | Show only what needs you / only working sessions (again to show all) |
-| wheel | Scroll the list, or the open summary |
+| wheel | Scroll the list, or the open popup |
 | o | Open the brief, memo, report or message with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open -t` (the default text editor) |
 | p | Next project, when more than one is configured |
-| r | Reload now |
+| R | Reload now |
 | ? | Help |
-| Esc | Close the innermost thing; never quits |
+| Esc | Close the innermost thing. In its own pane it never quits; run as a Herdr popup, Esc on the list closes the popup. |
 | q | Quit (from the list or the history) |
+
+#### Getting in and out of sessions
+
+Herdr's `last_pane` jumps back to the pane you came from and ships unbound. Bind it, and summon
+the console as a popup over whatever you are looking at:
+
+```toml
+# ~/.config/herdr/config.toml
+[keys]
+last_pane = ["prefix+backtick", "ctrl+alt+b"]   # back to where you were, one chord
+
+[[keys.command]]
+key = "ctrl+alt+c"
+type = "popup"
+command = "node /path/to/herdr-org/bin/org.mjs console"
+width = "100%"
+height = "100%"
+description = "Herdr Brain console"
+```
+
+As a popup (no `HERDR_PANE_ID`, `HERDR_ACTIVE_PANE_ID` set, or `HERDR_CONSOLE_POPUP=1`) the
+console closes itself when you go to a session, and Esc on the list closes it. Ctrl+Alt+C brings
+it back. Esc is never the way back from inside a session: Claude Code uses it to interrupt.
 
 The console turns on the terminal's mouse reporting (SGR mode) while it runs and turns it off
 when it quits, when it suspends for an editor, and when it crashes. Herdr keeps right clicks for
@@ -362,8 +397,11 @@ The console records answers only through `org answer` (a child process with an a
 re-reads at once. Everything agents wrote is shown with terminal escape sequences and control
 characters removed. A text document opened with `o` is written to a private temporary folder and
 removed when the editor returns (or, for macOS `open -t`, when the console quits). It never appends to
-`events.jsonl`, and never starts, stops or messages agents. Its only Herdr actions are reading the
-agent and tab lists, focusing a tab or agent, and routing right clicks in its own pane.
+`events.jsonl` directly, and never stops or closes an agent. It reaches into a session only when the
+operator has confirmed it: a reply (`r`, or a choice sent as words), a key pressed in a prompt the
+session is stuck at (a choice), or a new session started to work out a question (`d`). Its other
+Herdr actions are reading the agent and tab lists, reading a session's screen for the peek,
+focusing a tab or agent, and routing right clicks in its own pane.
 
 ## Guardrails are advisory
 

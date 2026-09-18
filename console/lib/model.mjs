@@ -5,7 +5,7 @@ import path from 'node:path';
 import { doingText, upText, whoFor } from './names.mjs';
 import { firstMarkdownPath } from './sources.mjs';
 import { DEFAULT_PREFIXES, firstSentence, hasCodes, oneLine, stripCodes } from './text.mjs';
-import { asQuestions } from './brain.mjs';
+import { CATEGORY_WORDS, asQuestions } from './brain.mjs';
 
 export const NO_PLAIN = '· no plain summary';
 
@@ -58,7 +58,17 @@ function answerWords(answer) {
   return ['yes', 'no'].includes(answer) ? answer : 'answered';
 }
 
+// A yes/no question shows what each answer does under its row, when it says.
+function yesNoOptions(q, visible) {
+  if (!q.on_yes && !q.on_no) return [];
+  return [
+    { key: 'y', label: 'yes', causes: q.on_yes ? visible(q.on_yes) : 'not recorded' },
+    { key: 'n', label: 'no', causes: q.on_no ? visible(q.on_no) : 'not recorded' },
+  ];
+}
+
 function questionRow(q, visible) {
+  const rec = String(q.recommend ?? '').trim().toLowerCase();
   return {
     key: `q:${q.id}`,
     kind: 'question',
@@ -70,11 +80,54 @@ function questionRow(q, visible) {
     time: hhmm(q.created?.at),
     state: q.recommend ? `recommend: ${visible(q.recommend)}` : 'no recommendation',
     question: q.id,
-    actions: ['approve', 'decline'],
+    options: yesNoOptions(q, visible),
+    recommendKey: rec === 'yes' ? 'y' : rec === 'no' ? 'n' : null,
+    actions: ['approve', 'decline', 'dispatch'],
     doc: q.memo ? { path: q.memo } : { missing: 'no memo recorded' },
     agent: null,
     data: q,
   };
+}
+
+// What a stopped session left behind: its question, the choices and how a
+// choice reaches it, Claude's draft if there is one, and whether the session
+// is still there to peek at, reply to or go to.
+function resultRow(q, visible, agents) {
+  const d = q.brain;
+  const agent = agents.get(d.session) ?? null;
+  const suggestion = d.suggestion ?? d.digest?.suggestion ?? null;
+  const actions = [];
+  if (q.options.length) actions.push('pick');
+  if (suggestion) actions.push('draft');
+  if (agent) actions.push('peek', 'reply', 'go');
+  if (!q.later) actions.push('later');
+  actions.push('drop');
+  return {
+    ...questionRow(q, visible),
+    kind: 'result',
+    headline: q.title,
+    category: q.category,
+    categoryWords: CATEGORY_WORDS[q.category] ?? q.category,
+    from: d.tab_label ?? d.session,
+    session: d.tab_label ?? d.session,
+    options: q.options,
+    via: q.via,
+    recommendKey: q.recommendKey,
+    suggestion,
+    unsent: d.unsent ?? null,
+    nextStep: d.digest?.next_step ?? null,
+    later: q.later,
+    actions,
+    go: agent ? { agent: d.session, tab: agent.tab ?? d.tab ?? null, pane: agent.pane ?? d.pane ?? null } : null,
+    live: agent,
+    data: d,
+    doc: d.screen ? { text: d.screen } : { missing: 'nothing was on its screen' },
+  };
+}
+
+// A folded group inside Waiting on you: one line until it is opened.
+function foldRow(fold, headline, count) {
+  return { key: `fold:${fold}`, kind: 'fold', fold, headline, count, actions: [], doc: { missing: 'a group, not an item' }, data: null };
 }
 
 // Today's answers, decisions and finished work, newest first.
@@ -186,14 +239,14 @@ function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
       itemTitle: run?.title,
     }),
     // A row with a live agent can be gone to: by its name, or by its tab.
-    go: agent && state !== 'gone' ? { agent: agent.name ?? null, tab: agent.tab ?? null } : null,
+    go: agent && state !== 'gone' ? { agent: agent.name ?? null, tab: agent.tab ?? null, pane: agent.pane ?? null } : null,
     agent: agent?.name ?? run?.agent ?? null,
     cwd,
     repo,
     run: run ?? null,
     transcript,
     live: agent ?? null,
-    actions: agent ? ['go'] : [],
+    actions: agent && state !== 'gone' ? ['peek', 'reply', 'go'] : [],
     doc: run?.brief_path ? { path: run.brief_path } : { missing: 'no brief recorded' },
     question: null,
     data: agent ?? run,
@@ -254,20 +307,29 @@ export function buildBoard({
   list.sort((a, b) => rank(a.rows[0]) - rank(b.rows[0]) || a.name.localeCompare(b.name));
 
   const tag = (r) => ({ ...r, prefixes });
+  const results = asQuestions(brain?.rows ?? []).map((q) => resultRow(q, visible, byName));
+  const now = results.filter((r) => !r.later);
+  const saved = results.filter((r) => r.later);
+  // Questions for a stage the project is not working on yet, or parked, are
+  // not the operator's problem today: one line, opened on demand.
+  const open = today?.project?.open_stage ?? null;
+  const questions = (today?.waiting ?? []).map((q) => questionRow(q, visible));
+  const current = (q) => open === null || q.data.stage === null || q.data.stage === undefined || String(q.data.stage) === String(open);
+  const parked = questions.filter((q) => !current(q));
+  const waiting = [...now, ...questions.filter(current)];
+  const folded = [];
+  if (saved.length) folded.push(foldRow('later', `${saved.length} saved for later`, saved.length), ...saved.map((r) => ({ ...r, foldedIn: 'later' })));
+  if (parked.length) {
+    folded.push(
+      foldRow('stages', `${parked.length} older question${parked.length === 1 ? ' is' : 's are'} parked or wait for a later stage (stage ${open} is open now)`, parked.length),
+      ...parked.map((r) => ({ ...r, foldedIn: 'stages' })),
+    );
+  }
   return {
     // What sessions left behind comes first: a stranded reply or a stuck
     // session is costing time now, while an org question waits patiently.
-    waiting: [
-      ...asQuestions(brain?.rows ?? []).map((q) => tag({
-        ...questionRow(q, visible),
-        kind: 'result',
-        // The org verbs would answer an item org has never heard of.
-        actions: [],
-        data: q.brain,
-        doc: q.brain?.screen ? { text: q.brain.screen } : { missing: 'nothing was on its screen' },
-      })),
-      ...(today?.waiting ?? []).map((q) => tag(questionRow(q, visible))),
-    ],
+    waiting: [...waiting, ...folded].map(tag),
+    waitingCount: waiting.length,
     groups: list.map((g) => ({ ...g, rows: g.rows.map(tag) })),
     history: historyRows(today, visible, prefixes).map(tag),
     prefixes,
@@ -281,13 +343,17 @@ export function boardRows(board, view = 'list') {
 }
 
 // scope: { repo: root | null, view: 'all' | 'needs' | 'working' }. Questions show in every scope.
-export function visibleBoard(board, scope = {}) {
+// unfolded: the folds inside Waiting on you that are open ('later', 'stages').
+export function visibleBoard(board, scope = {}, unfolded = []) {
   const keep = (row) => (scope.view === 'needs' ? row.state === 'blocked' : scope.view === 'working' ? row.state === 'working' : true);
   const groups = board.groups
     .filter((g) => !scope.repo || g.key === scope.repo)
     .map((g) => ({ ...g, rows: g.rows.filter(keep) }))
     .filter((g) => g.rows.length);
-  return { ...board, groups };
+  const waiting = (board.waiting ?? [])
+    .filter((r) => !r.foldedIn || unfolded.includes(r.foldedIn))
+    .map((r) => (r.kind === 'fold' ? { ...r, open: unfolded.includes(r.fold) } : r));
+  return { ...board, waiting, groups };
 }
 
 // The scope choices, with counts: every repository, then the views.
@@ -297,7 +363,7 @@ export function scopeItems(board) {
   return [
     { label: 'All repositories', count: rows.length, repo: null, view: 'all' },
     ...board.groups.map((g) => ({ label: g.name, count: g.rows.length, repo: g.key, view: 'all' })),
-    { label: 'needs you', count: board.waiting.length + count('blocked'), repo: null, view: 'needs', key: '!' },
+    { label: 'needs you', count: (board.waitingCount ?? board.waiting.length) + count('blocked'), repo: null, view: 'needs', key: '!' },
     { label: 'working', count: count('working'), repo: null, view: 'working', key: 'w' },
     { label: 'history', count: board.history.length, repo: null, view: 'history', key: 'h' },
   ];
@@ -413,19 +479,23 @@ function rawParagraphs(row) {
     case 'result': {
       const g = d.digest ?? {};
       const where = d.where ? d.where.split('/').slice(-2).join('/') : 'an unknown folder';
+      const how = row.via === 'key' ? 'Press its number to answer the prompt the session is stuck at.' : 'Press its number to send that answer to the session.';
       return [
         row.headline,
         d.unsent
           ? `You already answered this. Your reply is typed into its prompt box and was never sent:\n\n    "${d.unsent}"\n\nIt is waiting behind whatever is on its screen.`
           : null,
+        row.suggestion
+          ? `Claude drafted a reply for you. You did not write it and nobody has sent it:\n\n    "${row.suggestion}"\n\nPress y to send it as it is, or r to write your own.`
+          : null,
         g.what_happened ?? 'No summary was made of this one. The Screen tab has what it actually said.',
-        g.options?.length
-          ? ['What you can do:', ...g.options.map((o) => `  ${o.key}  ${o.label}${o.causes ? ` — ${o.causes}` : ''}${g.recommend === o.key ? '   ← recommended' : ''}`)].join('\n')
+        row.options?.length
+          ? ['What you can do:', ...row.options.map((o) => `  ${o.key}  ${o.label}${o.causes ? ` — ${o.causes}` : ''}${row.recommendKey === o.key ? '   ← recommended' : ''}`), how].join('\n')
           : null,
         g.why ? `Why that one: ${g.why}` : null,
         g.next_step ? `Next step: ${g.next_step}` : null,
         `This came from the session ${d.tab_label ?? d.session}, running in ${where}. It went ${d.state} at ${hhmm(d.at)}.`,
-        g.source === 'parser' ? 'Read straight from its screen; no model was asked.' : null,
+        row.live ? 'Enter shows its screen here; g goes to it.' : 'That session is no longer in Herdr, so it can only be read here.',
       ].filter(Boolean);
     }
     case 'answer':
@@ -489,6 +559,8 @@ export function contextPairs(row, project = {}) {
       add('workspace', d.workspace);
       add('terminal title', d.title);
       add('unsent reply', d.unsent);
+      add('claude draft', row.suggestion);
+      add('answered by', row.via === 'key' ? 'pressing the key in its dialog' : 'sending the words as a reply');
       add('stuck at', d.dialog?.question);
       add('its options', d.dialog?.options?.map((o) => `${o.key}. ${o.label}`));
       add('read by', d.digest?.source === 'parser' ? 'the parser, no model call' : d.digest ? 'a model' : 'nothing yet');

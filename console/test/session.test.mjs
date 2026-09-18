@@ -106,32 +106,48 @@ test('approving and declining from the console record the operator\'s answers', 
   }
 });
 
-test('Enter and a click go to a live session; a gone one says so; Herdr down says so', async () => {
+test('Enter and a click peek at a live session; g goes; a gone one says so; Herdr down says so', async () => {
   const t = tempOrg();
   t.org('start', 'ENG-1', '--meta', 'agent=lane-x', '--meta', 'lane=theft-fix'); // R-1, live
   t.org('start', 'DOC-1', '--meta', 'agent=lane-gone'); // R-2, gone
   const went = [];
-  const session = createSession({ config: t.config, deps: { ...quiet, herdrGo: async (target) => { went.push(target); return { ok: true }; } } });
+  const reads = [];
+  const herdrRead = async (target) => { reads.push(target); return { ok: true, text: 'line one\n  indented two\nthe last line it drew' }; };
+  const session = createSession({ config: t.config, deps: { ...quiet, herdrRead, herdrGo: async (target) => { went.push(target); return { ok: true }; } } });
   await session.refresh({ reorder: true });
   assert.deepEqual(session.rows('list').filter((r) => r.kind === 'session').map((r) => [r.key, r.session, r.state]), [
     ['r:R-1', 'lane theft-fix r1', 'idle'], ['r:R-2', 'run r1', 'gone'],
   ]);
   session.ui = { ...session.ui, selectedKey: 'r:R-1' };
   await keys(session, [['', { return: true }]]);
-  assert.deepEqual(went, [{ agent: 'lane-x', tab: 'w1:t1' }]);
-  assert.match(session.ui.message, /^Went to lane theft-fix r1 in Herdr\.$/);
+  assert.deepEqual(went, [], 'Enter does not leave the console');
+  assert.equal(session.ui.popup.kind, 'peek');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(reads[0], { agent: 'lane-x', pane: 'w1:p1' });
+  const peeked = screen(session, 140, 40).join('\n');
+  assert.match(peeked, /peek · Esc back/);
+  assert.match(peeked, /│ {3}indented two/, 'the screen keeps its indentation');
+  assert.match(peeked, /the last line it drew[\s\S]*following/, 'it opens at the end and follows');
+  await keys(session, [['', { escape: true }]]);
+  assert.equal(session.ui.popup, null);
+  assert.equal(session.ui.selectedKey, 'r:R-1', 'Esc comes back to the same row');
+
+  await keys(session, [['g']]);
+  assert.deepEqual(went, [{ agent: 'lane-x', tab: 'w1:t1', pane: 'w1:p1' }]);
+  assert.match(session.ui.message, /^Went to lane theft-fix r1\. Back here: Ctrl\+Alt\+B, or Ctrl\+B then `\.$/);
 
   session.ui = { ...session.ui, selectedKey: 'r:R-2' };
-  await keys(session, [['f']]);
+  await keys(session, [['g']]);
   assert.equal(went.length, 1, 'nothing is focused for a gone session');
   assert.match(session.ui.message, /run r1 is gone; there is no Herdr tab to go to/);
 
-  // A left click on the live row's line.
+  // A left click on the live row's line peeks too.
   const lines = screen(session, 140, 40);
   const y = lines.findIndex((l) => l.includes('lane theft-fix r1'));
   await session.mouse({ button: 'left', x: 10, y, press: true });
-  assert.equal(went.length, 2);
+  assert.equal(session.ui.popup.kind, 'peek');
   assert.equal(session.ui.selectedKey, 'r:R-1');
+  await keys(session, [['', { escape: true }]]);
   // A right click opens the menu at the row; its Summary item opens the popup.
   await session.mouse({ button: 'right', x: 10, y, press: true });
   assert.equal(session.ui.popup.kind, 'menu');
@@ -149,7 +165,7 @@ test('Enter and a click go to a live session; a gone one says so; Herdr down say
   assert.match(screen(down)[0], /Herdr unavailable/);
   assert.deepEqual(down.rows('list').filter((r) => r.kind === 'session').map((r) => r.state), ['unknown', 'unknown']);
   down.ui = { ...down.ui, selectedKey: 'r:R-1' };
-  await down.key('', { return: true });
+  await down.key('g', {});
   assert.match(down.ui.message, /Herdr unavailable \(no server\)/);
   down.stop();
 });

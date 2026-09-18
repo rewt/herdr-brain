@@ -1,7 +1,8 @@
 // The console's only ways to touch the world: the org CLI (child process, argument
-// arrays), Herdr's agent and tab lists and focus, Herdr's right-click routing for the
-// console's own pane, and an external viewer. It never appends to events.jsonl and
-// never starts, stops or messages agents.
+// arrays), Herdr's agent and tab lists, focus, screen reads and prompts, Herdr's
+// right-click routing for the console's own pane, and an external viewer. It never
+// appends to events.jsonl and never stops or closes agents. The only message it
+// sends into a session is one the operator typed or confirmed (herdrPrompt).
 //
 // Right clicks: Herdr keeps them for its pane menu unless the pane asks. While the
 // console runs, app.mjs calls `herdr pane input --right-click pane $HERDR_PANE_ID`
@@ -50,6 +51,12 @@ export async function orgAnswer(project, request) {
   return r.ok ? { ok: true, output: r.stdout.trim() } : { ok: false, error: firstLine(r.stderr) || r.error?.message || 'org answer failed' };
 }
 
+// A plain note on an item, as the operator. Best effort: a failure is reported, never fatal.
+export async function orgNote(project, id, text) {
+  const r = await run(process.execPath, [ORG_BIN, 'note', id, text], { env: orgEnv(project) });
+  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || 'org note failed' };
+}
+
 export async function herdrAgents() {
   const r = await run('herdr', ['agent', 'list'], { timeout: 4000 });
   if (!r.ok) return { ok: false, agents: [], error: firstLine(r.stderr) || r.error?.code || 'herdr agent list failed' };
@@ -82,6 +89,42 @@ export async function herdrGo(target) {
   if (!args) return { ok: false, error: 'no Herdr agent or tab to go to' };
   const r = await run('herdr', args, { timeout: 4000 });
   return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || `herdr ${args.slice(0, 2).join(' ')} failed` };
+}
+
+// A session's screen as plain text, for the peek. `recent-unwrapped` because the
+// session's pane is a different width than the peek, and a pre-wrapped screen
+// would arrive broken at the wrong width. An unnamed agent is read by its pane.
+export function readArgs({ agent, pane }, lines = 400) {
+  const tail = ['--source', 'recent-unwrapped', '--lines', String(lines), '--format', 'text'];
+  if (agent) return ['agent', 'read', agent, ...tail];
+  if (pane) return ['pane', 'read', pane, ...tail];
+  return null;
+}
+
+export async function herdrRead(target, lines = 400) {
+  const args = readArgs(target, lines);
+  if (!args) return { ok: false, error: 'no Herdr agent or pane to read' };
+  const r = await run('herdr', args, { timeout: 5000 });
+  if (!r.ok) return { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || 'herdr read failed' };
+  // `agent read` answers in JSON on some versions and plain text on others.
+  try {
+    const body = JSON.parse(r.stdout);
+    const text = body?.result?.text ?? body?.result?.output ?? body?.result?.content;
+    if (typeof text === 'string') return { ok: true, text };
+  } catch {
+    // plain text
+  }
+  return { ok: true, text: r.stdout };
+}
+
+// Sends the operator's words to a session. Herdr refuses a session stuck at a
+// prompt before sending anything (agent_blocked), so this cannot jam one.
+export async function herdrPrompt(agent, text) {
+  if (!agent) return { ok: false, error: 'that session has no name Herdr can address' };
+  const r = await run('herdr', ['agent', 'prompt', agent, text], { timeout: 30000 });
+  if (r.ok) return { ok: true };
+  const msg = `${r.stderr ?? ''}${r.stdout ?? ''}`;
+  return { ok: false, blocked: /agent_blocked/.test(msg), error: firstLine(r.stderr) || firstLine(r.stdout) || 'herdr agent prompt failed' };
 }
 
 // Herdr opens its own pane menu on a right click unless the pane asks for right clicks.

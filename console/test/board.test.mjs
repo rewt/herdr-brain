@@ -35,9 +35,9 @@ test('every Herdr agent is a row in its repository group, with all six columns f
   const console = b.groups[1].rows[0];
   assert.equal(console.key, 'r:R-4', 'a row with an org run keeps its identity whether Herdr answers or not');
   assert.equal(console.run.run, 'R-4');
-  assert.deepEqual(console.go, { agent: 'lane-console-a', tab: 'w1:t2' });
+  assert.deepEqual(console.go, { agent: 'lane-console-a', tab: 'w1:t2', pane: 'w1:p2' });
   assert.equal(b.groups[3].rows[0].key, 'h:pane:w2:p1');
-  assert.deepEqual(b.groups[3].rows[0].go, { agent: null, tab: 'w2:t1' });
+  assert.deepEqual(b.groups[3].rows[0].go, { agent: null, tab: 'w2:t1', pane: 'w2:p1' });
   const gone = b.groups[1].rows[2];
   assert.equal(gone.key, 'r:R-6');
   assert.equal(gone.go, null, 'a gone session has nowhere to go');

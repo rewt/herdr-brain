@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
-import { readQueue } from './brain.mjs';
+import { brainAct, brainArgs, readQueue, startWorkUp } from './brain.mjs';
 import { initialState, promptParts, reduce, reduceMouse } from './controller.mjs';
 import { RAIL_COLS, hitAt, renderFrame } from './frame.mjs';
 import {
@@ -32,7 +32,12 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     herdrAgents: cli.herdrAgents,
     herdrTabs: cli.herdrTabs,
     brainQueue: config?.brain_bin ? () => readQueue(config.brain_bin) : null,
+    brainAct: (args) => brainAct(config?.brain_bin, args),
     herdrGo: cli.herdrGo,
+    herdrRead: cli.herdrRead,
+    herdrPrompt: cli.herdrPrompt,
+    dispatch: config?.brain_bin ? (project, row) => startWorkUp(config.brain_bin, project, row) : null,
+    orgNote: cli.orgNote,
     viewer: () => cli.viewerFor(),
     openBlocking: cli.openBlocking,
     openDetached: cli.openDetached,
@@ -43,6 +48,9 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     ...deps,
   };
   const noColor = Boolean(env.NO_COLOR);
+  // Summoned as a Herdr popup: no pane of its own, and closing it (Esc, q, or
+  // going to a session) hands the screen back to the pane underneath.
+  const popupMode = env.HERDR_CONSOLE_POPUP === '1' || (!env.HERDR_PANE_ID && Boolean(env.HERDR_ACTIVE_PANE_ID));
   const s = {
     index: projectIndex,
     ui: initialState(),
@@ -66,6 +74,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     size: { cols: 100, rows: 30 },
     last: { hits: [], popupMax: 0, bodyHeight: 10 },
     tempDirs: new Set(), // text documents handed to a viewer that returns at once
+    peek: null, // { key, target, text, error, gone, at } while a peek is open
+    peekTimer: null,
   };
   const project = () => config.projects[s.index];
   const configDirs = () => [...new Set(config.projects.flatMap((p) => p.claude_config_dirs ?? []))];
@@ -114,11 +124,12 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     return text;
   }
 
-  const visible = () => visibleBoard(s.board, s.ui.scope);
+  const visible = () => visibleBoard(s.board, s.ui.scope, s.ui.unfolded ?? []);
   const rowsOf = (view) => boardRows(view === 'history' ? s.board : visible(), view);
 
   // Selection follows identity; a row that left the view gives way to its nearest neighbour.
   function keepCursor() {
+    followPeek();
     const list = rowsOf('list');
     const history = rowsOf('history');
     s.ui = {
@@ -197,6 +208,64 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     return boardRows(s.board, 'list').find((r) => r.key === key) ?? s.board.history.find((r) => r.key === key) ?? null;
   }
 
+  // ---- the peek ------------------------------------------------------------
+
+  // Who a row's screen belongs to: its Herdr agent by name, else its pane.
+  function peekTarget(row) {
+    if (!row) return null;
+    if (row.go?.agent || row.go?.pane) return { agent: row.go.agent ?? null, pane: row.go.pane ?? null };
+    return null;
+  }
+
+  // Once a result is answered it leaves Waiting on you, but its session is
+  // still there: the peek moves to that session's row instead of going blank,
+  // so the operator sees the session take the answer.
+  function followPeek() {
+    const p = s.ui.popup;
+    if (p?.kind !== 'peek' || findRow(p.key) || !s.peek?.target?.agent) return;
+    const same = boardRows(s.board, 'list').find((r) => r.kind === 'session' && r.go?.agent === s.peek.target.agent);
+    if (same) {
+      s.ui = { ...s.ui, popup: { ...p, key: same.key }, selectedKey: same.key };
+      s.peek = { ...s.peek, key: same.key };
+    }
+  }
+
+  async function readPeek() {
+    const p = s.ui.popup;
+    if (p?.kind !== 'peek' || !s.peek || s.peek.key !== p.key) return;
+    const row = findRow(p.key);
+    const target = peekTarget(row) ?? s.peek.target;
+    if (!target) {
+      // A result whose session is gone: its last captured screen is all there is.
+      s.peek = { ...s.peek, text: row?.data?.screen ?? row?.data?.said ?? '', gone: true, error: null };
+      onChange();
+      return;
+    }
+    const r = await d.herdrRead(target);
+    if (s.ui.popup?.kind !== 'peek' || s.peek?.key !== p.key) return;
+    s.peek = r.ok
+      ? { ...s.peek, target, text: r.text, error: null, gone: false, at: d.now().getTime() }
+      : { ...s.peek, target, error: r.error, text: s.peek.text ?? (row?.data?.screen ?? null), gone: s.peek.text == null && Boolean(row?.data?.screen) };
+    onChange();
+  }
+
+  // Starts reading when a peek opens and stops when it closes. The screen is
+  // re-read every 1.5 s while it is open, so it shows the session live.
+  function syncPeek() {
+    const want = s.ui.popup?.kind === 'peek' ? s.ui.popup.key : null;
+    if (want && s.peek?.key !== want) {
+      clearInterval(s.peekTimer);
+      s.peek = { key: want, target: peekTarget(findRow(want)), text: null, error: null, gone: false, at: null };
+      readPeek();
+      s.peekTimer = setInterval(readPeek, 1500);
+      s.peekTimer.unref?.();
+    } else if (!want && s.peek) {
+      clearInterval(s.peekTimer);
+      s.peekTimer = null;
+      s.peek = null;
+    }
+  }
+
   function document(file, text) {
     if (text) return { status: 'ok', text };
     if (!file) return null;
@@ -212,7 +281,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
 
   function header(now) {
     const p = project();
-    const h = { project: p.name, clock: hhmm(now.toISOString()), waiting: s.board.waiting.length };
+    const h = { project: p.name, clock: hhmm(now.toISOString()), waiting: s.board.waitingCount ?? s.board.waiting.length };
     if (!p.ledger_dir) h.sessionsNote = 'no session ledger';
     else if (s.ledger?.error) h.sessionsNote = s.ledger.error;
     else if (s.ledger) h.sessions = `${s.ledger.count}${p.session_cap ? `/${p.session_cap}` : ''}`;
@@ -245,6 +314,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       selectedRow: findRow(ui.view === 'history' ? ui.historyKey : ui.selectedKey),
       popupRow,
       popupDoc: ui.popup?.kind === 'summary' && ui.popup.tab === 1 ? rowDocument(popupRow) : null,
+      peek: ui.popup?.kind === 'peek' ? s.peek : null,
       project: { org: project().org },
       launch: { where: shownRepo && ui.scope.view === 'all' ? shownRepo.name : null },
     };
@@ -253,7 +323,9 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
   function frame(cols, rows, options) {
     s.size = { cols, rows };
     const out = renderFrame(view(), cols, rows, options);
-    const popup = s.ui.popup?.kind === 'summary' ? { ...s.ui.popup, scroll: Math.min(s.ui.popup.scroll, out.popupMax) } : s.ui.popup;
+    const pp = s.ui.popup;
+    const popup = pp?.kind === 'summary' ? { ...pp, scroll: Math.min(pp.scroll, out.popupMax) }
+      : pp?.kind === 'peek' ? { ...pp, scroll: out.popupScroll ?? pp.scroll } : pp;
     s.ui = { ...s.ui, listOffset: out.listOffset, popup };
     s.last = { hits: out.hits, popupMax: out.popupMax, bodyHeight: Math.max(1, rows - 5) };
     return out;
@@ -318,6 +390,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
         say(`Recorded ${effect.answer} for “${effect.headline}”. The next executive pass acts on it.`, 'ok');
         return;
       }
+      case 'act':
+        return act(effect);
       case 'go': {
         const row = findRow(effect.key);
         if (!row) {
@@ -333,7 +407,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
           return;
         }
         const r = await d.herdrGo(row.go);
-        say(r.ok ? `Went to ${row.session} in Herdr.` : `Herdr refused to go to ${row.session}: ${r.error}`, r.ok ? 'ok' : 'error');
+        if (r.ok && popupMode) return { quit: true };
+        say(r.ok ? `Went to ${row.session}. Back here: Ctrl+Alt+B, or Ctrl+B then \`.` : `Herdr refused to go to ${row.session}: ${r.error}`, r.ok ? 'ok' : 'error');
         return;
       }
       case 'open': {
@@ -363,6 +438,55 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     }
   }
 
+  // Verbs on a row: what a session left behind goes through the brain CLI, so
+  // the queue records it; a plain session gets the operator's words directly.
+  async function act(effect) {
+    const row = findRow(effect.key);
+    if (!row) {
+      say('That row is no longer listed; nothing was done.', 'warn');
+      return;
+    }
+    if (effect.verb === 'dispatch') {
+      if (!d.dispatch) {
+        say('Starting a session from here is not set up (no brain_bin configured).', 'error');
+        return;
+      }
+      say(`Starting a session to work out “${row.headline}”…`);
+      const r = await d.dispatch(project(), row);
+      // The question stays in org, with a note saying who is working it out.
+      if (r.ok && row.question) await d.orgNote?.(project(), row.question, `The operator sent this to be worked out by session ${r.name}.`);
+      say(r.ok ? `Started ${r.name} to work it out. It shows in the list below; when it stops, its choices come back here.` : `Not started: ${r.error}`, r.ok ? 'ok' : 'error');
+      await refresh();
+      return;
+    }
+    if (row.kind === 'session') {
+      if (effect.verb !== 'send') return;
+      const r = await d.herdrPrompt(row.go?.agent, effect.text);
+      say(r.ok ? `Sent to ${row.session}.` : r.blocked ? `${row.session} is stuck at a prompt and refused the message; answer the prompt first.` : `Not sent: ${r.error}`, r.ok ? 'ok' : 'error');
+      return;
+    }
+    if (row.kind !== 'result') return;
+    const args = brainArgs(effect.verb, row, { key: effect.option, text: effect.text });
+    if (!args) {
+      say('Nothing to do for that.', 'warn');
+      return;
+    }
+    const r = await d.brainAct(args);
+    if (!r.ok) {
+      say(r.blocked ? `${row.session} is stuck at a prompt and refused the message. Answer the prompt first: Enter to peek at it.` : `Not done: ${r.error}`, 'error');
+      return;
+    }
+    await refresh();
+    const option = row.options?.find((o) => o.key === String(effect.option));
+    const done = {
+      pick: row.via === 'key' ? `Pressed ${effect.option} (“${option?.label ?? ''}”) in ${row.session}.` : `Sent “${option?.label ?? ''}” to ${row.session}.`,
+      send: `Sent to ${row.session}.`,
+      later: 'Saved for later. It is under the “saved for later” line.',
+      drop: ['finished', 'report'].includes(row.category) ? 'Cleared.' : 'Dropped. It will not come back.',
+    };
+    say(done[effect.verb] ?? 'Done.', 'ok');
+  }
+
   function ctx() {
     const rows = rowsOf(s.ui.view);
     const hits = s.last.hits;
@@ -374,6 +498,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       popupPage: Math.max(1, s.last.bodyHeight - 6),
       popupMax: s.last.popupMax,
       projectCount: config.projects.length,
+      popupMode,
       menuX: s.size.cols >= RAIL_COLS ? 27 : 4,
       lineOf: (key) => {
         const y = hits.findIndex((line) => line.some((h) => h.target?.type === 'row' && h.target.key === key));
@@ -386,12 +511,14 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
   async function apply({ state, effects }) {
     s.ui = state;
     keepCursor();
+    syncPeek();
     onChange();
     let quit = false;
     for (const effect of effects) {
       if (effect.type === 'quit') quit = true;
-      else await perform(effect);
+      else if ((await perform(effect))?.quit) quit = true;
     }
+    syncPeek();
     return quit;
   }
 
@@ -423,6 +550,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
   function stop() {
     s.watcher?.close();
     clearInterval(s.timer);
+    clearInterval(s.peekTimer);
     for (const dir of s.tempDirs) fs.rmSync(dir, { recursive: true, force: true });
     s.tempDirs.clear();
   }
@@ -430,6 +558,8 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
   return {
     start, stop, refresh, key, mouse, frame, perform,
     get ui() { return s.ui; },
+    get peek() { return s.peek; },
+    popupMode,
     set ui(value) { s.ui = value; },
     get board() { return s.board; },
     get project() { return project(); },

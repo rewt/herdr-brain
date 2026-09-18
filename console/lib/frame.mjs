@@ -17,7 +17,7 @@ const RAIL_WIDTH = 22;
 
 export const TAB_NAMES = {
   question: ['Summary', 'Memo', 'Context'],
-  result: ['Summary', 'Screen', 'Context'],
+  result: ['Summary', 'Screen', 'Details'],
   session: ['Message', 'Brief', 'Context'],
   other: ['Summary', 'Document', 'Context'],
 };
@@ -203,12 +203,26 @@ function recommendText(row) {
   return row.recommend ? `recommend ${row.recommend}` : 'no recommendation';
 }
 
-function questionLine(row, L, cols, selected) {
-  const bg = selected ? 'selected' : 'bg';
-  const markText = L.kind === 'narrow' ? `${selected ? '>' : ' '}!` : `${selected ? '>' : ' '} !`;
-  const right = L.kind === 'narrow'
+// What a waiting row says on its right: for a question, its category and the
+// recommendation; for what a session left behind, what it needs and where from.
+function waitingRight(row, L, bg) {
+  if (row.kind === 'result') {
+    const fg = row.category === 'stranded' || row.category === 'obstacle' ? 'blocked' : row.category === 'decision' ? 'waitFg' : 'done';
+    if (L.kind === 'narrow') return [span(clip(row.categoryWords, 14), fg, bg)];
+    return [span(row.categoryWords, fg, bg), span(` · ${clip(row.from, 22)} · ${row.asked}`, 'muted', bg)];
+  }
+  return L.kind === 'narrow'
     ? [span(clip(row.recommend ?? 'no rec.', 12), row.recommend ? 'done' : 'muted', bg)]
     : [span(`${row.category} ${'·'} `, 'muted', bg), span(clip(recommendText(row), 30), row.recommend ? 'done' : 'muted', bg), span(` · asked ${row.asked}`, 'muted', bg)];
+}
+
+const MARKS = { result: { stranded: '!', decision: '?', obstacle: '■', finished: '✓', report: '✓' } };
+
+function questionLine(row, L, cols, selected) {
+  const bg = selected ? 'selected' : 'bg';
+  const glyph = row.kind === 'result' ? MARKS.result[row.category] ?? '!' : '!';
+  const markText = L.kind === 'narrow' ? `${selected ? '>' : ' '}${glyph}` : `${selected ? '>' : ' '} ${glyph}`;
+  const right = waitingRight(row, L, bg);
   const rightWidth = spansWidth(right);
   const room = cols - 1 - cellWidth(markText) - 1 - 1 - rightWidth - 1;
   return [
@@ -219,6 +233,52 @@ function questionLine(row, L, cols, selected) {
     span(' ', 'fg', bg),
     ...right,
     span(' ', 'fg', bg),
+  ];
+}
+
+// The lines under a waiting row: each choice with what it causes, Claude's
+// draft, a stranded reply, the next step. The choices are always shown, so
+// the operator can decide without opening anything; a click on one picks it.
+const MAX_OPTIONS = 4;
+
+function detailLines(row, width, selected) {
+  const bg = selected ? 'selected' : 'bg';
+  const indent = width >= 100 ? 7 : 5;
+  const out = [];
+  const add = (spans, hit) => out.push({ spans: fit([span(' '.repeat(indent), 'fg', bg), ...spans], width, bg), key: row.key, hit });
+  const options = row.options ?? [];
+  const labelWidth = Math.min(34, Math.max(0, ...options.map((o) => cellWidth(o.label))));
+  for (const o of options.slice(0, MAX_OPTIONS)) {
+    const rec = row.recommendKey === o.key ? '  ← recommended' : '';
+    const room = width - indent - 4 - labelWidth - 2 - cellWidth(rec) - 1;
+    const causes = width >= 100 && o.causes && room > 12 ? clip(o.causes, room) : '';
+    add([
+      span(pad(o.key, 3), 'working', bg, true),
+      span(' ', 'fg', bg),
+      span(pad(o.label, width >= 100 ? labelWidth : Math.max(8, width - indent - 4 - cellWidth(rec) - 1)), 'fg', bg),
+      span(causes ? `  ${causes}` : '', 'muted', bg),
+      span(rec, 'done', bg),
+    ], { type: 'option', key: row.key, option: o.key });
+  }
+  if (options.length > MAX_OPTIONS) add([span(`…and ${options.length - MAX_OPTIONS} more: s shows them all`, 'muted', bg)]);
+  if (row.unsent) add([span('you typed, never sent: ', 'blocked', bg), span(`“${row.unsent.split('\n')[0]}”`, 'fg', bg)]);
+  if (row.suggestion) {
+    add([span('Claude drafted, not sent: ', 'muted', bg), span(`“${row.suggestion.split('\n')[0]}”`, 'fg', bg), span('   y sends it · r writes your own', 'muted', bg)]);
+  }
+  if (row.kind === 'result' && !options.length && !row.suggestion && row.nextStep) add([span(`next: ${row.nextStep}`, 'muted', bg)]);
+  return out;
+}
+
+function foldLine(row, width, selected, G) {
+  const bg = selected ? 'selected' : 'bg';
+  const tail = row.open ? 'Enter hides them' : 'Enter shows them';
+  const room = width - 5 - cellWidth(tail) - 2;
+  return [
+    span(' ', 'fg', bg),
+    span(`${selected ? '>' : ' '} `, 'working', bg, true),
+    span(`${row.open ? '▾' : '▸'} `, 'muted', bg),
+    span(pad(row.headline, room), 'muted', bg),
+    span(` ${tail} `, 'faint', bg),
   ];
 }
 
@@ -252,8 +312,18 @@ function listBody(view, width, G) {
   }
   const L = layoutFor(width);
   if (board.waiting.length) {
-    out.push({ spans: capLine(width, G, { name: 'WAITING ON YOU', count: board.waiting.length, icon: G.question, pillBg: 'waitPill', pillFg: 'waitFg', countFg: 'waitFg' }) });
-    for (const row of board.waiting) out.push({ spans: questionLine(row, L, width, row.key === st.selectedKey), key: row.key });
+    const count = board.waitingCount ?? board.waiting.length;
+    out.push({ spans: capLine(width, G, { name: 'WAITING ON YOU', count, icon: G.question, pillBg: 'waitPill', pillFg: 'waitFg', countFg: 'waitFg' }) });
+    if (!count) out.push({ spans: [span('   Nothing needs you right now.', 'muted')] });
+    for (const row of board.waiting) {
+      const selected = row.key === st.selectedKey;
+      if (row.kind === 'fold') {
+        out.push({ spans: foldLine(row, width, selected, G), key: row.key });
+        continue;
+      }
+      out.push({ spans: questionLine(row, L, width, selected), key: row.key });
+      out.push(...detailLines(row, width, selected));
+    }
   }
   if (board.groups.length && L.kind !== 'narrow') out.push({ ...headsLine(L, width), key: null });
   for (const g of board.groups) {
@@ -303,21 +373,41 @@ function launchLines(view, cols, G) {
   return out;
 }
 
+// The verbs a row offers, as footer keys, in the order they are most used.
+function verbKeys(row, short) {
+  const has = (a) => row?.actions?.includes(a);
+  const keys = [];
+  if (row?.kind === 'result') {
+    const n = row.options?.length ?? 0;
+    if (n) keys.push([n === 1 ? '1' : `1-${Math.min(n, 9)}`, row.via === 'key' ? 'answer its prompt' : 'pick']);
+    if (has('draft')) keys.push(['y', 'send draft']);
+    else if (row.recommendKey) keys.push(['y', 'recommended']);
+  }
+  if (row?.kind === 'question') keys.push(['y/n', 'answer'], ['d', short ? 'work out' : 'work it out']);
+  if (has('reply')) keys.push(['r', 'reply']);
+  if (has('later')) keys.push(['l', 'later']);
+  if (has('drop')) keys.push(['x', ['finished', 'report'].includes(row.category) ? 'clear' : 'drop']);
+  if (has('go')) keys.push(['g', short ? 'go' : 'go there']);
+  return keys;
+}
+
 const KEYS = {
   list: (row, cols) => {
     const short = cols < 100;
     const keys = [['j/k', 'select']];
-    if (row?.kind === 'session') keys.push(['Enter', short ? 'go' : 'go to session']);
+    if (row?.kind === 'fold') keys.push(['Enter', row.open ? 'hide' : 'show']);
+    else if (row?.actions?.includes('peek')) keys.push(['Enter', 'peek']);
     else if (row) keys.push(['Enter', 'summary']);
-    keys.push(['s', 'summary']);
-    if (row?.kind === 'question') keys.push(['y/n', 'answer']);
-    else keys.push(['n', short ? 'task' : 'new task']);
+    keys.push(...verbKeys(row, short));
+    if (row?.kind !== 'fold') keys.push(['s', 'summary']);
+    if (!row || row.kind === 'session') keys.push(['n', short ? 'task' : 'new task']);
     keys.push(['m', 'menu'], ['h', 'history'], ['/', 'scope'], ['?', 'help'], ['q', 'quit']);
     return short ? keys.filter(([k]) => !['m', 'h', '/'].includes(k)) : keys;
   },
   history: (row) => [['j/k', 'select'], ['Enter', 'summary'], ...(row?.actions?.includes('overrule') ? [['n', 'overrule']] : []), ['o', 'open'], ['h', 'back'], ['q', 'quit']],
-  summary: (row) => [['1-3', 'tabs'], ['j/k', 'scroll'], ['o', 'open file'], ...(row?.kind === 'session' ? [['Enter', 'go to session']] : []),
-    ...(row?.kind === 'question' ? [['y/n', 'answer']] : []), ['Esc', 'close']],
+  summary: (row) => [['1-3', 'tabs'], ['j/k', 'scroll'], ['o', 'open file'], ...(row?.actions?.includes('peek') ? [['Enter', 'peek']] : []),
+    ...(row?.kind === 'question' ? [['y/n', 'answer']] : row?.kind === 'result' ? verbKeys(row, true).filter(([k]) => !/^1/.test(k)) : []), ['Esc', 'close']],
+  peek: (row, cols) => [['Esc', 'back'], ['j/k', 'scroll'], ['G', 'follow'], ...verbKeys(row, cols < 120)],
   menu: () => [['↑/↓', 'choose'], ['Enter', 'pick'], ['Esc', 'close']],
   scope: () => [['↑/↓', 'choose'], ['Enter', 'show'], ['Esc', 'close']],
   help: () => [['Esc', 'close']],
@@ -346,12 +436,17 @@ function footerLine(view, cols, G, mode, row) {
   if (view.prompt) return line([...head, span(' '), span(promptLine(view.prompt, room), 'waitFg', 'bg', true)], cols);
   if (st.message) return line([...head, span(' '), span(clip(st.message, room), MESSAGE_FG[st.messageStyle] ?? 'fg')], cols);
   const keys = KEYS[mode === 'LIST' ? 'list' : mode.toLowerCase()]?.(row, cols) ?? [];
+  if (mode === 'PEEK' && !st.popup?.follow) keys.splice(2, 1, ['G', 'follow the end']);
   const out = [...head, span(' ')];
-  for (const [k, label] of keys) {
-    const piece = [span(` ${k} `, 'ink', 'faint'), span(` ${label}  `, 'muted')];
-    if (spansWidth(out) + spansWidth(piece) > cols) break;
-    out.push(...piece);
+  const piece = ([k, label]) => [span(` ${k} `, 'ink', 'faint'), span(` ${label}  `, 'muted')];
+  // Help and quit always fit: the other keys give way to them when the pane is narrow.
+  const tail = keys.filter(([k]) => k === '?' || k === 'q').flatMap(piece);
+  for (const key of keys.filter(([k]) => k !== '?' && k !== 'q')) {
+    const p = piece(key);
+    if (spansWidth(out) + spansWidth(p) + spansWidth(tail) > cols) break;
+    out.push(...p);
   }
+  if (spansWidth(out) + spansWidth(tail) <= cols) out.push(...tail);
   return line(out, cols);
 }
 
@@ -426,6 +521,9 @@ function titleBand(row, width, G) {
       ...whoSpans(row.who, cellWidth(row.who.text), 'selected'),
       span(` ${G.sep} ${row.where} ${G.sep} up ${row.up} ${G.sep} ${row.state}`, 'muted', 'selected'),
     ];
+  } else if (row.kind === 'result') {
+    parts = [span(`${MARKS.result[row.category] ?? '!'} `, 'waitFg', 'selected', true), span(row.session, 'bright', 'selected', true),
+      span(` ${G.sep} ${row.categoryWords} ${G.sep} ${row.data?.state ?? ''} at ${row.asked}`, 'muted', 'selected')];
   } else if (row.kind === 'question') {
     parts = [span('! ', 'waitFg', 'selected', true), span(row.headline, 'bright', 'selected', true), span(` ${G.sep} ${row.category} ${G.sep} ${recommendText(row)}`, 'muted', 'selected')];
   } else {
@@ -460,6 +558,64 @@ function summaryPopup(view, cols, rows, G) {
   const top = Math.max(1, Math.floor((rows - lines.length) / 2));
   const left = Math.floor((cols - width) / 2);
   return { lines, top, left, popupMax, tabLine: 2, tabHits: tabHits.map((h) => ({ ...h, from: h.from + left + 2, to: h.to + left + 2 })) };
+}
+
+// The peek: the session's own screen, re-wrapped to the popup, with what it
+// needs from the operator pinned above it when it left something behind.
+export function peekBody(peek, width) {
+  if (!peek || (peek.text == null && !peek.error)) return [[span('reading its screen…', 'muted', 'panel')]];
+  const lines = [];
+  if (peek.gone) lines.push([span('This session is no longer in Herdr. This is the last screen captured from it.', 'waitFg', 'panel')], []);
+  if (peek.error && peek.text == null) return wrap(`Could not read its screen: ${peek.error}`, width).map((t) => [span(t, 'blocked', 'panel')]);
+  const text = String(peek.text ?? '').replace(/\s+$/, '');
+  for (const raw of text.split('\n')) {
+    const parts = raw.trim() ? wrapKeep(raw, width) : [''];
+    for (const t of parts) lines.push([span(t, 'fg', 'panel')]);
+  }
+  return lines;
+}
+
+// Wraps a screen line without collapsing its indentation, so lists and code stay
+// legible: every piece of a wrapped line keeps the line's own indent.
+export function wrapKeep(raw, width) {
+  const line = sanitize(raw).replace(/\s+$/, '');
+  if (cellWidth(line) <= width) return [line];
+  const lead = /^\s*/.exec(line)[0];
+  const indent = lead.length < width / 2 ? lead : '';
+  return wrap(line.trimStart(), width - indent.length).map((t) => `${indent}${t}`);
+}
+
+function needsLines(row, width) {
+  if (row?.kind !== 'result') return [];
+  const out = wrap(row.headline, width).slice(0, 2).map((t) => [span(t, 'bright', 'panel', true)]);
+  for (const o of (row.options ?? []).slice(0, 6)) {
+    const rec = row.recommendKey === o.key ? '  ← recommended' : '';
+    out.push([span(`  ${pad(o.key, 3)}`, 'working', 'panel', true), span(clip(o.label, width - 6 - cellWidth(rec)), 'fg', 'panel'), span(rec, 'done', 'panel')]);
+  }
+  if (row.suggestion) out.push([span('  Claude drafted, not sent: ', 'muted', 'panel'), span(clip(`“${row.suggestion}”`, width - 30), 'fg', 'panel')]);
+  if (row.unsent) out.push([span('  You typed, never sent: ', 'blocked', 'panel'), span(clip(`“${row.unsent}”`, width - 26), 'fg', 'panel')]);
+  return out;
+}
+
+function peekPopup(view, cols, rows, G) {
+  const p = view.state.popup;
+  const row = view.popupRow;
+  const width = cols;
+  const height = Math.max(10, rows - 3);
+  const inner = width - 4;
+  const needs = needsLines(row, inner);
+  const head = [titleBand(row, inner, G), ...needs, [span(G.rule.repeat(inner), 'rule', 'panel')]];
+  const bodyHeight = Math.max(3, height - 2 - head.length);
+  const body = peekBody(view.peek, inner);
+  const popupMax = Math.max(0, body.length - bodyHeight);
+  const scroll = p.follow ? popupMax : Math.min(p.scroll ?? 0, popupMax);
+  const shown = body.slice(scroll, scroll + bodyHeight);
+  while (shown.length < bodyHeight) shown.push([]);
+  const where = body.length > bodyHeight ? `${scroll + 1}-${Math.min(body.length, scroll + bodyHeight)}/${body.length}` : '';
+  const state = p.follow ? 'following' : 'scrolled up · G follows';
+  const age = view.peek?.error && view.peek?.text != null ? ` · not refreshed: ${clip(view.peek.error, 40)}` : '';
+  const lines = box(width, [...head, ...shown], { title: 'peek · Esc back', footer: `${where ? `${where} · ` : ''}${state}${age}` }, G);
+  return { lines, top: 1, left: 0, popupMax, scroll };
 }
 
 function listPopup(items, index, width, G, title) {
@@ -514,23 +670,33 @@ export function helpLines(version) {
     `Herdr Brain console ${version ?? ''}`.trim(),
     '',
     'j/k ↑/↓ PgUp/PgDn Home/End   move (or scroll a popup)',
-    'Enter, left click            go to the session (a question: its summary)',
-    'f                            go to the session',
+    'Enter, left click            peek at the session here (Esc comes back)',
+    '                             a question: its summary; a folded line: open it',
+    'g                            go to the session in Herdr',
+    '                             back: Ctrl+Alt+B, or Ctrl+B then `',
     's                            summary: 1/2/3 tabs, o opens the file, Esc closes',
     'm, right click               row menu',
-    'y / n                        approve / decline a question (n in history: overrule)',
+    '',
+    'What a session left behind:',
+    '1-9, click a choice          pick it (a prompt: presses that key)',
+    'y / n                        Claude\'s draft or the recommended choice / the no',
+    'r                            reply in your own words',
+    'l                            save for later      x  drop it, or clear a finished one',
+    '',
+    'A question filed in org:',
+    'y / n                        approve / decline (n in history: overrule)',
+    'd                            start a session to work it out; it comes back here',
+    '',
     'n, Tab                       new task (comes in the next round)',
     'h                            today\'s history (h or Esc returns)',
     '/                            scope: a repository or a view',
     '! / w                        only what needs you / only working sessions',
-    'wheel                        scroll the list',
     'o                            open the brief, memo or report',
-    'p  r                         switch project, reload now',
-    'Esc                          close the innermost thing (never quits)',
+    'p  R                         switch project, reload now',
+    'Esc                          close the innermost thing',
     'q                            quit (from the list or history)',
     '',
-    'Answers are only recorded; the next executive pass acts on them.',
-    'The console never starts, stops or messages agents.',
+    'Everything that sends, presses or drops asks first. The console never stops an agent.',
   ];
 }
 
@@ -597,7 +763,8 @@ export function renderFrame(view, cols, rows, { termRows = rows } = {}) {
   for (let i = 0; i < bodyHeight; i++) {
     const y = out.length;
     const main = shown[i] ? fit(shown[i].spans, mainWidth) : fit([], mainWidth);
-    if (shown[i]?.key) hits[y].push({ from: mainLeft, to: cols, target: { type: 'row', key: shown[i].key } });
+    if (shown[i]?.hit) hits[y].push({ from: mainLeft, to: cols, target: shown[i].hit });
+    else if (shown[i]?.key) hits[y].push({ from: mainLeft, to: cols, target: { type: 'row', key: shown[i].key } });
     if (rail) {
       const r = railBody[i];
       if (r?.hit) hits[y].push({ from: 0, to: RAIL_WIDTH, target: r.hit });
@@ -610,13 +777,14 @@ export function renderFrame(view, cols, rows, { termRows = rows } = {}) {
 
   const row = view.selectedRow ?? null;
   const p = st.popup;
-  const mode = view.prompt ? 'ANSWER' : st.help ? 'HELP' : p ? p.kind.toUpperCase() : st.view === 'history' ? 'HISTORY' : 'LIST';
+  const mode = view.prompt ? (st.mode?.kind === 'reply' ? 'REPLY' : 'ANSWER') : st.help ? 'HELP' : p ? p.kind.toUpperCase() : st.view === 'history' ? 'HISTORY' : 'LIST';
   out.push(footerLine(view, cols, G, mode, p ? view.popupRow : row));
 
   let popupMax = 0;
   let pop = null;
   if (st.help) pop = helpPopup(view, cols, rows, G);
   else if (p?.kind === 'summary') pop = summaryPopup(view, cols, rows, G);
+  else if (p?.kind === 'peek') pop = peekPopup(view, cols, rows, G);
   else if (p?.kind === 'menu') pop = menuPopup(view, cols, rows, G, rows - 1 - launch.length);
   else if (p?.kind === 'scope') pop = scopePopup(view, cols, rows, G);
   if (pop) {
@@ -635,7 +803,7 @@ export function renderFrame(view, cols, rows, { termRows = rows } = {}) {
     });
   }
 
-  return finish(out.map((l) => ({ spans: fit(l.spans, cols) })), { listOffset, popupMax, hits });
+  return finish(out.map((l) => ({ spans: fit(l.spans, cols) })), { listOffset, popupMax, hits, popupScroll: pop?.scroll });
 }
 
 // The target under a click: the narrowest hit that covers x.

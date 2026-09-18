@@ -8,6 +8,7 @@
 //   brain dismiss <id>
 //   brain digest <id>                 run the recommendation pass by hand
 //   brain start --cwd DIR --name NAME [--label TEXT] -- "brief"
+//   brain explain --org DIR ID        an org item in plain words, with actions (cached)
 //
 // It watches Herdr, notices a session going done or blocked, reads what it
 // said, and puts it in a queue. It never closes a session. It sends into one
@@ -19,6 +20,7 @@ import { append, fold, open as openRows, get, handleOf, loadSeen, saveSeen, LOG 
 import { digest as runDigest } from '../lib/digest.mjs';
 import { classifyLocally } from '../lib/classify.mjs';
 import { startSession } from '../lib/start.mjs';
+import { explainItem } from '../lib/explain.mjs';
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';
@@ -261,6 +263,24 @@ async function main() {
       }
       return;
     }
+    case 'explain': {
+      const id = argv.slice(1).find((a, i, all) => !a.startsWith('--') && !['--org', '--org-bin', '--model'].includes(all[i - 1]));
+      const orgDir = val('--org', process.env.ORG_DIR);
+      if (!id || !orgDir) { process.stderr.write('usage: brain explain --org DIR [--org-bin BIN] [--refresh] [--cached-only] [--json] ID\n'); process.exit(2); }
+      try {
+        const r = await explainItem({ orgDir, id, orgBin: val('--org-bin', 'org'), model: val('--model', 'claude-sonnet-5'), refresh: has('--refresh'), cachedOnly: has('--cached-only') });
+        if (has('--json')) { process.stdout.write(`${JSON.stringify(r ?? { id, missing: true })}\n`); return; }
+        if (!r) { process.stdout.write('not explained yet\n'); return; }
+        process.stdout.write(`${id} — "${r.gist ?? ''}"\n${r.explain ?? ''}\n`);
+        for (const o of r.options ?? []) process.stdout.write(`  ${o.key}  ${o.label} — ${o.causes}${String(r.recommend) === String(o.key) ? '   ← recommended' : ''}\n`);
+        if (r.why) process.stdout.write(`  why: ${r.why}\n`);
+      } catch (err) {
+        if (has('--json')) process.stdout.write(`${JSON.stringify({ id, error: err.message.split('\n')[0] })}\n`);
+        else process.stderr.write(`${err.message}\n`);
+        process.exit(1);
+      }
+      return;
+    }
     case 'digest': {
       const r = get(argv[1]);
       if (!r) { process.stderr.write('no such result\n'); process.exit(1); }
@@ -280,6 +300,7 @@ async function main() {
         '  brain never <id> ["why"]              drop it for good',
         '  brain answer <id> "…"                 record what you decided',
         '  brain digest <id>                     run the reading pass by hand',
+        '  brain explain --org DIR ID            an org item in plain words, with actions (cached)',
         '  brain start --cwd DIR --name NAME [--label TEXT] [--model opus] [--effort high] [--add-dir DIR]... -- "brief"',
         '                                        open a session in Herdr on the folder\'s account and give it the brief',
       ].join('\n') + '\n');

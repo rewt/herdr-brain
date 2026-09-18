@@ -116,23 +116,37 @@ function queue() {
   const rows = has('--all') ? fold() : openRows();
   if (has('--json')) { process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`); return; }
   if (!rows.length) { process.stdout.write('nothing waiting\n'); return; }
-  const blocked = rows.filter((r) => r.state === 'blocked');
-  const done = rows.filter((r) => r.state !== 'blocked');
+
+  // Stranded first: the operator already answered and it never got delivered.
+  // Then real decisions, then things merely in the way, then finished work.
+  const bucket = (r) => {
+    if (r.unsent) return 'stranded';
+    const k = r.digest?.kind;
+    if (k === 'decision') return 'decision';
+    if (k === 'obstacle') return 'obstacle';
+    if (k === 'report') return 'finished';
+    return r.state === 'blocked' ? 'obstacle' : 'finished';
+  };
+  const groups = { stranded: [], decision: [], obstacle: [], finished: [] };
+  for (const r of rows) groups[bucket(r)].push(r);
+
   const section = (title, list) => {
     if (!list.length) return;
     process.stdout.write(`\n${title} (${list.length})\n`);
     for (const r of list) {
       const d = r.digest;
-      process.stdout.write(`  ${r.id.slice(0, 13)}  ${ago(r.at).padStart(4)}  ${cut(r.tab_label ?? r.session, 26).padEnd(27)}${cut(d?.question ?? d?.what_happened ?? r.headline, 60)}\n`);
-      if (r.unsent) process.stdout.write(`                        ↑ your unsent reply is sitting in it: ${cut(r.unsent, 44)}\n`);
+      process.stdout.write(`  ${r.id.slice(0, 13)}  ${ago(r.at).padStart(4)}  ${cut(r.tab_label ?? r.session, 24).padEnd(25)}${cut(d?.question ?? d?.what_happened ?? r.headline, 62)}\n`);
+      if (r.unsent) process.stdout.write(`                      you already typed: "${cut(r.unsent, 56)}"\n`);
       for (const o of d?.options ?? []) {
-        process.stdout.write(`                        ${o.key}  ${cut(o.label, 30).padEnd(31)}${cut(o.causes, 52)}${d.recommend === o.key ? '  ← recommended' : ''}\n`);
+        process.stdout.write(`                      ${o.key}  ${cut(o.label, 28).padEnd(29)}${cut(o.causes, 50)}${d.recommend === o.key ? '  ← recommended' : ''}\n`);
       }
-      if (!d && r.status === 'new') process.stdout.write('                        (not digested — brain digest <id>)\n');
+      if (!d && r.status === 'new') process.stdout.write('                      (not digested — brain digest <id>)\n');
     }
   };
-  section('STUCK — waiting on you', blocked);
-  section('FINISHED — nobody has read these', done);
+  section('YOUR ANSWER NEVER LANDED', groups.stranded);
+  section('DECISIONS — the work needs you', groups.decision);
+  section('IN THE WAY — clear these', groups.obstacle);
+  section('FINISHED — nobody has read these', groups.finished);
   process.stdout.write(`\n  brain show <id> · brain answer <id> "…" · brain dismiss <id>\n`);
 }
 

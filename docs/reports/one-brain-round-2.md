@@ -1,46 +1,62 @@
 ---
-run: R-12
+run: R-13
 outcome: done
 summary: |
-  Corrected all five independent-review findings. The supervisor now creates its ignored runtime directory before taking the session-open lock, with regression coverage for a fresh checkout and for the legacy checklist-adjacent STOP default. Script headers, repository boundaries, and cutover ordering are now explicit, and both test suites plus every original acceptance check pass.
-headline: The folded supervisor now works from a fresh checkout and all checks pass
+  Brain results now carry a project derived from the shared console configuration,
+  the console shows only the active project's results while counting the rest,
+  tidy-tabs recognizes completed lane reviews, and Codex final messages land in
+  Finished instead of being mistaken for unsent operator text.
+headline: One Brain results are project-aware and finished lane work is visible
 blockers: []
 proposals: []
 learnings:
-  - A dry run returns before the session-open lock, so it cannot prove that a missing runtime directory works in a real open-session path.
-  - Callers that omit --ledger-dir still use the checklist directory for STOP, session ledgers, and the open-session lock.
-  - The ignored deliver-r1.sh is a completed one-off whose last command still names the old arm script, so cutover must retire it rather than preserve it as runtime state.
+  - Project attribution can be derived consistently from either a checkout prefix or the two supported worktree layouts.
+  - A review verdict is sufficient evidence to retire an idle review tab only when it is newer than the registered lane session.
+  - Codex final output needs agent-aware prompt trimming because Claude's unsent-input box heuristic misreads Codex's final-message separators.
 artifacts:
-  - "commit 5e0ec45: independent review round 1 record"
-  - "commit a7b1e41: fresh-checkout runtime fix, regression tests, script documentation, repository boundary, and corrected cutover"
-  - "npm test: 140 pass, 0 fail"
-  - "npm --prefix console test: 92 pass, 0 fail"
-  - "node brain/bin/brain.mjs status: not watching · service on"
-  - "env -u NO_COLOR node console/app.mjs --print 140x45 --project herdr-org: rendered successfully"
-  - "sh supervisor/arm-watch.sh R-1 --dry-run: R-1 already has a recorded report; nothing to watch"
+  - "c87e68d: show project on every brain result"
+  - "45c90e7: filter waiting results by console project"
+  - "1e1a48d: close lane review tabs after verdicts"
+  - "842a2c2: classify Codex final messages as finished"
+  - "npm test: 144 passed, 1 optional-dependency skip"
+  - "npm --prefix console test: 93 passed"
+  - "node console/app.mjs --print 140x45 --project herdr-org: rendered successfully"
 ---
 
-The Moderate finding was valid: `takeTurn()` tried to create
-`.lane/supervisor/.session-open.lock` with a non-recursive `mkdir` before anything created
-`.lane/supervisor`. The catch path mistook the missing parent for a stale lock and retried forever.
-`openSession()` now recursively creates the resolved ledger directory before `takeTurn()`, does
-nothing in dry-run mode, and stops with the directory and underlying error if creation fails.
+# One Brain round 2: visibility
 
-`test/settle-watch.test.mjs` now exercises a non-dry `--open` with an absent explicit ledger
-directory. It asserts that the process advances instead of timing out and that the directory was
-created. A second regression puts `STOP` beside the checklist and omits `--ledger-dir`, proving
-the old caller contract remains intact.
+## Commits
 
-The two tracked shell scripts now say both what they do and who runs them, and `continue.sh`
-again documents its optional focus and dry-run arguments. `AGENTS.md` now scopes `brain/` as the
-model-calling background service with private state and no event-log writes, and identifies
-`supervisor/` as the tracked settle prompt and scripts.
+- `c87e68d` — derives and prints a project for every Brain queue and show result, including older stored results.
+- `45c90e7` — filters the console's waiting results to the active project and summarizes results waiting elsewhere.
+- `1e1a48d` — treats an idle or done lane review as finished when a newer valid verdict exists.
+- `842a2c2` — parses Codex screens with agent-aware rules so final assistant messages are classified as finished.
+- This commit — records the R-13 outcome and live tidy-tabs evidence.
 
-The round-one-b report's Cutover section now tells the operator to wait for every watcher armed
-from the old scripts to fire before removing those scripts or their checklist. It also identifies
-the stale absolute arm-script call in `.lane/supervisor/deliver-r1.sh` and says to retire that
-completed one-off after promotion. No file outside this worktree was changed.
+## Verification
 
-All eight original Brain commits remain ancestors of the branch head. `git diff --check` passes,
-the root and console suites pass, the console frame renders, the folded Brain status command
-runs, and the tracked arm script completes its dry-run path.
+- `npm test` — 144 passed, 1 skipped because the optional console dependency was unavailable to the root suite.
+- `npm --prefix console test` — 93 passed.
+- `node console/app.mjs --print 140x45 --project herdr-org` — exited successfully.
+- The Brain JSON queue showed `herdr-org` and `bch-cloak` on their matching live rows and `other` for unmatched rows.
+- The branch is rebased on `main`, has no merge commits, and `git diff --check main...HEAD` is clean.
+
+## Cutover
+
+None. No configuration, service, queue, organization, or other outside-repository state was changed. Promoting these commits makes the canonical Brain executable enrich both new and previously captured rows with project names.
+
+## tidy-tabs dry run
+
+The live snapshot no longer contained registered engineer agents to retire. It did contain eight completed review agents with verdicts newer than their sessions; the planner selected all eight and one old completed settle session, and selected no working agent.
+
+```text
+[dry-run] would close wGJ:t3 "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-9d9b16)
+[dry-run] would close wGJ:t6 "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-04ac18)
+[dry-run] would close wGJ:t8 "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-ded26a)
+[dry-run] would close wGJ:tB "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-da79a2)
+[dry-run] would close wGJ:tD "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-64e44c)
+[dry-run] would close wGJ:tF "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-16397f)
+[dry-run] would close wGJ:tK "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-4c46a1)
+[dry-run] would close wGJ:tN "agent:brain-console-v1": worker finished and its review verdict is recorded (lane-brain-console-9621c9-118ed6)
+[dry-run] would close wGH:tR "settle R-11": session finished (settle-r-11-1621)
+```

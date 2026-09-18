@@ -297,13 +297,15 @@ From the top:
 3. **Sessions**: every Herdr agent, grouped by repository (a worktree belongs to its main
    repository; git's common directory decides), groups ordered by their most urgent session
    (blocked, working, idle, done), then by name. An org run whose agent has gone stays for an
-   hour as `gone`.
+   hour as `gone`. For a lane agent, the console also reads the optional herdr-lanes session
+   registry in the canonical checkout (`.lane/sessions.json` and live records in
+   `.lane/sessions.json.d/`) read-only; malformed and completed records are ignored.
 4. **Launch bar**, resting (next round).
 5. **Footer**: the mode, then the keys that work now, or a message, or the answer prompt.
 
 | Column | Shows | From |
 |---|---|---|
-| SESSION | `lane <topic> r<round>`, else the agent's name, else the tab label (`tab 1` for a bare number) | org run `lane`/`round` (the agent's open run, else the latest finished run with its name), Herdr |
+| SESSION | `lane <topic> r<round>` from an org run; else `review <topic>` or `lane <topic>` from the lane session registry; else `lane <topic>` from an unnamed or generated-name lane worktree; else the agent's name, then the tab label (`tab 1` for a bare number) | org run `lane`/`round` (the agent's open run, else the latest finished run with its name); read-only `.lane/sessions.json.d/` matched by Herdr name or transcript session id; Herdr `cwd`, agent and tab |
 | WHO | tool and model in words, plus effort: `Claude Opus 5 · high`, `Codex Astra · xhigh`; `Claude · unknown` without a model | org run `harness`/`model`/`effort`; else Herdr's `agent` and the transcript's last model. An alias recorded in org (`opus`) gives way to the exact model in the transcript. |
 | WHERE | the checkout folder | Herdr `cwd` (org `workspace` for a gone run) |
 | UP | `9m`, `2h`, `3d` or `unknown` | org run `started`, else the transcript's first entry |
@@ -318,6 +320,10 @@ WHERE and UP go and DOING takes a second line under each session. At 180 columns
 session list scrolls (`↑`/`↓` in the left edge say there is more); the header, launch bar and
 footer stay put. Selection follows the row, not its position, and rows and groups do not reorder
 under the cursor when data refreshes (`r` re-ranks).
+
+Question titles also hide record codes. If removing a possessive code would leave broken text,
+the list and history show `Question title depends on a record code · no plain summary`; the
+untouched title remains available in the Context tab.
 
 There is no reader pane and no Decided or Finished list on the main screen: the **summary popup**
 (`s`) and the **history view** (`h`) show them. The popup's tabs are **Message** (the session's

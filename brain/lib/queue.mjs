@@ -59,6 +59,18 @@ export function open() {
   return all.filter((r) => newest.get(r.session ?? r.id) === r.id && !GONE.has(r.status));
 }
 
+// The section a waiting result belongs to in the human queue view.
+export function bucketOf(r) {
+  if (r.status === 'later') return 'later';
+  if (r.unsent) return 'stranded';
+  if (r.suggestion) return 'suggested';
+  const kind = r.digest?.kind;
+  if (kind === 'decision') return 'decision';
+  if (kind === 'obstacle') return 'obstacle';
+  if (kind === 'report') return 'finished';
+  return r.state === 'blocked' ? 'obstacle' : 'finished';
+}
+
 // A short, stable, unique handle for typing at the shell. The id starts with a
 // timestamp, so two sessions captured in the same tick share its first
 // characters — printing that prefix pointed commands at the wrong row.

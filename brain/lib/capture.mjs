@@ -10,6 +10,9 @@ const SPINNER = /^\s*[✻✽✳✢·*]\s+\S+.*(for|·)\s/;
 const PROMPT = /^\s*[❯>]\s?(.*)$/;
 // Status-bar text the terminal draws, which is never something a session said.
 const CHROME = /\/clear to save|\? for shortcuts|until auto-compact|new task\?|esc to interrupt|ctrl\+[a-z] to/i;
+const CODEX_PROMPT = /^\s*›\s+Ask Codex to do anything\s*$/i;
+const CODEX_STATUS = /^\s*\S.*\s·\s+(?:~|\/).*/;
+const CODEX_TIMER = /^\s*[─━_-]*\s*(?:Worked for|Working \().*/i;
 
 // A separator, with or without a label in it: mostly dashes, and long.
 // `──────── settle-r-121-1803 ─` is a rule; a sentence with an em dash is not.
@@ -47,17 +50,23 @@ function isFaint(line) {
   return sawText;
 }
 
-export function parseScreen(text) {
+export function parseScreen(text, { agent = null } = {}) {
   const withCodes = (text ?? '').replace(/\r/g, '').split('\n');
   const raw = withCodes.map(strip).join('\n');
   const lines = raw.split('\n');
+  const codex = agent === 'codex';
 
   // Trailing chrome: mode line, status hints. Walk back past blank/mode lines.
   let end = lines.length;
-  while (end > 0 && (lines[end - 1].trim() === '' || MODE_LINE.test(lines[end - 1]))) end -= 1;
+  while (end > 0 && (
+    lines[end - 1].trim() === '' || MODE_LINE.test(lines[end - 1])
+    || (codex && (CODEX_PROMPT.test(lines[end - 1]) || CODEX_STATUS.test(lines[end - 1]) || CODEX_TIMER.test(lines[end - 1])))
+  )) end -= 1;
 
   const dialog = findDialog(lines, end);
-  const box = findPromptBox(lines, dialog ? dialog.start : end);
+  // Codex separates a final answer from its elapsed-time footer with rules.
+  // Those are not an input box; only Claude's renderer uses this box shape.
+  const box = codex ? null : findPromptBox(lines, dialog ? dialog.start : end);
   const said = findSaid(lines, box ? box.start : dialog ? dialog.start : end);
 
   // Everything in the box faint means Claude proposed it; nobody typed it.
@@ -143,7 +152,7 @@ function findPromptBox(lines, end) {
 // prose also starts with `⏺`, so the bracket is what separates them.
 const TOOL_CALL = /^\s*[⏺●]\s+[A-Z]\w*\(/;
 const TOOL_OUT = /^\s*[⎿└|]/;
-const BULLET = /^\s*[⏺●]\s+/;
+const BULLET = /^\s*[⏺●•]\s+/;
 
 const isNoise = (l) => TOOL_CALL.test(l) || TOOL_OUT.test(l) || SPINNER.test(l) || MODE_LINE.test(l) || CHROME.test(l) || isRule(l);
 

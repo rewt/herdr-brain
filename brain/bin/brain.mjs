@@ -16,7 +16,7 @@
 import process from 'node:process';
 import { agents, read, tabLabels, sendKeys, prompt, HerdrDown } from '../lib/herdr.mjs';
 import { parseScreen, headline } from '../lib/capture.mjs';
-import { append, fold, open as openRows, get, handleOf, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
+import { append, bucketOf, fold, open as openRows, get, handleOf, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
 import { digest as runDigest } from '../lib/digest.mjs';
 import { classifyLocally } from '../lib/classify.mjs';
 import { startSession } from '../lib/start.mjs';
@@ -44,12 +44,13 @@ const cut = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : (s ?? '')
 
 async function capture(agent, labels) {
   const text = await read(agent.name, 250);
-  const parsed = parseScreen(text ?? '');
+  const parsed = parseScreen(text ?? '', { agent: agent.agent });
   const id = `${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 13)}-${agent.name}`;
   const entry = {
     type: 'result',
     id,
     session: agent.name,
+    agent: agent.agent ?? null,
     state: agent.agent_status,
     where: agent.cwd ?? null,
     workspace: agent.workspace_id ?? null,
@@ -140,18 +141,8 @@ function queue() {
 
   // Stranded first: the operator already answered and it never got delivered.
   // Then real decisions, then things merely in the way, then finished work.
-  const bucket = (r) => {
-    if (r.status === 'later') return 'later';
-    if (r.unsent) return 'stranded';
-    if (r.suggestion) return 'suggested';
-    const k = r.digest?.kind;
-    if (k === 'decision') return 'decision';
-    if (k === 'obstacle') return 'obstacle';
-    if (k === 'report') return 'finished';
-    return r.state === 'blocked' ? 'obstacle' : 'finished';
-  };
   const groups = { stranded: [], decision: [], suggested: [], obstacle: [], finished: [], later: [] };
-  for (const r of rows) groups[bucket(r)].push(r);
+  for (const r of rows) groups[bucketOf(r)].push(r);
 
   const section = (title, list) => {
     if (!list.length) return;

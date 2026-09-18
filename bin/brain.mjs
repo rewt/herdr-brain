@@ -7,16 +7,18 @@
 //   brain answer <id> "<text>"        record what you decided
 //   brain dismiss <id>
 //   brain digest <id>                 run the recommendation pass by hand
+//   brain start --cwd DIR --name NAME [--label TEXT] -- "brief"
 //
 // It watches Herdr, notices a session going done or blocked, reads what it
-// said, and puts it in a queue. It never starts, prompts, keys or closes a
-// session.
+// said, and puts it in a queue. It never closes a session. It sends into one
+// (send, key) or starts one (start) only when the operator asks.
 import process from 'node:process';
 import { agents, read, tabLabels, sendKeys, prompt, HerdrDown } from '../lib/herdr.mjs';
 import { parseScreen, headline } from '../lib/capture.mjs';
 import { append, fold, open as openRows, get, handleOf, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
 import { digest as runDigest } from '../lib/digest.mjs';
 import { classifyLocally } from '../lib/classify.mjs';
+import { startSession } from '../lib/start.mjs';
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';
@@ -238,6 +240,27 @@ async function main() {
       process.stdout.write('dismissed\n');
       return;
     }
+    case 'start': {
+      // Everything after -- is the brief; flags come before it.
+      const dash = argv.indexOf('--');
+      const brief = dash >= 0 ? argv.slice(dash + 1).join(' ').trim() : '';
+      const flags = dash >= 0 ? argv.slice(0, dash) : argv;
+      const flag = (f) => { const i = flags.indexOf(f); return i >= 0 ? flags[i + 1] : undefined; };
+      const addDirs = flags.flatMap((f, i) => (f === '--add-dir' && flags[i + 1] ? [flags[i + 1]] : []));
+      try {
+        const r = await startSession({
+          cwd: flag('--cwd'), name: flag('--name'), label: flag('--label'), prompt: brief,
+          model: flag('--model') ?? 'opus', effort: flag('--effort') ?? 'high', addDirs,
+        });
+        append({ type: 'started', id: r.name, session: r.name, where: flag('--cwd'), label: flag('--label') ?? null });
+        process.stdout.write(`${has('--json') ? JSON.stringify({ ok: true, ...r }) : `started ${r.name}`}\n`);
+      } catch (err) {
+        if (has('--json')) process.stdout.write(`${JSON.stringify({ ok: false, error: err.message })}\n`);
+        else process.stderr.write(`${err.message}\n`);
+        process.exit(1);
+      }
+      return;
+    }
     case 'digest': {
       const r = get(argv[1]);
       if (!r) { process.stderr.write('no such result\n'); process.exit(1); }
@@ -257,6 +280,8 @@ async function main() {
         '  brain never <id> ["why"]              drop it for good',
         '  brain answer <id> "…"                 record what you decided',
         '  brain digest <id>                     run the reading pass by hand',
+        '  brain start --cwd DIR --name NAME [--label TEXT] [--model opus] [--effort high] [--add-dir DIR]... -- "brief"',
+        '                                        open a session in Herdr on the folder\'s account and give it the brief',
       ].join('\n') + '\n');
       process.exit(2);
   }

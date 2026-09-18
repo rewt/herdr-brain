@@ -57,6 +57,7 @@ test('org today --json builds the console read model deterministically', () => {
   assert.equal(doc.project.day.end, '2026-09-16T05:00:00.000Z');
   assert.equal(doc.project.day.date, '2026-09-15');
   assert.deepEqual(doc.project.item_prefixes, ['ARCH', 'ENG', 'G', 'HUM', 'RES', 'REV', 'W']);
+  assert.equal(doc.project.open_stage, null, 'no goal carries stage_now, so no stage is open');
 
   // Ranked by prioritized work unblocked (transitively), then priority.
   assert.deepEqual(doc.waiting.map((w) => [w.id, w.unblocks_prioritized]), [
@@ -65,7 +66,7 @@ test('org today --json builds the console read model deterministically', () => {
   const first = doc.waiting[0];
   assert.deepEqual(first, {
     id: 'HUM-1', title: 'Adopt the theft fix?', status: 'ready', category: 'design', recommend: 'yes',
-    why: 'Why Adopt the theft fix?', on_yes: 'Work starts.', on_no: 'Work stops.', memo: null, priority: null,
+    why: 'Why Adopt the theft fix?', on_yes: 'Work starts.', on_no: 'Work stops.', memo: null, priority: null, stage: null,
     created: { at: MORNING.replace('Z', '.000Z'), by: 'human' },
     blocks: [{ id: 'ENG-1', title: 'Implement the theft fix' }],
     unblocks_prioritized: 2,
@@ -153,4 +154,17 @@ test('org today --json names the latest run of each agent, finished runs include
   // Reading it writes nothing.
   const events = doc.project.events;
   assert.equal(JSON.parse(t.ok(['today', '--json'], { now: '2026-09-12T15:00:00Z' })).project.events, events);
+});
+
+test('org today says which stage is open and which stage each question belongs to', () => {
+  const t = busyOrg();
+  t.ok(['set', 'G-1', 'meta.stage_now=1'], { now: NOW });
+  t.ok(['set', 'HUM-2', 'meta.stage=4'], { now: NOW });
+  t.ok(['set', 'HUM-3', 'meta.stage=parked'], { now: NOW });
+  const doc = JSON.parse(t.ok(['today', '--json'], { now: NOW }));
+  assert.equal(String(doc.project.open_stage), '1');
+  const stage = Object.fromEntries(doc.waiting.map((w) => [w.id, w.stage]));
+  assert.equal(String(stage['HUM-2']), '4');
+  assert.equal(stage['HUM-3'], 'parked');
+  assert.equal(stage['HUM-1'], null, 'a question with no stage says so');
 });

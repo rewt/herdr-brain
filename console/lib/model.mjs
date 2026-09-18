@@ -264,6 +264,10 @@ const UNKNOWN_REPO = { root: '', name: 'unknown repository', path: '', git: fals
 
 function sessionName(run, agent, tabs, prefixes) {
   if (run?.lane) return stripCodes(`lane ${run.lane}${run.round ? ` r${run.round}` : ''}`, prefixes);
+  const folder = agent?.cwd ? path.basename(agent.cwd) : '';
+  if (/^lane-[a-z0-9][a-z0-9-]*$/i.test(folder) && (!agent?.name || agent.name.startsWith(`${folder}-`))) {
+    return `lane ${folder.slice('lane-'.length)}`;
+  }
   if (agent?.name) return stripCodes(agent.name, prefixes) || agent.name;
   const tab = agent?.tab ? tabs.get(agent.tab) : null;
   if (tab?.label) return /^\d+$/.test(tab.label) ? `tab ${tab.label}` : stripCodes(tab.label, prefixes) || `tab ${tab.number ?? ''}`.trim();

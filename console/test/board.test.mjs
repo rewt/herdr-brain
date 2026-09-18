@@ -175,3 +175,21 @@ test('an idle agent whose org run already finished is named after that run, and 
   assert.ok(!rows.some((r) => r.key === 'r:R-5' || r.key === 'r:R-9'), 'a finished run without a live agent is not a row');
   assert.ok(!rows.some((r) => r.state === 'gone' && r.run?.round === 5));
 });
+
+test('an unregistered lane session is named from its worktree instead of a raw Herdr name', () => {
+  const herdr = { ok: true, agents: [
+    {
+      name: 'lane-seal-selector-mal-02a9f4', status: 'idle', tab: 'w1:t1', pane: 'w1:p1',
+      cwd: '/worktrees/bch-cloak/lane-seal-selector', workspace: 'w1', tool: 'claude',
+    },
+    {
+      name: null, status: 'working', tab: 'w2:t1', pane: 'w2:p1',
+      cwd: '/worktrees/herdr-org/lane-console-polish', workspace: 'w2', tool: 'codex',
+    },
+  ] };
+  const b = board({ today: { ...boardToday(), running: [], agent_runs: [] }, herdr, tabs: [] });
+  assert.deepEqual(boardRows(b).filter((r) => r.kind === 'session').map((r) => r.session).sort(), [
+    'lane console-polish',
+    'lane seal-selector',
+  ]);
+});

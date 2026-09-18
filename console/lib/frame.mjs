@@ -335,7 +335,7 @@ function listBody(view, width, G) {
   if (board.waiting.length || board.otherWaiting?.length) {
     const count = board.waitingCount ?? board.waiting.length;
     out.push({ spans: capLine(width, G, { name: 'WAITING ON YOU', count, icon: G.question, pillBg: 'waitPill', pillFg: 'waitFg', countFg: 'waitFg' }) });
-    if (!count) out.push({ spans: [span('   Nothing needs you right now.', 'muted')] });
+    if (!count) out.push({ spans: [span(st.scope?.repo ? '   Nothing from this repository needs you. Press / for all repositories.' : '   Nothing needs you right now.', 'muted')] });
     for (const row of board.waiting) {
       const selected = row.key === st.selectedKey;
       if (row.kind === 'fold') {

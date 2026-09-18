@@ -387,7 +387,7 @@ Enter opens a fold. The project's newest instruction from the operator sits abov
 | m, right click | Row menu with the verbs the row offers. Arrows and Enter pick; Esc closes. |
 | Tab | New task (next round) |
 | h | Today's history, newest first: answers, decisions and finished work. `h` or Esc returns. |
-| / | Scope: all repositories, one repository, *needs you*, *working*, or the history |
+| / | Scope: all repositories, one repository, *needs you*, *working*, or the history. A repository (a click on the rail, too) narrows the sessions and Waiting on you alike: brain results whose session ran in that repository or one of its worktrees, and org questions when it is the project's own checkout. *working* hides Waiting on you |
 | ! / w | Show only what needs you / only working sessions (again to show all) |
 | wheel | Scroll the list, or the open popup |
 | o | Open the brief, memo, report or message with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open -t` (the default text editor) |

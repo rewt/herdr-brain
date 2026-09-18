@@ -187,8 +187,13 @@ function titled(row) {
 }
 
 // A folded group inside Waiting on you: one line until it is opened.
-function foldRow(fold, headline, count) {
-  return { key: `fold:${fold}`, kind: 'fold', fold, headline, count, actions: [], doc: { missing: 'a group, not an item' }, data: null };
+function foldHeadline(fold, count, open) {
+  if (fold === 'later') return `${count} saved for later`;
+  return `${count} older question${count === 1 ? ' is' : 's are'} parked or wait for a later stage (stage ${open} is open now)`;
+}
+
+function foldRow(fold, count, stage = null) {
+  return { key: `fold:${fold}`, kind: 'fold', fold, headline: foldHeadline(fold, count, stage), count, stage, actions: [], doc: { missing: 'a group, not an item' }, data: null };
 }
 
 // Today's answers, decisions and finished work, newest first.
@@ -386,13 +391,16 @@ export function buildBoard({
   list.sort((a, b) => rank(a.rows[0]) - rank(b.rows[0]) || a.name.localeCompare(b.name));
 
   const tag = (r) => ({ ...r, prefixes });
+  // The scope filters Waiting on you by repository: a result belongs where its
+  // session ran, an org question to the project's own checkout.
+  const home = repoOf(fallbackCwd)?.root ?? null;
   const allResults = asQuestions(brain?.rows ?? []);
   const resultProject = (q) => q.brain?.project ?? 'other';
   const results = allResults
     // Unmatched results have no project tab of their own, so keep them
     // reachable from every project instead of hiding them behind the summary.
     .filter((q) => !projectName || resultProject(q) === projectName || resultProject(q) === 'other')
-    .map((q) => titled(resultRow(q, visible, byName, today)));
+    .map((q) => ({ ...titled(resultRow(q, visible, byName, today)), repoRoot: repoOf(q.brain?.where)?.root ?? home }));
   const otherCounts = new Map();
   if (projectName) {
     for (const q of allResults) {
@@ -414,17 +422,12 @@ export function buildBoard({
   const parked = questions.filter((q) => !current(q));
   const waiting = [...now, ...questions.filter(current)];
   const folded = [];
-  if (saved.length) folded.push(foldRow('later', `${saved.length} saved for later`, saved.length), ...saved.map((r) => ({ ...r, foldedIn: 'later' })));
-  if (parked.length) {
-    folded.push(
-      foldRow('stages', `${parked.length} older question${parked.length === 1 ? ' is' : 's are'} parked or wait for a later stage (stage ${open} is open now)`, parked.length),
-      ...parked.map((r) => ({ ...r, foldedIn: 'stages' })),
-    );
-  }
+  if (saved.length) folded.push(foldRow('later', saved.length), ...saved.map((r) => ({ ...r, foldedIn: 'later' })));
+  if (parked.length) folded.push(foldRow('stages', parked.length, open), ...parked.map((r) => ({ ...r, foldedIn: 'stages' })));
   return {
     // What sessions left behind comes first: a stranded reply or a stuck
     // session is costing time now, while an org question waits patiently.
-    waiting: [...waiting, ...folded].map(tag),
+    waiting: [...waiting, ...folded].map((r) => ({ ...tag(r), repoRoot: r.repoRoot ?? home })),
     waitingCount: waiting.length,
     otherWaiting,
     direction: latestDirection(today),
@@ -450,7 +453,10 @@ export function boardRows(board, view = 'list') {
   return view === 'history' ? board.history : [...board.waiting, ...board.groups.flatMap((g) => g.rows)];
 }
 
-// scope: { repo: root | null, view: 'all' | 'needs' | 'working' }. Questions show in every scope.
+// scope: { repo: root | null, view: 'all' | 'needs' | 'working' }. A repository scope
+// narrows the sessions and Waiting on you alike, so choosing a workspace shows
+// what that workspace's sessions left for the operator; the working view hides
+// Waiting on you, since nothing there is working.
 // unfolded: the folds inside Waiting on you that are open ('later', 'stages').
 export function visibleBoard(board, scope = {}, unfolded = []) {
   const keep = (row) => (scope.view === 'needs' ? row.state === 'blocked' : scope.view === 'working' ? row.state === 'working' : true);
@@ -458,10 +464,16 @@ export function visibleBoard(board, scope = {}, unfolded = []) {
     .filter((g) => !scope.repo || g.key === scope.repo)
     .map((g) => ({ ...g, rows: g.rows.filter(keep) }))
     .filter((g) => g.rows.length);
-  const waiting = (board.waiting ?? [])
-    .filter((r) => !r.foldedIn || unfolded.includes(r.foldedIn))
-    .map((r) => (r.kind === 'fold' ? { ...r, open: unfolded.includes(r.fold) } : r));
-  return { ...board, waiting, groups };
+  const inScope = scope.view === 'working' ? []
+    : (board.waiting ?? []).filter((r) => r.kind === 'fold' || !scope.repo || r.repoRoot === scope.repo);
+  const recount = (fold) => inScope.filter((r) => r.foldedIn === fold.fold).length;
+  const waiting = inScope
+    .map((r) => (r.kind === 'fold' ? { ...r, count: recount(r), headline: foldHeadline(r.fold, recount(r), r.stage), open: unfolded.includes(r.fold) } : r))
+    .filter((r) => r.kind !== 'fold' || r.count)
+    .filter((r) => !r.foldedIn || unfolded.includes(r.foldedIn));
+  const waitingCount = waiting.filter((r) => r.kind !== 'fold' && !r.foldedIn).length;
+  const otherWaiting = scope.view === 'working' ? [] : board.otherWaiting;
+  return { ...board, waiting, waitingCount, otherWaiting, groups };
 }
 
 // The scope choices, with counts: every repository, then the views.

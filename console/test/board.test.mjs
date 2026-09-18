@@ -112,7 +112,7 @@ test('refreshes keep groups and rows in place; a scope narrows what is shown', (
 
   const org = visibleBoard(first, { repo: '/r/herdr-org', view: 'all' });
   assert.deepEqual(org.groups.map((g) => g.name), ['herdr-org']);
-  assert.equal(org.waiting.length, 1, 'questions stay in every scope');
+  assert.equal(org.waiting.length, 0, 'an org question belongs to the project checkout; none is configured here');
   assert.deepEqual(visibleBoard(first, { repo: null, view: 'working' }).groups.map((g) => g.rows.map((r) => r.state)), [['working'], ['working']]);
   assert.deepEqual(visibleBoard(first, { repo: null, view: 'needs' }).groups.map((g) => g.name), ['herdr-lanes']);
   const empty = visibleBoard(first, { repo: '/r/none', view: 'all' });
@@ -211,4 +211,31 @@ test('a lane review session is named from the lane session registry', () => {
     laneSessionOf: (a) => a.name === agent.name ? { topic: 'brain-console-v1', role: 'review' } : null,
   });
   assert.equal(boardRows(b).find((r) => r.kind === 'session').session, 'review brain-console-v1');
+});
+
+test('choosing a repository narrows Waiting on you to what its sessions left, with org questions on the project checkout', () => {
+  const result = (id, session, where, extra = {}) => ({
+    id, at: '2026-09-17T20:13:00.000Z', session, tab_label: session, state: 'done', status: 'digested', where, project: 'herdr-org',
+    headline: `${session} finished`, digest: { kind: 'report', question: null, options: [], recommend: null }, ...extra,
+  });
+  const b = board({
+    fallbackCwd: '/r/herdr-org',
+    brain: { rows: [
+      result('r-zeta', 'settle-zeta', '/r/zeta'),
+      result('r-org', 'settle-org', '/w/herdr-org/lane-relay'),
+      result('r-saved', 'settle-old', '/r/zeta', { status: 'later' }),
+      result('r-lost', 'settle-lost', '/nowhere'),
+    ] },
+  });
+  const keys = (v) => v.waiting.map((r) => r.key);
+  assert.deepEqual(keys(visibleBoard(b, { repo: null, view: 'all' })), ['q:r-lost', 'q:r-org', 'q:r-zeta', 'q:HUM-5', 'fold:later']);
+  const zeta = visibleBoard(b, { repo: '/r/zeta', view: 'all' }, ['later']);
+  assert.deepEqual(keys(zeta), ['q:r-zeta', 'fold:later', 'q:r-saved'], 'a worktree counts for its repository; the fold keeps only its own');
+  assert.equal(zeta.waitingCount, 1);
+  assert.equal(zeta.waiting[1].headline, '1 saved for later');
+  const org = visibleBoard(b, { repo: '/r/herdr-org', view: 'all' });
+  assert.deepEqual(keys(org), ['q:r-lost', 'q:r-org', 'q:HUM-5'], 'the org question and a result from a vanished folder follow the project checkout; an empty fold disappears');
+  assert.deepEqual(keys(visibleBoard(b, { repo: null, view: 'working' })), [], 'the working view hides Waiting on you');
+  assert.deepEqual(visibleBoard(b, { repo: null, view: 'working' }).otherWaiting, []);
+  assert.equal(visibleBoard(b, { repo: null, view: 'needs' }).waitingCount, 4);
 });

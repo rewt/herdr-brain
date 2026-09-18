@@ -11,6 +11,7 @@ const PROMPT = /^\s*[❯>]\s?(.*)$/;
 // Status-bar text the terminal draws, which is never something a session said.
 const CHROME = /\/clear to save|\? for shortcuts|until auto-compact|new task\?|esc to interrupt|ctrl\+[a-z] to/i;
 const CODEX_PROMPT = /^\s*›\s+Ask Codex to do anything\s*$/i;
+const CODEX_COMPOSER = /^\s*›(?:\s+(.*\S))?\s*$/;
 const CODEX_STATUS = /^\s*\S.*\s·\s+(?:~|\/).*/;
 const CODEX_TIMER = /^\s*[─━_-]*\s*(?:Worked for|Working \().*/i;
 
@@ -37,7 +38,7 @@ function isFaint(line) {
   let sawText = false;
   let last = 0;
   for (const m of line.matchAll(SGR)) {
-    const before = line.slice(last, m.index).replace(/[\u00a0\s❯>]/g, '');
+    const before = line.slice(last, m.index).replace(/[\u00a0\s❯›>]/g, '');
     if (before) { sawText = true; if (!faint) return false; }
     for (const code of (m[1] || '0').split(';')) {
       if (code === '2') faint = true;
@@ -45,7 +46,7 @@ function isFaint(line) {
     }
     last = m.index + m[0].length;
   }
-  const tail = line.slice(last).replace(/[\u00a0\s❯>]/g, '');
+  const tail = line.slice(last).replace(/[\u00a0\s❯›>]/g, '');
   if (tail) { sawText = true; if (!faint) return false; }
   return sawText;
 }
@@ -56,21 +57,38 @@ export function parseScreen(text, { agent = null } = {}) {
   const lines = raw.split('\n');
   const codex = agent === 'codex';
 
+  // Codex draws its composer as one prompt-glyph line above the status bar.
+  // Normal-intensity text there was typed but never sent; faint text is only
+  // placeholder/suggestion chrome. Find it before trimming trailing chrome so
+  // it cannot be mistaken for the assistant's final message.
+  let codexBox = null;
+  if (codex) {
+    for (let i = lines.length - 1; i >= 0 && i > lines.length - 12; i -= 1) {
+      const m = CODEX_COMPOSER.exec(lines[i]);
+      if (!m) continue;
+      if (!lines.slice(i + 1).every((line) => !line.trim() || MODE_LINE.test(line) || CODEX_STATUS.test(line))) continue;
+      const coded = withCodes[i] ?? '';
+      const text = (m[1] ?? '').trim();
+      const placeholder = CODEX_PROMPT.test(lines[i]) || isFaint(coded);
+      codexBox = { start: i, text: placeholder ? '' : text, lineRange: [i] };
+      break;
+    }
+  }
+
   // Trailing chrome: mode line, status hints. Walk back past blank/mode lines.
-  let end = lines.length;
+  let end = codexBox?.start ?? lines.length;
   while (end > 0 && (
     lines[end - 1].trim() === '' || MODE_LINE.test(lines[end - 1])
     || (codex && (CODEX_PROMPT.test(lines[end - 1]) || CODEX_STATUS.test(lines[end - 1]) || CODEX_TIMER.test(lines[end - 1])))
   )) end -= 1;
 
   const dialog = findDialog(lines, end);
-  // Codex separates a final answer from its elapsed-time footer with rules.
-  // Those are not an input box; only Claude's renderer uses this box shape.
-  const box = codex ? null : findPromptBox(lines, dialog ? dialog.start : end);
+  // Claude uses a ruled box; Codex uses the single composer line found above.
+  const box = codex ? codexBox : findPromptBox(lines, dialog ? dialog.start : end);
   const said = findSaid(lines, box ? box.start : dialog ? dialog.start : end);
 
   // Everything in the box faint means Claude proposed it; nobody typed it.
-  const suggested = Boolean(box?.text) && box.lineRange
+  const suggested = !codex && Boolean(box?.text) && box.lineRange
     .map((i) => withCodes[i])
     .filter((l) => strip(l ?? '').replace(/[\u00a0\s❯>]/g, ''))
     .every(isFaint);

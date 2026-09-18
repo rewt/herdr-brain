@@ -47,8 +47,8 @@ node bin/brain.mjs watch --catch-up --digest
 Then, from anywhere:
 
 ```sh
-node bin/brain.mjs queue              # what is waiting
-node bin/brain.mjs show <id>          # one result in full, plus its last screen
+node bin/brain.mjs queue              # what is waiting, with a project column on every row
+node bin/brain.mjs show <id>          # one result in full, starting with its project, plus its last screen
 node bin/brain.mjs digest <id>        # run the recommendation pass by hand
 node bin/brain.mjs answer <id> "…"    # record what you decided
 node bin/brain.mjs dismiss <id>
@@ -60,10 +60,15 @@ node bin/brain.mjs start --cwd DIR --name NAME --label TEXT -- "brief"
                                       # open a session in Herdr, on the folder's Claude account
 ```
 
+Brain derives the project on old and new results from the session folder and the projects in the
+console configuration (`$HERDR_ORG_CONSOLE_CONFIG`, or its default): a configured checkout and its
+supported worktree layouts share that project's name, while an unmatched folder is `other`.
+
 The Brain console (herdr-org, `brain_bin` in its config) shows this queue at the top of Waiting on
-you and runs these same commands from its keys: a number picks a choice, `y` sends Claude's draft
-or the recommended choice, `r` replies, `l` saves for later, `x` drops, and `d` on an org question
-starts a session with `brain start` to work it out.
+you. It shows the active project's rows plus `other`, counts rows waiting in other configured
+projects on one line, and switches project tabs with `p`. It runs the same commands from its keys:
+a number picks a choice, `y` sends Claude's draft or the recommended choice, `r` replies, `l` saves
+for later, `x` drops, and `d` on an org question starts a session with `brain start` to work it out.
 
 ## What it captures
 

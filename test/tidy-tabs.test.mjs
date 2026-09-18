@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isShellOnly, planTidy, reviewedAgentsFromRecords, sessionOrderFromLedgers } from '../contrib/tidy-tabs.mjs';
+import { isShellOnly, planTidy, reviewedAgentsFromRecords, reviewVerdict, sessionOrderFromLedgers } from '../contrib/tidy-tabs.mjs';
 
 const tab = (tab_id, label, lane = false) => ({ tab_id, label, workspace_id: lane ? 'wL' : 'wM', lane });
 const pane = (pane_id, tab_id, shellOnly = true) => ({ pane_id, tab_id, shellOnly });
@@ -94,6 +94,17 @@ test('a newer lane review verdict finishes its idle review tab, but an older ver
   assert.match(plan.close.find((c) => c.tab_id === 't1').why, /review verdict is recorded/);
   assert.match(plan.keep.find((k) => k.tab_id === 't2').why, /no recorded report/);
   assert.match(plan.keep.find((k) => k.tab_id === 't4').why, /still active/);
+});
+
+test('a FAIL review record on its first nonempty line finishes an older review session', () => {
+  assert.equal(reviewVerdict('\n\n**FAIL**\nSchema: lane-review/v1\n'), 'FAIL');
+  assert.equal(reviewVerdict('\nheading\n**PASS**\n'), null);
+  const reviewed = reviewedAgentsFromRecords([
+    { name: 'lane-topic-review', role: 'review', topic: 'topic', created_at: '2026-09-18T15:00:00Z' },
+  ], [
+    { topic: 'topic', verdict: reviewVerdict('\n**FAIL**\n'), mtimeMs: Date.parse('2026-09-18T16:00:00Z') },
+  ]);
+  assert.deepEqual([...reviewed], ['lane-topic-review']);
 });
 
 test('a watcher label in a lane workspace or with an agent inside is left alone', () => {

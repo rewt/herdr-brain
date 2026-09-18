@@ -96,6 +96,10 @@ export function reviewedAgentsFromRecords(sessions, reviewRecords) {
     .map((s) => s.name));
 }
 
+export function reviewVerdict(text) {
+  return /^\s*\*\*(PASS|NEEDS-WORK|FAIL)\*\*/.exec(text ?? '')?.[1] ?? null;
+}
+
 function laneSessions(checkout) {
   const dir = path.join(checkout, '.lane', 'sessions.json.d');
   const sessions = [];
@@ -120,7 +124,7 @@ function reviewRecords(roots) {
         if (!file.endsWith('.md')) continue;
         const full = path.join(dir, file);
         try {
-          const verdict = /^\*\*(PASS|NEEDS-WORK)\*\*/.test(fs.readFileSync(full, 'utf8'));
+          const verdict = reviewVerdict(fs.readFileSync(full, 'utf8'));
           records.push({ topic: topic.name, verdict, mtimeMs: fs.statSync(full).mtimeMs });
         } catch { /* a disappearing or unreadable record proves nothing */ }
       }

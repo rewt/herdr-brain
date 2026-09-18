@@ -15,10 +15,13 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 
 // Newest first; the board sorts by its own rules after this.
-export async function readQueue(bin, { timeout = 8000 } = {}) {
+export async function readQueue(bin, { timeout = 8000, configFile = null, env = process.env } = {}) {
   if (!bin) return { rows: [], off: true };
   try {
-    const { stdout } = await run(process.execPath, [bin, 'queue', '--json'], { timeout, maxBuffer: 32 * 1024 * 1024 });
+    const childEnv = configFile ? { ...env, HERDR_ORG_CONSOLE_CONFIG: configFile } : env;
+    const { stdout } = await run(process.execPath, [bin, 'queue', '--json'], {
+      timeout, maxBuffer: 32 * 1024 * 1024, env: childEnv,
+    });
     const parsed = JSON.parse(stdout);
     return { rows: Array.isArray(parsed) ? parsed : [], off: false };
   } catch (err) {

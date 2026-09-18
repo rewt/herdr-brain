@@ -25,13 +25,13 @@ function ago(ms) {
 
 const EMPTY = { waiting: [], otherWaiting: [], groups: [], history: [], prefixes: undefined };
 
-export function createSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
+export function createSession({ config, configFile = null, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = {
     orgToday: cli.orgToday,
     orgAnswer: cli.orgAnswer,
     herdrAgents: cli.herdrAgents,
     herdrTabs: cli.herdrTabs,
-    brainQueue: config?.brain_bin ? () => readQueue(config.brain_bin) : null,
+    brainQueue: config?.brain_bin ? () => readQueue(config.brain_bin, { configFile, env }) : null,
     brainAct: (args) => brainAct(config?.brain_bin, args),
     loopStatus: config?.brain_bin ? () => loopStatus(config.brain_bin) : async () => null,
     setLoop: (on) => setLoop(config?.brain_bin, on),

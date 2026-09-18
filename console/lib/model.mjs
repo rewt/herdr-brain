@@ -389,13 +389,15 @@ export function buildBoard({
   const allResults = asQuestions(brain?.rows ?? []);
   const resultProject = (q) => q.brain?.project ?? 'other';
   const results = allResults
-    .filter((q) => !projectName || resultProject(q) === projectName)
+    // Unmatched results have no project tab of their own, so keep them
+    // reachable from every project instead of hiding them behind the summary.
+    .filter((q) => !projectName || resultProject(q) === projectName || resultProject(q) === 'other')
     .map((q) => titled(resultRow(q, visible, byName, today)));
   const otherCounts = new Map();
   if (projectName) {
     for (const q of allResults) {
       const name = resultProject(q);
-      if (name !== projectName) otherCounts.set(name, (otherCounts.get(name) ?? 0) + 1);
+      if (name !== projectName && name !== 'other') otherCounts.set(name, (otherCounts.get(name) ?? 0) + 1);
     }
   }
   const projectOrder = new Map([...projectNames, 'other'].map((name, i) => [name, i]));

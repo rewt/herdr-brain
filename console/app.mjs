@@ -6,6 +6,7 @@
 //
 //   node console/app.mjs [--project NAME] [--config FILE]
 //   node console/app.mjs --print 140x40 [--select N] [--keys KEYS]   one frame as plain text
+import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { herdrRightClick } from './lib/cli.mjs';
 import { ConfigError, configPath, loadConfig } from './lib/config.mjs';
@@ -39,8 +40,9 @@ if (opt.version) {
 }
 
 let config;
+const loadedConfigPath = path.resolve(opt.config ?? configPath());
 try {
-  config = loadConfig(opt.config ?? configPath());
+  config = loadConfig(loadedConfigPath);
 } catch (error) {
   if (!(error instanceof ConfigError)) throw error;
   process.stderr.write(`org console: ${error.message}\n`);
@@ -64,7 +66,7 @@ if (opt.print) {
     process.stderr.write('org console: --print expects COLSxROWS, e.g. 140x40\n');
     process.exit(1);
   }
-  const session = createSession({ config, projectIndex });
+  const session = createSession({ config, configFile: loadedConfigPath, projectIndex });
   await session.refresh({ reorder: true });
   const [cols, rows] = [Number(m[1]), Number(m[2])];
   session.frame(cols, rows);
@@ -141,7 +143,7 @@ async function suspend(fn) {
   return result;
 }
 
-const session = createSession({ config, projectIndex, deps: { suspend }, onChange: notify });
+const session = createSession({ config, configFile: loadedConfigPath, projectIndex, deps: { suspend }, onChange: notify });
 
 function color(token) {
   return NO_COLOR ? undefined : PALETTE[token];

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { asQuestions, categoryOf, titleFor } from '../lib/brain.mjs';
+import { asQuestions, categoryOf, readQueue, titleFor } from '../lib/brain.mjs';
 import { buildBoard, contextPairs } from '../lib/model.mjs';
 import { lineText, renderFrame } from '../lib/frame.mjs';
 import { initialState } from '../lib/controller.mjs';
@@ -103,7 +106,7 @@ test('no brain configured leaves the board exactly as it was', () => {
   assert.equal(buildBoard({ today, brain: { rows: [], off: true } }).waiting.length, 1);
 });
 
-test('Waiting on you shows this project and counts results waiting in the others', () => {
+test('Waiting on you shows this project plus unmatched results and counts configured projects waiting elsewhere', () => {
   const alpha = { ...obstacle, id: 'alpha-row', project: 'alpha' };
   const beta = { ...finished, id: 'beta-row', project: 'beta' };
   const elsewhere = { ...finished, id: 'other-row', project: 'other', session: 'elsewhere' };
@@ -116,14 +119,25 @@ test('Waiting on you shows this project and counts results waiting in the others
     projectNames: ['alpha', 'beta'],
   });
 
-  assert.deepEqual(board.waiting.filter((r) => r.kind === 'result').map((r) => r.data.id), ['alpha-row']);
-  assert.deepEqual(board.otherWaiting, [{ project: 'beta', count: 1 }, { project: 'other', count: 2 }]);
+  assert.deepEqual(board.waiting.filter((r) => r.kind === 'result').map((r) => r.data.id), ['alpha-row', 'legacy-row', 'other-row']);
+  assert.deepEqual(board.otherWaiting, [{ project: 'beta', count: 1 }]);
   const frame = renderFrame({
     glyphs: 'plain', version: 'test', header: { project: 'alpha' }, board, scopeItems: [], state: initialState(), project: {}, launch: {},
   }, 140, 30);
-  assert.match(frame.lines.map(lineText).join('\n'), /1 waiting in beta, 2 in other/);
+  assert.match(frame.lines.map(lineText).join('\n'), /1 waiting in beta/);
+  assert.match(frame.lines.map(lineText).join('\n'), /elsewhere/);
 
   const switched = buildBoard({ today, brain: { rows: [alpha, beta, elsewhere, legacy] }, projectName: 'beta', projectNames: ['alpha', 'beta'] });
-  assert.deepEqual(switched.waiting.filter((r) => r.kind === 'result').map((r) => r.data.id), ['beta-row']);
-  assert.deepEqual(switched.otherWaiting, [{ project: 'alpha', count: 1 }, { project: 'other', count: 2 }]);
+  assert.deepEqual(switched.waiting.filter((r) => r.kind === 'result').map((r) => r.data.id), ['legacy-row', 'other-row', 'beta-row']);
+  assert.deepEqual(switched.otherWaiting, [{ project: 'alpha', count: 1 }]);
+});
+
+test('the queue child uses the exact configuration file loaded by the console', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'console-brain-config-'));
+  const bin = path.join(dir, 'brain.mjs');
+  const configFile = path.join(dir, 'named-console.json');
+  fs.writeFileSync(bin, 'process.stdout.write(JSON.stringify([{ project: process.env.HERDR_ORG_CONSOLE_CONFIG }]))\n');
+  const queue = await readQueue(bin, { configFile, env: {} });
+  assert.equal(queue.error, undefined);
+  assert.equal(queue.rows[0].project, configFile);
 });

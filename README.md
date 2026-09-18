@@ -298,7 +298,9 @@ writes an example there and exits; edit it and delete its `"example"` line.
   session id Herdr reports (in the folder named after the session's `cwd`, else in any project
   folder), or by `agent-name` when Herdr gives no id. A transcript is read once and then only
   its new lines.
-- `brain_bin`: the folded-in Brain CLI; its queue and service controls join the console.
+- `brain_bin`: the folded-in Brain CLI; its queue and service controls join the console. When the
+  console was started with `--config FILE`, it passes that exact file to `brain queue`, so both
+  processes use the same project names and checkout roots.
 - `glyphs`: `nerd` (default) or `plain`.
 - Herdr: `herdr agent list` and `herdr tab list` on the same cadence.
 
@@ -356,7 +358,11 @@ Waiting on you is a work queue, written the way the operator reads work: the ite
 gist of what is at stake, a few plain sentences on why it matters (all of them on the selected
 row, two on the others), then the actions, one line each, with what each causes and
 `← recommended`. At the top: what stopped sessions left behind (from the brain queue, when
-`brain_bin` is set), read by brain's digest. Under them, org questions for the stage the project is
+`brain_bin` is set), read by brain's digest. Brain derives each result's project by matching its
+session folder to a configured checkout or that checkout's supported worktree layouts; unmatched
+folders are named `other`. Each project tab shows its own results plus `other` (so unmatched work
+is always reachable), and one line counts results waiting in the other configured projects. Use
+`p` to switch project tabs. Under the Brain results, org questions for the stage the project is
 working on now (`G-1 meta.stage_now`), each read once by `brain explain` (one small model call per
 question, cached by its content; `"explain": false` in `console.json` turns it off). Items saved
 for later, and org questions that are parked or belong to a later stage, fold into one line each;

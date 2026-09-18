@@ -1,5 +1,7 @@
 #!/bin/sh
-# Opens a fresh executive session to act on answers and start ready work.
+# Opens a fresh executive session to act on answers and start ready work; the
+# operator runs it directly.
+# Usage: continue.sh ["what to focus on"] [--dry-run]
 set -eu
 REWT=/Users/rewt/development/rewt
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

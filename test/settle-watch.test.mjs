@@ -54,4 +54,30 @@ esac`);
   });
   assert.equal(stopped.status, 1, stopped.stdout + stopped.stderr);
   assert.match(stopped.stdout, new RegExp(`${runtime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/STOP exists`));
+
+  const defaultStop = path.join(supervisor, 'STOP');
+  fs.writeFileSync(defaultStop, 'stop\n');
+  const defaultStopped = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+    '--lane-config', laneConfig, '--checklist', checklist,
+    '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(defaultStopped.status, 1, defaultStopped.stdout + defaultStopped.stderr);
+  assert.match(defaultStopped.stdout, new RegExp(`${defaultStop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} exists`));
+  fs.unlinkSync(defaultStop);
+
+  const missingRuntime = path.join(root, 'missing-runtime');
+  assert.equal(fs.existsSync(missingRuntime), false);
+  const prepared = spawnSync(process.execPath, [WATCH, '--open', '--org', path.join(root, '.org'),
+    '--cwd', path.join(root, 'not-the-checkout'), '--lane-config', laneConfig, '--checklist', checklist,
+    '--ledger-dir', missingRuntime, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    timeout: 2_000,
+  });
+  assert.equal(prepared.status, 1, prepared.stdout + prepared.stderr);
+  assert.equal(prepared.error, undefined);
+  assert.equal(fs.statSync(missingRuntime).isDirectory(), true);
+  assert.match(prepared.stdout, /no Herdr workspace has .*not-the-checkout/);
 });

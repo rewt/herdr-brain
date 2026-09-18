@@ -51,10 +51,12 @@ runtime directory supplies the STOP brake.
 - `~/.config/herdr-org/console.json` `brain_bin`: `/Users/rewt/development/rewt/brain/bin/brain.mjs` → `/Users/rewt/development/rewt/herdr-org/brain/bin/brain.mjs`.
 - `~/Library/LaunchAgents/com.rewt.herdr-brain.plist` `ProgramArguments` script string: `/Users/rewt/development/rewt/brain/bin/brain.mjs` → `/Users/rewt/development/rewt/herdr-org/brain/bin/brain.mjs`.
 - The same plist's `WorkingDirectory`: `/Users/rewt/development/rewt/brain` → `/Users/rewt/development/rewt/herdr-org/brain`. Running `node /Users/rewt/development/rewt/herdr-org/brain/bin/brain.mjs service start` after promotion applies both plist edits and restarts the loaded service.
-- Settle checklist path: `/Users/rewt/development/rewt/herdr-org/.lane/supervisor/SETTLE.md` → `/Users/rewt/development/rewt/herdr-org/supervisor/SETTLE.md`; remove the old checklist after promotion.
-- Operator arm command: `.lane/supervisor/arm-watch.sh R-n` → `supervisor/arm-watch.sh R-n`; remove the old ignored arm script after promotion.
-- Operator continue command: `.lane/supervisor/continue.sh "focus"` → `supervisor/continue.sh "focus"`; remove the old ignored continue script after promotion.
-- Keep `.lane/supervisor/deliver-r1.sh`, `sessions-*.log`, `STOP`, and the open-session lock as runtime state; they do not move into the tracked directory.
+- Settle checklist path: `/Users/rewt/development/rewt/herdr-org/.lane/supervisor/SETTLE.md` → `/Users/rewt/development/rewt/herdr-org/supervisor/SETTLE.md`.
+- Operator arm command: `.lane/supervisor/arm-watch.sh R-n` → `supervisor/arm-watch.sh R-n`.
+- Operator continue command: `.lane/supervisor/continue.sh "focus"` → `supervisor/continue.sh "focus"`.
+- Cutover order: wait until every watcher armed from the old `.lane/supervisor` scripts has fired before removing the old checklist, arm script, or continue script; an old watcher tells its settle session to read the old checklist path.
+- `.lane/supervisor/deliver-r1.sh`: old final command `exec /Users/rewt/development/rewt/herdr-org/.lane/supervisor/arm-watch.sh R-1` → no replacement; retire this completed one-off after promotion rather than leaving a caller of the removed script.
+- Keep `sessions-*.log`, `STOP`, and the open-session lock in `.lane/supervisor` as runtime state; they do not move into the tracked directory.
 - No bch-cloak edit is required: its absolute target `/Users/rewt/development/rewt/herdr-org/contrib/settle-watch.mjs` is unchanged, and callers that omit `--ledger-dir` retain the old behavior.
 
 Nothing under `~/.config`, `~/Library`, `/Users/rewt/development/bastian`, the live organization,

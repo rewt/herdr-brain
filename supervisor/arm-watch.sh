@@ -1,5 +1,7 @@
 #!/bin/sh
-# Arms the watcher that opens a fresh settle session when one run stops.
+# Arms the watcher that opens a fresh settle session when one run stops; the
+# operator runs it directly, and SETTLE.md tells settle sessions to run it.
+# Usage: arm-watch.sh R-n [--dry-run]
 set -eu
 RUN=${1:?usage: arm-watch.sh R-n [--dry-run]}
 shift

@@ -249,6 +249,14 @@ function launchSettings() {
 
 // Brakes checked before any session opens.
 const supervisorDir = path.resolve(opt['ledger-dir'] ?? path.dirname(path.resolve(opt.checklist)));
+function prepareSupervisorDir() {
+  if (dry) return;
+  try {
+    fs.mkdirSync(supervisorDir, { recursive: true });
+  } catch (err) {
+    die(`could not create ledger directory ${supervisorDir}: ${err.message}`);
+  }
+}
 function brakes() {
   const stop = path.join(supervisorDir, 'STOP');
   if (fs.existsSync(stop)) die(`${stop} exists, so no session was opened (delete it to resume; the work is untouched)`);
@@ -292,6 +300,7 @@ function takeTurn() {
 const releaseTurn = () => { if (!dry) try { fs.rmSync(openLock, { recursive: true }); } catch {} };
 
 function openSession({ mode, r }) {
+  prepareSupervisorDir();
   takeTurn();
   const ledger = brakes();
   pruneSessionTabs();

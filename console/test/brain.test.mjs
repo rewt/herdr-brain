@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { asQuestions, categoryOf } from '../lib/brain.mjs';
+import { asQuestions, categoryOf, titleFor } from '../lib/brain.mjs';
 import { buildBoard } from '../lib/model.mjs';
 
 const stranded = {
@@ -38,7 +38,34 @@ test('a result with no digest still lands, categorized by the session state', ()
 test('the recommendation names the option the operator would press', () => {
   const [q] = asQuestions([stranded]);
   assert.equal(q.recommend, '1 · Yes, rebuild from chain');
-  assert.equal(q.title, 'Should the packet drop four fields?');
+});
+
+test('a row never says "your reply" without saying which reply', () => {
+  // A generic prompt is replaced by the operator's own words.
+  assert.equal(
+    titleFor({ unsent: 'yes to the live-gate checklist wording' }, { question: 'Send your stranded reply now?' }),
+    'Send your reply: "yes to the live-gate checklist wording"',
+  );
+  // A real question keeps its words and carries the reply after them.
+  assert.equal(
+    titleFor(stranded, stranded.digest),
+    'Should the packet drop four fields? — you said "yes, route B"',
+  );
+  // Nothing is added when the question already quotes it.
+  assert.equal(
+    titleFor({ unsent: 'quit the browsers' }, { question: "Clear the dialog so your 'quit the browsers' reply can send?" }),
+    "Clear the dialog so your 'quit the browsers' reply can send?",
+  );
+  // With no stranded reply the question stands alone.
+  assert.equal(titleFor(obstacle, obstacle.digest), 'Teach auto mode about your environment?');
+});
+
+test('a long reply is cut, and only its first line is used', () => {
+  const long = { unsent: `${'x'.repeat(80)}\nsecond line` };
+  const t = titleFor(long, { question: 'Send your reply now?' });
+  assert.ok(t.length < 70, t);
+  assert.ok(!t.includes('second line'));
+  assert.ok(t.endsWith('…"'));
 });
 
 test('results come before org questions, and org rows are untouched', () => {

@@ -258,7 +258,14 @@ export function buildBoard({
     // What sessions left behind comes first: a stranded reply or a stuck
     // session is costing time now, while an org question waits patiently.
     waiting: [
-      ...asQuestions(brain?.rows ?? []).map((q) => tag({ ...questionRow(q, visible), kind: 'result', brain: q.brain })),
+      ...asQuestions(brain?.rows ?? []).map((q) => tag({
+        ...questionRow(q, visible),
+        kind: 'result',
+        // The org verbs would answer an item org has never heard of.
+        actions: [],
+        data: q.brain,
+        doc: q.brain?.screen ? { text: q.brain.screen } : { missing: 'nothing was on its screen' },
+      })),
       ...(today?.waiting ?? []).map((q) => tag(questionRow(q, visible))),
     ],
     groups: list.map((g) => ({ ...g, rows: g.rows.map(tag) })),
@@ -383,6 +390,10 @@ function afterDecline(b) {
 
 // Paragraphs for the Summary tab, without codes.
 export function summaryParagraphs(row) {
+  // A result's text is already plain: it is the session's own words or a
+  // reading of them. Running the code stripper over it only mangles session
+  // names like "settle R-124" and marks honest prose as code.
+  if (row.kind === 'result') return rawParagraphs(row);
   return rawParagraphs(row).map((p) => (p === row.headline ? p : plain(p, row.prefixes)));
 }
 
@@ -399,6 +410,24 @@ function rawParagraphs(row) {
         d.status === 'blocked' ? 'This question is itself waiting on other work.' : null,
         `Category: ${d.category ?? 'not recorded'}. Asked at ${hhmm(d.created?.at)}.`,
       ].filter(Boolean);
+    case 'result': {
+      const g = d.digest ?? {};
+      const where = d.where ? d.where.split('/').slice(-2).join('/') : 'an unknown folder';
+      return [
+        row.headline,
+        d.unsent
+          ? `You already answered this. Your reply is typed into its prompt box and was never sent:\n\n    "${d.unsent}"\n\nIt is waiting behind whatever is on its screen.`
+          : null,
+        g.what_happened ?? 'No summary was made of this one. The Screen tab has what it actually said.',
+        g.options?.length
+          ? ['What you can do:', ...g.options.map((o) => `  ${o.key}  ${o.label}${o.causes ? ` — ${o.causes}` : ''}${g.recommend === o.key ? '   ← recommended' : ''}`)].join('\n')
+          : null,
+        g.why ? `Why that one: ${g.why}` : null,
+        g.next_step ? `Next step: ${g.next_step}` : null,
+        `This came from the session ${d.tab_label ?? d.session}, running in ${where}. It went ${d.state} at ${hhmm(d.at)}.`,
+        g.source === 'parser' ? 'Read straight from its screen; no model was asked.' : null,
+      ].filter(Boolean);
+    }
     case 'answer':
       return [
         row.headline,
@@ -449,6 +478,21 @@ export function contextPairs(row, project = {}) {
       add('blocks', d.blocks?.map((b) => [b.id, b.title, b.status && `(${[b.status, ...(b.open_runs ?? [])].join(' ')})`].filter(Boolean).join(' ')));
       add('unblocks prioritized', d.unblocks_prioritized);
       add('memo', d.memo);
+      break;
+    case 'result':
+      add('session', d.session);
+      add('state', d.state);
+      add('captured', d.at);
+      add('folder', d.where);
+      add('tab', d.tab_label ? `${d.tab_label} (${d.tab})` : d.tab);
+      add('pane', d.pane);
+      add('workspace', d.workspace);
+      add('terminal title', d.title);
+      add('unsent reply', d.unsent);
+      add('stuck at', d.dialog?.question);
+      add('its options', d.dialog?.options?.map((o) => `${o.key}. ${o.label}`));
+      add('read by', d.digest?.source === 'parser' ? 'the parser, no model call' : d.digest ? 'a model' : 'nothing yet');
+      add('queue id', d.id);
       break;
     case 'decision':
       add('on', `${d.id} ${d.title ?? ''}`.trim());

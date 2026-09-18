@@ -31,6 +31,22 @@ export function categoryOf(entry) {
 
 const RANK = { stranded: 0, decision: 1, obstacle: 2, finished: 3 };
 
+// A row that says "send your stranded reply" without saying which reply is
+// useless, so the operator's own words go in the title when nothing else
+// already carries them.
+export function titleFor(entry, digest) {
+  const asked = digest?.question ?? entry.headline ?? entry.title ?? 'a session stopped';
+  const reply = entry.unsent?.split('\n')[0]?.trim();
+  if (!reply) return asked;
+  const head = reply.slice(0, 16).toLowerCase();
+  if (asked.toLowerCase().includes(head)) return asked;
+  const short = reply.length > 44 ? `${reply.slice(0, 43)}…` : reply;
+  // A generic prompt is replaced; a real question keeps its words and is tagged.
+  return /stranded|your (typed )?reply|send (it|your)/i.test(asked)
+    ? `Send your reply: "${short}"`
+    : `${asked} — you said "${short}"`;
+}
+
 // The shape `questionRow` consumes: id, title, category, recommend, created, memo.
 export function asQuestions(rows) {
   return rows
@@ -39,7 +55,7 @@ export function asQuestions(rows) {
       const recommended = d?.options?.find((o) => o.key === d.recommend);
       return {
         id: r.id,
-        title: d?.question ?? r.headline ?? r.title ?? 'a session stopped',
+        title: titleFor(r, d),
         category: categoryOf(r),
         recommend: recommended ? `${recommended.key} · ${recommended.label}` : d?.recommend ?? null,
         created: { at: r.at, by: r.session },

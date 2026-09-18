@@ -17,6 +17,7 @@ const RAIL_WIDTH = 22;
 
 export const TAB_NAMES = {
   question: ['Summary', 'Memo', 'Context'],
+  result: ['Summary', 'Screen', 'Context'],
   session: ['Message', 'Brief', 'Context'],
   other: ['Summary', 'Document', 'Context'],
 };

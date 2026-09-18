@@ -87,3 +87,22 @@ test('a transcript looked up by agent name reads only transcripts written since 
   createSessionReader({ fsApi }).transcript({ configDirs: [dir], cwd: '/tmp/named', name: 'nobody' });
   assert.ok(opened.includes('old.jsonl'));
 });
+
+test('a lane session record is found by Herdr name or transcript session id', () => {
+  const repo = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'console-lane-registry-'));
+  const directory = path.join(repo, '.lane', 'sessions.json.d');
+  nodeFs.mkdirSync(directory, { recursive: true });
+  nodeFs.writeFileSync(path.join(directory, 'broken.json'), '{');
+  const record = {
+    session_id: 'f7e834b7-2ae7-4a7c-a444-36cb88c97942',
+    agent_session_id: 'claude-session-9',
+    name: 'lane-console-729a9a-7f2c',
+    topic: 'console',
+    role: 'review',
+  };
+  nodeFs.writeFileSync(path.join(directory, `${record.session_id}.json`), JSON.stringify(record));
+  const reader = createSessionReader();
+  assert.deepEqual(reader.laneSession({ repoRoot: repo, name: record.name }), record);
+  assert.deepEqual(reader.laneSession({ repoRoot: repo, sessionId: record.agent_session_id }), record);
+  assert.equal(reader.laneSession({ repoRoot: repo, name: 'not-there' }), null);
+});

@@ -110,6 +110,14 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
     }
   }
 
+  function laneSessionOf(agent, repo) {
+    try {
+      return d.reader.laneSession({ repoRoot: repo.root, name: agent.name, sessionId: agent.session });
+    } catch {
+      return null;
+    }
+  }
+
   function readText(file) {
     let st;
     try {
@@ -155,6 +163,7 @@ export function createSession({ config, projectIndex = 0, deps = {}, onChange = 
       transcriptOf,
       repoOf: d.repoOf,
       briefOf: readText,
+      laneSessionOf,
       nowMs: d.now().getTime(),
       seen: s.seen,
       fallbackCwd: project().cwd,

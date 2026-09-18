@@ -258,7 +258,36 @@ export function createSessionReader({ fsApi = nodeFs, now = Date.now } = {}) {
     return { file, model: entry.model, firstAt: entry.firstAt, note: entry.note };
   }
 
-  return { find, notes, load, transcript };
+  // herdr-lanes keeps display-only session records beside the canonical checkout.
+  // They are optional and may be partly written or from an older schema, so a bad
+  // record is ignored rather than making the console unavailable.
+  function laneSession({ repoRoot, name = null, sessionId = null }) {
+    if (!repoRoot || (!name && !sessionId)) return null;
+    const records = [];
+    const add = (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+      records.push(value);
+    };
+    try {
+      const legacy = JSON.parse(fsApi.readFileSync(path.join(repoRoot, '.lane', 'sessions.json'), 'utf8'));
+      if (Array.isArray(legacy)) legacy.forEach(add);
+    } catch {}
+    const directory = path.join(repoRoot, '.lane', 'sessions.json.d');
+    let filesInDirectory = [];
+    try {
+      filesInDirectory = fsApi.readdirSync(directory);
+    } catch {}
+    for (const file of filesInDirectory.sort()) {
+      if (!file.endsWith('.json') || file.endsWith('.done.json')) continue;
+      try {
+        add(JSON.parse(fsApi.readFileSync(path.join(directory, file), 'utf8')));
+      } catch {}
+    }
+    return records.find((record) =>
+      (sessionId && record.agent_session_id === sessionId) || (name && record.name === name)) ?? null;
+  }
+
+  return { find, notes, load, transcript, laneSession };
 }
 
 export function stopFileExists(ledgerDir, fsApi = nodeFs) {

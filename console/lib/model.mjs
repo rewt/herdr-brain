@@ -262,8 +262,13 @@ const URGENCY = { blocked: 0, working: 1, idle: 2, done: 3, unknown: 4, gone: 5 
 const GONE_KEEP_MS = 3600000;
 const UNKNOWN_REPO = { root: '', name: 'unknown repository', path: '', git: false };
 
-function sessionName(run, agent, tabs, prefixes) {
+function sessionName(run, agent, tabs, prefixes, laneSession) {
   if (run?.lane) return stripCodes(`lane ${run.lane}${run.round ? ` r${run.round}` : ''}`, prefixes);
+  const topic = laneSession?.topic ?? String(laneSession?.lane ?? '').replace(/^lane\//, '');
+  if (topic) {
+    const kind = /^review(?:er)?$/i.test(laneSession.role ?? '') ? 'review' : 'lane';
+    return stripCodes(`${kind} ${topic}`, prefixes);
+  }
   const folder = agent?.cwd ? path.basename(agent.cwd) : '';
   if (/^lane-[a-z0-9][a-z0-9-]*$/i.test(folder) && (!agent?.name || agent.name.startsWith(`${folder}-`))) {
     return `lane ${folder.slice('lane-'.length)}`;
@@ -276,14 +281,15 @@ function sessionName(run, agent, tabs, prefixes) {
 }
 
 function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
-  const { transcriptOf, repoOf, briefOf, nowMs, fallbackCwd } = deps;
+  const { transcriptOf, repoOf, briefOf, laneSessionOf, nowMs, fallbackCwd } = deps;
   const transcript = agent ? transcriptOf(agent, run) : null;
   const cwd = agent?.cwd ?? run?.workspace ?? null;
   const repo = repoOf(cwd) ?? (agent ? null : repoOf(fallbackCwd)) ?? UNKNOWN_REPO;
+  const laneSession = agent && repo.git ? laneSessionOf(agent, repo) : null;
   return {
     key: run ? `r:${run.run}` : agent.name ? `h:${agent.name}` : `h:pane:${agent.pane}`,
     kind: 'session',
-    session: sessionName(run, agent, tabs, prefixes),
+    session: sessionName(run, agent, tabs, prefixes, laneSession),
     who: whoFor({ harness: run?.harness, model: run?.model, effort: run?.effort, agentTool: agent?.tool, transcriptModel: transcript?.model }),
     where: cwd ? path.basename(cwd) : 'unknown',
     up: upText(run?.started ?? transcript?.firstAt ?? null, nowMs),
@@ -319,11 +325,12 @@ function sessionRow({ run, agent, state, deps, tabs, prefixes }) {
 //   fallbackCwd   the project's checkout, for a run with no known folder
 export function buildBoard({
   today, brain = null, herdr = null, tabs = [], transcriptOf = () => null, repoOf = () => null, briefOf = () => null,
+  laneSessionOf = () => null,
   nowMs = Date.now(), seen = new Map(), fallbackCwd = null, explanations = new Map(), explaining = null,
 }) {
   const prefixes = today?.project?.item_prefixes ?? undefined;
   const visible = (text) => plain(text, prefixes);
-  const deps = { transcriptOf, repoOf, briefOf, nowMs, fallbackCwd };
+  const deps = { transcriptOf, repoOf, briefOf, laneSessionOf, nowMs, fallbackCwd };
   // Sessions may belong to other organizations, so their text also loses the default prefixes.
   const sessionPrefixes = [...new Set([...(prefixes ?? []), ...DEFAULT_PREFIXES])];
   const tabMap = new Map((tabs ?? []).map((t) => [t.tab, t]));

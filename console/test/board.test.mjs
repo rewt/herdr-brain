@@ -193,3 +193,17 @@ test('an unregistered lane session is named from its worktree instead of a raw H
     'lane seal-selector',
   ]);
 });
+
+test('a lane review session is named from the lane session registry', () => {
+  const agent = {
+    name: 'lane-brain-console-v1-729a9a-7f2c', status: 'idle', tab: 'w1:t9', pane: 'w1:p9',
+    cwd: '/w/herdr-org/lane-brain-console-v1', workspace: 'w1', tool: 'claude', session: 'claude-session-9',
+  };
+  const b = board({
+    today: { ...boardToday(), running: [], agent_runs: [] },
+    herdr: { ok: true, agents: [agent] },
+    tabs: [],
+    laneSessionOf: (a) => a.name === agent.name ? { topic: 'brain-console-v1', role: 'review' } : null,
+  });
+  assert.equal(boardRows(b).find((r) => r.kind === 'session').session, 'review brain-console-v1');
+});

@@ -514,6 +514,9 @@ function ingestFile(ctx, file, runHint) {
       if (run.report.sha256 === sha256) return { add: [], result: { already: true, runId } };
       throw new UserError(`${runId} already has a report (recorded ${run.report.at}); start a new run to report again`);
     }
+    if (run.abandoned) {
+      return { add: [], result: { skipped: true, runId, item: run.item } };
+    }
     const stored = path.join('reports', `${runId}.md`);
     writeFileAtomic(path.join(ctx.dir, stored), text, 0o444);
     const report = { ...parsed.report, run: runId };
@@ -546,6 +549,10 @@ function printIngest(res) {
     for (const e of res.errors) err(`  error: ${e}\n`);
     for (const w of res.warnings) err(`  warning: ${w}\n`);
     return false;
+  }
+  if (res.skipped) {
+    safeOut(`${res.runId}: report skipped because the run was abandoned; it will not be ingested\n`);
+    return true;
   }
   if (res.already) {
     safeOut(`${res.runId}: report already recorded\n`);
@@ -631,7 +638,9 @@ function abandon(argv) {
     if (run.abandoned) return { add: [] };
     return { add: [{ type: 'run.abandoned', id, note: values.note ?? null }] };
   });
-  out(added.length ? `${id} abandoned; its item is free for a new run\n` : `${id} was already abandoned\n`);
+  out(added.length
+    ? `${id} abandoned; its item is free for a new run; a later report will not be ingested\n`
+    : `${id} was already abandoned; a later report will not be ingested\n`);
   return 0;
 }
 

@@ -183,17 +183,18 @@ proposals:
   assert.match(brief, /full report: `org show R-1`/);
 });
 
-test('an abandoned run frees its item and a late report is still kept', () => {
+test('an abandoned run frees its item and a late report is not ingested', () => {
   const { dir, ok } = setup();
   ok(['add', 'Flaky investigation', '--role', 'researcher']);
   ok(['start', 'RES-1', '--harness', 'codex']);
   assert.match(ok(['status']), /ACTIVE\n\s+RES-1.*R-1 \(codex\)/);
-  ok(['abandon', 'R-1', '--note', 'session died']);
+  assert.match(ok(['abandon', 'R-1', '--note', 'session died']), /a later report will not be ingested/);
   assert.match(ok(['status']), /READY\n\s+RES-1/);
   ok(['start', 'RES-1', '--harness', 'claude-code']);
   fs.writeFileSync(path.join(dir, 'runs/R-1/report.md'), report('run: R-1\noutcome: done\nsummary: Finished after all.'));
-  assert.match(ok(['sync']), /R-1 → done on RES-1 \(late: the run had been abandoned\)/);
-  assert.match(ok(['show', 'RES-1']), /R-1 .*reported done .*\(late\)/);
+  assert.match(ok(['sync']), /R-1: report skipped because the run was abandoned; it will not be ingested/);
+  assert.match(ok(['show', 'RES-1']), /R-1 .*abandoned/);
+  assert.equal(fs.existsSync(path.join(dir, 'reports/R-1.md')), false);
 });
 
 test('an interrupted write is ignored on read and repaired on the next write', () => {

@@ -13,6 +13,7 @@ import {
   wouldCycleBlock, wouldCycleParent,
 } from '../lib/state.mjs';
 import { readReport } from '../lib/report.mjs';
+import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
@@ -66,6 +67,7 @@ The organization is found from $ORG_DIR or the nearest .org/ above the current d
 
 const out = (text) => process.stdout.write(text);
 const err = (text) => process.stderr.write(text);
+const safeOut = (text) => out(sanitizeTerminal(text));
 
 function args(argv, options, { min = 0, max = Infinity, usage }) {
   const { values, positionals } = parseArgs({ args: argv, options, allowPositionals: true, strict: true });
@@ -476,14 +478,14 @@ function start(argv) {
   fs.mkdirSync(path.dirname(run.report_path), { recursive: true });
 
   const label = [meta.harness, meta.model, meta.effort].filter(Boolean).join(' · ');
-  out(`${run.id} started on ${id} "${truncate(after.state.items.get(id).title, 60)}"${label ? ` [${label}]` : ''}\n`);
-  if (result.reopened) out(`  (${id} was closed; reopened)\n`);
-  out(`  brief   ${run.brief_path}  (${brief.length} chars ≈ ${approxTokens(brief)} tokens)\n`);
-  out(`  report  ${run.report_path}\n`);
-  out(`  prompt  Read ${run.brief_path} and follow it.\n`);
-  if (result.parallel.length) out(`note: ${id} already has open runs: ${result.parallel.join(', ')}\n`);
+  safeOut(`${run.id} started on ${id} "${truncate(after.state.items.get(id).title, 60)}"${label ? ` [${label}]` : ''}\n`);
+  if (result.reopened) safeOut(`  (${id} was closed; reopened)\n`);
+  safeOut(`  brief   ${run.brief_path}  (${brief.length} chars ≈ ${approxTokens(brief)} tokens)\n`);
+  safeOut(`  report  ${run.report_path}\n`);
+  safeOut(`  prompt  Read ${run.brief_path} and follow it.\n`);
+  if (result.parallel.length) safeOut(`note: ${id} already has open runs: ${result.parallel.join(', ')}\n`);
   for (const a of attention(after.state, after.config, after.now).filter((a) => a.id === id && a.kind === 'budget')) {
-    out(`note: ${id} ${a.text}\n`);
+    safeOut(`note: ${id} ${a.text}\n`);
   }
   return 0;
 }
@@ -546,26 +548,26 @@ function printIngest(res) {
     return false;
   }
   if (res.already) {
-    out(`${res.runId}: report already recorded\n`);
+    safeOut(`${res.runId}: report already recorded\n`);
     return true;
   }
-  out(`${res.runId} → ${res.outcome} on ${res.item}${res.late ? ' (late: the run had been abandoned)' : ''}: ${truncate(res.summary, 100)}\n`);
+  safeOut(`${res.runId} → ${res.outcome} on ${res.item}${res.late ? ' (late: the run had been abandoned)' : ''}: ${truncate(res.summary, 100)}\n`);
   for (const c of res.created) {
-    out(`  + ${c.id} "${truncate(c.title, 60)}"${c.role ? ` (${c.role})` : ''}${c.blocking ? ` blocks ${res.item}` : ''}\n`);
+    safeOut(`  + ${c.id} "${truncate(c.title, 60)}"${c.role ? ` (${c.role})` : ''}${c.blocking ? ` blocks ${res.item}` : ''}\n`);
   }
-  for (const w of res.warnings) out(`  warning: ${w}\n`);
+  for (const w of res.warnings) safeOut(`  warning: ${w}\n`);
   const after = openOrg();
   const status = itemStatus(after.state, res.item);
-  out(`${res.item} is now ${status}\n`);
+  safeOut(`${res.item} is now ${status}\n`);
   if (isResolved(status)) {
     for (const blocked of blockedBy(after.state, res.item)) {
       const now = itemStatus(after.state, blocked);
-      if (now !== 'blocked') out(`${blocked} is no longer blocked by ${res.item} (now ${now})\n`);
+      if (now !== 'blocked') safeOut(`${blocked} is no longer blocked by ${res.item} (now ${now})\n`);
     }
   }
   const touched = new Set([res.item, ...res.created.map((c) => c.id)]);
   for (const a of attention(after.state, after.config, after.now).filter((a) => touched.has(a.id) && a.kind === 'budget')) {
-    out(`note: ${a.id} ${a.text}; recorded, not refused\n`);
+    safeOut(`note: ${a.id} ${a.text}; recorded, not refused\n`);
   }
   return true;
 }

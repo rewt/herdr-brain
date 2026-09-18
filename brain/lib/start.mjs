@@ -93,6 +93,9 @@ export async function startSession({ cwd, name, label, prompt, model = 'opus', e
   if (!cwd || !name || !prompt) throw new Error('start needs --cwd, --name and a prompt');
   const workspace = await workspaceFor(cwd);
   const { env, args } = await launchSettings(cwd);
+  // Commands the new session runs against org must be attributed to the
+  // session, not to the human process that asked Brain to open it.
+  env.ORG_ACTOR = name;
 
   const tabArgs = ['tab', 'create', '--workspace', workspace, '--cwd', cwd, '--label', label ?? name, '--no-focus'];
   for (const [k, v] of Object.entries(env)) tabArgs.push('--env', `${k}=${v}`);

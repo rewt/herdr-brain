@@ -165,6 +165,8 @@ Updated 2026-09-16 after the first bch-cloak pilot; evidence and numbers in
 | 3. Ephemeral executive / planning | `continue.sh` opens a fresh executive; decides within delegated authority | **No** — the day's plan (protocol release) was missing from org until the operator intervened and a long chat rebuilt it; no planning session exists |
 | 4. Disposable human-facing brain | `org status` / `org snapshot`; no curated view; notifications off | **No** — the operator's window was a long-running chat that cost 99M input tokens, more than the supervisor it replaced |
 
+2026-09-18: herdr-lanes was folded into `lanes/` as the dispatch layer for worktrees, dispatch, review and promotion.
+
 **The supervisor is not gone until jobs 2–5 of the pilot write-up (exceptions,
 planning, operator window, oversight) have homes that are not a live chat.**
 Proposed homes: `design-M2-supervisor-homes.md`.

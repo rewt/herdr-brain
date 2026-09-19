@@ -4,7 +4,10 @@
   "description": "Durable organizational state for agent R&D: work items, runs, reports and zero-inference status outside any LLM session.",
   "type": "module",
   "private": true,
-  "scripts": { "test": "node --test" },
+  "scripts": {
+    "test": "node --test test brain/test console/test",
+    "test:lanes": "node --test lanes/test"
+  },
   "bin": { "org": "./bin/org.mjs" },
   "engines": { "node": ">=20" }
 }

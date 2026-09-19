@@ -21,6 +21,7 @@ Node ≥ 20, no dependencies (the optional `console/` has its own). Put `bin/org
 | `lib/` | The dependency-free core: event storage, state folding, reports and views. |
 | `brain/` | The Herdr watcher, operator queue and commands that start or answer sessions. |
 | `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
+| `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
 | `contrib/settle-watch.mjs` | Waits for a worker to stop, then opens a fresh settle session. |
 | `contrib/tidy-tabs.mjs` | Closes finished Herdr tabs after their results are safely recorded. |
 | `supervisor/` | The prompt each settle session gets and the scripts that arm or continue it. |

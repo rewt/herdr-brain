@@ -19,3 +19,11 @@ Contract:
   the record inconsistent (unknown ids, cycles, a second different report for one run).
 - Status is derived from events. Do not add stored status.
 - Older folds must ignore event types they do not know.
+
+## `lanes/`
+
+- `lanes/lane.mjs` and its tests stay dependency-free; Herdr-only checks skip explicitly when Herdr is absent.
+- A lane is owned by its canonical Git common-directory identity, never a basename, remote or workspace label.
+- Promotion requires clean worktrees, a clean rebase, green validation and a fast-forward; it never pushes or creates merge commits.
+- Keep lifecycle safety checks intact. Unmerged work closed through the CLI remains recoverable through an archive tag.
+- Session metadata is display-only and must never authorize, schedule, retry, validate, promote, push or delete work.

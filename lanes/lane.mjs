@@ -22,130 +22,34 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import {
-  loadRegistry,
-  markSessionDone,
   markTopicSessionsDone,
   newSessionId,
   registryDirectoryFor,
   registryPathFor,
   writeSessionRecord,
 } from "./board/registry.mjs";
-import {
-  applyHerdrEvent,
-  boardSnapshotDocument,
-  buildSubscriptions,
-  collectBoardState,
-  joinBoardRows,
-  matchingTripwire,
-  renderPlainBoard,
-} from "./board/board.mjs";
-import { verifyCanonicalSession, verifyFocusSelection } from "./board/actions.mjs";
-import { HerdrClient, herdrSocketPath } from "./board/herdr-client.mjs";
-import { collectMachineBoardObservation } from "./board/inventory.mjs";
-import { refreshMessagePreviews } from "./board/message-preview.mjs";
-import { renderMachineBoardPlain } from "./board/view.mjs";
+import { herdrSocketPath } from "./board/herdr-client.mjs";
 
 const IS_REVIEW_COMMAND = process.argv[2] === "review";
 const CALLER_CWD = process.cwd();
-const BOARD_USAGE = "usage: lane board [--once | --json | --watch --json | focus <row-id> | done <row-id>] [--repo <path>] [--all]";
-let stopBoardObservation;
-
-function parseBoardArguments(args) {
-  const seen = new Set();
-  let repo;
-  let action;
-  let rowId;
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
-    if (argument === "focus" || argument === "done") {
-      if (action !== undefined || seen.size > 0) throw new Error(BOARD_USAGE);
-      action = argument;
-      continue;
-    }
-    if (action !== undefined && rowId === undefined && !argument.startsWith("--")) {
-      rowId = argument;
-      continue;
-    }
-    if (!["--once", "--json", "--watch", "--repo", "--all"].includes(argument)) {
-      if (!argument.startsWith("--")) throw new Error(BOARD_USAGE);
-      throw new Error(`${BOARD_USAGE} (unknown option or operand: ${argument})`);
-    }
-    if (seen.has(argument)) {
-      if (action !== undefined) throw new Error(BOARD_USAGE);
-      throw new Error(`${BOARD_USAGE} (duplicate option: ${argument})`);
-    }
-    seen.add(argument);
-    if (argument === "--repo") {
-      const value = args[index + 1];
-      if (value === undefined || value === "" || value.startsWith("--")) {
-        if (action !== undefined) throw new Error(BOARD_USAGE);
-        throw new Error(`${BOARD_USAGE} (--repo requires a path)`);
-      }
-      repo = value;
-      index += 1;
-    }
-  }
-  const once = seen.has("--once");
-  const json = seen.has("--json");
-  const watch = seen.has("--watch");
-  const all = seen.has("--all");
-  if (action !== undefined) {
-    if (rowId === undefined || once || json || watch || all) throw new Error(BOARD_USAGE);
-    return {
-      mode: action,
-      rowId,
-      repo: repo === undefined ? undefined : resolve(CALLER_CWD, repo),
-    };
-  }
-  if ((once && json) || (once && watch) || (watch && !json)) {
-    throw new Error(`${BOARD_USAGE} (contradictory output modes)`);
-  }
-  return {
-    mode: once ? "plain" : watch ? "watch-json" : json ? "json" : "interactive",
-    repo: repo === undefined ? undefined : resolve(CALLER_CWD, repo),
-    includeHistory: all,
-  };
-}
-
-const EARLY_BOARD_OPTIONS = (() => {
-  if (process.argv[2] !== "board") return undefined;
-  try {
-    return parseBoardArguments(process.argv.slice(3));
-  } catch (error) {
-    process.stderr.write(`lane: ${error.message}\n`);
-    process.exit(1);
-  }
-})();
 
 // Unix readers such as `head` routinely close a pipeline before the producer
 // is finished. Treat that as successful early consumption, not a crash.
 process.stdout.on("error", (error) => {
   if (error.code === "EPIPE") {
-    if (stopBoardObservation !== undefined) {
-      stopBoardObservation();
-      return;
-    }
     process.exit(IS_REVIEW_COMMAND ? 2 : 0);
   }
   throw error;
 });
 
-const BOARD_MACHINE_READ = EARLY_BOARD_OPTIONS !== undefined &&
-  ["plain", "json", "watch-json"].includes(EARLY_BOARD_OPTIONS.mode) &&
-  EARLY_BOARD_OPTIONS.repo === undefined;
-
 // The repository is whichever checkout the command runs in (any worktree of it).
-// Machine board reads may start outside Git; every other command keeps the
-// repository requirement.
 const REPO = (() => {
   try {
-    const start = EARLY_BOARD_OPTIONS?.repo ?? CALLER_CWD;
-    return realpathSync(execFileSync("git", ["-C", start, "rev-parse", "--show-toplevel"], {
+    return realpathSync(execFileSync("git", ["-C", CALLER_CWD, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }).trim());
   } catch (error) {
-    if (BOARD_MACHINE_READ) return undefined;
     process.stderr.write(`${IS_REVIEW_COMMAND ? "lane review" : "lane"}: not inside a git repository\n`);
     const gitStderr = typeof error.stderr === "string" ? error.stderr.trim() : "";
     const ordinaryNotRepository = /^fatal: not a git repository \(or any of the parent directories\): \.git$/u
@@ -273,7 +177,10 @@ const REPO_ROOT = repositoryRoot();
 //             "use": "when to select it"}} — named dispatch defaults;
 //             kind/model/args override dispatch, while env is appended. CLI
 //             flags take final precedence; use is descriptive only.
-//   registry  JSON session-registry path for `board` (default
+//   always_args {"<kind>": ["--option", "value", ...]} — agent options appended
+//             to every dispatch of that kind after route and --arg replacement.
+//             An option already present in the arguments is not repeated.
+//   registry  JSON session-metadata path for dispatched agents (default
 //             ".lane/sessions.json", relative to the repository root)
 //   seams_doc path of a topic map for kept unfinished work, shown by `seams`
 function isRecord(value) {
@@ -325,6 +232,16 @@ function validateConfig(config, file) {
     if (!isRecord(config.routes)) fail(`invalid lane config ${file}: routes must be an object`);
     for (const [name, route] of Object.entries(config.routes)) {
       validateDispatch(route, `routes.${name}`, file, { route: true });
+    }
+  }
+  if (Object.hasOwn(config, "always_args")) {
+    if (!isRecord(config.always_args)) fail(`invalid lane config ${file}: always_args must be an object`);
+    for (const kind of Object.keys(config.always_args)) {
+      requireStringArray(config.always_args, kind, "always_args", file);
+      const [first] = config.always_args[kind];
+      if (first !== undefined && !first.startsWith("-")) {
+        fail(`invalid lane config ${file}: always_args.${kind} must start with an option`);
+      }
     }
   }
 }
@@ -464,13 +381,28 @@ function resolveDispatch(options = {}) {
     }
     route = routes[options.route] ?? {};
   }
+  const kind = options.kind ?? route.kind ?? defaults.kind ?? "claude";
+  const model = options.model ?? route.model ?? defaults.model;
+  const args = options.args?.length > 0 ? options.args : (route.args ?? defaults.args ?? []);
   return {
-    kind: options.kind ?? route.kind ?? defaults.kind ?? "claude",
-    model: options.model ?? route.model ?? defaults.model,
-    args: options.args?.length > 0 ? options.args : (route.args ?? defaults.args ?? []),
+    kind,
+    model,
+    args: withAlwaysArgs(kind, model === undefined ? args : ["--model", ...args], args),
     env: [...(defaults.env ?? []), ...(route.env ?? []), ...(options.env ?? [])],
     use: route.use,
   };
+}
+
+// Appends each always_args option group (an option and its following values)
+// whose option is absent from `present`, so replaced args cannot drop it.
+function withAlwaysArgs(kind, present, args) {
+  const groups = [];
+  for (const token of CONFIG.always_args?.[kind] ?? []) {
+    if (token.startsWith("-")) groups.push([token]);
+    else groups.at(-1).push(token);
+  }
+  const supplied = (option) => present.some((arg) => arg === option || arg.startsWith(`${option}=`));
+  return [...args, ...groups.filter(([option]) => !supplied(option)).flat()];
 }
 
 function routes() {
@@ -487,6 +419,7 @@ function routes() {
 
 function config() {
   const rows = [
+    ["always_args", CONFIG.always_args ?? {}, CONFIG_SOURCES.get("always_args") ?? "default"],
     ["dispatch", CONFIG.dispatch ?? {}, CONFIG_SOURCES.get("dispatch") ?? "default"],
     ["main", MAIN, CONFIG_SOURCES.get("main") ?? "default"],
     ["prepare", CONFIG.prepare ?? [], CONFIG_SOURCES.get("prepare") ?? "default"],
@@ -2289,480 +2222,6 @@ function close(topic) {
   }
 }
 
-function boardDocument(state) {
-  return boardSnapshotDocument({
-    state,
-    repoId: REPO_IDENTITY,
-    rootId: ROOT_IDENTITY,
-    repoRoot: REPO_ROOT,
-    rootLabel: basename(ROOT_IDENTITY),
-    repositoryLabel: REPO_NAME,
-    laneBase: WORKTREE_ROOT,
-  });
-}
-
-function registeredBoardSession(rowId, action) {
-  const loaded = loadRegistry(REPO_ROOT, CONFIG);
-  const matches = loaded.sessions.filter((session) => session.session_id === rowId);
-  if (matches.length !== 1) {
-    throw new Error(`board row ${rowId} is not a registered session; ${action} is unsupported`);
-  }
-  return matches[0];
-}
-
-function canonicalBoardSession(rowId, action) {
-  const session = registeredBoardSession(rowId, action);
-  return verifyCanonicalSession(session, {
-    repoId: REPO_IDENTITY,
-    repoRoot: REPO_ROOT,
-    samePath,
-  });
-}
-
-async function focusBoardSession(rowId) {
-  const session = canonicalBoardSession(rowId, "focus");
-  const branch = typeof session.lane === "string" && session.lane.startsWith(LANE_PREFIX)
-    ? session.lane
-    : undefined;
-  if (branch === undefined) throw new Error("board row has no verified lane branch; focus is unsupported");
-  const checkout = worktreeFor(branch);
-  if (checkout === undefined) throw new Error("stale board selection: selected lane worktree is no longer open");
-  const client = new HerdrClient({ socketPath: session.server, requestTimeoutMs: 500 });
-  let snapshot;
-  try {
-    snapshot = await client.snapshot();
-  } catch (error) {
-    throw new Error(`cannot refresh selected Herdr session: ${error.message}`);
-  } finally {
-    client.close();
-  }
-  const selected = verifyFocusSelection({
-    session,
-    snapshot,
-    repoId: REPO_IDENTITY,
-    repoRoot: REPO_ROOT,
-    checkout,
-    samePath,
-  });
-  const run = spawnSync("herdr", ["agent", "focus", selected.target], {
-    encoding: "utf8",
-    env: { ...process.env, HERDR_SOCKET_PATH: selected.server },
-  });
-  const stderr = run.stderr?.trim();
-  let document;
-  let malformed = false;
-  try {
-    document = JSON.parse(run.stdout);
-  } catch {
-    malformed = true;
-  }
-  const documentError = document?.error;
-  if (run.error !== undefined || run.status !== 0 || malformed ||
-      documentError !== undefined || !Object.hasOwn(document ?? {}, "result")) {
-    const responseMessage = typeof documentError === "string"
-      ? documentError
-      : documentError?.message ?? documentError?.code;
-    const reason = stderr || run.error?.code || responseMessage ||
-      (malformed || !Object.hasOwn(document ?? {}, "result")
-        ? "malformed Herdr response"
-        : `exit ${run.status}`);
-    throw new Error(`Herdr focus failed for ${selected.name ?? selected.pane}: ${reason}`);
-  }
-  process.stdout.write(`focused ${selected.name ?? selected.pane} (${rowId})\n`);
-}
-
-function completeBoardSession(rowId) {
-  const registryPath = preflightRegistryAutomation({ create: false });
-  canonicalBoardSession(rowId, "done");
-  markSessionDone(registryPath, rowId, { repoRoot: REPO_ROOT });
-  process.stdout.write(`marked ${rowId} done\n`);
-}
-
-function writeBoardJson(state) {
-  process.stdout.write(`${JSON.stringify(boardDocument(state))}\n`);
-}
-
-function boardInventoryOptions(options) {
-  return {
-    anchor: REPO_ROOT === undefined ? undefined : {
-      path: REPO_ROOT,
-      config: CONFIG,
-      root_id: ROOT_IDENTITY,
-      lane_base: WORKTREE_ROOT,
-    },
-    repoFilter: options.repo,
-    includeHistory: options.includeHistory,
-  };
-}
-
-function writeMachineBoardPlain(document) {
-  process.stdout.write(renderMachineBoardPlain(document, {
-    missingRegistry: document.coverage.registry === "missing" && REPO_ROOT !== undefined
-      ? registryPathFor(REPO_ROOT, CONFIG)
-      : undefined,
-  }));
-}
-
-async function readMachineBoard(options, observationOptions = {}) {
-  return collectMachineBoardObservation({ ...boardInventoryOptions(options), ...observationOptions });
-}
-
-async function watchMachineBoard(options) {
-  let stopped = false;
-  let refreshPending = false;
-  let refreshTimer;
-  let previewTimer;
-  let previewRefreshDue = false;
-  let document;
-  let occupants = new Map();
-  let tripwires = new Map();
-  let rowsByPane = new Map();
-  let subscriptionSignature = "";
-  const clients = new Map();
-  const runtime = new Map();
-  const controller = new AbortController();
-  let finish;
-  const completed = new Promise((resolvePromise) => { finish = resolvePromise; });
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    controller.abort();
-    clearInterval(refreshTimer);
-    clearTimeout(previewTimer);
-    for (const client of clients.values()) client.close();
-    clients.clear();
-    finish();
-  };
-  stopBoardObservation = stop;
-
-  const schedulePreviewRefresh = () => {
-    if (previewTimer !== undefined || previewRefreshDue) return;
-    previewTimer = setTimeout(() => {
-      previewTimer = undefined;
-      if (refreshPending) {
-        previewRefreshDue = true;
-        return;
-      }
-      void refresh();
-    }, 1_000);
-  };
-
-  const installSubscriptions = (subscriptions) => {
-    const signature = JSON.stringify([subscriptions, [...occupants]]);
-    if (signature === subscriptionSignature) return;
-    subscriptionSignature = signature;
-    const boundOccupants = new Map(occupants);
-    for (const client of clients.values()) client.close();
-    clients.clear();
-    for (const item of subscriptions) {
-      if (item.subscriptions.length === 0) continue;
-      const client = new HerdrClient({
-        socketPath: item.endpoint.path,
-        requestTimeoutMs: 500,
-        paneReadTimeoutMs: 2_000,
-      });
-      client.on("event", (event) => {
-        if (stopped || document === undefined) return;
-        const paneId = event.data?.pane_id;
-        const key = `${item.endpoint.server_id}\0${paneId}`;
-        if (boundOccupants.get(key) !== occupants.get(key)) {
-          void refresh();
-          return;
-        }
-        if (event.event === "pane.output_changed") {
-          schedulePreviewRefresh();
-          return;
-        }
-        const row = document.rows.find(
-          (candidate) => candidate.row_id === rowsByPane.get(key),
-        );
-        if (row === undefined) {
-          void refresh();
-          return;
-        }
-        if (event.event === "pane.agent_status_changed") {
-          row.status = event.data?.agent_status ?? row.status;
-          if (row.done && ["idle", "done"].includes(row.status) && !options.includeHistory) {
-            document.rows = document.rows.filter((candidate) => candidate !== row);
-          } else {
-            row.active_after_done = row.done && ["working", "blocked", "unknown"].includes(row.status);
-          }
-          process.stdout.write(`${JSON.stringify(document)}\n`);
-          schedulePreviewRefresh();
-        } else if (event.event === "pane.output_matched") {
-          const binding = tripwires.get(key);
-          if (binding?.row_id === row.row_id && binding.identity === occupants.get(key)) {
-            const tripwire = matchingTripwire(binding.patterns, event);
-            if (tripwire !== undefined) {
-              const previous = runtime.get(key);
-              runtime.set(key, {
-                ...(previous?.inventoryOccupantId === binding.identity ? previous : {}),
-                inventoryOccupantId: binding.identity,
-                tripwire,
-                observedAt: new Date().toISOString(),
-              });
-              row.tripwire = tripwire;
-            }
-          }
-          process.stdout.write(`${JSON.stringify(document)}\n`);
-        }
-      });
-      client.on("connectionError", (error) => {
-        if (!stopped) process.stderr.write(`lane board: Herdr observation: ${error.message}\n`);
-      });
-      client.subscribe(item.subscriptions);
-      clients.set(item.endpoint.server_id, client);
-    }
-  };
-
-  const refresh = async () => {
-    if (stopped || refreshPending) return;
-    refreshPending = true;
-    try {
-      const observation = await readMachineBoard(options, { runtime, signal: controller.signal });
-      if (stopped) return;
-      document = observation.document;
-      occupants = observation.occupants;
-      tripwires = observation.tripwires;
-      rowsByPane = observation.rowsByPane;
-      process.stdout.write(`${JSON.stringify(document)}\n`);
-      installSubscriptions(observation.subscriptions);
-    } catch (error) {
-      if (!stopped) {
-        process.stderr.write(`lane: board read failed: ${error.message}\n`);
-        process.exitCode = 1;
-        stop();
-      }
-    } finally {
-      refreshPending = false;
-      if (!stopped && previewRefreshDue) {
-        previewRefreshDue = false;
-        void refresh();
-      }
-    }
-  };
-
-  const onSignal = () => stop();
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
-  try {
-    await refresh();
-    if (!stopped) refreshTimer = setInterval(() => void refresh(), 5_000);
-    await completed;
-  } finally {
-    stop();
-    process.removeListener("SIGINT", onSignal);
-    process.removeListener("SIGTERM", onSignal);
-    stopBoardObservation = undefined;
-  }
-}
-
-async function watchBoard() {
-  const client = new HerdrClient({ requestTimeoutMs: 500, paneReadTimeoutMs: 2_000 });
-  const runtime = new Map();
-  const previewTimers = new Map();
-  const previewLastRead = new Map();
-  let state;
-  let refreshTimer;
-  let refreshPending = false;
-  let previewReadsPending = 0;
-  let subscriptionSignature = "";
-  let stopped = false;
-  let exitStatus = 0;
-  let finish;
-  const completed = new Promise((resolvePromise) => { finish = resolvePromise; });
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    clearInterval(refreshTimer);
-    refreshTimer = undefined;
-    for (const timer of previewTimers.values()) clearTimeout(timer);
-    previewTimers.clear();
-    client.close();
-    finish();
-  };
-  stopBoardObservation = stop;
-
-  const installSubscriptions = (next) => {
-    const subscriptions = buildSubscriptions(next.sessions, next.snapshot);
-    const signature = JSON.stringify(subscriptions);
-    if (signature === subscriptionSignature) return;
-    subscriptionSignature = signature;
-    client.subscribe(subscriptions);
-  };
-  const refresh = async () => {
-    if (stopped || refreshPending || previewReadsPending > 0) return;
-    refreshPending = true;
-    try {
-      const next = await collectBoardState({ repoRoot: REPO_ROOT, config: CONFIG, client, runtime });
-      if (stopped) return;
-      state = next;
-      const sampledAt = Date.now();
-      for (const agent of state.snapshot.agents ?? []) {
-        if (runtime.get(agent.pane_id)?.messageObservedAt !== undefined) {
-          previewLastRead.set(agent.pane_id, sampledAt);
-        }
-      }
-      writeBoardJson(state);
-      installSubscriptions(state);
-    } catch (error) {
-      if (!stopped) {
-        exitStatus = 1;
-        process.stderr.write(`lane: board read failed: ${error.message}\n`);
-        stop();
-      }
-    } finally {
-      refreshPending = false;
-    }
-  };
-
-  const schedulePreview = (paneId) => {
-    if (stopped || typeof paneId !== "string" || previewTimers.has(paneId)) return;
-    const delay = Math.max(0, 1_000 - (Date.now() - (previewLastRead.get(paneId) ?? 0)));
-    const timer = setTimeout(async () => {
-      previewTimers.delete(paneId);
-      if (stopped) return;
-      const remaining = 1_000 - (Date.now() - (previewLastRead.get(paneId) ?? 0));
-      if (remaining > 0 || refreshPending || previewReadsPending > 0) {
-        const retry = setTimeout(() => {
-          previewTimers.delete(paneId);
-          schedulePreview(paneId);
-        }, Math.max(remaining, 25));
-        previewTimers.set(paneId, retry);
-        return;
-      }
-      previewLastRead.set(paneId, Date.now());
-      previewReadsPending += 1;
-      try {
-        const result = await refreshMessagePreviews({
-          registry: state.sessions,
-          snapshot: state.snapshot,
-          runtime,
-          client,
-          paneIds: [paneId],
-          currentSnapshot: () => state.snapshot,
-        });
-        if (stopped || result.updated === 0) return;
-        state = {
-          ...state,
-          runtime,
-          messageErrors: result.errors,
-          rows: joinBoardRows({
-            registry: state.sessions,
-            snapshot: state.snapshot,
-            gitStates: state.gitStates,
-            reportStates: state.reportStates,
-            runtime,
-          }),
-        };
-        writeBoardJson(state);
-      } finally {
-        previewReadsPending -= 1;
-      }
-    }, delay);
-    previewTimers.set(paneId, timer);
-  };
-
-  const onEvent = (event) => {
-    if (stopped || state === undefined) return;
-    if (event.event === "pane.output_changed") {
-      schedulePreview(event.data?.pane_id);
-      return;
-    }
-    const snapshot = {
-      ...state.snapshot,
-      agents: state.snapshot.agents.map((agent) => ({ ...agent })),
-    };
-    applyHerdrEvent(snapshot, runtime, state.sessions, event);
-    state = {
-      ...state,
-      snapshot,
-      runtime,
-      rows: joinBoardRows({
-        registry: state.sessions,
-        snapshot,
-        gitStates: state.gitStates,
-        reportStates: state.reportStates,
-        runtime,
-      }),
-    };
-    writeBoardJson(state);
-    if (event.event === "pane.agent_status_changed") schedulePreview(event.data?.pane_id);
-  };
-  const onConnectionError = (error) => {
-    if (!stopped) process.stderr.write(`lane board: Herdr observation: ${error.message}\n`);
-  };
-  const onSignal = () => stop();
-  client.on("event", onEvent);
-  client.on("connectionError", onConnectionError);
-  process.once("SIGINT", onSignal);
-  process.once("SIGTERM", onSignal);
-
-  try {
-    await refresh();
-    if (!stopped) refreshTimer = setInterval(() => void refresh(), 5_000);
-    await completed;
-  } finally {
-    stop();
-    process.removeListener("SIGINT", onSignal);
-    process.removeListener("SIGTERM", onSignal);
-    client.removeListener("event", onEvent);
-    client.removeListener("connectionError", onConnectionError);
-    stopBoardObservation = undefined;
-  }
-  if (exitStatus !== 0) process.exitCode = exitStatus;
-}
-
-async function board(options) {
-  if (options.mode === "focus" || options.mode === "done") {
-    try {
-      if (options.mode === "focus") await focusBoardSession(options.rowId);
-      else completeBoardSession(options.rowId);
-    } catch (error) {
-      fail(error.message);
-    }
-    return;
-  }
-  if (options.mode === "watch-json") {
-    await watchMachineBoard(options);
-    return;
-  }
-  if (options.mode === "plain" || options.mode === "json") {
-    try {
-      const { document } = await readMachineBoard(options);
-      if (options.mode === "json") process.stdout.write(`${JSON.stringify(document)}\n`);
-      else writeMachineBoardPlain(document);
-    } catch (error) {
-      fail(`board read failed: ${error.message}`);
-    }
-    return;
-  }
-
-  repositoryRoot({ requiredBy: "interactive board" });
-  const boardRoot = join(TOOL_ROOT, "board");
-  if (!process.stdin.isTTY) {
-    fail("interactive board requires a TTY; use `lane board --once`");
-  }
-  if (!existsSync(join(boardRoot, "node_modules", "ink"))) {
-    fail(`install board dependencies first: npm --prefix ${boardRoot} ci`);
-  }
-  const boardArgs = [
-    "--repo", REPO_ROOT,
-  ];
-  const boardEnvironment = EXPLICIT_CONFIG
-    ? { ...process.env, LANE_CONFIG: CONFIG_LAYERS[0].file }
-    : process.env;
-  const run = spawnSync("npm", ["--prefix", boardRoot, "run", "--silent", "start", "--", ...boardArgs], {
-    cwd: REPO_ROOT,
-    env: boardEnvironment,
-    stdio: "inherit",
-  });
-  if (run.error?.code === "ENOENT") fail("npm is required to start the interactive board");
-  if (run.status !== 0) {
-    process.exit(run.status ?? 1);
-  }
-}
-
 const [command, topic, ...rest] = process.argv.slice(2);
 switch (command) {
   case "config":
@@ -2771,9 +2230,6 @@ switch (command) {
     break;
   case "check":
     check([topic, ...rest].filter((argument) => argument !== undefined));
-    break;
-  case "board":
-    await board(EARLY_BOARD_OPTIONS);
     break;
   case "open":
     if (topic === undefined) fail("usage: lane.mjs open <topic> [base-ref]");
@@ -2867,7 +2323,7 @@ switch (command) {
     break;
   default:
     process.stdout.write(
-      "usage: lane <open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|close|board> [topic] [base-ref]\n" +
+      "usage: lane <open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|close> [topic] [base-ref]\n" +
         `  open <topic> [base]  cut lane/<topic> into a herdr worktree; base defaults to\n` +
         `                       ${MAIN} — pass a kept branch or archive/* tag to resume it\n` +
         "  seams [pattern]  list kept unfinished work (branches + archive tags)\n" +
@@ -2887,10 +2343,6 @@ switch (command) {
         `  status           list open lanes vs ${MAIN}\n` +
         "  check [--cmd <validate command>]\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
-        "  board [--once | --json | --watch --json | focus <row-id> | done <row-id>]\n" +
-        "        [--repo <path>] [--all]\n" +
-        "                   open the UI, observe sessions, focus a verified live row,\n" +
-        "                   or mark a verified registered row done\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
         "  close <topic>    remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

@@ -1,11 +1,10 @@
 {
-  "name": "herdr-lanes",
+  "name": "herdr-brain-lanes",
   "version": "0.1.0",
-  "description": "Git worktree lanes for coding agents with Herdr workspaces and validated fast-forward promotion.",
+  "description": "Herdr Brain's dependency-free worktree dispatch and promotion layer.",
   "type": "module",
-  "scripts": { "test": "node --test" },
   "bin": { "lane": "./lane.mjs" },
   "engines": { "node": ">=20" },
   "license": "MIT",
-  "repository": "github:rewt/herdr-lanes"
+  "repository": "github:rewt/herdr-brain"
 }

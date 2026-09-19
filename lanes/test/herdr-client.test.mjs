@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
 import test from "node:test";
 
-import { HerdrClient } from "../herdr-client.mjs";
+import { HerdrClient } from "../board/herdr-client.mjs";
 
 const NEGATIVE_CONTROL = process.env.LANE_TEST_NEGATIVE_CONTROL === "1";
 

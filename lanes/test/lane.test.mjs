@@ -1056,6 +1056,46 @@ test("routes prints configured routes with resolved dispatch defaults", () => {
   }
 });
 
+test("always_args rejects a non-object value", () => {
+  const fixture = makeFixture({ always_args: ["--profile", "shared"] });
+  try {
+    const run = lane(fixture, ["config"]);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /always_args must be an object/);
+    negativeControl("always_args object validation");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("always_args rejects a list whose first token is not an option", () => {
+  const fixture = makeFixture({ always_args: { codex: ["profile", "shared"] } });
+  try {
+    const run = lane(fixture, ["config"]);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /always_args\.codex must start with an option/);
+    negativeControl("always_args leading option validation");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("config attributes always_args to the file that supplied it", () => {
+  const alwaysArgs = { codex: ["--profile", "shared", "--sandbox", "workspace-write"] };
+  const fixture = makeFixture({ always_args: alwaysArgs });
+  try {
+    const run = lane(fixture, ["config"]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(configRows(run.stdout).get("always_args"), {
+      value: alwaysArgs,
+      source: fixture.configPath,
+    });
+    negativeControl("always_args config value and source");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("config layers the nearest parent and canonical repository with attributed replacement semantics", () => {
   const fixture = makeFixture(undefined, { repoParts: ["home", "projects", "team", "repo"] });
   try {

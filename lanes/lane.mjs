@@ -61,7 +61,6 @@ const REPO = (() => {
   }
 })();
 const REPO_IDENTITY = (() => {
-  if (REPO === undefined) return undefined;
   try {
     const common = execFileSync("git", ["-C", REPO, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim();
     return realpathSync(common);
@@ -70,7 +69,6 @@ const REPO_IDENTITY = (() => {
   }
 })();
 const CURRENT_GIT_DIRECTORY = (() => {
-  if (REPO === undefined) return undefined;
   try {
     const directory = execFileSync("git", ["-C", REPO, "rev-parse", "--path-format=absolute", "--git-dir"], { encoding: "utf8" }).trim();
     return realpathSync(directory);
@@ -117,10 +115,6 @@ function candidateIsCanonicalCheckout(path) {
 let canonicalCheckoutResolved = false;
 let canonicalCheckout;
 function repositoryRoot({ requiredBy } = {}) {
-  if (REPO === undefined) {
-    if (requiredBy !== undefined) fail(`${requiredBy} requires --repo when started outside a Git repository`);
-    return undefined;
-  }
   if (canonicalCheckoutResolved) {
     if (canonicalCheckout === undefined && requiredBy !== undefined) {
       fail(`cannot resolve canonical non-linked checkout for git common directory ${REPO_IDENTITY}; ${requiredBy} requires a canonical checkout`);
@@ -285,11 +279,8 @@ function nearestParentConfig(repository) {
 }
 
 const EXPLICIT_CONFIG = process.env.LANE_CONFIG !== undefined;
-if (EXPLICIT_CONFIG && REPO_ROOT === undefined) {
-  fail("LANE_CONFIG cannot anchor a machine board outside Git; supply --repo");
-}
-const REPOSITORY_CONFIG_FILE = REPO_ROOT === undefined ? undefined : join(REPO_ROOT, ".lane.json");
-const PARENT_CONFIG_FILE = EXPLICIT_CONFIG || REPO_ROOT === undefined ? undefined : nearestParentConfig(REPO_ROOT);
+const REPOSITORY_CONFIG_FILE = join(REPO_ROOT, ".lane.json");
+const PARENT_CONFIG_FILE = EXPLICIT_CONFIG ? undefined : nearestParentConfig(REPO_ROOT);
 const CONFIG_LAYERS = (() => {
   if (EXPLICIT_CONFIG) {
     const file = resolve(CALLER_CWD, process.env.LANE_CONFIG);
@@ -299,7 +290,7 @@ const CONFIG_LAYERS = (() => {
   if (PARENT_CONFIG_FILE !== undefined) {
     layers.push({ file: PARENT_CONFIG_FILE, config: readConfig(PARENT_CONFIG_FILE, { required: true }) });
   }
-  const repository = REPOSITORY_CONFIG_FILE === undefined ? undefined : readConfig(REPOSITORY_CONFIG_FILE);
+  const repository = readConfig(REPOSITORY_CONFIG_FILE);
   if (repository !== undefined) layers.push({ file: REPOSITORY_CONFIG_FILE, config: repository });
   return layers;
 })();
@@ -322,12 +313,9 @@ const { config: CONFIG, sources: CONFIG_SOURCES, routeSources: ROUTE_SOURCES } =
 })();
 const MAIN = CONFIG.main ?? "main";
 const LANE_PREFIX = "lane/";
-const REPO_NAME = REPO_ROOT === undefined ? undefined : basename(REPO_ROOT);
-const ROOT_IDENTITY = REPO_ROOT === undefined
-  ? undefined
-  : realpathSync(PARENT_CONFIG_FILE === undefined ? dirname(REPO_ROOT) : dirname(PARENT_CONFIG_FILE));
+const REPO_NAME = basename(REPO_ROOT);
+const ROOT_IDENTITY = realpathSync(PARENT_CONFIG_FILE === undefined ? dirname(REPO_ROOT) : dirname(PARENT_CONFIG_FILE));
 const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE } = (() => {
-  if (REPO_ROOT === undefined) return { path: undefined, base: undefined, source: "default" };
   if (process.env.LANE_WORKTREE_ROOT !== undefined) {
     const path = resolve(CALLER_CWD, process.env.LANE_WORKTREE_ROOT);
     return { path, base: path, source: "env" };

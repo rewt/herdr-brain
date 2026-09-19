@@ -4,15 +4,15 @@
 ────────────────────────────────────────────────────────────────────────────────
   Tasks 10                │> Open items 2
   All tasks              >│> Q-1     Choose a retry policy   harbor   reply    >
-* ENG-1  Validate imp… * >│  Q-2     Keep the existing file… harbor   decision >
-  ENG-2  Retry interr… . >│
-  REV-3  Review error… ! >│
-  RES-4  Measure slow… . >│
-  ENG-5  Explain reco… * >│
-  ENG-6  Check saved… .  >│
-  ENG-7  Test keyboar… ! >│
-  REV-8  Simplify pro… . >│
-  RES-9  Document fal… * >│
+* ENG-1  Valida… active  >│  Q-2     Keep the existing file… harbor   decision >
+  ENG-2  Retry… ready    >│
+  REV-3  Review… blocked >│
+  RES-4  Measur… ready   >│
+  ENG-5  Explai… active  >│
+  ENG-6  Check… ready    >│
+  ENG-7  Test k… blocked >│
+  REV-8  Simpli… ready   >│
+  RES-9  Docume… active  >│
  1-10 / 11                │ 1-2 / 2
   Sessions / harbor / 6 shown───────────────────────────────────────────────────
   SESSION                       WHO                STATE

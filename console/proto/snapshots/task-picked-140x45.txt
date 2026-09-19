@@ -4,16 +4,16 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Goals 5                   │  Tasks 10                          │> Open items 2
   All goals                >│  All tasks                        >│> Q-1     Choose a retry policy                        harbor   reply    >
-* G-1 Reliable imports     >│* ENG-1  Validate imports *        >│  Q-2     Keep the existing file format                harbor   decision >
-  G-2 Clear account recov… >│  ENG-2  Retry interrupted batc… . >│
-  G-3 Fast search          >│  REV-3  Review error messages !   >│
-  G-4 Calm releases        >│  RES-4  Measure slow requests .   >│
-  G-5 Useful audit trail   >│  ENG-5  Explain recovery steps *  >│
-                            │  ENG-6  Check saved filters .     >│
-                            │  ENG-7  Test keyboard paths !     >│
-                            │  REV-8  Simplify progress repo… . >│
-                            │  RES-9  Document fallback steps * >│
-                            │  ENG-10 Verify release checkli… . >│
+* G-1 Reliable imports     >│* ENG-1  Validate imports active   >│  Q-2     Keep the existing file format                harbor   decision >
+  G-2 Clear account recov… >│  ENG-2  Retry interrupte… ready   >│
+  G-3 Fast search          >│  REV-3  Review error mes… blocked >│
+  G-4 Calm releases        >│  RES-4  Measure slow req… ready   >│
+  G-5 Useful audit trail   >│  ENG-5  Explain recovery… active  >│
+                            │  ENG-6  Check saved filt… ready   >│
+                            │  ENG-7  Test keyboard pa… blocked >│
+                            │  REV-8  Simplify progres… ready   >│
+                            │  RES-9  Document fallbac… active  >│
+                            │  ENG-10 Verify release c… ready   >│
                             │                                    │
                             │                                    │
                             │                                    │

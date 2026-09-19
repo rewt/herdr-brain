@@ -40,6 +40,25 @@ test('the fixture scale and cascade never reduce the global attention count', ()
   assert.equal(s.goal, 'G-1');
   assert.equal(s.task, 'ENG-1');
 });
+test('task state words occupy one fixed column at every target width', () => {
+  for (const [w, h] of [
+    [80, 30],
+    [100, 40],
+    [140, 45],
+  ]) {
+    const s = { ...initialState(), focus: 'tasks' };
+    const lines = plain(frame(s, w, h)).split('\n');
+    const active = lines.find((line) => line.includes('ENG-1'));
+    const ready = lines.find((line) => line.includes('ENG-2'));
+    assert.ok(active, `missing active task at ${w}x${h}`);
+    assert.ok(ready, `missing ready task at ${w}x${h}`);
+    assert.equal(
+      active.indexOf('active'),
+      ready.indexOf('ready'),
+      `ragged task state column at ${w}x${h}`,
+    );
+  }
+});
 test('readers fit all target dimensions and a visible focus survives every width', () => {
   for (const [w, h] of [
     [80, 30],
@@ -149,6 +168,15 @@ test("a draft typed in the prototype is identified as the operator's", () => {
   assert.match(screen, /Your draft \/ never sent/);
   assert.doesNotMatch(screen, /Agent draft \/ never sent/);
 });
+test('an agent suggestion beside a null unsent reply keeps agent attribution', () => {
+  const suggested = openItems.find((row) => row.id === 'Q-2');
+  assert.equal(suggested.data.unsent, null);
+  assert.ok(suggested.data.suggestion);
+  const screen = plain(frame(rowDetail(initialState(), suggested), 100, 40));
+  assert.match(screen, /Agent draft \/ never sent/);
+  assert.match(screen, /Keep the existing format for this release\./);
+  assert.doesNotMatch(screen, /Your draft \/ never sent/);
+});
 test('mouse selects without opening; disclosure opens; wheel follows its region', () => {
   let s = initialState();
   let f = frame(s, 100, 40);
@@ -194,6 +222,19 @@ test('all sessions remain selectable and visible in every target reader and the 
         ),
       );
       assert.match(plain(f), new RegExp('> ' + session.name));
+      if (w === 80) {
+        const lines = plain(f).split('\n');
+        const main = lines.findIndex((line) =>
+          line.includes(`> ${session.name}`),
+        );
+        assert.ok(main >= 0, `missing ${session.name} main row at 80x30`);
+        assert.ok(
+          lines[main + 1]?.includes(
+            `${session.task} / ${session.up} / ${session.doing}`,
+          ),
+          `missing ${session.name} continuation at 80x30`,
+        );
+      }
     }
   s = { ...initialState(), scope: 'all', focus: 'sessions' };
   for (const session of lists(s).sessions) {

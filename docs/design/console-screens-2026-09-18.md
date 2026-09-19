@@ -249,11 +249,11 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
   Tasks 50                │> Open items 12
 * All tasks              >│> Q-1     Choose a retry policy   harbor   reply    >
   ENG-1  Valida… active  >│  Q-2     Keep the existing file… harbor   decision >
-  ENG-2  Retry… ready    >│  Q-3     Accept the message rev… harbor   decision >
+  ENG-2  Retry…  ready   >│  Q-3     Accept the message rev… harbor   decision >
   REV-3  Review… blocked >│  Q-4     Pick a recovery timeout harbor   decision >
   RES-4  Measur… ready   >│  Q-5     Review the search samp… harbor   decision >
   ENG-5  Explai… active  >│  Q-6     Schedule the release c… harbor   decision >
-  ENG-6  Check… ready    >│  Q-7     Approve the audit word… harbor   decision >
+  ENG-6  Check…  ready   >│  Q-7     Approve the audit word… harbor   decision >
   ENG-7  Test k… blocked >│  Q-8     Choose a fallback path  harbor   decision >
   REV-8  Simpli… ready   >│  HUM-1   Choose the recovery wo… harbor   decision >
   RES-9  Docume… active  >│  HUM-2   Set the review window   harbor   decision >
@@ -285,17 +285,17 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
 * All goals         >│* All tasks               >│> Q-1     Choose a retry poli… harbor   reply    >
   G-1 Reliable imp… >│  ENG-1  Validat… active  >│  Q-2     Keep the existing f… harbor   decision >
   G-2 Clear accoun… >│  ENG-2  Retry i… ready   >│  Q-3     Accept the message…  harbor   decision >
-  G-3 Fast search   >│  REV-3  Review… blocked  >│  Q-4     Pick a recovery tim… harbor   decision >
+  G-3 Fast search   >│  REV-3  Review…  blocked >│  Q-4     Pick a recovery tim… harbor   decision >
   G-4 Calm releases >│  RES-4  Measure… ready   >│  Q-5     Review the search s… harbor   decision >
   G-5 Useful audit… >│  ENG-5  Explain… active  >│  Q-6     Schedule the releas… harbor   decision >
                      │  ENG-6  Check s… ready   >│  Q-7     Approve the audit w… harbor   decision >
                      │  ENG-7  Test ke… blocked >│  Q-8     Choose a fallback p… harbor   decision >
                      │  REV-8  Simplif… ready   >│  HUM-1   Choose the recovery… harbor   decision >
                      │  RES-9  Documen… active  >│  HUM-2   Set the review wind… harbor   decision >
-                     │  ENG-10 Verify… ready    >│  REV-3   Error review is rea… harbor   read     >
+                     │  ENG-10 Verify…  ready   >│  REV-3   Error review is rea… harbor   read     >
                      │  ENG-11 Validat… active  >│  ENG-31  Release rehearsal f… harbor   read     >
                      │  ENG-12 Retry i… ready   >│
-                     │  REV-13 Review… blocked  >│
+                     │  REV-13 Review…  blocked >│
                      │  RES-14 Measure… ready   >│
                      │  ENG-15 Explain… active  >│
                      │  ENG-16 Check s… ready   >│
@@ -328,7 +328,7 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Goals 5                   │  Tasks 50                          │> Open items 12
 * All goals                >│* All tasks                        >│> Q-1     Choose a retry policy                        harbor   reply    >
-  G-1 Reliable imports     >│  ENG-1  Validate imports active   >│  Q-2     Keep the existing file format                harbor   decision >
+  G-1 Reliable imports     >│  ENG-1  Validate imports  active  >│  Q-2     Keep the existing file format                harbor   decision >
   G-2 Clear account recov… >│  ENG-2  Retry interrupte… ready   >│  Q-3     Accept the message review                    harbor   decision >
   G-3 Fast search          >│  REV-3  Review error mes… blocked >│  Q-4     Pick a recovery timeout                      harbor   decision >
   G-4 Calm releases        >│  RES-4  Measure slow req… ready   >│  Q-5     Review the search sample                     harbor   decision >
@@ -381,11 +381,11 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
   Tasks 10                │> Open items 5
 * All tasks              >│> Q-1     Choose a retry policy   harbor   reply    >
   ENG-1  Valida… active  >│  Q-2     Keep the existing file… harbor   decision >
-  ENG-2  Retry… ready    >│  Q-3     Accept the message rev… harbor   decision >
+  ENG-2  Retry…  ready   >│  Q-3     Accept the message rev… harbor   decision >
   REV-3  Review… blocked >│  HUM-1   Choose the recovery wo… harbor   decision >
   RES-4  Measur… ready   >│  REV-3   Error review is ready   harbor   read     >
   ENG-5  Explai… active  >│
-  ENG-6  Check… ready    >│
+  ENG-6  Check…  ready   >│
   ENG-7  Test k… blocked >│
   REV-8  Simpli… ready   >│
   RES-9  Docume… active  >│
@@ -417,14 +417,14 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
   All goals         >│* All tasks               >│> Q-1     Choose a retry poli… harbor   reply    >
 * G-1 Reliable imp… >│  ENG-1  Validat… active  >│  Q-2     Keep the existing f… harbor   decision >
   G-2 Clear accoun… >│  ENG-2  Retry i… ready   >│  Q-3     Accept the message…  harbor   decision >
-  G-3 Fast search   >│  REV-3  Review… blocked  >│  HUM-1   Choose the recovery… harbor   decision >
+  G-3 Fast search   >│  REV-3  Review…  blocked >│  HUM-1   Choose the recovery… harbor   decision >
   G-4 Calm releases >│  RES-4  Measure… ready   >│  REV-3   Error review is rea… harbor   read     >
   G-5 Useful audit… >│  ENG-5  Explain… active  >│
                      │  ENG-6  Check s… ready   >│
                      │  ENG-7  Test ke… blocked >│
                      │  REV-8  Simplif… ready   >│
                      │  RES-9  Documen… active  >│
-                     │  ENG-10 Verify… ready    >│
+                     │  ENG-10 Verify…  ready   >│
                      │                           │
                      │                           │
                      │                           │
@@ -460,7 +460,7 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Goals 5                   │  Tasks 10                          │> Open items 5
   All goals                >│* All tasks                        >│> Q-1     Choose a retry policy                        harbor   reply    >
-* G-1 Reliable imports     >│  ENG-1  Validate imports active   >│  Q-2     Keep the existing file format                harbor   decision >
+* G-1 Reliable imports     >│  ENG-1  Validate imports  active  >│  Q-2     Keep the existing file format                harbor   decision >
   G-2 Clear account recov… >│  ENG-2  Retry interrupte… ready   >│  Q-3     Accept the message review                    harbor   decision >
   G-3 Fast search          >│  REV-3  Review error mes… blocked >│  HUM-1   Choose the recovery wording                  harbor   decision >
   G-4 Calm releases        >│  RES-4  Measure slow req… ready   >│  REV-3   Error review is ready                        harbor   read     >
@@ -513,11 +513,11 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
   Tasks 10                │> Open items 2
   All tasks              >│> Q-1     Choose a retry policy   harbor   reply    >
 * ENG-1  Valida… active  >│  Q-2     Keep the existing file… harbor   decision >
-  ENG-2  Retry… ready    >│
+  ENG-2  Retry…  ready   >│
   REV-3  Review… blocked >│
   RES-4  Measur… ready   >│
   ENG-5  Explai… active  >│
-  ENG-6  Check… ready    >│
+  ENG-6  Check…  ready   >│
   ENG-7  Test k… blocked >│
   REV-8  Simpli… ready   >│
   RES-9  Docume… active  >│
@@ -549,14 +549,14 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
   All goals         >│  All tasks               >│> Q-1     Choose a retry poli… harbor   reply    >
 * G-1 Reliable imp… >│* ENG-1  Validat… active  >│  Q-2     Keep the existing f… harbor   decision >
   G-2 Clear accoun… >│  ENG-2  Retry i… ready   >│
-  G-3 Fast search   >│  REV-3  Review… blocked  >│
+  G-3 Fast search   >│  REV-3  Review…  blocked >│
   G-4 Calm releases >│  RES-4  Measure… ready   >│
   G-5 Useful audit… >│  ENG-5  Explain… active  >│
                      │  ENG-6  Check s… ready   >│
                      │  ENG-7  Test ke… blocked >│
                      │  REV-8  Simplif… ready   >│
                      │  RES-9  Documen… active  >│
-                     │  ENG-10 Verify… ready    >│
+                     │  ENG-10 Verify…  ready   >│
                      │                           │
                      │                           │
                      │                           │
@@ -592,7 +592,7 @@ These are generated text frames, not hand-aligned approximations. Blank lines an
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Goals 5                   │  Tasks 10                          │> Open items 2
   All goals                >│  All tasks                        >│> Q-1     Choose a retry policy                        harbor   reply    >
-* G-1 Reliable imports     >│* ENG-1  Validate imports active   >│  Q-2     Keep the existing file format                harbor   decision >
+* G-1 Reliable imports     >│* ENG-1  Validate imports  active  >│  Q-2     Keep the existing file format                harbor   decision >
   G-2 Clear account recov… >│  ENG-2  Retry interrupte… ready   >│
   G-3 Fast search          >│  REV-3  Review error mes… blocked >│
   G-4 Calm releases        >│  RES-4  Measure slow req… ready   >│

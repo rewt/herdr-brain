@@ -4,7 +4,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Goals 5                   │  Tasks 50                          │> Open items 12
 * All goals                >│* All tasks                        >│> Q-1     Choose a retry policy                        harbor   reply    >
-  G-1 Reliable imports     >│  ENG-1  Validate imports active   >│  Q-2     Keep the existing file format                harbor   decision >
+  G-1 Reliable imports     >│  ENG-1  Validate imports  active  >│  Q-2     Keep the existing file format                harbor   decision >
   G-2 Clear account recov… >│  ENG-2  Retry interrupte… ready   >│  Q-3     Accept the message review                    harbor   decision >
   G-3 Fast search          >│  REV-3  Review error mes… blocked >│  Q-4     Pick a recovery timeout                      harbor   decision >
   G-4 Calm releases        >│  RES-4  Measure slow req… ready   >│  Q-5     Review the search sample                     harbor   decision >

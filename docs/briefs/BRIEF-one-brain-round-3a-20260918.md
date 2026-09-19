@@ -14,7 +14,7 @@ repointing it is the operator's cutover, not yours.
 
 ## Where things are
 
-- Canonical checkout: `/Users/rewt/development/rewt/herdr-brain` (`main` at `3f2c589`).
+- Canonical checkout: `/Users/rewt/development/rewt/herdr-brain` (`main` at `5986745`).
 - Your worktree: `/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fold-lanes`
   on branch `lane/fold-lanes`. Work only there.
 - The repository to fold in: `/Users/rewt/development/rewt/herdr-lanes` (clean, `main` at

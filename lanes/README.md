@@ -110,7 +110,7 @@ metadata is marked done; metadata errors never rewrite the Git result.
 | `lane status` | Show lane state and overlapping files |
 | `lane check [--cmd <validate command>]` | Validate and record the current clean commit |
 | `lane prepare <topic>` | Run missing setup steps |
-| `lane rebase-check <topic>` | Check whether promotion will conflict |
+| `lane rebase-check <topic>` | Check whether promotion can rebase the lane onto main (conflicts, or a merge commit it will not flatten) |
 | `lane promote <topic>` | Rebase, validate, and fast-forward local main |
 | `lane close <topic>` | Remove and delete or archive a lane |
 | `lane seams [pattern]` | List unfinished work that can be resumed |

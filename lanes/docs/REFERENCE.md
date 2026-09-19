@@ -508,8 +508,11 @@ shared files: lane/api-change × lane/docs-change: src/client.js
 - `+N`: commits unique to the lane
 - `-N`: main commits missing from the lane
 - `DIRTY`: uncommitted changes
+- `rebase: current`: the lane already contains main; promote fast-forwards it
 - `rebase: clean`: clean dry-run replay onto main
 - `rebase: CONFLICT <files>`: manual resolution required
+- `rebase: merge commit present; ...`: the lane is behind main and carries a
+  merge commit, so promote will not rebase it (see below)
 - `shared files`: paths changed by more than one lane
 
 ## Promotion
@@ -517,8 +520,11 @@ shared files: lane/api-change × lane/docs-change: src/client.js
 `lane promote <topic>`:
 
 1. Requires clean lane and canonical worktrees.
-2. Dry-runs a rebase onto current main.
-3. Refuses and lists files on conflict.
+2. If main moved after the lane branched, dry-runs a rebase onto current main.
+   A lane that already contains main skips steps 2 to 4.
+3. Refuses and lists files on conflict. Also refuses, with no file list, when
+   the lane carries a merge commit (for example a `git subtree add`): a plain
+   rebase would flatten that history and may conflict.
 4. Rebases automatically when clean.
 5. Runs missing prepare steps and validation in the lane.
 6. Refuses if main moved during validation.
@@ -576,14 +582,16 @@ lane open resumed-task archive/lane/old-task
 | `current worktree is not clean` | Commit or stash changes before `lane check` |
 | `canonical main checkout is not clean` | Commit or stash canonical changes |
 | `validation failed ... nothing merged` | Fix the lane and promote again |
-| `does not rebase cleanly` | Rebase manually and resolve the listed files |
+| `does not rebase cleanly; conflicts in: ...` | Rebase manually and resolve the listed files |
+| `does not rebase cleanly; merge commit present` | Rebuild the merge on current main (redo it from the new main tip) or flatten the history by hand, then promote again |
 | `main moved during validation` | Promote again against the new main |
 
 ## Development
 
-`npm test` runs offline behavioral tests in temporary git repositories. The shared
-helpers use a fresh temporary `HOME` and `XDG_CONFIG_HOME`, an isolated global Git
-config containing only the test identity, no system Git config, and no inherited
-environment-level Git config entries. Operator global excludes and system settings
+`npm run test:lanes` (from the herdr-brain root) runs offline behavioral tests
+in temporary git repositories. The shared helpers use a fresh temporary `HOME`
+and `XDG_CONFIG_HOME`, an isolated global Git config containing only the test
+identity, no system Git config, and no inherited environment-level Git config
+entries. Operator global excludes and system settings
 therefore cannot change fixture behavior. Herdr-only coverage skips when Herdr is
 absent.

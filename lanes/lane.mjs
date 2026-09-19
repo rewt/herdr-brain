@@ -854,10 +854,12 @@ function verifyAgentCwd(agentName, path, deadline) {
 }
 
 // Dry-run a rebase of `branch` onto `against` with merge-tree (no worktree
-// touched). Conflicts are returned by file so the implementer sees them.
+// touched). Conflicts are returned by file so the implementer sees them. A
+// lane that already contains `against` needs no rebase (promote fast-forwards
+// it), so only a lane that is behind can be refused for carrying merges.
 function rebaseCheck(branch, against = MAIN) {
   const [ahead, behind] = git(["rev-list", "--left-right", "--count", `${branch}...${against}`]).split("\t");
-  if (ahead === "0") return { ahead, behind, clean: true, conflicts: [] };
+  if (ahead === "0" || behind === "0") return { ahead, behind, clean: true, conflicts: [] };
   if (git(["rev-list", "--merges", `${against}..${branch}`]) !== "") {
     return {
       ahead,
@@ -949,8 +951,13 @@ function status() {
       .split("\t");
     const path = worktreeFor(branch);
     const dirty = path !== undefined && git(["status", "--porcelain=v1"], { cwd: path }) !== "";
-    const check = rebaseCheck(branch);
-    const rebase = ahead === "0" ? "" : behind === "0" ? "  rebase: current" : check.clean ? "  rebase: clean" : `  rebase: CONFLICT ${check.conflicts.join(",")}`;
+    let rebase = "";
+    if (ahead !== "0") {
+      const check = behind === "0" ? undefined : rebaseCheck(branch);
+      rebase = check === undefined ? "  rebase: current"
+        : check.clean ? "  rebase: clean"
+        : `  rebase: ${check.reason ?? `CONFLICT ${check.conflicts.join(",")}`}`;
+    }
     process.stdout.write(
       `${branch}  +${ahead}/-${behind} vs ${MAIN}  ${path ?? "(no worktree)"}${dirty ? "  DIRTY" : ""}${rebase}\n`,
     );

@@ -862,6 +862,44 @@ test("rebase-check exits zero when clean and one with files on conflict", () => 
   }
 });
 
+test("rebase-check and status refuse a merge-bearing lane only when it is behind main", () => {
+  const fixture = makeFixture();
+  const mergeLane = (path, topic) => {
+    commitFile(path, `${topic}.txt`, "lane\n", "lane base");
+    git(path, ["switch", "-c", `${topic}-side`]);
+    commitFile(path, `${topic}-side.txt`, "side\n", "side change");
+    git(path, ["switch", `lane/${topic}`]);
+    commitFile(path, `${topic}-topic.txt`, "topic\n", "topic change");
+    git(path, ["merge", "--no-ff", `${topic}-side`, "-m", "merge side"]);
+  };
+  try {
+    mergeLane(openLane(fixture, "merged-behind"), "merged-behind");
+    commitFile(fixture.repo, "main.txt", "main\n", "main change");
+    mergeLane(openLane(fixture, "merged-current"), "merged-current");
+
+    const current = lane(fixture, ["rebase-check", "merged-current"]);
+    assert.equal(current.status, 0, current.stdout);
+    assert.match(current.stdout, /lane\/merged-current vs main: \+\d+\/-0 clean$/m);
+    const behind = lane(fixture, ["rebase-check", "merged-behind"]);
+    assert.equal(behind.status, 1);
+    assert.match(
+      behind.stdout,
+      /lane\/merged-behind vs main: \+\d+\/-1 merge commit present; plain rebase would linearize and may conflict$/m,
+    );
+
+    const run = lane(fixture, ["status"]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /lane\/merged-current\s+\+\d+\/-0 vs main.*rebase: current$/m);
+    assert.match(
+      run.stdout,
+      /lane\/merged-behind\s+\+\d+\/-1 vs main.*rebase: merge commit present; plain rebase would linearize and may conflict$/m,
+    );
+    negativeControl("merge-bearing rebase-check and status");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("prepare runs needed steps and skips steps whose unless path exists", () => {
   const fixture = makeFixture();
   try {

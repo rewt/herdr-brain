@@ -235,7 +235,7 @@ the bar is drawn but `n` only says so.)
  ( WAITING ON YOU ) ─────────────────────────────────────────────────────────────────────────── ( 1 )
    ! Promote the Herdr Brain console into main?                  tooling · recommend yes · asked 19:19
      SESSION                    WHO                    WHERE              UP      STATE     DOING
- ( herdr-org ) ~/development/rewt/herdr-org ────────────────────────────────────────────────── ( 2 )
+ ( herdr-org ) ~/development/rewt/herdr-brain ────────────────────────────────────────────────── ( 2 )
  >   lane brain-console-v1 r3   Claude Opus 5 · high   lane-brain-consol… 44m     ● working Verifying…
      settle-r-4-1912            Claude Fable 5.1       herdr-org          1h      ✓ done    no description
  ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ writes an example there and exits; edit it and delete its `"example"` line.
     }
   ],
   "refresh_seconds": 5,
-  "brain_bin": "/Users/rewt/development/rewt/herdr-org/brain/bin/brain.mjs",
+  "brain_bin": "/Users/rewt/development/rewt/herdr-brain/brain/bin/brain.mjs",
   "glyphs": "nerd"
 }
 ```

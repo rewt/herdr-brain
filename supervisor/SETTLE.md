@@ -16,9 +16,9 @@ You were opened in one of two modes, named in your prompt:
 
 ```sh
 export ORG_DIR=/Users/rewt/development/rewt/.org
-cd /Users/rewt/development/rewt/herdr-org          # lane commands run from the canonical checkout
+cd /Users/rewt/development/rewt/herdr-brain          # lane commands run from the canonical checkout
 LANE=<the run's lane: org show <R-n> → meta lane>   # e.g. brain-console-v1
-WT=/Users/rewt/development/rewt/.worktrees/herdr-org/lane-$LANE
+WT=/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-$LANE
 BRIEF=<the task brief named in the item's notes>   # e.g. docs/briefs/BRIEF-brain-console-v1-20260916.md
 SPEC=<the spec the brief builds to>                # e.g. docs/spec-brain-console-v1.md
 ```
@@ -61,7 +61,7 @@ the operator.
 ## 4. Independent review
 
 ```sh
-cd /Users/rewt/development/rewt/herdr-org
+cd /Users/rewt/development/rewt/herdr-brain
 lane review $LANE --round <N> --brief $BRIEF
 ```
 

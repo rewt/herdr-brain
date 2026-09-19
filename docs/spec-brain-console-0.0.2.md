@@ -77,7 +77,7 @@ launch bar. Set `console/package.json` `version` to `0.0.2` and show it in help.
  herdr-org   20:50   4/30 sessions   2 waiting   0.0.2                                           ? help
 ╭ WAITING ON YOU ──────────────────────────────────────────────────────────────────────────────────────────── 1 ╮
  > ! Promote the Herdr Brain console into main?                           tooling · recommend yes · asked 19:19
-╭ herdr-org  ~/development/rewt/herdr-org ────────────────────────────────────────────────────────────────── 3 ╮
+╭ herdr-org  ~/development/rewt/herdr-brain ────────────────────────────────────────────────────────────────── 3 ╮
      SESSION                        WHO                  WHERE                         UP     STATE    DOING
      settle R-4                     Claude Opus 5 · high  herdr-org                     12m    working  Verifying correction round three
      lane brain-console-v1 r3       Claude Opus 5 · high  lane-brain-console-v1         44m    done     Fixing review round two findings

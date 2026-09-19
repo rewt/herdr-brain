@@ -1,5 +1,5 @@
 {
-  "name": "herdr-org",
+  "name": "herdr-brain",
   "version": "0.1.0",
   "description": "Durable organizational state for agent R&D: work items, runs, reports and zero-inference status outside any LLM session.",
   "type": "module",

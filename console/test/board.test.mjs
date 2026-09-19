@@ -180,15 +180,15 @@ test('an unregistered lane session is named from its worktree instead of a raw H
   const herdr = { ok: true, agents: [
     {
       name: 'lane-brain-console-9621c9-ebe725', status: 'idle', tab: 'w1:t1', pane: 'w1:p1',
-      cwd: '/worktrees/herdr-org/lane-brain-console-v1', workspace: 'w1', tool: 'claude',
+      cwd: '/worktrees/herdr-brain/lane-brain-console-v1', workspace: 'w1', tool: 'claude',
     },
     {
       name: null, status: 'working', tab: 'w2:t1', pane: 'w2:p1',
-      cwd: '/worktrees/herdr-org/lane-console-polish', workspace: 'w2', tool: 'codex',
+      cwd: '/worktrees/herdr-brain/lane-console-polish', workspace: 'w2', tool: 'codex',
     },
     {
       name: 'lane-successor-wor-a1b2c3-d4e5f6', status: 'idle', tab: 'w3:t1', pane: 'w3:p1',
-      cwd: '/worktrees/herdr-org/lane-successor-wording-family', workspace: 'w3', tool: 'codex',
+      cwd: '/worktrees/herdr-brain/lane-successor-wording-family', workspace: 'w3', tool: 'codex',
     },
   ] };
   const b = board({ today: { ...boardToday(), running: [], agent_runs: [] }, herdr, tabs: [] });

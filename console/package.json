@@ -1,5 +1,5 @@
 {
-  "name": "herdr-org-console",
+  "name": "herdr-brain-console",
   "version": "0.0.2",
   "description": "Herdr Brain console: the operator's view of an organization, in one terminal pane.",
   "type": "module",

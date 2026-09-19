@@ -266,7 +266,7 @@ stages open. New decisions arrive only through reports.
      nothing
 ╭ LATER STAGES ──────────────────────────────────────────────────────────────────────────────────────────── 9 ╮
    9 decisions wait for stage 4, the five-repo release                                         / to see them
-╭ herdr-org  ~/development/rewt/herdr-org ───────────────────────────────────────────────────────────────── 2 ╮
+╭ herdr-org  ~/development/rewt/herdr-brain ───────────────────────────────────────────────────────────────── 2 ╮
      …sessions as in 0.0.2…
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   1-9 pick  a answer  w work it up  b what it holds up  p not now  Enter peek  g go there  s summary

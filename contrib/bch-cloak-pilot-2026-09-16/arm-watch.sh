@@ -16,6 +16,6 @@ set -- "$RUN" \
   --add-dir "$HOME/.herdr/worktrees/bch-cloak" \
   "$@"
 case " $* " in
-  *" --dry-run "*) exec node /Users/rewt/development/rewt/herdr-org/contrib/settle-watch.mjs "$@" ;;
-  *)               exec node /Users/rewt/development/rewt/herdr-org/contrib/settle-watch.mjs "$@" --spawn ;;
+  *" --dry-run "*) exec node /Users/rewt/development/rewt/herdr-brain/contrib/settle-watch.mjs "$@" ;;
+  *)               exec node /Users/rewt/development/rewt/herdr-brain/contrib/settle-watch.mjs "$@" --spawn ;;
 esac

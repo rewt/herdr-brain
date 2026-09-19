@@ -14,7 +14,7 @@ set -- "$RUN" \
   --lane-config "$REWT/.lane.json" \
   --checklist "$HERE/supervisor/SETTLE.md" \
   --ledger-dir "$HERE/.lane/supervisor" \
-  --add-dir "$REWT/.worktrees/herdr-org" \
+  --add-dir "$REWT/.worktrees/herdr-brain" \
   --add-dir "$REWT/.org" \
   --max-sessions-per-day 30 \
   "$@"

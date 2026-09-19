@@ -7,7 +7,7 @@ BASTIAN=/Users/rewt/development/bastian
 HERE=$BASTIAN/bch-cloak
 FOCUS=""
 case "${1:-}" in --*|"") ;; *) FOCUS=$1; shift ;; esac
-exec node /Users/rewt/development/rewt/herdr-org/contrib/settle-watch.mjs --open \
+exec node /Users/rewt/development/rewt/herdr-brain/contrib/settle-watch.mjs --open \
   ${FOCUS:+--focus "$FOCUS"} \
   --org "$BASTIAN/.org" \
   --cwd "$HERE" \

@@ -21,6 +21,8 @@ starting a session and going to a pane show a simulation receipt. Restart resets
 Main: Tab / arrows focus, j/k select, Enter opens. `!` opens the global inbox;
 `p` chooses project; `:` shows the screen chooser. `b` always backs out except
 while typing in a field; Tab to Cancel and Enter is the non-Esc editor exit.
+`>` identifies the focused region and active row; `*` retains a selection in
+another region, and task states are written as words.
 Click a row to select, its trailing `>` to open, a header to focus, or a visible
 button to act. Wheel moves the region under the pointer. Right click stays with
 Herdr. `--no-mouse` leaves native mouse selection available. `q` quits at root.

@@ -353,7 +353,7 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
       version: VERSION,
       header: header(now),
       board: visible(),
-      scopeItems: scopeItems(s.board),
+      scopeItems: scopeItems(s.board, config.projects),
       state: ui,
       prompt: promptParts(ui),
       selectedRow: findRow(ui.view === 'history' ? ui.historyKey : ui.selectedKey),
@@ -414,17 +414,22 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
         await refresh({ reorder: true });
         say('Reloaded.');
         return;
-      case 'project':
-        s.index = (s.index + 1) % config.projects.length;
+      case 'project': {
+        const wanted = effect.name ? config.projects.findIndex((p) => p.name === effect.name) : -1;
+        if (effect.name && wanted < 0) { say(`No project named ${effect.name}.`, 'error'); return; }
+        if (wanted === s.index) return;
+        const keptScope = wanted >= 0 ? s.ui.scope : null;
+        s.index = wanted >= 0 ? wanted : (s.index + 1) % config.projects.length;
         s.today = null;
         s.todayError = null;
         s.board = EMPTY;
         s.keys = null;
-        s.ui = { ...initialState(), message: `Project: ${project().name}` };
+        s.ui = { ...initialState(), ...(keptScope ? { scope: keptScope } : {}), message: `Project: ${project().name}` };
         restartWatch();
         onChange();
         await refresh({ reorder: true });
         return;
+      }
       case 'answer': {
         const r = await d.orgAnswer(p, effect);
         if (!r.ok) {
@@ -577,7 +582,7 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
     return {
       rows,
       historyRows: rowsOf('history'),
-      scopeItems: scopeItems(s.board),
+      scopeItems: scopeItems(s.board, config.projects),
       listPage: Math.max(1, s.last.bodyHeight - 2),
       popupPage: Math.max(1, s.last.bodyHeight - 6),
       popupMax: s.last.popupMax,

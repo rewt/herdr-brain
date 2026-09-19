@@ -384,3 +384,23 @@ test('transcripts are looked up by name from the run\'s start, else from local m
   assert.equal(since['lane-run'], Date.parse(today.running[0].started));
   assert.equal(since.loose, Date.parse(today.project.day.start));
 });
+
+test('a named project switch lands on that project and keeps the repository scope', async () => {
+  const t = tempOrg();
+  const config = { ...t.config, projects: [t.config.projects[0], { ...t.config.projects[0], name: 'second', cwd: path.join(t.root, 'second') }] };
+  const session = testSession({ config, deps: quiet });
+  await session.refresh({ reorder: true });
+  assert.equal(session.project.name, 'test');
+  session.ui.scope = { repo: '/r/x', view: 'all' };
+  await session.perform({ type: 'project', name: 'second' });
+  assert.equal(session.project.name, 'second');
+  assert.deepEqual(session.ui.scope, { repo: '/r/x', view: 'all' }, 'the scope survives a named switch');
+  await session.perform({ type: 'project', name: 'second' });
+  assert.equal(session.project.name, 'second', 'switching to the current project is a no-op');
+  await session.perform({ type: 'project' });
+  assert.equal(session.project.name, 'test', 'an unnamed switch still cycles');
+  assert.deepEqual(session.ui.scope, { repo: null, view: 'all' }, 'a cycle resets the scope as before');
+  await session.perform({ type: 'project', name: 'nope' });
+  assert.equal(session.project.name, 'test');
+  session.stop();
+});

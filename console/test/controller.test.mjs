@@ -208,6 +208,23 @@ test('h swaps in the history; / and the rail choose a scope; ! and w toggle view
   assert.deepEqual(rail.state.scope, { repo: '/r/herdr-lanes', view: 'all' });
 });
 
+test('picking a repository that is another project\'s checkout switches the project and keeps the scope', () => {
+  const items = scopeItems(B, [{ name: 'org', cwd: '/r/herdr-org' }]);
+  const pick = (projectName) => {
+    const c = ctx(start(), { scopeItems: items, projectName, projectCount: 2 });
+    let r = reduce(start(), '/', {}, c);
+    for (const k of ['j', 'j']) r = reduce(r.state, k, {}, c);
+    return reduce(r.state, '', { return: true }, c);
+  };
+  const other = pick('bch-cloak');
+  assert.deepEqual(other.state.scope, { repo: '/r/herdr-org', view: 'all' });
+  assert.deepEqual(other.effects, [{ type: 'project', name: 'org' }]);
+  assert.match(other.state.message, /switching to project org/);
+  const same = pick('org');
+  assert.deepEqual(same.effects, [], 'the current project\'s own checkout only filters');
+  assert.match(same.state.message, /Showing herdr-org\.$/);
+});
+
 test('Escape never quits, q quits only from the list or history, and ? shows help', () => {
   let r = press(start(), { escape: true });
   assert.deepEqual(r.effects, []);

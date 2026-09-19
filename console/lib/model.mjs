@@ -477,12 +477,19 @@ export function visibleBoard(board, scope = {}, unfolded = []) {
 }
 
 // The scope choices, with counts: every repository, then the views.
-export function scopeItems(board) {
+// `projects` (name + cwd) lets a repository row say which configured project it is the
+// checkout of, so picking it can switch the project rather than filter the current one.
+export function scopeItems(board, projects = []) {
   const rows = board.groups.flatMap((g) => g.rows);
   const count = (state) => rows.filter((r) => r.state === state).length;
+  const trim = (p) => String(p).replace(/\/+$/, '');
+  const projectOf = (key) => projects.find((p) => p?.name && p?.cwd && trim(path.resolve(p.cwd)) === trim(key))?.name ?? null;
   return [
     { label: 'All repositories', count: rows.length, repo: null, view: 'all' },
-    ...board.groups.map((g) => ({ label: g.name, count: g.rows.length, repo: g.key, view: 'all' })),
+    ...board.groups.map((g) => {
+      const project = projectOf(g.key);
+      return { label: g.name, count: g.rows.length, repo: g.key, view: 'all', ...(project ? { project } : {}) };
+    }),
     { label: 'needs you', count: (board.waitingCount ?? board.waiting.length) + count('blocked'), repo: null, view: 'needs', key: '!' },
     { label: 'working', count: count('working'), repo: null, view: 'working', key: 'w' },
     { label: 'history', count: board.history.length, repo: null, view: 'history', key: 'h' },

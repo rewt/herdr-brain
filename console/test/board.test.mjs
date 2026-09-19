@@ -127,6 +127,11 @@ test('refreshes keep groups and rows in place; a scope narrows what is shown', (
     [null, 'all'], ['/r/herdr-lanes', 'all'], ['/r/herdr-org', 'all'], ['/r/zeta', 'all'], ['/r/coach', 'all'],
     [null, 'needs'], [null, 'working'], [null, 'history'],
   ]);
+  assert.deepEqual(
+    scopeItems(first, [{ name: 'org', cwd: '/r/herdr-org/' }, { name: 'elsewhere', cwd: '/r/nope' }]).map((i) => i.project ?? null),
+    [null, null, 'org', null, null, null, null, null],
+    'a repository row names the configured project whose checkout it is',
+  );
 });
 
 test('the Context of a session names where everything is', () => {

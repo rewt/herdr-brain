@@ -309,7 +309,13 @@ function pickScope(state, ctx, index) {
   if (item.view === 'history') return done(toHistory(closed, ctx, true));
   const scope = { repo: item.repo, view: item.view };
   const name = item.repo ? item.label : item.view === 'all' ? 'all repositories' : item.label;
-  return done(say({ ...closed, view: 'list', scope, follow: true }, `Showing ${name}.`));
+  const next = { ...closed, view: 'list', scope, follow: true };
+  // A repository that is another project's checkout: its questions live in that project,
+  // so switch to it (the scope is kept across the switch) instead of filtering this one to nothing.
+  if (item.project && ctx.projectName && item.project !== ctx.projectName) {
+    return done(say(next, `Showing ${name} — switching to project ${item.project}…`), [{ type: 'project', name: item.project }]);
+  }
+  return done(say(next, `Showing ${name}.`));
 }
 
 function toggleView(state, view) {

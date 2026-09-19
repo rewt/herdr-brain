@@ -1,0 +1,40 @@
+ herdr-brain / demo [p harbor] [: Screens] [b Back] [q Quit] [R Refresh]
+ [! Needs you 13] 3 to read 0 later [s Sessions 8] all projects [5 Lanes]
+ harbor > G-1 > All tasks > Open items
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ [e Next work] 14:10 Started retry recovery / harbor
+> Goals 5 / rank     │  Tasks 10                 │  Open items 5
+  All goals         >│* All tasks               >│* Q-1     Choose a retry poli… harbor   reply    >
+> #1 G-1 Reliable…  >│  ENG-1  Validat… active  >│  Q-2     Keep the existing f… harbor   decision >
+  #2 G-2 Clear acc… >│  ENG-2  Retry i… active  >│  Q-3     Accept the message…  harbor   decision >
+  #3 G-3 Fast sear… >│  REV-3  Review…  blocked >│  HUM-1   Choose the recovery… harbor   decision >
+  #4 G-4 Calm rele… >│  RES-4  Measure… ready   >│  REV-3   Error review is rea… harbor   read     >
+  #5 G-5 Useful au… >│  ENG-5  Explain… active  >│
+                     │  ENG-6  Check s… ready   >│
+                     │  ENG-7  Test ke… blocked >│
+                     │  REV-8  Simplif… ready   >│
+                     │  RES-9  Documen… active  >│
+                     │  ENG-10 Verify…  ready   >│
+                     │                           │
+                     │                           │
+                     │                           │
+                     │                           │
+                     │                           │
+ 1-6 / 6             │ 1-11 / 11                 │ 1-5 / 5
+  Sessions / harbor / 6 shown───────────────────────────────────────────────────────────────────────
+  SESSION               WHO                UP    STATE    SERVES  DOING
+  harbor / 6 sessions
+  import-recovery       Codex Astra        32m   blocked  ENG-1   Waiting for a retry policy       >
+  batch-retry           Claude Opus        18m   working  ENG-2   Testing interrupted batches      >
+  import-review         Codex Astra        45m   done     REV-3   Finished the error review        >
+  account-recovery      Claude Opus        24m   working  ENG-11  Tracing a recovery edge case     >
+  search-timing         Codex Astra        12m   idle     ENG-21  Ready for the next sample        >
+  release-checks        Claude Opus        9m    working  ENG-31  Checking the release steps       >
+
+
+
+  Sessions 1-7 / 7 lines; scroll here for more
+ Showing 4 of 13 needing you; ! opens all. Task stages: all.
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
+ [Goals] [Tasks] [Open items] [[ Earlier] [] Later] [? Help]
+ [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]

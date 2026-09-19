@@ -49,7 +49,7 @@ test('task state words occupy one fixed column at every target width', () => {
     const s = { ...initialState(), focus: 'tasks' };
     const lines = plain(frame(s, w, h)).split('\n');
     const active = lines.find((line) => line.includes('ENG-1'));
-    const ready = lines.find((line) => line.includes('ENG-2'));
+    const ready = lines.find((line) => line.includes('ENG-6'));
     assert.ok(active, `missing active task at ${w}x${h}`);
     assert.ok(ready, `missing ready task at ${w}x${h}`);
     assert.equal(

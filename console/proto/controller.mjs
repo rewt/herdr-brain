@@ -8,13 +8,15 @@ import {
   sessions,
   projects,
 } from './model.mjs';
-export const browserViews = ['board', 'inbox', 'later', 'lanes', 'history'];
+import { moveGoal, goalFor, policyFor, decisionFor } from './autonomy.mjs';
+export const browserViews = ['board', 'inbox', 'later', 'lanes', 'history', 'decisions'];
 export const destinations = [
   ['board', 'Overview'],
   ['inbox', 'Needs you - all projects'],
   ['later', 'Saved for later'],
   ['history', 'Today: finished and decided'],
   ['lanes', 'Lanes and worktrees'],
+  ['decisions', 'Next work: executive decisions'],
 ];
 export function initialState() {
   return {
@@ -40,6 +42,7 @@ export function initialState() {
     message: '',
     menuIndex: 0,
     control: 0,
+    autonomy: { order: {}, policies: {}, requested: {} },
   };
 }
 export function push(s, change) {
@@ -62,6 +65,7 @@ export function back(s) {
     dismissed: s.dismissed,
     later: s.later,
     drafts: s.drafts,
+    autonomy: s.autonomy,
     message: s.message,
   };
 }
@@ -163,12 +167,35 @@ export function actions(row) {
     result.push({ key: 'r', label: 'Reply to the session', verb: 'reply' });
   if (row.kind === 'goal' || row.kind === 'item')
     result.push({ key: 'v', label: 'Browse related work', verb: 'browse' });
+  if (row.kind === 'goal')
+    result.push(
+      { key: 'a', label: 'Authority', verb: 'authority' },
+      { key: '[', label: 'Earlier goal', verb: 'earlier' },
+      { key: ']', label: 'Later goal', verb: 'later-goal' },
+    );
+  if (row.kind === 'item' || row.name)
+    result.push({ key: 'w', label: 'Why this work', verb: 'why-work' });
+  if (row.kind === 'dispatch-decision') {
+    result.push({ key: 'a', label: 'Current authority', verb: 'authority' });
+    if (row.question) result.push({ key: 'o', label: 'Open authority question', verb: 'question' });
+  }
   result.push(...relationActions(row).map((a) => ({ ...a, verb: 'related' })));
   return result;
 }
 function act(s, a) {
   const row = s.detail;
   if (!a || !row) return s;
+  if (a.verb === 'earlier' || a.verb === 'later-goal')
+    return moveGoal(s, row, a.verb === 'earlier' ? -1 : 1);
+  if (a.verb === 'authority') {
+    const goal = byId(row.goal) ?? goalFor(row.id ?? row.task);
+    return goal ? push(s, { view: 'authority', detail: goal, focus: 'detail' }) : s;
+  }
+  if (a.verb === 'question') return rowDetail(s, openItems.find((q) => q.key === row.question));
+  if (a.verb === 'why-work') {
+    const decision = decisionFor(row);
+    return decision ? rowDetail(s, decision) : { ...s, message: 'No pickup decision recorded for this work. No rationale inferred from its session.' };
+  }
   if (a.verb === 'related') return rowDetail(s, a.row);
   if (a.verb === 'peek')
     return s.view === 'peek' ? s : push(s, { view: 'peek', focus: 'detail' });
@@ -221,6 +248,26 @@ function act(s, a) {
   });
 }
 function confirm(s) {
+  if (s.pending.verb === 'executive') {
+    const project = s.detail.project;
+    return { ...back(s), autonomy: { ...s.autonomy,
+      requested: { ...s.autonomy.requested, [project]: true } },
+      message: `Demo: executive requested for ${project}. No model ran; recorded decisions are unchanged.` };
+  }
+  if (s.pending.verb === 'authority-edit' || s.pending.verb === 'pickup') {
+    const goal = s.detail;
+    const prior = policyFor(s, goal);
+    const policy = {
+      ...prior, goal: goal.id, project: goal.project,
+      revision: `${goal.id}/demo-${(prior?.edits ?? 0) + 1}`, edits: (prior?.edits ?? 0) + 1,
+      by: 'operator (demo)', at: '2026-09-19 14:20',
+      ...(s.pending.verb === 'authority-edit' ? { scope: s.text } : { pickup: s.pending.pickup }),
+    };
+    let next = back(s);
+    if (next.view === 'authority-edit') next = back(next);
+    return { ...next, autonomy: { ...s.autonomy, policies: { ...s.autonomy.policies, [goal.id]: policy } },
+      message: 'Demo: authority revision recorded for future picks. Running work is unchanged.' };
+  }
   const remove = ['pick', 'drop', 'read', 'send'].includes(s.pending.verb);
   let next = back(s);
   if (next.view === 'reply') next = back(next);
@@ -234,12 +281,15 @@ function confirm(s) {
 }
 export function key(s, input, key = {}, frame = {}) {
   if (key.ctrl || key.meta) return s; // Herdr owns its modifiers and prefix.
-  if (s.view === 'reply' || s.view === 'search' || s.view === 'screens') {
+  if (['reply', 'search', 'screens', 'authority-edit'].includes(s.view)) {
     if (key.escape) return back(s);
     if (key.tab)
       return { ...s, control: (s.control + (key.shift ? 2 : 1)) % 3 };
     if (key.return) {
       if (s.control === 2) return back(s);
+      if (s.view === 'authority-edit')
+        return s.text.trim() ? act(s, { verb: 'authority-edit', label: 'Record allowed-work change', text: s.text })
+          : { ...s, message: 'Describe the allowed work before recording it.' };
       if (s.view === 'reply')
         return s.text.trim()
           ? act(s, { verb: 'send', label: 'Send reply', text: s.text })
@@ -260,6 +310,7 @@ export function key(s, input, key = {}, frame = {}) {
                 ? 'lanes'
                 : dest[0] === 'history'
                   ? 'history'
+                  : dest[0] === 'decisions' ? 'decisions'
                   : 'open',
             scroll: 0,
           }
@@ -349,6 +400,26 @@ export function key(s, input, key = {}, frame = {}) {
     const a = opts.find((a) => a.key === input);
     return a ? act(back(s), a) : s;
   }
+  if (input === 'e') return s.view === 'decisions' ? s : push(s, { view: 'decisions', focus: 'decisions' });
+  if (s.view === 'decisions' && input === 'n') {
+    if (s.scope === 'all') return { ...s, message: 'Choose one project with p before requesting an executive.' };
+    if (s.autonomy.requested[s.scope]) return { ...s, message: 'Demo: executive already requested for this project; no duplicate request.' };
+    return push(s, { view: 'confirm', focus: 'detail',
+      detail: { id: 'Executive', project: s.scope },
+      pending: { verb: 'executive', label: 'Run executive now' }, text: '' });
+  }
+  if (s.view === 'authority' && s.focus === 'detail') {
+    const policy = policyFor(s, s.detail);
+    if (input === 'r') return policy ? push(s, { view: 'authority-edit', text: policy.scope })
+      : { ...s, message: 'No authority recorded. Establish the full envelope before enabling pickup.' };
+    if (['1', '2'].includes(input)) return policy ? act(s, { verb: 'pickup',
+      pickup: input === '1' ? 'allowed' : 'paused', label: input === '1' ? 'Allow pickup inside this envelope' : 'Pause future pickup for this goal' })
+      : { ...s, message: 'No authority recorded; a rank is not permission.' };
+  }
+  if (s.view === 'board' && s.focus === 'goals' && ['[', ']'].includes(input)) {
+    const goal = selected(s);
+    return goal?.id ? moveGoal(s, goal, input === '[' ? -1 : 1) : s;
+  }
   const browsing = browserViews.includes(s.view);
   const areas = browsing
     ? s.view === 'board'
@@ -358,6 +429,7 @@ export function key(s, input, key = {}, frame = {}) {
             ? 'lanes'
             : s.view === 'history'
               ? 'history'
+              : s.view === 'decisions' ? 'decisions'
               : 'open',
           'sessions',
         ]
@@ -442,8 +514,10 @@ export function key(s, input, key = {}, frame = {}) {
 export function click(s, target) {
   if (!target) return s;
   if (target.type === 'key') {
+    if (s.view === 'authority' && ['r', '1', '2'].includes(target.input))
+      return key({ ...s, focus: 'detail' }, target.input);
     if (
-      ['reply', 'search', 'screens'].includes(s.view) &&
+      ['reply', 'search', 'screens', 'authority-edit'].includes(s.view) &&
       !target.key?.return
     ) {
       if (['b', 'q'].includes(target.input)) return back(s);
@@ -475,7 +549,7 @@ export function click(s, target) {
     return key(s, target.input ?? '', target.key ?? {});
   }
   if (
-    ['reply', 'search', 'screens', 'confirm', 'scope', 'actions'].includes(
+    ['reply', 'search', 'screens', 'authority-edit', 'confirm', 'scope', 'actions'].includes(
       s.view,
     ) &&
     ['row', 'focus'].includes(target.type)
@@ -500,6 +574,7 @@ export function click(s, target) {
           ? 'lanes'
           : target.view === 'history'
             ? 'history'
+            : target.view === 'decisions' ? 'decisions'
             : 'open',
       goal: null,
       task: null,
@@ -545,7 +620,7 @@ export function mouse(s, event, frame) {
   if (
     !area ||
     (area === 'sessions' &&
-      ['reply', 'search', 'screens', 'confirm', 'scope', 'actions'].includes(
+      ['reply', 'search', 'screens', 'authority-edit', 'confirm', 'scope', 'actions'].includes(
         s.view,
       ))
   )

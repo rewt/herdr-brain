@@ -1,0 +1,30 @@
+ herdr-brain / demo [p harbor] [: Screens] [b Back] [q Quit] [R Refresh]
+ [! Needs you 13] 3 to read 0 later [s Sessions 8] all projects [5 Lanes]
+ Goal authority / operator direction / fixture
+────────────────────────────────────────────────────────────────────────────────
+  > G-1 Reliable imports / authority
+  Goal rank #1 in harbor: Reliable imports
+  Pickup: allowed / G-1/note-42
+  Recorded by operator at 2026-09-19 13:40.
+  Allowed work
+  Implement and test import recovery in local lanes; keep the saved format.
+  Ask the operator
+  Ask before changing saved formats, shared rules, spending money or
+  publishing.
+  No push or lane deletion. Budgets are advisory. Existing project launch
+  limits still apply.
+  Promotion
+  Promotion needs the exact reviewed head, clean worktrees, green validation
+  and a fast-forward.
+  Changes govern future picks. A running session keeps its explicit task.
+  1-15 / 16  j/k or wheel for more
+  Sessions / harbor / 6 shown───────────────────────────────────────────────────
+  SESSION                       WHO                STATE
+  harbor / 6 sessions
+  import-recovery               Codex Astra        blocked                     >
+    ENG-1 / 32m / Waiting for a retry policy                                   >
+  Sessions 1-3 / 13 lines; scroll here for more
+ Demo: actions stay in memory. Session list remains available below.
+ [r Edit work] [1 Allow pickup] [2 Pause pickup]
+ [? Help]
+ [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]

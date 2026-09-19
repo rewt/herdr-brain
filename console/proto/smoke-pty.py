@@ -43,7 +43,20 @@ def send(data, expected):
 
 try:
     read_until('Open items 12')
-    send(b'\x1b[<0;3;5M\x1b[<0;3;5m\x1b[B', 'harbor > G-1 > All tasks')
+    send(b'e', 'Next work / recorded executive decisions')
+    send(b'\r', 'Authority then: G-1/note-42')
+    send(b'a', 'Goal authority / operator direction')
+    send(b'2', 'Pause future pickup for this goal')
+    send(b'b', 'Goal authority / operator direction')
+    send(b'r', 'Allowed work')
+    send(b'\x1b[200~ b!12[e\x1b[201~\t\t\r', 'Goal authority / operator direction')
+    send(b'bbn', 'Run executive now')
+    send(b'\r', 'No model ran')
+    send(b'n', 'no duplicate request')
+    send(b'b', 'Open items 12')
+    send(b'\x1b[<0;3;6M\x1b[<0;3;6m\x1b[B', 'harbor > G-1 > All tasks')
+    send(b']', 'Reliable imports is #2')
+    send(b'[', 'Reliable imports is #1')
     send(b'\t\x1b[B\t\r', 'Your draft / never sent')
     os.write(master, b'\x1b[<0;5;')
     time.sleep(0.01)
@@ -65,7 +78,7 @@ try:
     assert proc.returncode == 0
     for mode in [b'\x1b[?1006l', b'\x1b[?1000l', b'\x1b[?2004l', b'\x1b[?25h']:
         assert mode in transcript, f'Missing cleanup {mode!r}'
-    print('PASS: Ink keyboard, click, fragmented SGR, reply cancel, stack, lanes, resize, wheel, quit and cleanup.')
+    print('PASS: Ink ranking, authority review/cancel, paste ownership, executive request/deduplication, keyboard, click, fragmented SGR, reply cancel, stack, lanes, resize, wheel, quit and cleanup.')
 finally:
     if proc.poll() is None:
         proc.terminate()

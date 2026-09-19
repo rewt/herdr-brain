@@ -33,7 +33,7 @@ export const goals = goalTitles.map((title, i) => ({
   title,
   role: 'architect',
   parent: null,
-  priority: i + 1,
+  priority: i === 5 ? 50 : 50 - i * 10,
   project: i === 5 ? 'orchard' : 'harbor',
   status: 'active',
   accept: ['The user can complete the work without guessing what happened.'],
@@ -88,7 +88,7 @@ export const human = [0, 1, 5].map((g, i) => ({
   kind: 'item',
   title: [
     'Choose the recovery wording',
-    'Set the review window',
+    'Allow a saved-format migration',
     'Choose a note export format',
   ][i],
   role: 'human',
@@ -105,6 +105,22 @@ export const human = [0, 1, 5].map((g, i) => ({
   notes: [],
   accept: [],
 }));
+Object.assign(human[1], {
+  blocks: ['REV-13', 'ENG-12'],
+  explain: 'Account recovery needs a saved-format migration. Existing authority covers local changes that preserve the format; only the operator can widen it.',
+  options: [
+    { key: '1', label: 'Allow a versioned migration with compatibility tests' },
+    { key: '2', label: 'Keep the format and replan the recovery change' },
+    { key: '3', label: 'Request compatibility evidence before deciding' },
+  ],
+  why: 'Keep the format for this release; a migration is broader than the recovery fix.',
+  meta: { ...human[1].meta, recommend: '2' },
+});
+// Current read-model facts for the new pickup and authority-deferral examples.
+tasks.find((t) => t.id === 'ENG-2').status = 'active';
+const migration = tasks.find((t) => t.id === 'ENG-12');
+migration.status = 'blocked';
+migration.blocked_by = ['HUM-2'];
 export const items = [...goals, ...tasks, ...human];
 for (const item of items)
   if (item.parent)

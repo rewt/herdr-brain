@@ -6,10 +6,26 @@ import nodeFs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createSessionReader, parseAgentList, parseTabList } from '../lib/sources.mjs';
+import { agentNames, createSessionReader, parseAgentList, parseTabList, projectSlugs } from '../lib/sources.mjs';
 
 const FIX = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const DIRS = [path.join(FIX, 'claude-a'), path.join(FIX, 'claude-b')];
+
+test('Claude project folders and agent-name entries keep their observed on-disk shape', () => {
+  assert.deepEqual(projectSlugs('/Users/example/development/example/herdr-brain'), [
+    '-Users-example-development-example-herdr-brain',
+  ]);
+
+  const sessionId = 'synthetic-session-id';
+  const transcript = [
+    { type: 'custom-title', customTitle: 'settle-r-99-0000', sessionId },
+    { type: 'agent-name', agentName: 'settle-r-99-0000', sessionId },
+    { type: 'mode', mode: 'normal', sessionId },
+    { type: 'permission-mode', permissionMode: 'auto', sessionId },
+    { parentUuid: null, isSidechain: false, attachment: { type: 'hook_success' }, type: 'attachment', sessionId },
+  ].map(JSON.stringify).join('\n');
+  assert.deepEqual([...agentNames(transcript)], ['settle-r-99-0000']);
+});
 
 test('Herdr agents keep their tool, title and session id; tabs keep their labels', () => {
   const agents = parseAgentList(JSON.stringify({ result: { agents: [

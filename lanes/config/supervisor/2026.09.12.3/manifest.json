@@ -1,0 +1,6 @@
+{
+  "protocol": "2026.09.12.3",
+  "requires_core_config_release": "2026.09.12.1",
+  "kind": "manual-daily-supervisor",
+  "files": ["README.md", "STARTER.md", "ENGINEER_REPORT_APPENDIX.md", "PROJECT_TEMPLATE.md", "TODAY_TEMPLATE.md", "CODEX_REMOTE.md"]
+}

@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lane console · keyboard wireframe</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  --page:#0c1117; --bg:#111920; --panel:#17222c; --line:#415162;
+  --fg:#dce6ef; --muted:#9daebe; --cyan:#78d2df; --red:#ff9494;
+  --green:#a0d8aa; --amber:#edcf82; --magenta:#dab1ee; --selected:#293d4d;
+  --row:20px;
+}
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+body { margin:0; padding:24px 20px; background:var(--page); color:var(--fg);
+  font:13px/var(--row) "IBM Plex Mono",Consolas,monospace; }
+button,input,textarea,select { font:inherit; color:inherit; border-radius:0; }
+button { border:0; padding:0; background:transparent; cursor:pointer; text-align:left; }
+input,textarea,select { background:var(--bg); border:1px solid var(--line); padding:0 1ch; }
+textarea { resize:none; }
+button:disabled { color:var(--muted); cursor:default; }
+:focus-visible { outline:1px solid currentColor; outline-offset:-1px; }
+button:focus-visible::before { content:">"; }
+button:focus-visible { color:var(--fg); }
+a { color:var(--cyan); }
+b,strong { font-weight:600; }
+.muted { color:var(--muted); }
+.working { color:var(--cyan); }
+.bad { color:var(--red); }
+.ok { color:var(--green); }
+.stale { color:var(--amber); }
+.overdue { color:var(--magenta); }
+.clipped { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; min-width:0; }
+.preview-head,.preview-notes { max-width:1200px; margin:0 auto; }
+.preview-head { margin-bottom:16px; }
+.preview-head h1 { margin:0 0 4px; font-size:16px; }
+.preview-head p,.preview-notes p { margin:4px 0; }
+.preview-controls { display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:14px; }
+.preview-controls label { display:flex; align-items:center; gap:8px; }
+.preview-controls select { max-width:28ch; }
+.preview-scroll { overflow-x:auto; padding:2px; }
+.terminal { --cols:140; --lines:40; position:relative; width:calc(var(--cols)*1ch + 2px);
+  height:calc(var(--lines)*var(--row) + 2px); margin:0 auto; border:1px solid var(--line);
+  background:var(--bg); display:flex; flex-direction:column; overflow:hidden; }
+.header { height:calc(2*var(--row)); flex:none; padding:0 1ch; }
+.header-line { display:flex; height:var(--row); gap:2ch; align-items:center; }
+.header-line .right { margin-left:auto; white-space:nowrap; }
+.header-line strong { white-space:nowrap; }
+.coverage { padding:0 1ch; height:var(--row); flex:none; border-bottom:1px solid var(--line);
+  display:flex; gap:1ch; }
+.coverage span { flex:1; }
+.workspace { flex:1; min-height:0; display:grid; grid-template-columns:22ch minmax(0,1fr); }
+.rail { padding:0 1ch; border-right:1px solid var(--line); overflow:auto; }
+.rail h2 { font:inherit; color:var(--muted); margin:var(--row) 0 0; }
+.rail button { display:block; width:100%; min-height:var(--row); white-space:nowrap; overflow:hidden; }
+.rail .current { color:var(--cyan); }
+.main { display:flex; flex-direction:column; min-height:0; min-width:0; }
+.list { flex:1; min-height:0; overflow:auto; outline-offset:-1px; }
+.list-head,.session { display:grid; grid-template-columns:2ch 29ch 8ch 15ch minmax(0,1fr);
+  column-gap:1ch; margin:0 1ch; height:var(--row); }
+.list-head { color:var(--muted); position:sticky; top:0; z-index:1; background:var(--bg); }
+.group { display:flex; gap:1ch; padding:0 1ch; height:var(--row); background:var(--panel); }
+.group span:last-child { margin-left:auto; white-space:nowrap; }
+.session { cursor:pointer; }
+.session[aria-selected="true"] { background:var(--selected); }
+.session .marker { white-space:pre; }
+.session .message { color:var(--fg); }
+.session .message.unavailable { color:var(--muted); }
+.empty { margin:var(--row) 2ch; white-space:normal; }
+.empty button { text-decoration:underline; margin-top:var(--row); }
+.evidence { flex:none; height:calc(10*var(--row)); border-top:1px solid var(--line);
+  display:flex; flex-direction:column; min-height:0; }
+.evidence-title { padding:0 1ch; height:var(--row); flex:none; }
+.tabs { display:flex; gap:2ch; padding:0 1ch; height:var(--row); flex:none; }
+.tabs button[aria-selected="true"] { color:var(--cyan); text-decoration:underline; }
+.detail-body { flex:1; min-height:0; overflow:auto; padding:0 1ch; overflow-wrap:anywhere; white-space:normal; }
+.detail-body p { margin:0 0 var(--row); white-space:pre-wrap; }
+.kv { display:grid; grid-template-columns:15ch minmax(0,1fr); column-gap:1ch; margin:0; }
+.kv dt { color:var(--muted); }
+.kv dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.detail-actions { display:flex; gap:2ch; padding:0 1ch; height:var(--row); flex:none; }
+.detail-actions .reason { margin-left:auto; }
+.launch { flex:none; border-top:1px solid var(--line); }
+.launch-rest { height:calc(3*var(--row) - 1px); padding:0 1ch; }
+.launch-rest button { width:100%; height:var(--row); }
+.launch-form { padding:0 1ch; }
+.task-line { display:grid; grid-template-columns:6ch minmax(0,1fr); gap:1ch; }
+.task-line textarea { width:100%; height:calc(3*var(--row)); border:0; padding:0; background:var(--panel); }
+.topic-line { display:flex; gap:1ch; height:var(--row); }
+.topic-line input { width:32ch; border:0; background:var(--panel); }
+.choices { display:flex; align-items:center; gap:2ch; min-height:var(--row); }
+.choices .review { margin-left:auto; white-space:nowrap; }
+.form-hint { height:var(--row); }
+.footer { flex:none; height:var(--row); padding:0 1ch; border-top:1px solid var(--line); }
+.overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  z-index:5; background:rgb(12 17 23 / 70%); }
+.popup { width:min(88ch,calc(100% - 4ch)); max-height:calc(100% - 2*var(--row));
+  border:1px solid var(--fg); background:var(--panel); display:flex; flex-direction:column; }
+.popup h2 { margin:0; font:inherit; font-weight:600; padding:0 1ch; min-height:var(--row); }
+.popup-content { min-height:0; overflow:auto; padding:0 1ch; }
+.popup-content p { margin:var(--row) 0; overflow-wrap:anywhere; white-space:pre-wrap; }
+.popup-content label { display:block; }
+.popup-content input { width:100%; height:calc(var(--row) + 2px); }
+.popup-footer { border-top:1px solid var(--line); padding:0 1ch; display:flex; flex-wrap:wrap; gap:2ch; }
+.options { max-height:calc(10*var(--row)); overflow:auto; margin:var(--row) 0; }
+.option { min-height:var(--row); padding:0 1ch; cursor:pointer; display:grid;
+  grid-template-columns:2ch minmax(0,1fr); gap:1ch; }
+.option[aria-selected="true"] { background:var(--selected); }
+.option[aria-disabled="true"] { color:var(--muted); cursor:default; }
+.option-detail { white-space:pre-wrap; min-height:calc(4*var(--row)); overflow-wrap:anywhere; }
+.review-task { padding:0 1ch; margin:var(--row) 0; border-left:1px solid var(--line); white-space:pre-wrap; overflow-wrap:anywhere; }
+.compact-note { display:none; }
+.terminal[data-width="medium"] .workspace,.terminal[data-width="narrow"] .workspace,
+.terminal[data-width="compact"] .workspace { grid-template-columns:minmax(0,1fr); }
+.terminal:not([data-width="wide"]) .rail { display:none; }
+.terminal[data-width="narrow"] .session { grid-template-columns:2ch minmax(0,1fr) 8ch 15ch; height:calc(2*var(--row)); }
+.terminal[data-width="narrow"] .session .message { grid-column:1/-1; padding-left:2ch; }
+.terminal[data-width="narrow"] .list-head { grid-template-columns:2ch minmax(0,1fr) 8ch 15ch; }
+.terminal[data-width="narrow"] .list-head .message-head { display:none; }
+.terminal[data-width="narrow"] .choices { flex-wrap:wrap; gap:0 2ch; }
+.terminal[data-width="narrow"] .choices .review { margin-left:0; }
+.terminal[data-width="narrow"] .choices > button { width:100%; }
+.terminal[data-height="short"] .evidence { height:calc(7*var(--row)); }
+.terminal[data-width="compact"] .list { display:none; }
+.terminal[data-width="compact"] .evidence { height:100%; }
+.terminal[data-width="compact"] .compact-note { display:block; }
+.terminal[data-width="compact"] .launch { display:none; }
+.terminal[data-minimal="true"] .workspace,.terminal[data-minimal="true"] .launch { display:none; }
+.terminal[data-minimal="true"] .compact-note { display:block; padding:var(--row) 1ch; flex:1; }
+.terminal[data-minimal="true"] .header-line .right { display:none; }
+.terminal.mono { --bg:#111; --panel:#111; --fg:#eee; --muted:#ccc; --line:#aaa;
+  --cyan:#eee; --red:#eee; --green:#eee; --amber:#eee; --magenta:#eee; --selected:#111; }
+.terminal.mono .session[aria-selected="true"] { text-decoration:underline; }
+.terminal.mono .option[aria-selected="true"] { text-decoration:underline; }
+.preview-notes { margin-top:16px; color:var(--muted); }
+#demo-log { color:var(--fg); }
+</style>
+</head>
+<body>
+<header class="preview-head">
+  <h1>Lane console / keyboard study</h1>
+  <p>Eight sample sessions. Every action is simulated. No commands run and no work is dispatched.</p>
+  <div class="preview-controls" aria-label="Wireframe review controls, outside the terminal">
+    <label>Columns <select id="width"><option>140</option><option>100</option><option>80</option><option value="auto">Auto</option></select></label>
+    <label>Rows <select id="height"><option>40</option><option>24</option></select></label>
+    <label><input id="no-color" type="checkbox"> NO_COLOR preview</label>
+    <label>Observation <select id="scene">
+      <option value="snapshot">Sample snapshot</option><option value="partial">Partial coverage</option>
+      <option value="disconnected">Disconnected</option><option value="no-agents">No sessions</option>
+      <option value="no-repos">No repository inventory</option><option value="no-routes">No routes</option>
+    </select></label>
+    <label>Launch result <select id="outcome">
+      <option value="success">Success, awaiting row</option><option value="refused">Preflight refused</option>
+      <option value="draft">Editor cancelled</option><option value="opened">Lane left unprompted</option>
+      <option value="ambiguous">Delivery unknown</option><option value="metadata">Delivered, registry failed</option>
+    </select></label>
+  </div>
+</header>
+<div class="preview-scroll">
+<main class="terminal" id="terminal" data-width="wide" data-height="tall" aria-label="Lane console terminal wireframe">
+  <header class="header">
+    <div class="header-line"><strong>LANE CONSOLE</strong><span class="clipped" id="scope-label"></span><span class="right" id="coverage-label"></span></div>
+    <div class="header-line"><span class="clipped" id="counts"></span><span class="right muted" id="position"></span></div>
+  </header>
+  <div class="coverage"><span class="clipped" id="notice" aria-live="polite"></span><button id="inspect" data-action="diagnostics" tabindex="-1">[v] details</button></div>
+  <div class="compact-note" id="compact-note">Compact view. Resize to at least 80 columns and 20 rows. [q] quit</div>
+  <div class="workspace">
+    <aside class="rail" aria-label="Repository scope" id="rail"></aside>
+    <div class="main">
+      <div class="list" id="list" tabindex="0" role="listbox" aria-label="Sessions. Arrows select, Enter focuses live tab.">
+        <div class="list-head" aria-hidden="true"><span></span><span>SESSION / ROLE</span><span>STATE</span><span>GATE</span><span class="message-head">LAST MESSAGE</span></div>
+        <div id="rows"></div>
+      </div>
+      <section class="evidence" id="detail" tabindex="0" aria-label="Selected session evidence. Keys 1, 2, 3 change view.">
+        <div class="evidence-title clipped" id="detail-title"></div>
+        <div class="tabs" role="tablist" aria-label="Evidence views">
+          <button role="tab" id="tab-message" aria-controls="detail-body" data-tab="message" tabindex="-1">[1] Message</button>
+          <button role="tab" id="tab-evidence" aria-controls="detail-body" data-tab="evidence" tabindex="-1">[2] Evidence</button>
+          <button role="tab" id="tab-context" aria-controls="detail-body" data-tab="context" tabindex="-1">[3] Context</button>
+        </div>
+        <div class="detail-body" id="detail-body" role="tabpanel"></div>
+        <div class="detail-actions"><button id="focus-row" data-action="focus" tabindex="-1">[Enter/a] Focus live tab</button><button id="done-row" data-action="done" tabindex="-1">[d] Mark done</button><span class="reason muted clipped" id="action-reason"></span></div>
+      </section>
+    </div>
+  </div>
+  <section class="launch" aria-label="Launch a lane">
+    <div class="launch-rest" id="launch-rest">
+      <button id="activate" data-action="compose" tabindex="-1">[n] Type a task to launch one lane...</button>
+      <div class="clipped muted" id="draft-summary"></div>
+      <div class="muted">Tab to compose · Enter in task adds a line · review before launch</div>
+    </div>
+    <div class="launch-form" id="launch-form" hidden>
+      <label class="task-line">Task <textarea id="task" aria-label="Task text" placeholder="Describe the outcome. Enter adds a line."></textarea></label>
+      <label class="topic-line">Topic <input id="topic" aria-label="Editable lane topic" placeholder="editable-topic"><span class="muted clipped" id="topic-hint"></span></label>
+      <div class="choices">
+        <button id="where" aria-haspopup="dialog">Where [choose repository]</button>
+        <button id="who" aria-haspopup="dialog">Who [choose route]</button>
+        <button id="review" class="review" aria-haspopup="dialog">[Review launch]</button>
+      </div>
+      <div class="form-hint clipped muted" id="form-hint"></div>
+    </div>
+  </section>
+  <footer class="footer clipped" id="footer">j/k select · Enter focus · Tab evidence · / scope · ! attention · n task · ? help</footer>
+  <div class="overlay" id="overlay" hidden>
+    <section class="popup" role="dialog" aria-modal="true" aria-labelledby="popup-title">
+      <h2 id="popup-title"></h2><div class="popup-content" id="popup-content"></div><div class="popup-footer" id="popup-footer"></div>
+    </section>
+  </div>
+</main>
+</div>
+<footer class="preview-notes">
+  <p><b>Try:</b> click the session list, j/k, Tab, 1/2/3, Enter. / filters repositories; ! filters attention; h shows marked-done history. n starts a draft. Escape returns without losing it.</p>
+  <p><b>Read the limits:</b> personal labels use sample aliases. Models/efforts, full SHAs and deadline times were absent from the input. “done*” is a Herdr state, not known lane completion. No source values are live.</p>
+  <p><b>Simulation log:</b> <span id="demo-log" aria-live="polite">No action requested.</span></p>
+  <p><a href="CONSOLE-UX.md">UX review, design replacements and bootstrap recommendation</a></p>
+</footer>
+<script>
+(() => {
+  'use strict';
+  const S = {
+    groups: [
+      { root: "work", repo: "herdr-lanes", path: "/example/work/herdr-lanes", rows: [
+        { n: 41, id: "bm-x", name: "board-messages", kind: "codex", role: "engineer-xhigh", status: "working", run: "9m", idle: "2s",
+          gate: { s: "stale", exit: 0, head: "f2cb31b" }, branch: "lane/board-messages @ 1a2b40d  +12/-0 clean", report: "docs/reports/board-messages.md · NEEDS-WORK r6 · 2h",
+          brief: "board-messages-fresh-brief.md", msg: "Building the rule table first: 11 Codex entries, 9 Claude entries, each with an anchored pattern, a first-line scope flag and a minimal chrome example. The paired corpus will be generated from that table.", src: "assistant-preview · 13:03:51" },
+        { n: 40, id: "bm-r6", name: "board-messages", kind: "claude", role: "review r6", status: "idle", run: "41m", idle: "2h",
+          gate: { s: "stale", exit: 0, head: "f2cb31b" }, branch: "lane/board-messages @ 1a2b40d  +12/-0 clean", report: "docs/reviews/board-messages/f2cb31b-r6.md · NEEDS-WORK",
+          brief: "board-messages-supplement-r6.md", msg: "Verdict written. One Major: the trailing status form requires the elapsed time as the final token, so a progress line with a field after the duration is published as a message. Two Minor.", src: "assistant-preview · 11:12:40" },
+        { n: 39, id: "rc-r7", name: "review-cli-fix-3", kind: "claude", role: "review r7", status: "working", run: "24m", idle: "5s",
+          gate: { s: "ok", exit: 0, head: "8198068" }, branch: "lane/review-cli-fix-3 @ 8198068  +11/-0 clean", report: "docs/reports/review-cli-fix-3.md · NEEDS-WORK r6 · 3h",
+          brief: "review-cli-fix-3-supplement-r7c.md", msg: "Scratch exports of the reviewed and base trees are ready. Running the regression sweep over every leak shape named in rounds 1 to 6; nothing has published verbatim so far.", src: "assistant-preview · 13:02:17" },
+        { n: 33, id: "rc-e", name: "review-cli-fix-3", kind: "codex", role: "engineer", status: "done", run: "39m", idle: "3h",
+          gate: { s: "ok", exit: 0, head: "8198068" }, branch: "lane/review-cli-fix-3 @ 8198068  +11/-0 clean", report: "docs/reports/review-cli-fix-3.md · round 7",
+          brief: "review-cli-fix-3-round7-brief.md", msg: "Implemented and committed Round 7 as 8198068. Widened the flag-boundary lookbehind; fixtures for backtick-quoted prose, a quoted or assigned command flag and a double-quoted location. npm test 148/148.", src: "assistant-preview · 10:41:03" },
+        { n: 1, id: "fac", name: "main", kind: "claude", role: "facilitator", status: "working", run: "9h", idle: "1s", unreg: true,
+          gate: { s: "none" }, branch: "main @ 3367cd5  clean", report: "—", brief: "—", msg: null, reason: "unregistered row; cwd verified as this repository, no lane metadata", src: "pane-output" },
+      ]},
+      { root: "work", repo: "sample-app", path: "/example/work/sample-app", rows: [
+        { n: 18, id: "co-1", name: "intervals-write-provider", kind: "codex", role: "engineer", status: "idle", run: "2h", idle: "46m", unreg: true,
+          gate: { s: "none" }, branch: "lane/intervals-write-provider @ a91c2e0  +4/-2 dirty", report: "—", brief: "—", msg: "Provider write path is behind a feature flag; two tests still red on the retry budget. Next: wire the flag into the config loader.", src: "assistant-preview · 12:18:09" },
+        { n: 17, id: "co-2", name: "workout-write-authority", kind: "codex", role: "engineer", status: "blocked", run: "3h", idle: "1h", unreg: true, overdue: true,
+          gate: { s: "bad", exit: 1, head: "5d0e77c" }, branch: "lane/workout-write-authority @ 5d0e77c  +2/-2 clean", report: "—", brief: "—", msg: null, reason: "waiting on an approval prompt: Do you want to allow this command?", src: "pane-output" },
+      ]},
+      { root: "unknown", repo: "lane-ops", path: "no repository at cwd", rows: [
+        { n: 3, id: "ops", name: "lane-ops", kind: "unknown", role: "—", status: "unknown", run: "6d", idle: "6d", unreg: true,
+          gate: { s: "none" }, branch: "no repository at cwd", report: "—", brief: "—", msg: null, reason: "cwd is not a git repository; pane read skipped", src: "pane-output" },
+      ]},
+    ],
+    repos: [
+      { label: "work/herdr-lanes", path: "/example/work/herdr-lanes", dest: "/example/work/.worktrees/herdr-lanes/lane-", routes: [
+        ["engineer", "codex", "Default engineering lane: Sol at high effort."],
+        ["engineer-xhigh", "codex", "Specific hard problems: cross-cutting features, tricky concurrency or protocol work."],
+        ["engineer-max", "codex", "Correctness-critical logic only."],
+        ["chore", "codex", "Mechanical, isolated changes: renames, doc sweeps, generated-file refreshes."],
+        ["review", "claude", "Independent review of a lane diff; verdict PASS, NEEDS-WORK, or FAIL."],
+        ["unblock", "codex", "Single session for a plan or spec when a lane is stuck or scope is unclear."] ] },
+      { label: "work/sample-app", path: "/example/work/sample-app", dest: "/example/work/.worktrees/sample-app/lane-", routes: [
+        ["engineer", "codex", "Default engineering lane: Sol at high effort."],
+        ["chore", "codex", "Mechanical, isolated changes: renames, doc sweeps, generated-file refreshes."],
+        ["review", "claude", "Independent review of a lane diff; verdict PASS, NEEDS-WORK, or FAIL."] ] },
+      { label: "work (identity root)", path: "/example/work", dest: "", routes: [] },
+    ],
+  };
+  const $ = selector => document.querySelector(selector);
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const state = {
+    selected:'bm-x', scope:'all', working:false, attention:false, history:false,
+    marked:new Set(), tab:'message', composing:false, task:'', topic:'', topicEdited:false,
+    repo:0, route:0, explicitTarget:false, scene:'snapshot', notice:'', modal:null, option:0, query:'', returnFocus:'list', submitting:false
+  };
+  const all = [];
+  S.groups.forEach((group,index) => {
+    group.key = index === 2 ? 'unknown' : `repo-${index}`;
+    group.label = index === 2 ? 'Unknown repository' : `${group.root}/${group.repo}`;
+    group.rows.forEach(row => { row.group = group; all.push(row); });
+  });
+  const selected = () => visible().find(row => row.id === state.selected);
+  const observedStale = () => state.scene === 'disconnected';
+  const inventory = () => state.scene === 'no-repos' ? [] : S.repos.slice(0,2);
+  const scopeGroups = () => S.groups.filter(group => group.key === 'unknown' || inventory().some(repo => repo.path === group.path));
+  const targetRepo = () => state.repo === null || (state.scene === 'no-repos' && !state.explicitTarget) ? null : S.repos[state.repo];
+  const routes = () => state.scene === 'no-routes' ? [] : targetRepo()?.routes || [];
+  const targetRoute = () => state.route === null ? null : routes()[state.route];
+  function attentionReasons(row) {
+    const reasons = [];
+    if (row.status === 'blocked') reasons.push('blocked: operator input');
+    if (row.gate.s === 'bad') reasons.push(`gate exit=${row.gate.exit}`);
+    if (row.gate.s === 'stale') reasons.push('gate is for an earlier commit');
+    if (observedStale()) reasons.push('observation stale: disconnected');
+    if (row.status === 'unknown') reasons.push('agent state unknown');
+    // No deadline timestamp or verified current review exists in this fixture.
+    return reasons;
+  }
+  function retired(row) { return state.marked.has(row.id) && ['idle','done','offline'].includes(row.status); }
+  function availableRows() {
+    if (state.scene === 'no-agents') return [];
+    if (state.scene === 'no-repos') return all.filter(row => row.group.key === 'unknown');
+    return all;
+  }
+  function scopedRows() {
+    return availableRows().filter(row => state.scope === 'all' || row.group.key === state.scope);
+  }
+  function scopeHistoryRows() { return scopedRows().filter(row => state.history || !retired(row)); }
+  function visible() {
+    return scopeHistoryRows().filter(row => (!state.working || row.status === 'working') &&
+      (!state.attention || attentionReasons(row).length));
+  }
+  function orderedVisible() {
+    const rows = visible();
+    return S.groups.flatMap(group => [true,false].flatMap(facilitator => rows.filter(row => row.group === group && (row.role === 'facilitator') === facilitator)));
+  }
+  function gate(row) {
+    if (row.gate.s === 'none') return {text:'unknown',color:'muted'};
+    if (row.gate.s === 'stale') return {text:`STALE @${row.gate.head}`,color:'stale'};
+    return {text:`exit=${row.gate.exit} @${row.gate.head}`,color:row.gate.exit === 0 ? 'ok' : 'bad'};
+  }
+  function roleTag(row) {
+    if (row.role === 'facilitator') return 'fac';
+    if (row.unreg) return 'unreg';
+    if (row.role.startsWith('review')) return row.role.replace('review ','');
+    return row.role === 'engineer-xhigh' ? 'eng+' : row.role === 'engineer' ? 'eng' : row.role;
+  }
+  function label(row) { return `#${row.n} ${row.name} /${roleTag(row)}`; }
+  function stateText(row) { return row.status === 'done' ? 'done*' : row.status; }
+  function coverageText() {
+    if (state.scene === 'partial') return '1/2 local · PARTIAL';
+    if (state.scene === 'disconnected') return '0/1 local · STALE';
+    return '1/1 local · sample';
+  }
+  function observationNotice() {
+    if (state.scene === 'partial') return 'PARTIAL: one enumerated local endpoint is unreachable. Reachable rows retained.';
+    if (state.scene === 'disconnected') return 'STALE OBS: disconnected; last sample 12s ago. Draft retained. [r] refresh observation.';
+    if (state.scene === 'no-repos') return 'No repositories discovered. Non-git agents remain visible; enter an existing repository path.';
+    if (state.scene === 'no-agents') return 'No sessions in this sample. Repository choices remain available.';
+    return 'Observed 2s ago (fixture) · 2 repositories + 1 non-git bucket · host metrics not supplied';
+  }
+  function setNotice(message) { state.notice = message; $('#demo-log').textContent = message; renderHeader(); }
+  function renderHeader() {
+    const base = scopeHistoryRows(), rows = visible(), attention = base.filter(row => attentionReasons(row).length).length;
+    $('#scope-label').textContent = state.scope === 'all' ? 'all repositories' : S.groups.find(group => group.key === state.scope)?.label || 'unknown';
+    $('#coverage-label').textContent = coverageText();
+    $('#coverage-label').className = 'right ' + (['partial','disconnected'].includes(state.scene) ? 'stale' : 'muted');
+    const hidden = scopedRows().filter(retired).length;
+    $('#counts').textContent = `${rows.length}/${availableRows().length} shown · ${base.filter(row => row.status === 'working').length} working · ! ${attention} attention · ${hidden} completed${state.history ? ' (shown)' : ' hidden'}${state.working ? ' · working only' : ''}${state.attention ? ' · attention only' : ''}`;
+    const order = orderedVisible();
+    $('#position').textContent = `${Math.max(0,order.findIndex(row => row.id === state.selected) + 1)}/${rows.length}`;
+    $('#notice').textContent = state.notice || observationNotice();
+    $('#notice').className = 'clipped ' + (observedStale() || state.scene === 'partial' ? 'stale' : 'muted');
+  }
+  function scopeButton(key,text) {
+    return `<button tabindex="-1" data-scope="${esc(key)}" class="${state.scope === key ? 'current' : ''}">${state.scope === key ? '>' : ' '} ${esc(text)}</button>`;
+  }
+  function renderRail() {
+    $('#rail').innerHTML = '<h2>SCOPE  [/]</h2>' + scopeButton('all','All repositories') + '<h2>work</h2>' +
+      scopeGroups().filter(group => group.key !== 'unknown').map(group => scopeButton(group.key,`${group.repo} ${availableRows().filter(row => row.group === group).length}`)).join('') +
+      '<h2>Unresolved</h2>' + scopeButton('unknown',`Unknown repo ${availableRows().filter(row => row.group.key === 'unknown').length}`) + '<h2>VIEW</h2>' +
+      `<button tabindex="-1" data-action="attention">[${state.attention ? 'x' : ' '}] ! Attention</button>` +
+      `<button tabindex="-1" data-action="working">[${state.working ? 'x' : ' '}] w Working</button>` +
+      `<button tabindex="-1" data-action="history">[${state.history ? 'x' : ' '}] h History</button>` +
+      '<h2>LOCAL COVERAGE</h2><div>' + esc(coverageText()) + '</div><div class="muted">[v] errors & age</div><h2>NAVIGATION</h2><div class="muted">[ ] attention rows<br>r refresh reads<br>? all keys</div>';
+  }
+  function renderRows() {
+    const rows = visible();
+    let markup = '';
+    for (const group of S.groups) {
+      for (const fac of [true,false]) {
+        const groupRows = rows.filter(row => row.group === group && (row.role === 'facilitator') === fac);
+        if (!groupRows.length) continue;
+        markup += `<div class="group" role="presentation"><span class="clipped">${esc(group.label)} / ${group.key === 'unknown' ? 'non-git' : fac ? 'facilitator' : 'lanes'}</span><span>${groupRows.length}</span></div>`;
+        for (const row of groupRows) {
+          const isSelected = row.id === state.selected, needs = attentionReasons(row).length, g = gate(row);
+          const preview = row.msg ? row.msg.split('\n').find(line => line.trim()) : `message unavailable · ${row.src}`;
+          markup += `<div class="session" id="row-${esc(row.id)}" role="option" aria-selected="${isSelected}" data-row="${esc(row.id)}" aria-label="${esc(label(row) + ', ' + stateText(row) + ', ' + g.text + ', ' + (needs ? 'needs attention, ' : '') + preview)}">` +
+            `<span class="marker">${isSelected ? '>' : ' '}${needs ? '!' : ' '}</span>` +
+            `<span class="clipped">${esc(label(row))}${state.marked.has(row.id) ? ' [marked done]' : ''}</span>` +
+            `<span class="${row.status === 'blocked' ? 'bad' : row.status === 'working' ? 'working' : 'muted'}">${esc(stateText(row))}</span>` +
+            `<span class="${g.color}">${esc(g.text)}</span><span class="message clipped ${row.msg ? '' : 'unavailable'}">${esc(preview)}</span></div>`;
+        }
+      }
+    }
+    if (!rows.length) markup = `<div class="empty">${state.scene === 'no-agents' ? 'No sessions in this snapshot. Type a task to start a lane in a configured repository.' : 'No sessions match the current scope and view filters.'}<br><button data-action="clear" tabindex="-1">[0] Clear filters</button></div>`;
+    $('#rows').innerHTML = markup;
+    if (state.selected) $('#list').setAttribute('aria-activedescendant',`row-${state.selected}`);
+    else $('#list').removeAttribute('aria-activedescendant');
+  }
+  function kv(pairs) { return '<dl class="kv">' + pairs.map(([key,value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join('') + '</dl>'; }
+  function reviewApplicability(row) {
+    const reviewed = row.report.match(/\/([a-f0-9]{7})-r\d+\.md/), head = row.branch.match(/@ ([a-f0-9]{7})/);
+    if (reviewed) return `${reviewed[1] === head?.[1] ? 'Matches supplied short HEAD' : 'Historical; not current HEAD'} · reviewed @${reviewed[1]}; full SHA not supplied`;
+    return row.report === '—' ? 'No report supplied' : 'Reviewed SHA not supplied; applicability unverified';
+  }
+  function renderDetail() {
+    const row = selected();
+    document.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-selected',String(tab.dataset.tab === state.tab)));
+    $('#detail-body').setAttribute('aria-labelledby',`tab-${state.tab}`);
+    if (!row) {
+      $('#detail-title').textContent = 'EVIDENCE / no selected session';
+      $('#detail-body').textContent = 'Clear filters or select a session to see its evidence.';
+      $('#focus-row').disabled = true; $('#done-row').disabled = true; $('#action-reason').textContent = 'No row selected'; return;
+    }
+    const reasons = attentionReasons(row);
+    $('#detail-title').textContent = `${label(row)} · ${stateText(row)}${reasons.length ? ' · ! ' + reasons.join('; ') : ''}`;
+    let content = '';
+    if (state.tab === 'message') {
+      content = row.msg ? `<p>${esc(row.msg)}</p>` : `<p class="muted">Message unavailable.
+${esc(row.reason)}</p>`;
+      if (!row.msg) content += `<p>Raw pane excerpt (separate from assistant text):
+${esc(row.id === 'co-2' ? 'Do you want to allow this command?' : 'Not supplied in this fixture.')}</p>`;
+      content += kv([['Source',row.src],['Freshness',observedStale() ? 'STALE OBS · retained sample; disconnected 12s ago' : 'Static sample; source time has no date'],['Truncated','Not supplied; visible text is not a full transcript'],['Attention',reasons.join('; ') || 'No attention condition observed']]);
+    } else if (state.tab === 'evidence') {
+      content = kv([['Git',row.branch],['Gate',gate(row).text + (row.gate.s === 'stale' ? ` · historical exit=${row.gate.exit}; HEAD moved` : '')],['Gate command','Not supplied'],['Gate timing','Timestamp and duration not supplied'],['Full gate SHA','Not supplied; only short heads are available'],['Report',row.report],['Applicability',reviewApplicability(row)],['Deadline',row.overdue ? 'overdue? Supplied flag; timestamp missing, cannot verify overdue.' : 'Not supplied; no overdue inference'],['Tripwire','Not supplied'],['Observation',observedStale() ? 'STALE OBS; gate/git values are last observed' : 'Static sample, no live verification']]);
+    } else {
+      content = kv([['Title',row.name],['Goal','Not supplied; title is a display label, not a verified task goal'],['Kind / role',`${row.kind} / ${row.role}${row.unreg ? ' (supplied label; registry role unverified)' : ''}`],['Brief',row.brief],['Brief excerpt','Not supplied'],['Repository',row.group.key === 'unknown' ? 'Unknown: cwd is not a repository' : row.group.path + ' (synthetic canonical-path example)'],['Worktree',row.group.key === 'unknown' ? 'Unknown' : 'Actual checkout path not supplied'],['Row identity',`${row.id} (fixture key; not a real actionable Herdr ID)`],['Server / pane','Not supplied'],['Registration',row.unreg ? 'Unregistered; mark done unavailable' : 'Registered in sample'],['Completion',state.marked.has(row.id) ? (retired(row) ? 'Marked done in this preview' : 'Marked done; active') : row.status === 'done' ? 'Herdr done; registry completion unknown' : 'No completion marker supplied'],['Run / silence',`${row.run} / ${row.idle}; silence does not mean blocked or overdue`]]);
+    }
+    $('#detail-body').innerHTML = content;
+    $('#focus-row').disabled = observedStale(); $('#done-row').disabled = Boolean(row.unreg || state.marked.has(row.id));
+    $('#action-reason').textContent = observedStale() ? 'Focus unavailable: disconnected' : row.unreg ? 'Done unavailable: unregistered' : state.marked.has(row.id) ? (retired(row) ? 'Marked done' : 'Marked done; active') : 'Display completion only';
+  }
+  function reconcileSelection(previousOrder = []) {
+    const rows = orderedVisible();
+    if (!rows.some(row => row.id === state.selected)) {
+      const previousIndex = previousOrder.findIndex(row => row.id === state.selected);
+      state.selected = rows[Math.min(Math.max(previousIndex,0),rows.length - 1)]?.id || null;
+    }
+  }
+  function render() { reconcileSelection(); renderHeader(); renderRail(); renderRows(); renderDetail(); updateLaunch(); }
+  function moveSelection(delta,attentionOnly = false) {
+    const rows = orderedVisible(); if (!rows.length) return;
+    const current = rows.findIndex(row => row.id === state.selected);
+    let index = current;
+    if (attentionOnly) {
+      for (let offset = 1; offset <= rows.length; offset++) {
+        const candidate = (current + delta * offset + rows.length * 2) % rows.length;
+        if (attentionReasons(rows[candidate]).length) { index = candidate; break; }
+      }
+    } else index = Math.max(0,Math.min(rows.length - 1,current + delta));
+    state.selected = rows[index].id; renderRows(); renderDetail(); renderHeader();
+    $('#detail-body').scrollTop = 0;
+    document.getElementById(`row-${state.selected}`)?.scrollIntoView({block:'nearest'});
+  }
+  function toggleView(key) {
+    const before = orderedVisible(), was = state.selected;
+    state[key] = !state[key]; reconcileSelection(before); render();
+    if (was && was !== state.selected) setNotice('Selection changed because the previous row is hidden by this view. Draft destination is unchanged.');
+  }
+  function setScope(key) {
+    const before = orderedVisible(), was = state.selected;
+    state.scope = key; reconcileSelection(before); render();
+    if (was && was !== state.selected) setNotice('Selection changed with repository scope. The draft destination is unchanged.');
+  }
+  function rowAction(action) {
+    const row = selected(); if (!row) return;
+    if (action === 'focus') {
+      if (observedStale()) return setNotice('Focus unavailable: disconnected. Refresh and inspect the live target.');
+      return setNotice(`Preview: request focus for #${row.n} (${row.id}) once. No live tab was focused.`);
+    }
+    if (row.unreg) return setNotice('Mark done unavailable: this row has no verified registration.');
+    if (state.marked.has(row.id)) return setNotice('This row is already marked done in the preview.');
+    const before = orderedVisible(); state.marked.add(row.id); reconcileSelection(before); render();
+    setNotice(retired(row) ? `Preview: #${row.n} marked done; h reveals it in history. No agent stopped or lane closed.` : `Preview: #${row.n} marked done; active row remains visible. No agent stopped or lane closed.`);
+  }
+  function slug(text) { return text.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60).replace(/-+$/,''); }
+  function invalidDraft() {
+    if (!state.task.trim()) return 'Type a task; draft text stays here until you launch.';
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(state.topic)) return 'Enter a valid kebab-case topic.';
+    if (!targetRepo()) return 'Choose an existing repository. An identity root cannot receive a lane.';
+    if (!routes().length) return 'No routes for this repository. Inspect its configuration or choose another repository.';
+    if (!targetRoute()) return 'Choose a route for this repository.';
+    if (observedStale()) return 'Herdr disconnected. Keep the draft and refresh before launch.';
+    return '';
+  }
+  function updateLaunch() {
+    $('#launch-rest').hidden = state.composing; $('#launch-form').hidden = !state.composing;
+    if ($('#task').value !== state.task) $('#task').value = state.task;
+    if ($('#topic').value !== state.topic) $('#topic').value = state.topic;
+    const repo = targetRepo(), route = targetRoute();
+    $('#draft-summary').textContent = `${state.task ? 'Draft retained · ' : ''}Where ${repo?.label || 'choose repository'} · Who ${route?.[0] || 'choose route'}`;
+    $('#where').textContent = `Where [${repo?.label || 'choose repository'}]`;
+    $('#who').textContent = `Who [${route?.[0] || 'choose route'}]`;
+    $('#topic-hint').textContent = state.topicEdited ? 'your topic' : 'suggested; editable';
+    $('#form-hint').textContent = invalidDraft() || 'Ready to review · Tab changes field · Escape retains draft and returns to list';
+    $('#review').disabled = Boolean(invalidDraft() || state.submitting);
+  }
+  function compose() { state.composing = true; updateLaunch(); $('#task').focus(); }
+  function dialog(title,content,footer,focusId) {
+    $('#popup-title').textContent = title; $('#popup-content').innerHTML = content; $('#popup-footer').innerHTML = footer;
+    $('#overlay').hidden = false;
+    $('#popup-content').scrollTop = 0;
+    if (focusId) document.getElementById(focusId)?.focus();
+  }
+  function beginModal(type) { state.returnFocus = document.activeElement?.id || 'list'; state.modal = type; }
+  function closeModal() {
+    state.modal = null; state.submitting = false; $('#overlay').hidden = true;
+    const previous = document.getElementById(state.returnFocus);
+    if (previous && !previous.disabled && previous.getClientRects().length) previous.focus(); else $('#list').focus();
+    updateLaunch();
+  }
+  function pickerItems(type) {
+    if (type === 'scope') return [{key:'all',label:'All repositories',detail:'Accessible local Herdr sessions only; no filesystem scan.'},
+      ...scopeGroups().map(group => ({key:group.key,label:group.label,detail:group.path}))];
+    if (type === 'where') return [...inventory().map(repo => ({key:String(S.repos.indexOf(repo)),label:repo.label,detail:repo.path})),
+      {key:'root',label:'work (identity root) · unavailable',detail:'This root is not a repository. Choose an existing repository or enter its path.',disabled:true}];
+    return routes().map((route,index) => ({key:String(index),label:`${route[0]} · ${route[1]}`,detail:`Kind: ${route[1]}\nModel: not supplied · effort: not supplied\nUse: ${route[2] || 'no usage note'}`}));
+  }
+  function matchingOptions() {
+    return pickerItems(state.modal).filter(item => (item.label + ' ' + item.detail).toLowerCase().includes(state.query.toLowerCase()));
+  }
+  function renderOptions() {
+    const items = matchingOptions(); state.option = Math.max(0,Math.min(state.option,items.length - 1));
+    $('#options').innerHTML = items.map((item,index) => `<div role="option" class="option" id="option-${index}" data-option="${index}" aria-selected="${index === state.option}" aria-disabled="${Boolean(item.disabled)}"><span>${index === state.option ? '>' : ' '}</span><span>${esc(item.label)}</span></div>`).join('') ||
+      `<div>${state.query ? 'No matches. Clear search to see all choices.' : state.modal === 'who' ? 'No routes for this repository. Inspect its configuration or choose another repository.' : 'No repositories discovered. Enter an existing repository path.'}</div>`;
+    $('#option-detail').textContent = items[state.option]?.detail || '';
+    if (items.length) $('#picker-search').setAttribute('aria-activedescendant',`option-${state.option}`);
+    else $('#picker-search').removeAttribute('aria-activedescendant');
+    document.getElementById(`option-${state.option}`)?.scrollIntoView({block:'nearest'});
+  }
+  function openPicker(type) {
+    if (type === 'who' && !targetRepo()) return setNotice('Choose a repository first; the identity root is not a repository.');
+    beginModal(type); state.option = 0; state.query = '';
+    const title = type === 'scope' ? 'Repository scope / observation filter' : type === 'where' ? 'Where / existing repository' : `Who / routes for ${targetRepo().label}`;
+    dialog(title,'<label>Search<input id="picker-search" autocomplete="off" role="combobox" aria-controls="options" aria-expanded="true"></label><div class="options" id="options" role="listbox" aria-label="Choices"></div><div class="option-detail" id="option-detail"></div>',
+      '<span>Up/Down choose · Enter accept · Esc cancel</span>' + (type === 'where' ? '<button id="path-entry" data-action="path">[Enter path]</button>' : '') + '<button id="picker-cancel" data-action="cancel">[Cancel]</button>','picker-search');
+    renderOptions();
+  }
+  function chooseOption() {
+    const item = matchingOptions()[state.option]; if (!item) return;
+    if (item.disabled) { $('#option-detail').textContent = item.detail; return; }
+    const type = state.modal;
+    if (type === 'scope') setScope(item.key);
+    if (type === 'where') {
+      const next = Number(item.key); if (next !== state.repo) state.route = null;
+      state.repo = next;
+    }
+    if (type === 'who') state.route = Number(item.key);
+    closeModal(); render();
+  }
+  function pathEntry() {
+    state.modal = 'path';
+    dialog('Where / enter an existing repository','<p>Enter a canonical repository path. The preview recognizes only its two sample paths; production validates through the CLI.</p><label>Repository path<input id="repo-path" placeholder="/example/work/herdr-lanes" autocomplete="off"></label><p id="path-error" class="stale" aria-live="polite"></p>',
+      '<button id="accept-path" data-action="accept-path">[Use repository]</button><button data-action="cancel">[Cancel]</button>','repo-path');
+  }
+  function acceptPath() {
+    const path = $('#repo-path').value.trim().replace(/\/+$/,'');
+    if (path === '/example/work') { $('#path-error').textContent = 'This is an identity root, not a repository. Choose an existing repository.'; return; }
+    const index = S.repos.slice(0,2).findIndex(repo => repo.path === path);
+    if (index < 0) { $('#path-error').textContent = 'Validation unavailable in this wireframe. Use a displayed sample repository path; no filesystem was inspected.'; return; }
+    state.repo = index; state.route = null; state.explicitTarget = true;
+    // Explicit target selection does not invent a machine discovery inventory.
+    closeModal(); render();
+  }
+  function openReview() {
+    if (invalidDraft()) return setNotice(invalidDraft());
+    beginModal('review'); const repo = targetRepo(), route = targetRoute();
+    dialog('Review launch / one lane',kv([['Topic',state.topic],['Repository',repo.label],['Canonical path',repo.path + ' (sample)'],['Destination',repo.dest + state.topic + ' (sample; CLI preflight is authoritative)'],['Route / kind',`${route[0]} / ${route[1]}`],['Model / effort','Not supplied in the route fixture'],['Use',route[2] || 'no usage note']]) + '<div class="review-task">' + esc(state.task) + '</div>',
+      '<button id="launch-once" data-action="launch">[Launch once]</button><button id="edit-launch" data-action="edit-launch">[Edit then dispatch]</button><button data-action="cancel">[Back to draft]</button><span class="muted">PageUp/Down read</span>',null);
+    // Initial review focus is Back to draft, so a repeated Enter cannot launch.
+    $('#popup-footer [data-action="cancel"]').focus();
+  }
+  function launchPreview(edit) {
+    if (state.submitting || state.modal !== 'review') return;
+    state.submitting = true;
+    const request = {task:state.task,topic:state.topic,repository:targetRepo().path,route:targetRoute()[0],edit};
+    const outcome = $('#outcome').value;
+    state.modal = 'result';
+    const draft = `${targetRepo().path}/.lane/briefs/${state.topic}.md`;
+    const outcomes = {
+      success:['Launched; waiting for observation','The sample has no returned row for this new task. Keep the launch receipt visible until that exact row appears; do not guess by topic. A later Enter can focus it.'],
+      refused:['Preflight refused; nothing created','The selected repository parent workspace is unavailable in this example. Start or select that repository workspace, inspect it, then submit explicitly.'],
+      draft:['Editor cancelled; draft retained',`No lane opened and no task dispatched. Inspect the retained draft before starting again.\nDraft: ${draft}`],
+      opened:['Lane opened; task not delivered',`The lane and brief remain recoverable. Inspect the existing lane, then explicitly dispatch only after confirming it is unprompted. Do not repeat lane new.\nDraft: ${draft}`],
+      ambiguous:['Delivery unknown; inspect the live session',`A connection failed after prompt delivery was attempted. The brief and lane remain. Inspect the agent before deciding what to do; this screen offers no resend.\nDraft: ${draft}`],
+      metadata:['Task delivered; registration failed',`The agent may be working. Inspect the lane and live session; do not resend the task. Discovery may show an unregistered row.\nDraft: ${draft}`]
+    };
+    const result = outcomes[outcome];
+    dialog(`SIMULATED / ${result[0]}`,`<p>${esc(result[1])}</p>` + kv([['Topic',request.topic],['Repository',request.repository],['Route',request.route],['Mode',edit ? 'Edit then dispatch; real editor handoff not exercised' : 'Launch once']]) + '<p class="muted">Wireframe only: zero commands ran; no new session was added to the eight-row sample.</p>',
+      '<button id="receipt-close" data-action="cancel">[Return to board]</button>','receipt-close');
+    state.returnFocus = 'list';
+    $('#demo-log').textContent = `One simulated ${edit ? 'edit-and-launch' : 'launch'} request for ${request.topic}; ${result[0].toLowerCase()}. Zero commands ran.`;
+  }
+  function help() {
+    beginModal('help'); dialog('Keyboard / focus owns input',kv([
+      ['List','Up/Down or j/k select; Home/End, PageUp/PageDown navigate'],['Enter / a','Focus selected live tab once'],['Tab','List → evidence → task → topic → Where → Who → Review'],['Evidence','1 Message; 2 Evidence; 3 Context; arrows/page keys scroll'],['/ / 0','Repository scope / clear filters; neither changes launch target'],['! / w / h','Attention / working / completion history filters'],['[ / ]','Previous / next attention row'],['d','Mark registered session done; never stop or close work'],['n','Compose; Enter in task inserts a newline'],['r / v','Refresh observations / inspect notice and coverage'],['Escape','Cancel popup or suspend draft, then return to list'],['q','Quit from navigation only; typing q never quits']
+    ]),'<button id="help-close" data-action="cancel">[Close]</button>','help-close');
+  }
+  function diagnostics() {
+    beginModal('diagnostics'); dialog('Coverage and action notice',`<p>${esc(observationNotice())}</p><p>${esc(state.notice || 'No action notice.')}</p><p>Accessible local Herdr endpoints only. Agents outside Herdr or inaccessible endpoints are not covered. All displayed values are a static sample.</p>`, '<button id="diagnostic-close" data-action="cancel">[Close]</button>','diagnostic-close');
+  }
+  function quit() {
+    beginModal('quit'); dialog('Console closed / preview','<p>In the terminal, quit restores the previous screen and stops observation resources. This browser preview has no observer or live session.</p><p>The in-memory sample and draft are retained while this page stays open.</p>','<button id="restart" data-action="cancel">[Return to preview]</button>','restart');
+    state.returnFocus = 'list';
+  }
+  function act(action) {
+    if (action === 'cancel') return closeModal();
+    if (action === 'focus' || action === 'done') return rowAction(action);
+    if (['attention','working','history'].includes(action)) return toggleView(action);
+    if (action === 'compose') return compose();
+    if (action === 'clear') { state.scope = 'all'; state.working = false; state.attention = false; state.history = false; render(); return; }
+    if (action === 'diagnostics') return diagnostics();
+    if (action === 'path') return pathEntry();
+    if (action === 'accept-path') return acceptPath();
+    if (action === 'launch' || action === 'edit-launch') return launchPreview(action === 'edit-launch');
+  }
+  $('#terminal').addEventListener('click',event => {
+    const target = event.target.closest('[data-action],[data-scope],[data-row],[data-tab],[data-option]');
+    if (!target || target.disabled) return;
+    if (target.dataset.action) return act(target.dataset.action);
+    if (target.dataset.scope) { setScope(target.dataset.scope); $('#list').focus(); }
+    if (target.dataset.row) { state.selected = target.dataset.row; render(); $('#detail-body').scrollTop = 0; $('#list').focus(); }
+    if (target.dataset.tab) { state.tab = target.dataset.tab; renderDetail(); $('#detail-body').scrollTop = 0; $('#detail').focus(); }
+    if (target.dataset.option) { state.option = Number(target.dataset.option); chooseOption(); }
+  });
+  $('#terminal').addEventListener('input',event => {
+    if (event.target.id === 'task') { state.task = event.target.value; if (!state.topicEdited) state.topic = slug(state.task); updateLaunch(); }
+    if (event.target.id === 'topic') { state.topic = event.target.value; state.topicEdited = true; updateLaunch(); }
+    if (event.target.id === 'picker-search') { state.query = event.target.value; state.option = 0; renderOptions(); }
+  });
+  $('#where').addEventListener('click',() => openPicker('where'));
+  $('#who').addEventListener('click',() => openPicker('who'));
+  $('#review').addEventListener('click',openReview);
+  document.addEventListener('keydown',event => {
+    if (!$('#terminal').contains(document.activeElement)) return;
+    if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = event.key, editing = ['INPUT','TEXTAREA'].includes(event.target.tagName);
+    if (event.repeat && ((key === 'Enter' && event.target.tagName !== 'TEXTAREA') || (!editing && ['a','d'].includes(key)))) {
+      event.preventDefault(); return;
+    }
+    if (state.modal) {
+      if (key === 'Escape') { event.preventDefault(); closeModal(); return; }
+      if (key === 'Tab') {
+        const controls = [...$('#overlay').querySelectorAll('input,button')].filter(control => !control.disabled);
+        const index = controls.indexOf(document.activeElement);
+        event.preventDefault(); controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]?.focus(); return;
+      }
+      if (event.target.id === 'picker-search') {
+        if (key === 'ArrowDown' || key === 'ArrowUp') { event.preventDefault(); state.option += key === 'ArrowDown' ? 1 : -1; renderOptions(); }
+        if (key === 'Enter') { event.preventDefault(); chooseOption(); }
+      }
+      if (event.target.id === 'repo-path' && key === 'Enter') { event.preventDefault(); acceptPath(); }
+      if (!editing && ['ArrowDown','ArrowUp','PageDown','PageUp','Home','End'].includes(key)) {
+        event.preventDefault(); const content = $('#popup-content');
+        if (key === 'Home') content.scrollTop = 0;
+        else if (key === 'End') content.scrollTop = content.scrollHeight;
+        else content.scrollTop += (['ArrowDown','PageDown'].includes(key) ? 1 : -1) * (key.startsWith('Page') ? content.clientHeight : 20);
+      }
+      return;
+    }
+    if (key === 'Escape') {
+      event.preventDefault(); state.composing = false; updateLaunch(); $('#list').focus(); return;
+    }
+    if (key === 'Tab') {
+      event.preventDefault();
+      const ids = ['list','detail','task','topic','where','who','review'].filter(id => !document.getElementById(id).disabled);
+      const here = event.target.closest('#list,#detail,#task,#topic,#where,#who,#review')?.id || 'list';
+      const next = ids[(ids.indexOf(here) + (event.shiftKey ? -1 : 1) + ids.length) % ids.length];
+      if (!['list','detail'].includes(next)) { state.composing = true; updateLaunch(); }
+      document.getElementById(next).focus(); return;
+    }
+    if (editing) {
+      if (event.target.id === 'topic' && key === 'Enter') { event.preventDefault(); $('#where').focus(); }
+      return;
+    }
+    if (event.target.tagName === 'BUTTON' && ['Enter',' '].includes(key)) return;
+    if (event.target.closest('.launch-form')) return;
+    const inDetail = Boolean(event.target.closest('#detail'));
+    if (inDetail && ['1','2','3'].includes(key)) { state.tab = ['message','evidence','context'][Number(key) - 1]; renderDetail(); $('#detail-body').scrollTop = 0; return; }
+    if (['ArrowDown','ArrowUp','j','k','PageDown','PageUp','Home','End'].includes(key)) {
+      event.preventDefault(); const down = ['ArrowDown','j','PageDown','End'].includes(key);
+      if (inDetail) {
+        const body = $('#detail-body');
+        if (key === 'Home') body.scrollTop = 0; else if (key === 'End') body.scrollTop = body.scrollHeight;
+        else body.scrollTop += (down ? 1 : -1) * (key.startsWith('Page') ? body.clientHeight : 20);
+      } else {
+        const page = Math.max(1,Math.floor($('#list').clientHeight / ($('#terminal').dataset.width === 'narrow' ? 40 : 20)) - 2);
+        moveSelection((down ? 1 : -1) * (['Home','End'].includes(key) ? all.length : key.startsWith('Page') ? page : 1));
+      }
+      return;
+    }
+    if (key === 'Enter' || key === 'a') { event.preventDefault(); rowAction('focus'); }
+    if (key === 'd') rowAction('done');
+    if (key === 'n') compose();
+    if (key === '/') { event.preventDefault(); openPicker('scope'); }
+    if (key === '!') toggleView('attention');
+    if (key === 'w') toggleView('working');
+    if (key === 'h') toggleView('history');
+    if (key === '0') act('clear');
+    if (key === '[' || key === ']') moveSelection(key === ']' ? 1 : -1,true);
+    if (key === '?') help();
+    if (key === 'v') diagnostics();
+    if (key === 'q') quit();
+    if (key === 'r') { state.notice = ''; renderHeader(); $('#demo-log').textContent = 'Preview: observation refresh requested. Selected failure scenario remains; no action is replayed.'; }
+  });
+  function dimensions() {
+    const choice = $('#width').value;
+    const measure = document.createElement('span'); measure.textContent = '0'; measure.style.position = 'absolute'; measure.style.visibility = 'hidden'; $('#terminal').appendChild(measure);
+    const cell = measure.getBoundingClientRect().width; measure.remove();
+    const columns = choice === 'auto' ? Math.max(40,Math.min(140,Math.floor((window.innerWidth - 48) / cell))) : Number(choice);
+    const lines = Number($('#height').value), terminal = $('#terminal');
+    terminal.style.setProperty('--cols',columns); terminal.style.setProperty('--lines',lines);
+    terminal.dataset.width = columns < 80 || lines < 20 ? 'compact' : columns < 100 ? 'narrow' : columns < 140 ? 'medium' : 'wide';
+    terminal.dataset.height = lines <= 24 ? 'short' : 'tall'; terminal.dataset.minimal = String(columns < 60 || lines < 16);
+  }
+  $('#width').addEventListener('change',dimensions); $('#height').addEventListener('change',dimensions);
+  $('#no-color').addEventListener('change',event => $('#terminal').classList.toggle('mono',event.target.checked));
+  $('#scene').addEventListener('change',event => { state.scene = event.target.value; state.explicitTarget = false; state.notice = ''; if (state.modal) closeModal(); render(); });
+  window.addEventListener('resize',dimensions);
+  document.fonts?.ready.then(dimensions);
+  render(); dimensions();
+})();
+</script>
+</body>
+</html>

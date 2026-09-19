@@ -1,0 +1,16 @@
+schema: spec-driven
+context: |
+  herdr-lanes is a public MIT tool. AGENTS.md remains the governing contract.
+  The CLI and tests use Node.js built-ins; interactive UI dependencies are isolated.
+  Support Node.js 20 and git 2.38. Read openspec/README.md before this initiative.
+  Each change is one dispatchable lane. Product implementation is not authorized by a proposal.
+rules:
+  proposal:
+    - Keep operator machine configuration out of change artifacts.
+    - Name prerequisites and any contract amendment requiring operator approval.
+  specs:
+    - Use SHALL requirements with concrete WHEN/THEN scenarios, including failure cases.
+    - Preserve clean-tree, cwd, conflict, validation, archive, and fast-forward safeguards.
+  tasks:
+    - One checkbox is one complete lane brief with test-first evidence and a handoff.
+    - Keep routes role-based; never embed model, account, or organization defaults.

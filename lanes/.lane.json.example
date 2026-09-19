@@ -1,0 +1,29 @@
+{
+  "main": "main",
+  "worktree_root": "../.worktrees",
+  "validate": "npm test",
+  "registry": ".lane/sessions.json",
+  "prepare": [
+    { "unless": "node_modules", "run": "npm ci" }
+  ],
+  "dispatch": {
+    "kind": "codex"
+  },
+  "routes": {
+    "engineer": {
+      "kind": "codex",
+      "model": "engineering-model",
+      "use": "Implementation work that needs full repository context"
+    },
+    "unblock": {
+      "kind": "codex",
+      "model": "planning-model",
+      "use": "Planning and unblocking when the implementation path is unclear"
+    },
+    "review": {
+      "kind": "claude",
+      "model": "review-model",
+      "use": "Independent review after implementation and tests are complete"
+    }
+  }
+}

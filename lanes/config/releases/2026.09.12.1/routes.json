@@ -1,0 +1,14 @@
+{
+  "monitor": {
+    "kind": "codex",
+    "model": "gpt-5.6-luna",
+    "args": ["-c", "model_reasoning_effort=low"],
+    "use": "One-shot read-only status from concise durable evidence; no repeated agent waits; exit after the answer."
+  },
+  "review-codex": {
+    "kind": "codex",
+    "model": "gpt-6-astra",
+    "args": ["-c", "model_reasoning_effort=xhigh"],
+    "use": "Independent fixed-commit review when a Codex-only route is required; follow the review template."
+  }
+}

@@ -1,0 +1,25 @@
+## Report to the supervisor
+
+Supervisor Herdr agent name: `<exact-supervisor-agent-name>`
+
+After a material checkpoint, blockage, or completed gate, first preserve the
+available evidence under the lane's rules. Then send one concise
+notification to the named supervisor with `herdr agent prompt` and no `--wait`.
+Use the exact supervisor name as the command target and the following five-line
+report as its text, replacing every placeholder with observed facts:
+
+```text
+LANE REPORT <CHECKPOINT|BLOCKED|READY_FOR_REVIEW>
+repo=<canonical-git-common-dir> topic=<topic> agent=<engineer-name>
+branch=lane/<topic> head=<full-commit-sha>
+gate=<exact-gate-result-or-unverified> report=<path-or-unverified>
+next=<one-specific-decision-or-evidence-needed>
+```
+
+The notification is a pointer to evidence, not approval to promote, publish,
+or perform a financial action. Do not include secrets, transcript dumps, or
+long logs. Do not send heartbeat messages. If the supervisor is unavailable or
+blocked and Herdr refuses delivery, do not loop or retry. Keep the durable
+report and state the undelivered notification in your final lane message.
+Independent reviewers must follow the read-only review template instead of
+sending this notification.

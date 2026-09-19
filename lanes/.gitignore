@@ -1,0 +1,6 @@
+.DS_Store
+node_modules/
+.lane/
+!CLAUDE.md
+docs/BRIEF-*.md
+docs/REVIEW-*.md

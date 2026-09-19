@@ -1,0 +1,8 @@
+{
+  "release": "2026.09.12.1",
+  "scope": "pinned-core-cli-and-configuration",
+  "cli_source_commit": "de11d4b0eec7e7d46acdbf194111eaed2508745b",
+  "console_included": false,
+  "routes_file": "routes.json",
+  "core_files": "core-files.txt"
+}

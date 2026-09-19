@@ -84,3 +84,20 @@ commits while the subtree parent is preserved. `git merge-base main HEAD` is
 No review sanitizer, release, live symlink, operator configuration, organization
 state, supervisor, Brain, console, bin or lib implementation was changed by this
 correction.
+
+## Wrap-up correction (operator session, 2026-09-19)
+
+Review round 3 (`docs/reviews/fold-lanes/cbf23c0-r3.md`) found that the
+explicit root `test` patterns left out `console/proto/prototype.test.mjs`,
+which main gained from the console-design promotion after this lane's earlier
+base, so the 154 total above was 13 short of what main's bare `node --test`
+ran. `console/proto/*.test.mjs` is now in the root `test` script.
+
+- Node 20.19.4 and Node 22.22.3 `npm test`: 167 tests, 166 passed, 1 skipped
+  (the same total as main at 080aa33).
+- Node 20.19.4 and Node 22.22.3 `npm run test:lanes`: 136 tests, 136 passed.
+
+The round's three Minor findings (rebase-check refusing an ahead-only lane
+that carries a merge, `status` not printing the refusal reason, REFERENCE.md
+not describing the refusal) are left for a follow-up item; none affects this
+promotion, which fast-forwards.

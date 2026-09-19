@@ -165,7 +165,7 @@ export function frame(s, W = 100, H = 40) {
   const taskFormat = (r, w) =>
     !r.id
       ? r.title
-      : `${pad(r.id, 6)} ${clip(r.title, w - 15)} ${pad(r.status, 7)}`;
+      : `${pad(r.id, 6)} ${pad(r.title, w - 15)} ${pad(r.status, 7)}`;
   const openFormat = (r, w) => {
     const proj = 8,
       tag = 8,
@@ -318,10 +318,13 @@ export function frame(s, W = 100, H = 40) {
           { fg: 'muted' },
         );
         const operatorDraft = s.drafts[detail.key] ?? detail.data.unsent;
-        const draft = operatorDraft ?? detail.data.suggestion;
+        const hasOperatorDraft = operatorDraft != null;
+        const draft = hasOperatorDraft
+          ? operatorDraft
+          : detail.data.suggestion;
         if (draft) {
           add(
-            operatorDraft !== undefined
+            hasOperatorDraft
               ? 'Your draft / never sent'
               : 'Agent draft / never sent',
             { fg: 'attention' },
@@ -596,9 +599,41 @@ export function frame(s, W = 100, H = 40) {
     0,
     Math.min(rendered.length - contentCap, at - Math.floor(contentCap / 2)),
   );
-  // A repeated group label consumes a line. Recompute the window at the smaller
-  // capacity so the selected session cannot be displaced from the viewport.
-  if (rendered[offset]?.row) {
+  if (narrow) {
+    // Narrow sessions occupy a main row and a continuation row. Choose only
+    // windows made of complete sessions, accounting for a repeated group label
+    // when the window begins in the middle of a repository.
+    let best = null;
+    for (let start = 0; start <= at; start++) {
+      if (rendered[start]?.continuation) continue;
+      const capacity = cap - (rendered[start]?.row ? 1 : 0);
+      let end = Math.min(rendered.length, start + capacity);
+      while (end > start && !rendered[end - 1]?.continuation) end--;
+      if (at + 1 >= end) continue;
+      const sessionCount = rendered
+        .slice(start, end)
+        .filter((line) => line.row && !line.continuation).length;
+      const startsAtGroup = Boolean(rendered[start]?.group);
+      const distance = Math.abs((start + end - 1) / 2 - (at + 0.5));
+      if (
+        !best ||
+        sessionCount > best.sessionCount ||
+        (sessionCount === best.sessionCount &&
+          startsAtGroup &&
+          !best.startsAtGroup) ||
+        (sessionCount === best.sessionCount &&
+          startsAtGroup === best.startsAtGroup &&
+          distance < best.distance)
+      )
+        best = { start, end, sessionCount, startsAtGroup, distance };
+    }
+    if (best) {
+      offset = best.start;
+      contentCap = best.end - best.start;
+    }
+  } else if (rendered[offset]?.row) {
+    // A repeated group label consumes a line. Recompute the window at the
+    // smaller capacity so the selected session stays in the viewport.
     contentCap = cap - 1;
     offset = Math.max(
       0,

@@ -6,17 +6,17 @@
 * All goals         >│* All tasks               >│> Q-1     Choose a retry poli… harbor   reply    >
   G-1 Reliable imp… >│  ENG-1  Validat… active  >│  Q-2     Keep the existing f… harbor   decision >
   G-2 Clear accoun… >│  ENG-2  Retry i… ready   >│  Q-3     Accept the message…  harbor   decision >
-  G-3 Fast search   >│  REV-3  Review… blocked  >│  Q-4     Pick a recovery tim… harbor   decision >
+  G-3 Fast search   >│  REV-3  Review…  blocked >│  Q-4     Pick a recovery tim… harbor   decision >
   G-4 Calm releases >│  RES-4  Measure… ready   >│  Q-5     Review the search s… harbor   decision >
   G-5 Useful audit… >│  ENG-5  Explain… active  >│  Q-6     Schedule the releas… harbor   decision >
                      │  ENG-6  Check s… ready   >│  Q-7     Approve the audit w… harbor   decision >
                      │  ENG-7  Test ke… blocked >│  Q-8     Choose a fallback p… harbor   decision >
                      │  REV-8  Simplif… ready   >│  HUM-1   Choose the recovery… harbor   decision >
                      │  RES-9  Documen… active  >│  HUM-2   Set the review wind… harbor   decision >
-                     │  ENG-10 Verify… ready    >│  REV-3   Error review is rea… harbor   read     >
+                     │  ENG-10 Verify…  ready   >│  REV-3   Error review is rea… harbor   read     >
                      │  ENG-11 Validat… active  >│  ENG-31  Release rehearsal f… harbor   read     >
                      │  ENG-12 Retry i… ready   >│
-                     │  REV-13 Review… blocked  >│
+                     │  REV-13 Review…  blocked >│
                      │  RES-14 Measure… ready   >│
                      │  ENG-15 Explain… active  >│
                      │  ENG-16 Check s… ready   >│

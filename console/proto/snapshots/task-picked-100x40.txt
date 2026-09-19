@@ -6,14 +6,14 @@
   All goals         >│  All tasks               >│> Q-1     Choose a retry poli… harbor   reply    >
 * G-1 Reliable imp… >│* ENG-1  Validat… active  >│  Q-2     Keep the existing f… harbor   decision >
   G-2 Clear accoun… >│  ENG-2  Retry i… ready   >│
-  G-3 Fast search   >│  REV-3  Review… blocked  >│
+  G-3 Fast search   >│  REV-3  Review…  blocked >│
   G-4 Calm releases >│  RES-4  Measure… ready   >│
   G-5 Useful audit… >│  ENG-5  Explain… active  >│
                      │  ENG-6  Check s… ready   >│
                      │  ENG-7  Test ke… blocked >│
                      │  REV-8  Simplif… ready   >│
                      │  RES-9  Documen… active  >│
-                     │  ENG-10 Verify… ready    >│
+                     │  ENG-10 Verify…  ready   >│
                      │                           │
                      │                           │
                      │                           │

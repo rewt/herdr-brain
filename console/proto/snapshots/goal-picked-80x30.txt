@@ -5,11 +5,11 @@
   Tasks 10                │> Open items 5
 * All tasks              >│> Q-1     Choose a retry policy   harbor   reply    >
   ENG-1  Valida… active  >│  Q-2     Keep the existing file… harbor   decision >
-  ENG-2  Retry… ready    >│  Q-3     Accept the message rev… harbor   decision >
+  ENG-2  Retry…  ready   >│  Q-3     Accept the message rev… harbor   decision >
   REV-3  Review… blocked >│  HUM-1   Choose the recovery wo… harbor   decision >
   RES-4  Measur… ready   >│  REV-3   Error review is ready   harbor   read     >
   ENG-5  Explai… active  >│
-  ENG-6  Check… ready    >│
+  ENG-6  Check…  ready   >│
   ENG-7  Test k… blocked >│
   REV-8  Simpli… ready   >│
   RES-9  Docume… active  >│

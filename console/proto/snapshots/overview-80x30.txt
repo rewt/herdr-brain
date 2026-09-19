@@ -1,0 +1,30 @@
+ herdr-brain / demo [p harbor] [: Screens] [b Back] [q Quit] [R Refresh]
+ [! Needs you 13] 3 to read 0 later [s Sessions 8] all projects [5 Lanes]
+ harbor > All goals > All tasks > Open items
+────────────────────────────────────────────────────────────────────────────────
+  Tasks 50                │> Open items 12
+* All tasks              >│> Q-1     Choose a retry policy   harbor   reply    >
+  ENG-1  Validate imp… * >│  Q-2     Keep the existing file… harbor   decision >
+  ENG-2  Retry interr… . >│  Q-3     Accept the message rev… harbor   decision >
+  REV-3  Review error… ! >│  Q-4     Pick a recovery timeout harbor   decision >
+  RES-4  Measure slow… . >│  Q-5     Review the search samp… harbor   decision >
+  ENG-5  Explain reco… * >│  Q-6     Schedule the release c… harbor   decision >
+  ENG-6  Check saved… .  >│  Q-7     Approve the audit word… harbor   decision >
+  ENG-7  Test keyboar… ! >│  Q-8     Choose a fallback path  harbor   decision >
+  REV-8  Simplify pro… . >│  HUM-1   Choose the recovery wo… harbor   decision >
+  RES-9  Document fal… * >│  HUM-2   Set the review window   harbor   decision >
+ 1-10 / 51                │ 1-10 / 12
+  Sessions / harbor / 6 shown───────────────────────────────────────────────────
+  SESSION                       WHO                STATE
+  harbor / 6 sessions
+  import-recovery               Codex Astra        blocked                     >
+    ENG-1 / 32m / Waiting for a retry policy                                   >
+  batch-retry                   Claude Opus        working                     >
+    ENG-2 / 18m / Testing interrupted batches                                  >
+  import-review                 Codex Astra        done                        >
+    REV-3 / 45m / Finished the error review                                    >
+  Sessions 1-7 / 13 lines; scroll here for more
+ Showing 10 of 13 needing you; ! opens all. Task stages: all.
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
+ [Goals] [Tasks] [Open items] [0 Clear filters] [? Help]
+ [b Back] [! All needs you] [s Sessions] [: Screens]

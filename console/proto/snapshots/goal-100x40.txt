@@ -1,0 +1,40 @@
+ herdr-brain / demo [p harbor] [: Screens] [b Back] [q Quit] [R Refresh]
+ [! Needs you 13] 3 to read 0 later [s Sessions 8] all projects [5 Lanes]
+ Read one thing / return to the same row
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  > G-1 Reliable imports
+  Outcome
+  Reliable imports
+  State: active Priority: 1 Project: harbor
+  Stage: 1 Open stage: 1 (advisory in this view)
+  Acceptance
+  - The user can complete the work without guessing what happened.
+  Budget: 120000 tokens, advisory; never a stop rule.
+  Blocked by: nothing recorded
+  Children: ENG-1, ENG-2, REV-3, RES-4, ENG-5, ENG-6, ENG-7, REV-8, RES-9, HUM-1
+  Runs: none yet
+  Latest direction
+  Keep the existing format readable while improving recovery.
+  v browses related work without starting anything.
+
+
+
+
+
+
+
+
+
+  1-14 / 14
+  Sessions / harbor / 6 shown───────────────────────────────────────────────────────────────────────
+  SESSION               WHO                UP    STATE    SERVES  DOING
+  harbor / 6 sessions
+  import-recovery       Codex Astra        32m   blocked  ENG-1   Waiting for a retry policy       >
+  batch-retry           Claude Opus        18m   working  ENG-2   Testing interrupted batches      >
+  import-review         Codex Astra        45m   done     REV-3   Finished the error review        >
+  account-recovery      Claude Opus        24m   working  ENG-11  Tracing a recovery edge case     >
+  Sessions 1-5 / 7 lines; scroll here for more
+ Demo: actions stay in memory. Session list remains available below.
+ [v Browse]
+ [m Actions] [? Help]
+ [b Back] [! All needs you] [s Sessions] [: Screens]

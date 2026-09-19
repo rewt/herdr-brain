@@ -5,6 +5,7 @@ import { initialState, key, mouse, rowDetail } from './controller.mjs';
 import { frame, plain, palette } from './frame.mjs';
 import { openItems, goals, tasks, sessions } from './model.mjs';
 import { decoder, modes } from './input.mjs';
+import { decisions } from './autonomy.mjs';
 const { values: opt } = parseArgs({
   options: {
     print: { type: 'string' },
@@ -19,7 +20,7 @@ const { values: opt } = parseArgs({
 });
 if (opt.help) {
   process.stdout.write(
-    'Fixture console: node console/proto/main.mjs [--print 140x45] [--screen waiting|goal|task|session|peek|inbox|later|lanes|history] [--goal G-1] [--task ENG-1] [--scope all|harbor|orchard] [--keys Tab,j,Enter,b] [--no-mouse]\n',
+    'Fixture console: node console/proto/main.mjs [--print 140x45] [--screen waiting|goal|task|session|peek|inbox|later|lanes|history|decisions|decision|authority] [--goal G-1] [--task ENG-1] [--scope all|harbor|orchard] [--keys Tab,j,Enter,b] [--no-mouse]\n',
   );
   process.exit(0);
 }
@@ -43,15 +44,17 @@ if (opt.task) {
 }
 const detail = {
   waiting: openItems[0],
-  goal: goals[0],
-  task: tasks[0],
+  goal: goals.find((g) => g.id === opt.goal) ?? goals[0],
+  task: tasks.find((t) => t.id === opt.task) ?? tasks[0],
   session: sessions[0],
+  decision: decisions.find((d) => (!opt.scope || opt.scope === 'all' || d.project === opt.scope) && (!opt.goal || d.goal === opt.goal)) ?? decisions[0],
 };
 if (opt.screen) {
   if (detail[opt.screen]) state = rowDetail(state, detail[opt.screen]);
+  else if (opt.screen === 'authority') state = key(rowDetail(state, detail.goal), 'a');
   else if (opt.screen === 'peek')
     state = key(rowDetail(state, openItems[0]), '', { return: true });
-  else if (['inbox', 'later', 'lanes', 'history'].includes(opt.screen)) {
+  else if (['inbox', 'later', 'lanes', 'history', 'decisions'].includes(opt.screen)) {
     state.view = opt.screen;
     state.focus = ['inbox', 'later'].includes(opt.screen) ? 'open' : opt.screen;
   } else throw Error('Unknown screen');
@@ -149,7 +152,7 @@ function App() {
       setUI((s) => {
         if (
           event.key?.paste &&
-          !['reply', 'search', 'screens'].includes(s.view)
+          !['reply', 'search', 'screens', 'authority-edit'].includes(s.view)
         )
           return s;
         const f = frame(s, size.w, size.h);

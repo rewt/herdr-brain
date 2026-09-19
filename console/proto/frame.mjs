@@ -20,6 +20,7 @@ import {
   destinations,
   relationActions,
 } from './controller.mjs';
+import { rankOf, policyFor, priorityText, decisionsFor, decisionFor } from './autonomy.mjs';
 export const palette = {
   bg: '#101820',
   fg: '#dce4e8',
@@ -97,6 +98,9 @@ export function frame(s, W = 100, H = 40) {
           peek: 'Session screen / fixture capture',
           lanes: 'Lanes and worktrees',
           history: 'Today / finished and decided',
+          decisions: 'Next work / recorded executive decisions / fixture',
+          authority: 'Goal authority / operator direction / fixture',
+          'authority-edit': 'Edit allowed work / existing boundaries remain in force',
           scope: 'Choose a project',
           screens: 'Choose a screen',
           search: 'Find in the focused column',
@@ -110,9 +114,14 @@ export function frame(s, W = 100, H = 40) {
   const browsing = browserViews.includes(s.view);
   const sessionHeight = browsing ? (H >= 40 ? 13 : 10) : H >= 40 ? 8 : 6;
   const sessionY = H - sessionHeight - 4;
-  const bodyY = 4;
+  const bodyY = s.view === 'board' ? 5 : 4;
   const bodyH = Math.max(3, sessionY - bodyY);
   const all = lists(s);
+  if (s.view === 'board') {
+    const latest = decisionsFor(s)[0];
+    const x = button(1, 4, '[e Next work]', keyHit('e'));
+    put(x, 4, latest ? `${latest.at.slice(11)} ${latest.title} / ${latest.project}` : 'No decision recorded', W - x - 1, { fg: 'muted' });
+  }
   function panel(name, label, list, x, y, w, h, format) {
     areas.push({ name, x, y, w, h });
     button(
@@ -161,7 +170,7 @@ export function frame(s, W = 100, H = 40) {
     put(x + 1, y + h - 1, range, w - 2, { fg: 'muted' });
   }
   const basic = (r, w) =>
-    r.id ? `${r.id} ${clip(r.title, w - r.id.length - 1)}` : r.title;
+    r.id ? clip(`${s.scope === 'all' ? `${r.project} ` : ''}#${rankOf(s, r)} ${r.id} ${r.title}`, w) : r.title;
   const taskFormat = (r, w) =>
     !r.id
       ? r.title
@@ -181,7 +190,7 @@ export function frame(s, W = 100, H = 40) {
         b = W >= 140 ? 36 : 27;
       panel(
         'goals',
-        `Goals ${all.goals.length - 1}`,
+        `Goals ${all.goals.length - 1} / rank`,
         all.goals,
         0,
         bodyY,
@@ -219,7 +228,7 @@ export function frame(s, W = 100, H = 40) {
       panel(
         showGoals ? 'goals' : 'tasks',
         showGoals
-          ? `Goals ${all.goals.length - 1}`
+          ? `Goals ${all.goals.length - 1} / rank`
           : `Tasks ${all.tasks.length - 1}`,
         showGoals ? all.goals : all.tasks,
         0,
@@ -268,6 +277,10 @@ export function frame(s, W = 100, H = 40) {
           w,
         ),
     );
+  else if (s.view === 'decisions')
+    panel('decisions', 'When / result / what happened / project', all.decisions,
+      0, bodyY, W, bodyH, (r, w) =>
+        `${r.at.slice(5)} ${pad(r.result, 15)} ${pad(r.title, w - 39)} ${pad(r.project, 8)}`);
   else if (s.view === 'history')
     panel(
       'history',
@@ -292,7 +305,22 @@ export function frame(s, W = 100, H = 40) {
       head(
         `${s.focus === 'detail' ? '>' : ' '} ${detail.id ?? detail.name}  ${detail.title ?? detail.doing ?? detail.topic ?? ''}`,
       );
-      if (detail.kind === 'waiting') {
+      if (detail.kind === 'dispatch-decision') {
+        add(`${detail.result.toUpperCase()} / ${detail.at} / ${detail.project}`, { fg: 'attention' });
+        add(`Why: ${detail.why}`);
+        add(`Priority then: #${detail.rank} ${byId(detail.goal)?.title}. Task: ${detail.task}.`);
+        add(`Authority then: ${detail.authority.revision} by ${detail.authority.by}; pickup ${detail.authority.pickup}.`);
+        add(`Allowed: ${detail.authority.scope}`);
+        add(`Checked: ${detail.eligibility}`);
+        add(`Other work: ${detail.alternatives}`);
+        add(`Outcome: ${detail.outcome}`);
+        add(`Revisit: ${detail.revisit}`);
+        add(`Trigger: ${detail.trigger}. By ${detail.actor}; ${detail.observed}.`, { fg: 'muted' });
+        add(`Boundaries then: ${detail.authority.ask} ${detail.authority.limits}`);
+        add(`Gates then: ${detail.authority.gates}`);
+        if (detail.question) add('[o] Open the authority question', { fg: 'focus' }, keyHit('o'));
+        add('[a] Read current authority; this decision keeps its original evidence.', { fg: 'focus' }, keyHit('a'));
+      } else if (detail.kind === 'waiting') {
         add('Summary', { fg: 'muted' });
         add(
           detail.data.digest?.explain ??
@@ -348,8 +376,14 @@ export function frame(s, W = 100, H = 40) {
         add(detail.kind === 'goal' ? 'Outcome' : 'Work', { fg: 'muted' });
         add(detail.title);
         add(
-          `State: ${detail.status}   Priority: ${detail.priority}   Project: ${detail.project}`,
+          `State: ${detail.status}   Project: ${detail.project}`,
         );
+        add(priorityText(s, detail));
+        if (detail.kind === 'goal') {
+          const policy = policyFor(s, detail);
+          add(`Pickup: ${policy?.pickup ?? 'no authority recorded'}${policy ? ` / ${policy.revision}` : ''}`, { fg: 'attention' });
+          add('[a] Authority   [[] Earlier goal   []] Later goal', { fg: 'muted' });
+        } else add('[w] Why this work / recorded pickup decision', { fg: 'muted' });
         if (detail.meta?.stage)
           add(
             `Stage: ${detail.meta.stage}   Open stage: 1 (advisory in this view)`,
@@ -371,6 +405,9 @@ export function frame(s, W = 100, H = 40) {
         });
       } else if (detail.name) {
         add(`${detail.kind} / ${detail.status} / up ${detail.up}`);
+        const decision = decisionFor(detail);
+        add(decision ? `[w] Why this work: ${decision.title} / goal #${decision.rank} at pickup`
+          : '[w] Why this work: no pickup decision recorded', { fg: 'focus' }, keyHit('w'));
         add(`Doing: ${detail.doing}`);
         const run = runs.find((r) => r.agent === detail.name);
         add(
@@ -422,6 +459,27 @@ export function frame(s, W = 100, H = 40) {
           { fg: 'focus' },
           { type: 'related', row: a.row },
         );
+    } else if (s.view === 'authority') {
+      const policy = policyFor(s, detail);
+      head(`> ${detail.id} ${detail.title} / authority`);
+      add(priorityText(s, detail));
+      if (!policy) {
+        add('No authority recorded. Ranking this goal does not grant permission.', { fg: 'attention' });
+        add('The executive must bring a concrete proposed envelope and recommendation to the operator.');
+        add('This prototype cannot invent an envelope for an unconfigured goal.');
+      } else {
+        add(`Pickup: ${policy.pickup} / ${policy.revision}`, { fg: 'attention' });
+        add(`Recorded by ${policy.by} at ${policy.at}.`);
+        head('Allowed work');
+        add(policy.scope);
+        head('Ask the operator');
+        add(policy.ask);
+        add(policy.limits);
+        head('Promotion');
+        add(policy.gates);
+        add('Changes govern future picks. A running session keeps its explicit task.');
+        add('[r] Edit allowed work   [1] Allow pickup   [2] Pause pickup', { fg: 'muted' });
+      }
     } else if (s.view === 'peek') {
       head('> Peek / fixture capture, not a live connection');
       for (const l of (
@@ -447,6 +505,10 @@ export function frame(s, W = 100, H = 40) {
         'Detail: 1-9 choices; y recommended; r reply; l later; x drop.',
         'd start a session; g go to pane; Enter peek; m all actions.',
         'Goal/task: v browse. G/T/S: linked goal, task, session.',
+        'e: Next work and lasting decisions. n there: request one executive.',
+        'Goals: [ earlier, ] later (within project). a in detail: authority.',
+        'Authority: r edit allowed work; 1 allow pickup; 2 pause future pickup.',
+        'Task/session: w reads why picked. Rank changes never stop a worker.',
         'Result: a marks read. R explains that fixture data is fixed.',
         'Wheel selects/scrolls the region under the pointer. Headers focus.',
         'Editor: Tab visits field, Review, Cancel; Enter activates.',
@@ -476,26 +538,42 @@ export function frame(s, W = 100, H = 40) {
       head('> Review / demo only');
       add(`${s.pending.label}`);
       add(`For: ${detail.id ?? detail.name} in ${detail.project}`);
-      add(
-        `Destination: ${detail.data?.session ?? (detail.name || 'organization answer')}`,
-      );
-      if (s.text) add(`Reply: ${s.text}`);
-      add(
-        s.pending.verb === 'drop'
-          ? 'This removes the inbox entry. It does not close its task or stop a session.'
-          : s.pending.verb === 'start'
-            ? 'A session would investigate this question and return with choices.'
-            : 'The prototype records this action in memory only.',
-      );
+      if (['authority-edit', 'pickup'].includes(s.pending.verb)) {
+        const policy = policyFor(s, detail);
+        add(`Based on ${policy?.revision}; by ${policy?.by}.`);
+        add(`Pickup: ${policy?.pickup}${s.pending.verb === 'pickup' ? ` -> ${s.pending.pickup}` : ' (unchanged)'}`);
+        add(`Allowed before: ${policy?.scope}`);
+        if (s.pending.verb === 'authority-edit') add(`Allowed after: ${s.text}`);
+        add(`Still applies: ${policy?.ask} ${policy?.limits}`);
+        add(`Promotion: ${policy?.gates}`);
+        add('This replaces the current scope/pickup field in a new revision. Running work is unchanged.');
+      } else if (s.pending.verb === 'executive') {
+        add(`Scope: every goal in ${detail.project}; browsing filters do not select a task.`);
+        add('One fresh reasoning session may pick ready work inside existing authority, record why, then exit.');
+        add('This uses a model in the product. Missing authority becomes a substantive question.');
+        add('The demo only records a request; it does not run a model or start work.');
+      } else {
+        add(
+          `Destination: ${detail.data?.session ?? (detail.name || 'organization answer')}`,
+        );
+        if (s.text) add(`Reply: ${s.text}`);
+        add(
+          s.pending.verb === 'drop'
+            ? 'This removes the inbox entry. It does not close its task or stop a session.'
+            : s.pending.verb === 'start'
+              ? 'A session would investigate this question and return with choices.'
+              : 'The prototype records this action in memory only.',
+        );
+      }
       add(
         '[Enter Confirm demo action]',
         { fg: 'attention' },
         { type: 'submit' },
       );
       add('[b Cancel]', { fg: 'muted' }, { type: 'cancel' });
-    } else if (['reply', 'search', 'screens'].includes(s.view)) {
+    } else if (['reply', 'search', 'screens', 'authority-edit'].includes(s.view)) {
       head(
-        `> ${s.view === 'reply' ? 'Reply' : s.view === 'search' ? 'Find' : 'Screen name'}`,
+        `> ${s.view === 'authority-edit' ? 'Allowed work' : s.view === 'reply' ? 'Reply' : s.view === 'search' ? 'Find' : 'Screen name'}`,
       );
       add(
         `${s.control === 0 ? '>' : ' '} ${s.text || ''}${s.control === 0 ? '|' : ''}`,
@@ -515,7 +593,7 @@ export function frame(s, W = 100, H = 40) {
             ),
           );
       add(
-        `${s.control === 1 ? '>' : ' '} [Enter ${s.view === 'reply' ? 'Review reply' : 'Apply'}]`,
+        `${s.control === 1 ? '>' : ' '} [Enter ${s.view === 'authority-edit' ? 'Review authority' : s.view === 'reply' ? 'Review reply' : 'Apply'}]`,
         { fg: 'focus' },
         { type: 'submit' },
       );
@@ -685,7 +763,9 @@ export function frame(s, W = 100, H = 40) {
   const shown = all.open?.filter((o) => o.kind === 'waiting').length ?? 0;
   const notice =
     s.message ||
-    (browsing
+    (s.view === 'decisions'
+      ? `${all.decisions.length} recorded choices. Reading uses no model. These are past decisions.`
+      : browsing
       ? `Showing ${shown} of ${totals.needs} needing you; ! opens all. Task stages: ${s.stage}.`
       : 'Demo: actions stay in memory. Session list remains available below.');
   put(1, H - 4, notice, W - 2, { fg: s.message ? 'attention' : 'muted' });
@@ -698,6 +778,7 @@ export function frame(s, W = 100, H = 40) {
       ['[t Stage]', keyHit('t')],
     ]);
     bar(H - 2, [
+      ...(s.view === 'decisions' ? [['[n Run executive now]', keyHit('n')]] : []),
       ...(s.view === 'board'
         ? [
             ['[Goals]', { type: 'focus', area: 'goals' }],
@@ -705,7 +786,9 @@ export function frame(s, W = 100, H = 40) {
             ['[Open items]', { type: 'focus', area: 'open' }],
           ]
         : []),
-      ['[0 Clear filters]', keyHit('0')],
+      ...(s.view === 'board' && s.focus === 'goals'
+        ? [['[[ Earlier]', keyHit('[')], ['[] Later]', keyHit(']')]]
+        : [['[0 Clear filters]', keyHit('0')]]),
       ['[? Help]', keyHit('?')],
     ]);
   } else if (s.view === 'detail' || s.view === 'peek') {
@@ -713,9 +796,9 @@ export function frame(s, W = 100, H = 40) {
     bar(
       H - 3,
       available
-        .filter((a) => ['y', 'r', 'l', 'x', 'd', 'a', 'v'].includes(a.key))
+        .filter((a) => ['y', 'r', 'l', 'x', 'd', 'a', 'v', '[', ']', 'w', 'o'].includes(a.key))
         .map((a) => [
-          `[${a.key} ${{ y: 'Recommended', r: 'Reply', l: 'Later', x: 'Drop', d: 'Start session', a: 'Mark read', v: 'Browse' }[a.key]}]`,
+          `[${a.key} ${{ y: 'Recommended', r: 'Reply', l: 'Later', x: 'Drop', d: 'Start session', a: s.detail.kind === 'read' ? 'Mark read' : 'Authority', v: 'Browse', '[': 'Earlier', ']': 'Later', w: 'Why this work', o: 'Question' }[a.key]}]`,
           { type: 'action', action: a },
         ]),
     );
@@ -733,6 +816,11 @@ export function frame(s, W = 100, H = 40) {
         : []),
       ['[? Help]', keyHit('?')],
     ]);
+  } else if (s.view === 'authority') {
+    if (policyFor(s, s.detail)) bar(H - 3, [
+      ['[r Edit work]', keyHit('r')], ['[1 Allow pickup]', keyHit('1')], ['[2 Pause pickup]', keyHit('2')],
+    ]);
+    bar(H - 2, [['[? Help]', keyHit('?')]]);
   } else
     bar(H - 2, [
       ['[Enter Apply]', { type: 'submit' }],
@@ -744,6 +832,8 @@ export function frame(s, W = 100, H = 40) {
     ['[! All needs you]', keyHit('!')],
     ['[s Sessions]', keyHit('s')],
     ['[: Screens]', keyHit(':')],
+    ...(['reply', 'search', 'screens', 'authority-edit', 'confirm', 'scope', 'actions'].includes(s.view)
+      ? [] : [['[e Next work]', keyHit('e')]]),
   ]);
   return finish();
   function finish() {

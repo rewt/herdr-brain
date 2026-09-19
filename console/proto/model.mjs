@@ -10,6 +10,7 @@ import {
   lanes,
   today,
 } from './fixtures.mjs';
+import { rankedGoals, decisionsFor } from './autonomy.mjs';
 export { projects, items, goals, tasks, sessions, runs, lanes, today };
 export const byId = (id) => items.find((x) => x.id === id);
 export function ancestors(id) {
@@ -50,13 +51,13 @@ export const openItems = [
     data: {
       ...q,
       digest: {
-        explain: 'This question sets the next step for the goal.',
-        options: [
+        explain: q.explain ?? 'This question sets the next step for the goal.',
+        options: q.options ?? [
           { key: '1', label: 'Use the proposed approach' },
           { key: '2', label: 'Ask for another pass' },
         ],
         recommend: q.meta.recommend,
-        why: 'It preserves the existing workflow.',
+        why: q.why ?? 'It preserves the existing workflow.',
       },
     },
   })),
@@ -95,7 +96,7 @@ export const matches = (row, q) =>
 export function lists(s) {
   const scoped = (x) => s.scope === 'all' || x.project === s.scope;
   const result = {
-    goals: [{ id: null, title: 'All goals' }, ...goals.filter(scoped)],
+    goals: [{ id: null, title: 'All goals' }, ...projects.flatMap((p) => rankedGoals(s, p.name)).filter(scoped)],
     tasks: [
       { id: null, title: 'All tasks' },
       ...tasks
@@ -106,6 +107,7 @@ export function lists(s) {
     open: openRows(s, { global: s.view === 'inbox' || s.view === 'later' }),
     sessions: sessions.filter(scoped),
     lanes: lanes.filter(scoped),
+    decisions: decisionsFor(s),
     history: [...today.finished, ...today.decided]
       .filter(scoped)
       .map((x, i) => ({

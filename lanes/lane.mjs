@@ -2293,8 +2293,9 @@ switch (command) {
     }
     break;
   case "rebase-check": {
-    // Control for the promote auto-rebase: exit 0 iff <topic> rebases cleanly
-    // onto --against (default main); prints the conflicting files otherwise.
+    // Control for the promote auto-rebase: exit 0 iff <topic> already contains
+    // --against (default main) or would replay onto it cleanly; otherwise print
+    // the conflicting files, or the merge-commit reason for a lane that is behind.
     if (topic === undefined) fail("usage: lane.mjs rebase-check <topic> [--against <ref>]");
     const against = rest[0] === "--against" ? rest[1] : MAIN;
     const check = rebaseCheck(laneBranch(topic), against);

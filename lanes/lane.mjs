@@ -858,6 +858,15 @@ function verifyAgentCwd(agentName, path, deadline) {
 function rebaseCheck(branch, against = MAIN) {
   const [ahead, behind] = git(["rev-list", "--left-right", "--count", `${branch}...${against}`]).split("\t");
   if (ahead === "0") return { ahead, behind, clean: true, conflicts: [] };
+  if (git(["rev-list", "--merges", `${against}..${branch}`]) !== "") {
+    return {
+      ahead,
+      behind,
+      clean: false,
+      conflicts: [],
+      reason: "merge commit present; plain rebase would linearize and may conflict",
+    };
+  }
   const run = spawnSync("git", ["-C", REPO, "merge-tree", "--write-tree", against, branch], { encoding: "utf8" });
   const conflicts = `${run.stdout}${run.stderr}`
     .split("\n")
@@ -2123,7 +2132,10 @@ function promote(topic) {
     // run is clean, and the gate below validates the rebased tree; conflicts
     // go back to the implementer with the file list.
     const check = rebaseCheck(branch);
-    if (!check.clean) fail(`lane is behind ${MAIN} and does not rebase cleanly; conflicts in: ${check.conflicts.join(", ")}`);
+    if (!check.clean) {
+      const reason = check.reason ?? `conflicts in: ${check.conflicts.join(", ")}`;
+      fail(`lane is behind ${MAIN} and does not rebase cleanly; ${reason}`);
+    }
     const before = git(["rev-parse", "--short", branch]);
     git(["rebase", MAIN], { cwd: path });
     process.stdout.write(`rebased ${branch} onto ${MAIN} (${before} -> ${git(["rev-parse", "--short", branch])}, clean replay)\n`);
@@ -2279,7 +2291,8 @@ switch (command) {
     if (topic === undefined) fail("usage: lane.mjs rebase-check <topic> [--against <ref>]");
     const against = rest[0] === "--against" ? rest[1] : MAIN;
     const check = rebaseCheck(laneBranch(topic), against);
-    process.stdout.write(`${laneBranch(topic)} vs ${against}: +${check.ahead}/-${check.behind} ${check.clean ? "clean" : `CONFLICT ${check.conflicts.join(",")}`}\n`);
+    const result = check.clean ? "clean" : (check.reason ?? `CONFLICT ${check.conflicts.join(",")}`);
+    process.stdout.write(`${laneBranch(topic)} vs ${against}: +${check.ahead}/-${check.behind} ${result}\n`);
     process.exit(check.clean ? 0 : 1);
   }
   case "verify-agent": {

@@ -689,6 +689,44 @@ test("promote rebases a clean lane behind main and fast-forwards", () => {
   }
 });
 
+test("promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes", () => {
+  const fixture = makeFixture();
+  try {
+    const mergedPath = openLane(fixture, "merged-history");
+    const linearPath = openLane(fixture, "linear-history");
+    commitFile(mergedPath, "lane.txt", "lane\n", "lane base");
+    git(mergedPath, ["switch", "-c", "merged-history-side"]);
+    commitFile(mergedPath, "side.txt", "side\n", "side change");
+    git(mergedPath, ["switch", "lane/merged-history"]);
+    commitFile(mergedPath, "topic.txt", "topic\n", "topic change");
+    git(mergedPath, ["merge", "--no-ff", "merged-history-side", "-m", "merge side"]);
+    commitFile(linearPath, "linear.txt", "linear\n", "linear change");
+    commitFile(fixture.repo, "main.txt", "main\n", "main change");
+    const mainBefore = git(fixture.repo, ["rev-parse", "main"]);
+    const mergedBefore = git(fixture.repo, ["rev-parse", "lane/merged-history"]);
+
+    const refused = lane(fixture, ["promote", "merged-history"]);
+    assert.equal(refused.status, 1);
+    assert.match(
+      refused.stderr,
+      /merge commit present; plain rebase would linearize and may conflict/,
+    );
+    assert.equal(git(fixture.repo, ["rev-parse", "main"]), mainBefore);
+    assert.equal(git(fixture.repo, ["rev-parse", "lane/merged-history"]), mergedBefore);
+    assert.equal(git(mergedPath, ["status", "--porcelain=v1"]), "");
+    assert.ok(!existsSync(git(mergedPath, ["rev-parse", "--git-path", "rebase-merge"])));
+    assert.ok(!existsSync(git(mergedPath, ["rev-parse", "--git-path", "rebase-apply"])));
+
+    const promoted = lane(fixture, ["promote", "linear-history"]);
+    assert.equal(promoted.status, 0, promoted.stderr);
+    assert.match(promoted.stdout, /rebased lane\/linear-history onto main/);
+    assert.match(promoted.stdout, /promoted lane\/linear-history/);
+    negativeControl("merge-bearing rebase refusal and linear promotion");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("promote accepts a gitignored session registry in the canonical checkout", () => {
   const fixture = makeFixture({ main: "main", validate: "true", registry: ".lane/sessions.json" });
   try {

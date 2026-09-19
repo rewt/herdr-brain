@@ -5,8 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test test brain/test console/test",
-    "test:lanes": "node --test lanes/test"
+    "test": "node --test test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs",
+    "test:lanes": "node --test lanes/test/*.test.mjs"
   },
   "bin": { "org": "./bin/org.mjs" },
   "engines": { "node": ">=20" }

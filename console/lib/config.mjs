@@ -42,13 +42,13 @@ function expand(p) {
   return path.resolve(p.replace(/^~(?=$|\/)/, os.homedir()));
 }
 
-export function normalizeConfig(raw, file) {
+export function normalizeConfig(raw, file, { allowUnmanaged = false } = {}) {
   if (raw?.example) throw new ConfigError(`${file} is still the example: edit its project paths, then delete the "example" line`);
   const projects = Array.isArray(raw?.projects) ? raw.projects : [];
-  if (!projects.length) throw new ConfigError(`${file} lists no projects`);
+  if (!projects.length && !allowUnmanaged) throw new ConfigError(`${file} lists no projects`);
   const out = projects.map((p, i) => {
     if (!p?.name) throw new ConfigError(`${file}: projects[${i}] needs a name`);
-    if (!p.org) throw new ConfigError(`${file}: project ${p.name} needs "org" (its organization directory)`);
+    if (!p.org && !allowUnmanaged) throw new ConfigError(`${file}: project ${p.name} needs "org" (its organization directory)`);
     return {
       name: String(p.name),
       org: expand(p.org),
@@ -66,6 +66,18 @@ export function normalizeConfig(raw, file) {
   if (raw.brain_bin && !brainBin) throw new ConfigError(`${file}: "brain_bin" must be a path`);
   // explain: false turns off the plain-words reading of org questions (one small model call each, cached).
   return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs, brain_bin: brainBin, explain: raw.explain !== false };
+}
+
+// Opening the live trial on a new installation must not create an example
+// config or demand an organization before the operator can inspect a project.
+export function loadModernConfig(file = configPath()) {
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT') return normalizeConfig({ projects: [], explain: false }, file, { allowUnmanaged: true });
+    throw new ConfigError(`${file} cannot be read: ${error.message}`);
+  }
+  return normalizeConfig({ ...raw, explain: false }, file, { allowUnmanaged: true });
 }
 
 export function loadConfig(file = configPath()) {

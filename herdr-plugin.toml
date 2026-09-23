@@ -1,0 +1,15 @@
+id = "rewt.brain-console-trial"
+name = "Herdr Brain live console trial"
+version = "0.1.0"
+min_herdr_version = "0.8.2"
+description = "Inspect live projects, worktrees, goals, tasks and agent output."
+platforms = ["macos", "linux"]
+
+[[build]]
+command = ["npm", "--prefix", "console", "ci"]
+
+[[panes]]
+id = "projects"
+title = "Projects"
+placement = "tab"
+command = ["node", "console/plugin.mjs"]

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { parseAgentList, parseTabList } from './sources.mjs';
 
 export const ORG_BIN = process.env.HERDR_ORG_BIN || fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
+export const herdrBinary = () => process.env.HERDR_BIN_PATH || 'herdr';
 
 function run(cmd, args, { env, timeout = 15000 } = {}) {
   return new Promise((resolve) => {
@@ -41,6 +42,25 @@ export async function orgToday(project) {
   return JSON.parse(r.stdout);
 }
 
+export async function orgStatus(project) {
+  const r = await run(process.execPath, [ORG_BIN, 'status', '--json'], { env: orgEnv(project) });
+  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org status failed');
+  const doc = JSON.parse(r.stdout);
+  if (!Array.isArray(doc.items) || !Array.isArray(doc.runs)) throw new Error('unexpected org status output');
+  return doc;
+}
+
+// The live trial reads topology separately so an unavailable source never looks
+// like an empty project. Keep opaque IDs and Git identity supplied by Herdr.
+export async function herdrList(resource) {
+  if (!['workspace', 'tab', 'pane'].includes(resource)) throw new Error('unknown Herdr resource');
+  const r = await run(herdrBinary(), [resource, 'list'], { timeout: 4000 });
+  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || `Herdr ${resource} list failed`);
+  const rows = JSON.parse(r.stdout)?.result?.[`${resource}s`];
+  if (!Array.isArray(rows)) throw new Error(`unexpected Herdr ${resource} list output`);
+  return rows;
+}
+
 export function answerArgs({ question, answer, note, overrule }) {
   // --note=… keeps a reason that starts with a dash from reading as an option.
   return ['answer', question, answer, ...(note ? [`--note=${note}`] : []), ...(overrule ? ['--overrule'] : [])];
@@ -58,7 +78,7 @@ export async function orgNote(project, id, text, { decision = false } = {}) {
 }
 
 export async function herdrAgents() {
-  const r = await run('herdr', ['agent', 'list'], { timeout: 4000 });
+  const r = await run(herdrBinary(), ['agent', 'list'], { timeout: 4000 });
   if (!r.ok) return { ok: false, agents: [], error: firstLine(r.stderr) || r.error?.code || 'herdr agent list failed' };
   try {
     return { ok: true, agents: parseAgentList(r.stdout) };
@@ -68,7 +88,7 @@ export async function herdrAgents() {
 }
 
 export async function herdrTabs() {
-  const r = await run('herdr', ['tab', 'list'], { timeout: 4000 });
+  const r = await run(herdrBinary(), ['tab', 'list'], { timeout: 4000 });
   if (!r.ok) return [];
   try {
     return parseTabList(r.stdout);
@@ -87,7 +107,7 @@ export function goArgs({ agent, tab }) {
 export async function herdrGo(target) {
   const args = goArgs(target);
   if (!args) return { ok: false, error: 'no Herdr agent or tab to go to' };
-  const r = await run('herdr', args, { timeout: 4000 });
+  const r = await run(herdrBinary(), args, { timeout: 4000 });
   return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || `herdr ${args.slice(0, 2).join(' ')} failed` };
 }
 
@@ -104,7 +124,7 @@ export function readArgs({ agent, pane }, lines = 400) {
 export async function herdrRead(target, lines = 400) {
   const args = readArgs(target, lines);
   if (!args) return { ok: false, error: 'no Herdr agent or pane to read' };
-  const r = await run('herdr', args, { timeout: 5000 });
+  const r = await run(herdrBinary(), args, { timeout: 5000 });
   if (!r.ok) return { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || 'herdr read failed' };
   // `agent read` answers in JSON on some versions and plain text on others.
   try {
@@ -121,7 +141,7 @@ export async function herdrRead(target, lines = 400) {
 // prompt before sending anything (agent_blocked), so this cannot jam one.
 export async function herdrPrompt(agent, text) {
   if (!agent) return { ok: false, error: 'that session has no name Herdr can address' };
-  const r = await run('herdr', ['agent', 'prompt', agent, text], { timeout: 30000 });
+  const r = await run(herdrBinary(), ['agent', 'prompt', agent, text], { timeout: 30000 });
   if (r.ok) return { ok: true };
   const msg = `${r.stderr ?? ''}${r.stdout ?? ''}`;
   return { ok: false, blocked: /agent_blocked/.test(msg), error: firstLine(r.stderr) || firstLine(r.stdout) || 'herdr agent prompt failed' };
@@ -132,7 +152,7 @@ export async function herdrPrompt(agent, text) {
 // ("herdr") when it stops. Synchronous, so it also works while the process exits.
 export function herdrRightClick(pane, target) {
   if (!pane) return false;
-  const r = spawnSync('herdr', ['pane', 'input', '--right-click', target, pane], { stdio: 'ignore', timeout: 3000 });
+  const r = spawnSync(herdrBinary(), ['pane', 'input', '--right-click', target, pane], { stdio: 'ignore', timeout: 3000 });
   return !r.error && r.status === 0;
 }
 

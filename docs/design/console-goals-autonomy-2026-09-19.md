@@ -313,6 +313,13 @@ not cards. No new dependency or Herdr keybinding is needed.
 
 ## Interaction changes and layout critique
 
+**Correction after operator review:** retained functionality must be compared
+with the live console, not only the earlier fixture prototype. Project
+instructions, capture controls/status, direct row actions, history overrules and
+document/context readers are now represented in the prototype alongside the
+goals study. See the [live-workflow comparison](console-live-workflows-2026-09-19.md)
+for the exact controls, shortcut differences and remaining integration limits.
+
 | Context | Key / mouse target | Effect |
 |---|---|---|
 | Overview and readers | `e` / Next work | Open recorded decisions for the project, independent of goal/task filters |
@@ -433,8 +440,8 @@ The original ARCH-3 snapshots remain historical evidence of that design.
 Changed controls (same frame):
 
 ```text
- [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
- [Goals] [Tasks] [Open items] [[ Earlier] [] Later] [? Help]
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage] [m Actions]
+ [Goals] [Tasks] [Open items] [0 Clear filters] [[ Earlier] [] Later] [? Help]
  [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]
 ```
 
@@ -454,8 +461,8 @@ Changed controls (same frame):
 Changed controls (same frame):
 
 ```text
- [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
- [Goals] [Tasks] [Open items] [[ Earlier] [] Later] [? Help]
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage] [m Actions]
+ [Goals] [Tasks] [Open items] [0 Clear filters] [[ Earlier] [] Later] [? Help]
  [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]
 ```
 
@@ -475,8 +482,8 @@ Changed controls (same frame):
 Changed controls (same frame):
 
 ```text
- [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
- [Goals] [Tasks] [Open items] [[ Earlier] [] Later] [? Help]
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage] [m Actions]
+ [Goals] [Tasks] [Open items] [0 Clear filters] [[ Earlier] [] Later] [? Help]
  [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]
 ```
 
@@ -494,7 +501,7 @@ Changed controls (same frame):
 Changed controls (same frame):
 
 ```text
- [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage] [m Actions]
  [n Run executive now] [0 Clear filters] [? Help]
  [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]
 ```
@@ -511,7 +518,7 @@ Changed controls (same frame):
 Changed controls (same frame):
 
 ```text
- [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage] [m Actions]
  [n Run executive now] [0 Clear filters] [? Help]
  [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]
 ```
@@ -528,7 +535,7 @@ Changed controls (same frame):
 Changed controls (same frame):
 
 ```text
- [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage]
+ [Tab focus] [j/k select] [Enter detail] [/ Find] [t Stage] [m Actions]
  [n Run executive now] [0 Clear filters] [? Help]
  [b Back] [! All needs you] [s Sessions] [: Screens] [e Next work]
 ```

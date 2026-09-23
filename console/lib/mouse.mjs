@@ -12,7 +12,8 @@ export function parseMouse(input) {
   if (!m) return null;
   const code = Number(m[1]);
   let button;
-  if (code & 64) button = (code & 3) === 0 ? 'wheelUp' : (code & 3) === 1 ? 'wheelDown' : 'wheel';
+  if ((code & 128) && !(code & 32)) button = (code & 3) === 0 ? 'back' : (code & 3) === 1 ? 'forward' : 'extra';
+  else if (code & 64) button = (code & 3) === 0 ? 'wheelUp' : (code & 3) === 1 ? 'wheelDown' : 'wheel';
   else if (code & 32) button = 'motion';
   else button = ['left', 'middle', 'right', 'none'][code & 3];
   return { button, x: Number(m[2]) - 1, y: Number(m[3]) - 1, press: m[4] === 'M' };

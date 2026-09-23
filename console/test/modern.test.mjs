@@ -1,0 +1,340 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { catalog, projectView, createIdentityReader, folderPath } from '../modern/model.mjs';
+import { createModernSession } from '../modern/session.mjs';
+import { loadModernConfig, normalizeConfig } from '../lib/config.mjs';
+import { parseMouse } from '../lib/mouse.mjs';
+import { cellWidth } from '../lib/text.mjs';
+import { lineText } from '../lib/frame.mjs';
+
+const identity = cwd => cwd === '/b' ? { key: '/b/.git', root: '/b', name: 'same-name', git: true } : ['/a', '/a-lane'].includes(cwd) ? { key: '/a/.git', root: '/a', name: 'same-name', git: true } : null;
+const space = (id, root, linked = false) => ({ workspace_id: id, label: id, active_tab_id: `${id}:t1`, worktree: { repo_key: `${root}/.git`, repo_root: root, repo_name: 'same-name', checkout_path: linked ? `${root}-lane` : root, is_linked_worktree: linked } });
+function fixture(overrides = {}) {
+  const config = { projects: [{ name: 'Alpha', cwd: '/a', org: '/org-a' }, { name: 'Beta', cwd: '/b', org: '/org-b' }], refresh_seconds: 60 };
+  const workspaces = [space('a', '/a'), space('a-work', '/a', true), space('b', '/b')];
+  const tabs = workspaces.map(w => ({ tab_id: `${w.workspace_id}:t1`, workspace_id: w.workspace_id, label: 'Terminal' }));
+  const agents = [{ name: 'worker', pane: 'a-work:p1', tab: 'a-work:t1', workspace: 'a-work', cwd: '/a-lane', tool: 'codex', status: 'working' }, { name: 'beta', pane: 'b:p1', tab: 'b:t1', workspace: 'b', cwd: '/b', tool: 'claude', status: 'idle' }];
+  const items = [{ id: 'G-1', kind: 'goal', title: 'Ship the result', status: 'open', parent: null, notes: [] }, { id: 'ENG-1', kind: 'task', role: 'engineer', title: 'Implement the result', parent: 'G-1', status: 'active', notes: [] }, { id: 'ENG-2', kind: 'task', role: 'engineer', title: 'Completed work', parent: 'G-1', status: 'done', notes: [] }];
+  const today = p => ({ project: { top_goal: null }, waiting: [], running: p.name === 'Alpha' ? [{ run: 'R-1', item: 'ENG-1', title: 'Implement the result', agent: 'worker', workspace: '/a-lane', started: new Date().toISOString() }] : [], agent_runs: [], decided: [], finished: [] });
+  const reads = [], calls = [];
+  const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), brainQueue: async () => ({ rows: [], off: true }),
+    herdrList: async what => what === 'workspace' ? workspaces : tabs, herdrAgents: async () => ({ ok: true, agents }),
+    herdrRead: async target => { reads.push(target); return { ok: true, text: `EXACT ${target.pane}\n${'output\n'.repeat(45)}` }; }, herdrGo: async target => { calls.push(target); return { ok: true }; }, gitSummary: async () => ({ branch: 'lane/alpha', changes: 2 }), ...overrides };
+  const session = createModernSession({ config, deps, env: {} });
+  return { session, config, deps, workspaces, tabs, agents, items, reads, calls };
+}
+const rendered = (s, cols = 100, rows = 32) => s.frame(cols, rows).lines.map(lineText).join('\n');
+
+test('project discovery uses Git identity, deduplicates worktrees, never repo basenames', () => {
+  const { config, workspaces } = fixture();
+  const list = catalog(config.projects.slice(0, 1), workspaces, identity);
+  assert.equal(list.length, 2); assert.equal(list[1].id, 'discovered:/b/.git');
+  assert.equal(list[0].org, '/org-a'); assert.equal(list[1].org, null);
+});
+
+test('live scope keeps the exact sessions, run relationships and active work only', async () => {
+  const { session } = fixture(); await session.refresh();
+  assert.deepEqual(session.model.sessions.map(a => [a.pane, a.goal, a.task]), [['a-work:p1', 'G-1', 'ENG-1']]);
+  assert.equal(session.model.tasks.length, 1);
+  await session.activate('project:configured:Beta');
+  assert.deepEqual(session.model.sessions.map(a => a.pane), ['b:p1']); assert.equal(session.model.goals.length, 0);
+  assert.doesNotMatch(rendered(session), /Ship the result|ENG-1/);
+});
+
+test('output reads the selected pane, history restores task and its keyboard focus', async () => {
+  const { session, reads } = fixture(); await session.refresh();
+  session.ui.focus = 'item:ENG-1'; await session.activate('item:ENG-1');
+  session.ui.focus = 'session:a-work:p1'; await session.activate('session:a-work:p1');
+  assert.deepEqual(reads.at(-1), { pane: 'a-work:p1' });
+  assert.match(rendered(session), /a-work:p1/);
+  await session.key('', { escape: true }); assert.equal(session.ui.view, 'item'); assert.equal(session.ui.focus, 'session:a-work:p1');
+  await session.key('', { escape: true }); assert.equal(session.ui.view, 'overview'); assert.equal(session.ui.focus, 'item:ENG-1');
+});
+
+test('same-view navigation does not accumulate Back entries', async () => {
+  const { session } = fixture(); await session.refresh();
+  await session.activate('view:goals'); await session.activate('view:goals'); await session.activate('view:goals');
+  await session.activate('back'); assert.equal(session.ui.view, 'overview');
+  await session.activate('forward'); assert.equal(session.ui.view, 'goals');
+});
+
+test('split tab requires a specific agent and shell tabs do not borrow other output', async () => {
+  const { session, agents, reads } = fixture();
+  agents.push({ ...agents[0], name: 'second', pane: 'a-work:p2' }); await session.refresh();
+  await session.activate('space:a-work'); assert.equal(session.ui.pane, null); assert.equal(reads.length, 0);
+  assert.match(rendered(session), /Select a session/);
+  await session.activate('session:a-work:p2'); assert.equal(reads.at(-1).pane, 'a-work:p2');
+  await session.activate('space:a'); assert.equal(session.ui.pane, null); assert.match(rendered(session), /Shell tab/);
+});
+
+test('source failure retains last good data with an error and cannot focus stale sessions', async () => {
+  let fail = false;
+  const { session, calls, agents } = fixture({ herdrAgents: async () => fail ? { ok: false, error: 'socket disconnected' } : { ok: true, agents } });
+  await session.refresh(); await session.activate('session:a-work:p1'); fail = true; await session.refresh();
+  assert.equal(session.model.sessions.length, 1); assert.match(rendered(session), /Connection issue/);
+  await session.activate('go'); assert.equal(calls.length, 0);
+  fail = false; await session.refresh(); assert.equal(session.ui.errors.agents, undefined);
+});
+
+test('a disappeared agent retains its last output but cannot be focused as live', async () => {
+  const { session, agents, calls } = fixture(); await session.refresh(); await session.activate('session:a-work:p1');
+  agents.shift(); await session.refresh(); assert.match(session.ui.outputError, /no longer/);
+  assert.match(session.ui.output, /EXACT a-work:p1/); await session.activate('go'); assert.equal(calls.length, 0);
+});
+
+test('late output cannot overwrite a newer selection', async () => {
+  let release;
+  const { session } = fixture({ herdrRead: () => new Promise(resolve => { release = resolve; }) });
+  await session.refresh();
+  const pending = session.activate('session:a-work:p1'); await new Promise(resolve => setImmediate(resolve));
+  await session.activate('view:goals'); release({ ok: true, text: 'STALE RESULT' }); await pending;
+  assert.equal(session.ui.view, 'goals'); assert.equal(session.ui.output, null); assert.doesNotMatch(rendered(session), /STALE RESULT/);
+});
+
+test('scope switch during a pending refresh never leaks the previous project', async () => {
+  const { session, deps } = fixture(); await session.refresh();
+  let release; let slow = true;
+  const slowSession = createModernSession({ config: fixture().config, deps: { ...deps, orgStatus: async p => {
+    if (p.name === 'Alpha' && slow) { slow = false; await new Promise(resolve => release = resolve); }
+    return deps.orgStatus(p);
+  } } });
+  const first = slowSession.refresh(); await new Promise(resolve => setImmediate(resolve));
+  const switched = slowSession.activate('project:configured:Beta'); release(); await Promise.all([first, switched]);
+  assert.equal(slowSession.project.name, 'Beta'); assert.equal(slowSession.model.goals.length, 0);
+  assert.doesNotMatch(rendered(slowSession), /Ship the result/);
+});
+
+test('frame is cell-exact and source text cannot inject terminal escapes at target sizes', async () => {
+  const { session, items } = fixture(); items[0].title = '\x1b]52;c;secret\x07 A wide 字 outcome'; await session.refresh();
+  for (const [cols, rows] of [[80, 24], [100, 34], [140, 42]]) {
+    const f = session.frame(cols, rows); assert.equal(f.lines.length, rows);
+    for (const l of f.lines) { assert.equal(cellWidth(lineText(l)), cols); assert.doesNotMatch(lineText(l), /\x1b|secret/); }
+    assert.ok(f.hits.flat().every(h => h.from >= 0 && h.to <= cols));
+    assert.match(lineText(f.lines[0]), /^ herdr brain/);
+  }
+});
+
+test('mouse hits open the intended live session and Back/Forward use the same history', async () => {
+  const { session } = fixture(); await session.refresh(); const frame = session.frame(100, 32);
+  const y = frame.hits.findIndex(h => h.some(x => x.id === 'session:a-work:p1'));
+  const hit = frame.hits[y].find(x => x.id === 'session:a-work:p1');
+  await session.mouse({ x: hit.from, y, button: 'left', press: true }); assert.equal(session.ui.pane, 'a-work:p1');
+  await session.mouse(parseMouse('\x1b[<128;1;1M')); assert.equal(session.ui.view, 'overview');
+  await session.mouse(parseMouse('\x1b[<129;1;1M')); assert.equal(session.ui.view, 'output');
+  assert.equal(parseMouse('\x1b[<160;1;1M').button, 'motion');
+});
+
+test('fresh installation reads no config into existence; goals and org are optional', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modern-empty-'));
+  try {
+    const file = path.join(dir, 'not-created', 'console.json'); const config = loadModernConfig(file);
+    assert.deepEqual(config.projects, []); assert.equal(fs.existsSync(path.dirname(file)), false);
+    assert.throws(() => normalizeConfig({ projects: [] }, file), /no projects/);
+    const { deps } = fixture(); const session = createModernSession({ config, deps: { ...deps, herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }) } });
+    await session.refresh(); assert.match(rendered(session), /Start where you are/); assert.match(rendered(session), /Open a folder/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('opening a directory without Git creates no project files and can return to the previous scope', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modern-folder-'));
+  try {
+    const { session } = fixture({ identity: cwd => identity(cwd) ?? { key: dir, root: dir, name: 'Ideas', git: false } });
+    await session.refresh(); await session.activate('folder'); session.ui.text = dir; await session.activate('open-folder');
+    assert.equal(session.project.org, null); assert.equal(session.model.goals.length, 0); assert.deepEqual(fs.readdirSync(dir), []);
+    assert.match(rendered(session), /No organization/); assert.match(rendered(session), /No sessions or checkouts/); assert.doesNotMatch(rendered(session), /Shell tabs remain/); await session.activate('back'); assert.equal(session.ui.view, 'folder');
+    await session.activate('back'); assert.equal(session.project.name, 'Alpha');
+    await session.activate('folder'); session.ui.text = path.join(dir, 'missing'); await session.activate('open-folder'); assert.match(session.ui.message, /Cannot open folder/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('canonical discovery groups an actual worktree and a symlink, keeping same-named repos distinct', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modern-identity-'));
+  try {
+    const a = path.join(dir, 'one', 'repo'), b = path.join(dir, 'two', 'repo'), lane = path.join(dir, 'lane');
+    fs.mkdirSync(a, { recursive: true }); fs.mkdirSync(b, { recursive: true });
+    for (const cwd of [a, b]) { execFileSync('git', ['init', '-q', cwd]); execFileSync('git', ['-C', cwd, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-qm', 'Fixture']); }
+    execFileSync('git', ['-C', a, 'worktree', 'add', '-qb', 'lane', lane]);
+    fs.symlinkSync(a, path.join(dir, 'alias'));
+    const read = createIdentityReader();
+    assert.equal(read(a).key, read(lane).key); assert.equal(read(a).key, read(path.join(dir, 'alias')).key); assert.notEqual(read(a).key, read(b).key);
+    assert.equal(folderPath(path.join(dir, 'alias')), fs.realpathSync(a));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('future-stage and deferred questions remain reachable without inflating Needs you', async () => {
+  const { session } = fixture({ orgToday: async () => ({ project: { open_stage: 1 }, waiting: [{ id: 'HUM-1', title: 'Now?', stage: 1 }, { id: 'HUM-2', title: 'Later stage?', stage: 2 }], running: [], agent_runs: [], decided: [], finished: [] }) });
+  await session.refresh(); assert.equal(session.model.needs.length, 1); assert.equal(session.model.parked.length, 1);
+  await session.activate('view:parked'); assert.match(rendered(session), /Later stage/);
+  await session.activate(`need:${session.model.parked[0].key}`); assert.equal(session.ui.view, 'need'); assert.match(rendered(session), /Later stage/);
+});
+
+test('list shortcuts focus the first actionable item and Enter drills in', async () => {
+  const { session } = fixture(); await session.refresh();
+  for (const [key, id] of [['g', 'G-1'], ['t', 'ENG-1']]) {
+    await session.key(key); session.frame(100, 34); assert.equal(session.ui.focus, `item:${id}`);
+    await session.key('', { return: true }); assert.equal(session.ui.detail, id);
+    await session.key('b'); assert.equal(session.ui.focus, `item:${id}`);
+  }
+  await session.key('s'); assert.equal(session.ui.focus, 'session:a-work:p1');
+});
+
+test('narrow lists keep work state readable and narrow sessions retain full state', async () => {
+  const { session, items } = fixture(); items[1].title = 'Very long description '.repeat(15); await session.refresh();
+  await session.key('t'); for (const cols of [80, 100, 140]) assert.match(rendered(session, cols, 30), /ENG-1\s+active/);
+  await session.key('s'); for (const cols of [80, 100, 140]) assert.match(rendered(session, cols, 30), /working/);
+});
+
+test('output PageUp reads older lines and PageDown returns to latest', async () => {
+  const { session } = fixture(); await session.refresh(); await session.activate('session:a-work:p1');
+  rendered(session); await session.key('', { pageUp: true }); rendered(session); assert.ok(session.ui.outputScroll > 0);
+  await session.key('', { pageDown: true }); assert.equal(session.ui.outputScroll, 0);
+});
+
+test('plugin/caller workspace selects its canonical project without relying on labels', async () => {
+  const { config, deps } = fixture(); const session = createModernSession({ config, deps, projectIndex: -1, env: { HERDR_WORKSPACE_ID: 'b' } });
+  await session.refresh(); assert.equal(session.project.name, 'Beta'); assert.deepEqual(session.model.sessions.map(a => a.pane), ['b:p1']);
+});
+
+test('overview purpose links open their records and Back restores the exact link', async () => {
+  const { session, reads } = fixture(); await session.refresh();
+  for (const item of ['G-1', 'ENG-1']) {
+    const f = session.frame(140, 42);
+    const y = f.hits.findIndex(h => h.some(x => x.id.startsWith(`link-item:${item}|a-work:p1`)));
+    const hit = f.hits[y].find(x => x.id.startsWith(`link-item:${item}|a-work:p1`));
+    await session.mouse({ x: hit.from, y, button: 'left', press: true });
+    assert.equal(session.ui.detail, item); assert.equal(reads.length, 0);
+    await session.activate('back'); assert.equal(session.ui.focus, hit.id);
+  }
+  const f = session.frame(140, 42);
+  const y = f.hits.findIndex(h => h.some(x => x.id.startsWith('link-space:')));
+  const hit = f.hits[y].find(x => x.id.startsWith('link-space:'));
+  await session.mouse({ x: hit.from, y, button: 'left', press: true });
+  assert.equal(session.ui.space, 'a-work'); assert.equal(reads.at(-1).pane, 'a-work:p1');
+});
+
+test('overview keeps goal surfaces and attention under grouped tasks; narrow layouts stack', async () => {
+  const { session, items } = fixture();
+  items.push({ id: 'ENG-3', kind: 'task', role: 'engineer', title: 'Another outcome', status: 'blocked', parent: null });
+  await session.refresh();
+  const f = session.frame(140, 42);
+  const goalsY = f.hits.findIndex(h => h.some(x => x.id === 'view:goals' && x.from > 25 && x.to > x.from + 10));
+  const groupY = f.hits.findIndex(h => h.some(x => x.id === 'link-item:G-1|task-group'));
+  const needY = f.lines.findIndex(l => lineText(l).includes('Needs you ·'));
+  assert.ok(groupY > goalsY); assert.ok(needY > groupY);
+  const need = f.hits[needY].find(h => h.id === 'view:needs');
+  const goal = f.hits.flat().find(h => h.id === 'item:G-1');
+  assert.ok(need.from > goal.to);
+  assert.ok(f.lines.some(l => l.spans.some(s => s.bg === 'goalBg' && s.text.includes('Ship the result'))));
+  assert.ok(f.lines[needY].spans.some(s => s.bg === 'attentionBg'));
+  assert.match(rendered(session, 100, 42), /No goal assigned/);
+  const narrow = session.frame(100, 42);
+  const narrowGoal = narrow.hits.flat().find(h => h.id === 'item:G-1');
+  const taskGroup = narrow.hits.flat().find(h => h.id === 'link-item:G-1|task-group');
+  assert.equal(narrowGoal.from, taskGroup.from);
+});
+
+test('overview retains access to every session and task when live data exceeds its summary', async () => {
+  const { session, agents, items } = fixture();
+  for (let i = 2; i <= 30; i++) agents.push({ ...agents[0], pane: `a-work:p${i}`, name: `worker${i}` });
+  for (let i = 4; i <= 30; i++) items.push({ ...items[1], id: `ENG-${i}` });
+  await session.refresh();
+  assert.match(rendered(session, 140, 42), /8 of 30 shown/);
+  assert.match(rendered(session, 140, 42), /Showing 6 of 28/);
+  await session.activate('view:sessions');
+  let f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('session:')).length, 30);
+  await session.key('t'); f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('item:')).length, 28);
+});
+
+test('appearance changes preserve navigation and unsupported preview actions have an honest handoff', async () => {
+  const { session, calls } = fixture(); await session.refresh(); await session.key('g');
+  const history = session.ui.history.length, focus = session.ui.focus;
+  assert.equal(session.ui.appearance, 'light'); await session.key('D'); assert.equal(session.ui.appearance, 'dark');
+  assert.equal(session.ui.history.length, history); assert.equal(session.ui.focus, focus);
+  await session.activate('unavailable'); assert.match(session.ui.message, /Read-only trial/); assert.deepEqual(calls, []);
+});
+
+test('Tab changes regions, arrows stay within them, and central tabs support Left/Right', async () => {
+  const { session } = fixture(); await session.refresh(); session.frame(140, 42);
+  session.ui.focus = 'space:a'; await session.key('', { downArrow: true }); assert.equal(session.ui.focus, 'space:a-work');
+  await session.key('', { tab: true }); assert.equal(session.ui.focus, 'view:overview');
+  await session.key('', { tab: true, shift: true }); assert.equal(session.ui.focus, 'space:a-work');
+  await session.key('', { tab: true }); await session.key('', { rightArrow: true });
+  assert.equal(session.ui.view, 'goals'); assert.equal(session.ui.focus, 'view:goals');
+  session.frame(140, 42); await session.key('', { leftArrow: true }); assert.equal(session.ui.view, 'overview');
+});
+
+test('scope dropdown preserves background, cancels cleanly, and same-project selection is a no-op', async () => {
+  const { session } = fixture(); await session.refresh(); await session.activate('item:G-1'); session.ui.focus = 'item:ENG-1';
+  const history = session.ui.history.length;
+  await session.key('p'); assert.equal(session.ui.view, 'item'); assert.equal(session.ui.detail, 'G-1');
+  assert.match(rendered(session), /type to filter/); assert.equal(session.ui.history.length, history);
+  await session.key('', { return: true }); assert.equal(session.ui.view, 'item'); assert.equal(session.ui.history.length, history); assert.equal(session.ui.focus, 'item:ENG-1');
+  await session.key('p'); await session.key('nonesuch'); assert.match(rendered(session), /No matching projects/);
+  await session.key('', { escape: true }); assert.equal(session.ui.picker, null); assert.equal(session.ui.focus, 'item:ENG-1');
+  await session.key('p'); await session.key('', { downArrow: true }); await session.key('', { return: true });
+  assert.equal(session.project.name, 'Beta'); await session.key('b'); assert.equal(session.project.name, 'Alpha'); assert.equal(session.ui.detail, 'G-1');
+});
+
+test('Herdr companion starts without a duplicate rail, but checkouts can be opened on demand', async () => {
+  const { config, deps } = fixture(); const session = createModernSession({ config, deps, env: { HERDR_ENV: '1' } });
+  await session.refresh(); assert.equal(session.ui.showCheckouts, false);
+  let frame = session.frame(140, 42); assert.ok(!frame.controls.some(c => c.id === 'space:a'));
+  await session.key('w'); frame = session.frame(140, 42); assert.ok(frame.controls.some(c => c.id === 'space:a'));
+  await session.key('w'); assert.equal(session.ui.showCheckouts, false);
+});
+
+test('goal readers put current descendant sessions first and render acceptance as actual criteria', async () => {
+  const { session, items } = fixture(); items[0].accept = [];
+  items[0].notes = [{ text: 'Long note '.repeat(150) }];
+  items.push({ id: 'G-2', kind: 'goal', title: 'Child goal', parent: 'G-1', status: 'open', notes: [] }); items[1].parent = 'G-2';
+  await session.refresh(); await session.activate('item:G-1');
+  let text = rendered(session, 100, 32); assert.match(text, /Current linked sessions · 1/); assert.match(text, /worker/); assert.match(text, /No success criteria recorded/); assert.doesNotMatch(text, /Success:\s*\n/);
+  assert.ok(text.indexOf('worker') < text.indexOf('Long note'));
+  items[0].accept = ['First useful check', 'Second useful check']; await session.refresh(); text = rendered(session, 100, 32);
+  assert.match(text, /1\. First useful check/); assert.match(text, /2\. Second useful check/);
+});
+
+test('compact overview keeps each work category visible despite a large live backlog', async () => {
+  const { session, agents, items } = fixture();
+  for (let n = 2; n <= 15; n++) { agents.push({ ...agents[0], name: `agent${n}`, pane: `a-work:p${n}` }); items.push({ ...items[0], id: `G-${n}`, title: `Goal ${n}` }); }
+  await session.refresh(); const text = rendered(session, 80, 24);
+  assert.match(text, /Sessions · 15/); assert.match(text, /Goals/); assert.match(text, /Tasks ·/); assert.match(text, /Needs you ·/);
+});
+
+test('native observer keeps latest rows visible, pans locally, and cancels on routes and stop', async () => {
+  const observers = [];
+  const { session } = fixture({ observeTerminal: options => { const o = { ...options, stopped: false }; observers.push(o); return { stop() { o.stopped = true; } }; } });
+  try {
+    await session.refresh(); session.frame(140, 42); await session.activate('session:a-work:p1');
+    const first = observers[0]; assert.equal(first.pane, 'a-work:p1'); assert.equal(first.followNativeSize, true);
+    const frame = () => ({ width: 177, height: 79, seq: 1, lines: Array.from({ length: 79 }, (_, i) => ({ spans: [{ text: (i === 78 ? 'NATIVE COLOR PROMPT' : i === 0 ? 'OLD TOP OF SCREEN' : `ROW ${i + 1}`).padEnd(177), fg: '#12ab34', bg: 'terminalBg', bold: true }] })) });
+    first.onFrame(frame()); assert.match(rendered(session, 140, 42), /NATIVE COLOR PROMPT/);
+    assert.match(rendered(session, 140, 42), /Native 177×79 · rows \d+–79/); assert.doesNotMatch(rendered(session, 140, 42), /OLD TOP OF SCREEN/);
+    assert.ok(session.ui.frame.lines.some(l => l.spans.some(s => s.fg === '#12ab34')));
+    assert.match(rendered(session, 80, 24), /NATIVE COLOR PROMPT/); assert.equal(first.stopped, false); assert.equal(observers.length, 1);
+    await session.key('', { shift: true, upArrow: true }); assert.equal(session.ui.screenScroll, 3); assert.doesNotMatch(rendered(session, 80, 24), /NATIVE COLOR PROMPT/);
+    await session.key('', { shift: true, downArrow: true }); assert.match(rendered(session, 80, 24), /NATIVE COLOR PROMPT/);
+    await session.key('', { shift: true, rightArrow: true }); assert.equal(session.ui.outputX, 12); assert.match(rendered(session, 80, 24), /cols 13–/);
+    await session.key('', { shift: true, leftArrow: true }); assert.equal(session.ui.outputX, 0); assert.match(rendered(session, 80, 24), /NATIVE COLOR PROMPT/); assert.equal(observers.length, 1);
+    await session.activate('view:goals'); assert.equal(first.stopped, true);
+    first.onFrame(frame()); assert.equal(session.ui.terminalFrame, null);
+    await session.activate('session:a-work:p1'); const last = observers.at(-1); session.stop(); assert.equal(last.stopped, true);
+  } finally { session.stop(); }
+});
+
+test('observer retry rejects previous callbacks even for the same pane', async () => {
+  const observers = [];
+  const { session } = fixture({ observeTerminal: o => { observers.push(o); return { stop() {} }; } });
+  try {
+    await session.refresh(); session.frame(140, 42); await session.activate('session:a-work:p1');
+    const first = observers[0]; first.onError('disconnected'); assert.match(session.ui.outputError, /disconnected/);
+    await session.activate('refresh'); assert.equal(observers.length, 2);
+    first.onFrame({ width: 177, height: 79, seq: 1, lines: [{ spans: [{ text: 'STALE' }] }] });
+    assert.equal(session.ui.terminalFrame, null);
+    await session.activate('transcript'); assert.equal(session.ui.outputMode, 'transcript'); assert.match(session.ui.output, /EXACT/);
+  } finally { session.stop(); }
+});

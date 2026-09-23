@@ -1,7 +1,7 @@
- herdr-brain / demo [p harbor] [: Screens] [b Back] [q Quit] [R Refresh]
+ herdr-brain demo [p harbor] [i Instruct] [L Loop ok] [h History] [q Quit]
  [! Needs you 13] 3 to read 0 later [s Sessions 8] all projects [5 Lanes]
  Goal authority / operator direction / fixture
-────────────────────────────────────────────────────────────────────────────────
+─[O Status: 8/30 today | Herdr connected | 1 alert]─────────────────────────────
   > G-1 Reliable imports / authority
   Goal rank #1 in harbor: Reliable imports
   Pickup: allowed / G-1/note-42
@@ -18,7 +18,7 @@
   and a fast-forward.
   Changes govern future picks. A running session keeps its explicit task.
   1-15 / 16  j/k or wheel for more
-  Sessions / harbor / 6 shown───────────────────────────────────────────────────
+  Sessions / harbor / 6 shown─────────────────────────────────────[Working]─────
   SESSION                       WHO                STATE
   harbor / 6 sessions
   import-recovery               Codex Astra        blocked                     >

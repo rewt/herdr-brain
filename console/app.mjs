@@ -9,15 +9,20 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { herdrRightClick } from './lib/cli.mjs';
-import { ConfigError, configPath, loadConfig } from './lib/config.mjs';
+import { ConfigError, configPath, loadConfig, loadModernConfig } from './lib/config.mjs';
 import { lineText } from './lib/frame.mjs';
 import { MOUSE_OFF, MOUSE_ON, parseMouse } from './lib/mouse.mjs';
 import { VERSION, createSession } from './lib/session.mjs';
 import { PALETTE } from './lib/theme.mjs';
+import { createModernSession } from './modern/session.mjs';
+import { MODERN_PALETTES } from './modern/frame.mjs';
+import { folderPath, createIdentityReader } from './modern/model.mjs';
 
 const { values: opt } = parseArgs({
   options: {
     project: { type: 'string' },
+    modern: { type: 'boolean' },
+    folder: { type: 'string' },
     config: { type: 'string' },
     print: { type: 'string' },
     select: { type: 'string' },
@@ -29,8 +34,16 @@ const { values: opt } = parseArgs({
 
 if (opt.help) {
   process.stdout.write(`Herdr Brain console ${VERSION}
-usage: org console [--project NAME]
-       node console/app.mjs [--project NAME] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
+usage: org console [--project NAME] [--modern]
+       org console --modern --folder PATH
+       node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
+
+--modern opens the live, read-only native-spaces trial. No model calls or org writes.
+--keys sends characters in order: literal \\n means Enter and \\e means Escape.
+Modern keys: p scope dropdown, h overview, g goals, t tasks, s sessions, ! needs.
+Tab changes section; Up/Down select rows; Left/Right change views; Enter opens; Esc goes back.
+w toggles checkouts. In output: l transcript, v live screen, Shift+arrows pan, o native terminal.
+Appearance: D toggles the preview's light/dark colors; HERDR_CONSOLE_THEME=dark starts dark.
 `);
   process.exit(0);
 }
@@ -40,16 +53,26 @@ if (opt.version) {
 }
 
 let config;
+let folderIndex = null;
 const loadedConfigPath = path.resolve(opt.config ?? configPath());
 try {
-  config = loadConfig(loadedConfigPath);
+  if (opt.folder && (!opt.modern || opt.project)) throw new ConfigError('--folder requires --modern and cannot be combined with --project');
+  config = (opt.modern ? loadModernConfig : loadConfig)(loadedConfigPath);
+  if (opt.folder) {
+    let cwd;
+    try { cwd = folderPath(opt.folder); } catch (e) { throw new ConfigError(e.message); }
+    const identity = createIdentityReader(), repo = identity(cwd);
+    const found = config.projects.findIndex(p => repo && identity(p.cwd)?.key === repo.key);
+    folderIndex = found >= 0 ? found : config.projects.length;
+    if (found < 0) config.projects.push({ id: `folder:${cwd}`, name: path.basename(cwd), cwd, org: null, claude_config_dirs: [] });
+  }
 } catch (error) {
   if (!(error instanceof ConfigError)) throw error;
   process.stderr.write(`org console: ${error.message}\n`);
   process.exit(1);
 }
 
-let projectIndex = 0;
+let projectIndex = folderIndex ?? (opt.modern && !opt.project ? -1 : 0);
 if (opt.project) {
   projectIndex = config.projects.findIndex((p) => p.name === opt.project);
   if (projectIndex < 0) {
@@ -59,6 +82,7 @@ if (opt.project) {
 }
 
 const NO_COLOR = Boolean(process.env.NO_COLOR);
+const createConsole = opt.modern ? createModernSession : createSession;
 
 if (opt.print) {
   const m = /^(\d+)x(\d+)$/.exec(opt.print);
@@ -66,7 +90,7 @@ if (opt.print) {
     process.stderr.write('org console: --print expects COLSxROWS, e.g. 140x40\n');
     process.exit(1);
   }
-  const session = createSession({ config, configFile: loadedConfigPath, projectIndex });
+  const session = createConsole({ config, configFile: loadedConfigPath, projectIndex });
   await session.refresh({ reorder: true });
   const [cols, rows] = [Number(m[1]), Number(m[2])];
   session.frame(cols, rows);
@@ -76,6 +100,7 @@ if (opt.print) {
     await session.key(k === '\n' || k === '\x1b' ? '' : k, { return: k === '\n', escape: k === '\x1b' });
     session.frame(cols, rows);
   }
+  await session.waitForOutput?.();
   const { lines } = session.frame(cols, rows);
   process.stdout.write(lines.map((l) => lineText(l).trimEnd()).join('\n') + '\n');
   session.stop();
@@ -92,7 +117,7 @@ const h = React.createElement;
 
 const ALT_ON = '\x1b[?1049h';
 const ALT_OFF = '\x1b[?1049l';
-const BLACK = '\x1b[48;2;0;0;0m';
+const background = () => opt.modern ? `\x1b[48;2;${MODERN_PALETTES[session.ui.appearance].bg.slice(1).match(/../g).map(x => parseInt(x, 16)).join(';')}m` : '\x1b[48;2;0;0;0m';
 let instance = null;
 let remount = null;
 let suspending = false;
@@ -108,7 +133,7 @@ const PANE = process.env.HERDR_PANE_ID || null;
 // The terminal's modes, taken and given back as a pair. Giving back is safe to repeat.
 function takeTerminal() {
   terminalTaken = true;
-  process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${BLACK}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}`);
+  process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${background()}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}`);
   herdrRightClick(PANE, 'pane');
 }
 
@@ -123,7 +148,7 @@ function giveBackTerminal() {
 function paintLastRow() {
   if (NO_COLOR || !terminalTaken || suspending) return;
   const { rows } = size();
-  process.stdout.write(`\x1b7\x1b[${rows};1H${BLACK}\x1b[2K\x1b[0m\x1b8`);
+  process.stdout.write(`\x1b7\x1b[${rows};1H${background()}\x1b[2K\x1b[0m\x1b8`);
 }
 
 // Suspends Ink for an editor in this terminal, then restores the screen, mouse and keys.
@@ -143,10 +168,13 @@ async function suspend(fn) {
   return result;
 }
 
-const session = createSession({ config, configFile: loadedConfigPath, projectIndex, deps: { suspend }, onChange: notify });
+const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps: { suspend }, onChange: notify });
 
 function color(token) {
-  return NO_COLOR ? undefined : PALETTE[token];
+  if (!NO_COLOR && opt.modern && /^#[0-9a-f]{6}$/i.test(token ?? '')) return token;
+  if (!NO_COLOR && opt.modern && token === 'terminalBg') return '#101216';
+  if (!NO_COLOR && opt.modern && token === 'terminalFg') return '#e4e4e4';
+  return NO_COLOR ? undefined : (opt.modern ? MODERN_PALETTES[session.ui.appearance][token] : PALETTE[token]);
 }
 
 function Line({ spans }) {
@@ -155,6 +183,11 @@ function Line({ spans }) {
     color: color(s.fg),
     backgroundColor: color(s.bg),
     bold: s.bold || undefined,
+    dimColor: s.dim || undefined,
+    italic: s.italic || undefined,
+    underline: s.underline || undefined,
+    strikethrough: s.strikethrough || undefined,
+    inverse: s.inverse || undefined,
   }, s.text)));
 }
 

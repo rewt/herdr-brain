@@ -9,6 +9,8 @@ import {
   projects,
 } from './model.mjs';
 import { moveGoal, goalFor, policyFor, decisionFor } from './autonomy.mjs';
+import { documentFor, operationFor } from './workflows.mjs';
+export const editorViews = ['reply', 'search', 'screens', 'authority-edit', 'instruct', 'overrule'];
 export const browserViews = ['board', 'inbox', 'later', 'lanes', 'history', 'decisions'];
 export const destinations = [
   ['board', 'Overview'],
@@ -17,6 +19,7 @@ export const destinations = [
   ['history', 'Today: finished and decided'],
   ['lanes', 'Lanes and worktrees'],
   ['decisions', 'Next work: executive decisions'],
+  ['operations', 'Project status and controls'],
 ];
 export function initialState() {
   return {
@@ -43,6 +46,9 @@ export function initialState() {
     menuIndex: 0,
     control: 0,
     autonomy: { order: {}, policies: {}, requested: {} },
+    workflow: { loops: {}, instructions: {}, history: [], overrules: {} },
+    sessionFilter: 'all',
+    readerTab: 'summary',
   };
 }
 export function push(s, change) {
@@ -66,12 +72,13 @@ export function back(s) {
     later: s.later,
     drafts: s.drafts,
     autonomy: s.autonomy,
+    workflow: s.workflow,
     message: s.message,
   };
 }
 export function rowDetail(s, row) {
   if (!row || (!identity(row) && !row.name)) return s;
-  return push(s, { view: 'detail', detail: row, focus: 'detail' });
+  return push(s, { view: 'detail', detail: row, focus: 'detail', readerTab: 'summary' });
 }
 export function pick(s, area, row) {
   const next = {
@@ -149,7 +156,10 @@ export function actions(row) {
         label: 'Recommended choice',
         verb: 'recommended',
       });
+    if (row.data?.suggestion)
+      result.push({ key: 'Y', label: 'Review the agent draft', verb: 'draft' });
     result.push(
+      { key: 'n', label: 'Decline / choose No', verb: 'decline' },
       { key: 'r', label: 'Reply in your words', verb: 'reply' },
       { key: 'l', label: 'Save for later', verb: 'later' },
       { key: 'x', label: 'Drop from this inbox', verb: 'drop' },
@@ -157,7 +167,13 @@ export function actions(row) {
     );
   }
   if (row.kind === 'read')
-    result.push({ key: 'a', label: 'Mark read', verb: 'read' });
+    result.push({ key: 'a', label: 'Mark read', verb: 'read' },
+      { key: 'x', label: 'Clear finished result', verb: 'drop' });
+  if (row.answer && row.answeredBy !== 'operator')
+    result.push({ key: 'n', label: 'Overrule recorded answer', verb: 'overrule' });
+  if (documentFor(row)) result.push({ key: 'D', label: 'Read source document', verb: 'document' });
+  result.push({ key: 'C', label: 'Context and identifiers', verb: 'context' });
+  if (documentFor(row)?.path) result.push({ key: 'o', label: 'Open source file', verb: 'open-source' });
   if (session)
     result.push(
       { key: 'g', label: 'Go to the pane', verb: 'go' },
@@ -185,6 +201,18 @@ export function actions(row) {
 function act(s, a) {
   const row = s.detail;
   if (!a || !row) return s;
+  if (['document', 'context'].includes(a.verb))
+    return { ...(s.view === 'detail' ? s : rowDetail(s, row)), readerTab: a.verb, scroll: 0 };
+  if (a.verb === 'open-source')
+    return { ...s, message: `Demo: would open ${documentFor(row)?.path}. No file was opened.` };
+  if (a.verb === 'draft') return act(s, { verb: 'send', label: 'Send the agent draft', text: row.data.suggestion });
+  if (a.verb === 'decline') {
+    const option = row.data?.digest?.options?.find((o) => /^(no\b|decline\b)/i.test(o.label));
+    return option ? act(s, { verb: 'pick', option: option.key })
+      : { ...s, message: 'This question has no explicit No option. Choose a numbered alternative in its detail.' };
+  }
+  if (a.verb === 'overrule')
+    return push(s, { view: 'overrule', focus: 'detail', text: '' });
   if (a.verb === 'earlier' || a.verb === 'later-goal')
     return moveGoal(s, row, a.verb === 'earlier' ? -1 : 1);
   if (a.verb === 'authority') {
@@ -228,12 +256,14 @@ function act(s, a) {
         '',
       control: 0,
     });
-  if (a.verb === 'later')
-    return back({
+  if (a.verb === 'later') {
+    const next = {
       ...s,
       later: [...new Set([...s.later, row.key])],
       message: 'Saved for later in this demo. Use : Screens to find it.',
-    });
+    };
+    return browserViews.includes(s.view) ? next : back(next);
+  }
   if (a.verb === 'recommended')
     return act(s, { verb: 'pick', option: row.data.digest.recommend });
   const option = row.data?.digest?.options?.find(
@@ -248,6 +278,26 @@ function act(s, a) {
   });
 }
 function confirm(s) {
+  if (s.pending.verb === 'instruction') {
+    const project = s.detail.project;
+    const history = { key: `instruction:${project}:${s.workflow.history.length}`, id: 'Direction', project,
+      title: s.text, text: s.text, at: '2026-09-19 14:25', by: 'operator' };
+    const next = back(back(s));
+    return { ...next, workflow: { ...s.workflow,
+      instructions: { ...s.workflow.instructions, [project]: s.text }, history: [history, ...s.workflow.history] },
+      message: `Demo: direction recorded for ${project}. No live instruction was sent.` };
+  }
+  if (s.pending.verb === 'loop') {
+    return { ...back(s), workflow: { ...s.workflow, loops: { ...s.workflow.loops, [s.detail.project]: s.pending.on ? 'on' : 'off' } },
+      message: `Demo: capture loop ${s.pending.on ? 'on' : 'off'}. Running sessions and goal authority are unchanged.` };
+  }
+  if (s.pending.verb === 'overrule-answer') {
+    const override = { answer: s.detail.answer === 'yes' ? 'no' : 'yes', originalAnswer: s.detail.answer, answeredBy: 'operator', reason: s.text };
+    const next = back(back(s));
+    return { ...next, detail: next.detail?.key === s.detail.key ? { ...next.detail, ...override } : next.detail,
+      workflow: { ...s.workflow, overrules: { ...s.workflow.overrules, [s.detail.key]: override } },
+      message: 'Demo: answer overruled with your reason. No running session was stopped.' };
+  }
   if (s.pending.verb === 'executive') {
     const project = s.detail.project;
     return { ...back(s), autonomy: { ...s.autonomy,
@@ -281,12 +331,16 @@ function confirm(s) {
 }
 export function key(s, input, key = {}, frame = {}) {
   if (key.ctrl || key.meta) return s; // Herdr owns its modifiers and prefix.
-  if (['reply', 'search', 'screens', 'authority-edit'].includes(s.view)) {
+  if (editorViews.includes(s.view)) {
     if (key.escape) return back(s);
     if (key.tab)
       return { ...s, control: (s.control + (key.shift ? 2 : 1)) % 3 };
     if (key.return) {
       if (s.control === 2) return back(s);
+      if (s.view === 'instruct' || s.view === 'overrule')
+        return s.text.trim() ? act(s, { verb: s.view === 'instruct' ? 'instruction' : 'overrule-answer',
+          label: s.view === 'instruct' ? 'Record project instruction' : 'Overrule recorded answer', text: s.text.trim() })
+          : { ...s, message: s.view === 'instruct' ? 'Write the instruction first.' : 'Give a reason for changing this answer.' };
       if (s.view === 'authority-edit')
         return s.text.trim() ? act(s, { verb: 'authority-edit', label: 'Record allowed-work change', text: s.text })
           : { ...s, message: 'Describe the allowed work before recording it.' };
@@ -310,7 +364,7 @@ export function key(s, input, key = {}, frame = {}) {
                 ? 'lanes'
                 : dest[0] === 'history'
                   ? 'history'
-                  : dest[0] === 'decisions' ? 'decisions'
+                  : dest[0] === 'decisions' ? 'decisions' : dest[0] === 'operations' ? 'detail'
                   : 'open',
             scroll: 0,
           }
@@ -396,10 +450,21 @@ export function key(s, input, key = {}, frame = {}) {
       return { ...s, menuIndex: Math.min(opts.length - 1, s.menuIndex + 1) };
     if (key.upArrow || input === 'k')
       return { ...s, menuIndex: Math.max(0, s.menuIndex - 1) };
-    if (key.return) return act(back(s), opts[s.menuIndex]);
+    if (key.return) return act({ ...back(s), detail: s.detail }, opts[s.menuIndex]);
     const a = opts.find((a) => a.key === input);
-    return a ? act(back(s), a) : s;
+    return a ? act({ ...back(s), detail: s.detail }, a) : s;
   }
+  if (input === 'i' || input === 'L') {
+    const op = operationFor(s);
+    if (!op) return { ...s, message: 'Choose one project with p before changing its controls.' };
+    if (input === 'i') return push(s, { view: 'instruct', focus: 'detail', text: '',
+      detail: { id: 'Project direction', project: s.scope } });
+    return push(s, { view: 'confirm', focus: 'detail', text: '', detail: { id: 'Capture loop', project: s.scope },
+      pending: { verb: 'loop', label: `Turn the capture loop ${op.loop === 'on' ? 'off' : 'on'}`, on: op.loop !== 'on' } });
+  }
+  if (input === 'O') return s.view === 'operations' ? s : push(s, { view: 'operations', focus: 'detail' });
+  if (input === 'h') return s.view === 'history' ? back(s) : push(s, { view: 'history', focus: 'history' });
+  if (s.view === 'detail' && input === 'V') return { ...s, readerTab: 'summary', scroll: 0 };
   if (input === 'e') return s.view === 'decisions' ? s : push(s, { view: 'decisions', focus: 'decisions' });
   if (s.view === 'decisions' && input === 'n') {
     if (s.scope === 'all') return { ...s, message: 'Choose one project with p before requesting an executive.' };
@@ -421,6 +486,8 @@ export function key(s, input, key = {}, frame = {}) {
     return goal?.id ? moveGoal(s, goal, input === '[' ? -1 : 1) : s;
   }
   const browsing = browserViews.includes(s.view);
+  if (browsing && input === 'w') return { ...s, focus: 'sessions',
+    sessionFilter: s.sessionFilter === 'working' ? 'all' : 'working', query: '' };
   const areas = browsing
     ? s.view === 'board'
       ? ['goals', 'tasks', 'open', 'sessions']
@@ -465,6 +532,7 @@ export function key(s, input, key = {}, frame = {}) {
       task: null,
       query: '',
       stage: 'all',
+      sessionFilter: 'all',
       cursor: { ...s.cursor, goals: null, tasks: null },
     };
   if (browsing && input === ' ' && (s.focus === 'goals' || s.focus === 'tasks'))
@@ -494,6 +562,10 @@ export function key(s, input, key = {}, frame = {}) {
   }
   if (s.focus === 'sessions' || browsing) {
     if (key.return) return rowDetail(s, selected(s));
+    const row = selected(s);
+    if (input === 'm' && row && identity(row)) return push(s, { view: 'actions', focus: 'detail', detail: row, menuIndex: 0 });
+    const action = actions(row).find((a) => a.key === input);
+    if (action) return act({ ...s, detail: row }, action);
     return s;
   }
   if (s.view === 'detail' || s.view === 'peek') {
@@ -517,9 +589,10 @@ export function click(s, target) {
     if (s.view === 'authority' && ['r', '1', '2'].includes(target.input))
       return key({ ...s, focus: 'detail' }, target.input);
     if (
-      ['reply', 'search', 'screens', 'authority-edit'].includes(s.view) &&
+      editorViews.includes(s.view) &&
       !target.key?.return
     ) {
+      if (['i', 'L', 'h', 'O'].includes(target.input)) return { ...s, message: 'Finish or cancel this editor before changing project controls.' };
       if (['b', 'q'].includes(target.input)) return back(s);
       if (target.input === 'R')
         return {
@@ -549,7 +622,7 @@ export function click(s, target) {
     return key(s, target.input ?? '', target.key ?? {});
   }
   if (
-    ['reply', 'search', 'screens', 'authority-edit', 'confirm', 'scope', 'actions'].includes(
+    [...editorViews, 'confirm', 'scope', 'actions'].includes(
       s.view,
     ) &&
     ['row', 'focus'].includes(target.type)
@@ -561,6 +634,10 @@ export function click(s, target) {
     return target.open ? rowDetail(next, target.row) : next;
   }
   if (target.type === 'action') return act(s, target.action);
+  if (target.type === 'session-filter')
+    return [...editorViews, 'confirm', 'scope', 'actions'].includes(s.view) ? s
+      : { ...s, focus: 'sessions', sessionFilter: s.sessionFilter === 'working' ? 'all' : 'working', query: '' };
+  if (target.type === 'reader-tab') return { ...s, readerTab: target.tab, scroll: 0, focus: 'detail' };
   if (target.type === 'related') return rowDetail(s, target.row);
   if (target.type === 'control') return { ...s, control: target.index };
   if (target.type === 'cancel') return back(s);
@@ -574,7 +651,7 @@ export function click(s, target) {
           ? 'lanes'
           : target.view === 'history'
             ? 'history'
-            : target.view === 'decisions' ? 'decisions'
+            : target.view === 'decisions' ? 'decisions' : target.view === 'operations' ? 'detail'
             : 'open',
       goal: null,
       task: null,
@@ -593,11 +670,11 @@ export function click(s, target) {
       cursor: { ...s.cursor, goals: null, tasks: null },
     };
   if (target.type === 'menu')
-    return act(back(s), actions(s.detail)[target.index]);
+    return act({ ...back(s), detail: s.detail }, actions(s.detail)[target.index]);
   return s;
 }
 export function mouse(s, event, frame) {
-  if (!event.press || !['left', 'wheelUp', 'wheelDown'].includes(event.button))
+  if (!event.press || !['left', 'right', 'wheelUp', 'wheelDown'].includes(event.button))
     return s;
   const hits = frame.hits
     .filter(
@@ -609,6 +686,11 @@ export function mouse(s, event, frame) {
     )
     .sort((a, b) => a.w * a.h - b.w * b.h);
   const target = hits[0]?.target;
+  if (event.button === 'right') {
+    if (editorViews.includes(s.view) || ['confirm', 'actions', 'scope'].includes(s.view) || target?.type !== 'row') return s;
+    const next = pick(s, target.area, target.row);
+    return push(next, { view: 'actions', focus: 'detail', detail: target.row, menuIndex: 0 });
+  }
   if (event.button === 'left') return click(s, target);
   const area = frame.areas.find(
     (a) =>
@@ -620,7 +702,7 @@ export function mouse(s, event, frame) {
   if (
     !area ||
     (area === 'sessions' &&
-      ['reply', 'search', 'screens', 'authority-edit', 'confirm', 'scope', 'actions'].includes(
+      [...editorViews, 'confirm', 'scope', 'actions'].includes(
         s.view,
       ))
   )

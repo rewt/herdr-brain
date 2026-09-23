@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { StringDecoder } from 'node:string_decoder';
-import { initialState, key, mouse, rowDetail } from './controller.mjs';
+import { initialState, key, mouse, rowDetail, editorViews } from './controller.mjs';
 import { frame, plain, palette } from './frame.mjs';
 import { openItems, goals, tasks, sessions } from './model.mjs';
 import { decoder, modes } from './input.mjs';
@@ -20,7 +20,7 @@ const { values: opt } = parseArgs({
 });
 if (opt.help) {
   process.stdout.write(
-    'Fixture console: node console/proto/main.mjs [--print 140x45] [--screen waiting|goal|task|session|peek|inbox|later|lanes|history|decisions|decision|authority] [--goal G-1] [--task ENG-1] [--scope all|harbor|orchard] [--keys Tab,j,Enter,b] [--no-mouse]\n',
+    'Fixture console: node console/proto/main.mjs [--print 140x45] [--screen waiting|goal|task|session|peek|inbox|later|lanes|history|operations|decisions|decision|authority] [--goal G-1] [--task ENG-1] [--scope all|harbor|orchard] [--keys Tab,j,Enter,b] [--no-mouse]\n',
   );
   process.exit(0);
 }
@@ -52,6 +52,7 @@ const detail = {
 if (opt.screen) {
   if (detail[opt.screen]) state = rowDetail(state, detail[opt.screen]);
   else if (opt.screen === 'authority') state = key(rowDetail(state, detail.goal), 'a');
+  else if (opt.screen === 'operations') state = key(state, 'O');
   else if (opt.screen === 'peek')
     state = key(rowDetail(state, openItems[0]), '', { return: true });
   else if (['inbox', 'later', 'lanes', 'history', 'decisions'].includes(opt.screen)) {
@@ -152,7 +153,7 @@ function App() {
       setUI((s) => {
         if (
           event.key?.paste &&
-          !['reply', 'search', 'screens', 'authority-edit'].includes(s.view)
+          !editorViews.includes(s.view)
         )
           return s;
         const f = frame(s, size.w, size.h);

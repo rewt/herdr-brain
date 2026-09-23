@@ -184,6 +184,8 @@ if [ "$3" = "refuse; rm -rf /" ]; then echo "no such agent" >&2; exit 3; fi
 exit 0
 `, { mode: 0o755 });
   const previous = process.env.PATH;
+  const previousBinary = process.env.HERDR_BIN_PATH;
+  process.env.HERDR_BIN_PATH = path.join(bin, 'herdr');
   process.env.PATH = `${bin}:${previous}`;
   try {
     assert.deepEqual(await herdrGo({ agent: 'lane-x' }), { ok: true });
@@ -191,12 +193,14 @@ exit 0
     assert.deepEqual(await herdrGo({ agent: 'refuse; rm -rf /' }), { ok: false, error: 'no such agent' });
     assert.deepEqual(await herdrGo({}), { ok: false, error: 'no Herdr agent or tab to go to' });
     assert.deepEqual(await herdrTabs(), [{ tab: 'w1:t1', label: 'cli', number: 1, workspace: 'w1' }]);
+    delete process.env.HERDR_BIN_PATH; // Also verify PATH fallback outside a plugin.
     // Right clicks come to the console's own pane while it runs, and go back to Herdr after.
     assert.equal(herdrRightClick('w1:p9', 'pane'), true);
     assert.equal(herdrRightClick('w1:p9', 'herdr'), true);
     assert.equal(herdrRightClick(null, 'pane'), false, 'outside Herdr nothing is asked');
   } finally {
     process.env.PATH = previous;
+    if (previousBinary === undefined) delete process.env.HERDR_BIN_PATH; else process.env.HERDR_BIN_PATH = previousBinary;
   }
   assert.deepEqual(fs.readFileSync(log, 'utf8').trim().split('\n'), [
     'agent focus lane-x', 'tab focus w1:t1', 'agent focus refuse; rm -rf /', 'tab list',

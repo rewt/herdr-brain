@@ -24,10 +24,12 @@ while typing in a field; Tab to Cancel and Enter is the non-Esc editor exit.
 `>` identifies the focused region and active row; `*` retains a selection in
 another region, and task states are written as words.
 Click a row to select, its trailing `>` to open, a header to focus, or a visible
-button to act. Wheel moves the region under the pointer. Right click stays with
-Herdr. `--no-mouse` leaves native mouse selection available. `q` quits at root.
+button to act. Wheel moves the region under the pointer. A right click opens the
+row menu if Herdr forwards it; `m` always opens the same menu. The prototype does
+not claim Herdr's context-menu shortcut. `--no-mouse` leaves native mouse
+selection available. `q` quits at root.
 
-`--screen`: waiting, goal, task, session, peek, inbox, later, lanes, history,
+`--screen`: waiting, goal, task, session, peek, inbox, later, lanes, history, operations,
 decisions, decision, authority. `--goal` chooses the goal/authority reader;
 `--task` chooses the task reader; `--scope`/`--goal` select a matching decision.
 `--scope`: harbor, orchard, all. `--keys` is a comma-separated replay: Enter, Tab,
@@ -37,7 +39,7 @@ Text replays are convenient for editors; live bracketed pastes only enter fields
 The architecture follows the current console: source-shaped fixture → pure read
 model → pure key/mouse reducer → frame with spans and hit rectangles → Ink host.
 The prototype only imports existing dependency-free text helpers from `console/lib`;
-no existing file is modified. It uses the installed Ink 6.8 and React 19.3.
+no production console file is modified. It uses the installed Ink 6.8 and React 19.3.
 
 `render-mockups.mjs` is the original ARCH-3 generator; its snapshots and document
 are retained as historical design evidence. `render-autonomy.mjs` generates the
@@ -48,8 +50,37 @@ height exactly. Minimum is 80 columns and a 24-row terminal. ANSI colors are
 optional (`NO_COLOR`), and focus also uses text markers; no Nerd Font is required.
 
 Known prototype boundaries: no durable read receipts or saved drafts, no live
-refresh, no external editor, no pane switching, and no right-click interception.
+refresh, no external editor or file opening, no pane switching, and no live loop
+or instruction writes.
 These are explicit limits of the design object, not completed product integrations.
+
+## Live-console workflows
+
+The live console is the baseline for retained functionality. The goals study's
+first pass preserved the earlier cascade prototype but missed live controls;
+those flows are now represented here on fixture data. See the
+[workflow comparison](../../docs/design/console-live-workflows-2026-09-19.md).
+
+- `i` records project direction after review; `h` shows it in history.
+- `L` reviews a capture-loop change. It never changes goal authority or STOP.
+- `O` opens project status: daily sessions, STOP, stale state, Herdr health,
+  alerts and the latest project direction. The header exposes the status at a glance.
+- `r`, `y`, `n`, `Y`, numbers, `l`, `x`, `d` and `g` act on the selected row
+  where applicable; `m` shows its available actions. `y` reviews the recommended
+  choice; `Y` reviews the agent's text draft. `n` only chooses an explicit No
+  option, or opens the reason editor for an automated answer in history.
+- `V` / `D` / `C` switch Summary / Document / Context in a reader. Documents
+  include captured screens, decision memos, briefs and reports; `o` simulates
+  opening the source file. Number keys remain answer choices.
+- `w` in a list filters sessions to working; the sessions header has the same
+  mouse toggle. In a task/session reader, `w` still opens Why this work.
+
+```sh
+node console/proto/main.mjs --print 80x30 --screen operations --scope orchard
+node console/proto/main.mjs --print 100x40 --screen session --keys D
+node console/proto/main.mjs --print 100x40 --keys h,n
+node console/proto/main.mjs --print 100x40 --keys i,Keep saved work readable.,Enter
+```
 
 ## Goals and autonomous pickup study
 

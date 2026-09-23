@@ -43,6 +43,18 @@ def send(data, expected):
 
 try:
     read_until('Open items 12')
+    send(b'i', 'Project instruction')
+    send(b'Keep the import format readable.\r', 'Record project instruction')
+    send(b'\r', 'direction recorded for harbor')
+    send(b'h\r', 'Keep the import format readable.')
+    send(b'bbL', 'Turn the capture loop off')
+    send(b'\r', 'capture loop off')
+    send(b'L\r', 'capture loop on')
+    send(b'w', 'working only')
+    send(b'ws\rD', 'ACCEPTANCE')
+    send(b'C', 'run: R-1')
+    send(b'V', 'Serves: ENG-1')
+    send(b'b', 'Open items 12')
     send(b'e', 'Next work / recorded executive decisions')
     send(b'\r', 'Authority then: G-1/note-42')
     send(b'a', 'Goal authority / operator direction')
@@ -78,7 +90,7 @@ try:
     assert proc.returncode == 0
     for mode in [b'\x1b[?1006l', b'\x1b[?1000l', b'\x1b[?2004l', b'\x1b[?25h']:
         assert mode in transcript, f'Missing cleanup {mode!r}'
-    print('PASS: Ink ranking, authority review/cancel, paste ownership, executive request/deduplication, keyboard, click, fragmented SGR, reply cancel, stack, lanes, resize, wheel, quit and cleanup.')
+    print('PASS: Ink instructions/history, loop controls, working filter, document/context tabs, ranking, authority review/cancel, paste ownership, executive request/deduplication, keyboard, click, fragmented SGR, reply cancel, stack, lanes, resize, wheel, quit and cleanup.')
 finally:
     if proc.poll() is None:
         proc.terminate()

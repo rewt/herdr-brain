@@ -19,8 +19,11 @@ import {
   browserViews,
   destinations,
   relationActions,
+  editorViews,
 } from './controller.mjs';
 import { rankOf, policyFor, priorityText, decisionsFor, decisionFor } from './autonomy.mjs';
+import { operationFor, operationRows, documentFor, contextFor } from './workflows.mjs';
+import { renderMarkdown } from '../lib/markdown.mjs';
 export const palette = {
   bg: '#101820',
   fg: '#dce4e8',
@@ -73,10 +76,11 @@ export function frame(s, W = 100, H = 40) {
     return finish();
   }
   bar(0, [
-    ['herdr-brain / demo', keyHit('0')],
+    ['herdr-brain demo', keyHit('0')],
     [`[p ${s.scope}]`, keyHit('p')],
-    ['[: Screens]', keyHit(':')],
-    ['[b Back]', keyHit('b')],
+    ['[i Instruct]', keyHit('i')],
+    [`[L Loop ${operationFor(s)?.loop === 'off' ? 'off' : operationFor(s)?.loopHealth ?? 'mixed'}]`, keyHit('L')],
+    ['[h History]', keyHit('h')],
     ['[q Quit]', keyHit('q')],
     ['[R Refresh]', keyHit('R')],
   ]);
@@ -101,6 +105,9 @@ export function frame(s, W = 100, H = 40) {
           decisions: 'Next work / recorded executive decisions / fixture',
           authority: 'Goal authority / operator direction / fixture',
           'authority-edit': 'Edit allowed work / existing boundaries remain in force',
+          instruct: 'Give the whole project an instruction',
+          overrule: 'Change a recorded answer / explain why',
+          operations: 'Project status and controls / fixture data',
           scope: 'Choose a project',
           screens: 'Choose a screen',
           search: 'Find in the focused column',
@@ -110,7 +117,19 @@ export function frame(s, W = 100, H = 40) {
           help: 'Keys and mouse',
         }[s.view] ?? s.view);
   put(1, 2, title, W - 2, { fg: 'muted' });
+  if (s.view === 'detail') {
+    put(0, 2, ' '.repeat(W));
+    bar(2, [
+    ['[V Summary]', { type: 'reader-tab', tab: 'summary' }, s.readerTab === 'summary'],
+    ...(documentFor(s.detail) ? [['[D Document]', { type: 'reader-tab', tab: 'document' }, s.readerTab === 'document']] : []),
+    ['[C Context]', { type: 'reader-tab', tab: 'context' }, s.readerTab === 'context'],
+    ]);
+  }
   rule(3);
+  const op = operationFor(s);
+  const status = op ? `${op.used}/${op.cap} today | ${op.stop ? 'STOP | ' : ''}${op.stale ? 'stale | ' : ''}Herdr ${op.herdr} | ${op.alerts.length} alert`
+    : `${operationRows(s).length} projects | ${operationRows(s).filter((o) => o.stop || o.stale).length} need a status check`;
+  button(1, 3, clip(`[O Status: ${status}]`, W - 2), keyHit('O'), Boolean(op?.stop || op?.stale));
   const browsing = browserViews.includes(s.view);
   const sessionHeight = browsing ? (H >= 40 ? 13 : 10) : H >= 40 ? 8 : 6;
   const sessionY = H - sessionHeight - 4;
@@ -305,7 +324,21 @@ export function frame(s, W = 100, H = 40) {
       head(
         `${s.focus === 'detail' ? '>' : ' '} ${detail.id ?? detail.name}  ${detail.title ?? detail.doing ?? detail.topic ?? ''}`,
       );
-      if (detail.kind === 'dispatch-decision') {
+      if (s.readerTab === 'document') {
+        const doc = documentFor(detail);
+        head(doc?.label ?? 'Source document');
+        if (!doc) add('No document recorded for this row.');
+        else {
+          if (doc.path) add(doc.path, { fg: 'muted' });
+          if (doc.markdown) for (const line of renderMarkdown(doc.text, W - 4))
+            lines.push({ text: line.text, style: ['heading', 'subheading'].includes(line.style) ? { fg: 'focus', bold: true } : {} });
+          else for (const line of doc.text.split('\n')) add(line);
+          if (doc.path) add('[o] Open source file (simulated)', { fg: 'focus' }, keyHit('o'));
+        }
+      } else if (s.readerTab === 'context') {
+        head('Context');
+        for (const [name, value] of contextFor(detail)) add(`${name}: ${value}`);
+      } else if (detail.kind === 'dispatch-decision') {
         add(`${detail.result.toUpperCase()} / ${detail.at} / ${detail.project}`, { fg: 'attention' });
         add(`Why: ${detail.why}`);
         add(`Priority then: #${detail.rank} ${byId(detail.goal)?.title}. Task: ${detail.task}.`);
@@ -437,6 +470,11 @@ export function frame(s, W = 100, H = 40) {
         add(`Worktree: ${detail.path}`);
         add('Reading this lane never promotes or rebases it.');
       } else {
+        if (detail.answer) {
+          add(`Answer: ${detail.answer} / by ${detail.answeredBy}`);
+          if (detail.originalAnswer) add(`Previously: ${detail.originalAnswer}. Reason: ${detail.reason}`);
+          if (detail.answeredBy !== 'operator') add('[n] Overrule with a reason', { fg: 'attention' }, keyHit('n'));
+        }
         add(
           detail.data?.note ??
             detail.note ??
@@ -459,6 +497,18 @@ export function frame(s, W = 100, H = 40) {
           { fg: 'focus' },
           { type: 'related', row: a.row },
         );
+    } else if (s.view === 'operations') {
+      head('> Project status and controls');
+      for (const current of operationRows(s)) {
+        head(current.project);
+        add(`Capture loop: ${current.loop}${current.loop === 'on' ? ` / ${current.loopHealth}` : ''}. Sessions today: ${current.used}/${current.cap}.`);
+        add(`Herdr: ${current.herdr}. Data: ${current.stale ? 'stale / last known' : 'current fixture'}. Launches: ${current.stop ? 'STOP' : 'enabled'}.`);
+        head('Project direction');
+        add(current.direction);
+        for (const alert of current.alerts) add(`Attention: ${alert}`, { fg: 'attention' });
+      }
+      add('The capture loop brings stopped sessions into the inbox; it does not grant task pickup or promotion authority.');
+      add('Existing questions remain visible when capture is off. This prototype changes memory only.');
     } else if (s.view === 'authority') {
       const policy = policyFor(s, detail);
       head(`> ${detail.id} ${detail.title} / authority`);
@@ -510,6 +560,11 @@ export function frame(s, W = 100, H = 40) {
         'Authority: r edit allowed work; 1 allow pickup; 2 pause future pickup.',
         'Task/session: w reads why picked. Rank changes never stop a worker.',
         'Result: a marks read. R explains that fixture data is fixed.',
+        'i: project instruction. L: capture loop on/off. O: status and direction.',
+        'h: history and recorded answers. n on an agent answer: overrule with reason.',
+        'List: r reply, y recommend, Y agent draft, l later, x drop, g pane, m actions.',
+        'w in a list: working sessions / all. V/D/C in detail: summary/document/context.',
+        'o: open a recorded source file (simulated). All row actions keep their review.',
         'Wheel selects/scrolls the region under the pointer. Headers focus.',
         'Editor: Tab visits field, Review, Cancel; Enter activates.',
         'Ctrl/Alt/prefix chords stay with Herdr. This demo never sends.',
@@ -538,7 +593,18 @@ export function frame(s, W = 100, H = 40) {
       head('> Review / demo only');
       add(`${s.pending.label}`);
       add(`For: ${detail.id ?? detail.name} in ${detail.project}`);
-      if (['authority-edit', 'pickup'].includes(s.pending.verb)) {
+      if (s.pending.verb === 'instruction') {
+        add(`Current direction: ${operationFor(s, detail.project).direction}`);
+        add(`New instruction: ${s.text}`);
+        add('Record project direction for sessions to read. This does not send keystrokes into a running session.');
+      } else if (s.pending.verb === 'loop') {
+        add(s.pending.on ? 'New stopped sessions will reach the inbox again.' : 'New stopped sessions will not reach the inbox while the capture loop is off.');
+        add('Existing questions, running sessions, launch STOP and goal authority stay unchanged.');
+      } else if (s.pending.verb === 'overrule-answer') {
+        add(`Recorded: ${detail.answer} by ${detail.answeredBy}. Change to: ${detail.answer === 'yes' ? 'no' : 'yes'}.`);
+        add(`Reason: ${s.text}`);
+        add('Keep the original answer in history. No running session is stopped by this correction.');
+      } else if (['authority-edit', 'pickup'].includes(s.pending.verb)) {
         const policy = policyFor(s, detail);
         add(`Based on ${policy?.revision}; by ${policy?.by}.`);
         add(`Pickup: ${policy?.pickup}${s.pending.verb === 'pickup' ? ` -> ${s.pending.pickup}` : ' (unchanged)'}`);
@@ -571,10 +637,12 @@ export function frame(s, W = 100, H = 40) {
         { type: 'submit' },
       );
       add('[b Cancel]', { fg: 'muted' }, { type: 'cancel' });
-    } else if (['reply', 'search', 'screens', 'authority-edit'].includes(s.view)) {
+    } else if (editorViews.includes(s.view)) {
       head(
-        `> ${s.view === 'authority-edit' ? 'Allowed work' : s.view === 'reply' ? 'Reply' : s.view === 'search' ? 'Find' : 'Screen name'}`,
+        `> ${s.view === 'instruct' ? 'Project instruction' : s.view === 'overrule' ? 'Reason for overruling' : s.view === 'authority-edit' ? 'Allowed work' : s.view === 'reply' ? 'Reply' : s.view === 'search' ? 'Find' : 'Screen name'}`,
       );
+      if (s.view === 'instruct') add(`Current direction: ${operationFor(s, detail.project).direction}`);
+      if (s.view === 'overrule') add(`${detail.title}: ${detail.answer} by ${detail.answeredBy}`);
       add(
         `${s.control === 0 ? '>' : ' '} ${s.text || ''}${s.control === 0 ? '|' : ''}`,
         { fg: 'focus', bg: 'selected' },
@@ -593,7 +661,7 @@ export function frame(s, W = 100, H = 40) {
             ),
           );
       add(
-        `${s.control === 1 ? '>' : ' '} [Enter ${s.view === 'authority-edit' ? 'Review authority' : s.view === 'reply' ? 'Review reply' : 'Apply'}]`,
+        `${s.control === 1 ? '>' : ' '} [Enter ${['instruct', 'overrule'].includes(s.view) ? 'Review change' : s.view === 'authority-edit' ? 'Review authority' : s.view === 'reply' ? 'Review reply' : 'Apply'}]`,
         { fg: 'focus' },
         { type: 'submit' },
       );
@@ -630,10 +698,11 @@ export function frame(s, W = 100, H = 40) {
   button(
     0,
     sessionY,
-    `${s.focus === 'sessions' ? '>' : ' '} Sessions / ${s.scope} / ${all.sessions.length} shown`,
+    `${s.focus === 'sessions' ? '>' : ' '} Sessions / ${s.scope} / ${all.sessions.length} shown${s.sessionFilter === 'working' ? ' / working only' : ''}`,
     { type: 'focus', area: 'sessions' },
     s.focus === 'sessions',
   );
+  button(W - 14, sessionY, s.sessionFilter === 'working' ? '[Show all]' : '[Working]', { type: 'session-filter' });
   const narrow = W < 100;
   const who = (r) => {
     const run = runs.find((x) => x.agent === r.name);
@@ -776,6 +845,7 @@ export function frame(s, W = 100, H = 40) {
       ['[Enter detail]', keyHit('', { return: true })],
       ['[/ Find]', keyHit('/')],
       ['[t Stage]', keyHit('t')],
+      ['[m Actions]', keyHit('m')],
     ]);
     bar(H - 2, [
       ...(s.view === 'decisions' ? [['[n Run executive now]', keyHit('n')]] : []),
@@ -786,9 +856,9 @@ export function frame(s, W = 100, H = 40) {
             ['[Open items]', { type: 'focus', area: 'open' }],
           ]
         : []),
+      ['[0 Clear filters]', keyHit('0')],
       ...(s.view === 'board' && s.focus === 'goals'
-        ? [['[[ Earlier]', keyHit('[')], ['[] Later]', keyHit(']')]]
-        : [['[0 Clear filters]', keyHit('0')]]),
+        ? [['[[ Earlier]', keyHit('[')], ['[] Later]', keyHit(']')]] : []),
       ['[? Help]', keyHit('?')],
     ]);
   } else if (s.view === 'detail' || s.view === 'peek') {
@@ -796,9 +866,9 @@ export function frame(s, W = 100, H = 40) {
     bar(
       H - 3,
       available
-        .filter((a) => ['y', 'r', 'l', 'x', 'd', 'a', 'v', '[', ']', 'w', 'o'].includes(a.key))
+        .filter((a) => ['y', 'r', 'l', 'x', 'd', 'a', 'v', '[', ']', 'w', 'o', 'n', 'Y'].includes(a.key))
         .map((a) => [
-          `[${a.key} ${{ y: 'Recommended', r: 'Reply', l: 'Later', x: 'Drop', d: 'Start session', a: s.detail.kind === 'read' ? 'Mark read' : 'Authority', v: 'Browse', '[': 'Earlier', ']': 'Later', w: 'Why this work', o: 'Question' }[a.key]}]`,
+          `[${a.key} ${{ y: 'Recommended', r: 'Reply', l: 'Later', x: 'Drop', d: 'Start session', a: s.detail.kind === 'read' ? 'Mark read' : 'Authority', v: 'Browse', '[': 'Earlier', ']': 'Later', w: 'Why this work', o: s.detail.kind === 'dispatch-decision' ? 'Question' : 'Open file', n: s.detail.answer ? 'Overrule' : 'Decline', Y: 'Agent draft' }[a.key]}]`,
           { type: 'action', action: a },
         ]),
     );
@@ -816,6 +886,9 @@ export function frame(s, W = 100, H = 40) {
         : []),
       ['[? Help]', keyHit('?')],
     ]);
+  } else if (s.view === 'operations') {
+    bar(H - 3, [['[i Instruct project]', keyHit('i')], ['[L Toggle capture loop]', keyHit('L')]]);
+    bar(H - 2, [['[h History]', keyHit('h')], ['[R Refresh]', keyHit('R')], ['[? Help]', keyHit('?')]]);
   } else if (s.view === 'authority') {
     if (policyFor(s, s.detail)) bar(H - 3, [
       ['[r Edit work]', keyHit('r')], ['[1 Allow pickup]', keyHit('1')], ['[2 Pause pickup]', keyHit('2')],
@@ -832,7 +905,7 @@ export function frame(s, W = 100, H = 40) {
     ['[! All needs you]', keyHit('!')],
     ['[s Sessions]', keyHit('s')],
     ['[: Screens]', keyHit(':')],
-    ...(['reply', 'search', 'screens', 'authority-edit', 'confirm', 'scope', 'actions'].includes(s.view)
+    ...([...editorViews, 'confirm', 'scope', 'actions'].includes(s.view)
       ? [] : [['[e Next work]', keyHit('e')]]),
   ]);
   return finish();

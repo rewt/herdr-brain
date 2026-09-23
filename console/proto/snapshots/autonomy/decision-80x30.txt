@@ -1,7 +1,7 @@
- herdr-brain / demo [p harbor] [: Screens] [b Back] [q Quit] [R Refresh]
+ herdr-brain demo [p harbor] [i Instruct] [L Loop ok] [h History] [q Quit]
  [! Needs you 13] 3 to read 0 later [s Sessions 8] all projects [5 Lanes]
- Read one thing / return to the same row
-────────────────────────────────────────────────────────────────────────────────
+ [V Summary] [C Context]
+─[O Status: 8/30 today | Herdr connected | 1 alert]─────────────────────────────
   > D-18 Started retry recovery
   STARTED / 2026-09-19 14:10 / harbor
   Why: The first-ranked goal has a ready retry fix; completed imports must
@@ -18,7 +18,7 @@
   Revisit: Reconsider remaining work when this run reports or direction
   changes.
   1-15 / 26  j/k or wheel for more
-  Sessions / harbor / 6 shown───────────────────────────────────────────────────
+  Sessions / harbor / 6 shown─────────────────────────────────────[Working]─────
   SESSION                       WHO                STATE
   harbor / 6 sessions
   import-recovery               Codex Astra        blocked                     >

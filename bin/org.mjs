@@ -60,7 +60,7 @@ Views (zero inference)
   org show <ID> [--json]                  an item or run with its reports and history
   org log [--since 2h|09:00|DATE] [--limit N] [--json]
   org today [--json]                      what waits on the operator, was decided, runs and finished today
-  org console [--project NAME]            the operator console (needs: npm --prefix console ci)
+  org console [--project NAME] [--modern] the operator console (needs: npm --prefix console ci)
 
 The organization is found from $ORG_DIR or the nearest .org/ above the current directory.
 `;
@@ -702,12 +702,12 @@ function today(argv) {
 
 // The console is an isolated package with its own dependencies; the core only launches it.
 function consoleApp(argv) {
-  const { values } = args(argv, { project: { type: 'string' } }, { max: 0, usage: 'org console [--project NAME]' });
+  const { values } = args(argv, { project: { type: 'string' }, modern: { type: 'boolean' }, folder: { type: 'string' }, help: { type: 'boolean' } }, { max: 0, usage: 'org console [--project NAME] [--modern] [--folder PATH] [--help]' });
   const dir = path.resolve(process.env.HERDR_ORG_CONSOLE_DIR || path.join(path.dirname(BIN), '..', 'console'));
   if (!fs.existsSync(path.join(dir, 'node_modules', 'ink', 'package.json'))) {
     throw new UserError(`the console's dependencies are not installed; run: npm --prefix ${shq(dir)} ci`);
   }
-  const r = spawnSync(process.execPath, [path.join(dir, 'app.mjs'), ...(values.project ? ['--project', values.project] : [])], {
+  const r = spawnSync(process.execPath, [path.join(dir, 'app.mjs'), ...(values.project ? ['--project', values.project] : []), ...(values.modern ? ['--modern'] : []), ...(values.folder ? ['--folder', values.folder] : []), ...(values.help ? ['--help'] : [])], {
     stdio: 'inherit',
     env: { ...process.env, HERDR_ORG_BIN: BIN },
   });

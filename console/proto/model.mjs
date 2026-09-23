@@ -11,6 +11,7 @@ import {
   today,
 } from './fixtures.mjs';
 import { rankedGoals, decisionsFor } from './autonomy.mjs';
+import { recordedAnswers } from './workflows.mjs';
 export { projects, items, goals, tasks, sessions, runs, lanes, today };
 export const byId = (id) => items.find((x) => x.id === id);
 export function ancestors(id) {
@@ -53,8 +54,8 @@ export const openItems = [
       digest: {
         explain: q.explain ?? 'This question sets the next step for the goal.',
         options: q.options ?? [
-          { key: '1', label: 'Use the proposed approach' },
-          { key: '2', label: 'Ask for another pass' },
+          { key: '1', label: 'Yes, use the proposed approach' },
+          { key: '2', label: 'No, ask for another pass' },
         ],
         recommend: q.meta.recommend,
         why: q.why ?? 'It preserves the existing workflow.',
@@ -105,17 +106,17 @@ export function lists(s) {
         .filter((t) => s.stage === 'all' || String(t.meta.stage) === s.stage),
     ],
     open: openRows(s, { global: s.view === 'inbox' || s.view === 'later' }),
-    sessions: sessions.filter(scoped),
+    sessions: sessions.filter(scoped).filter((r) => s.sessionFilter !== 'working' || r.status === 'working'),
     lanes: lanes.filter(scoped),
     decisions: decisionsFor(s),
-    history: [...today.finished, ...today.decided]
+    history: [...s.workflow.history, ...recordedAnswers, ...today.finished, ...today.decided]
       .filter(scoped)
       .map((x, i) => ({
         ...x,
-        key: `history:${i}`,
+        key: x.key ?? `history:${i}`,
         id: x.item ?? x.id,
         kind: 'history',
-      })),
+      })).map((x) => ({ ...x, ...s.workflow.overrules[x.key] })),
   };
   if (s.query && result[s.focus])
     result[s.focus] = result[s.focus].filter((x) => matches(x, s.query));

@@ -18,19 +18,25 @@ import { createModernSession } from './modern/session.mjs';
 import { MODERN_PALETTES } from './modern/frame.mjs';
 import { folderPath, createIdentityReader } from './modern/model.mjs';
 
-const { values: opt } = parseArgs({
-  options: {
-    project: { type: 'string' },
-    modern: { type: 'boolean' },
-    folder: { type: 'string' },
-    config: { type: 'string' },
-    print: { type: 'string' },
-    select: { type: 'string' },
-    keys: { type: 'string' },
-    help: { type: 'boolean', short: 'h' },
-    version: { type: 'boolean' },
-  },
-});
+let opt;
+try {
+  ({ values: opt } = parseArgs({
+    options: {
+      project: { type: 'string' },
+      modern: { type: 'boolean' },
+      folder: { type: 'string' },
+      config: { type: 'string' },
+      print: { type: 'string' },
+      select: { type: 'string' },
+      keys: { type: 'string' },
+      help: { type: 'boolean', short: 'h' },
+      version: { type: 'boolean' },
+    },
+  }));
+} catch (error) {
+  process.stderr.write(`org console: ${error.message}\nTry --help.\n`);
+  process.exit(1);
+}
 
 if (opt.help) {
   process.stdout.write(`Herdr Brain console ${VERSION}
@@ -90,7 +96,9 @@ if (opt.print) {
     process.stderr.write('org console: --print expects COLSxROWS, e.g. 140x40\n');
     process.exit(1);
   }
-  const session = createConsole({ config, configFile: loadedConfigPath, projectIndex });
+  // A snapshot is read-only: it must never move the operator's Herdr focus.
+  const deps = opt.modern ? { herdrGo: async () => ({ ok: false, error: '--print does not open Herdr terminals' }) } : {};
+  const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps });
   await session.refresh({ reorder: true });
   const [cols, rows] = [Number(m[1]), Number(m[2])];
   session.frame(cols, rows);
@@ -134,14 +142,15 @@ const PANE = process.env.HERDR_PANE_ID || null;
 function takeTerminal() {
   terminalTaken = true;
   process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${background()}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}`);
-  herdrRightClick(PANE, 'pane');
+  // The modern trial has no right-click menu, so Herdr keeps its own.
+  if (!opt.modern) herdrRightClick(PANE, 'pane');
 }
 
 function giveBackTerminal() {
   if (!terminalTaken) return;
   terminalTaken = false;
   process.stdout.write(`${MOUSE_OFF}\x1b[0m${ALT_OFF}`);
-  herdrRightClick(PANE, 'herdr');
+  if (!opt.modern) herdrRightClick(PANE, 'herdr');
 }
 
 // Ink draws one row short of the terminal; this paints that last row black too.
@@ -246,6 +255,8 @@ process.on('exit', giveBackTerminal);
 // A crash must not leave the terminal reporting mouse movements into the shell.
 for (const event of ['uncaughtException', 'unhandledRejection']) {
   process.on(event, (error) => {
+    // Stop observers and timers too, or a live-screen subprocess outlives us.
+    try { session.stop(); } catch {}
     giveBackTerminal();
     process.stderr.write(`org console crashed: ${error?.stack ?? error}\n`);
     process.exit(1);

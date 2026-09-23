@@ -108,12 +108,19 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
         load('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; }, x => data.agents = x),
         load('brain', async () => { const r = await d.brainQueue(); if (r.error) throw Error(r.error); return r; }, x => data.brain = x),
       ]);
-      s.projects = catalog(config.projects, data.workspaces, d.identity, s.opened);
+      s.projects = catalog(config.projects, data.workspaces, d.identity, s.opened, data.agents);
+      // A discovered project leaves the catalog when its last workspace closes.
+      const vanished = Boolean(s.projectId && !project());
+      if (vanished) {
+        Object.assign(s, { projectId: null, view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'view:overview' });
+        s.message = 'That project has no open workspace any more; showing the current one.';
+      }
       if (!s.projectId) {
         const workspace = data.workspaces.find(w => w.workspace_id === env.HERDR_WORKSPACE_ID);
         const key = workspace ? workspaceIdentity(workspace, d.identity)?.key : null;
         s.projectId = s.projects.find(p => key && p.repoKey === key)?.id ?? s.projects[0]?.id ?? null;
       }
+      if (vanished) adoptProject();
       const p = project();
       if (p?.org && (selected === s.projectId || selected === null)) {
         const id = p.id, cached = s.cache.get(id) ?? { times: {} };
@@ -165,7 +172,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
         const cwd = d.folderPath(s.text), repo = d.identity(cwd);
         const existing = s.projects.find(p => p.repoKey === repo?.key);
         if (!existing) s.opened.push({ id: `folder:${cwd}`, name: repo?.name ?? cwd, cwd, org: null });
-        s.projects = catalog(config.projects, data.workspaces, d.identity, s.opened);
+        s.projects = catalog(config.projects, data.workspaces, d.identity, s.opened, data.agents);
         return activate(`project:${existing?.id ?? `folder:${cwd}`}`);
       } catch (e) { s.message = `Cannot open folder: ${e.message}`; changed(); return; }
     }
@@ -188,13 +195,20 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       navigate({ view: 'output', detail: null, space: row.space, tab: row.tab, pane: row.pane }); await readOutput(); return refresh();
     }
     if (id === 'go') {
+      // Only the session on screen can be opened; a tab/pane kept from an
+      // earlier visit is not a target the operator can see.
+      if (s.view !== 'output') { s.message = 'Open a session first, then press o to go to it in Herdr.'; changed(); return; }
       if (s.errors.agents || s.errors.tabs || !s.tab) { s.message = 'Refresh Herdr before opening the native terminal.'; changed(); return; }
       // Re-read topology before transferring focus; no cached metadata authorizes
-      // a write or selects a different agent by a reused display name.
+      // a write or selects a different agent by a reused display name. The
+      // target is fixed at the keypress, so navigating during the checks cannot
+      // redirect focus to a different pane.
+      const tab = s.tab, pane = s.pane, generation = s.generation;
       try {
-        const tabs = await d.herdrList('tab'); if (!tabs.some(t => t.tab_id === s.tab)) throw Error('The tab has closed. Refresh and choose another.');
-        if (s.pane) { const a = await d.herdrAgents(); if (!a.ok || !a.agents.some(a => a.pane === s.pane && a.tab === s.tab)) throw Error('The session changed. Refresh and choose it again.'); }
-        const r = await d.herdrGo(s.pane ? { agent: s.pane } : { tab: s.tab });
+        const tabs = await d.herdrList('tab'); if (!tabs.some(t => t.tab_id === tab)) throw Error('The tab has closed. Refresh and choose another.');
+        if (pane) { const a = await d.herdrAgents(); if (!a.ok || !a.agents.some(a => a.pane === pane && a.tab === tab)) throw Error('The session changed. Refresh and choose it again.'); }
+        if (generation !== s.generation) return;
+        const r = await d.herdrGo(pane ? { agent: pane } : { tab });
         s.message = r.ok ? 'Opened in Herdr. Return to this console tab to continue.' : r.error;
         changed(); return r.ok && env.HERDR_CONSOLE_POPUP === '1';
       } catch (e) { s.message = e.message; changed(); }

@@ -338,3 +338,60 @@ test('observer retry rejects previous callbacks even for the same pane', async (
     await session.activate('transcript'); assert.equal(session.ui.outputMode, 'transcript'); assert.match(session.ui.output, /EXACT/);
   } finally { session.stop(); }
 });
+
+test('goals and tasks render without a selected project instead of crashing', async () => {
+  const { deps } = fixture();
+  const session = createModernSession({ config: { projects: [], refresh_seconds: 60 }, deps: { ...deps, herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }) }, projectIndex: -1, env: {} });
+  await session.refresh(); assert.equal(session.project, null);
+  for (const key of ['g', 't', '!', 's']) { await session.key(key, {}); assert.match(rendered(session), /No organization connected|Nothing|No /); }
+});
+
+test('a discovered project whose last workspace closed falls back to a current project', async () => {
+  const { deps, workspaces, agents } = fixture();
+  const config = { projects: [{ name: 'Alpha', cwd: '/a', org: '/org-a' }], refresh_seconds: 60 };
+  const session = createModernSession({ config, deps, env: {} }); await session.refresh();
+  await session.activate('project:discovered:/b/.git'); assert.equal(session.project.name, 'same-name');
+  await session.key('g', {});
+  workspaces.splice(workspaces.findIndex(w => w.workspace_id === 'b'), 1); agents.splice(agents.findIndex(a => a.pane === 'b:p1'), 1);
+  await session.refresh();
+  assert.equal(session.project.name, 'Alpha'); assert.equal(session.ui.view, 'overview'); assert.match(session.ui.message, /no open workspace/);
+  assert.doesNotThrow(() => rendered(session));
+});
+
+test('Needs keeps Brain results in the checkout their session ran in, never by label alone', async () => {
+  const at = new Date().toISOString();
+  const row = (id, where, project) => ({ id, session: `s-${id}`, where, project, at, state: 'idle', status: 'new', digest: { question: `Question ${id}?`, gist: `Gist ${id}` } });
+  const rows = [row('in-b', '/b', 'other'), row('in-a', '/a-lane', 'other'), row('mislabeled', '/b', 'Alpha'), row('nowhere', null, 'other'), row('labelled', null, 'Beta')];
+  const { session } = fixture({ brainQueue: async () => ({ rows, off: false }) });
+  await session.refresh();
+  const ids = () => session.model.allNeeds.filter(n => n.kind === 'result').map(n => n.data.id).sort();
+  assert.deepEqual(ids(), ['in-a']);
+  await session.activate('project:configured:Beta');
+  assert.deepEqual(ids(), ['in-b', 'labelled', 'mislabeled']);
+});
+
+test('agents are discoverable by their own checkout even when no workspace belongs to it', async () => {
+  const lookup = cwd => cwd === '/elsewhere' ? { key: '/elsewhere', root: '/elsewhere', cwd, name: 'elsewhere', git: false } : identity(cwd);
+  const { session, agents } = fixture({ identity: lookup });
+  agents.push({ name: 'stuck', pane: 'a:p9', tab: 'a:t1', workspace: 'a', cwd: '/elsewhere', tool: 'claude', status: 'blocked' });
+  await session.refresh();
+  assert.ok(session.ui.projects.some(p => p.id === 'discovered:/elsewhere'));
+  assert.ok(!session.model.sessions.some(a => a.pane === 'a:p9'));
+  await session.activate('space:a'); assert.equal(session.ui.pane, null);
+  const out = rendered(session); assert.match(out, /stuck \(blocked\) is in this tab but works in elsewhere/); assert.doesNotMatch(out, /Shell tab/);
+  await session.activate('project:discovered:/elsewhere'); assert.deepEqual(session.model.sessions.map(a => a.pane), ['a:p9']);
+});
+
+test('o opens only the session on screen, fixed at the keypress', async () => {
+  let release = null, hold = false;
+  const { session, calls, workspaces, tabs: all } = fixture({ herdrList: what => what === 'workspace' ? Promise.resolve(workspaces)
+    : hold ? new Promise(resolve => { release = () => resolve(all); }) : Promise.resolve(all) });
+  await session.refresh(); await session.activate('session:a-work:p1');
+  await session.activate('view:goals'); await session.key('o', {});
+  assert.equal(calls.length, 0); assert.match(session.ui.message, /Open a session first/);
+  await session.activate('back'); assert.equal(session.ui.view, 'output');
+  hold = true;
+  const pending = session.key('o', {}); await new Promise(resolve => setImmediate(resolve));
+  await session.activate('view:tasks'); release(); await pending;
+  assert.equal(calls.length, 0);
+});

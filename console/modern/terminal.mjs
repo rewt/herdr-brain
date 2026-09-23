@@ -10,6 +10,18 @@ const baseColors = ['#000000', '#cd0000', '#00cd00', '#cdcd00', '#0000ee', '#cd0
 const defaults = () => ({ fg: 'terminalFg', bg: 'terminalBg', bold: false, dim: false, italic: false, underline: false, inverse: false, strikethrough: false, hidden: false });
 const integer = (n, max) => Number.isSafeInteger(n) && n > 0 && n <= max;
 const validPane = pane => typeof pane === 'string' && /^w[^\s:]+:p[^\s:]+$/.test(pane) && pane.length <= 128 && !/[\x00-\x1f\x7f]/.test(pane);
+// Children still running when this process exits. A SIGTERM grace timer cannot
+// fire after exit, so exit sends SIGKILL to whatever has not closed yet.
+const live = new Set();
+let exitHook = false;
+function track(child) {
+  live.add(child); child.once?.('close', () => live.delete(child));
+  if (!exitHook) { exitHook = true; process.once('exit', () => { for (const c of live) try { c.kill('SIGKILL'); } catch {} }); }
+  return child;
+}
+// Consecutive failed size probes tolerated once a live screen is established:
+// one slow reply from a busy server must not tear down a working observer.
+const PROBE_TOLERANCE = 3;
 const hex = values => '#' + values.map(v => v.toString(16).padStart(2, '0')).join('');
 function indexed(n) {
   if (!Number.isInteger(n) || n < 0 || n > 255) throw Error('Invalid terminal color');
@@ -242,7 +254,7 @@ export function observeTerminal({ pane, cols, rows, onFrame, onError, binary, en
   try {
     if (!validPane(pane)) throw Error('An exact Herdr pane ID is required');
     if (!integer(cols, 400) || !integer(rows, 160)) throw Error('Unsupported observer viewport size');
-    child = spawnImpl(binary ?? env.HERDR_BIN_PATH ?? 'herdr', ['terminal', 'session', 'observe', pane, '--cols', String(cols), '--rows', String(rows)], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = track(spawnImpl(binary ?? env.HERDR_BIN_PATH ?? 'herdr', ['terminal', 'session', 'observe', pane, '--cols', String(cols), '--rows', String(rows)], { env, stdio: ['ignore', 'pipe', 'pipe'] }));
     child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
     child.stdout.on('data', chunk => {
       if (stopped) return;
@@ -275,7 +287,7 @@ export function observeTerminal({ pane, cols, rows, onFrame, onError, binary, en
 // grid locally. A compact observer requested directly from Herdr clips the TOP
 // of the source screen and can silently hide the agent's latest work/prompt.
 function observeNativeTerminal({ pane, onFrame, onError, binary, env, spawnImpl }) {
-  let stopped = false, observer = null, probeStop = null, pollTimer, sizeKey = null, generation = 0;
+  let stopped = false, observer = null, probeStop = null, pollTimer, sizeKey = null, generation = 0, misses = 0;
   function stop() {
     if (stopped) return;
     stopped = true; generation++; clearTimeout(pollTimer); observer?.stop(); probeStop?.();
@@ -294,7 +306,7 @@ function observeNativeTerminal({ pane, onFrame, onError, binary, env, spawnImpl 
       };
       const finish = (error, value) => { if (settled) return; settled = true; clearTimeout(timeout); probeStop = null; error ? reject(error) : resolve(value); };
       try {
-        child = spawnImpl(binary ?? env.HERDR_BIN_PATH ?? 'herdr', ['pane', 'layout', '--pane', pane], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+        child = track(spawnImpl(binary ?? env.HERDR_BIN_PATH ?? 'herdr', ['pane', 'layout', '--pane', pane], { env, stdio: ['ignore', 'pipe', 'pipe'] }));
         probeStop = cancel;
         child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
         child.stdout.on('data', chunk => { if (settled) return; out += chunk; if (out.length > 1024 * 1024) { finish(Error('Native geometry reply is too large')); cancel(); } });
@@ -314,10 +326,20 @@ function observeNativeTerminal({ pane, onFrame, onError, binary, env, spawnImpl 
       } catch (error) { finish(error); cancel(); }
     });
   }
+  const again = () => { if (!stopped) { pollTimer = setTimeout(check, 3000); pollTimer.unref?.(); } };
   async function check() {
     try {
       if (!validPane(pane)) throw Error('An exact Herdr pane ID is required');
-      const size = await geometry(); if (stopped) return;
+      let size;
+      try { size = await geometry(); }
+      catch (error) {
+        // Before the first frame there is nothing to keep; afterwards the
+        // running observer stays up until the misses are no longer transient.
+        if (stopped || !sizeKey || ++misses >= PROBE_TOLERANCE) throw error;
+        return again();
+      }
+      if (stopped) return;
+      misses = 0;
       const key = `${size.cols}x${size.rows}`;
       if (key !== sizeKey) {
         const current = ++generation; observer?.stop(); sizeKey = key;
@@ -326,7 +348,7 @@ function observeNativeTerminal({ pane, onFrame, onError, binary, env, spawnImpl 
           onError: error => { if (!stopped && current === generation) fail(error); },
         });
       }
-      if (!stopped) { pollTimer = setTimeout(check, 3000); pollTimer.unref?.(); }
+      again();
     } catch (error) { if (!stopped) fail(error); }
   }
   void check(); return { stop };

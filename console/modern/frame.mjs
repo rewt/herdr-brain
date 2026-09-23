@@ -143,7 +143,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   } else if (s.view === 'goals' || s.view === 'tasks') {
     const list = s.view === 'goals' ? m.goals : m.tasks;
     section(`${s.view === 'goals' ? 'Goals' : 'Tasks'} · ${list.length}`, s.view === 'goals' ? 'goal' : 'blue'); list.forEach(itemRow);
-    if (!list.length) paragraph(s.errors.status ? 'Organization data is unavailable. Refresh to reconnect.' : p.org ? 'Nothing defined yet. Explore first; structure can follow.' : 'No organization connected. Goals and tasks require project setup, which is not connected in this trial. Open a folder or inspect an existing Herdr conversation first.');
+    if (!list.length) paragraph(s.errors.status ? 'Organization data is unavailable. Refresh to reconnect.' : p?.org ? 'Nothing defined yet. Explore first; structure can follow.' : 'No organization connected. Goals and tasks require project setup, which is not connected in this trial. Open a folder or inspect an existing Herdr conversation first.');
   } else if (['needs', 'later', 'parked'].includes(s.view)) {
     const list = s.view === 'later' ? m.later : s.view === 'parked' ? m.parked : m.needs;
     section(`${s.view === 'later' ? 'Saved for later' : s.view === 'parked' ? 'Future stages' : 'Needs you'} · ${list.length}`, 'amber'); list.forEach(needRow); if (!list.length) paragraph('Nothing here.');
@@ -198,7 +198,10 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     bodyRegion = 'terminal';
     if (!s.pane) {
       if (s.tab) row('o  Open native terminal in Herdr', { id: 'go', fg: 'blue' });
-      paragraph(agents.length ? 'Select a session to read its exact pane.' : 'Shell tab · open the native terminal to interact.');
+      const away = m.elsewhere.filter(a => a.tab === s.tab);
+      if (agents.length) paragraph('Select a session to read its exact pane.');
+      else if (away.length) for (const a of away) paragraph(`${a.name ?? a.pane} (${a.status ?? 'unknown'}) is in this tab but works in ${a.repo?.name ?? a.cwd}. Press p and choose that project to read it.`, 'amber');
+      else paragraph('Shell tab · open the native terminal to interact.');
     } else {
       const mirror = s.outputMode !== 'transcript';
       row(`o  Open live ${active?.who?.tool ?? 'agent'} terminal in Herdr`, { id: 'go', fg: 'blue', bold: true });

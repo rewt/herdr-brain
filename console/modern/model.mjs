@@ -21,7 +21,8 @@ export function createIdentityReader() {
     const key = r.status === 0 ? canonical(r.stdout.trim()) : cwd;
     const root = r.status === 0 && path.basename(key) === '.git' ? path.dirname(key) : cwd;
     const value = { key, root, cwd, git: r.status === 0, name: path.basename(root) || root };
-    cache.set(cwd, value);
+    // A timeout or spawn failure is not an answer; ask again next time.
+    if (!r.error && r.status !== null) cache.set(cwd, value);
     return value;
   };
 }
@@ -32,23 +33,26 @@ export function workspaceIdentity(w, identity) {
     : identity(w.cwd ?? w.path);
 }
 
-export function catalog(configured, workspaces, identity, opened = []) {
+export function catalog(configured, workspaces, identity, opened = [], agents = []) {
   const result = [...configured, ...opened].map((p) => {
     const repo = identity(p.cwd);
     return { ...p, id: p.id ?? `configured:${p.name}`, repoKey: repo?.key, root: repo?.root ?? p.cwd, git: Boolean(repo?.git), configured: Boolean(p.org) };
   });
   const known = new Set(result.map(p => p.repoKey).filter(Boolean));
-  for (const w of workspaces) {
-    const repo = workspaceIdentity(w, identity);
-    if (!repo?.key || known.has(repo.key)) continue;
+  const discover = repo => {
+    if (!repo?.key || known.has(repo.key)) return;
     known.add(repo.key);
     result.push({ id: `discovered:${repo.key}`, name: repo.name ?? path.basename(repo.root), cwd: repo.root, root: repo.root, repoKey: repo.key, git: repo.git, org: null, configured: false });
-  }
+  };
+  for (const w of workspaces) discover(workspaceIdentity(w, identity));
+  // An agent is assigned by its own cwd, so a checkout known only from an
+  // agent (another repo, or a folder without Git) still needs a project.
+  for (const a of agents) if (a.cwd) discover(identity(a.cwd));
   return result;
 }
 
 export function projectView(project, data, identity) {
-  const empty = { sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], allNeeds: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
+  const empty = { sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
   if (!project) return empty;
   const spaces = data.workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey && project.repoKey);
   const spacesById = new Map(spaces.map(w => [w.workspace_id, w]));
@@ -58,7 +62,8 @@ export function projectView(project, data, identity) {
   const repoOf = cwd => { const r = identity(cwd); return r ? { root: r.key, name: r.name, path: r.root, git: r.git } : null; };
   const sameRun = r => !r.workspace || identity(r.workspace)?.key === project.repoKey;
   const today = data.today ? { ...data.today, running: (data.today.running ?? []).filter(sameRun), agent_runs: (data.today.agent_runs ?? []).filter(sameRun) } : null;
-  const board = buildBoard({ today, brain: data.brain, herdr: { ok: true, agents }, tabs: data.tabs.map(t => ({ tab: t.tab_id, label: t.label, workspace: t.workspace_id })), repoOf, projectName: project.name, fallbackCwd: project.cwd });
+  // Brain results are assigned below by checkout, not by the board's label filter.
+  const board = buildBoard({ today, brain: data.brain, herdr: { ok: true, agents }, tabs: data.tabs.map(t => ({ tab: t.tab_id, label: t.label, workspace: t.workspace_id })), repoOf, projectName: null, fallbackCwd: project.cwd });
   const items = data.status?.items ?? [];
   const itemsById = new Map(items.map(i => [i.id, i]));
   const goalOf = item => { const visited = new Set(); for (let i = item; i && !visited.has(i.id); i = itemsById.get(i.parent)) { if (i.kind === 'goal') return i.id; visited.add(i.id); } return null; };
@@ -70,11 +75,26 @@ export function projectView(project, data, identity) {
   // Keep its actual checkout available, without reparenting that workspace.
   const tabIds = new Set(sessions.map(s => s.tab));
   const tabs = data.tabs.filter(t => spacesById.has(t.workspace_id) || tabIds.has(t.tab_id));
+  // The reverse: an agent in one of this project's tabs that works in another
+  // checkout belongs to that project, but the tab must not claim to be a shell.
+  const shown = new Set(sessions.map(s => s.pane)), ownTabs = new Set(tabs.map(t => t.tab_id));
+  const elsewhere = data.agents.filter(a => ownTabs.has(a.tab) && !shown.has(a.pane)).map(a => ({ pane: a.pane, tab: a.tab, name: a.name, cwd: a.cwd, status: a.status, repo: identity(a.cwd) }));
+  // Org questions come from this project's own organization. A Brain result
+  // belongs where its session ran; a label match is only a fallback for results
+  // that recorded no checkout, and an unmatched result belongs to no project.
+  const ownResult = r => {
+    const where = r.data?.where;
+    if (where) return identity(where)?.key === project.repoKey;
+    const label = r.data?.project;
+    return Boolean(project.configured && label && label !== 'other' && label === project.name);
+  };
+  const waiting = board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i)));
   return { ...empty, items, itemsById, board, sessions, spaces, tabs,
     goals: items.filter(i => i.kind === 'goal' && !i.closed),
     tasks: items.filter(i => i.kind !== 'goal' && i.role !== 'human' && !['done', 'dropped'].includes(i.status)).map(i => ({ ...i, goal: goalOf(i) })),
-    needs: board.waiting.filter(i => i.kind !== 'fold' && !i.foldedIn),
-    later: board.waiting.filter(i => i.foldedIn === 'later'), parked: board.waiting.filter(i => i.foldedIn === 'stages'), allNeeds: board.waiting.filter(i => i.kind !== 'fold'),
+    needs: waiting.filter(i => !i.foldedIn),
+    later: waiting.filter(i => i.foldedIn === 'later'), parked: waiting.filter(i => i.foldedIn === 'stages'), allNeeds: waiting,
+    elsewhere,
   };
 }
 

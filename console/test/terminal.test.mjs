@@ -210,3 +210,38 @@ test('stopping during native geometry discovery cancels only the owned query and
   const observer = observeTerminal({ pane: 'w1:p1', cols: 80, rows: 20, followNativeSize: true, onError: e => errors.push(e), spawnImpl: () => child });
   observer.stop(); await tick(); assert.deepEqual(child.signals, ['SIGTERM']); assert.deepEqual(errors, []);
 });
+
+test('an established live screen survives transient geometry failures but not persistent ones', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let failing = false; const children = [], frames = [], errors = [];
+  const spawnImpl = (_binary, args) => {
+    const child = fakeProcess(); children.push({ child, args });
+    if (args[0] === 'pane') queueMicrotask(() => {
+      if (failing) { child.stderr.write('server busy'); child.emit('close', 1, null); return; }
+      child.stdout.write(JSON.stringify({ result: { layout: { panes: [{ pane_id: 'w1:p1', rect: { width: 12, height: 3 } }] } } }));
+      child.emit('close', 0, null);
+    });
+    return child;
+  };
+  const observer = observeTerminal({ pane: 'w1:p1', followNativeSize: true, spawnImpl, onFrame: f => frames.push(f), onError: e => errors.push(e) });
+  await tick(); children[1].child.stdout.write(JSON.stringify(frame('live')) + '\n'); await tick();
+  assert.equal(frames.length, 1);
+  failing = true;
+  t.mock.timers.tick(3000); await tick(); t.mock.timers.tick(3000); await tick();
+  assert.deepEqual(errors, []); assert.deepEqual(children[1].child.signals, []);
+  failing = false; t.mock.timers.tick(3000); await tick(); // a success resets the count
+  failing = true;
+  t.mock.timers.tick(3000); await tick(); t.mock.timers.tick(3000); await tick();
+  assert.deepEqual(errors, []);
+  t.mock.timers.tick(3000); await tick();
+  assert.equal(errors.length, 1); assert.match(errors[0], /server busy/); assert.deepEqual(children[1].child.signals, ['SIGTERM']);
+  observer.stop();
+});
+
+test('a geometry failure before the first live screen still fails at once', async () => {
+  const errors = [];
+  const observer = observeTerminal({ pane: 'w1:p1', followNativeSize: true, onError: e => errors.push(e), spawnImpl: () => {
+    const child = fakeProcess(); queueMicrotask(() => { child.stderr.write('no such pane'); child.emit('close', 1, null); }); return child;
+  } });
+  await tick(); assert.equal(errors.length, 1); observer.stop();
+});

@@ -225,6 +225,8 @@ function Console() {
   });
   useInput((input, key) => {
     const event = parseMouse(input);
+    // Typing into a session arrives raw (below); only the mouse is the console's.
+    if (session.ui.interactive && !event) return;
     const done = event ? session.mouse(event) : session.key(input, key);
     done.then((quit) => {
       if (quit) exit();
@@ -241,7 +243,8 @@ function Console() {
 
 // Ink exits on q and on Ctrl-C; an unmount for an editor is not an exit.
 remount = () => {
-  instance = render(h(Console), { exitOnCtrlC: true, patchConsole: false });
+  // Ctrl-C belongs to a session while typing into it, so the console handles it itself.
+  instance = render(h(Console), { exitOnCtrlC: !opt.modern, patchConsole: false });
   instance.waitUntilExit().then(() => {
     if (!suspending) finish(0);
   }, () => finish(1));
@@ -265,6 +268,13 @@ for (const event of ['uncaughtException', 'unhandledRejection']) {
     process.exit(1);
   });
 }
+
+// Ink reads stdin with read(), which also emits each chunk here, unparsed: the
+// exact bytes a session needs (arrows, Esc, Ctrl-C, pastes) while typing into it.
+if (opt.modern) process.stdin.on('data', (chunk) => {
+  if (!session.ui.interactive) return;
+  session.input(chunk).catch((error) => { session.ui = { ...session.ui, message: `error: ${error.message}` }; notify(); });
+});
 
 takeTerminal();
 remount();

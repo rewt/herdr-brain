@@ -2,7 +2,8 @@
 
 This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes
-are the project screen's start bar: a new chat, or a task under the work block.
+are the project screen's start bar (a new chat, or a task under the work block)
+and what the operator types into a session.
 It runs in Ink through `console/app.mjs`; it is not the browser design preview or
 `console/proto` fixture application. Opt in per launch; the existing console
 remains the default and retains all of its operational actions.
@@ -74,7 +75,15 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   Missing config does not write an example file or prevent discovery.
 - Checkout tabs are horizontal. A split tab with several agents requires an
   explicit session choice. Shell tabs offer native terminal access.
-- Session detail separates goal/task/summary from a live, read-only harness
+- Opening a session lets you type into it here. The console takes Herdr's
+  control stream for that pane (`herdr terminal session control`). While it
+  holds the stream, Herdr sizes the pane's terminal to the console's area, so
+  the agent redraws to fit, with its cursor. Every key goes to the session,
+  including Esc, Ctrl-C and `q`. Ctrl+] or clicking ‹ Back releases the pane,
+  which returns to its native size, and goes back to where you were. A crash or
+  kill releases it too. The wheel scrolls the session. If Herdr hands the
+  terminal elsewhere, the view drops back to watching; `i` types into it again.
+- The watching view separates goal/task/summary from a live, read-only harness
   screen. An exact-pane observer preserves supported ANSI styles and cell layout.
   It reads the native dimensions and shows the bottom rows first, with explicit
   visible row/column ranges. Console resize and local panning never resize or
@@ -116,6 +125,8 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | `r` | Refresh sources |
 | `D` | Switch between the reference's light and dark appearance |
 | `o` | Open selected native terminal in Herdr |
+| `i` | Type into the watched session here |
+| `Ctrl+]` | While typing into a session: release it and go back |
 | `n` | Start bar: type, Tab chat kind/task, Up/Down checkout, Enter to review, Enter again to start, Esc |
 | `?` | Help |
 | `q` | Quit, restoring terminal modes |
@@ -129,7 +140,8 @@ show the remaining facts in session detail.
 
 ## Boundaries
 
-The start bar is this mode's only write: `org add` through the CLI for a task,
+Typing into a session writes only to that session's terminal, and only while
+the operator is in it. The start bar is the other write: `org add` through the CLI for a task,
 and `herdr tab create` / `agent start` / `agent prompt` for a chat. Each needs
 the operator's typed text and a second Enter. It has no answer, dispatch or
 model-call path. Use `node bin/org.mjs console --project NAME` for answers and
@@ -151,10 +163,11 @@ while Projects remains a naming recommendation. Daily/weekly planning is
 specified in the [backlog review design](../../docs/design/console-backlog-review-2026-09-20.md);
 no scheduler or autonomous backlog mutation is enabled by this trial.
 
-The live viewer is a decoded terminal screen, not an interactive PTY. It supports
+The watching viewer is a decoded terminal screen; typing uses Herdr's control
+stream, not a local PTY. It supports
 the observed Herdr renderer's bounded ANSI controls, not arbitrary terminal
 images or every host palette customization. See the [terminal contract](../../docs/design/console-native-terminal-contract-2026-09-20.md).
-Typing and harness-specific controls belong to the native terminal opened by `o`.
+Mouse clicks inside the session are not forwarded; use `o` for those.
 
 ## Herdr plugin package
 

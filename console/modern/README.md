@@ -27,6 +27,14 @@ node bin/org.mjs console --modern
 node bin/org.mjs console --modern --folder /absolute/path/to/folder
 ```
 
+To keep it open while the code changes, run the development loop in its own
+Herdr tab. Saving any `.mjs` under `console/`, `lib/` or `bin/` restarts it in
+place; after `q`, Enter reopens it and Ctrl-C ends the loop:
+
+```sh
+node console/dev.mjs --project bch-cloak
+```
+
 A direct launch supports an explicit config and one-frame output:
 
 ```sh
@@ -70,6 +78,11 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   reconnect errors retain distinguishable last-good data instead of pretending
   the project is empty.
 - Current, deferred and future-stage decisions remain separately reachable.
+- Needs you holds only what still asks something open. A session result folds
+  out, still readable, when its org item has closed or a newer result about the
+  same item replaced it (Resolved), when it reported without asking (Reports),
+  or when its session ended over a day ago and no org item records it (Ended
+  sessions). A stranded reply never folds. Org questions are never folded here.
 
 ## Keys
 

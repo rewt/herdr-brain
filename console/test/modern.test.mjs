@@ -395,3 +395,29 @@ test('o opens only the session on screen, fixed at the keypress', async () => {
   await session.activate('view:tasks'); release(); await pending;
   assert.equal(calls.length, 0);
 });
+
+test('Needs folds session results that the org resolved, replaced, only reported, or left unowned', async () => {
+  const now = Date.now(), iso = ms => new Date(now - ms).toISOString(), day = 24 * 60 * 60 * 1000;
+  const row = (id, extra = {}, digest = {}) => ({ id, session: `s-${id}`, where: '/a-lane', project: 'other', at: iso(60_000), state: 'idle', status: 'digested', pane: `gone:${id}`, digest: { kind: 'decision', needs_you: true, question: `Question ${id}?`, ...digest }, ...extra });
+  const rows = [
+    row('closed-item', {}, { item: 'ENG-2' }),
+    row('older', { at: iso(2 * 60_000) }, { item: 'ENG-1' }), row('newer', {}, { item: 'ENG-1' }),
+    row('report', {}, { kind: 'report', needs_you: false }),
+    row('unowned', { at: iso(2 * day) }), row('fresh-unowned'), row('old-but-live', { at: iso(2 * day), pane: 'a-work:p1' }),
+    row('stranded', { at: iso(2 * day), unsent: 'yes, go ahead' }, { item: 'ENG-2' }),
+  ];
+  const { session } = fixture({ brainQueue: async () => ({ rows, off: false }), now: () => now });
+  await session.refresh();
+  const m = session.model, ids = list => list.map(n => n.data.id).sort();
+  assert.deepEqual(ids(m.needs), ['fresh-unowned', 'newer', 'old-but-live', 'stranded']);
+  assert.deepEqual(ids(m.resolved), ['closed-item', 'older']);
+  assert.deepEqual(ids(m.reports), ['report']);
+  assert.deepEqual(ids(m.ended), ['unowned']);
+  assert.match(m.resolved.find(n => n.data.id === 'closed-item').settled, /ENG-2 is closed/);
+  assert.match(m.resolved.find(n => n.data.id === 'older').settled, /newer session result about ENG-1/);
+  // Folded groups stay one keypress away and explain themselves.
+  await session.activate('view:needs'); let text = rendered(session);
+  assert.match(text, /Needs you · 4/); assert.match(text, /Resolved 2/); assert.match(text, /Ended sessions 1/); assert.match(text, /Reports 1/);
+  await session.activate('view:resolved'); await session.activate(`need:${m.resolved[0].key}`); text = rendered(session);
+  assert.match(text, /Folded · /);
+});

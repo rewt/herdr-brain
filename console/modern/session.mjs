@@ -31,7 +31,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, message: '',
     frame: null, stopped: false, timer: null, outputTimer: null, pending: null, generation: 0, reading: false, loading: true };
   const project = () => s.projects.find(p => p.id === s.projectId) ?? null;
-  const model = () => projectView(project(), data, d.identity);
+  const model = () => projectView(project(), data, d.identity, d.now());
   const route = () => ({ projectId: s.projectId, view: s.view, detail: s.detail, space: s.space, tab: s.tab, pane: s.pane, focus: s.focus, scroll: s.scroll, outputScroll: s.outputScroll, outputMode: s.outputMode, outputX: s.outputX, screenScroll: s.screenScroll, text: s.text });
   const routeKey = r => JSON.stringify([r.projectId, r.view, r.detail, r.view === 'output' ? [r.space, r.tab, r.pane] : null]);
   const changed = () => { if (!s.stopped) onChange(); };
@@ -181,7 +181,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (next === s.projectId) { changed(); return; }
       navigate({ projectId: next, view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'view:overview' }); adoptProject(); return refresh();
     }
-    if (id.startsWith('view:')) { const view = id.slice(5); const first = { goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
+    if (id.startsWith('view:')) { const view = id.slice(5); const first = { goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
     if (id.startsWith('item:')) { if (m.itemsById.has(id.slice(5))) navigate({ view: 'item', detail: id.slice(5) }); return; }
     if (id.startsWith('need:')) { if (m.allNeeds.some(r => r.key === id.slice(5))) navigate({ view: 'need', detail: id.slice(5) }); return; }
     if (id.startsWith('space:')) {

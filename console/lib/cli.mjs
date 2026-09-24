@@ -1,5 +1,6 @@
 // The console's only ways to touch the world: the org CLI (child process, argument
-// arrays), Herdr's agent and tab lists, focus, screen reads and prompts, Herdr's
+// arrays), Herdr's agent and tab lists, focus, screen reads and prompts, a new chat
+// tab the operator started, Herdr's
 // right-click routing for the console's own pane, and an external viewer. It never
 // appends to events.jsonl and never stops or closes agents. The only message it
 // sends into a session is one the operator typed or confirmed (herdrPrompt).
@@ -75,6 +76,35 @@ export async function orgAnswer(project, request) {
 export async function orgNote(project, id, text, { decision = false } = {}) {
   const r = await run(process.execPath, [ORG_BIN, 'note', id, text, ...(decision ? ['--decision'] : [])], { env: orgEnv(project) });
   return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || 'org note failed' };
+}
+
+// A task the operator typed, under the work block when there is one.
+export function addArgs({ title, parent }) {
+  // `--` keeps a title that starts with a dash from reading as an option.
+  return ['add', ...(parent ? [`--parent=${parent}`] : []), '--', title];
+}
+
+export async function orgAdd(project, request) {
+  const r = await run(process.execPath, [ORG_BIN, ...addArgs(request)], { env: orgEnv(project) });
+  return r.ok ? { ok: true, id: firstLine(r.stdout) } : { ok: false, error: firstLine(r.stderr) || r.error?.message || 'org add failed' };
+}
+
+// A new chat the operator asked for: a tab in the chosen checkout, a supported
+// agent started at its shell prompt, then the operator's first words, if any.
+export async function herdrStartChat({ workspace, cwd, kind, name, prompt }) {
+  const herdr = herdrBinary();
+  const tab = await run(herdr, ['tab', 'create', '--workspace', workspace, '--cwd', cwd, '--label', 'chat', '--no-focus'], { timeout: 5000 });
+  if (!tab.ok) return { ok: false, error: firstLine(tab.stderr) || 'herdr tab create failed' };
+  let pane = null;
+  try { pane = JSON.parse(tab.stdout)?.result?.root_pane?.pane_id ?? null; } catch { /* reported below */ }
+  if (!pane) return { ok: false, error: 'Herdr created a tab but reported no pane' };
+  const start = await run(herdr, ['agent', 'start', name, '--kind', kind, '--pane', pane], { timeout: 35000 });
+  if (!start.ok) return { ok: false, pane, error: firstLine(start.stderr) || firstLine(start.stdout) || `herdr could not start ${kind}` };
+  if (prompt) {
+    const sent = await herdrPrompt(name, prompt);
+    if (!sent.ok) return { ...sent, pane, error: `Started, but the first message was not sent: ${sent.error}` };
+  }
+  return { ok: true, pane, name };
 }
 
 export async function herdrAgents() {

@@ -96,8 +96,11 @@ if (opt.print) {
     process.stderr.write('org console: --print expects COLSxROWS, e.g. 140x40\n');
     process.exit(1);
   }
-  // A snapshot is read-only: it must never move the operator's Herdr focus.
-  const deps = opt.modern ? { herdrGo: async () => ({ ok: false, error: '--print does not open Herdr terminals' }) } : {};
+  // A snapshot is read-only: it must never move the operator's Herdr focus,
+  // record a task or start an agent, whatever --keys confirms.
+  const deps = opt.modern ? { herdrGo: async () => ({ ok: false, error: '--print does not open Herdr terminals' }),
+    orgAdd: async () => ({ ok: false, error: '--print does not record tasks' }),
+    herdrStartChat: async () => ({ ok: false, error: '--print does not start agents' }) } : {};
   const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps });
   await session.refresh({ reorder: true });
   const [cols, rows] = [Number(m[1]), Number(m[2])];

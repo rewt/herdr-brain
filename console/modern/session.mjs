@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { catalog, createIdentityReader, folderPath, projectView, workspaceIdentity } from './model.mjs';
 import { renderModern } from './frame.mjs';
+import { checkoutName, checkoutOrder, composeModes, currentBlock } from './project.mjs';
 import { moveRegion, moveWithin, pickerEntries } from './navigation.mjs';
 import { observeTerminal } from './terminal.mjs';
 const exec = promisify(execFile);
@@ -18,7 +19,7 @@ async function gitSummary(cwd) {
 
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
-    herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, gitSummary, folderPath,
+    herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, gitSummary, folderPath,
     observeTerminal: deps.herdrRead ? null : observeTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
   const data = { workspaces: [], tabs: [], agents: [], today: null, status: null, brain: { rows: [], off: true } };
@@ -28,7 +29,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
     picker: null, regionFocus: {}, outputX: 0, screenScroll: 0,
     outputMode: 'mirror', terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },
-    history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, message: '',
+    history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, checkoutGit: {}, compose: null, chatKinds: config.chat_kinds ?? ['claude', 'codex'], message: '',
     frame: null, stopped: false, timer: null, outputTimer: null, pending: null, generation: 0, reading: false, loading: true };
   const project = () => s.projects.find(p => p.id === s.projectId) ?? null;
   const model = () => projectView(project(), data, d.identity, d.now());
@@ -61,7 +62,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     const before = route(), after = { ...before, ...next };
     if (routeKey(before) === routeKey(after)) return;
     s.history.push(before); s.future = [];
-    Object.assign(s, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', focus: next.focus ?? 'back' });
+    Object.assign(s, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, focus: next.focus ?? 'back' });
     s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
     stopObserver(); s.terminalFrame = null; s.screenViewport = null; s.outputMode = 'mirror'; observerRetryAt = 0;
     changed();
@@ -137,6 +138,12 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     // A project switch during IO must not leave the new scope with the old data.
     if (selected !== s.projectId && selected !== null) return refresh();
     await readOutput();
+    // Each checkout's branch and change count, for the project screen.
+    const spaces = model().spaces, checked = s.projectId;
+    await Promise.all(spaces.map(async w => {
+      try { const git = await d.gitSummary(w.worktree?.checkout_path ?? w.cwd); if (checked === s.projectId) s.checkoutGit[w.workspace_id] = git; } catch { delete s.checkoutGit[w.workspace_id]; }
+    }));
+    changed();
     if (s.view === 'output') {
       const generation = s.generation, w = data.workspaces.find(w => w.workspace_id === s.space);
       try { const git = await d.gitSummary(w?.worktree?.checkout_path); if (generation === s.generation) s.git = git; } catch { if (generation === s.generation) s.git = null; }
@@ -194,6 +201,11 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       const row = m.sessions.find(a => a.pane === id.slice(8)); if (!row) return;
       navigate({ view: 'output', detail: null, space: row.space, tab: row.tab, pane: row.pane }); await readOutput(); return refresh();
     }
+    if (id === 'compose') {
+      if (!project()) return;
+      if (s.view !== 'overview') navigate({ view: 'overview', detail: null, space: null, tab: null, pane: null });
+      openCompose(); return;
+    }
     if (id === 'go') {
       // Only the session on screen can be opened; a tab/pane kept from an
       // earlier visit is not a target the operator can see.
@@ -213,6 +225,59 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
         changed(); return r.ok && env.HERDR_CONSOLE_POPUP === '1';
       } catch (e) { s.message = e.message; changed(); }
     }
+  }
+  // The start bar: the only place this screen writes. A chat is a new Herdr tab
+  // with an agent in the chosen checkout; a task is `org add` under the block.
+  // Both take a second Enter, after the bar says exactly what will happen.
+  function openCompose() {
+    const main = checkoutOrder(model().spaces)[0];
+    s.compose = { mode: 0, text: '', space: main?.workspace_id ?? null, confirm: false, busy: false };
+    s.focus = 'compose'; s.message = ''; changed();
+  }
+  async function composeKey(input, k) {
+    const c = s.compose, modes = composeModes(project(), s.chatKinds), mode = modes[c.mode];
+    if (c.busy) return false;
+    if (k.escape) { if (c.confirm) c.confirm = false; else { s.compose = null; s.focus = 'compose'; } changed(); return false; }
+    if (k.return) {
+      if (mode.kind === 'task' && !c.text.trim()) s.message = 'Type the task first.';
+      else if (mode.kind === 'chat' && !c.space) s.message = 'Open this project in Herdr first; a chat starts in one of its checkouts.';
+      else if (c.confirm) return submitCompose();
+      else c.confirm = true;
+      changed(); return false;
+    }
+    c.confirm = false; s.message = '';
+    if (k.tab) c.mode = (c.mode + (k.shift ? -1 : 1) + modes.length) % modes.length;
+    else if (k.upArrow || k.downArrow) {
+      const spaces = checkoutOrder(model().spaces), index = spaces.findIndex(w => w.workspace_id === c.space);
+      c.space = spaces[(index + (k.upArrow ? -1 : 1) + spaces.length) % spaces.length]?.workspace_id ?? c.space;
+    } else if (k.backspace || k.delete) c.text = [...c.text].slice(0, -1).join('');
+    else if (input && !k.ctrl && !k.meta) c.text += input.replace(/[\x00-\x1f\x7f]/g, '');
+    changed(); return false;
+  }
+  async function submitCompose() {
+    const c = s.compose, mode = composeModes(project(), s.chatKinds)[c.mode], p = project(), m = model(), text = c.text.trim();
+    c.busy = true; changed();
+    let done = null;
+    try {
+      if (mode.kind === 'task') {
+        const block = currentBlock(m);
+        const r = await d.orgAdd(p, { title: text, parent: block?.goal.id });
+        if (!r.ok) throw Error(`Task not added: ${r.error}`);
+        s.compose = null; done = `Added ${r.id}${block ? ` under ${block.goal.id}` : ''}.`;
+        await refresh();
+      } else {
+        const w = m.spaces.find(w => w.workspace_id === c.space);
+        if (!w) throw Error('That checkout is no longer open in Herdr.');
+        const name = `chat-${d.now().toString(36)}`;
+        const r = await d.herdrStartChat({ workspace: w.workspace_id, cwd: w.worktree?.checkout_path ?? p.cwd, kind: mode.agent, name, prompt: text });
+        if (!r.ok && !r.pane) throw Error(`Chat not started: ${r.error}`);
+        s.compose = null; done = r.ok ? `Started ${mode.agent} in ${checkoutName(w)} as ${name}.` : r.error;
+        await refresh();
+        if (model().sessions.some(a => a.pane === r.pane)) await activate(`session:${r.pane}`);
+      }
+    } catch (e) { s.message = e.message; }
+    finally { if (s.compose) { s.compose.busy = false; s.compose.confirm = false; } if (done) s.message = done; changed(); }
+    return false;
   }
   async function openTab(space, tab) {
     const agents = model().sessions.filter(a => a.tab === tab);
@@ -236,6 +301,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       else if (input && !k.ctrl && !k.meta) { s.picker.query += input.replace(/[\x00-\x1f\x7f]/g, ''); s.picker.index = 0; }
       changed(); return false;
     }
+    if (s.compose) return composeKey(input, k);
     if (k.escape || (k.meta && k.leftArrow) || input === '\x1b[1;3D') return activate('back');
     if ((k.meta && k.rightArrow) || input === '\x1b[1;3C') return activate('forward');
     if (s.view === 'folder') {
@@ -273,7 +339,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       return false;
     }
     if (s.view === 'output' && (input === 'l' || input === 'v')) return activate(input === 'l' ? 'transcript' : 'mirror');
-    const shortcut = { p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
+    const shortcut = { p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
     if (shortcut) return activate(shortcut);
     return false;
   }

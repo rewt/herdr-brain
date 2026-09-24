@@ -4,7 +4,7 @@ import path from 'node:path';
 import { cropTerminalSpans } from './terminal.mjs';
 import { cutSpans } from '../lib/frame.mjs';
 import { pad, clip, wrap, sanitize, cellWidth } from '../lib/text.mjs';
-import { overviewRows } from './overview.mjs';
+import { projectRows, composeModes, currentBlock, checkoutName } from './project.mjs';
 import { regionFor, pickerEntries } from './navigation.mjs';
 import { relatedWork, acceptanceCriteria } from './model.mjs';
 
@@ -35,7 +35,9 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     lines[0] = { spans: [ss(clip('Projects needs at least 80 columns × 20 rows. Resize, or q to quit.', cols))] };
     return { lines, hits, controls, bodyHeight: 1, maxScroll: 0 };
   }
-  const rail = s.showCheckouts === false ? 0 : cols >= 120 ? 25 : cols >= 100 ? 22 : 18, x = rail + 2, width = cols - x - 2, top = 6, bodyHeight = rows - top - 2;
+  // The project screen keeps a start bar under its body.
+  const bar = s.view === 'overview' && p ? 2 : 0;
+  const rail = s.showCheckouts === false ? 0 : cols >= 120 ? 25 : cols >= 100 ? 22 : 18, x = rail + 2, width = cols - x - 2, top = 6, bodyHeight = rows - top - 2 - bar;
   const put = (y, from, text, fg = 'fg', bg = 'bg', bold = false, limit = cols - from) => {
     if (y < 0 || y >= rows || from >= cols) return;
     limit = Math.max(0, Math.min(limit, cols - from));
@@ -75,7 +77,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('folder', '+ Open folder', rows - 5, 1, rail - 2, 'blue', null, 'panel');
   control('appearance', `D ${s.appearance === 'dark' ? 'Light' : 'Dark'} appearance`, rows - 4, 1, rail - 2, 'muted', null, 'panel');
   control('view:help', '? Keys', rows - 3, 1, rail - 2, 'muted', null, 'panel');
-  put(rows - 2, 1, 'Live · read only', 'muted', 'panel', false, rail - 2);
+  put(rows - 2, 1, 'Live', 'muted', 'panel', false, rail - 2);
   }
 
   if (!rail) control('scope', `${p?.name ?? 'Choose project'} ▾`, 0, x, Math.min(26, width - 35), 'blue');
@@ -87,7 +89,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
   const title = s.view === 'projects' ? 'Your projects' : s.view === 'folder' ? 'Open a folder' : s.view === 'ideas' ? 'Start with an idea' : s.view === 'output' ? space?.label ?? 'Session output' : p?.name ?? 'Start where you are';
-  const action = 'Read only';
+  const action = s.view === 'overview' && p ? 'n Start' : 'Read only';
   put(2, x, title, 'bright', 'bg', true, width - action.length - 2);
   put(2, cols - action.length - 2, action, 'muted', 'bg', false, action.length);
   const errors = Object.entries(s.errors);
@@ -150,7 +152,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     paragraph('The live trial currently opens existing folders and sessions. Idea capture and new-project creation are the next onboarding flow; they are not connected yet.'); row();
     row('Open a folder you already have', { id: 'folder', fg: 'blue' }); row('Browse open projects', { id: 'scope', fg: 'blue' });
   } else if (s.view === 'overview') {
-    body.push(...overviewRows({ model: m, state: s, project: p, width, height: bodyHeight }));
+    body.push(...projectRows({ model: m, state: s, project: p, width, height: bodyHeight }));
   } else if (s.view === 'sessions') {
     section(`Sessions · ${m.sessions.length}`); row(fullRow(compactSessions ? ['Session', 'Who', 'Where', 'State'] : ['Session', 'Who', 'Where', 'Up', 'State', 'Doing']), { fg: 'muted' }); sessionRows(m.sessions);
     if (compactSessions) { row(); paragraph('Open a session for full identity, uptime and activity.'); }
@@ -257,7 +259,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'Click a session for output; its goal/task links open those records.', 'Back restores your project, selection and scroll.', 'For answers and dispatch: org console --project NAME', 'This trial reads live state. No model calls or organization writes.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session for output; its goal/task links open those records.', 'Back restores your project, selection and scroll.', 'For answers and dispatch: org console --project NAME', 'This trial reads live state. Its only writes are the start bar; no model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
@@ -268,10 +270,30 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       lines[y] = { spans: [...cutSpans(lines[y].spans, 0, x + c.col), ...spans, ss(' '.repeat(Math.max(0, c.w - used)), c.fg, c.bg), ...cutSpans(lines[y].spans, x + c.col + c.w, cols)] };
     } else if (visible) put(y, x + c.col, c.text, c.fg, c.bg ?? 'bg', c.bold, c.w);
   }));
+  if (bar) {
+    put(rows - 3, x, '─'.repeat(width), 'rule');
+    const c = s.compose;
+    if (!c) control('compose', '+ Start a chat or task  n', rows - 2, x, 26, 'blue');
+    else {
+      const mode = composeModes(p, s.chatKinds)[c.mode] ?? { kind: 'chat', agent: '?' }, block = currentBlock(m);
+      const w = m.spaces.find(w => w.workspace_id === c.space);
+      const target = mode.kind === 'task' ? (block ? `under ${block.goal.id}` : 'no goal') : `in ${w ? checkoutName(w) : 'no open checkout'}`;
+      const chip = ` ${mode.kind === 'task' ? 'Task' : `Chat · ${mode.agent}`} ${target} `;
+      if (c.busy) put(rows - 2, x, `${mode.kind === 'task' ? 'Adding the task' : `Starting ${mode.agent}`}…`, 'amber', 'bg', true, width);
+      else if (c.confirm) {
+        const said = c.text.trim() ? ` “${c.text.trim()}”` : '';
+        put(rows - 2, x, mode.kind === 'task' ? `Enter again to add task${said} ${target} · Esc edits` : `Enter again to start ${mode.agent} ${target}${said ? ` with${said}` : ''} · Esc edits`, 'amber', 'attentionBg', true, width);
+      } else {
+        control('compose', chip, rows - 2, x, cellWidth(chip), 'bright', null, 'selected', true, 'actions');
+        const room = width - cellWidth(chip) - 1, text = [...c.text], shown = text.slice(Math.max(0, text.length - room + 2)).join('');
+        put(rows - 2, x + cellWidth(chip) + 1, `${shown || ''}▏${shown ? '' : mode.kind === 'task' ? ' what should be done' : ' first message (optional)'}`, shown ? 'bright' : 'muted', 'bg', false, room);
+      }
+    }
+  }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.compose ? ' Type · Tab chat/task · ↑↓ checkout · Enter review · Esc close' : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
-  if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Read only · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
+  if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {
     const entries = pickerEntries(s), left = rail ? 1 : x, upper = rail ? 4 : 1, menuWidth = Math.min(64, cols - left - 2);
     const noMatch = Boolean(s.picker.query) && !entries.some(entry => entry.id.startsWith('project:'));

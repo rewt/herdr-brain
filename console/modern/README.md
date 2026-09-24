@@ -1,7 +1,8 @@
 # Live Projects trial
 
 This is the native-spaces design connected to live org and Herdr data, with
-the September 20 operator-study repairs. It remains a read-only live trial.
+the September 20 operator-study repairs. It is a live trial whose only writes
+are the project screen's start bar: a new chat, or a task under the work block.
 It runs in Ink through `console/app.mjs`; it is not the browser design preview or
 `console/proto` fixture application. Opt in per launch; the existing console
 remains the default and retains all of its operational actions.
@@ -47,6 +48,17 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 
 ## What works
 
+- The project screen (`h`) leads with the work block: an open goal marked
+  `meta.block` (morning, afternoon, overnight), else the goal most current
+  sessions are linked to, labelled as inferred. Its open tasks follow, the ones
+  with a session first, with that session's checkout. Needs you is a short
+  strip. Every session then appears under the checkout it runs in, with the
+  checkout's branch, change count and ahead/behind; checkouts with no agent
+  share one line.
+- The start bar (`n`) starts a chat with a configured agent kind (`chat_kinds`,
+  default claude and codex) in a chosen checkout, as a new Herdr tab, or adds a
+  task under the work block through `org add`. The bar states what will happen
+  and waits for a second Enter; Esc edits, then closes. `--print` never writes.
 - Current project sessions lead the overview. Goals/tasks come from `org status
   --json`; decisions and stopped-session results reuse the existing org/Brain
   read projections. Finished tasks are excluded from the active list.
@@ -104,6 +116,7 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | `r` | Refresh sources |
 | `D` | Switch between the reference's light and dark appearance |
 | `o` | Open selected native terminal in Herdr |
+| `n` | Start bar: type, Tab chat kind/task, Up/Down checkout, Enter to review, Enter again to start, Esc |
 | `?` | Help |
 | `q` | Quit, restoring terminal modes |
 
@@ -116,9 +129,11 @@ show the remaining facts in session detail.
 
 ## Boundaries
 
-This mode has no organizational write, dispatch, reply, model-call, or new-agent
-path. Use `node bin/org.mjs console --project NAME` for current operational
-actions. Nothing invokes those actions as a side effect of opening the trial.
+The start bar is this mode's only write: `org add` through the CLI for a task,
+and `herdr tab create` / `agent start` / `agent prompt` for a chat. Each needs
+the operator's typed text and a second Enter. It has no answer, dispatch or
+model-call path. Use `node bin/org.mjs console --project NAME` for answers and
+dispatch. Nothing writes as a side effect of opening or navigating the trial.
 
 Goal/session associations use recorded run data. A title resemblance does not
 establish a link; unmatched sessions say Unlinked and older recorded associations
@@ -130,8 +145,8 @@ files and project files remain unchanged. Idea capture, new folders, project
 registration, chat creation, and new-shell write workflows are follow-on work in
 the [onboarding design](../../docs/design/console-projects-onboarding-2026-09-20.md).
 The browser URL on port 8765 remains a captured-data design preview.
-Unimplemented Instruct/Chat/Goal creation controls are omitted from the live
-header, which states Read only. The existing `herdr brain` brand is retained
+Goal creation is not connected; the header offers `n Start` on the project
+screen and states Read only elsewhere. The existing `herdr brain` brand is retained
 while Projects remains a naming recommendation. Daily/weekly planning is
 specified in the [backlog review design](../../docs/design/console-backlog-review-2026-09-20.md);
 no scheduler or autonomous backlog mutation is enabled by this trial.

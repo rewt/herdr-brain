@@ -210,43 +210,10 @@ test('overview purpose links open their records and Back restores the exact link
     await session.activate('back'); assert.equal(session.ui.focus, hit.id);
   }
   const f = session.frame(140, 42);
-  const y = f.hits.findIndex(h => h.some(x => x.id.startsWith('link-space:')));
-  const hit = f.hits[y].find(x => x.id.startsWith('link-space:'));
+  const y = f.hits.findIndex(h => h.some(x => x.id.startsWith('link-space:a-work')));
+  const hit = f.hits[y].find(x => x.id.startsWith('link-space:a-work'));
   await session.mouse({ x: hit.from, y, button: 'left', press: true });
   assert.equal(session.ui.space, 'a-work'); assert.equal(reads.at(-1).pane, 'a-work:p1');
-});
-
-test('overview keeps goal surfaces and attention under grouped tasks; narrow layouts stack', async () => {
-  const { session, items } = fixture();
-  items.push({ id: 'ENG-3', kind: 'task', role: 'engineer', title: 'Another outcome', status: 'blocked', parent: null });
-  await session.refresh();
-  const f = session.frame(140, 42);
-  const goalsY = f.hits.findIndex(h => h.some(x => x.id === 'view:goals' && x.from > 25 && x.to > x.from + 10));
-  const groupY = f.hits.findIndex(h => h.some(x => x.id === 'link-item:G-1|task-group'));
-  const needY = f.lines.findIndex(l => lineText(l).includes('Needs you ·'));
-  assert.ok(groupY > goalsY); assert.ok(needY > groupY);
-  const need = f.hits[needY].find(h => h.id === 'view:needs');
-  const goal = f.hits.flat().find(h => h.id === 'item:G-1');
-  assert.ok(need.from > goal.to);
-  assert.ok(f.lines.some(l => l.spans.some(s => s.bg === 'goalBg' && s.text.includes('Ship the result'))));
-  assert.ok(f.lines[needY].spans.some(s => s.bg === 'attentionBg'));
-  assert.match(rendered(session, 100, 42), /No goal assigned/);
-  const narrow = session.frame(100, 42);
-  const narrowGoal = narrow.hits.flat().find(h => h.id === 'item:G-1');
-  const taskGroup = narrow.hits.flat().find(h => h.id === 'link-item:G-1|task-group');
-  assert.equal(narrowGoal.from, taskGroup.from);
-});
-
-test('overview retains access to every session and task when live data exceeds its summary', async () => {
-  const { session, agents, items } = fixture();
-  for (let i = 2; i <= 30; i++) agents.push({ ...agents[0], pane: `a-work:p${i}`, name: `worker${i}` });
-  for (let i = 4; i <= 30; i++) items.push({ ...items[1], id: `ENG-${i}` });
-  await session.refresh();
-  assert.match(rendered(session, 140, 42), /8 of 30 shown/);
-  assert.match(rendered(session, 140, 42), /Showing 6 of 28/);
-  await session.activate('view:sessions');
-  let f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('session:')).length, 30);
-  await session.key('t'); f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('item:')).length, 28);
 });
 
 test('appearance changes preserve navigation and unsupported preview actions have an honest handoff', async () => {
@@ -296,13 +263,6 @@ test('goal readers put current descendant sessions first and render acceptance a
   assert.ok(text.indexOf('worker') < text.indexOf('Long note'));
   items[0].accept = ['First useful check', 'Second useful check']; await session.refresh(); text = rendered(session, 100, 32);
   assert.match(text, /1\. First useful check/); assert.match(text, /2\. Second useful check/);
-});
-
-test('compact overview keeps each work category visible despite a large live backlog', async () => {
-  const { session, agents, items } = fixture();
-  for (let n = 2; n <= 15; n++) { agents.push({ ...agents[0], name: `agent${n}`, pane: `a-work:p${n}` }); items.push({ ...items[0], id: `G-${n}`, title: `Goal ${n}` }); }
-  await session.refresh(); const text = rendered(session, 80, 24);
-  assert.match(text, /Sessions · 15/); assert.match(text, /Goals/); assert.match(text, /Tasks ·/); assert.match(text, /Needs you ·/);
 });
 
 test('native observer keeps latest rows visible, pans locally, and cancels on routes and stop', async () => {
@@ -420,4 +380,60 @@ test('Needs folds session results that the org resolved, replaced, only reported
   assert.match(text, /Needs you · 4/); assert.match(text, /Resolved 2/); assert.match(text, /Ended sessions 1/); assert.match(text, /Reports 1/);
   await session.activate('view:resolved'); await session.activate(`need:${m.resolved[0].key}`); text = rendered(session);
   assert.match(text, /Folded · /);
+});
+
+test('project screen leads with the work block and its linked tasks, then sessions by checkout', async () => {
+  const { session, items } = fixture(); await session.refresh(); session.ui.showCheckouts = false;
+  const f = session.frame(140, 42), lines = f.lines.map(lineText), at = re => lines.findIndex(l => re.test(l));
+  assert.match(lines[at(/Now · G-1/)], /Ship the result/); assert.ok(at(/Inferred from linked sessions/) > 0);
+  assert.match(lines[at(/ENG-1/)], /●/); assert.ok(!lines.some(l => /ENG-2/.test(l)), 'finished tasks stay out');
+  assert.ok(at(/Now · G-1/) < at(/Checkouts · 2/)); assert.ok(at(/Checkouts · 2/) < at(/Main checkout/));
+  assert.ok(at(/Main checkout/) < at(/^\s+a-lane/)); assert.ok(at(/^\s+a-lane/) < at(/worker/));
+  assert.ok(f.controls.some(c => c.id === 'session:a-work:p1'));
+  // A goal marked as a block is the block by declaration, whatever sessions say.
+  items.push({ id: 'G-2', kind: 'goal', title: 'Afternoon: tidy the docs', status: 'open', parent: null, meta: { block: 'afternoon' }, notes: [] });
+  await session.refresh(); assert.match(rendered(session, 140, 42), /Block · afternoon · G-2 · Afternoon: tidy the docs/);
+});
+
+test('project screen keeps every session and task reachable when live data exceeds it', async () => {
+  const { session, agents, items } = fixture();
+  for (let i = 2; i <= 30; i++) agents.push({ ...agents[0], pane: `a-work:p${i}`, name: `worker${i}` });
+  for (let i = 4; i <= 30; i++) items.push({ ...items[1], id: `ENG-${i}` });
+  await session.refresh();
+  let f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('session:')).length, 30);
+  assert.match(rendered(session, 140, 42), /of 28 tasks under G-1 · all tasks/);
+  await session.key('t'); f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('item:')).length, 28);
+  await session.key('h');
+  assert.match(rendered(session, 80, 24), /Now · G-1/); assert.match(rendered(session, 80, 24), /Start a chat or task/);
+});
+
+test('start bar starts a chat or records a task only after a second Enter', async () => {
+  const chats = [], tasks = [];
+  const { session } = fixture({ herdrStartChat: async r => { chats.push(r); return { ok: true, pane: 'a:p7', name: r.name }; }, orgAdd: async (p, r) => { tasks.push([p.name, r]); return { ok: true, id: 'W-9' }; } });
+  await session.refresh(); session.frame(140, 42);
+  const type = async text => { for (const ch of text) await session.key(ch, {}); };
+  await session.key('n'); assert.ok(session.ui.compose); await type('hi there');
+  await session.key('', { escape: true }); assert.equal(session.ui.compose, null, 'Esc closes before anything is sent');
+  await session.key('n'); await type('hi'); await session.key('', { return: true });
+  assert.match(rendered(session, 140, 42), /Enter again to start claude in Main checkout with “hi”/); assert.deepEqual(chats, []);
+  await session.key('', { return: true });
+  assert.deepEqual(chats.map(c => [c.workspace, c.cwd, c.kind, c.prompt]), [['a', '/a', 'claude', 'hi']]);
+  assert.equal(session.ui.compose, null); assert.match(session.ui.message, /Started claude in Main checkout/);
+  // Down picks the next checkout; Tab moves from claude to codex to a task under the block.
+  await session.key('n'); await session.key('', { downArrow: true }); await session.key('', { tab: true });
+  assert.match(rendered(session, 140, 42), /Chat · codex in a-lane/);
+  await session.key('', { tab: true }); await type('Write the docs'); await session.key('', { return: true });
+  assert.match(rendered(session, 140, 42), /Enter again to add task “Write the docs” under G-1/);
+  await session.key('', { return: true });
+  assert.deepEqual(tasks, [['Alpha', { title: 'Write the docs', parent: 'G-1' }]]); assert.match(session.ui.message, /Added W-9 under G-1/);
+  // A task needs words; a failed start keeps what was typed.
+  await session.key('n'); await session.key('', { tab: true }); await session.key('', { tab: true }); await session.key('', { return: true });
+  assert.match(session.ui.message, /Type the task first/); assert.equal(tasks.length, 1);
+});
+
+test('a folder without an organization offers chats only', async () => {
+  const { session } = fixture(); await session.refresh();
+  session.ui.projects.find(p => p.name === 'Alpha').org = null;
+  await session.key('n'); await session.key('', { tab: true }); await session.key('', { tab: true });
+  assert.match(rendered(session, 140, 42), /Chat · claude/);
 });

@@ -51,8 +51,8 @@ export function catalog(configured, workspaces, identity, opened = [], agents = 
   return result;
 }
 
-export function projectView(project, data, identity) {
-  const empty = { sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
+export function projectView(project, data, identity, now = Date.now()) {
+  const empty = { sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
   if (!project) return empty;
   const spaces = data.workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey && project.repoKey);
   const spacesById = new Map(spaces.map(w => [w.workspace_id, w]));
@@ -88,14 +88,44 @@ export function projectView(project, data, identity) {
     const label = r.data?.project;
     return Boolean(project.configured && label && label !== 'other' && label === project.name);
   };
-  const waiting = board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i)));
+  const waiting = settle(board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i))), itemsById,
+    { live: new Set(data.agents.map(a => a.pane)), now });
   return { ...empty, items, itemsById, board, sessions, spaces, tabs,
     goals: items.filter(i => i.kind === 'goal' && !i.closed),
     tasks: items.filter(i => i.kind !== 'goal' && i.role !== 'human' && !['done', 'dropped'].includes(i.status)).map(i => ({ ...i, goal: goalOf(i) })),
     needs: waiting.filter(i => !i.foldedIn),
-    later: waiting.filter(i => i.foldedIn === 'later'), parked: waiting.filter(i => i.foldedIn === 'stages'), allNeeds: waiting,
+    later: waiting.filter(i => i.foldedIn === 'later'), parked: waiting.filter(i => i.foldedIn === 'stages'),
+    resolved: waiting.filter(i => i.foldedIn === 'resolved'), reports: waiting.filter(i => i.foldedIn === 'reports'),
+    ended: waiting.filter(i => i.foldedIn === 'ended'), allNeeds: waiting,
     elsewhere,
   };
+}
+
+const closedItem = item => Boolean(item && (item.closed || ['done', 'dropped'].includes(item.status)));
+
+// A session's result stays in Needs you only while it still asks something
+// open. One whose org item has closed, or an older one about the same item, is
+// resolved; one that reports without asking is a report. A question with no
+// org record whose session ended over a day ago is unowned: nobody will act on
+// it unless the operator raises it. All remain readable, folded out of the
+// queue. Org questions are the org's own and never fold here.
+export const ENDED_AFTER_MS = 24 * 60 * 60 * 1000;
+export function settle(waiting, itemsById, { live = new Set(), now = Date.now() } = {}) {
+  const newest = new Map();
+  for (const r of waiting) {
+    const item = r.kind === 'result' && r.data?.digest?.item;
+    if (item && !(newest.get(item)?.data?.at > r.data?.at)) newest.set(item, r);
+  }
+  return waiting.map(r => {
+    // A reply that never left its prompt box is the operator's own words; it stays.
+    if (r.kind !== 'result' || r.foldedIn || r.category === 'stranded') return r;
+    const id = r.data?.digest?.item, item = itemsById.get(id);
+    if (closedItem(item)) return { ...r, foldedIn: 'resolved', settled: `${item.id} is ${item.status === 'dropped' ? 'dropped' : 'closed'} in the organization.` };
+    if (id && newest.get(id) !== r) return { ...r, foldedIn: 'resolved', settled: `A newer session result about ${id} replaces this one.` };
+    if (['report', 'finished'].includes(r.category) || r.data?.digest?.needs_you === false) return { ...r, foldedIn: 'reports', settled: 'This session reported without asking for a decision.' };
+    if (!id && !live.has(r.data?.pane) && now - Date.parse(r.data?.at) > ENDED_AFTER_MS) return { ...r, foldedIn: 'ended', settled: 'Its session has ended and no org item records this question. Raise it in the org if it still matters.' };
+    return r;
+  });
 }
 
 export function folderPath(input) {

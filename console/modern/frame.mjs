@@ -14,6 +14,15 @@ export const MODERN_PALETTES = {
   dark: { bg: '#121b28', panel: '#19283c', selected: '#29466a', fg: '#e0e8f4', bright: '#e0e8f4', muted: '#a5b7cf', faint: '#a5b7cf', rule: '#34465f', blue: '#9bc7ff', band: '#203550', goal: '#b9c7f9', goalBg: '#1d273c', amber: '#efc887', attentionBg: '#392e1d', teal: '#79d2c2' },
 };
 export const MODERN_PALETTE = MODERN_PALETTES.light;
+// Needs you, then the groups folded out of it; each stays one keypress away.
+export const NEED_FOLDS = [
+  { view: 'needs', list: 'needs', title: 'Needs you', label: 'Open' },
+  { view: 'resolved', list: 'resolved', title: 'Resolved in the org', label: 'Resolved', about: 'Session questions whose org item has closed, or that a newer result about the same item replaced.' },
+  { view: 'ended', list: 'ended', title: 'Ended sessions', label: 'Ended sessions', about: 'Questions from sessions that ended over a day ago, with no org item recording them.' },
+  { view: 'reports', list: 'reports', title: 'Session reports', label: 'Reports', about: 'Sessions that finished and reported without asking for a decision.' },
+  { view: 'later', list: 'later', title: 'Saved for later', label: 'Saved for later' },
+  { view: 'parked', list: 'parked', title: 'Future stages', label: 'Future stages' },
+];
 const clean = text => sanitize(String(text ?? ''));
 const age = (at, now) => at ? `${Math.max(0, Math.floor((now - at) / 1000))}s ago` : 'not loaded';
 const ss = (text, fg = 'fg', bg = 'bg', bold = false) => ({ text: clean(text), fg, bg, bold });
@@ -88,7 +97,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     let tx = x;
     for (const [id, label] of [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['needs', `Needs you ${m.needs.length}`]]) {
       control(`view:${id}`, label, 4, tx, label.length + 2, id === 'needs' ? 'amber' : 'fg');
-      if (s.view === id) put(5, tx, '━'.repeat(label.length), 'blue', 'bg', false, label.length);
+      if (s.view === id || (id === 'needs' && NEED_FOLDS.some(f => f.view === s.view))) put(5, tx, '━'.repeat(label.length), 'blue', 'bg', false, label.length);
       tx += label.length + 3;
     }
     if (width >= 70) control('checkouts', rail ? 'w Hide checkouts' : 'w Checkouts', 4, cols - 18, 16, 'muted');
@@ -115,7 +124,13 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   };
   const sessionRows = list => list.forEach(a => row(sessionLabel(a), { id: `session:${a.pane}`, fg: a.state === 'working' ? 'teal' : a.state === 'blocked' ? 'amber' : 'fg' }));
   const itemRow = i => row(`${pad(i.id, 8)} ${pad(i.status, 8)} ${clip(i.title, width - 18)}`, { id: `item:${i.id}`, fg: i.status === 'blocked' ? 'amber' : i.kind === 'goal' ? 'goal' : 'fg' });
-  const needRow = n => row(`${n.handle ?? n.question ?? n.session ?? 'Decision'}  ${n.title ?? n.headline}${n.later ? ' · later' : ''}`, { id: `need:${n.key}`, fg: 'amber' });
+  // A result reads by its digest, not the screen text it was scraped from.
+  const needText = n => { const g = n.data?.digest; return g?.question ?? g?.gist ?? g?.what_happened ?? n.title ?? n.headline; };
+  const needRow = n => {
+    const when = n.data?.at ? new Date(n.data.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    const label = n.handle ?? n.data?.tab_label ?? n.session ?? n.question ?? 'Decision';
+    return row(`${pad(clip(label, 16), 16)} ${n.foldedIn ? pad(when, 7) : ''}${needText(n)}${n.later ? ' · later' : ''}`, { id: `need:${n.key}`, fg: n.foldedIn ? 'fg' : 'amber' });
+  };
   if (s.view === 'projects' || (!p && s.view === 'overview')) {
     section('Continue a project');
     for (const project of s.projects) {
@@ -144,10 +159,11 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const list = s.view === 'goals' ? m.goals : m.tasks;
     section(`${s.view === 'goals' ? 'Goals' : 'Tasks'} · ${list.length}`, s.view === 'goals' ? 'goal' : 'blue'); list.forEach(itemRow);
     if (!list.length) paragraph(s.errors.status ? 'Organization data is unavailable. Refresh to reconnect.' : p?.org ? 'Nothing defined yet. Explore first; structure can follow.' : 'No organization connected. Goals and tasks require project setup, which is not connected in this trial. Open a folder or inspect an existing Herdr conversation first.');
-  } else if (['needs', 'later', 'parked'].includes(s.view)) {
-    const list = s.view === 'later' ? m.later : s.view === 'parked' ? m.parked : m.needs;
-    section(`${s.view === 'later' ? 'Saved for later' : s.view === 'parked' ? 'Future stages' : 'Needs you'} · ${list.length}`, 'amber'); list.forEach(needRow); if (!list.length) paragraph('Nothing here.');
-    row(); row(`Open ${m.needs.length}`, { id: 'view:needs', fg: 'amber' }); row(`Saved for later ${m.later.length}`, { id: 'view:later', fg: 'amber' }); row(`Future stages ${m.parked.length}`, { id: 'view:parked', fg: 'muted' });
+  } else if (NEED_FOLDS.some(f => f.view === s.view)) {
+    const fold = NEED_FOLDS.find(f => f.view === s.view), list = m[fold.list];
+    section(`${fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
+    list.forEach(needRow); if (!list.length) paragraph('Nothing here.');
+    row(); for (const f of NEED_FOLDS) if (f.view === 'needs' || m[f.list].length) row(`${f.view === s.view ? '▸ ' : '  '}${f.label} ${m[f.list].length}`, { id: `view:${f.view}`, fg: f.view === 'needs' ? 'amber' : 'muted' });
   } else if (s.view === 'item') {
     const i = m.itemsById.get(s.detail);
     if (!i) paragraph('This item is no longer available in the current project.');
@@ -174,6 +190,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const n = m.allNeeds.find(n => n.key === s.detail);
     if (!n) paragraph('This item has left the queue. Return to Needs you for the current list.');
     else { section(n.handle ?? n.question ?? n.session ?? 'Decision', 'amber'); paragraph(n.title ?? n.headline, 'fg'); row();
+      if (n.settled) { paragraph(`Folded · ${n.settled}`, 'teal'); row(); }
       paragraph(n.data?.why ?? n.gist ?? n.data?.summary ?? n.data?.digest?.question ?? '');
       if (n.data?.recommend) paragraph(`Recommendation: ${n.data.recommend}`);
       for (const option of n.options ?? []) paragraph(`${option.label ?? option.key} — ${option.text ?? ''}`);

@@ -199,6 +199,29 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       row(); paragraph('Answer using the existing console for this project. This live trial is read only.');
       if (p?.name) paragraph(`org console --project ${p.name}`);
     }
+  } else if (s.view === 'output' && s.interactive && s.pane) {
+    // Interactive: one line of identity and the way back, then the session's own
+    // terminal, sized by Herdr to exactly this area, with its cursor.
+    const active = m.sessions.find(a => a.pane === s.pane), task = m.itemsById.get(active?.task), goal = m.itemsById.get(active?.goal);
+    const who = `${active?.who?.tool ?? 'Agent'} ${active?.session ?? s.pane} · ${active?.state ?? 'unknown'}${goal ? ` · ${goal.id}` : ''}${task ? ` › ${task.id} ${task.title}` : ''}`;
+    body.push([{ text: ' ‹ Back  Ctrl+] ', id: 'back', fg: 'blue', bold: true, col: 0, w: 16, bg: 'selected', region: 'actions' },
+      { text: who, col: 17, w: width - 17, fg: 'muted', bg: 'bg', region: 'actions' }]);
+    bodyRegion = 'terminal';
+    if (s.outputError) paragraph(s.outputError, 'amber');
+    const available = Math.max(1, bodyHeight - body.length);
+    s.screenViewport = { cols: width, rows: available };
+    const screen = s.terminalFrame;
+    if (!screen) row(' Taking the terminal from Herdr…', { fg: 'terminalFg', bg: 'terminalBg' });
+    else {
+      const start = Math.max(0, screen.height - available), shownWidth = Math.min(screen.width, width), cursor = screen.cursor;
+      screen.lines.slice(start).forEach((line, i) => {
+        let grid = cropTerminalSpans(line.spans, 0, shownWidth);
+        if (cursor?.visible && cursor.y === start + i && cursor.x < shownWidth) {
+          grid = [...cutSpans(grid, 0, cursor.x), ...cutSpans(grid, cursor.x, cursor.x + 1).map(c => ({ ...c, inverse: !c.inverse })), ...cutSpans(grid, cursor.x + 1, shownWidth)];
+        }
+        row('', { bg: 'terminalBg', native: true, spans: [...grid, ...(width > shownWidth ? [ss(' '.repeat(width - shownWidth), 'terminalFg', 'terminalBg')] : [])] });
+      });
+    }
   } else if (s.view === 'output') {
     const agents = m.sessions.filter(a => a.tab === s.tab), active = agents.find(a => a.pane === s.pane);
     const task = m.itemsById.get(active?.task), goal = m.itemsById.get(active?.goal);
@@ -223,7 +246,8 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       else paragraph('Shell tab · open the native terminal to interact.');
     } else {
       const mirror = s.outputMode !== 'transcript';
-      row(`o  Open live ${active?.who?.tool ?? 'agent'} terminal in Herdr`, { id: 'go', fg: 'blue', bold: true });
+      row('i  Type into this session here', { id: 'interact', fg: 'blue', bold: true });
+      row(`o  Open live ${active?.who?.tool ?? 'agent'} terminal in Herdr`, { id: 'go', fg: 'blue' });
       row(`${s.pane} · ${active?.session ?? 'Session unavailable'} · ${active?.state ?? 'unknown'} · up ${active?.up ?? 'unknown'}`, { fg: 'muted' });
       if (s.outputError) paragraph(s.outputError, 'amber');
       section(mirror ? `Live screen · read only · ${age(s.outputAt, now)}` : `Transcript · plain text · ${age(s.outputAt, now)}`, 'teal');
@@ -255,11 +279,11 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
         const end = out.length - s.outputScroll, start = Math.max(0, end - available);
         for (const line of out.slice(start, end)) row(` ${clip(line, width - 2)}`, { fg: 'terminalFg', bg: 'terminalBg' });
       }
-      row(mirror ? 'Shift+arrows pan · l Transcript · o Native for input · read only' : `v Live screen · PageUp/PageDown transcript${s.outputScroll ? ` · ↑ ${s.outputScroll} lines above latest` : ''}`, { fg: 'muted' });
+      row(mirror ? 'i Type here · Shift+arrows pan · l Transcript · o Native terminal' : `v Live screen · PageUp/PageDown transcript${s.outputScroll ? ` · ↑ ${s.outputScroll} lines above latest` : ''}`, { fg: 'muted' });
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session for output; its goal/task links open those records.', 'Back restores your project, selection and scroll.', 'For answers and dispatch: org console --project NAME', 'This trial reads live state. Its only writes are the start bar; no model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'For answers and dispatch: org console --project NAME', 'Writes: the start bar, and what you type into a session. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
@@ -291,7 +315,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.compose ? ' Type · Tab chat/task · ↑↓ checkout · Enter review · Esc close' : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.compose ? ' Type · Tab chat/task · ↑↓ checkout · Enter review · Esc close' : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

@@ -437,3 +437,36 @@ test('a folder without an organization offers chats only', async () => {
   await session.key('n'); await session.key('', { tab: true }); await session.key('', { tab: true });
   assert.match(rendered(session, 140, 42), /Chat · claude/);
 });
+
+test('opening a session types into it here, and Ctrl+] or Back releases it and returns', async () => {
+  const controllers = [];
+  const controlTerminal = options => { const c = { ...options, inputs: [], sizes: [], released: false, input(b) { c.inputs.push(Buffer.from(b).toString()); }, resize(cols, rows) { c.sizes.push([cols, rows]); }, scroll() {}, release() { c.released = true; }, stop() { c.released = true; } }; controllers.push(c); return c; };
+  const { session } = fixture({ controlTerminal }); await session.refresh(); session.frame(140, 42);
+  await session.key('s'); await session.key('', { return: true });
+  assert.equal(session.ui.view, 'output'); assert.equal(session.ui.interactive, true);
+  const c = controllers[0]; assert.equal(c.pane, 'a-work:p1');
+  c.onFrame({ width: 20, height: 2, seq: 1, cursor: { x: 2, y: 1, visible: true }, lines: [{ spans: [{ text: 'AGENT SCREEN'.padEnd(20), fg: 'terminalFg', bg: 'terminalBg' }] }, { spans: [{ text: '> '.padEnd(20), fg: 'terminalFg', bg: 'terminalBg' }] }] });
+  const f = session.frame(140, 42), text = f.lines.map(lineText).join('\n');
+  assert.match(text, /‹ Back {2}Ctrl\+\]/); assert.match(text, /AGENT SCREEN/); assert.match(text, /Typing goes to this session/);
+  assert.ok(f.lines.some(l => l.spans.some(s => s.inverse)), 'the session cursor is drawn');
+  assert.deepEqual(c.sizes.at(-1), [session.ui.screenViewport.cols, session.ui.screenViewport.rows], 'Herdr sizes the terminal to the console area');
+  // Console keys belong to the session now; q does not quit.
+  assert.equal(await session.key('q', {}), false); assert.equal(session.ui.view, 'output');
+  await session.input('hello\r\x1b[<0;3;3M'); assert.deepEqual(c.inputs, ['hello\r']);
+  await session.input('\x1d'); assert.equal(c.released, true);
+  assert.equal(session.ui.view, 'sessions'); assert.equal(session.ui.interactive, false);
+  // Forward returns to typing; i re-enters a watched session; Back from a click works too.
+  await session.activate('forward'); assert.equal(session.ui.interactive, true); assert.equal(controllers.length, 2);
+  await session.activate('back'); assert.equal(controllers[1].released, true);
+  await session.activate('forward'); session.ui.interactive = false; await session.key('i'); assert.equal(session.ui.interactive, true);
+  assert.equal(await session.key('c', { ctrl: true }), false, 'Ctrl-C reaches the session');
+  await session.activate('back'); assert.equal(await session.key('c', { ctrl: true }), true, 'outside a session Ctrl-C quits');
+});
+
+test('a controller Herdr hands elsewhere drops back to watching with a way to retype', async () => {
+  const controllers = [];
+  const { session } = fixture({ controlTerminal: o => { const c = { ...o, stop() {}, release() {} }; controllers.push(c); return c; } });
+  await session.refresh(); await session.activate('session:a-work:p1');
+  controllers[0].onClose('detached'); assert.equal(session.ui.interactive, false); assert.match(session.ui.message, /Press i/);
+  await session.activate('interact'); controllers[1].onError('refused'); assert.match(session.ui.outputError, /Cannot type into this session: refused/);
+});

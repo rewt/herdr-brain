@@ -1,20 +1,21 @@
 // A read-only Herdr observer. ANSI is decoded into cells, never written to our
-// terminal. This deliberately has no input, focus, attach, control or resize API.
+// terminal. This deliberately has no input, focus, attach, control or resize API;
+// typing into a session is control.mjs, which the operator enters explicitly.
 import { spawn } from 'node:child_process';
 import { charWidth, sanitize } from '../lib/text.mjs';
 
 const MAX_BYTES = 4 * 1024 * 1024;
-const MAX_LINE = Math.ceil(MAX_BYTES / 3) * 4 + 1024;
+export const MAX_LINE = Math.ceil(MAX_BYTES / 3) * 4 + 1024;
 const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
 const baseColors = ['#000000', '#cd0000', '#00cd00', '#cdcd00', '#0000ee', '#cd00cd', '#00cdcd', '#e5e5e5', '#7f7f7f', '#ff0000', '#00ff00', '#ffff00', '#5c5cff', '#ff00ff', '#00ffff', '#ffffff'];
 const defaults = () => ({ fg: 'terminalFg', bg: 'terminalBg', bold: false, dim: false, italic: false, underline: false, inverse: false, strikethrough: false, hidden: false });
 const integer = (n, max) => Number.isSafeInteger(n) && n > 0 && n <= max;
-const validPane = pane => typeof pane === 'string' && /^w[^\s:]+:p[^\s:]+$/.test(pane) && pane.length <= 128 && !/[\x00-\x1f\x7f]/.test(pane);
+export const validPane = pane => typeof pane === 'string' && /^w[^\s:]+:p[^\s:]+$/.test(pane) && pane.length <= 128 && !/[\x00-\x1f\x7f]/.test(pane);
 // Children still running when this process exits. A SIGTERM grace timer cannot
 // fire after exit, so exit sends SIGKILL to whatever has not closed yet.
 const live = new Set();
 let exitHook = false;
-function track(child) {
+export function track(child) {
   live.add(child); child.once?.('close', () => live.delete(child));
   if (!exitHook) { exitHook = true; process.once('exit', () => { for (const c of live) try { c.kill('SIGKILL'); } catch {} }); }
   return child;
@@ -64,7 +65,7 @@ export function cropTerminalSpans(spans, left, width) {
  * Returned grids are independent immutable-by-convention snapshots, not PTYs.
  * Gaps in differential frames fail visibly; a full frame can resynchronize. */
 export function createTerminalDecoder() {
-  let width = 0, height = 0, seq = 0, cells = [], x = 0, y = 0, saved = null, style = defaults();
+  let width = 0, height = 0, seq = 0, cells = [], x = 0, y = 0, saved = null, style = defaults(), cursorVisible = true;
   const blank = () => ({ text: ' ', width: 1, style: { ...style } });
   function clearCell(col, row) {
     if (col < 0 || col >= width || row < 0 || row >= height) return;
@@ -138,7 +139,7 @@ export function createTerminalDecoder() {
     }
   }
   function csi(raw, final) {
-    if ((final === 'h' || final === 'l') && /^[?\d;]*$/.test(raw)) return;
+    if ((final === 'h' || final === 'l') && /^[?\d;]*$/.test(raw)) { if (/^\?(\d+;)*25(;\d+)*$/.test(raw)) cursorVisible = final === 'h'; return; }
     if (final === 'q' && /^\d* $/.test(raw)) return; // cursor shape
     if (final === 'm') { sgr(raw); return; }
     if (!/^[\d;]*$/.test(raw)) throw Error('Unsupported terminal control');
@@ -219,7 +220,7 @@ export function createTerminalDecoder() {
       if (bytes.toString('base64') !== frame.bytes) throw Error('Unsupported Herdr terminal frame encoding');
       if (bytes.length > MAX_BYTES) throw Error('Herdr terminal frame is too large');
       const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-      if (frame.full) { width = frame.width; height = frame.height; x = 0; y = 0; saved = null; style = defaults(); cells = Array.from({ length: width * height }, blank); }
+      if (frame.full) { width = frame.width; height = frame.height; x = 0; y = 0; saved = null; style = defaults(); cursorVisible = true; cells = Array.from({ length: width * height }, blank); }
       decodeAnsi(text); seq = frame.seq;
       const lines = [];
       for (let row = 0; row < height; row++) {
@@ -232,7 +233,7 @@ export function createTerminalDecoder() {
         }
         lines.push({ spans });
       }
-      return { width, height, seq, lines };
+      return { width, height, seq, lines, cursor: { x, y, visible: cursorVisible } };
     },
   };
 }

@@ -8,6 +8,7 @@ import { renderModern } from './frame.mjs';
 import { checkoutName, checkoutOrder, composeModes, currentBlock } from './project.mjs';
 import { moveRegion, moveWithin, pickerEntries } from './navigation.mjs';
 import { observeTerminal } from './terminal.mjs';
+import { controlTerminal, splitInput } from './control.mjs';
 const exec = promisify(execFile);
 
 async function gitSummary(cwd) {
@@ -20,7 +21,7 @@ async function gitSummary(cwd) {
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
     herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, gitSummary, folderPath,
-    observeTerminal: deps.herdrRead ? null : observeTerminal,
+    observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
   const data = { workspaces: [], tabs: [], agents: [], today: null, status: null, brain: { rows: [], off: true } };
   const s = { projects: [], projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
@@ -28,17 +29,42 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     appearance: env.HERDR_CONSOLE_THEME === 'dark' ? 'dark' : 'light',
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
     picker: null, regionFocus: {}, outputX: 0, screenScroll: 0,
-    outputMode: 'mirror', terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },
+    outputMode: 'mirror', interactive: false, terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },
     history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, checkoutGit: {}, compose: null, chatKinds: config.chat_kinds ?? ['claude', 'codex'], message: '',
     frame: null, stopped: false, timer: null, outputTimer: null, pending: null, generation: 0, reading: false, loading: true };
   const project = () => s.projects.find(p => p.id === s.projectId) ?? null;
   const model = () => projectView(project(), data, d.identity, d.now());
-  const route = () => ({ projectId: s.projectId, view: s.view, detail: s.detail, space: s.space, tab: s.tab, pane: s.pane, focus: s.focus, scroll: s.scroll, outputScroll: s.outputScroll, outputMode: s.outputMode, outputX: s.outputX, screenScroll: s.screenScroll, text: s.text });
+  const route = () => ({ projectId: s.projectId, view: s.view, detail: s.detail, space: s.space, tab: s.tab, pane: s.pane, interactive: s.interactive, focus: s.focus, scroll: s.scroll, outputScroll: s.outputScroll, outputMode: s.outputMode, outputX: s.outputX, screenScroll: s.screenScroll, text: s.text });
   const routeKey = r => JSON.stringify([r.projectId, r.view, r.detail, r.view === 'output' ? [r.space, r.tab, r.pane] : null]);
   const changed = () => { if (!s.stopped) onChange(); };
-  let observer = null, observerKey = null, observerRetryAt = 0, observerEpoch = 0;
-  function stopObserver() { observerEpoch++; observerKey = null; observer?.stop(); observer = null; }
+  let observer = null, observerKey = null, observerRetryAt = 0, observerEpoch = 0, controlSize = null;
+  function stopObserver() { observerEpoch++; observerKey = null; controlSize = null; observer?.stop(); observer = null; }
+  // Interactive: the console holds Herdr's control stream for the pane, sized to
+  // its own terminal area, so the session redraws to fit and takes typing.
+  function ensureController() {
+    if (s.view !== 'output' || !s.pane || s.stopped) return;
+    if (s.errors.agents || s.errors.tabs || s.errors.workspaces || !model().sessions.some(a => a.pane === s.pane && a.tab === s.tab)) { stopObserver(); s.interactive = false; return; }
+    const key = `control:${s.pane}`;
+    if (key === observerKey || d.now() < observerRetryAt) return;
+    const size = s.screenViewport ?? { cols: Math.max(20, s.dimensions.cols - 30), rows: Math.max(5, s.dimensions.rows - 12) };
+    stopObserver(); observerKey = key; controlSize = `${size.cols}x${size.rows}`;
+    const generation = s.generation, epoch = observerEpoch, live = () => !s.stopped && observerKey === key && generation === s.generation && epoch === observerEpoch;
+    observer = d.controlTerminal({ pane: s.pane, cols: size.cols, rows: size.rows,
+      onFrame(frame) { if (!live()) return; s.terminalFrame = frame; s.outputAt = d.now(); s.outputError = null; changed(); },
+      onError(error) {
+        if (!live()) return;
+        s.outputError = `Cannot type into this session: ${error?.message ?? error}. Press i to retry, or o for the native terminal.`;
+        s.interactive = false; observerRetryAt = d.now() + 2000; stopObserver(); changed(); readOutput();
+      },
+      onClose(reason) {
+        if (!live()) return;
+        s.message = `Herdr handed this terminal elsewhere (${reason}). Press i to type into it again.`;
+        s.interactive = false; stopObserver(); changed(); readOutput();
+      },
+    });
+  }
   function ensureObserver() {
+    if (s.interactive && d.controlTerminal) return ensureController();
     if (!d.observeTerminal || s.outputMode !== 'mirror' || s.view !== 'output' || !s.pane || s.stopped) return;
     if (s.errors.agents || s.errors.tabs || s.errors.workspaces || !model().sessions.some(a => a.pane === s.pane && a.tab === s.tab)) { stopObserver(); return; }
     const key = s.pane;
@@ -62,7 +88,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     const before = route(), after = { ...before, ...next };
     if (routeKey(before) === routeKey(after)) return;
     s.history.push(before); s.future = [];
-    Object.assign(s, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, focus: next.focus ?? 'back' });
+    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, focus: next.focus ?? 'back' });
     s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
     stopObserver(); s.terminalFrame = null; s.screenViewport = null; s.outputMode = 'mirror'; observerRetryAt = 0;
     changed();
@@ -70,7 +96,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   async function restore(from, to) {
     if (!from.length) return;
     const prior = from.pop(), oldProject = s.projectId;
-    to.push(route()); Object.assign(s, prior); s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
+    to.push(route()); Object.assign(s, { interactive: false }, prior); s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
     stopObserver(); s.terminalFrame = null; s.screenViewport = null; observerRetryAt = 0;
     if (oldProject !== s.projectId) { adoptProject(); await refresh(); }
     await readOutput(); changed();
@@ -81,12 +107,13 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     for (const key of ['today', 'status']) { delete s.errors[key]; s.times[key] = cached?.times?.[key] ?? null; }
   }
   async function readOutput() {
-    if (s.view !== 'output' || !s.pane || s.reading || s.stopped) return;
+    // A transcript read in flight must not delay taking the terminal to type.
+    if (s.view !== 'output' || !s.pane || (s.reading && !s.interactive) || s.stopped) return;
     const pane = s.pane, generation = s.generation;
     if (s.errors.agents || s.errors.workspaces || s.errors.tabs) { stopObserver(); s.outputError = 'Herdr is unavailable. Last output is retained; refresh to reconnect.'; changed(); return; }
     const m = model();
     if (!m.sessions.some(a => a.pane === pane && a.tab === s.tab)) { stopObserver(); s.outputError = 'This agent is no longer in this tab. Choose a current session.'; changed(); return; }
-    if (d.observeTerminal && s.outputMode === 'mirror') {
+    if ((d.observeTerminal || (s.interactive && d.controlTerminal)) && s.outputMode === 'mirror') {
       ensureObserver(); return;
     }
     s.reading = true;
@@ -199,7 +226,12 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (id.startsWith('tab:')) { const tab = m.tabs.find(t => t.tab_id === id.slice(4)); if (tab) return openTab(tab.workspace_id, tab.tab_id); return; }
     if (id.startsWith('session:')) {
       const row = m.sessions.find(a => a.pane === id.slice(8)); if (!row) return;
-      navigate({ view: 'output', detail: null, space: row.space, tab: row.tab, pane: row.pane }); await readOutput(); return refresh();
+      navigate({ view: 'output', detail: null, space: row.space, tab: row.tab, pane: row.pane, interactive: Boolean(d.controlTerminal) }); await readOutput(); return refresh();
+    }
+    if (id === 'interact') {
+      if (s.view !== 'output' || !s.pane || !d.controlTerminal) return;
+      stopObserver(); s.interactive = true; s.outputMode = 'mirror'; s.terminalFrame = null; s.outputError = null; s.message = ''; s.generation++; observerRetryAt = 0;
+      await readOutput(); changed(); return;
     }
     if (id === 'compose') {
       if (!project()) return;
@@ -282,12 +314,14 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   async function openTab(space, tab) {
     const agents = model().sessions.filter(a => a.tab === tab);
     // A split with several agents needs an explicit choice, never an arbitrary first agent.
-    navigate({ view: 'output', detail: null, space, tab, pane: agents.length === 1 ? agents[0].pane : null });
+    navigate({ view: 'output', detail: null, space, tab, pane: agents.length === 1 ? agents[0].pane : null, interactive: Boolean(d.controlTerminal && agents.length === 1) });
     await readOutput(); return refresh();
   }
   function frame(cols, rows) {
     s.dimensions = { cols, rows };
     s.frame = renderModern({ state: s, project: project(), model: model(), config, now: d.now() }, cols, rows);
+    const v = s.screenViewport;
+    if (s.interactive && observer?.resize && v && controlSize !== `${v.cols}x${v.rows}`) { controlSize = `${v.cols}x${v.rows}`; observer.resize(v.cols, v.rows); }
     return s.frame;
   }
   function move(amount) { moveWithin(s, amount); changed(); }
@@ -301,6 +335,8 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       else if (input && !k.ctrl && !k.meta) { s.picker.query += input.replace(/[\x00-\x1f\x7f]/g, ''); s.picker.index = 0; }
       changed(); return false;
     }
+    if (s.interactive) return false;
+    if (k.ctrl && input === 'c') return true;
     if (s.compose) return composeKey(input, k);
     if (k.escape || (k.meta && k.leftArrow) || input === '\x1b[1;3D') return activate('back');
     if ((k.meta && k.rightArrow) || input === '\x1b[1;3C') return activate('forward');
@@ -339,6 +375,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       return false;
     }
     if (s.view === 'output' && (input === 'l' || input === 'v')) return activate(input === 'l' ? 'transcript' : 'mirror');
+    if (s.view === 'output' && input === 'i') return activate('interact');
     const shortcut = { p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
     if (shortcut) return activate(shortcut);
     return false;
@@ -349,6 +386,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (s.picker && ['wheelDown', 'wheelUp'].includes(event.button)) return key('', { downArrow: event.button === 'wheelDown', upArrow: event.button === 'wheelUp' });
     if (event.button === 'back') return activate('back');
     if (event.button === 'forward') return activate('forward');
+    if (s.interactive && (event.button === 'wheelDown' || event.button === 'wheelUp')) { observer?.scroll?.(event.button === 'wheelUp' ? 'up' : 'down', 3); return false; }
     if (event.button === 'wheelDown' || event.button === 'wheelUp') {
       if (s.view === 'output' && s.pane && d.observeTerminal && s.outputMode === 'mirror') await activate('transcript');
       const delta = event.button === 'wheelDown' ? 3 : -3;
@@ -364,7 +402,16 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (target) { s.focus = target.id; return activate(target.id); }
     return false;
   }
-  return { frame, key, mouse, activate, refresh,
+  // Raw terminal input while interactive: everything goes to the session except
+  // mouse reports (the console's) and Ctrl+], which returns to the console.
+  async function input(data) {
+    if (!s.interactive) return false;
+    const { back, bytes } = splitInput(data);
+    if (bytes.length) observer?.input?.(bytes);
+    if (back) await activate('back');
+    return true;
+  }
+  return { frame, key, mouse, activate, refresh, input,
     async waitForOutput(timeout = 5000) {
       const until = Date.now() + timeout;
       while (d.observeTerminal && s.outputMode === 'mirror' && s.view === 'output' && s.pane && !s.terminalFrame && !s.outputError && !s.stopped && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 25));

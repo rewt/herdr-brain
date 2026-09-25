@@ -20,12 +20,12 @@ function fixture(overrides = {}) {
   const agents = [{ name: 'worker', pane: 'a-work:p1', tab: 'a-work:t1', workspace: 'a-work', cwd: '/a-lane', tool: 'codex', status: 'working' }, { name: 'beta', pane: 'b:p1', tab: 'b:t1', workspace: 'b', cwd: '/b', tool: 'claude', status: 'idle' }];
   const items = [{ id: 'G-1', kind: 'goal', title: 'Ship the result', status: 'open', parent: null, notes: [] }, { id: 'ENG-1', kind: 'task', role: 'engineer', title: 'Implement the result', parent: 'G-1', status: 'active', notes: [] }, { id: 'ENG-2', kind: 'task', role: 'engineer', title: 'Completed work', parent: 'G-1', status: 'done', notes: [] }];
   const today = p => ({ project: { top_goal: null }, waiting: [], running: p.name === 'Alpha' ? [{ run: 'R-1', item: 'ENG-1', title: 'Implement the result', agent: 'worker', workspace: '/a-lane', started: new Date().toISOString() }] : [], agent_runs: [], decided: [], finished: [] });
-  const reads = [], calls = [];
+  const reads = [], calls = [], panes = [];
   const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), brainQueue: async () => ({ rows: [], off: true }),
-    herdrList: async what => what === 'workspace' ? workspaces : tabs, herdrAgents: async () => ({ ok: true, agents }),
+    herdrList: async what => what === 'workspace' ? workspaces : what === 'pane' ? panes : tabs, herdrAgents: async () => ({ ok: true, agents }),
     herdrRead: async target => { reads.push(target); return { ok: true, text: `EXACT ${target.pane}\n${'output\n'.repeat(45)}` }; }, herdrGo: async target => { calls.push(target); return { ok: true }; }, gitSummary: async () => ({ branch: 'lane/alpha', changes: 2 }), ...overrides };
   const session = createModernSession({ config, deps, env: {} });
-  return { session, config, deps, workspaces, tabs, agents, items, reads, calls };
+  return { session, config, deps, workspaces, tabs, agents, items, reads, calls, panes };
 }
 const rendered = (s, cols = 100, rows = 32) => s.frame(cols, rows).lines.map(lineText).join('\n');
 
@@ -145,7 +145,7 @@ test('opening a directory without Git creates no project files and can return to
     const { session } = fixture({ identity: cwd => identity(cwd) ?? { key: dir, root: dir, name: 'Ideas', git: false } });
     await session.refresh(); await session.activate('folder'); session.ui.text = dir; await session.activate('open-folder');
     assert.equal(session.project.org, null); assert.equal(session.model.goals.length, 0); assert.deepEqual(fs.readdirSync(dir), []);
-    assert.match(rendered(session), /No organization/); assert.match(rendered(session), /No sessions or checkouts/); assert.doesNotMatch(rendered(session), /Shell tabs remain/); await session.activate('back'); assert.equal(session.ui.view, 'folder');
+    assert.match(rendered(session), /No sessions here yet/); assert.doesNotMatch(rendered(session), /task →/); assert.doesNotMatch(rendered(session), /Shell tabs remain/); await session.activate('back'); assert.equal(session.ui.view, 'folder');
     await session.activate('back'); assert.equal(session.project.name, 'Alpha');
     await session.activate('folder'); session.ui.text = path.join(dir, 'missing'); await session.activate('open-folder'); assert.match(session.ui.message, /Cannot open folder/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -197,23 +197,6 @@ test('output PageUp reads older lines and PageDown returns to latest', async () 
 test('plugin/caller workspace selects its canonical project without relying on labels', async () => {
   const { config, deps } = fixture(); const session = createModernSession({ config, deps, projectIndex: -1, env: { HERDR_WORKSPACE_ID: 'b' } });
   await session.refresh(); assert.equal(session.project.name, 'Beta'); assert.deepEqual(session.model.sessions.map(a => a.pane), ['b:p1']);
-});
-
-test('overview purpose links open their records and Back restores the exact link', async () => {
-  const { session, reads } = fixture(); await session.refresh();
-  for (const item of ['G-1', 'ENG-1']) {
-    const f = session.frame(140, 42);
-    const y = f.hits.findIndex(h => h.some(x => x.id.startsWith(`link-item:${item}|a-work:p1`)));
-    const hit = f.hits[y].find(x => x.id.startsWith(`link-item:${item}|a-work:p1`));
-    await session.mouse({ x: hit.from, y, button: 'left', press: true });
-    assert.equal(session.ui.detail, item); assert.equal(reads.length, 0);
-    await session.activate('back'); assert.equal(session.ui.focus, hit.id);
-  }
-  const f = session.frame(140, 42);
-  const y = f.hits.findIndex(h => h.some(x => x.id.startsWith('link-space:a-work')));
-  const hit = f.hits[y].find(x => x.id.startsWith('link-space:a-work'));
-  await session.mouse({ x: hit.from, y, button: 'left', press: true });
-  assert.equal(session.ui.space, 'a-work'); assert.equal(reads.at(-1).pane, 'a-work:p1');
 });
 
 test('appearance changes preserve navigation and unsupported preview actions have an honest handoff', async () => {
@@ -382,62 +365,6 @@ test('Needs folds session results that the org resolved, replaced, only reported
   assert.match(text, /Folded · /);
 });
 
-test('project screen leads with the work block and its linked tasks, then sessions by checkout', async () => {
-  const { session, items } = fixture(); await session.refresh(); session.ui.showCheckouts = false;
-  const f = session.frame(140, 42), lines = f.lines.map(lineText), at = re => lines.findIndex(l => re.test(l));
-  assert.match(lines[at(/Now · G-1/)], /Ship the result/); assert.ok(at(/Inferred from linked sessions/) > 0);
-  assert.match(lines[at(/ENG-1/)], /●/); assert.ok(!lines.some(l => /ENG-2/.test(l)), 'finished tasks stay out');
-  assert.ok(at(/Now · G-1/) < at(/Checkouts · 2/)); assert.ok(at(/Checkouts · 2/) < at(/Main checkout/));
-  assert.ok(at(/Main checkout/) < at(/^\s+a-lane/)); assert.ok(at(/^\s+a-lane/) < at(/worker/));
-  assert.ok(f.controls.some(c => c.id === 'session:a-work:p1'));
-  // A goal marked as a block is the block by declaration, whatever sessions say.
-  items.push({ id: 'G-2', kind: 'goal', title: 'Afternoon: tidy the docs', status: 'open', parent: null, meta: { block: 'afternoon' }, notes: [] });
-  await session.refresh(); assert.match(rendered(session, 140, 42), /Block · afternoon · G-2 · Afternoon: tidy the docs/);
-});
-
-test('project screen keeps every session and task reachable when live data exceeds it', async () => {
-  const { session, agents, items } = fixture();
-  for (let i = 2; i <= 30; i++) agents.push({ ...agents[0], pane: `a-work:p${i}`, name: `worker${i}` });
-  for (let i = 4; i <= 30; i++) items.push({ ...items[1], id: `ENG-${i}` });
-  await session.refresh();
-  let f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('session:')).length, 30);
-  assert.match(rendered(session, 140, 42), /of 28 tasks under G-1 · all tasks/);
-  await session.key('t'); f = session.frame(140, 42); assert.equal(f.controls.filter(c => c.id.startsWith('item:')).length, 28);
-  await session.key('h');
-  assert.match(rendered(session, 80, 24), /Now · G-1/); assert.match(rendered(session, 80, 24), /Start a chat or task/);
-});
-
-test('start bar starts a chat or records a task only after a second Enter', async () => {
-  const chats = [], tasks = [];
-  const { session } = fixture({ herdrStartChat: async r => { chats.push(r); return { ok: true, pane: 'a:p7', name: r.name }; }, orgAdd: async (p, r) => { tasks.push([p.name, r]); return { ok: true, id: 'W-9' }; } });
-  await session.refresh(); session.frame(140, 42);
-  const type = async text => { for (const ch of text) await session.key(ch, {}); };
-  await session.key('n'); assert.ok(session.ui.compose); await type('hi there');
-  await session.key('', { escape: true }); assert.equal(session.ui.compose, null, 'Esc closes before anything is sent');
-  await session.key('n'); await type('hi'); await session.key('', { return: true });
-  assert.match(rendered(session, 140, 42), /Enter again to start claude in Main checkout with “hi”/); assert.deepEqual(chats, []);
-  await session.key('', { return: true });
-  assert.deepEqual(chats.map(c => [c.workspace, c.cwd, c.kind, c.prompt]), [['a', '/a', 'claude', 'hi']]);
-  assert.equal(session.ui.compose, null); assert.match(session.ui.message, /Started claude in Main checkout/);
-  // Down picks the next checkout; Tab moves from claude to codex to a task under the block.
-  await session.key('n'); await session.key('', { downArrow: true }); await session.key('', { tab: true });
-  assert.match(rendered(session, 140, 42), /Chat · codex in a-lane/);
-  await session.key('', { tab: true }); await type('Write the docs'); await session.key('', { return: true });
-  assert.match(rendered(session, 140, 42), /Enter again to add task “Write the docs” under G-1/);
-  await session.key('', { return: true });
-  assert.deepEqual(tasks, [['Alpha', { title: 'Write the docs', parent: 'G-1' }]]); assert.match(session.ui.message, /Added W-9 under G-1/);
-  // A task needs words; a failed start keeps what was typed.
-  await session.key('n'); await session.key('', { tab: true }); await session.key('', { tab: true }); await session.key('', { return: true });
-  assert.match(session.ui.message, /Type the task first/); assert.equal(tasks.length, 1);
-});
-
-test('a folder without an organization offers chats only', async () => {
-  const { session } = fixture(); await session.refresh();
-  session.ui.projects.find(p => p.name === 'Alpha').org = null;
-  await session.key('n'); await session.key('', { tab: true }); await session.key('', { tab: true });
-  assert.match(rendered(session, 140, 42), /Chat · claude/);
-});
-
 test('opening a session types into it here, and Ctrl+] or Back releases it and returns', async () => {
   const controllers = [];
   const controlTerminal = options => { const c = { ...options, inputs: [], sizes: [], released: false, input(b) { c.inputs.push(Buffer.from(b).toString()); }, resize(cols, rows) { c.sizes.push([cols, rows]); }, scroll() {}, release() { c.released = true; }, stop() { c.released = true; } }; controllers.push(c); return c; };
@@ -469,4 +396,102 @@ test('a controller Herdr hands elsewhere drops back to watching with a way to re
   await session.refresh(); await session.activate('session:a-work:p1');
   controllers[0].onClose('detached'); assert.equal(session.ui.interactive, false); assert.match(session.ui.message, /Press i/);
   await session.activate('interact'); controllers[1].onError('refused'); assert.match(session.ui.outputError, /Cannot type into this session: refused/);
+});
+
+const hitFor = (f, id) => { const y = f.hits.findIndex(h => h.some(x => x.id === id)); return y < 0 ? null : { y, ...f.hits[y].find(x => x.id === id) }; };
+
+test('project screen: counts, the work block and its tasks, then numbered sessions under their checkout', async () => {
+  const { session, items } = fixture(); await session.refresh(); session.ui.showCheckouts = false;
+  const f = session.frame(140, 42), lines = f.lines.map(lineText), at = re => lines.findIndex(l => re.test(l));
+  assert.match(lines[at(/sessions/)], /1 sessions\s+1 working\s+0 blocked\s+0 idle\s+0 done/);
+  assert.match(lines[at(/now · G-1/)], /Ship the result.*1 on it · goals ›/);
+  assert.match(lines[at(/ENG-1 /)], /●.*Implement the result.*active\s+#1/); assert.ok(!lines.some(l => /ENG-2/.test(l)), 'finished tasks stay out');
+  assert.ok(at(/now · G-1/) < at(/a-lane · 1/));
+  assert.match(lines[at(/^\s+1\s+●/)], /1 {2}● beta|1 {2}● .*codex\s+G-1 › ENG-1 Implement the result/);
+  assert.ok(f.controls.some(c => c.id === 'session:a-work:p1'));
+  // A goal marked as a block is the block by declaration, whatever sessions say.
+  items.push({ id: 'G-2', kind: 'goal', title: 'Afternoon: tidy the docs', status: 'open', parent: null, meta: { block: 'afternoon' }, notes: [] });
+  await session.refresh(); assert.match(rendered(session, 140, 42), /afternoon · G-2 · Afternoon: tidy the docs/);
+});
+
+test('a session number opens it, a task link opens the task, and Back restores the link', async () => {
+  const { session, reads } = fixture(); await session.refresh();
+  let f = session.frame(140, 42), hit = hitFor(f, 'link-item:ENG-1|a-work:p1');
+  await session.mouse({ x: hit.from, y: hit.y, button: 'left', press: true });
+  assert.equal(session.ui.detail, 'ENG-1'); assert.equal(reads.length, 0);
+  await session.activate('back'); assert.equal(session.ui.focus, 'link-item:ENG-1|a-work:p1');
+  await session.key('1'); assert.equal(session.ui.view, 'output'); assert.equal(session.ui.pane, 'a-work:p1');
+  await session.activate('back'); f = session.frame(140, 42); hit = hitFor(f, 'link-space:a-work|project');
+  await session.mouse({ x: hit.from, y: hit.y, button: 'left', press: true }); assert.equal(session.ui.space, 'a-work');
+  await session.activate('back'); await session.key('7'); assert.match(session.ui.message, /No session 7/);
+});
+
+test('clicking a session name renames its pane label, never the agent', async () => {
+  const renames = [];
+  const { session, panes } = fixture({ herdrRename: async (pane, label) => { renames.push([pane, label]); panes.push({ pane_id: pane, label }); return { ok: true }; } });
+  await session.refresh(); let f = session.frame(140, 42);
+  const hit = hitFor(f, 'rename:a-work:p1'); assert.ok(hit, 'the name is a click target');
+  assert.ok(!f.controls.some(c => c.id === 'rename:a-work:p1'), 'but not a keyboard stop');
+  await session.mouse({ x: hit.from, y: hit.y, button: 'left', press: true }); assert.equal(session.ui.rename.pane, 'a-work:p1');
+  for (let i = 0; i < 30; i++) await session.key('', { backspace: true });
+  for (const ch of 'docs pass') await session.key(ch, {});
+  assert.match(rendered(session, 140, 42), /docs pass▏/); assert.equal(session.ui.view, 'overview', 'typing does not trigger shortcuts');
+  await session.key('', { return: true }); assert.deepEqual(renames, [['a-work:p1', 'docs pass']]);
+  assert.match(rendered(session, 140, 42), /1 {2}● docs pass/);
+  session.ui.focus = 'session:a-work:p1'; await session.key('e'); assert.equal(session.ui.rename.text, 'docs pass');
+  await session.key('', { escape: true }); assert.equal(session.ui.rename, null); assert.equal(renames.length, 1);
+});
+
+test('the prompt bar adds a task or starts a chat on one Enter, and says which before', async () => {
+  const chats = [], tasks = [];
+  const { session } = fixture({ herdrStartChat: async r => { chats.push(r); return { ok: true, pane: 'a:p7', name: r.name }; }, orgAdd: async (p, r) => { tasks.push([p.name, r]); return { ok: true, id: 'W-9' }; } });
+  await session.refresh(); session.frame(140, 42);
+  const type = async text => { for (const ch of text) await session.key(ch, {}); };
+  assert.match(rendered(session, 140, 42), /› write a task or a message….*task → G-1/);
+  await session.key('n'); await type('Write the docs'); await session.key('', { return: true });
+  assert.deepEqual(tasks, [['Alpha', { title: 'Write the docs', parent: 'G-1' }]]); assert.match(session.ui.message, /Added W-9 under G-1/);
+  await session.key('n'); await session.key('', { return: true }); assert.match(session.ui.message, /Type the task first/); assert.equal(tasks.length, 1);
+  await session.key('', { escape: true }); assert.equal(session.ui.compose, null);
+  // Tab: task, claude, codex. Down picks the next checkout.
+  await session.key('n'); await session.key('', { tab: true }); assert.match(rendered(session, 140, 42), /claude → main/);
+  await session.key('', { tab: true }); await session.key('', { downArrow: true }); assert.match(rendered(session, 140, 42), /codex → a-lane/);
+  await type('hi'); await session.key('', { return: true });
+  assert.deepEqual(chats.map(c => [c.workspace, c.cwd, c.kind, c.prompt]), [['a-work', '/a-lane', 'codex', 'hi']]);
+  assert.match(session.ui.message, /Started codex in a-lane/);
+});
+
+test('a folder without an organization offers chats only', async () => {
+  const { session } = fixture(); await session.refresh();
+  session.ui.projects.find(p => p.name === 'Alpha').org = null;
+  assert.match(rendered(session, 140, 42), /claude → main/);
+  await session.key('n'); await session.key('', { tab: true }); await session.key('', { tab: true });
+  assert.match(rendered(session, 140, 42), /claude → main/);
+});
+
+test('a Needs you item is answered from its page: choices, reply, later, and org questions', async () => {
+  const acts = [], answers = [];
+  const at = new Date().toISOString();
+  const rows = [{ id: 'r1', session: 'worker', where: '/a-lane', project: 'other', at, state: 'idle', status: 'digested', pane: 'a-work:p1', tab_label: 'worker',
+    digest: { kind: 'decision', needs_you: true, item: 'ENG-1', question: 'Ship it now?', explain: 'Because.', options: [{ key: '1', label: 'Ship', causes: 'It ships.' }, { key: '2', label: 'Wait', causes: 'It waits.' }], recommend: '1' } }];
+  const { session } = fixture({
+    brainQueue: async () => ({ rows, off: false }),
+    brainAct: async args => { acts.push(args); return { ok: true }; },
+    orgAnswer: async (p, r) => { answers.push([p.name, r.question, r.answer, r.note]); return { ok: true }; },
+    orgToday: async () => ({ project: {}, waiting: [{ id: 'HUM-1', title: 'Publish?', recommend: 'yes', on_yes: 'It goes out.' }], running: [], agent_runs: [], decided: [], finished: [] }),
+  });
+  await session.refresh();
+  const need = id => session.model.needs.find(n => (n.handle ?? n.question) === id);
+  assert.ok(need('ENG-1'), 'the session question is open'); assert.ok(need('HUM-1'), 'the org question is open');
+  await session.activate(`need:${need('ENG-1').key}`); let text = rendered(session, 140, 42);
+  assert.match(text, /1 {2}Ship {3}★ recommended/); assert.match(text, /It waits\./); assert.match(text, /r {2}Reply in your words/);
+  await session.key('2'); assert.match(rendered(session, 140, 42), /Send “Wait” to worker\?/); assert.deepEqual(acts, []);
+  await session.key('', { escape: true }); assert.equal(session.ui.act, null);
+  await session.key('y'); await session.key('', { return: true });
+  assert.equal(acts.length, 1); assert.equal(acts[0].at(-1), 'Ship'); assert.match(session.ui.message, /Done: Send “Ship”/);
+  await session.activate(`need:${need('ENG-1').key}`); await session.key('r');
+  for (const ch of 'go ahead') await session.key(ch, {}); await session.key('', { return: true });
+  assert.deepEqual(acts[1].slice(-1), ['go ahead']);
+  await session.activate(`need:${need('HUM-1').key}`); assert.match(rendered(session, 140, 42), /y {2}Approve {3}★ recommended/);
+  await session.key('n'); for (const ch of 'not yet') await session.key(ch, {}); await session.key('', { return: true });
+  assert.deepEqual(answers, [['Alpha', 'HUM-1', 'no', 'not yet']]);
 });

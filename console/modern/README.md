@@ -2,8 +2,8 @@
 
 This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes
-are the project screen's start bar (a new chat, or a task under the work block)
-and what the operator types into a session.
+are the project screen's prompt (a new chat, or a task under the work block),
+what the operator types into a session, session names, and Needs you answers.
 It runs in Ink through `console/app.mjs`; it is not the browser design preview or
 `console/proto` fixture application. Opt in per launch; the existing console
 remains the default and retains all of its operational actions.
@@ -49,17 +49,29 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 
 ## What works
 
-- The project screen (`h`) leads with the work block: an open goal marked
-  `meta.block` (morning, afternoon, overnight), else the goal most current
-  sessions are linked to, labelled as inferred. Its open tasks follow, the ones
-  with a session first, with that session's checkout. Needs you is a short
-  strip. Every session then appears under the checkout it runs in, with the
-  checkout's branch, change count and ahead/behind; checkouts with no agent
-  share one line.
-- The start bar (`n`) starts a chat with a configured agent kind (`chat_kinds`,
-  default claude and codex) in a chosen checkout, as a new Herdr tab, or adds a
-  task under the work block through `org add`. The bar states what will happen
-  and waits for a second Enter; Esc edits, then closes. `--print` never writes.
+- The project screen (`h`) opens with counts (sessions, working, blocked,
+  idle, done), then the work block: an open goal marked `meta.block`
+  (morning, afternoon, overnight), else the goal most current sessions are
+  linked to. Its open tasks follow, the ones with a session first, with that
+  session's number. Needs you shows each item with its recommended answer.
+  Every session is then numbered, one row each, under a `checkout · count`
+  heading: state, name, time in its current state (as this console saw it
+  change), uptime, harness, and its task or what it is doing.
+- A session's number opens it (two digits when there are ten or more).
+  Clicking its name renames it: a display-only Herdr pane label (`herdr pane
+  rename`); the agent name that org runs link to is never changed. `e`
+  renames the focused session; an empty name clears the label.
+- The prompt at the bottom (`n`, or click it) adds a task under the block
+  through `org add`, or starts a chat with a configured agent kind
+  (`chat_kinds`, default claude and codex) in a chosen checkout. The bar
+  always shows which and where (`task → G-15`, `claude → main`); Tab and
+  Up/Down change them, and one Enter starts it. `--print` never writes.
+- A Needs you item's page lists its choices with what each causes, the
+  recommended one starred, then Reply, Open the session, Save for later and
+  Drop. A number (or `y` for the recommended choice) arms the answer line,
+  which says exactly what will happen; Enter does it. A reply or an org
+  decline asks for its words first. Session results go through the Brain CLI
+  (the same verbs as the classic console); org questions through `org answer`.
 - Current project sessions lead the overview. Goals/tasks come from `org status
   --json`; decisions and stopped-session results reuse the existing org/Brain
   read projections. Finished tasks are excluded from the active list.
@@ -127,7 +139,9 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | `o` | Open selected native terminal in Herdr |
 | `i` | Type into the watched session here |
 | `Ctrl+]` | While typing into a session: release it and go back |
-| `n` | Start bar: type, Tab chat kind/task, Up/Down checkout, Enter to review, Enter again to start, Esc |
+| `n` | Prompt: type, Tab task/chat kind, Up/Down checkout, Enter starts, Esc |
+| `1`–`9` | Open that numbered session (project screen) |
+| `e` | Rename the focused session (project screen) |
 | `?` | Help |
 | `q` | Quit, restoring terminal modes |
 
@@ -141,11 +155,12 @@ show the remaining facts in session detail.
 ## Boundaries
 
 Typing into a session writes only to that session's terminal, and only while
-the operator is in it. The start bar is the other write: `org add` through the CLI for a task,
-and `herdr tab create` / `agent start` / `agent prompt` for a chat. Each needs
-the operator's typed text and a second Enter. It has no answer, dispatch or
-model-call path. Use `node bin/org.mjs console --project NAME` for answers and
-dispatch. Nothing writes as a side effect of opening or navigating the trial.
+the operator is in it. The prompt bar writes `org add` through the CLI for a
+task, and `herdr tab create` / `agent start` / `agent prompt` for a chat, on the
+operator's typed text and Enter. Renaming sets only a pane label. A Needs you
+answer goes through the Brain CLI or `org answer` after the answer line says
+what it will do. There is no dispatch or model-call path; use
+`node bin/org.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
 
 Goal/session associations use recorded run data. A title resemblance does not
 establish a link; unmatched sessions say Unlinked and older recorded associations

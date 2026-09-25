@@ -5,6 +5,7 @@ import { cropTerminalSpans } from './terminal.mjs';
 import { cutSpans } from '../lib/frame.mjs';
 import { pad, clip, wrap, sanitize, cellWidth } from '../lib/text.mjs';
 import { projectRows, composeModes, currentBlock, checkoutName } from './project.mjs';
+import { needChoices, needActions, needEffect } from './needs.mjs';
 import { regionFor, pickerEntries } from './navigation.mjs';
 import { relatedWork, acceptanceCriteria } from './model.mjs';
 
@@ -27,6 +28,8 @@ const clean = text => sanitize(String(text ?? ''));
 const age = (at, now) => at ? `${Math.max(0, Math.floor((now - at) / 1000))}s ago` : 'not loaded';
 const ss = (text, fg = 'fg', bg = 'bg', bold = false) => ({ text: clean(text), fg, bg, bold });
 
+const checkoutOrderFirst = m => m.spaces.slice().sort((a, b) => Number(Boolean(a.worktree?.is_linked_worktree)) - Number(Boolean(b.worktree?.is_linked_worktree)))[0]?.workspace_id;
+
 export function renderModern({ state: s, project: p, model: m, now }, cols, rows) {
   cols = Math.max(1, cols); rows = Math.max(1, rows);
   const lines = Array.from({ length: rows }, () => ({ spans: [ss(' '.repeat(cols))] }));
@@ -36,7 +39,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     return { lines, hits, controls, bodyHeight: 1, maxScroll: 0 };
   }
   // The project screen keeps a start bar under its body.
-  const bar = s.view === 'overview' && p ? 2 : 0;
+  const bar = (s.view === 'overview' && p) || s.view === 'need' ? 2 : 0;
   const rail = s.showCheckouts === false ? 0 : cols >= 120 ? 25 : cols >= 100 ? 22 : 18, x = rail + 2, width = cols - x - 2, top = 6, bodyHeight = rows - top - 2 - bar;
   const put = (y, from, text, fg = 'fg', bg = 'bg', bold = false, limit = cols - from) => {
     if (y < 0 || y >= rows || from >= cols) return;
@@ -152,7 +155,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     paragraph('The live trial currently opens existing folders and sessions. Idea capture and new-project creation are the next onboarding flow; they are not connected yet.'); row();
     row('Open a folder you already have', { id: 'folder', fg: 'blue' }); row('Browse open projects', { id: 'scope', fg: 'blue' });
   } else if (s.view === 'overview') {
-    body.push(...projectRows({ model: m, state: s, project: p, width, height: bodyHeight }));
+    body.push(...projectRows({ model: m, state: s, project: p, width, height: bodyHeight, now }));
   } else if (s.view === 'sessions') {
     section(`Sessions · ${m.sessions.length}`); row(fullRow(compactSessions ? ['Session', 'Who', 'Where', 'State'] : ['Session', 'Who', 'Where', 'Up', 'State', 'Doing']), { fg: 'muted' }); sessionRows(m.sessions);
     if (compactSessions) { row(); paragraph('Open a session for full identity, uptime and activity.'); }
@@ -189,15 +192,29 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       if (!related.tasks.length) paragraph('No active tasks are recorded under this item.');
     }
   } else if (s.view === 'need') {
+    // The item's own page: what is asked, why, then the choices as controls.
     const n = m.allNeeds.find(n => n.key === s.detail);
     if (!n) paragraph('This item has left the queue. Return to Needs you for the current list.');
-    else { section(n.handle ?? n.question ?? n.session ?? 'Decision', 'amber'); paragraph(n.title ?? n.headline, 'fg'); row();
+    else {
+      const g = n.data?.digest, from = n.kind === 'result' ? `from ${n.data?.tab_label ?? n.session ?? 'a session'}` : 'org question';
+      section(`${n.handle ?? n.question ?? 'Decision'} · ${from}`, 'amber');
+      paragraph(g?.question ?? n.title ?? n.headline, 'bright'); row();
       if (n.settled) { paragraph(`Folded · ${n.settled}`, 'teal'); row(); }
-      paragraph(n.data?.why ?? n.gist ?? n.data?.summary ?? n.data?.digest?.question ?? '');
-      if (n.data?.recommend) paragraph(`Recommendation: ${n.data.recommend}`);
-      for (const option of n.options ?? []) paragraph(`${option.label ?? option.key} — ${option.text ?? ''}`);
-      row(); paragraph('Answer using the existing console for this project. This live trial is read only.');
-      if (p?.name) paragraph(`org console --project ${p.name}`);
+      const why = g?.explain ?? n.data?.why ?? n.gist ?? n.data?.summary;
+      if (why) { paragraph(why); row(); }
+      bodyRegion = 'actions';
+      const choices = needChoices(n);
+      if (choices.length) section('Choose', 'goal');
+      for (const c of choices) {
+        const armed = s.act?.choice?.id === c.id;
+        row(` ${c.key}  ${c.label}${c.recommended ? '   ★ recommended' : ''}`, { id: `choose:${c.id}`, fg: c.recommended ? 'goal' : 'bright', bold: true, bg: armed ? 'attentionBg' : 'bg' });
+        if (c.causes) for (const line of wrap(clean(c.causes), width - 5)) row(`    ${line}`, { fg: 'muted' });
+      }
+      if (!choices.length) paragraph('No choices were worked out for this one. Reply in your own words, or open the session.');
+      if (n.recommend && !choices.some(c => c.recommended)) paragraph(`Recommendation: ${n.recommend}`);
+      row();
+      for (const a of needActions(n, { canOpen: Boolean(n.data?.pane && m.sessions.some(x => x.pane === n.data.pane)) || Boolean(n.go?.agent) })) row(` ${a.key}  ${a.label}`, { id: `choose:${a.id}`, fg: 'blue' });
+      bodyRegion = 'content';
     }
   } else if (s.view === 'output' && s.interactive && s.pane) {
     // Interactive: one line of identity and the way back, then the session's own
@@ -288,34 +305,43 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
     const y = top + i - s.scroll, visible = y >= top && y < top + bodyHeight;
-    if (c.id) { if (visible) control(c.id, c.text, y, x + c.col, c.w, c.fg, i, c.bg ?? 'bg', c.bold, c.region); else if (!controls.some(k => k.id === c.id)) controls.push({ id: c.id, bodyRow: i, region: c.region ?? 'content' }); }
+    // A hit-only cell answers the mouse but is not a keyboard stop; it shows the
+    // focus of the row it belongs to.
+    if (c.id && c.hitOnly) { if (visible) { put(y, x + c.col, c.text, c.fg, s.focus === c.focusAs ? 'selected' : c.bg ?? 'bg', c.bold || s.focus === c.focusAs, c.w); hits[y].push({ from: x + c.col, to: x + c.col + c.w, id: c.id }); } }
+    else if (c.id) { if (visible) control(c.id, c.text, y, x + c.col, c.w, c.fg, i, c.bg ?? 'bg', c.bold, c.region); else if (!controls.some(k => k.id === c.id)) controls.push({ id: c.id, bodyRow: i, region: c.region ?? 'content' }); }
     else if (visible && c.spans) {
       const spans = c.native ? c.spans : cutSpans(c.spans, 0, c.w), used = c.native ? c.w : spans.reduce((n, span) => n + cellWidth(span.text), 0);
       lines[y] = { spans: [...cutSpans(lines[y].spans, 0, x + c.col), ...spans, ss(' '.repeat(Math.max(0, c.w - used)), c.fg, c.bg), ...cutSpans(lines[y].spans, x + c.col + c.w, cols)] };
     } else if (visible) put(y, x + c.col, c.text, c.fg, c.bg ?? 'bg', c.bold, c.w);
   }));
-  if (bar) {
+  if (bar && s.view === 'need') {
+    // The answer line: what the chosen action will do, or the text it needs.
+    put(rows - 3, x, '─'.repeat(width), 'rule');
+    const n = m.allNeeds.find(n => n.key === s.detail), a = s.act;
+    if (a?.busy) put(rows - 2, x, `${a.says}…`, 'amber', 'bg', true, width);
+    else if (a?.stage === 'text') put(rows - 2, x, `${a.choice.needsText}: ${a.text}▏   Enter sends · Esc cancels`, 'bright', 'attentionBg', false, width);
+    else if (a) put(rows - 2, x, `${a.says}?   Enter confirms · Esc cancels`, 'amber', 'attentionBg', true, width);
+    else if (n) put(rows - 2, x, [needChoices(n).length ? `${needChoices(n).map(c => c.key).join(' ')} choose` : '', ...needActions(n, { canOpen: true }).map(c => `${c.key} ${c.id === 'open' ? 'open' : c.id}`)].filter(Boolean).join(' · '), 'muted', 'bg', false, width);
+  } else if (bar) {
+    // The prompt: write, and Enter starts it. Tab picks task or a chat kind.
     put(rows - 3, x, '─'.repeat(width), 'rule');
     const c = s.compose;
-    if (!c) control('compose', '+ Start a chat or task  n', rows - 2, x, 26, 'blue');
-    else {
-      const mode = composeModes(p, s.chatKinds)[c.mode] ?? { kind: 'chat', agent: '?' }, block = currentBlock(m);
-      const w = m.spaces.find(w => w.workspace_id === c.space);
-      const target = mode.kind === 'task' ? (block ? `under ${block.goal.id}` : 'no goal') : `in ${w ? checkoutName(w) : 'no open checkout'}`;
-      const chip = ` ${mode.kind === 'task' ? 'Task' : `Chat · ${mode.agent}`} ${target} `;
-      if (c.busy) put(rows - 2, x, `${mode.kind === 'task' ? 'Adding the task' : `Starting ${mode.agent}`}…`, 'amber', 'bg', true, width);
-      else if (c.confirm) {
-        const said = c.text.trim() ? ` “${c.text.trim()}”` : '';
-        put(rows - 2, x, mode.kind === 'task' ? `Enter again to add task${said} ${target} · Esc edits` : `Enter again to start ${mode.agent} ${target}${said ? ` with${said}` : ''} · Esc edits`, 'amber', 'attentionBg', true, width);
-      } else {
-        control('compose', chip, rows - 2, x, cellWidth(chip), 'bright', null, 'selected', true, 'actions');
-        const room = width - cellWidth(chip) - 1, text = [...c.text], shown = text.slice(Math.max(0, text.length - room + 2)).join('');
-        put(rows - 2, x + cellWidth(chip) + 1, `${shown || ''}▏${shown ? '' : mode.kind === 'task' ? ' what should be done' : ' first message (optional)'}`, shown ? 'bright' : 'muted', 'bg', false, room);
-      }
+    const mode = composeModes(p, s.chatKinds)[c?.mode ?? 0] ?? { kind: 'chat', agent: s.chatKinds?.[0] ?? 'claude' }, block = currentBlock(m);
+    const w = m.spaces.find(w => w.workspace_id === (c?.space ?? checkoutOrderFirst(m)));
+    const target = mode.kind === 'task' ? `task → ${block ? block.goal.id : 'no goal'}` : `${mode.agent} → ${w ? checkoutName(w) : 'no checkout'}`;
+    const tw = cellWidth(target) + 2, room = width - tw - 3;
+    if (c?.busy) put(rows - 2, x, `› ${mode.kind === 'task' ? 'adding the task' : `starting ${mode.agent}`}…`, 'amber', 'bg', true, width);
+    else if (c) {
+      const text = [...c.text], shown = text.slice(Math.max(0, text.length - room + 2)).join('');
+      control('compose', `› ${shown}▏`, rows - 2, x, room + 2, 'bright', null, 'bg', true, 'actions');
+      control('compose-mode', ` ${target} `, rows - 2, x + width - tw, tw, mode.kind === 'task' ? 'goal' : 'amber', null, 'selected', true, 'actions');
+    } else {
+      control('compose', `› write a task or a message…  n`, rows - 2, x, room + 2, 'muted', null, 'bg', false, 'actions');
+      put(rows - 2, x + width - tw, ` ${target} `, 'muted', 'bg', false, tw);
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.compose ? ' Type · Tab chat/task · ↑↓ checkout · Enter review · Esc close' : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

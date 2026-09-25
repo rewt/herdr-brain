@@ -1,11 +1,12 @@
 // Opt-in live reader. It never dispatches, invokes a model, or writes org/config.
 import * as cli from '../lib/cli.mjs';
-import { readQueue } from '../lib/brain.mjs';
+import { readQueue, brainAct } from '../lib/brain.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { catalog, createIdentityReader, folderPath, projectView, workspaceIdentity } from './model.mjs';
 import { renderModern } from './frame.mjs';
-import { checkoutName, checkoutOrder, composeModes, currentBlock } from './project.mjs';
+import { checkoutName, checkoutOrder, composeModes, currentBlock, sessionGroups, sessionName } from './project.mjs';
+import { needChoices, needActions, needEffect } from './needs.mjs';
 import { moveRegion, moveWithin, pickerEntries } from './navigation.mjs';
 import { observeTerminal } from './terminal.mjs';
 import { controlTerminal, splitInput } from './control.mjs';
@@ -20,17 +21,18 @@ async function gitSummary(cwd) {
 
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
-    herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, gitSummary, folderPath,
+    herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, herdrRename: cli.herdrRename, orgAnswer: cli.orgAnswer,
+    brainAct: args => brainAct(config.brain_bin, args), gitSummary, folderPath,
     observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
-  const data = { workspaces: [], tabs: [], agents: [], today: null, status: null, brain: { rows: [], off: true } };
+  const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, brain: { rows: [], off: true } };
   const s = { projects: [], projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
     view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'scope', scroll: 0, outputScroll: 0,
     appearance: env.HERDR_CONSOLE_THEME === 'dark' ? 'dark' : 'light',
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
     picker: null, regionFocus: {}, outputX: 0, screenScroll: 0,
     outputMode: 'mirror', interactive: false, terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },
-    history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, checkoutGit: {}, compose: null, chatKinds: config.chat_kinds ?? ['claude', 'codex'], message: '',
+    history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, checkoutGit: {}, compose: null, rename: null, act: null, digits: '', digitTimer: null, chatKinds: config.chat_kinds ?? ['claude', 'codex'], message: '',
     frame: null, stopped: false, timer: null, outputTimer: null, pending: null, generation: 0, reading: false, loading: true };
   const project = () => s.projects.find(p => p.id === s.projectId) ?? null;
   const model = () => projectView(project(), data, d.identity, d.now());
@@ -38,6 +40,14 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   const routeKey = r => JSON.stringify([r.projectId, r.view, r.detail, r.view === 'output' ? [r.space, r.tab, r.pane] : null]);
   const changed = () => { if (!s.stopped) onChange(); };
   let observer = null, observerKey = null, observerRetryAt = 0, observerEpoch = 0, controlSize = null;
+  // When each session last changed state, as seen by this console. A session
+  // first seen has no known start for its current state.
+  function noteStates(agents) {
+    for (const a of agents) {
+      const prior = data.since.get(a.pane);
+      if (!prior || prior.status !== a.status) data.since.set(a.pane, { status: a.status, at: prior ? d.now() : null });
+    }
+  }
   function stopObserver() { observerEpoch++; observerKey = null; controlSize = null; observer?.stop(); observer = null; }
   // Interactive: the console holds Herdr's control stream for the pane, sized to
   // its own terminal area, so the session redraws to fit and takes typing.
@@ -88,7 +98,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     const before = route(), after = { ...before, ...next };
     if (routeKey(before) === routeKey(after)) return;
     s.history.push(before); s.future = [];
-    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, focus: next.focus ?? 'back' });
+    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, rename: null, act: null, focus: next.focus ?? 'back' });
     s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
     stopObserver(); s.terminalFrame = null; s.screenViewport = null; s.outputMode = 'mirror'; observerRetryAt = 0;
     changed();
@@ -133,7 +143,8 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       await Promise.all([
         load('workspaces', () => d.herdrList('workspace'), x => data.workspaces = x),
         load('tabs', () => d.herdrList('tab'), x => data.tabs = x),
-        load('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; }, x => data.agents = x),
+        load('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; }, x => { data.agents = x; noteStates(x); }),
+        load('panes', () => d.herdrList('pane'), x => data.panes = x),
         load('brain', async () => { const r = await d.brainQueue(); if (r.error) throw Error(r.error); return r; }, x => data.brain = x),
       ]);
       s.projects = catalog(config.projects, data.workspaces, d.identity, s.opened, data.agents);
@@ -233,6 +244,9 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       stopObserver(); s.interactive = true; s.outputMode = 'mirror'; s.terminalFrame = null; s.outputError = null; s.message = ''; s.generation++; observerRetryAt = 0;
       await readOutput(); changed(); return;
     }
+    if (id.startsWith('rename:')) return startRename(id.slice(7));
+    if (id.startsWith('choose:')) return choose(id.slice(7));
+    if (id === 'compose-mode') { if (s.compose) { s.compose.mode = (s.compose.mode + 1) % composeModes(project(), s.chatKinds).length; changed(); } return; }
     if (id === 'compose') {
       if (!project()) return;
       if (s.view !== 'overview') navigate({ view: 'overview', detail: null, space: null, tab: null, pane: null });
@@ -258,9 +272,9 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       } catch (e) { s.message = e.message; changed(); }
     }
   }
-  // The start bar: the only place this screen writes. A chat is a new Herdr tab
-  // with an agent in the chosen checkout; a task is `org add` under the block.
-  // Both take a second Enter, after the bar says exactly what will happen.
+  // The prompt bar. A chat is a new Herdr tab with an agent in the chosen
+  // checkout; a task is `org add` under the block. The bar always shows which,
+  // and where, before Enter.
   function openCompose() {
     const main = checkoutOrder(model().spaces)[0];
     s.compose = { mode: 0, text: '', space: main?.workspace_id ?? null, confirm: false, busy: false };
@@ -269,15 +283,14 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   async function composeKey(input, k) {
     const c = s.compose, modes = composeModes(project(), s.chatKinds), mode = modes[c.mode];
     if (c.busy) return false;
-    if (k.escape) { if (c.confirm) c.confirm = false; else { s.compose = null; s.focus = 'compose'; } changed(); return false; }
+    if (k.escape) { s.compose = null; s.focus = 'compose'; changed(); return false; }
     if (k.return) {
       if (mode.kind === 'task' && !c.text.trim()) s.message = 'Type the task first.';
       else if (mode.kind === 'chat' && !c.space) s.message = 'Open this project in Herdr first; a chat starts in one of its checkouts.';
-      else if (c.confirm) return submitCompose();
-      else c.confirm = true;
+      else return submitCompose();
       changed(); return false;
     }
-    c.confirm = false; s.message = '';
+    s.message = '';
     if (k.tab) c.mode = (c.mode + (k.shift ? -1 : 1) + modes.length) % modes.length;
     else if (k.upArrow || k.downArrow) {
       const spaces = checkoutOrder(model().spaces), index = spaces.findIndex(w => w.workspace_id === c.space);
@@ -311,6 +324,76 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     finally { if (s.compose) { s.compose.busy = false; s.compose.confirm = false; } if (done) s.message = done; changed(); }
     return false;
   }
+  // Renaming a session sets its pane label; the name org runs know is unchanged.
+  function startRename(pane) {
+    const a = model().sessions.find(x => x.pane === pane); if (!a) return;
+    s.rename = { pane, text: sessionName(a) }; s.focus = `session:${pane}`; s.message = ''; changed();
+  }
+  async function renameKey(input, k) {
+    const r = s.rename;
+    if (k.escape) { s.rename = null; changed(); return false; }
+    if (k.return) {
+      const result = await d.herdrRename(r.pane, r.text);
+      s.rename = null; s.message = result.ok ? (r.text.trim() ? `Named “${r.text.trim()}”.` : 'Name cleared.') : `Not renamed: ${result.error}`;
+      await refresh(); changed(); return false;
+    }
+    if (k.backspace || k.delete) r.text = [...r.text].slice(0, -1).join('');
+    else if (input && !k.ctrl && !k.meta && !k.tab && !k.upArrow && !k.downArrow) r.text += input.replace(/[\x00-\x1f\x7f]/g, '');
+    changed(); return false;
+  }
+  // A session's number opens it. Two digits when there are ten or more.
+  function digit(input) {
+    const order = sessionGroups(model()).order;
+    clearTimeout(s.digitTimer); s.digits += input;
+    const open = () => { const n = Number(s.digits); s.digits = ''; const a = order[n - 1]; if (a) return activate(`session:${a.pane}`); s.message = `No session ${n}.`; changed(); };
+    if (Number(s.digits) * 10 > order.length || s.digits.length >= 2) return open();
+    s.digitTimer = setTimeout(open, 600); s.digitTimer.unref?.();
+    return false;
+  }
+  // Answering a Needs you item: a choice arms the answer line with what will
+  // happen; Enter does it. A reply or a decline asks for its words first.
+  const currentNeed = () => s.view === 'need' ? model().allNeeds.find(n => n.key === s.detail) : null;
+  function choose(id) {
+    const n = currentNeed(); if (!n) return;
+    const m = model(), pane = n.data?.pane;
+    if (id === 'open') {
+      if (pane && m.sessions.some(a => a.pane === pane)) return activate(`session:${pane}`);
+      if (n.go?.agent) return d.herdrGo({ agent: n.go.agent }).then(r => { s.message = r.ok ? 'Opened in Herdr.' : r.error; changed(); });
+      s.message = 'That session is no longer open.'; changed(); return;
+    }
+    const choice = [...needChoices(n), ...needActions(n)].find(c => c.id === id); if (!choice) return;
+    if (choice.needsText) { s.act = { choice, stage: 'text', text: '', says: '' }; changed(); return; }
+    const effect = needEffect(n, choice);
+    if (!effect?.args && effect?.type === 'brain') { s.message = 'Nothing to do for that.'; changed(); return; }
+    s.act = { choice, stage: 'confirm', says: effect.says }; changed();
+  }
+  async function actKey(input, k) {
+    const a = s.act;
+    if (a.busy) return false;
+    if (k.escape) { s.act = null; changed(); return false; }
+    if (a.stage === 'text') {
+      if (k.return) { if (!a.text.trim() && a.choice.id === 'reply') { s.message = 'Type the reply first.'; changed(); return false; } return performAct(); }
+      if (k.backspace || k.delete) a.text = [...a.text].slice(0, -1).join('');
+      else if (input && !k.ctrl && !k.meta && !k.tab && !k.upArrow && !k.downArrow) a.text += input.replace(/[\x00-\x1f\x7f]/g, '');
+      changed(); return false;
+    }
+    if (k.return) return performAct();
+    return false;
+  }
+  async function performAct() {
+    const a = s.act, n = currentNeed(), p = project();
+    if (!n) { s.act = null; s.message = 'This item has left the queue.'; changed(); return false; }
+    const effect = needEffect(n, a.choice, a.text);
+    if (!effect) { s.act = null; s.message = 'Nothing to do for that.'; changed(); return false; }
+    a.busy = true; a.says = effect.says; changed();
+    const r = effect.type === 'answer' ? await d.orgAnswer(p, { ...effect.request, headline: n.headline }) : await d.brainAct(effect.args);
+    if (!r.ok) { a.busy = false; s.act = null; s.message = r.blocked ? 'The session is stuck at a prompt and refused it. Open the session (o) and answer there.' : `Not done: ${r.error}`; changed(); return false; }
+    s.act = null;
+    await refresh();
+    await activate('back');
+    s.message = `Done: ${effect.says}.`; changed();
+    return false;
+  }
   async function openTab(space, tab) {
     const agents = model().sessions.filter(a => a.tab === tab);
     // A split with several agents needs an explicit choice, never an arbitrary first agent.
@@ -338,6 +421,17 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (s.interactive) return false;
     if (k.ctrl && input === 'c') return true;
     if (s.compose) return composeKey(input, k);
+    if (s.rename) return renameKey(input, k);
+    if (s.act) return actKey(input, k);
+    if (s.view === 'need' && !k.ctrl && !k.meta) {
+      const n = currentNeed(), choices = needChoices(n), actions = needActions(n, { canOpen: true });
+      const byKey = [...choices, ...actions].find(c => c.key === input);
+      if (byKey) return activate(`choose:${byKey.id}`);
+      // y takes the recommended choice when nothing is bound to y itself.
+      if (input === 'y' && choices.some(c => c.recommended)) return activate(`choose:${choices.find(c => c.recommended).id}`);
+    }
+    if (s.view === 'overview' && /^[0-9]$/.test(input) && !k.ctrl && !k.meta) return digit(input);
+    if (s.view === 'overview' && input === 'e' && s.focus?.startsWith('session:')) { startRename(s.focus.slice(8)); return false; }
     if (k.escape || (k.meta && k.leftArrow) || input === '\x1b[1;3D') return activate('back');
     if ((k.meta && k.rightArrow) || input === '\x1b[1;3C') return activate('forward');
     if (s.view === 'folder') {

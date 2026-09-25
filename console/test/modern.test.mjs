@@ -21,7 +21,7 @@ function fixture(overrides = {}) {
   const items = [{ id: 'G-1', kind: 'goal', title: 'Ship the result', status: 'open', parent: null, notes: [] }, { id: 'ENG-1', kind: 'task', role: 'engineer', title: 'Implement the result', parent: 'G-1', status: 'active', notes: [] }, { id: 'ENG-2', kind: 'task', role: 'engineer', title: 'Completed work', parent: 'G-1', status: 'done', notes: [] }];
   const today = p => ({ project: { top_goal: null }, waiting: [], running: p.name === 'Alpha' ? [{ run: 'R-1', item: 'ENG-1', title: 'Implement the result', agent: 'worker', workspace: '/a-lane', started: new Date().toISOString() }] : [], agent_runs: [], decided: [], finished: [] });
   const reads = [], calls = [], panes = [];
-  const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), brainQueue: async () => ({ rows: [], off: true }),
+  const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), orgRecap: async () => ({ block: null, threads: [], waiting: [] }), brainQueue: async () => ({ rows: [], off: true }),
     herdrList: async what => what === 'workspace' ? workspaces : what === 'pane' ? panes : tabs, herdrAgents: async () => ({ ok: true, agents }),
     herdrRead: async target => { reads.push(target); return { ok: true, text: `EXACT ${target.pane}\n${'output\n'.repeat(45)}` }; }, herdrGo: async target => { calls.push(target); return { ok: true }; }, gitSummary: async () => ({ branch: 'lane/alpha', changes: 2 }), ...overrides };
   const session = createModernSession({ config, deps, env: {} });
@@ -360,7 +360,7 @@ test('Needs folds session results that the org resolved, replaced, only reported
   assert.match(m.resolved.find(n => n.data.id === 'older').settled, /newer session result about ENG-1/);
   // Folded groups stay one keypress away and explain themselves.
   await session.activate('view:needs'); let text = rendered(session);
-  assert.match(text, /Needs you · 4/); assert.match(text, /Resolved 2/); assert.match(text, /Ended sessions 1/); assert.match(text, /Reports 1/);
+  assert.match(text, /Decide · 0 open in the org/); assert.match(text, /Stopped sessions · 4 left a question the org does not record/); assert.match(text, /Resolved 2/); assert.match(text, /Ended sessions 1/); assert.match(text, /Reports 1/);
   await session.activate('view:resolved'); await session.activate(`need:${m.resolved[0].key}`); text = rendered(session);
   assert.match(text, /Folded · /);
 });

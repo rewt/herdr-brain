@@ -52,7 +52,7 @@ export function catalog(configured, workspaces, identity, opened = [], agents = 
 }
 
 export function projectView(project, data, identity, now = Date.now()) {
-  const empty = { sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
+  const empty = { sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map(), runsById: new Map(), recap: null };
   if (!project) return empty;
   const spaces = data.workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey && project.repoKey);
   const spacesById = new Map(spaces.map(w => [w.workspace_id, w]));
@@ -93,7 +93,8 @@ export function projectView(project, data, identity, now = Date.now()) {
   };
   const waiting = settle(board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i))), itemsById,
     { live: new Set(data.agents.map(a => a.pane)), now });
-  return { ...empty, items, itemsById, board, sessions, spaces, tabs,
+  const runsById = new Map((data.status?.runs ?? []).map(r => [r.id, r]));
+  return { ...empty, items, itemsById, runsById, recap: data.recap ?? null, board, sessions, spaces, tabs,
     goals: items.filter(i => i.kind === 'goal' && !i.closed),
     tasks: items.filter(i => i.kind !== 'goal' && i.role !== 'human' && !['done', 'dropped'].includes(i.status)).map(i => ({ ...i, goal: goalOf(i) })),
     needs: waiting.filter(i => !i.foldedIn),

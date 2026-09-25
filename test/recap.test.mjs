@@ -113,7 +113,7 @@ test('org recap: threads from the idea, what each spawned and asked, who steered
   // Older open work is folded, not listed: the idea itself, and one proposal untouched since Sep 22.
   assert.equal(doc.backlog.open, 2);
   assert.equal(doc.backlog.stale, 1);
-  assert.deepEqual(doc.backlog.by_origin.map((g) => [g.id, g.count, g.stale]), [['ENG-1', 1, 1], ['ARCH-1', 1, 0]]);
+  assert.deepEqual(doc.backlog.by_goal.map((g) => [g.goal.id, g.count, g.stale, g.direct, g.parents.length]), [['G-1', 2, 1, 2, 0]]);
   // The text view says the same thing.
   const text = t.ok(['recap'], { now: local(25, '18:30') });
   assert.match(text, /^Fri afternoon · 12:41–now/);

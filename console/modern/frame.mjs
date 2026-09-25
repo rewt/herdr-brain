@@ -8,6 +8,7 @@ import { projectRows, composeModes, currentBlock, checkoutName } from './project
 import { needChoices, needActions, needEffect } from './needs.mjs';
 import { regionFor, pickerEntries } from './navigation.mjs';
 import { relatedWork, acceptanceCriteria } from './model.mjs';
+import { blockRows, threadRows, pendingRows, backlogRows, steeredRows, provenance } from './block.mjs';
 
 // These are the actual light/dark tokens from modern-console-overview.html.
 export const MODERN_PALETTES = {
@@ -87,7 +88,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   const breadcrumbX = rail ? x : x + Math.min(28, width - 33);
   if (s.history.length) control('back', '‹', 0, breadcrumbX, 2, 'blue');
   else put(0, breadcrumbX, '‹', 'muted', 'bg', false, 2);
-  const viewName = s.view === 'item' ? m.itemsById.get(s.detail)?.id ?? 'Item' : s.view.charAt(0).toUpperCase() + s.view.slice(1);
+  const viewName = s.view === 'item' ? m.itemsById.get(s.detail)?.id ?? 'Item' : s.view === 'thread' ? `Thread ${s.detail}` : s.view === 'overview' && m.recap?.block ? 'Block' : s.view === 'needs' ? 'Decide' : s.view.charAt(0).toUpperCase() + s.view.slice(1);
   put(0, breadcrumbX + 3, `Project / ${viewName}`, 'muted', 'bg', false, cols - breadcrumbX - 16);
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
@@ -100,9 +101,15 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   put(5, rail, '─'.repeat(cols - rail), 'rule');
   if (s.view !== 'output') {
     let tx = x;
-    for (const [id, label] of [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['needs', `Needs you ${m.needs.length}`]]) {
+    // The org's own questions are the decision count; what stopped sessions left
+    // behind is counted apart, so the number matches org today and org status.
+    const questions = m.needs.filter(n => n.kind === 'question').length, prompts = m.needs.length - questions;
+    const tabsFor = m.recap?.block
+      ? [['overview', 'Block'], ['pending', `Pending ${m.recap.pending.length}`], ['needs', `Decide ${questions}${prompts ? ` · ${prompts} prompts` : ''}`], ['backlog', `Backlog ${m.recap.backlog.open}`]]
+      : [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['needs', `Decide ${questions}${prompts ? ` · ${prompts} prompts` : ''}`]];
+    for (const [id, label] of tabsFor) {
       control(`view:${id}`, label, 4, tx, label.length + 2, id === 'needs' ? 'amber' : 'fg');
-      if (s.view === id || (id === 'needs' && NEED_FOLDS.some(f => f.view === s.view))) put(5, tx, '━'.repeat(label.length), 'blue', 'bg', false, label.length);
+      if (s.view === id || (id === 'overview' && s.view === 'thread') || (id === 'needs' && NEED_FOLDS.some(f => f.view === s.view))) put(5, tx, '━'.repeat(label.length), 'blue', 'bg', false, label.length);
       tx += label.length + 3;
     }
     if (width >= 70) control('checkouts', rail ? 'w Hide checkouts' : 'w Checkouts', 4, cols - 18, 16, 'muted');
@@ -155,7 +162,15 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     paragraph('The live trial currently opens existing folders and sessions. Idea capture and new-project creation are the next onboarding flow; they are not connected yet.'); row();
     row('Open a folder you already have', { id: 'folder', fg: 'blue' }); row('Browse open projects', { id: 'scope', fg: 'blue' });
   } else if (s.view === 'overview') {
-    body.push(...projectRows({ model: m, state: s, project: p, width, height: bodyHeight, now }));
+    body.push(...(m.recap?.block ? blockRows({ model: m, state: s, project: p, width, height: bodyHeight, now }) : projectRows({ model: m, state: s, project: p, width, height: bodyHeight, now })));
+  } else if (s.view === 'thread') {
+    body.push(...threadRows({ model: m, detail: s.detail, width }));
+  } else if (s.view === 'pending') {
+    body.push(...pendingRows({ model: m, width }));
+  } else if (s.view === 'backlog') {
+    body.push(...backlogRows({ model: m, width }));
+  } else if (s.view === 'steered') {
+    body.push(...steeredRows({ model: m, width }));
   } else if (s.view === 'sessions') {
     section(`Sessions · ${m.sessions.length}`); row(fullRow(compactSessions ? ['Session', 'Who', 'Where', 'State'] : ['Session', 'Who', 'Where', 'Up', 'State', 'Doing']), { fg: 'muted' }); sessionRows(m.sessions);
     if (compactSessions) { row(); paragraph('Open a session for full identity, uptime and activity.'); }
@@ -166,14 +181,26 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     if (!list.length) paragraph(s.errors.status ? 'Organization data is unavailable. Refresh to reconnect.' : p?.org ? 'Nothing defined yet. Explore first; structure can follow.' : 'No organization connected. Goals and tasks require project setup, which is not connected in this trial. Open a folder or inspect an existing Herdr conversation first.');
   } else if (NEED_FOLDS.some(f => f.view === s.view)) {
     const fold = NEED_FOLDS.find(f => f.view === s.view), list = m[fold.list];
-    section(`${fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
-    list.forEach(needRow); if (!list.length) paragraph('Nothing here.');
+    if (fold.view === 'needs') {
+      const questions = list.filter(n => n.kind === 'question'), results = list.filter(n => n.kind !== 'question');
+      section(`Decide · ${questions.length} open in the org`, 'amber');
+      questions.forEach(needRow); if (!questions.length) paragraph('Nothing in the org waits on you.');
+      row(); section(`Stopped sessions · ${results.length} left a question the org does not record`, 'muted');
+      paragraph('Read by Brain from each session\'s last screen. Answer here, or drop it; it is not an org decision until someone asks it with org ask.');
+      results.forEach(needRow); if (!results.length) paragraph('None.');
+    } else {
+      section(`${fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
+      list.forEach(needRow); if (!list.length) paragraph('Nothing here.');
+    }
     row(); for (const f of NEED_FOLDS) if (f.view === 'needs' || m[f.list].length) row(`${f.view === s.view ? '▸ ' : '  '}${f.label} ${m[f.list].length}`, { id: `view:${f.view}`, fg: f.view === 'needs' ? 'amber' : 'muted' });
   } else if (s.view === 'item') {
     const i = m.itemsById.get(s.detail);
     if (!i) paragraph('This item is no longer available in the current project.');
     else {
       section(`${i.id} · ${i.status}`, i.kind === 'goal' ? 'goal' : 'blue'); paragraph(i.title, 'fg'); row();
+      const origin = provenance(i, m.runsById, m.itemsById);
+      if (origin) paragraph(origin, i.created?.unattributed ? 'amber' : 'muted');
+      if (i.created?.why) paragraph(`Why: ${i.created.why}`);
       if (i.parent) row(`Parent: ${i.parent} · ${m.itemsById.get(i.parent)?.title ?? ''}`, { id: `item:${i.parent}`, fg: 'goal' });
       const related = relatedWork(m, i.id);
       row(); bodyRegion = 'sessions'; section(`Current linked sessions · ${related.current.length}`, 'teal');
@@ -341,7 +368,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · Enter opens a thread · [ ] earlier/later block · n write · ! decide · g goals · t tasks${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

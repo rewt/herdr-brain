@@ -223,6 +223,25 @@ only view of the organization. It is deterministic for a fixed record, config, `
 - *Finished* holds reports recorded today and items closed today (answered questions excluded).
 - Live Herdr state and session notes are not part of `org today`: the core never talks to Herdr.
 
+## `org recap`: one work block, top down
+
+`org recap [--back N] [--json]` derives the latest work block from the log (`--back 1` is
+the one before). A block is a stretch of activity with no gap over two hours; one longer
+than eight hours is cut at 06:00, 12:00, 18:00 and 22:00 local, and a piece under an hour
+and a half joins its neighbour, so an overnight run reads as one block. For the block it
+gives: the items its threads grew from; the open questions (the same list as `org today`);
+each thread (an item worked or created in the block whose parent was not) with its runs,
+the items it spawned and which are still open, its questions and decisions; every
+question asked or answered and every decision note; the sessions (the actors that started
+runs, and each worker agent with its runs); what is pending; and the older open work
+folded by goal and parent, with how much of it is untouched for two days. Deterministic
+for a fixed record, `ORG_NOW` and `TZ`. The modern console opens on it.
+
+A write with neither `ORG_ACTOR` nor a terminal is still recorded as `human`, carries
+`"unattributed": true`, and the CLI prints how to name the session. Nothing is refused
+for it. Agent sessions set `ORG_ACTOR` to their session name (settle-watch, `brain start`
+and chats started from the console do); the console writes as `ORG_ACTOR=human`.
+
 ## The console
 
 `org console` (version 0.0.2) is a terminal app for a Herdr tab. It costs no model tokens and

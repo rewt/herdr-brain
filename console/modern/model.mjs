@@ -127,7 +127,9 @@ export function settle(waiting, itemsById, { live = new Set(), now = Date.now() 
     if (closedItem(item)) return { ...r, foldedIn: 'resolved', settled: `${item.id} is ${item.status === 'dropped' ? 'dropped' : 'closed'} in the organization.` };
     if (id && newest.get(id) !== r) return { ...r, foldedIn: 'resolved', settled: `A newer session result about ${id} replaces this one.` };
     if (['report', 'finished'].includes(r.category) || r.data?.digest?.needs_you === false) return { ...r, foldedIn: 'reports', settled: 'This session reported without asking for a decision.' };
-    if (!id && !live.has(r.data?.pane) && now - Date.parse(r.data?.at) > ENDED_AFTER_MS) return { ...r, foldedIn: 'ended', settled: 'Its session has ended and no org item records this question. Raise it in the org if it still matters.' };
+    // A session gone for over a day will not act on an answer. Its question
+    // folds out; the org item it named, if any, is still open in the org.
+    if (!live.has(r.data?.pane) && now - Date.parse(r.data?.at) > ENDED_AFTER_MS) return { ...r, foldedIn: 'ended', settled: id ? `Its session has ended; ${id} is still open in the organization, where it is tracked.` : 'Its session has ended and no org item records this question. Raise it in the org if it still matters.' };
     return r;
   });
 }

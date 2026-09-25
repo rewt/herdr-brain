@@ -95,7 +95,7 @@ export function blockRows({ model: m, state: s, width, height, now = Date.now() 
     ...(prev ? [cell(`‹ [ ${prev.name}`, width - navW, prev && next ? navW - next.name.length - 8 : navW, { id: 'block:prev', fg: 'goal', bg: 'goalBg' })] : []),
     ...(next ? [cell(`${next.name} ] ›`, width - next.name.length - 5, next.name.length + 5, { id: 'block:next', fg: 'goal', bg: 'goalBg' })] : []),
     ...(!prev && !next ? [cell('', width - navW, navW, { bg: 'goalBg' })] : []));
-  const facts = `${c.runs} runs by ${c.workers} worker sessions · ${c.decisions} decided · ${c.answered} answered · ${c.spawned} spawned`;
+  const facts = `${c.runs} runs by ${c.workers} worker sessions · ${c.decisions} decided · ${c.answered} answered · ${c.spawned} spawned${c.dropped ? ` · ${c.dropped} dropped` : ''}`;
   const pend = `${c.pending} still pending ›`;
   add('goals', cell(` ${facts} · `, 0, facts.length + 4, { fg: 'muted' }),
     cell(pend, facts.length + 4, width - facts.length - 4, { id: 'view:pending', fg: c.pending ? 'blue' : 'muted', bold: Boolean(c.pending) }));
@@ -111,8 +111,8 @@ export function blockRows({ model: m, state: s, width, height, now = Date.now() 
     cell(padStart(compact ? 'the org\'s open questions ' : 'the org\'s open questions · the same list as org today ', width - 16), 16, width - 16, { fg: 'amber', bg: 'attentionBg' }));
   for (const q of decide) {
     const from = q.asked.run ? `${q.asked.run}${q.asked.lane ? ` ${laneFamily(q.asked.lane)}` : ''}` : actorWords(q.asked.by, r);
-    const hint = `${q.recommend ? `recommend ${q.recommend} · ` : ''}asked ${dayHm(q.asked.at, b.end)} · ${from}`;
-    const hw = compact ? 0 : Math.min(48, hint.length + 1);
+    const hint = ` ${q.recommend ? `recommend ${q.recommend} · ` : 'no recommendation · '}asked ${dayHm(q.asked.at, b.end)} · ${from}`;
+    const hw = compact ? 0 : Math.min(58, hint.length + 1);
     add('needs', cell(`  ${pad(q.id, 9)}${plainTitle(q.title)}`, 0, width - hw, { id: q.need ? `need:${q.need.key}` : `item:${q.id}`, fg: 'bright', bg: 'attentionBg' }),
       ...(hw ? [cell(hint, width - hw, hw, { fg: 'muted', bg: 'attentionBg' })] : []));
   }

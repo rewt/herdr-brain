@@ -42,7 +42,7 @@ const today = { project: {}, waiting: [{ id: 'HUM-2', title: 'Which curve?', sta
 function fixture() {
   const space = { workspace_id: 'w1', label: 'main', active_tab_id: 'w1:t1', worktree: { repo_key: '/a/.git', repo_root: '/a', repo_name: 'a', checkout_path: '/a', is_linked_worktree: false } };
   const agents = [{ name: 'lane-hash-2', pane: 'w1:p2', tab: 'w1:t1', workspace: 'w1', cwd: '/a', tool: 'claude', status: 'working' }];
-  const brainRow = { id: 'b1', session: 'old-session', where: '/a', project: 'a', at: at(17, '21:30'), state: 'idle', status: 'digested', pane: 'gone:1', digest: { kind: 'decision', needs_you: true, item: 'ENG-1', question: 'Stop the old job?' } };
+  const brainRow = { id: 'b1', session: 'old-session', where: '/a', project: 'a', at: at(25, '17:30'), state: 'idle', status: 'digested', pane: 'gone:1', digest: { kind: 'decision', needs_you: true, item: 'ENG-1', question: 'Stop the old job?' } };
   const backs = [];
   const deps = {
     identity: cwd => cwd?.startsWith('/a') ? { key: '/a/.git', root: '/a', name: 'a', git: true } : null,
@@ -82,7 +82,7 @@ test('the block screen: when, what it grew from, the org\'s decisions apart from
   assert.match(text, /grew from ARCH-1 Research \(operator\): verify proofs in script/);
   assert.match(text, /Decide · 1 .*the same list as org today/);
   assert.match(text, /HUM-2 {4}Which curve\?/);
-  assert.match(text, /\+ 1 stopped session left a question the org does not record · oldest Sep 17 21:30/);
+  assert.match(text, /\+ 1 stopped session left a question the org does not record · oldest 17:30/);
   assert.match(text, /\?ARCH-2 {4}Prototype the one-hash in.*\s2\s+1\s+1\s+1 {2}16:20 One-hash input accepted/);
   assert.match(text, /15:06 {2}HUM-1 → yes +Operator: adopt it\s+· sup-1/);
   assert.match(text, /13:44 {2}asked HUM-1 +Adopt it before the audit\?\s+· R-1 pool-hash/);

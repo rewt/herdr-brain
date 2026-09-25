@@ -20,7 +20,7 @@ export const MODERN_PALETTE = MODERN_PALETTES.light;
 export const NEED_FOLDS = [
   { view: 'needs', list: 'needs', title: 'Needs you', label: 'Open' },
   { view: 'resolved', list: 'resolved', title: 'Resolved in the org', label: 'Resolved', about: 'Session questions whose org item has closed, or that a newer result about the same item replaced.' },
-  { view: 'ended', list: 'ended', title: 'Ended sessions', label: 'Ended sessions', about: 'Questions from sessions that ended over a day ago, with no org item recording them.' },
+  { view: 'ended', list: 'ended', title: 'Ended sessions', label: 'Ended sessions', about: 'Questions from sessions that ended over a day ago. Nobody will act on an answer here; an org item they name stays open in the org.' },
   { view: 'reports', list: 'reports', title: 'Session reports', label: 'Reports', about: 'Sessions that finished and reported without asking for a decision.' },
   { view: 'later', list: 'later', title: 'Saved for later', label: 'Saved for later' },
   { view: 'parked', list: 'parked', title: 'Future stages', label: 'Future stages' },

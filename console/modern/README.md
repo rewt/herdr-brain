@@ -49,7 +49,21 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 
 ## What works
 
-- The project screen (`h`) opens with counts (sessions, working, blocked,
+- The project screen (`h`) is the work block, from `org recap --json`: when it
+  ran and what it grew from; **Decide**, the org's open questions (the same
+  list as `org today`), with what stopped sessions left behind counted apart;
+  **Threads**, one per line of work started in the block (runs, lanes, items
+  spawned, items still open, latest decision or headline); **Steered and
+  decided**, every question asked or answered and every decision note, newest
+  first, with who recorded it; **Sessions now**, numbered, each with what it
+  did in the block, plus org sessions no live session carries the name of; and
+  the backlog folded to one line. Enter opens a thread (its pending items with
+  the run that spawned each, its steering and its runs). `[` and `]` step to
+  the block before or after. Tabs: Block, Pending, Decide, Backlog; `g` and
+  `t` still open goals and tasks. An item page says which run spawned it,
+  while working on what. Without an organization or a block, the screen below
+  is shown instead.
+- Without a recap, the project screen (`h`) opens with counts (sessions, working, blocked,
   idle, done), then the work block: an open goal marked `meta.block`
   (morning, afternoon, overnight), else the goal most current sessions are
   linked to. Its open tasks follow, the ones with a session first, with that

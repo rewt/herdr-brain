@@ -27,10 +27,10 @@ function run(cmd, args, { env, timeout = 15000 } = {}) {
 }
 
 function orgEnv(project) {
-  const env = { ...process.env, ORG_DIR: project.org };
-  // Answers from the console are the operator's.
-  delete env.ORG_ACTOR;
-  return env;
+  // Writes from the console are the operator's own, and say so: an inherited
+  // session name must not be used, and without a terminal an unnamed write
+  // would be flagged unattributed.
+  return { ...process.env, ORG_DIR: project.org, ORG_ACTOR: 'human' };
 }
 
 function firstLine(text) {
@@ -48,6 +48,15 @@ export async function orgStatus(project) {
   if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org status failed');
   const doc = JSON.parse(r.stdout);
   if (!Array.isArray(doc.items) || !Array.isArray(doc.runs)) throw new Error('unexpected org status output');
+  return doc;
+}
+
+// One work block, top down (org recap --json). back=0 is the latest block.
+export async function orgRecap(project, back = 0) {
+  const r = await run(process.execPath, [ORG_BIN, 'recap', '--json', ...(back ? ['--back', String(back)] : [])], { env: orgEnv(project) });
+  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org recap failed');
+  const doc = JSON.parse(r.stdout);
+  if (!Array.isArray(doc.threads) || !Array.isArray(doc.waiting)) throw new Error('unexpected org recap output');
   return doc;
 }
 
@@ -93,7 +102,9 @@ export async function orgAdd(project, request) {
 // agent started at its shell prompt, then the operator's first words, if any.
 export async function herdrStartChat({ workspace, cwd, kind, name, prompt }) {
   const herdr = herdrBinary();
-  const tab = await run(herdr, ['tab', 'create', '--workspace', workspace, '--cwd', cwd, '--label', 'chat', '--no-focus'], { timeout: 5000 });
+  // The chat's org writes carry its Herdr agent name, so the record and the
+  // live session join exactly (ORG_ACTOR is identity, never authority).
+  const tab = await run(herdr, ['tab', 'create', '--workspace', workspace, '--cwd', cwd, '--label', 'chat', '--env', `ORG_ACTOR=${name}`, '--no-focus'], { timeout: 5000 });
   if (!tab.ok) return { ok: false, error: firstLine(tab.stderr) || 'herdr tab create failed' };
   let pane = null;
   try { pane = JSON.parse(tab.stdout)?.result?.root_pane?.pane_id ?? null; } catch { /* reported below */ }

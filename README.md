@@ -431,7 +431,7 @@ fails, right clicks stay Herdr's; `m` opens the same menu. The keyboard does eve
 does.
 
 The console records answers only through `org answer` (a child process with an argument array,
-`ORG_ACTOR` removed, so the answer is the operator's; the reason goes as `--note=<reason>`) and
+`ORG_ACTOR=human`, so the answer is the operator's; the reason goes as `--note=<reason>`) and
 re-reads at once. Everything agents wrote is shown with terminal escape sequences and control
 characters removed. A text document opened with `o` is written to a private temporary folder and
 removed when the editor returns (or, for macOS `open -t`, when the console quits). It never appends to

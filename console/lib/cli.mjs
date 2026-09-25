@@ -27,10 +27,10 @@ function run(cmd, args, { env, timeout = 15000 } = {}) {
 }
 
 function orgEnv(project) {
-  const env = { ...process.env, ORG_DIR: project.org };
-  // Answers from the console are the operator's.
-  delete env.ORG_ACTOR;
-  return env;
+  // Writes from the console are the operator's own, and say so: an inherited
+  // session name must not be used, and without a terminal an unnamed write
+  // would be flagged unattributed.
+  return { ...process.env, ORG_DIR: project.org, ORG_ACTOR: 'human' };
 }
 
 function firstLine(text) {
@@ -41,6 +41,13 @@ export async function orgToday(project) {
   const r = await run(process.execPath, [ORG_BIN, 'today', '--json'], { env: orgEnv(project) });
   if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org today failed');
   return JSON.parse(r.stdout);
+}
+
+// Recent events, one JSON object per line, for the items pane.
+export async function orgLog(project, since = '36h') {
+  const r = await run(process.execPath, [ORG_BIN, 'log', '--since', since, '--json'], { env: orgEnv(project) });
+  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org log failed');
+  return r.stdout.split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
 }
 
 export async function orgStatus(project) {
@@ -179,6 +186,14 @@ export async function herdrRead(target, lines = 400) {
 
 // Sends the operator's words to a session. Herdr refuses a session stuck at a
 // prompt before sending anything (agent_blocked), so this cannot jam one.
+// What a pane shows right now, and nothing more. The `recent` sources make Herdr
+// scroll a full-screen app such as Claude Code to collect its history, which the
+// operator sees as the session scrolling up by itself; `visible` touches nothing.
+export async function herdrVisible(pane) {
+  const r = await run(herdrBinary(), ['pane', 'read', pane, '--source', 'visible', '--format', 'text'], { timeout: 4000 });
+  return r.ok ? { ok: true, text: r.stdout } : { ok: false, error: firstLine(r.stderr) || 'herdr pane read failed' };
+}
+
 export async function herdrPrompt(agent, text) {
   if (!agent) return { ok: false, error: 'that session has no name Herdr can address' };
   const r = await run(herdrBinary(), ['agent', 'prompt', agent, text], { timeout: 30000 });

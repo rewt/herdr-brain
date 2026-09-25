@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import {
-  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic,
+  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
   BUDGET_KEYS, attention, blockedBy, fold, isResolved, itemStatus, nextItemId, nextRunId, openRuns,
@@ -15,6 +15,7 @@ import {
 import { readReport } from '../lib/report.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
+import { blockJson, renderBlock } from '../lib/block.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate,
@@ -60,6 +61,8 @@ Views (zero inference)
   org show <ID> [--json]                  an item or run with its reports and history
   org log [--since 2h|09:00|DATE] [--limit N] [--json]
   org today [--json]                      what waits on the operator, was decided, runs and finished today
+  org recap [--back N] [--json]           the latest work block top down: threads, what they spawned,
+                                          asked and were told, what is pending (--back 1: the one before)
   org console [--project NAME] [--modern] the operator console (needs: npm --prefix console ci)
 
 The organization is found from $ORG_DIR or the nearest .org/ above the current directory.
@@ -98,10 +101,17 @@ function view(ctx) {
   return { orgDir: ctx.dir, events: ctx.events, tornTail: ctx.tornTail, config: ctx.config, now: ctx.now, cli: cliString(ctx.dir) };
 }
 
+let warnedUnattributed = false;
 function mutate(ctx, fn) {
+  const who = writer();
+  if (who.unattributed && !warnedUnattributed) {
+    warnedUnattributed = true;
+    err('org: recorded as human but unattributed (no ORG_ACTOR, no terminal). An agent session sets ORG_ACTOR=<its session name>.\n');
+  }
   const res = transact(ctx.dir, (events) => fn(fold(events), events), {
     at: ctx.now,
-    actor: process.env.ORG_ACTOR || 'human',
+    actor: who.actor,
+    unattributed: who.unattributed,
   });
   if (res.repaired) err('org: repaired an incomplete last event left by an interrupted write\n');
   return res;
@@ -281,7 +291,7 @@ function ask(argv) {
   }
   const ctx = openOrg();
   const policy = categoryPolicy(ctx.config, values.category);
-  const actor = process.env.ORG_ACTOR || 'human';
+  const { actor } = writer();
   const { result } = mutate(ctx, (s) => {
     requireItem(s, values.parent);
     const blocks = [...new Set(values.blocks ?? [])];
@@ -318,7 +328,7 @@ function answer(argv) {
   const [id, ...words] = positionals;
   const { answer: reply, rest } = parseReply(words.join(' '));
   if (!reply) throw new UserError('an answer is required: yes, no or a short text');
-  const actor = process.env.ORG_ACTOR || 'human';
+  const { actor } = writer();
   const note = [rest, values.note?.replace(/\s+/g, ' ').trim()].filter(Boolean).join('; ') || null;
   const { result } = mutate(openOrg(), (s) => {
     const item = requireItem(s, id);
@@ -700,6 +710,16 @@ function today(argv) {
   return 0;
 }
 
+function recap(argv) {
+  const { values } = args(argv, { json: { type: 'boolean' }, back: { type: 'string' } }, { max: 0, usage: 'org recap [--back N] [--json]' });
+  const back = values.back == null ? 0 : Number(values.back);
+  if (!Number.isInteger(back) || back < 0) throw new UserError('--back expects a whole number of blocks (0 is the latest)');
+  const ctx = openOrg();
+  const doc = blockJson(ctx.state, ctx.events, { orgDir: ctx.dir, now: ctx.now, back });
+  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderBlock(doc));
+  return 0;
+}
+
 // The console is an isolated package with its own dependencies; the core only launches it.
 function consoleApp(argv) {
   const { values } = args(argv, { project: { type: 'string' }, modern: { type: 'boolean' }, folder: { type: 'string' }, help: { type: 'boolean' } }, { max: 0, usage: 'org console [--project NAME] [--modern] [--folder PATH] [--help]' });
@@ -746,7 +766,7 @@ function log(argv) {
 
 const COMMANDS = {
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, console: consoleApp,
+  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, console: consoleApp,
 };
 
 function main(argv) {

@@ -67,7 +67,10 @@ export function projectView(project, data, identity, now = Date.now()) {
   const items = data.status?.items ?? [];
   const itemsById = new Map(items.map(i => [i.id, i]));
   const goalOf = item => { const visited = new Set(); for (let i = item; i && !visited.has(i.id); i = itemsById.get(i.parent)) { if (i.kind === 'goal') return i.id; visited.add(i.id); } return null; };
-  const sessions = board.groups.flatMap(g => g.rows).filter(row => row.live).map(row => ({ ...row, pane: row.live?.pane, tab: row.live?.tab, space: row.live?.workspace,
+  // A pane's label is the operator's own name for a session (display only).
+  const labels = new Map((data.panes ?? []).filter(x => x.label).map(x => [x.pane_id, x.label]));
+  const sessions = board.groups.flatMap(g => g.rows).filter(row => row.live).map(row => ({ ...row, pane: row.live?.pane, tab: row.live?.tab, space: row.live?.workspace, label: labels.get(row.live?.pane) ?? null,
+    since: data.since?.get(row.live?.pane)?.at ?? null,
     task: itemsById.has(row.run?.item) ? row.run.item : null, goal: goalOf(itemsById.get(row.run?.item)),
     recorded: Boolean(row.run && !(today?.running ?? []).some(r => r.run === row.run.run)),
   }));

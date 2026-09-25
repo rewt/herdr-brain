@@ -107,6 +107,16 @@ export async function herdrStartChat({ workspace, cwd, kind, name, prompt }) {
   return { ok: true, pane, name };
 }
 
+// The operator's own name for a session: a display-only pane label. Agent
+// names are left alone, since org runs are linked to them.
+export async function herdrRename(pane, label) {
+  // Herdr keeps a `--` as part of the label, so a leading dash is dropped instead.
+  const text = String(label ?? '').trim().replace(/^-+\s*/, '');
+  const args = text ? ['pane', 'rename', pane, text] : ['pane', 'rename', pane, '--clear'];
+  const r = await run(herdrBinary(), args, { timeout: 4000 });
+  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || firstLine(r.stdout) || 'herdr pane rename failed' };
+}
+
 export async function herdrAgents() {
   const r = await run(herdrBinary(), ['agent', 'list'], { timeout: 4000 });
   if (!r.ok) return { ok: false, agents: [], error: firstLine(r.stderr) || r.error?.code || 'herdr agent list failed' };

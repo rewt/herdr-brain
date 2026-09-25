@@ -17,6 +17,7 @@ import { PALETTE } from './lib/theme.mjs';
 import { createModernSession } from './modern/session.mjs';
 import { MODERN_PALETTES } from './modern/frame.mjs';
 import { folderPath, createIdentityReader } from './modern/model.mjs';
+import { createPainter } from './modern/paint.mjs';
 
 let opt;
 try {
@@ -130,6 +131,7 @@ const ALT_ON = '\x1b[?1049h';
 const ALT_OFF = '\x1b[?1049l';
 const background = () => opt.modern ? `\x1b[48;2;${MODERN_PALETTES[session.ui.appearance].bg.slice(1).match(/../g).map(x => parseInt(x, 16)).join(';')}m` : '\x1b[48;2;0;0;0m';
 let instance = null;
+let painter = null;
 let remount = null;
 let suspending = false;
 let terminalTaken = false;
@@ -144,7 +146,8 @@ const PANE = process.env.HERDR_PANE_ID || null;
 // The terminal's modes, taken and given back as a pair. Giving back is safe to repeat.
 function takeTerminal() {
   terminalTaken = true;
-  process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${background()}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}`);
+  process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${background()}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}${opt.modern ? '\x1b[?7l\x1b[?25l' : ''}`);
+  painter?.invalidate();
   // The modern trial has no right-click menu, so Herdr keeps its own.
   if (!opt.modern) herdrRightClick(PANE, 'pane');
 }
@@ -152,7 +155,7 @@ function takeTerminal() {
 function giveBackTerminal() {
   if (!terminalTaken) return;
   terminalTaken = false;
-  process.stdout.write(`${MOUSE_OFF}\x1b[0m${ALT_OFF}`);
+  process.stdout.write(`${MOUSE_OFF}\x1b[0m${opt.modern ? '\x1b[?7h\x1b[?25h' : ''}${ALT_OFF}`);
   if (!opt.modern) herdrRightClick(PANE, 'herdr');
 }
 
@@ -182,12 +185,15 @@ async function suspend(fn) {
 
 const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps: { suspend }, onChange: notify });
 
+
 function color(token) {
   if (!NO_COLOR && opt.modern && /^#[0-9a-f]{6}$/i.test(token ?? '')) return token;
   if (!NO_COLOR && opt.modern && token === 'terminalBg') return '#101216';
   if (!NO_COLOR && opt.modern && token === 'terminalFg') return '#e4e4e4';
   return NO_COLOR ? undefined : (opt.modern ? MODERN_PALETTES[session.ui.appearance][token] : PALETTE[token]);
 }
+
+painter = opt.modern ? createPainter({ write: (text) => process.stdout.write(text), color: (token) => color(token) }) : null;
 
 function Line({ spans }) {
   return h(Text, { wrap: 'truncate-end' }, ...spans.map((s, j) => h(Text, {
@@ -223,28 +229,54 @@ function Console() {
     const t = setTimeout(paintLastRow, 20);
     return () => clearTimeout(t);
   });
-  useInput((input, key) => {
-    const event = parseMouse(input);
-    // Typing into a session arrives raw (below); only the mouse is the console's.
-    if (session.ui.interactive && !event) return;
-    const done = event ? session.mouse(event) : session.key(input, key);
-    done.then((quit) => {
-      if (quit) exit();
-    }, (error) => {
-      session.ui = { ...session.ui, message: `error: ${error.message}`, messageStyle: 'error' };
-      notify();
-    });
-  });
+  useInput((input, key) => handleInput(input, key, exit));
   // One line short of the terminal, so Ink never has to clear the whole screen; the
   // minimum-size check still applies to the terminal itself.
   const { lines } = session.frame(dims.cols, Math.max(1, dims.rows - 1), { termRows: dims.rows });
   return h(Box, { flexDirection: 'column' }, ...lines.map((line, i) => h(Line, { key: i, spans: line.spans })));
 }
 
+function handleInput(input, key, exit) {
+  const event = parseMouse(input);
+  // Typing into a session arrives raw (below); only the mouse is the console's.
+  if (session.ui.interactive && !event) return;
+  const done = event ? session.mouse(event) : session.key(input, key);
+  done.then((quit) => {
+    if (quit) exit();
+  }, (error) => {
+    session.ui = { ...session.ui, message: `error: ${error.message}`, messageStyle: 'error' };
+    notify();
+  });
+}
+
+// The modern console paints its own rows (modern/paint.mjs); Ink only reads
+// input here and renders nothing, so it never erases the screen.
+function ModernConsole() {
+  const { exit } = useApp();
+  useEffect(() => {
+    let pending = null;
+    const draw = () => {
+      pending = null;
+      if (!terminalTaken || suspending) return;
+      const { cols, rows } = size();
+      painter.paint(session.frame(cols, rows).lines);
+    };
+    const schedule = () => { pending ??= setTimeout(draw, 16); };
+    const resize = () => { painter.invalidate(); if (!NO_COLOR) process.stdout.write(`${background()}\x1b[2J\x1b[0m`); schedule(); };
+    listeners.add(schedule);
+    process.stdout.on('resize', resize);
+    const clock = setInterval(schedule, 1000);
+    draw();
+    return () => { listeners.delete(schedule); process.stdout.off('resize', resize); clearInterval(clock); clearTimeout(pending); };
+  }, []);
+  useInput((input, key) => handleInput(input, key, exit));
+  return null;
+}
+
 // Ink exits on q and on Ctrl-C; an unmount for an editor is not an exit.
 remount = () => {
   // Ctrl-C belongs to a session while typing into it, so the console handles it itself.
-  instance = render(h(Console), { exitOnCtrlC: !opt.modern, patchConsole: false });
+  instance = render(h(opt.modern ? ModernConsole : Console), { exitOnCtrlC: !opt.modern, patchConsole: false });
   instance.waitUntilExit().then(() => {
     if (!suspending) finish(0);
   }, () => finish(1));

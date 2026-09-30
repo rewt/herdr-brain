@@ -206,7 +206,7 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
 }
 
 export function createFeedSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
-  const d = { orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrGo: cli.herdrGo, herdrList: cli.herdrList, herdrRead: cli.herdrRead, now: () => Date.now(), ...deps };
+  const d = { orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrGo: cli.herdrGo, herdrList: cli.herdrList, herdrVisible: cli.herdrVisible, now: () => Date.now(), ...deps };
   const project = config.projects[projectIndex] ?? null;
   const s = { view: 'feed', detail: null, screen: '', watching: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', interactive: false, targets: [], timer: null, stopped: false, pending: null, history: [] };
@@ -223,7 +223,7 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
     return s.pending;
   }
   // The chat beside this pane: HERDR_FEED_WATCH names a pane or agent; otherwise
-  // the agent sharing this pane's tab. Its recent screen is read, never written.
+  // the agent sharing this pane's tab. Its visible screen is read, never written.
   async function readBeside() {
     try {
       let target = env.HERDR_FEED_WATCH ?? null;
@@ -233,7 +233,8 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
       }
       if (!target) { s.watching = null; return; }
       const agent = s.agents.find(a => a.pane === target || a.name === target);
-      const r = await d.herdrRead(/^w[^:\s]*:p\S+$/.test(target) ? { pane: target } : { agent: target }, 160);
+      // Only what is on screen: reading history would scroll the chat (see herdrVisible).
+      const r = await d.herdrVisible(agent?.pane ?? target);
       if (r.ok) { s.screen = r.text; s.watching = agent?.name ?? target; delete s.errors.screen; } else s.errors.screen = `screen: ${r.error}`;
     } catch (e) { s.errors.screen = `screen: ${e.message}`; }
   }

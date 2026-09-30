@@ -179,6 +179,14 @@ export function readArgs({ agent, pane }, lines = 400) {
   return null;
 }
 
+// What a pane shows right now, and nothing more. The `recent` sources make Herdr
+// scroll a full-screen app such as Claude Code to collect its history, which the
+// operator sees as the session scrolling up by itself; `visible` touches nothing.
+export async function herdrVisible(pane) {
+  const r = await run(herdrBinary(), ['pane', 'read', pane, '--source', 'visible', '--format', 'text'], { timeout: 4000 });
+  return r.ok ? { ok: true, text: r.stdout } : { ok: false, error: firstLine(r.stderr) || 'herdr pane read failed' };
+}
+
 export async function herdrRead(target, lines = 400) {
   const args = readArgs(target, lines);
   if (!args) return { ok: false, error: 'no Herdr agent or pane to read' };

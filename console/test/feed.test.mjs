@@ -81,9 +81,9 @@ test('the pane reads the agent sharing its tab and lists what that chat mentions
   const session = createFeedSession({ config: { projects: [{ name: 'Alpha', org: '/org' }] }, env: { HERDR_PANE_ID: 'w:p9' },
     deps: { now: () => now, orgStatus: async () => status, orgLog: async () => events, herdrAgents: async () => ({ ok: true, agents: [...agents, { name: 'supervisor', pane: 'w:p1', status: 'idle' }] }),
       herdrList: async () => [{ pane_id: 'w:p1', tab_id: 'w:t1', agent: 'claude' }, { pane_id: 'w:p9', tab_id: 'w:t1' }, { pane_id: 'w:p2', tab_id: 'w:t2', agent: 'claude' }],
-      herdrRead: async t => { reads.push(t); return { ok: true, text: 'Next: ENG-2 (R-2).' }; } } });
+      herdrVisible: async t => { reads.push(t); return { ok: true, text: 'Next: ENG-2 (R-2).' }; } } });
   await session.refresh();
-  assert.deepEqual(reads, [{ pane: 'w:p1' }]);
+  assert.deepEqual(reads, ['w:p1'], 'only the visible screen of the tab neighbour is read');
   const text = session.frame(60, 40).lines.map(lineText).join('\n');
   assert.match(text, /on screen · 1 +supervisor/); assert.match(text, /ENG-2 +active +Build the wrapper/); assert.match(text, /● R-2 claude working/);
 });

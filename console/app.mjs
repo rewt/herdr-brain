@@ -18,6 +18,7 @@ import { createModernSession } from './modern/session.mjs';
 import { MODERN_PALETTES } from './modern/frame.mjs';
 import { folderPath, createIdentityReader } from './modern/model.mjs';
 import { createPainter } from './modern/paint.mjs';
+import { createFeedSession } from './modern/feed.mjs';
 
 let opt;
 try {
@@ -25,6 +26,7 @@ try {
     options: {
       project: { type: 'string' },
       modern: { type: 'boolean' },
+      feed: { type: 'boolean' },
       folder: { type: 'string' },
       config: { type: 'string' },
       print: { type: 'string' },
@@ -54,6 +56,8 @@ Appearance: D toggles the preview's light/dark colors; HERDR_CONSOLE_THEME=dark 
 `);
   process.exit(0);
 }
+// The items pane is a modern-mode view: same config, painter and input.
+if (opt.feed) opt.modern = true;
 if (opt.version) {
   process.stdout.write(`${VERSION}\n`);
   process.exit(0);
@@ -89,7 +93,7 @@ if (opt.project) {
 }
 
 const NO_COLOR = Boolean(process.env.NO_COLOR);
-const createConsole = opt.modern ? createModernSession : createSession;
+const createConsole = opt.feed ? createFeedSession : opt.modern ? createModernSession : createSession;
 
 if (opt.print) {
   const m = /^(\d+)x(\d+)$/.exec(opt.print);

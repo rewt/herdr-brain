@@ -5,6 +5,7 @@
 // the chat does not have to be read to know what exists. It reads through the
 // org CLI and Herdr's agent list; its only effect is focusing a session in Herdr.
 import { pad, clip, wrap, sanitize } from '../lib/text.mjs';
+import fs from 'node:fs';
 import * as cli from '../lib/cli.mjs';
 
 const clean = t => sanitize(String(t ?? '')).replace(/\s+/g, ' ').trim();
@@ -81,9 +82,73 @@ export function mentions(text, items, runs) {
   return { known, unknown };
 }
 
+// A report's "Decisions for the operator" section: numbered questions, each
+// with its bold recommendation. Reports are the agents' own words; nothing is
+// inferred beyond the section's numbering and its "Recommend" phrase.
+export function reportDecisions(markdown) {
+  const text = String(markdown ?? '');
+  const head = /^#{2,4}\s+.*decisions?\b.*(operator|you)\b.*$/im.exec(text) ?? /^#{2,4}\s+.*(operator|human)\b.*decisions?\b.*$/im.exec(text);
+  if (!head) return [];
+  const rest = text.slice(head.index + head[0].length), end = rest.search(/^#{1,4}\s/m);
+  const section = end < 0 ? rest : rest.slice(0, end);
+  const items = [];
+  for (const m of section.matchAll(/^\s*(\d+)[.)]\s+([\s\S]*?)(?=^\s*\d+[.)]\s|(?![\s\S]))/gm)) {
+    const body = m[2].replace(/\s+/g, ' ').trim();
+    const q = /^\*\*(.+?)\*\*/.exec(body)?.[1] ?? body.split(/(?<=\?)\s/)[0];
+    const rec = /recommend(?:ed|ation)?:?\s*\*\*(.+?)\*\*/i.exec(body)?.[1] ?? null;
+    items.push({ n: Number(m[1]), question: q.replace(/\*\*/g, '').trim(), recommend: rec, detail: body.replace(/^\*\*.+?\*\*\s*/, '').replace(/\*\*/g, '') });
+  }
+  return items;
+}
+
+// What waits on the operator: open org questions, and operator decisions in
+// recent reports that the item has no decision note for since. Ordered by how
+// much each blocks, then oldest first (or by ID).
+export function waitingQueue(items, runs, events, decisionsByRun = new Map(), sort = 'blocking') {
+  const q = [];
+  for (const i of items.values()) {
+    if (i.role !== 'human' || i.closed || ['done', 'dropped'].includes(i.status)) continue;
+    q.push({ key: i.id, id: i.id, run: i.created?.run ?? null, title: i.title, at: i.created?.at, blocks: i.blocks?.length ?? 0, source: 'question',
+      decisions: [{ n: 1, question: i.title, recommend: i.meta?.recommend ?? null, detail: [i.meta?.why, i.meta?.on_yes && `If yes: ${i.meta.on_yes}`, i.meta?.on_no && `If no: ${i.meta.on_no}`].filter(Boolean).join(' ') }] });
+  }
+  for (const e of events) {
+    if (e.type !== 'report.ingested') continue;
+    const decisions = decisionsByRun.get(e.run); if (!decisions?.length) continue;
+    const item = items.get(e.item); if (!item) continue;
+    const answered = (item.notes ?? []).some(n => n.decision && Date.parse(n.at ?? 0) > Date.parse(e.at)) || events.some(x => x.type === 'note.added' && x.decision && x.id === e.item && x.seq > e.seq);
+    if (answered) continue;
+    q.push({ key: e.run, id: e.item, run: e.run, title: item.title, at: e.at, blocks: item.blocks?.length ?? 0, source: 'report', headline: e.report?.headline ?? null, summary: e.report?.summary ?? null, decisions });
+  }
+  const order = { blocking: (a, b) => b.blocks - a.blocks || Date.parse(b.at) - Date.parse(a.at), oldest: (a, b) => Date.parse(a.at) - Date.parse(b.at), id: (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }) }[sort] ?? (() => 0);
+  return q.sort(order);
+}
+
+// The message the supervisor receives: the operator's picks, in order, plus
+// their own words. Unanswered decisions are left out, never guessed.
+export function answerMessage(entry, picks = {}, note = '') {
+  const parts = entry.decisions.filter(d => picks[d.n]).map(d => {
+    const p = picks[d.n];
+    return entry.decisions.length === 1 ? (p === 'rec' ? `${d.recommend ?? 'as recommended'} (as recommended)` : p) : `${d.n} ${p === 'rec' ? `${d.recommend ?? 'as recommended'} (as recommended)` : p}`;
+  });
+  if (!parts.length && !note.trim()) return null;
+  const whose = entry.source === 'question' ? entry.id : `${entry.run} (${entry.id})`;
+  return `Operator answer from the items pane for ${whose}${entry.decisions.length > 1 ? ' decisions' : ''}: ${parts.join('; ')}${note.trim() ? `${parts.length ? '. ' : ''}${note.trim()}` : ''}`;
+}
+
+// Whether a Claude Code chat's prompt box holds unsent text: the line after its
+// last "❯" between the box's rules. Sending then would merge the two messages.
+export function promptDraft(screen) {
+  const lines = String(screen ?? '').split('\n');
+  const rules = lines.map((l, i) => /^\s*─{8,}/.test(l) ? i : -1).filter(i => i >= 0);
+  if (rules.length < 2) return null;
+  const box = lines.slice(rules.at(-2) + 1, rules.at(-1)).join(' ');
+  const text = /❯\s*(.*)$/.exec(box)?.[1]?.trim() ?? '';
+  return text || null;
+}
+
 // Everything the pane shows, derived from `org status --json`, recent `org log`
 // events and Herdr's agents. Pure, so it is tested without a server.
-export function feedModel({ status, events = [], agents = [], now = Date.now(), filter = null, screen = '' }) {
+export function feedModel({ status, events = [], agents = [], now = Date.now(), filter = null, screen = '', decisionsByRun = new Map(), sort = 'blocking' }) {
   const items = new Map((status?.items ?? []).map(i => [i.id, i]));
   const runs = new Map((status?.runs ?? []).map(r => [r.id, r]));
   const live = new Map(agents.filter(a => a.name).map(a => [a.name, a]));
@@ -106,7 +171,8 @@ export function feedModel({ status, events = [], agents = [], now = Date.now(), 
   for (const x of events.slice().sort((a, b) => b.seq - a.seq)) { const y = entry(x, items, runs); if (y?.id && !latest.has(y.id)) latest.set(y.id, { ...y, at: x.at }); }
   const said = mentions(screen, items, runs);
   const onScreen = said.known.map(k => ({ ...k, item: items.get(k.id), working: onItem.get(k.id) ?? null, latest: latest.get(k.id) ?? null }));
-  return { items, runs, decide, running, feed, created, onItem, onScreen, shorthand: said.unknown };
+  const waiting = waitingQueue(items, runs, events, decisionsByRun, sort);
+  return { items, runs, decide, running, feed, created, onItem, onScreen, shorthand: said.unknown, waiting };
 }
 
 // The item's own thread: why it exists, who is on it, what happened, newest first.
@@ -133,29 +199,52 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
   const W = Math.max(20, cols);
   const header = `${project?.name ?? 'no project'} · items`;
   const clock = hhmm(now);
+  const section = (title, fg = 'blue') => row([text(title, fg, true)], { bg: 'panel' });
+  const para = (t, fg = 'fg', indent = 1, max = 99) => { for (const l of wrap(clean(t), W - indent - 1).slice(0, max)) row([text(`${' '.repeat(indent)}${l}`, fg)]); };
   if (s.view === 'item') {
     const t = itemThread(model, s.detail, s.events);
-    row([text('‹ back', 'blue', true), text(`   ${s.detail}`, categoryColor(s.detail), true), text(t ? ` · ${t.item.status}` : '', 'muted')], { id: 'back' });
-    row([]);
+    const entry = model.waiting.find(w => w.key === s.entryKey) ?? model.waiting.find(w => w.id === s.detail);
+    row([text('‹ back', 'blue', true), text(`   ${s.detail}`, categoryColor(s.detail), true), text(t ? ` · ${t.item.status}` : '', 'muted'), text(entry?.run && entry.source === 'report' ? ` · ${entry.run} reported ${when(entry.at, now)}` : '', 'muted')], { id: 'back' });
     if (!t) row([text('This item is not in the organization.', 'muted')]);
     else {
-      for (const l of wrap(clean(t.item.title), W - 2)) row([text(l, 'bright', true)]);
-      if (t.item.created?.why) { row([]); for (const l of wrap(clean(t.item.created.why), W - 2)) row([text(l, 'fg')]); }
-      row([]);
-      row([text(`created ${hhmm(t.item.created?.at)} by ${t.item.created?.run ?? t.item.created?.by ?? '?'}`, 'muted'), text(t.parent ? ` · under ${t.parent.id}` : '', 'muted')], { id: t.parent ? `item:${t.parent.id}` : null });
-      if (t.working) row([text('● ', 'teal'), text(`${t.working.run} ${t.working.harness} · ${t.working.agent ?? ''} · ${t.working.state} ${ago(t.working.for)}`, 'teal')], { id: 'go' });
-      if (t.children.length) {
-        row([]); row([text(`spawned · ${t.children.length}`, 'blue', true)]);
-        for (const c of t.children.slice(0, 8)) row([text(`${pad(c.id, 9)}`, categoryColor(c.id)), text(`${pad(c.status, 8)}`, 'muted'), text(clean(c.title), 'fg')], { id: `item:${c.id}` });
+      section('TITLE'); para(t.item.title, 'bright');
+      const summary = entry?.source === 'report' ? [entry.headline, entry.summary].filter(Boolean).join(' ') : t.item.created?.why;
+      if (summary) { section('SUMMARY'); para(summary, 'fg', 1, 6); }
+      if (entry) {
+        const a = s.answer?.key === entry.key ? s.answer : { picks: {}, note: '', sel: 1 };
+        section(`DECISIONS · ${entry.decisions.length}`, 'amber');
+        for (const d of entry.decisions) {
+          const pick = a.picks[d.n], mark = pick ? `  → ${pick === 'rec' ? 'as recommended' : pick}` : '';
+          const q = wrap(clean(d.question), W - 6);
+          q.forEach((l, i) => row([text(i ? '    ' : ` ${d.n}  `, 'amber', true), text(l, 'bright', true), text(i === q.length - 1 ? mark : '', 'teal', true)], { id: `pick:${d.n}`, bg: a.sel === d.n ? 'selected' : 'bg' }));
+          if (d.recommend) row([text(`    ★ recommend: ${clean(d.recommend)}`, 'goal')], { id: `pick:${d.n}` });
+          if (d.detail && a.sel === d.n) para(d.detail, 'muted', 4, 5);
+        }
+        section('ACTION', 'teal');
+        const n = entry.decisions.length;
+        row([text(` ${n > 1 ? `1-${n} choose · ` : ''}y yes · n no · a accept all recommended · e add words`, 'muted')]);
+        const msg = answerMessage(entry, a.picks, a.note);
+        if (a.typing) row([text(` your words: ${a.note}▏`, 'bright')]);
+        if (msg) { row([text(` Enter sends to ${s.watching ?? 'the supervisor'}:`, 'teal', true)], { id: 'send' }); para(`“${msg}”`, 'fg', 2, 6); }
+        else row([text(` Choose an answer to send it to ${s.watching ?? 'the supervisor'}.`, 'muted')]);
+        if (s.sent?.[entry.key]) row([text(` sent ${when(s.sent[entry.key].at, now)}: waiting for the supervisor to record it`, 'teal')]);
       }
-      row([]); row([text('history', 'blue', true)]);
-      for (const h of t.history.slice(0, 30)) {
-        row([text(`${hhmm(h.at)} ${h.mark} `, 'muted'), text(h.verb, h.mark === '?' ? 'amber' : 'fg', true), text(h.detail ? ` · ${h.detail}` : '', 'muted')]);
-        if (h.why) for (const l of wrap(clean(h.why), W - 8).slice(0, 4)) row([text(`      ${l}`, 'muted')]);
-      }
-      for (const n of (t.item.notes ?? []).filter(n => !n.decision).slice(-3)) { row([text('note', 'muted')]); for (const l of wrap(clean(n.text), W - 6).slice(0, 3)) row([text(`      ${l}`, 'muted')]); }
+      section('CONTEXT', 'muted');
+      row([text(` created ${when(t.item.created?.at, now)} by ${t.item.created?.run ?? t.item.created?.by ?? '?'}`, 'muted'), text(t.parent ? ` · under ${t.parent.id}` : '', 'muted')], { id: t.parent ? `item:${t.parent.id}` : null });
+      if (t.working) row([text(' ● ', 'teal'), text(`${t.working.run} ${t.working.harness} · ${t.working.agent ?? ''} · ${t.working.state} ${ago(t.working.for)} · o open`, 'teal')], { id: 'go' });
+      for (const c of t.children.slice(0, 6)) row([text(` ${pad(c.id, 9)}`, categoryColor(c.id)), text(`${pad(c.status, 8)}`, 'muted'), text(clean(c.title), 'fg')], { id: `item:${c.id}` });
+      for (const h of t.history.slice(0, 12)) row([text(` ${when(h.at, now)} ${h.mark} `, 'muted'), text(h.verb, 'fg'), text(h.detail ? ` · ${h.detail}` : '', 'muted')]);
     }
   } else {
+    // What waits on the operator comes first: each with how many answers it needs.
+    section(`WAITING ON YOU · ${model.waiting.length}   sort: ${s.sort ?? 'blocking'} (s)`, 'amber');
+    for (const w of model.waiting) {
+      const recs = w.decisions.filter(d => d.recommend).length;
+      row([text(` ${pad(w.id, 9)}`, categoryColor(w.id), true), text(clean(w.title), 'bright')], { id: `wait:${w.key}` });
+      row([text(`          ${[w.source === 'report' ? w.run : 'question', w.decisions.length > 1 ? `${w.decisions.length} decisions` : null, recs ? `${recs === w.decisions.length ? 'all' : recs} recommended` : 'no rec', w.blocks ? `blocks ${w.blocks}` : null, when(w.at, now), s.sent?.[w.key] ? 'sent' : null].filter(Boolean).join(' · ')}`, s.sent?.[w.key] ? 'teal' : 'muted')], { id: `wait:${w.key}` });
+    }
+    if (!model.waiting.length) row([text('   nothing waits on you', 'muted')]);
+    row([]);
     if (s.watching) {
       row([text(`on screen · ${model.onScreen.length}`, 'bright', true), text(`   ${s.watching}`, 'muted')], { bg: 'panel' });
       for (const o of model.onScreen.slice(0, 14)) {
@@ -168,14 +257,6 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
       }
       if (!model.onScreen.length) row([text('   no org IDs on the chat screen right now', 'muted')]);
       if (model.shorthand.length) row([text(`   not org items: ${model.shorthand.slice(0, 8).join(', ')}`, 'muted')]);
-      row([]);
-    }
-    if (model.decide.length) {
-      row([text(`decide · ${model.decide.length}`, 'amber', true)], { bg: 'attentionBg' });
-      for (const d of model.decide) {
-        row([text(` ${pad(d.id, 8)}`, 'amber', true), text(clean(d.text), 'bright')], { id: `item:${d.id}`, bg: 'attentionBg' });
-        row([text(`          ${[d.recommend ? `recommend ${d.recommend}` : 'no recommendation', d.asked ? `asked ${when(d.asked, now)}` : null, d.by].filter(Boolean).join(' · ')}`, 'muted')], { id: `item:${d.id}`, bg: 'attentionBg' });
-      }
       row([]);
     }
     row([text(`running · ${model.running.length}`, 'teal', true)]);
@@ -208,7 +289,7 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
   s.targets = [...new Set(body.map(r => r.id).filter(id => id && id !== 'back' && id !== 'go'))];
   lines.push({ spans: [span(` ${pad(clip(header, W - clock.length - 3), W - clock.length - 2)}`, 'bright', 'panel', true), span(`${clock} `, 'muted', 'panel')] });
   const errs = Object.values(s.errors ?? {});
-  lines.push({ spans: [span(pad(errs.length ? ` ${errs[0]}` : ` ${model.decide.length} decide · ${model.running.length} running · ${model.running.filter(r => r.state === 'working').length} working`, W), errs.length ? 'amber' : 'muted', 'panel')] });
+  lines.push({ spans: [span(pad(errs.length ? ` ${errs[0]}` : ` ${model.waiting.length} waiting on you · ${model.running.length} running · ${model.running.filter(r => r.state === 'working').length} working`, W), errs.length ? 'amber' : 'muted', 'panel')] });
   hits.push([], []);
   for (let i = 0; i < height; i++) {
     const r = body[s.scroll + i];
@@ -219,18 +300,19 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
     spans.push(span(' '.repeat(Math.max(0, W - used)), 'fg', bg));
     lines.push({ spans }); hits.push(r.id ? [{ from: 0, to: W, id: r.id }] : []);
   }
-  const hint = s.message || (s.view === 'item' ? ' Esc back · o open the session · ↑↓ · q quit' : ' ↑↓ select · Enter open · f filter · r refresh · q quit');
+  const hint = s.message || (s.view === 'item' ? (s.entryKey ? ' y/n answer · a all recommended · e words · Enter send · Esc' : ' Esc back · o open the session · ↑↓ · q quit') : ' ↑↓ select · Enter open · s sort · f filter · q quit');
   lines.push({ spans: [span(pad(clip(hint, W), W), s.message ? 'amber' : 'muted', 'panel')] }); hits.push([]);
   return { lines, hits, controls, bodyHeight: height, maxScroll: Math.max(0, body.length - height) };
 }
 
 export function createFeedSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
-  const d = { orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrGo: cli.herdrGo, herdrList: cli.herdrList, herdrVisible: cli.herdrVisible, now: () => Date.now(), ...deps };
+  const d = { orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrGo: cli.herdrGo, herdrList: cli.herdrList, herdrVisible: cli.herdrVisible, herdrPrompt: cli.herdrPrompt,
+    readFile: file => fs.promises.readFile(file, 'utf8'), now: () => Date.now(), ...deps };
   const project = config.projects[projectIndex] ?? null;
-  const s = { view: 'feed', detail: null, screen: '', watching: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
+  const s = { view: 'feed', detail: null, screen: '', watching: null, sort: 'blocking', decisionsByRun: new Map(), answers: {}, answer: null, sent: {}, entryKey: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', interactive: false, targets: [], timer: null, stopped: false, pending: null, history: [] };
   const changed = () => { if (!s.stopped) onChange(); };
-  const model = () => feedModel({ status: s.status, events: s.events, agents: s.agents, now: d.now(), filter: s.filter, screen: s.screen });
+  const model = () => feedModel({ status: s.status, events: s.events, agents: s.agents, now: d.now(), filter: s.filter, screen: s.screen, decisionsByRun: s.decisionsByRun, sort: s.sort });
   async function refresh() {
     if (s.pending || !project?.org) { if (!project?.org) s.errors.org = 'This project has no organization.'; return s.pending; }
     s.pending = (async () => {
@@ -238,6 +320,7 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
       const [status, events, agents] = await Promise.all([load('status', () => d.orgStatus(project)), load('log', () => d.orgLog(project, env.HERDR_FEED_SINCE ?? '36h')), load('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; })]);
       if (status) s.status = status; if (events) s.events = events; if (agents) s.agents = agents;
       await readBeside();
+      await loadDecisions();
     })().finally(() => { s.pending = null; changed(); });
     return s.pending;
   }
@@ -257,6 +340,32 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
       if (r.ok) { s.screen = r.text; s.watching = agent?.name ?? target; delete s.errors.screen; } else s.errors.screen = `screen: ${r.error}`;
     } catch (e) { s.errors.screen = `screen: ${e.message}`; }
   }
+  // Operator decisions written in each recent report, read once per run.
+  async function loadDecisions() {
+    const runs = new Map((s.status?.runs ?? []).map(r => [r.id, r]));
+    for (const e of s.events) {
+      if (e.type !== 'report.ingested' || s.decisionsByRun.has(e.run)) continue;
+      const file = runs.get(e.run)?.report_path;
+      try { s.decisionsByRun.set(e.run, file ? reportDecisions(await d.readFile(file)) : []); } catch { s.decisionsByRun.set(e.run, []); }
+    }
+  }
+  const entryOf = key => model().waiting.find(w => w.key === key);
+  // Answering: the picks and words live per entry, so leaving and returning keeps them.
+  function answerFor(key) { return (s.answers[key] ??= { key, picks: {}, note: '', sel: 1, typing: false }); }
+  async function send() {
+    const entry = entryOf(s.entryKey), a = entry && answerFor(entry.key);
+    const text = entry && answerMessage(entry, a.picks, a.note);
+    if (!text) { s.message = 'Choose an answer first.'; changed(); return; }
+    const agent = s.agents.find(x => x.name === s.watching || x.pane === s.watching);
+    if (!agent?.name) { s.message = 'No supervisor chat with a Herdr agent name beside this pane.'; changed(); return; }
+    const screen = await d.herdrVisible(agent.pane);
+    const draft = screen.ok ? promptDraft(screen.text) : null;
+    if (draft) { s.message = `${agent.name} has unsent text in its prompt box (“${clip(draft, 30)}”). Send or clear it first.`; changed(); return; }
+    const r = await d.herdrPrompt(agent.name, text);
+    if (r.ok) { s.sent[entry.key] = { at: new Date(d.now()).toISOString(), text }; s.message = `Sent to ${agent.name}.`; }
+    else s.message = r.blocked ? `${agent.name} is stuck at a prompt and refused it; answer that first.` : `Not sent: ${r.error}`;
+    changed();
+  }
   const move = n => {
     const t = s.targets; if (!t.length) return;
     const i = t.indexOf(s.selected);
@@ -266,9 +375,17 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
   async function open(target) {
     if (target === 'back') return back();
     if (target === 'go') return go();
+    if (target === 'send') return send();
+    if (target?.startsWith('pick:')) { const a = answerFor(s.entryKey); a.sel = Number(target.slice(5)); changed(); return; }
+    if (target?.startsWith('wait:')) {
+      const entry = entryOf(target.slice(5)); if (!entry) return;
+      s.history.push({ view: s.view, detail: s.detail, selected: s.selected, scroll: s.scroll, entryKey: s.entryKey });
+      Object.assign(s, { view: 'item', detail: entry.id, entryKey: entry.key, selected: null, scroll: 0, message: '' }); s.answer = answerFor(entry.key); changed(); return;
+    }
     const id = idOf(target); if (!id) return;
     s.history.push({ view: s.view, detail: s.detail, selected: s.selected, scroll: s.scroll });
-    Object.assign(s, { view: 'item', detail: id, selected: null, scroll: 0, message: '' }); changed();
+    const waiting = model().waiting.find(w => w.id === id);
+    Object.assign(s, { view: 'item', detail: id, entryKey: waiting?.key ?? null, selected: null, scroll: 0, message: '' }); s.answer = waiting ? answerFor(waiting.key) : null; changed();
   }
   function back() { const prior = s.history.pop(); if (prior) Object.assign(s, prior, { message: '' }); changed(); }
   async function go() {
@@ -281,7 +398,24 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
     frame(cols, rows) { const f = renderFeed({ s, model: model(), project, now: d.now() }, cols, rows); s.lastHits = f.hits; return f; },
     refresh, input: async () => false, waitForOutput: async () => {},
     async key(input, k = {}) {
+      const entry = s.view === 'item' && s.entryKey ? entryOf(s.entryKey) : null, a = entry ? answerFor(entry.key) : null;
+      if (a?.typing) {
+        if (k.return || k.escape) a.typing = false;
+        else if (k.backspace || k.delete) a.note = [...a.note].slice(0, -1).join('');
+        else if (input && !k.ctrl && !k.meta) a.note += input.replace(/[\x00-\x1f\x7f]/g, '');
+        changed(); return false;
+      }
+      if (a && !k.ctrl && !k.meta) {
+        const n = entry.decisions.length;
+        if (/^[1-9]$/.test(input) && Number(input) <= n) { a.sel = Number(input); changed(); return false; }
+        if (input === 'y' || input === 'n') { a.picks[a.sel] = input === 'y' ? 'yes' : 'no'; if (a.sel < n) a.sel++; changed(); return false; }
+        if (input === 'a') { for (const d of entry.decisions) a.picks[d.n] = d.recommend ? 'rec' : a.picks[d.n]; changed(); return false; }
+        if (input === 'x') { a.picks = {}; a.note = ''; changed(); return false; }
+        if (input === 'e') { a.typing = true; changed(); return false; }
+        if (k.return && (!s.selected || /^(pick:|send)/.test(s.selected))) { await send(); return false; }
+      }
       if (input === 'q' || (k.ctrl && input === 'c')) return true;
+      if (input === 's' && s.view === 'feed') { s.sort = { blocking: 'oldest', oldest: 'id', id: 'blocking' }[s.sort]; changed(); return false; }
       if (k.escape || input === 'b') { back(); return false; }
       if (k.upArrow || input === 'k') move(-1);
       else if (k.downArrow || input === 'j') move(1);
@@ -299,7 +433,7 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
       if (e.button === 'back') { back(); return false; }
       if (e.button !== 'left') return false;
       const target = s.lastHits?.[e.y]?.find(h => e.x >= h.from && e.x < h.to);
-      if (target) { if (!['back', 'go'].includes(target.id)) s.selected = target.id; await open(target.id); }
+      if (target) { if (!['back', 'go', 'send'].includes(target.id) && !target.id.startsWith('pick:')) s.selected = target.id; await open(target.id); }
       return false;
     },
     async start() { s.timer = setInterval(() => refresh().catch(() => {}), (config.feed_seconds ?? 3) * 1000); return refresh(); },

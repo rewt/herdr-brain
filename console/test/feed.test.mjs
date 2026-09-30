@@ -54,7 +54,7 @@ test('the pane renders narrow, opens an item, focuses its session, and never wri
     deps: { now: () => now, orgStatus: async () => status, orgLog: async () => events, herdrAgents: async () => ({ ok: true, agents }), herdrGo: async t => { gone.push(t); return { ok: true }; } } });
   await session.refresh();
   let text = session.frame(60, 40).lines.map(lineText).join('\n');
-  assert.match(text, /decide · 1/); assert.match(text, /HUM-3 +Spend on Chipnet\?/); assert.match(text, /recommend yes/);
+  assert.match(text, /WAITING ON YOU · 1/); assert.match(text, /HUM-3 +Spend on Chipnet\?/); assert.match(text, /question · all recommended/);
   assert.match(text, /ENG-2 +new Build the wrapper/); assert.match(text, /“The wrapper is missing\.”/);
   assert.ok(session.frame(60, 40).lines.every(l => lineText(l).length <= 60));
   const f = session.frame(60, 40), y = f.hits.findIndex(h => h.some(x => x.id.startsWith('item:ENG-2')));
@@ -97,4 +97,60 @@ test('a plan label resolves only through a recorded alias, preferring an open it
   const session = { ui: {} };
   const text = renderFeed({ s: { view: 'feed', scroll: 0, watching: 'supervisor', errors: {} }, model: m, project: { name: 'Alpha' }, now }, 60, 30).lines.map(lineText).join('\n');
   assert.match(text, /3B S1 → ENG-2 active/);
+});
+
+import { reportDecisions, waitingQueue, answerMessage, promptDraft } from '../modern/feed.mjs';
+const REPORT = `# Report\n\n## Decisions for the operator\n\n1. **Adopt the new slot?** Recommend **yes as the successor design**, gated on review.\n2. **Split the verifier now?** Recommend **no split now**. Measure first.\n\n## Next\n\n1. not a decision\n`;
+
+test('a report’s operator decisions become numbered questions with their recommendations', () => {
+  assert.deepEqual(reportDecisions(REPORT).map(d => [d.n, d.question, d.recommend]), [[1, 'Adopt the new slot?', 'yes as the successor design'], [2, 'Split the verifier now?', 'no split now']]);
+  assert.deepEqual(reportDecisions('# Report\n\nNo decisions here.'), []);
+});
+
+test('the queue holds open questions and unanswered report decisions, most blocking then newest first', () => {
+  const items = new Map([
+    ['HUM-3', { id: 'HUM-3', role: 'human', status: 'open', title: 'Spend?', created: { at: at(50), run: 'R-1' }, blocks: ['ENG-2', 'ENG-4'], meta: { recommend: 'yes' } }],
+    ['ARCH-1', { id: 'ARCH-1', role: 'architect', status: 'done', title: 'Plan', created: { at: at(300) }, blocks: [], notes: [] }],
+    ['ARCH-5', { id: 'ARCH-5', role: 'architect', status: 'done', title: 'Old plan', created: { at: at(300) }, blocks: [], notes: [] }],
+  ]);
+  const ev = [{ seq: 10, at: at(20), type: 'report.ingested', run: 'R-7', item: 'ARCH-1', report: { headline: 'Planned.' } },
+    { seq: 11, at: at(19), type: 'report.ingested', run: 'R-8', item: 'ARCH-5', report: {} },
+    { seq: 12, at: at(5), type: 'note.added', id: 'ARCH-5', decision: true, text: 'Operator: yes' }];
+  const decisions = new Map([['R-7', reportDecisions(REPORT)], ['R-8', reportDecisions(REPORT)]]);
+  const q = waitingQueue(items, new Map(), ev, decisions);
+  assert.deepEqual(q.map(w => [w.key, w.decisions.length]), [['HUM-3', 1], ['R-7', 2]], 'ARCH-5 has a decision note since its report');
+  assert.deepEqual(waitingQueue(items, new Map(), ev, decisions, 'oldest').map(w => w.key), ['HUM-3', 'R-7']);
+  const entry = q[1];
+  assert.equal(answerMessage(entry, {}), null);
+  assert.equal(answerMessage(entry, { 1: 'rec', 2: 'no' }, 'measure first'), 'Operator answer from the items pane for R-7 (ARCH-1) decisions: 1 yes as the successor design (as recommended); 2 no. measure first');
+  assert.equal(answerMessage(q[0], { 1: 'yes' }), 'Operator answer from the items pane for HUM-3: yes');
+});
+
+test('a prompt box with unsent text is detected; an empty one is not', () => {
+  const rule = '─'.repeat(40);
+  assert.equal(promptDraft(`history\n❯ old message\n${rule}\n❯ yes on all four\n${rule}\n  ⏵⏵ auto mode`), 'yes on all four');
+  assert.equal(promptDraft(`history\n❯ old message\n${rule}\n❯ \n${rule}\n  ⏵⏵ auto mode`), null);
+});
+
+test('answering from the pane sends one message to the supervisor, never over an unsent draft', async () => {
+  const sent = []; let screen = `x\n${'─'.repeat(20)}\n❯ half typed\n${'─'.repeat(20)}`;
+  const withRep = { ...status, runs: [...status.runs.map(r => r.id === 'R-1' ? { ...r, report_path: '/r1.md' } : r)] };
+  const session = createFeedSession({ config: { projects: [{ name: 'Alpha', org: '/org' }] }, env: { HERDR_FEED_WATCH: 'w:p1' },
+    deps: { now: () => now, orgStatus: async () => withRep, orgLog: async () => events.filter(e => e.seq !== 5), readFile: async () => REPORT,
+      herdrAgents: async () => ({ ok: true, agents: [...agents, { name: 'supervisor', pane: 'w:p1', status: 'idle' }] }),
+      herdrVisible: async () => ({ ok: true, text: screen }), herdrPrompt: async (agent, text) => { sent.push([agent, text]); return { ok: true }; } } });
+  await session.refresh();
+  const entry = session.model.waiting.find(w => w.key === 'R-1'); assert.ok(entry, 'the report decisions wait on the operator');
+  await session.ui.targets; session.frame(60, 60);
+  const y = session.frame(60, 60).hits.findIndex(h => h.some(x => x.id === 'wait:R-1'));
+  await session.mouse({ x: 2, y, button: 'left', press: true });
+  let text = session.frame(60, 60).lines.map(lineText).join('\n');
+  assert.match(text, /TITLE[\s\S]*SUMMARY[\s\S]*DECISIONS · 2[\s\S]*ACTION/); assert.match(text, /★ recommend: no split now/);
+  await session.key('a', {}); await session.key('1', {}); await session.key('n', {});
+  await session.key('', { return: true });
+  assert.deepEqual(sent, []); assert.match(session.ui.message, /unsent text/);
+  screen = `x\n${'─'.repeat(20)}\n❯ \n${'─'.repeat(20)}`;
+  await session.key('', { return: true });
+  assert.deepEqual(sent, [['supervisor', 'Operator answer from the items pane for R-1 (ARCH-1) decisions: 1 no; 2 no split now (as recommended)']]);
+  assert.match(session.frame(60, 60).lines.map(lineText).join('\n'), /sent .*: waiting for the supervisor/);
 });

@@ -71,7 +71,7 @@ test('the pane renders narrow, opens an item, focuses its session, and never wri
 test('the IDs on the chat screen resolve to items, runs to the item they work, the rest is shorthand', () => {
   const screen = 'Done with ARCH-1 (R-1). OD-1 recorded. See archive/REVIEW-20260930.md. Now R-2 is building; HUM-3 waits.';
   const m = feedModel({ status, events, agents, now, screen });
-  assert.deepEqual(m.onScreen.map(o => [o.id, o.via, o.said]), [['HUM-3', null, []], ['ENG-2', 'R-2', ['R-2']], ['ARCH-1', 'R-1', ['R-1']]]);
+  assert.deepEqual(m.onScreen.map(o => [o.id, o.via, o.said]), [['ARCH-1', 'R-1', ['R-1']], ['ENG-2', 'R-2', ['R-2']], ['HUM-3', null, []]]);
   assert.deepEqual(m.shorthand, ['OD-1']);
   assert.equal(m.onScreen.find(o => o.id === 'ENG-2').working.state, 'working');
   assert.equal(m.onScreen.find(o => o.id === 'ARCH-1').latest.verb, 'decided');
@@ -93,8 +93,8 @@ test('a plan label resolves only through a recorded alias, preferring an open it
   const withAlias = { ...status, items: [...status.items.map(i => i.id === 'ENG-2' ? { ...i, meta: { alias: 'S1, 3B' } } : i),
     { id: 'ENG-9', kind: 'work', role: 'engineer', title: 'Old slice S1', status: 'done', closed: { at: at(900) }, meta: { alias: 'S1' }, created: { at: at(900) }, runs: [], notes: [] }] };
   const m = feedModel({ status: withAlias, events, agents, now, screen: 'S1 is built; 3B next. P9 guards it.' });
-  assert.deepEqual(m.onScreen.map(o => [o.id, o.said]), [['ENG-2', ['3B', 'S1']]]);
-  assert.deepEqual(m.shorthand, [], 'unrecorded labels such as P9 are not guessed');
+  assert.deepEqual(m.onScreen.map(o => [o.id, o.said]), [['ENG-2', ['S1', '3B']]]);
+  assert.ok(!m.shorthand.includes('S1') && !m.shorthand.includes('3B'), 'recorded aliases resolve'); assert.ok(!m.shorthand.includes('P9'), 'P9 is not a label pattern');
   const session = { ui: {} };
   const text = renderFeed({ s: { view: 'feed', scroll: 0, watching: 'supervisor', errors: {} }, model: m, project: { name: 'Alpha' }, now }, 60, 30).lines.map(lineText).join('\n');
   assert.match(text, /● lane-wrapper +claude · 25m ◂/);
@@ -154,4 +154,13 @@ test('answering from the pane sends one message to the supervisor, never over an
   await session.key('', { return: true });
   assert.deepEqual(sent, [['supervisor', 'Operator answer from the items pane for R-1 (ARCH-1) decisions: 1 no; 2 no split now (as recommended)']]);
   assert.match(session.frame(60, 60).lines.map(lineText).join('\n'), /sent .*: waiting for the supervisor/);
+});
+
+test('the chat legend lists codes in reading order, and plan labels as not in the org', () => {
+  const screen = '1. Promote R-2, then dispatch 3D. 2. Settle ARCH-1 and 4-DC2; OD-9 is about 1.06M sats. 3G waits.';
+  const m = feedModel({ status, events, agents, now, screen });
+  assert.deepEqual(m.onScreen.map(o => [o.id, o.said]), [['ENG-2', ['R-2']], ['ARCH-1', []]]);
+  assert.deepEqual(m.shorthand, ['3D', '4-DC2', 'OD-9', '3G'], 'reading order; 1.06M is not a label');
+  const text = renderFeed({ s: { view: 'feed', scroll: 0, watching: 'supervisor', errors: {}, events, sent: {} }, model: m, project: { name: 'Alpha' }, now }, 60, 40).lines.map(lineText).join('\n');
+  assert.match(text, /IN THE CHAT ◂ supervisor[\s\S]*R-2 +ENG-2 Build the wrapper[\s\S]*lane-wrapper · claude · working 25m[\s\S]*ARCH-1 +Plan stage 3[\s\S]*not in the org: 3D 4-DC2 OD-9 3G[\s\S]*SESSIONS/);
 });

@@ -71,15 +71,20 @@ export function mentions(text, items, runs) {
     const re = new RegExp(`(?<![\\w-])${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'g');
     for (const m of screen.matchAll(re)) last.set(a, Math.max(last.get(a) ?? -1, m.index));
   }
+  // Plan labels the chat uses of its own (3A, 4-DC2, 4a): listed, never resolved.
+  const labels = new Map();
+  for (const m of screen.matchAll(/(?<![\w.-])(\d{1,2}[A-Z](?:-[A-Z]{1,4}\d*)?|\d{1,2}-[A-Z]{1,4}\d*)(?![\w-])/g)) if (!last.has(m[0]) && !labels.has(m[0])) labels.set(m[0], m.index);
   const seen = new Map(), known = [], unknown = [];
-  for (const [code] of [...last].sort((a, b) => b[1] - a[1])) {
+  // Reading order: the legend runs down the chat the way the operator reads it.
+  for (const [code] of [...last].sort((a, b) => a[1] - b[1])) {
     const run = runs.get(code), itemId = run ? run.item : alias.get(code)?.id ?? code;
     if (!items.has(itemId)) { unknown.push(code); continue; }
-    if (seen.has(itemId)) { const k = seen.get(itemId); if (code !== itemId && !k.said.includes(code)) k.said.push(code); continue; }
+    if (seen.has(itemId)) { const k = seen.get(itemId); if (code !== itemId && !k.said.includes(code)) k.said.push(code); if (run) k.via ??= code; continue; }
     const k = { id: itemId, via: run ? code : null, said: code === itemId ? [] : [code] };
     seen.set(itemId, k); known.push(k);
   }
-  return { known, unknown };
+  const first = code => screen.indexOf(code);
+  return { known, unknown: [...unknown.map(c => [c, first(c)]), ...labels].sort((a, b) => a[1] - b[1]).map(([c]) => c) };
 }
 
 // A report's "Decisions for the operator" section: numbered questions, each
@@ -254,6 +259,25 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
       for (const h of t.history.slice(0, 12)) row([text(` ${when(h.at, now)} ${h.mark} `, 'muted'), text(h.verb, 'fg'), text(h.detail ? ` · ${h.detail}` : '', 'muted')]);
     }
   } else {
+    // A legend for the chat beside this pane: every code on its screen, in
+    // reading order, with what it is and where it runs.
+    if (s.watching && (model.onScreen.length || model.shorthand.length)) {
+      section(`IN THE CHAT ◂ ${s.watching}`, 'amber');
+      const byRun = new Map(model.sessions.flatMap(x => x.work.map(w => [w.run, x])));
+      for (const o of model.onScreen) {
+        const i = o.item, codes = o.said.length ? o.said : [o.id], lead = pad(codes.join(' '), Math.max(8, codes.join(' ').length + 1));
+        const id = `item:${o.id}~s`;
+        const head = o.said.length ? `${o.id} ${clean(i.title)}` : clean(i.title);
+        wrap(head, W - lead.length - 2).forEach((l, n) => row([text(n ? ' '.repeat(lead.length + 1) : ` ${lead}`, n ? 'fg' : categoryColor(o.id), true), text(l, 'fg')], { id }));
+        const runId = o.said.find(c => model.runs.has(c)) ?? i.runs?.at(-1), run = model.runs.get(runId), sess = byRun.get(runId);
+        const lane = sess?.lane ?? (run?.meta?.lane ? `lane-${run.meta.lane}` : null);
+        const state = sess ? `${sess.state} ${ago(sess.for)}` : run?.report ? `reported ${when(model.items.get(run.item) && (s.events.find(e => e.type === 'report.ingested' && e.run === runId)?.at ?? run.report?.at), now) || ''}`.trim() : i.status;
+        const facts = [lane, run?.meta?.harness ?? sess?.harness, state, !sess && o.latest ? `${o.latest.verb} ${when(o.latest.at, now)}` : null].filter(Boolean);
+        for (const l of wrap([...new Set(facts)].join(' · '), W - lead.length - 3)) row([text(`${' '.repeat(lead.length + 2)}${l}`, sess?.state === 'working' ? 'teal' : 'muted')], { id });
+      }
+      if (model.shorthand.length) for (const l of wrap(`not in the org: ${model.shorthand.join(' ')}`, W - 3)) row([text(`  ${l}`, 'muted')]);
+      row([]);
+    }
     // Sessions first: the lane, its agent, and the work it holds right now.
     const glyph = st => st === 'working' ? '●' : st === 'blocked' ? '!' : st === 'starting' ? '◌' : '○';
     const tone = st => st === 'working' ? 'teal' : st === 'blocked' ? 'amber' : 'muted';
@@ -296,15 +320,6 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
       for (const l of wrap(clean(w.title), W - 11).slice(0, 3)) row([text(`          ${l}`, 'fg')], { id: `wait:${w.key}` });
     }
     if (!model.waiting.length) row([text('   nothing waits on you', 'muted')]);
-    // What the supervisor mentions that no running session holds.
-    if (model.alsoInChat.length || model.shorthand.length) {
-      row([]); section('ALSO IN THE CHAT ◂', 'muted');
-      for (const o of model.alsoInChat.slice(0, 8)) {
-        const said = o.said.length ? `${o.said.join(' ')} → ` : '';
-        row([text(` ${said}`, 'bright', true), text(`${pad(o.id, said ? o.id.length + 1 : 9)}`, categoryColor(o.id), true), text(`${pad(o.item.status === 'needs_human' ? 'needs you' : o.item.status, 8)} `, 'muted'), text(clean(o.item.title), 'fg')], { id: `item:${o.id}~s` });
-      }
-      if (model.shorthand.length) row([text(`   not org items: ${model.shorthand.slice(0, 8).join(', ')}`, 'muted')]);
-    }
     row([]);
     row([text(`activity${s.filter ? ` · ${s.filter} only` : ''}`, 'blue', true), text(`   f filter · ${model.created} new today`, 'muted')]);
     let lastDay = null;

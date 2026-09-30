@@ -48,9 +48,25 @@ function entry(e, items, runs) {
   }
 }
 
+// The IDs a chat has on screen, most recently mentioned first. A run (R-n)
+// stands for the item it works; an ID the org does not know is the chat's own
+// shorthand and is listed as such.
+export function mentions(text, items, runs) {
+  const last = new Map();
+  // Dates in file names (REVIEW-20260930) are not IDs.
+  for (const m of String(text ?? '').matchAll(/\b([A-Z][A-Z0-9]{0,5})-(\d{1,5})\b/g)) last.set(m[0], m.index);
+  const seen = new Set(), known = [], unknown = [];
+  for (const [id] of [...last].sort((a, b) => b[1] - a[1])) {
+    const run = runs.get(id), itemId = run ? run.item : id;
+    if (items.has(itemId)) { if (!seen.has(itemId)) { seen.add(itemId); known.push({ id: itemId, via: run ? id : null }); } else if (run) known.find(k => k.id === itemId).via ??= id; }
+    else unknown.push(id);
+  }
+  return { known, unknown };
+}
+
 // Everything the pane shows, derived from `org status --json`, recent `org log`
 // events and Herdr's agents. Pure, so it is tested without a server.
-export function feedModel({ status, events = [], agents = [], now = Date.now(), filter = null }) {
+export function feedModel({ status, events = [], agents = [], now = Date.now(), filter = null, screen = '' }) {
   const items = new Map((status?.items ?? []).map(i => [i.id, i]));
   const runs = new Map((status?.runs ?? []).map(r => [r.id, r]));
   const live = new Map(agents.filter(a => a.name).map(a => [a.name, a]));
@@ -68,7 +84,12 @@ export function feedModel({ status, events = [], agents = [], now = Date.now(), 
   }).filter(Boolean).filter(x => !filter || prefixOf(x.id) === filter);
   const today = new Date(now).toDateString();
   const created = events.filter(e => e.type === 'item.added' && e.kind !== 'goal' && new Date(e.at).toDateString() === today).length;
-  return { items, runs, decide, running, feed, created, onItem };
+  // What the chat beside this pane is talking about, with each item's latest moment.
+  const latest = new Map();
+  for (const x of events.slice().sort((a, b) => b.seq - a.seq)) { const y = entry(x, items, runs); if (y?.id && !latest.has(y.id)) latest.set(y.id, { ...y, at: x.at }); }
+  const said = mentions(screen, items, runs);
+  const onScreen = said.known.map(k => ({ ...k, item: items.get(k.id), working: onItem.get(k.id) ?? null, latest: latest.get(k.id) ?? null }));
+  return { items, runs, decide, running, feed, created, onItem, onScreen, shorthand: said.unknown };
 }
 
 // The item's own thread: why it exists, who is on it, what happened, newest first.
@@ -118,6 +139,18 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
       for (const n of (t.item.notes ?? []).filter(n => !n.decision).slice(-3)) { row([text('note', 'muted')]); for (const l of wrap(clean(n.text), W - 6).slice(0, 3)) row([text(`      ${l}`, 'muted')]); }
     }
   } else {
+    if (s.watching) {
+      row([text(`on screen · ${model.onScreen.length}`, 'bright', true), text(`   ${s.watching}`, 'muted')], { bg: 'panel' });
+      for (const o of model.onScreen.slice(0, 14)) {
+        const i = o.item, w = o.working, l = o.latest;
+        row([text(` ${pad(o.id, 9)}`, categoryColor(o.id), true), text(`${pad(i.status === 'needs_human' ? 'needs you' : i.status, 10)}`, i.status === 'blocked' || i.status === 'needs_human' ? 'amber' : 'muted'), text(clean(i.title), 'fg')], { id: `item:${o.id}~s` });
+        const facts = [o.via && o.via !== w?.run ? o.via : null, w ? `● ${w.run} ${w.harness} ${w.state}` : null, l ? `${l.verb} ${when(l.at, now)}` : `created ${when(i.created?.at, now)}`].filter(Boolean).join(' · ');
+        row([text(`           ${facts}`, w ? 'teal' : 'muted')], { id: `item:${o.id}~s` });
+      }
+      if (!model.onScreen.length) row([text('   no org IDs on the chat screen right now', 'muted')]);
+      if (model.shorthand.length) row([text(`   not org items: ${model.shorthand.slice(0, 8).join(', ')}`, 'muted')]);
+      row([]);
+    }
     if (model.decide.length) {
       row([text(`decide · ${model.decide.length}`, 'amber', true)], { bg: 'attentionBg' });
       for (const d of model.decide) {
@@ -173,27 +206,43 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
 }
 
 export function createFeedSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
-  const d = { orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrGo: cli.herdrGo, now: () => Date.now(), ...deps };
+  const d = { orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrGo: cli.herdrGo, herdrList: cli.herdrList, herdrRead: cli.herdrRead, now: () => Date.now(), ...deps };
   const project = config.projects[projectIndex] ?? null;
-  const s = { view: 'feed', detail: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
+  const s = { view: 'feed', detail: null, screen: '', watching: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', interactive: false, targets: [], timer: null, stopped: false, pending: null, history: [] };
   const changed = () => { if (!s.stopped) onChange(); };
-  const model = () => feedModel({ status: s.status, events: s.events, agents: s.agents, now: d.now(), filter: s.filter });
+  const model = () => feedModel({ status: s.status, events: s.events, agents: s.agents, now: d.now(), filter: s.filter, screen: s.screen });
   async function refresh() {
     if (s.pending || !project?.org) { if (!project?.org) s.errors.org = 'This project has no organization.'; return s.pending; }
     s.pending = (async () => {
       const load = async (key, fn) => { try { const v = await fn(); delete s.errors[key]; return v; } catch (e) { s.errors[key] = `${key}: ${e.message}`; return undefined; } };
       const [status, events, agents] = await Promise.all([load('status', () => d.orgStatus(project)), load('log', () => d.orgLog(project, env.HERDR_FEED_SINCE ?? '36h')), load('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; })]);
       if (status) s.status = status; if (events) s.events = events; if (agents) s.agents = agents;
+      await readBeside();
     })().finally(() => { s.pending = null; changed(); });
     return s.pending;
+  }
+  // The chat beside this pane: HERDR_FEED_WATCH names a pane or agent; otherwise
+  // the agent sharing this pane's tab. Its recent screen is read, never written.
+  async function readBeside() {
+    try {
+      let target = env.HERDR_FEED_WATCH ?? null;
+      if (!target && env.HERDR_PANE_ID && d.herdrList) {
+        const panes = await d.herdrList('pane'), me = panes.find(p => p.pane_id === env.HERDR_PANE_ID);
+        target = panes.find(p => p.tab_id === me?.tab_id && p.pane_id !== me?.pane_id && p.agent)?.pane_id ?? null;
+      }
+      if (!target) { s.watching = null; return; }
+      const agent = s.agents.find(a => a.pane === target || a.name === target);
+      const r = await d.herdrRead(/^w[^:\s]*:p\S+$/.test(target) ? { pane: target } : { agent: target }, 160);
+      if (r.ok) { s.screen = r.text; s.watching = agent?.name ?? target; delete s.errors.screen; } else s.errors.screen = `screen: ${r.error}`;
+    } catch (e) { s.errors.screen = `screen: ${e.message}`; }
   }
   const move = n => {
     const t = s.targets; if (!t.length) return;
     const i = t.indexOf(s.selected);
     s.selected = t[Math.max(0, Math.min(t.length - 1, (i < 0 ? (n > 0 ? -1 : t.length) : i) + n))]; changed();
   };
-  const idOf = target => target?.startsWith('item:') ? target.slice(5).split('#')[0] : null;
+  const idOf = target => target?.startsWith('item:') ? target.slice(5).split(/[#~]/)[0] : null;
   async function open(target) {
     if (target === 'back') return back();
     if (target === 'go') return go();

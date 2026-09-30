@@ -66,3 +66,24 @@ test('the pane renders narrow, opens an item, focuses its session, and never wri
   await session.key('f', {}); assert.equal(session.ui.filter, 'HUM');
   assert.equal(await session.key('q', {}), true);
 });
+
+test('the IDs on the chat screen resolve to items, runs to the item they work, the rest is shorthand', () => {
+  const screen = 'Done with ARCH-1 (R-1). OD-1 recorded. See archive/REVIEW-20260930.md. Now R-2 is building; HUM-3 waits.';
+  const m = feedModel({ status, events, agents, now, screen });
+  assert.deepEqual(m.onScreen.map(o => [o.id, o.via]), [['HUM-3', null], ['ENG-2', 'R-2'], ['ARCH-1', 'R-1']]);
+  assert.deepEqual(m.shorthand, ['OD-1']);
+  assert.equal(m.onScreen.find(o => o.id === 'ENG-2').working.state, 'working');
+  assert.equal(m.onScreen.find(o => o.id === 'ARCH-1').latest.verb, 'decided');
+});
+
+test('the pane reads the agent sharing its tab and lists what that chat mentions', async () => {
+  const reads = [];
+  const session = createFeedSession({ config: { projects: [{ name: 'Alpha', org: '/org' }] }, env: { HERDR_PANE_ID: 'w:p9' },
+    deps: { now: () => now, orgStatus: async () => status, orgLog: async () => events, herdrAgents: async () => ({ ok: true, agents: [...agents, { name: 'supervisor', pane: 'w:p1', status: 'idle' }] }),
+      herdrList: async () => [{ pane_id: 'w:p1', tab_id: 'w:t1', agent: 'claude' }, { pane_id: 'w:p9', tab_id: 'w:t1' }, { pane_id: 'w:p2', tab_id: 'w:t2', agent: 'claude' }],
+      herdrRead: async t => { reads.push(t); return { ok: true, text: 'Next: ENG-2 (R-2).' }; } } });
+  await session.refresh();
+  assert.deepEqual(reads, [{ pane: 'w:p1' }]);
+  const text = session.frame(60, 40).lines.map(lineText).join('\n');
+  assert.match(text, /on screen · 1 +supervisor/); assert.match(text, /ENG-2 +active +Build the wrapper/); assert.match(text, /● R-2 claude working/);
+});

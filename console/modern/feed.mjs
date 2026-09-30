@@ -148,7 +148,7 @@ export function promptDraft(screen) {
 
 // Everything the pane shows, derived from `org status --json`, recent `org log`
 // events and Herdr's agents. Pure, so it is tested without a server.
-export function feedModel({ status, events = [], agents = [], now = Date.now(), filter = null, screen = '', decisionsByRun = new Map(), sort = 'blocking' }) {
+export function feedModel({ status, events = [], agents = [], workspaces = [], now = Date.now(), filter = null, screen = '', decisionsByRun = new Map(), sort = 'blocking' }) {
   const items = new Map((status?.items ?? []).map(i => [i.id, i]));
   const runs = new Map((status?.runs ?? []).map(r => [r.id, r]));
   const live = new Map(agents.filter(a => a.name).map(a => [a.name, a]));
@@ -172,7 +172,25 @@ export function feedModel({ status, events = [], agents = [], now = Date.now(), 
   const said = mentions(screen, items, runs);
   const onScreen = said.known.map(k => ({ ...k, item: items.get(k.id), working: onItem.get(k.id) ?? null, latest: latest.get(k.id) ?? null }));
   const waiting = waitingQueue(items, runs, events, decisionsByRun, sort);
-  return { items, runs, decide, running, feed, created, onItem, onScreen, shorthand: said.unknown, waiting };
+  // Sessions first: each running agent with the items its runs work on. The
+  // summary is the run's latest report headline, else why the item exists.
+  const talked = new Set(onScreen.flatMap(o => [o.id, ...o.said]));
+  const headline = new Map(events.filter(e => e.type === 'report.ingested').map(e => [e.run, e.report?.headline ?? firstSentence(e.report?.summary)]));
+  const sessions = [];
+  for (const r of running) {
+    const key = r.agent ?? r.run;
+    let sess = sessions.find(x => x.key === key);
+    // Named as Herdr's sidebar names it: the session's workspace label.
+    const space = workspaces.find(w => w.workspace_id === live.get(r.agent)?.workspace);
+    if (!sess) sessions.push(sess = { key, agent: r.agent, lane: space?.label ?? (r.lane ? `lane-${r.lane}` : r.agent ?? r.run), harness: r.harness, state: r.state, for: r.for, pane: r.pane, work: [] });
+    const item = items.get(r.id), l = latest.get(r.id);
+    sess.work.push({ id: r.id, run: r.run, title: item?.title ?? r.text, latest: l, summary: headline.get(r.run) ?? item?.created?.why ?? null, talked: talked.has(r.id) || talked.has(r.run) });
+    sess.for = Math.max(sess.for, r.for);
+  }
+  for (const x of sessions) x.talked = x.work.some(w => w.talked);
+  const inSessions = new Set(sessions.flatMap(x => x.work.map(w => w.id))), waitingIds = new Set(waiting.map(w => w.id));
+  const alsoInChat = onScreen.filter(o => !inSessions.has(o.id) && !waitingIds.has(o.id));
+  return { items, runs, decide, running, feed, created, onItem, onScreen, shorthand: said.unknown, waiting, sessions, alsoInChat };
 }
 
 // The item's own thread: why it exists, who is on it, what happened, newest first.
@@ -236,35 +254,57 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
       for (const h of t.history.slice(0, 12)) row([text(` ${when(h.at, now)} ${h.mark} `, 'muted'), text(h.verb, 'fg'), text(h.detail ? ` · ${h.detail}` : '', 'muted')]);
     }
   } else {
-    // What waits on the operator comes first: each with how many answers it needs.
+    // Sessions first: the lane, its agent, and the work it holds right now.
+    const glyph = st => st === 'working' ? '●' : st === 'blocked' ? '!' : st === 'starting' ? '◌' : '○';
+    const tone = st => st === 'working' ? 'teal' : st === 'blocked' ? 'amber' : 'muted';
+    const live = model.sessions.filter(x => ['working', 'blocked', 'starting'].includes(x.state)), rest = model.sessions.filter(x => !live.includes(x));
+    section(`SESSIONS · ${live.length} live`, 'teal');
+    for (const x of live) {
+      const right = `${x.harness} · ${ago(x.for)}${x.state !== 'working' ? ` · ${x.state}` : ''}${x.talked ? ' ◂' : ''}`;
+      const id = `item:${x.work[0].id}~r`;
+      // The name in full; the facts share its line when they fit.
+      if (x.lane.length + right.length + 5 <= W) row([text(` ${glyph(x.state)} `, tone(x.state), true), text(pad(x.lane, W - right.length - 4), x.state === 'working' ? 'bright' : 'fg', true), text(right, x.talked ? 'amber' : 'muted')], { id });
+      else {
+        wrap(x.lane, W - 4).forEach((l, i) => row([text(i ? '   ' : ` ${glyph(x.state)} `, tone(x.state), true), text(l, x.state === 'working' ? 'bright' : 'fg', true)], { id }));
+        row([text(`   ${right}`, x.talked ? 'amber' : 'muted')], { id });
+      }
+      for (const w of x.work) {
+        const wid = `item:${w.id}~r`;
+        wrap(clean(w.title), W - 13).forEach((l, i) => row([text(i ? ' '.repeat(12) : `   ${pad(w.id, 9)}`, categoryColor(w.id), true), text(l, 'fg')], { id: wid }));
+        const moment = w.latest ? `${w.latest.verb} ${when(w.latest.at, now)}` : '';
+        row([text(`${' '.repeat(12)}${[w.run, moment].filter(Boolean).join(' · ')}`, 'muted')], { id: wid });
+        if (w.summary) wrap(`“${firstSentence(w.summary)}”`, W - 13).forEach(l => row([text(`${' '.repeat(12)}${l}`, 'muted')], { id: wid }));
+      }
+    }
+    if (!live.length) row([text('   no live sessions', 'muted')]);
+    // Stopped, not yet settled: one line each, until their reports are recorded.
+    if (rest.length) {
+      row([]); section(`STOPPED, NOT SETTLED · ${rest.length}`, 'muted');
+      for (const x of rest) {
+        const w = x.work[0], right = `${x.state} ${ago(x.for)}${x.talked ? ' ◂' : ''}`;
+        row([text(' ○ ', 'muted'), text(x.lane, 'fg'), text(`  ${right}`, x.talked ? 'amber' : 'muted')], { id: `item:${w.id}~r` });
+        wrap(clean(w.title), W - 13).slice(0, 2).forEach((l, i) => row([text(i ? ' '.repeat(12) : `   ${pad(w.id, 9)}`, categoryColor(w.id), true), text(l, 'muted')], { id: `item:${w.id}~r` }));
+      }
+    }
+    row([]);
+    // What waits on the operator: each with how many answers it needs.
     section(`WAITING ON YOU · ${model.waiting.length}   sort: ${s.sort ?? 'blocking'} (s)`, 'amber');
     for (const w of model.waiting) {
       const recs = w.decisions.filter(d => d.recommend).length;
-      row([text(` ${pad(w.id, 9)}`, categoryColor(w.id), true), text(clean(w.title), 'bright')], { id: `wait:${w.key}` });
-      row([text(`          ${[w.source === 'report' ? w.run : 'question', w.decisions.length > 1 ? `${w.decisions.length} decisions` : null, recs ? `${recs === w.decisions.length ? 'all' : recs} recommended` : 'no rec', w.blocks ? `blocks ${w.blocks}` : null, when(w.at, now), s.sent?.[w.key] ? 'sent' : null].filter(Boolean).join(' · ')}`, s.sent?.[w.key] ? 'teal' : 'muted')], { id: `wait:${w.key}` });
+      const facts = [w.decisions.length > 1 ? `${w.decisions.length} decisions` : 'question', recs ? `${recs === w.decisions.length ? 'all' : recs} recommended` : 'no rec', w.blocks ? `blocks ${w.blocks}` : null, w.source === 'report' ? w.run : null, when(w.at, now), s.sent?.[w.key] ? 'sent' : null].filter(Boolean).join(' · ');
+      row([text(` ${pad(w.id, 9)}`, categoryColor(w.id), true), text(facts, s.sent?.[w.key] ? 'teal' : 'amber')], { id: `wait:${w.key}` });
+      for (const l of wrap(clean(w.title), W - 11).slice(0, 3)) row([text(`          ${l}`, 'fg')], { id: `wait:${w.key}` });
     }
     if (!model.waiting.length) row([text('   nothing waits on you', 'muted')]);
-    row([]);
-    if (s.watching) {
-      row([text(`on screen · ${model.onScreen.length}`, 'bright', true), text(`   ${s.watching}`, 'muted')], { bg: 'panel' });
-      for (const o of model.onScreen.slice(0, 14)) {
-        const i = o.item, w = o.working, l = o.latest;
-        // The code as the chat wrote it comes first, then what it stands for.
+    // What the supervisor mentions that no running session holds.
+    if (model.alsoInChat.length || model.shorthand.length) {
+      row([]); section('ALSO IN THE CHAT ◂', 'muted');
+      for (const o of model.alsoInChat.slice(0, 8)) {
         const said = o.said.length ? `${o.said.join(' ')} → ` : '';
-        row([text(` ${said}`, 'bright', true), text(`${pad(o.id, said ? o.id.length + 1 : 9)}`, categoryColor(o.id), true), text(`${pad(i.status === 'needs_human' ? 'needs you' : i.status, 10)}`, i.status === 'blocked' || i.status === 'needs_human' ? 'amber' : 'muted'), text(clean(i.title), 'fg')], { id: `item:${o.id}~s` });
-        const facts = [o.via && o.via !== w?.run ? o.via : null, w ? `● ${w.run} ${w.harness} ${w.state}` : null, l ? `${l.verb} ${when(l.at, now)}` : `created ${when(i.created?.at, now)}`].filter(Boolean).join(' · ');
-        row([text(`           ${facts}`, w ? 'teal' : 'muted')], { id: `item:${o.id}~s` });
+        row([text(` ${said}`, 'bright', true), text(`${pad(o.id, said ? o.id.length + 1 : 9)}`, categoryColor(o.id), true), text(`${pad(o.item.status === 'needs_human' ? 'needs you' : o.item.status, 8)} `, 'muted'), text(clean(o.item.title), 'fg')], { id: `item:${o.id}~s` });
       }
-      if (!model.onScreen.length) row([text('   no org IDs on the chat screen right now', 'muted')]);
       if (model.shorthand.length) row([text(`   not org items: ${model.shorthand.slice(0, 8).join(', ')}`, 'muted')]);
-      row([]);
     }
-    row([text(`running · ${model.running.length}`, 'teal', true)]);
-    for (const r of model.running) {
-      row([text(` ${r.state === 'working' ? '●' : r.state === 'blocked' ? '!' : '○'} `, r.state === 'working' ? 'teal' : r.state === 'blocked' ? 'amber' : 'muted'), text(`${pad(r.id, 9)}`, categoryColor(r.id), true), text(clean(r.text), 'fg')], { id: `item:${r.id}` });
-      row([text(`   ${[r.run, r.harness, r.lane, r.state, ago(r.for)].filter(Boolean).join(' · ')}`, 'muted')], { id: `item:${r.id}` });
-    }
-    if (!model.running.length) row([text('   nothing running', 'muted')]);
     row([]);
     row([text(`activity${s.filter ? ` · ${s.filter} only` : ''}`, 'blue', true), text(`   f filter · ${model.created} new today`, 'muted')]);
     let lastDay = null;
@@ -289,7 +329,7 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
   s.targets = [...new Set(body.map(r => r.id).filter(id => id && id !== 'back' && id !== 'go'))];
   lines.push({ spans: [span(` ${pad(clip(header, W - clock.length - 3), W - clock.length - 2)}`, 'bright', 'panel', true), span(`${clock} `, 'muted', 'panel')] });
   const errs = Object.values(s.errors ?? {});
-  lines.push({ spans: [span(pad(errs.length ? ` ${errs[0]}` : ` ${model.waiting.length} waiting on you · ${model.running.length} running · ${model.running.filter(r => r.state === 'working').length} working`, W), errs.length ? 'amber' : 'muted', 'panel')] });
+  lines.push({ spans: [span(pad(errs.length ? ` ${errs[0]}` : ` ${model.running.filter(r => r.state === 'working').length} working · ${model.running.filter(r => r.state !== 'working').length} other · ${model.waiting.length} waiting on you`, W), errs.length ? 'amber' : 'muted', 'panel')] });
   hits.push([], []);
   for (let i = 0; i < height; i++) {
     const r = body[s.scroll + i];
@@ -309,16 +349,17 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
   const d = { orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrGo: cli.herdrGo, herdrList: cli.herdrList, herdrVisible: cli.herdrVisible, herdrPrompt: cli.herdrPrompt,
     readFile: file => fs.promises.readFile(file, 'utf8'), now: () => Date.now(), ...deps };
   const project = config.projects[projectIndex] ?? null;
-  const s = { view: 'feed', detail: null, screen: '', watching: null, sort: 'blocking', decisionsByRun: new Map(), answers: {}, answer: null, sent: {}, entryKey: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
+  const s = { view: 'feed', detail: null, screen: '', workspaces: [], watching: null, sort: 'blocking', decisionsByRun: new Map(), answers: {}, answer: null, sent: {}, entryKey: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', interactive: false, targets: [], timer: null, stopped: false, pending: null, history: [] };
   const changed = () => { if (!s.stopped) onChange(); };
-  const model = () => feedModel({ status: s.status, events: s.events, agents: s.agents, now: d.now(), filter: s.filter, screen: s.screen, decisionsByRun: s.decisionsByRun, sort: s.sort });
+  const model = () => feedModel({ status: s.status, events: s.events, agents: s.agents, workspaces: s.workspaces, now: d.now(), filter: s.filter, screen: s.screen, decisionsByRun: s.decisionsByRun, sort: s.sort });
   async function refresh() {
     if (s.pending || !project?.org) { if (!project?.org) s.errors.org = 'This project has no organization.'; return s.pending; }
     s.pending = (async () => {
       const load = async (key, fn) => { try { const v = await fn(); delete s.errors[key]; return v; } catch (e) { s.errors[key] = `${key}: ${e.message}`; return undefined; } };
       const [status, events, agents] = await Promise.all([load('status', () => d.orgStatus(project)), load('log', () => d.orgLog(project, env.HERDR_FEED_SINCE ?? '36h')), load('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; })]);
       if (status) s.status = status; if (events) s.events = events; if (agents) s.agents = agents;
+      const spaces = await load('workspaces', () => d.herdrList('workspace')); if (spaces) s.workspaces = spaces;
       await readBeside();
       await loadDecisions();
     })().finally(() => { s.pending = null; changed(); });

@@ -54,7 +54,8 @@ test('the pane renders narrow, opens an item, focuses its session, and never wri
     deps: { now: () => now, orgStatus: async () => status, orgLog: async () => events, herdrAgents: async () => ({ ok: true, agents }), herdrGo: async t => { gone.push(t); return { ok: true }; } } });
   await session.refresh();
   let text = session.frame(60, 40).lines.map(lineText).join('\n');
-  assert.match(text, /WAITING ON YOU · 1/); assert.match(text, /HUM-3 +Spend on Chipnet\?/); assert.match(text, /question · all recommended/);
+  assert.match(text, /SESSIONS · 2 live/); assert.match(text, /● lane-wrapper +claude · 25m/); assert.match(text, /ENG-2 +Build the wrapper/);
+  assert.match(text, /WAITING ON YOU · 1/); assert.match(text, /HUM-3 +question · all recommended/); assert.match(text, /Spend on Chipnet\?/);
   assert.match(text, /ENG-2 +new Build the wrapper/); assert.match(text, /“The wrapper is missing\.”/);
   assert.ok(session.frame(60, 40).lines.every(l => lineText(l).length <= 60));
   const f = session.frame(60, 40), y = f.hits.findIndex(h => h.some(x => x.id.startsWith('item:ENG-2')));
@@ -85,7 +86,7 @@ test('the pane reads the agent sharing its tab and lists what that chat mentions
   await session.refresh();
   assert.deepEqual(reads, ['w:p1'], 'only the visible screen of the tab neighbour is read');
   const text = session.frame(60, 40).lines.map(lineText).join('\n');
-  assert.match(text, /on screen · 1 +supervisor/); assert.match(text, /ENG-2 +active +Build the wrapper/); assert.match(text, /● R-2 claude working/);
+  assert.match(text, /● lane-wrapper +claude · 25m ◂/, 'the session the chat talks about is marked'); assert.doesNotMatch(text, /ALSO IN THE CHAT/);
 });
 
 test('a plan label resolves only through a recorded alias, preferring an open item', () => {
@@ -96,7 +97,7 @@ test('a plan label resolves only through a recorded alias, preferring an open it
   assert.deepEqual(m.shorthand, [], 'unrecorded labels such as P9 are not guessed');
   const session = { ui: {} };
   const text = renderFeed({ s: { view: 'feed', scroll: 0, watching: 'supervisor', errors: {} }, model: m, project: { name: 'Alpha' }, now }, 60, 30).lines.map(lineText).join('\n');
-  assert.match(text, /3B S1 → ENG-2 active/);
+  assert.match(text, /● lane-wrapper +claude · 25m ◂/);
 });
 
 import { reportDecisions, waitingQueue, answerMessage, promptDraft } from '../modern/feed.mjs';

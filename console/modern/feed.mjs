@@ -48,18 +48,35 @@ function entry(e, items, runs) {
   }
 }
 
-// The IDs a chat has on screen, most recently mentioned first. A run (R-n)
-// stands for the item it works; an ID the org does not know is the chat's own
-// shorthand and is listed as such.
+// The codes a chat has on screen, most recently mentioned first. An org ID is
+// itself; a run (R-n) stands for the item it works; a plan's own label (S1, 3A)
+// resolves only when an item records it as an alias (meta.alias, comma
+// separated), preferring an open item. Anything else is the chat's shorthand.
+export function aliases(items) {
+  const map = new Map();
+  const open = i => !i.closed && !['done', 'dropped'].includes(i.status);
+  for (const i of items.values()) for (const a of String(i.meta?.alias ?? '').split(/[,\s]+/).filter(Boolean)) {
+    const prior = map.get(a);
+    if (!prior || (open(i) && !open(prior))) map.set(a, i);
+  }
+  return map;
+}
 export function mentions(text, items, runs) {
-  const last = new Map();
+  const last = new Map(), screen = String(text ?? '');
   // Dates in file names (REVIEW-20260930) are not IDs.
-  for (const m of String(text ?? '').matchAll(/\b([A-Z][A-Z0-9]{0,5})-(\d{1,5})\b/g)) last.set(m[0], m.index);
-  const seen = new Set(), known = [], unknown = [];
-  for (const [id] of [...last].sort((a, b) => b[1] - a[1])) {
-    const run = runs.get(id), itemId = run ? run.item : id;
-    if (items.has(itemId)) { if (!seen.has(itemId)) { seen.add(itemId); known.push({ id: itemId, via: run ? id : null }); } else if (run) known.find(k => k.id === itemId).via ??= id; }
-    else unknown.push(id);
+  for (const m of screen.matchAll(/\b([A-Z][A-Z0-9]{0,5})-(\d{1,5})\b/g)) last.set(m[0], m.index);
+  const alias = aliases(items);
+  for (const a of alias.keys()) {
+    const re = new RegExp(`(?<![\\w-])${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'g');
+    for (const m of screen.matchAll(re)) last.set(a, Math.max(last.get(a) ?? -1, m.index));
+  }
+  const seen = new Map(), known = [], unknown = [];
+  for (const [code] of [...last].sort((a, b) => b[1] - a[1])) {
+    const run = runs.get(code), itemId = run ? run.item : alias.get(code)?.id ?? code;
+    if (!items.has(itemId)) { unknown.push(code); continue; }
+    if (seen.has(itemId)) { const k = seen.get(itemId); if (code !== itemId && !k.said.includes(code)) k.said.push(code); continue; }
+    const k = { id: itemId, via: run ? code : null, said: code === itemId ? [] : [code] };
+    seen.set(itemId, k); known.push(k);
   }
   return { known, unknown };
 }
@@ -143,7 +160,9 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
       row([text(`on screen · ${model.onScreen.length}`, 'bright', true), text(`   ${s.watching}`, 'muted')], { bg: 'panel' });
       for (const o of model.onScreen.slice(0, 14)) {
         const i = o.item, w = o.working, l = o.latest;
-        row([text(` ${pad(o.id, 9)}`, categoryColor(o.id), true), text(`${pad(i.status === 'needs_human' ? 'needs you' : i.status, 10)}`, i.status === 'blocked' || i.status === 'needs_human' ? 'amber' : 'muted'), text(clean(i.title), 'fg')], { id: `item:${o.id}~s` });
+        // The code as the chat wrote it comes first, then what it stands for.
+        const said = o.said.length ? `${o.said.join(' ')} → ` : '';
+        row([text(` ${said}`, 'bright', true), text(`${pad(o.id, said ? o.id.length + 1 : 9)}`, categoryColor(o.id), true), text(`${pad(i.status === 'needs_human' ? 'needs you' : i.status, 10)}`, i.status === 'blocked' || i.status === 'needs_human' ? 'amber' : 'muted'), text(clean(i.title), 'fg')], { id: `item:${o.id}~s` });
         const facts = [o.via && o.via !== w?.run ? o.via : null, w ? `● ${w.run} ${w.harness} ${w.state}` : null, l ? `${l.verb} ${when(l.at, now)}` : `created ${when(i.created?.at, now)}`].filter(Boolean).join(' · ');
         row([text(`           ${facts}`, w ? 'teal' : 'muted')], { id: `item:${o.id}~s` });
       }

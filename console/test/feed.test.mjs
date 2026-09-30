@@ -70,7 +70,7 @@ test('the pane renders narrow, opens an item, focuses its session, and never wri
 test('the IDs on the chat screen resolve to items, runs to the item they work, the rest is shorthand', () => {
   const screen = 'Done with ARCH-1 (R-1). OD-1 recorded. See archive/REVIEW-20260930.md. Now R-2 is building; HUM-3 waits.';
   const m = feedModel({ status, events, agents, now, screen });
-  assert.deepEqual(m.onScreen.map(o => [o.id, o.via]), [['HUM-3', null], ['ENG-2', 'R-2'], ['ARCH-1', 'R-1']]);
+  assert.deepEqual(m.onScreen.map(o => [o.id, o.via, o.said]), [['HUM-3', null, []], ['ENG-2', 'R-2', ['R-2']], ['ARCH-1', 'R-1', ['R-1']]]);
   assert.deepEqual(m.shorthand, ['OD-1']);
   assert.equal(m.onScreen.find(o => o.id === 'ENG-2').working.state, 'working');
   assert.equal(m.onScreen.find(o => o.id === 'ARCH-1').latest.verb, 'decided');
@@ -86,4 +86,15 @@ test('the pane reads the agent sharing its tab and lists what that chat mentions
   assert.deepEqual(reads, ['w:p1'], 'only the visible screen of the tab neighbour is read');
   const text = session.frame(60, 40).lines.map(lineText).join('\n');
   assert.match(text, /on screen · 1 +supervisor/); assert.match(text, /ENG-2 +active +Build the wrapper/); assert.match(text, /● R-2 claude working/);
+});
+
+test('a plan label resolves only through a recorded alias, preferring an open item', () => {
+  const withAlias = { ...status, items: [...status.items.map(i => i.id === 'ENG-2' ? { ...i, meta: { alias: 'S1, 3B' } } : i),
+    { id: 'ENG-9', kind: 'work', role: 'engineer', title: 'Old slice S1', status: 'done', closed: { at: at(900) }, meta: { alias: 'S1' }, created: { at: at(900) }, runs: [], notes: [] }] };
+  const m = feedModel({ status: withAlias, events, agents, now, screen: 'S1 is built; 3B next. P9 guards it.' });
+  assert.deepEqual(m.onScreen.map(o => [o.id, o.said]), [['ENG-2', ['3B', 'S1']]]);
+  assert.deepEqual(m.shorthand, [], 'unrecorded labels such as P9 are not guessed');
+  const session = { ui: {} };
+  const text = renderFeed({ s: { view: 'feed', scroll: 0, watching: 'supervisor', errors: {} }, model: m, project: { name: 'Alpha' }, now }, 60, 30).lines.map(lineText).join('\n');
+  assert.match(text, /3B S1 → ENG-2 active/);
 });

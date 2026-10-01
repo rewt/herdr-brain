@@ -6,28 +6,36 @@ cutover plan in `docs/reports/ENG-64-one-watcher-20261001.md` first. This brief 
 
 ## The outcome
 
-One local command that shows, before anything reaches bch-cloak, that a candidate release works
-the way we expect. The operator asked for this (2026-10-01): "before we push this to bch-cloak,
-design some local test cases to ensure things are working the way we expect." No bch-cloak
-switch happens until it passes against the release that carries the switch.
+One local command that shows a candidate release works the way we expect, for any project.
+The operator asked for local test cases before anything is pushed to bch-cloak, and then set
+the frame (2026-10-01): this is designed for anyone to use with any project, not for bch-cloak.
+A project needs no special user configuration; agents discover it when they enter the project
+to work, and the project's record fills up from the work they do. bch-cloak is one existing
+project already running an older release; no switch happens there until the cases pass against
+the release that carries it.
 
 ## Why it matters, and to whom
 
 Today's checks were offline unit tests (fakes for Herdr) and real use by the supervisor here.
-Neither runs the whole cycle end to end, and neither runs bch-cloak's own calls against the
-release that would replace them. Two lanes today nearly broke a bch-cloak command through a path
-nobody tested (`contrib/settle-watch.mjs`, see `AGENTS.md`). bch-cloak runs real work every day;
-the operator should be able to read one screen and know a release is safe to activate.
+Neither runs the whole cycle end to end, neither starts from a project with nothing set up, and
+neither runs an existing project's calls against the release that would replace them. Two lanes
+today nearly broke a bch-cloak command through a path nobody tested (`contrib/settle-watch.mjs`,
+see `AGENTS.md`). The operator should be able to read one screen and know a release is safe.
 
 ## What it should cover (the cases are yours to design)
 
+- **A brand-new project, nothing set up (the primary case):** a scratch git repo with no
+  `.org`, no `.lane.json`, no routes. What does an agent entering it see, and can it discover the
+  record, routes, dispatch and watch on its own? Does the cycle below run on defaults while the
+  record populates from the work? Where something today needs hand configuration, make that a
+  failing or pending case and name it, rather than working around it.
 - **The cycle, end to end, in a scratch project:** a scratch git repo with a scratch record and
   lane config; dispatch an item by route (`dispatch/dispatch.mjs`) to a scripted stand-in worker
   (a real Herdr pane running a script, not a model) that commits and writes a report; the watcher
   delivers the notice to a stand-in supervisor pane; the report is ingested; the lane is checked,
   promoted and closed; housekeeping (when ENG-73 lands) closes the finished worker. Include the
   failure paths that matter: no report, invalid report, blocked worker, a fix round.
-- **bch-cloak's calls against the candidate release:** the exact invocations bch-cloak's scripts
+- **An existing project on an older release (bch-cloak today):** the exact invocations bch-cloak's scripts
   make today (`launch-supervisor.mjs` → `contrib/settle-watch.mjs` with `--model`/`--effort`;
   `org` from PATH in `apply-settle.sh` and `close-finished-agents.sh`; `routing.json` loading;
   `notify-watch.sh`'s replacement per the ENG-64 plan), run against copies in scratch, never the

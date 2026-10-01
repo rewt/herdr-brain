@@ -480,7 +480,7 @@ and recommendations can change, so recheck the linked source when updating route
 | Model | Vendor positioning | Example route fit |
 | --- | --- | --- |
 | [`gpt-6-astra`](https://learn.chatgpt.com/docs/models) | OpenAI's most capable model for complex work across code, apps, and research, with stronger judgment | Planning and unblocking |
-| [`gpt-5.6-sol`](https://learn.chatgpt.com/docs/models) | Most capable GPT-5.6 model for complex coding, computer use, and research | Engineering lanes |
+| [`gpt-6.1-sol`](https://learn.chatgpt.com/docs/models) | Sol for complex coding, computer use, and research; replaced `gpt-5.6-sol` (archived) on 2026-10-01 | Engineering lanes |
 | [`gpt-5.6-terra`](https://learn.chatgpt.com/docs/models) | Balanced everyday work at lower cost | Mechanical or isolated changes |
 | [`gpt-5.6-luna`](https://learn.chatgpt.com/docs/models) | Fast and affordable for clear, repeatable tasks such as extraction and classification | Repeatable, well-specified work |
 | [`claude-opus-5`](https://platform.claude.com/docs/en/about-claude/models/choosing-a-model) | Complex agentic coding and enterprise work, including large refactors and complex systems engineering; start at its default `high` effort | Independent review |

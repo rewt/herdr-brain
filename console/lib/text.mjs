@@ -109,12 +109,13 @@ export function wrap(text, width, hang = '') {
         lines.push(line);
         line = '';
       }
-      let room = width - cellWidth(lead());
+      // A width at or below the hang still takes one cell per line, never none.
+      let room = Math.max(1, width - cellWidth(lead()));
       while (cellWidth(word) > room) {
         const head = clipExact(word, Math.max(1, room));
         lines.push(lead() + head);
         word = word.slice(head.length);
-        room = width - hangWidth;
+        room = Math.max(1, width - hangWidth);
       }
       if (word) line = lead() + word;
     }

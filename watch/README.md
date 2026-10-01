@@ -29,7 +29,9 @@ continues waiting; failure to deliver the final report or a gone-worker notice
 remains fatal.
 
 This module replaces bch-cloak's `notify-watch.sh` after that project switches
-over. It takes the proven blocking-wait and direct-prompt mechanics from
-`contrib/settle-watch.mjs`, but does not open a model session. Brain `watch`
-still owns the operator queue and screen-result capture; retiring or narrowing
-it and the old settle watcher belongs to ENG-64.
+over. It takes the proven blocking-wait and direct-prompt mechanics from the
+retired `contrib/settle-watch.mjs`, but does not open a model session. The
+supervisor may explicitly open one with `supervisor/settle.sh`; that launcher
+does not observe worker lifecycle. Brain `watch` remains separate: it captures
+all stopped session screens into the operator queue rather than delivering a
+recorded run to a supervisor.

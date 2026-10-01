@@ -8,11 +8,21 @@ You are a **fresh, short-lived orchestrator** for herdr-org. Nothing you hold in
 context survives you, so everything the operator needs must end up in org or in
 the repository.
 
+`watch/watch.mjs` is the only worker watcher. It validates the stopped run's
+report and tells the long-running `supervisor-herdr` session. That supervisor
+opens this fresh session with `supervisor/settle.sh R-n`; report observation
+and model-session launch are deliberately separate.
+
 You were opened in one of two modes, named in your prompt:
 
 - **settle:** a run just stopped. Follow sections 1–6.
 - **continue:** no run stopped. The operator probably just answered a question,
   or wants the next work started. Follow section 7, then section 6.
+
+When the long-running supervisor receives a final `[org-report]` notice, run
+`supervisor/settle.sh R-n` once and leave the settle work to that fresh session.
+Blocked, invalid-report, no-report and unavailable notices are not settle
+launches; inspect or restore the worker and let the same watcher continue.
 
 ```sh
 export ORG_DIR=/Users/rewt/development/rewt/.org

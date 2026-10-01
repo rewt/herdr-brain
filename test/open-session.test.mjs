@@ -6,13 +6,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const WATCH = fileURLToPath(new URL('../contrib/settle-watch.mjs', import.meta.url));
+const OPEN_SESSION = fileURLToPath(new URL('../supervisor/open-session.mjs', import.meta.url));
 
 function script(file, body) {
   fs.writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
 }
 
-test('settle-watch tells org which session is acting (dry run, fake Herdr)', () => {
+test('open-session tells org which session is acting (dry run, fake Herdr)', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'settle-watch-'));
   const bin = path.join(root, 'bin');
   const cwd = path.join(root, 'checkout');
@@ -32,7 +32,7 @@ esac`);
   script(path.join(root, 'launcher'), `echo CLAUDE_CONFIG_DIR=${root}/claude`);
   script(path.join(root, 'cmem'), 'exit 1');
 
-  const r = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+  const r = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
     env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
@@ -46,7 +46,7 @@ esac`);
   const runtime = path.join(root, 'runtime');
   fs.mkdirSync(runtime);
   fs.writeFileSync(path.join(runtime, 'STOP'), 'stop\n');
-  const stopped = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+  const stopped = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', runtime,
     '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
@@ -57,7 +57,7 @@ esac`);
 
   const defaultStop = path.join(supervisor, 'STOP');
   fs.writeFileSync(defaultStop, 'stop\n');
-  const defaultStopped = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+  const defaultStopped = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist,
     '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
@@ -69,7 +69,7 @@ esac`);
 
   const missingRuntime = path.join(root, 'missing-runtime');
   assert.equal(fs.existsSync(missingRuntime), false);
-  const prepared = spawnSync(process.execPath, [WATCH, '--open', '--org', path.join(root, '.org'),
+  const prepared = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--org', path.join(root, '.org'),
     '--cwd', path.join(root, 'not-the-checkout'), '--lane-config', laneConfig, '--checklist', checklist,
     '--ledger-dir', missingRuntime, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
@@ -83,7 +83,7 @@ esac`);
 });
 
 test('a codex route starts a codex session with its model, effort, route args and always_args (dry run)', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'settle-watch-codex-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'open-session-codex-'));
   const bin = path.join(root, 'bin'), cwd = path.join(root, 'checkout'), supervisor = path.join(root, 'supervisor');
   for (const d of [bin, cwd, supervisor]) fs.mkdirSync(d);
   const checklist = path.join(supervisor, 'SETTLE.md'), laneConfig = path.join(root, 'lane.json');
@@ -98,7 +98,7 @@ test('a codex route starts a codex session with its model, effort, route args an
 esac`);
   script(path.join(root, 'launcher'), `echo CLAUDE_CONFIG_DIR=${root}/claude`);
   script(path.join(root, 'cmem'), 'exit 1');
-  const r = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+  const r = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
   });

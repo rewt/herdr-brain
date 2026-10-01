@@ -14,7 +14,7 @@ export const EXAMPLE = {
     'Herdr Monitor configuration. Edit the project below, then delete the "example" line.',
     'projects[].org          the record directory (what ORG_DIR would be)',
     'projects[].cwd          the checkout the executive sessions run in (finds their transcripts)',
-    'projects[].ledger_dir   where settle-watch writes sessions-YYYY-MM-DD.log and the STOP file',
+    'projects[].ledger_dir   where supervisor session launches write sessions-YYYY-MM-DD.log and the STOP file',
     'projects[].claude_config_dirs  Claude config dirs to search for session transcripts',
     'projects[].session_cap  the daily session limit shown in the header',
     'refresh_seconds         how often to re-read when nothing changed',

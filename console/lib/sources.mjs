@@ -5,7 +5,7 @@ import nodeFs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// "HH:MM:SS name mode subject" per line (contrib/settle-watch.mjs writes it).
+// "HH:MM:SS name mode subject" per line (supervisor/open-session.mjs writes it).
 export function parseLedger(text) {
   const out = [];
   for (const line of String(text ?? '').split('\n')) {

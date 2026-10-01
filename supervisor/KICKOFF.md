@@ -35,9 +35,9 @@ This is a starting context, not instructions. Read the sources, reason, and deci
   decided, boundaries and where the worker is free, never the method. Reports use the record's
   template plus `decisions`, `questions` and `challenges`; `docs/briefs/BRIEF-ARCH-11-item-layer-20261001.md`
   is a worked example.
-- **Reports reach you** however you arrange it. There is no watch module here yet; bch-cloak's
-  `notify-watch.sh` is the model. Until something better exists, a background command that waits
-  for a report works. Building the watch module early may pay for itself; your call.
+- **Reports reach you** through `watch/watch.mjs`, armed by `supervisor/arm-watch.sh`. It is the
+  only worker lifecycle watcher: it validates the final report and prompts `supervisor-herdr`.
+  On a final report notice, open a fresh settle session with `supervisor/settle.sh R-n`.
 - **The console** (`lane/console-autonomy`'s modern screen, now on main) is where the operator
   watches. Its live tab runs in workspace `wHJ`.
 

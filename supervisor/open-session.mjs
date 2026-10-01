@@ -1,28 +1,21 @@
 #!/usr/bin/env node
-// settle-watch: wait for one org run's worker to stop, then open a fresh settle
-// session to handle the result. Pilot tooling, deliberately outside the org core:
-// it knows about Herdr, lane configuration and Claude; org does not.
+// Open one fresh settle or executive session. This is supervisor launch policy,
+// deliberately outside the org core: it knows about Herdr, lane configuration
+// and model accounts; org does not.
 //
-// No model is involved while waiting. `herdr agent wait` blocks inside the Herdr
-// server, so there is no polling loop here.
-//
-//   settle-watch.mjs R-n --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--ledger-dir DIR] [--dry-run]
-//   settle-watch.mjs R-n ... --spawn     # open a visible "watch R-n" tab and run there
-//   settle-watch.mjs --open [--focus TEXT] ...   # open a "continue" executive session now
+//   open-session.mjs R-n --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--ledger-dir DIR] [--dry-run]
+//   open-session.mjs --open [--focus TEXT] ...   # open a "continue" executive session now
 //
 // Brakes: a STOP file in --ledger-dir blocks every new session, and at most
 // --max-sessions-per-day sessions are opened per local day there. The ledger
 // defaults to the checklist's directory for compatibility with older callers.
 
-import { spawn, spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-const SELF = fileURLToPath(import.meta.url);
 const { values: opt, positionals } = parseArgs({
   allowPositionals: true,
   options: {
@@ -37,26 +30,24 @@ const { values: opt, positionals } = parseArgs({
     'permission-mode': { type: 'string', default: 'auto' },
     launcher: { type: 'string', default: path.join(os.homedir(), 'bin/ai') },
     'cmem-domain': { type: 'string', default: path.join(os.homedir(), 'development/claude-mem/bin/cmem-domain') },
-    spawn: { type: 'boolean', default: false },
     open: { type: 'boolean', default: false },
     focus: { type: 'string' },
     'max-sessions-per-day': { type: 'string', default: '12' },
     'add-dir': { type: 'string', multiple: true, default: [] },
-    'close-tab-on-exit': { type: 'boolean', default: false },
     'dry-run': { type: 'boolean', default: false },
   },
 });
 
 const runId = positionals[0];
 if ((opt.open ? runId !== undefined : !/^R-\d+$/.test(runId ?? '')) || !opt.org || !opt.cwd || !opt['lane-config'] || !opt.checklist) {
-  console.error('usage: settle-watch.mjs (R-n [--spawn] | --open [--focus TEXT]) --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--ledger-dir DIR] [--account NAME] [--model M] [--effort E] [--dry-run]');
+  console.error('usage: open-session.mjs (R-n | --open [--focus TEXT]) --org DIR --cwd CHECKOUT --lane-config FILE --checklist FILE [--ledger-dir DIR] [--account NAME] [--model M] [--effort E] [--dry-run]');
   process.exit(2);
 }
 const dry = opt['dry-run'];
 const subject = runId ?? 'executive';
 
 const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${msg}`);
-const die = (msg) => { log(`STOP: ${msg}`); notify(`settle-watch ${subject}: stopped`, msg); process.exit(1); };
+const die = (msg) => { log(`STOP: ${msg}`); notify(`session launch ${subject}: stopped`, msg); process.exit(1); };
 
 // Model and effort come from the lane config's route table so there is one place
 // to tune what each role costs, and the console can show the same names. --model
@@ -72,7 +63,7 @@ function route(mode) {
   // Two kinds are supported: claude (the original) and codex (added 2026-09-20 so the
   // settle loop keeps running while the Claude plan is exhausted). Anything else dies.
   const kind = r.kind ?? 'claude';
-  if (kind !== 'claude' && kind !== 'codex') die(`route "${key}" is kind "${r.kind}", but settle-watch only starts claude or codex sessions`);
+  if (kind !== 'claude' && kind !== 'codex') die(`route "${key}" is kind "${r.kind}", but open-session only starts claude or codex sessions`);
   if (!routes[key]) log(`no "${key}" route in ${opt['lane-config']}; using opus/high`);
   // For codex the effort travels as `-c model_reasoning_effort=…`; a route may carry its
   // own args (profile, extra -c), and the lane config's always_args.codex are appended
@@ -83,7 +74,7 @@ function route(mode) {
 }
 
 function run(cmd, args, { env, quiet } = {}) {
-  // Node's default 1 MB output cap killed a watcher once the org record grew (ENOBUFS).
+  // The org record can exceed Node's default 1 MB output cap.
   const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, ...env } });
   if (r.error) throw r.error;
   if (!quiet && r.status !== 0) log(`${cmd} ${args[0]} ${args[1] ?? ''} exited ${r.status}: ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
@@ -127,19 +118,7 @@ function agentStatus(name) {
   return r.ok ? r.result.agent?.agent_status ?? 'unknown' : null; // null: the agent is gone
 }
 
-function waitFor(name, states) {
-  if (dry) { log(`[dry-run] would block: herdr agent wait ${name} ${states.map((s) => `--until ${s}`).join(' ')}`); return true; }
-  log(`waiting for ${name} to reach ${states.join('|')} (no polling; Herdr blocks)`);
-  return run('herdr', ['agent', 'wait', name, ...states.flatMap((s) => ['--until', s])], { quiet: true }).status === 0;
-}
-
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-// A failed wait must not turn into a busy loop.
-const backoff = () => { log('herdr agent wait failed; retrying in 30 s'); sleep(30_000); };
-
-function reportReady(file) {
-  try { return fs.statSync(file).size > 0; } catch { return false; }
-}
 
 // The workspace whose canonical checkout is --cwd. Ids can change across Herdr
 // restarts, so resolve at use time rather than configuring one.
@@ -162,26 +141,8 @@ function newTab(label, env) {
   return r.result.root_pane.pane_id;
 }
 
-// Tidy-up. A watcher started with --spawn closes its own tab when it finishes
-// cleanly (an error leaves the tab open to be read); after a hand-off it also
-// closes the stopped worker's tab; before opening a session, finished settle and
-// executive tabs beyond the newest two are closed. Nothing working or blocked is touched.
-function closeOwnTab() {
-  const tab = process.env.HERDR_TAB_ID;
-  if (dry || !opt['close-tab-on-exit'] || !tab) return;
-  log(`closing this watcher tab (${tab})`);
-  spawn('herdr', ['tab', 'close', tab], { detached: true, stdio: 'ignore' }).unref();
-}
-const finish = (msg) => { if (msg) log(msg); closeOwnTab(); process.exit(0); };
-
-function closeWorkerTab(agentName) {
-  const got = herdr(['agent', 'get', agentName]);
-  const info = got.ok ? got.result.agent : null;
-  if (!info?.tab_id || !['idle', 'done'].includes(info.agent_status)) return;
-  const r = act('close worker tab', 'herdr', ['tab', 'close', info.tab_id]);
-  log(r.ok ? `closed worker tab ${info.tab_id} (${agentName})` : `could not close worker tab ${info.tab_id}: ${r.error}`);
-}
-
+// Before opening a session, finished settle and executive tabs beyond the
+// newest two are closed. Nothing working or blocked is touched.
 function pruneSessionTabs(keep = 2) {
   const ws = workspaceId();
   const tabs = herdr(['tab', 'list', '--workspace', ws]).result?.tabs ?? [];
@@ -200,29 +161,6 @@ function pruneSessionTabs(keep = 2) {
     const r = act('close finished session tab', 'herdr', ['tab', 'close', f.tab]);
     if (r.ok && !dry) log(`closed finished session tab ${f.tab} (${f.name})`);
   }
-}
-
-// --spawn: run this same watcher inside a visible tab, so it outlives whoever armed it.
-if (opt.spawn && !opt.open) {
-  const argv = process.argv.slice(2).filter((a) => a !== '--spawn').concat('--close-tab-on-exit');
-  const command = [process.execPath, SELF, ...argv].map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
-  const pane = newTab(`watch ${runId}`, []);
-  if (!dry) sleep(3_000);
-  const r = act('start watcher', 'herdr', ['pane', 'run', pane, command]);
-  if (!r.ok) die(`could not start the watcher in ${pane}: ${r.error}`);
-  log(`watcher for ${runId} running in pane ${pane}`);
-  process.exit(0);
-}
-
-// One watcher per run.
-const lock = path.join(os.tmpdir(), `settle-watch-${crypto.createHash('sha256').update(path.resolve(opt.org)).digest('hex').slice(0, 12)}-${runId}.lock`);
-if (!dry && !opt.open) {
-  try {
-    const pid = Number(fs.readFileSync(lock, 'utf8'));
-    try { process.kill(pid, 0); die(`another watcher (pid ${pid}) already owns ${runId}`); } catch { /* stale */ }
-  } catch { /* no lock */ }
-  fs.writeFileSync(lock, String(process.pid));
-  process.on('exit', () => { try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {} });
 }
 
 // Account and memory settings exactly as `ai claude` would choose them in --cwd.
@@ -293,7 +231,7 @@ function takeTurn() {
       let alive = false;
       try { process.kill(holder, 0); alive = true; } catch {}
       if (!alive) { try { fs.rmSync(openLock, { recursive: true }); } catch {} continue; }
-      log(`another watcher (pid ${holder}) is opening a session; waiting`);
+      log(`another launcher (pid ${holder}) is opening a session; waiting`);
       sleep(10_000);
       continue;
     }
@@ -301,8 +239,7 @@ function takeTurn() {
     const busy = agents.filter((a) => /^(settle-|exec-)/.test(a.name ?? '') && a.agent_status === 'working');
     if (busy.length === 0) return;
     fs.rmSync(openLock, { recursive: true });
-    log(`waiting for ${busy.map((a) => a.name).join(', ')} to finish before opening another session`);
-    for (const a of busy) if (!waitFor(a.name, ['idle', 'done', 'blocked'])) backoff();
+    die(`${busy.map((a) => a.name).join(', ')} is already working; refusing to open a concurrent supervisor session`);
   }
 }
 const releaseTurn = () => { if (!dry) try { fs.rmSync(openLock, { recursive: true }); } catch {} };
@@ -402,52 +339,16 @@ if (opt.open) {
   process.exit(0);
 }
 
-// Main: follow one worker until it stops with a report, then hand off.
+// A settle launch is explicit: watch/watch.mjs has already told the supervisor
+// that this worker stopped. Keeping launch separate means there is only one
+// worker lifecycle watcher.
 const initial = orgRun();
 if (!initial) die(`${runId} is not in ${opt.org}`);
-if (initial.report) finish(`${runId} already has a recorded report; nothing to watch`);
-if (initial.abandoned) finish(`${runId} was abandoned; nothing to watch`);
+if (initial.abandoned) die(`${runId} was abandoned; refusing to open a settle session`);
 if (initial.meta.settled_by) {
-  if (agentStatus(initial.meta.settled_by) !== null) finish(`${runId} is already with live session ${initial.meta.settled_by}`);
+  if (agentStatus(initial.meta.settled_by) !== null) die(`${runId} is already with live session ${initial.meta.settled_by}`);
   log(`${runId} was handed to ${initial.meta.settled_by}, which no longer exists; handing it again`);
 }
-const handedTo = initial.meta.settled_by ?? null;
-const agent = initial.meta.agent;
-if (!agent) die(`${runId} has no agent recorded (org set ${runId} agent=<name>)`);
-log(`watching ${runId}: worker ${agent}, report ${initial.report_path}`);
-
-if (dry) {
-  log(`[dry-run] worker is ${agentStatus(agent) ?? 'gone'}; report ${reportReady(initial.report_path) ? 'exists' : 'not written yet'}`);
-  waitFor(agent, ['idle', 'done', 'blocked']);
-  log('[dry-run] when it stops with a report, the watcher would do this:');
-  openSession({ mode: 'settle', r: initial });
-  process.exit(0);
-}
-
-let notified = null; // the state we last told the operator about
-for (;;) {
-  const state = agentStatus(agent);
-  const r = orgRun();
-  if (r.report || (r.meta.settled_by && r.meta.settled_by !== handedTo)) finish(`${runId} was settled elsewhere`);
-
-  if (state === 'working' || state === 'unknown') {
-    notified = null;
-    if (!waitFor(agent, ['idle', 'done', 'blocked'])) backoff();
-    continue;
-  }
-  if (state === 'blocked') {
-    if (notified !== 'blocked') notify(`${runId} needs you`, `Worker ${agent} is blocked (a permission prompt or a question).`);
-    notified = 'blocked';
-    if (!waitFor(agent, ['working'])) backoff();
-    continue;
-  }
-  if (reportReady(r.report_path)) {
-    openSession({ mode: 'settle', r });
-    closeWorkerTab(agent);
-    finish();
-  }
-  if (state === null) die(`worker ${agent} is gone and no report exists at ${r.report_path}`);
-  if (notified !== 'no-report') notify(`${runId} stopped without a report`, `Worker ${agent} is ${state} but ${r.report_path} does not exist yet.`);
-  notified = 'no-report';
-  if (!waitFor(agent, ['working'])) backoff();
-}
+if (!initial.meta.agent) die(`${runId} has no agent recorded (org set ${runId} agent=<name>)`);
+if (!initial.report_path) die(`${runId} has no report path`);
+openSession({ mode: 'settle', r: initial });

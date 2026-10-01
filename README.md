@@ -26,12 +26,11 @@ look like one project.
 |---|---|
 | `bin/org.mjs` | The shared CLI implementation; installation exposes it as both `record` and the permanent `org` compatibility name. |
 | `lib/` | The dependency-free core: event storage, state folding, reports and views. |
-| `brain/` | The Herdr watcher, operator queue and commands that start or answer sessions. |
+| `brain/` | Captures stopped session screens for the operator queue and provides commands that start or answer sessions. |
 | `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
 | `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
 | `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
-| `contrib/settle-watch.mjs` | Waits for a worker to stop, then opens a fresh settle session. |
-| `supervisor/` | The prompt each settle session gets, the scripts that arm or continue it, and tab housekeeping. |
+| `supervisor/` | The settle prompt, explicit settle/continue session launchers, watcher wrapper and tab housekeeping. |
 | `.lane/` | Ignored runtime state, including session ledgers and the emergency `STOP` file. |
 | `~/.config/herdr-org/console.json` | The operator's local console project and Brain-path configuration. |
 | `~/Library/LaunchAgents/com.rewt.herdr-brain.plist` | The operator's local service definition for the always-on Brain watcher. |
@@ -179,7 +178,7 @@ record note ENG-7 --decision --summary "Leave the exposed test cells alone until
 The console shows the summary. A decision without one is shown as its first sentence with codes
 removed, marked `· no plain summary`.
 
-Sessions opened by `contrib/settle-watch.mjs` get `ORG_ACTOR=<session name>`, so the record tells
+Sessions opened by `supervisor/open-session.mjs` get `ORG_ACTOR=<session name>`, so the record tells
 their answers and notes apart from the operator's.
 
 ## `record today`: the operator's read model
@@ -246,7 +245,7 @@ for a fixed record, `ORG_NOW` and `TZ`.
 
 A write with neither `ORG_ACTOR` nor a terminal is still recorded as `human`, carries
 `"unattributed": true`, and the CLI prints how to name the session. Nothing is refused
-for it. Agent sessions set `ORG_ACTOR` to their session name (settle-watch and `brain start`
+for it. Agent sessions set `ORG_ACTOR` to their session name (`supervisor/open-session.mjs` and `brain start`
 do); the console writes as `ORG_ACTOR=human`.
 
 ## The console

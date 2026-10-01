@@ -13,7 +13,7 @@ if [ -n "$FOCUS" ]; then
 else
   set -- --open "$@"
 fi
-exec node "$HERE/contrib/settle-watch.mjs" "$@" \
+exec node "$HERE/supervisor/open-session.mjs" "$@" \
   --org "$REWT/.org" \
   --cwd "$HERE" \
   --lane-config "$REWT/.lane.json" \

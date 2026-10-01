@@ -90,6 +90,23 @@ test('every terminal condition has a distinct, compact supervisor notice', () =>
   assert.match(unavailableNotice({ ...common, error: 'permission denied' }), /^\[watch-unavailable\].*permission denied/);
 });
 
+test('spawn resolves the cwd workspace when it is run outside a Herdr pane', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-spawn-'));
+  const cwd = path.join(root, 'checkout');
+  const herdr = path.join(root, 'herdr');
+  fs.mkdirSync(cwd);
+  executable(herdr, `case "$1 $2" in
+  "workspace list") printf '%s\\n' '{"result":{"workspaces":[{"workspace_id":"w-canonical","worktree":{"checkout_path":"${cwd}"}}]}}' ;;
+  *) exit 2 ;;
+esac`);
+  const result = spawnSync(process.execPath, [
+    WATCH, 'R-6', '--org', path.join(root, '.org'), '--herdr', herdr,
+    '--cwd', cwd, '--spawn', '--dry-run',
+  ], { encoding: 'utf8', env: { ...process.env, HERDR_WORKSPACE_ID: '' } });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /would create tab "watch R-6" in w-canonical/);
+});
+
 test('a valid report is checked and delivered without Herdr being present', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-'));
   const report = path.join(root, 'report.md');

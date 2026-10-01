@@ -222,8 +222,14 @@ function shellQuote(value) {
 }
 
 function spawnWatcher() {
-  const workspace = opt.workspace ?? process.env.HERDR_WORKSPACE_ID;
-  if (!workspace) throw new Error('--spawn needs --workspace or HERDR_WORKSPACE_ID');
+  let workspace = opt.workspace ?? process.env.HERDR_WORKSPACE_ID;
+  if (!workspace) {
+    const workspaces = jsonResult(run(opt.herdr, ['workspace', 'list']), 'herdr workspace list').workspaces ?? [];
+    const cwd = path.resolve(opt.cwd);
+    workspace = workspaces.find((entry) => entry.worktree?.checkout_path
+      && path.resolve(entry.worktree.checkout_path) === cwd)?.workspace_id;
+  }
+  if (!workspace) throw new Error(`--spawn found no Herdr workspace for ${path.resolve(opt.cwd)}; pass --workspace`);
   const argv = process.argv.slice(2).filter((arg) => arg !== '--spawn').concat('--close-tab-on-exit');
   const command = [process.execPath, SELF, ...argv].map(shellQuote).join(' ');
   if (dry) {

@@ -68,6 +68,22 @@ launchers() {
   done
 }
 
+# Reload the Brain service. launchd unloads asynchronously, so bootstrap right after
+# bootout can fail with "5: Input/output error"; wait for the old one to go, then retry.
+reload_service() {
+  local domain="gui/$(id -u)" i
+  "$LAUNCHCTL" bootout "$domain/$LABEL" 2>/dev/null || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    "$LAUNCHCTL" print "$domain/$LABEL" >/dev/null 2>&1 || break
+    sleep 1
+  done
+  for i in 1 2 3 4 5; do
+    "$LAUNCHCTL" bootstrap "$domain" "$PLIST" 2>/dev/null && return 0
+    sleep 2
+  done
+  "$LAUNCHCTL" bootstrap "$domain" "$PLIST" || die "the Brain service did not load; try: launchctl bootstrap $domain $PLIST"
+}
+
 # Point the Brain service's program at a tree (keeping its node, arguments and
 # environment) and restart it. No plist, no service: nothing is created unasked.
 brain_service() {
@@ -84,8 +100,7 @@ args[i] = f'{tree}/brain/bin/brain.mjs'
 p['WorkingDirectory'] = f'{tree}/brain'
 with open(path, 'wb') as f: plistlib.dump(p, f)
 PY
-  "$LAUNCHCTL" bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-  "$LAUNCHCTL" bootstrap "gui/$(id -u)" "$PLIST"
+  reload_service
   say "Brain service now runs $tree/brain/bin/brain.mjs"
 }
 
@@ -100,7 +115,10 @@ activate() {
   local tag=$1 dir="$HOME_DIR/releases/$1"
   [ -d "$dir" ] || die "no release $tag; run: release.sh build $tag"
   remember
-  [ -L "$HOME_DIR/current" ] && ln -sfn "$(readlink "$HOME_DIR/current")" "$HOME_DIR/previous"
+  # Re-activating the active release (after a failed step) must not make it its own previous.
+  if [ -L "$HOME_DIR/current" ] && [ "$(readlink "$HOME_DIR/current")" != "$dir" ]; then
+    ln -sfn "$(readlink "$HOME_DIR/current")" "$HOME_DIR/previous"
+  fi
   ln -sfn "$dir" "$HOME_DIR/current"
   launchers
   brain_service "$HOME_DIR/current"
@@ -126,8 +144,7 @@ restore() {
   done
   if [ -f "$before/plist" ] && [ "${RELEASE_NO_LAUNCHD:-}" != 1 ]; then
     cp "$before/plist" "$PLIST"
-    "$LAUNCHCTL" bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-    "$LAUNCHCTL" bootstrap "gui/$(id -u)" "$PLIST"
+    reload_service
   fi
   say "launchers and the Brain service are back where they were before the first activation"
 }

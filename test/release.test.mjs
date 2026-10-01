@@ -36,12 +36,17 @@ function scratch() {
 <plist version="1.0"><dict><key>Label</key><string>com.rewt.herdr-brain</string>
 <key>ProgramArguments</key><array><string>/node</string><string>/dev/checkout/brain/bin/brain.mjs</string><string>watch</string></array>
 <key>WorkingDirectory</key><string>/dev/checkout/brain</string></dict></plist>\n`);
+  // A fake launchctl: nothing is ever loaded (print fails), and the first bootstrap
+  // fails the way launchd does when the old service is still unloading.
+  const launchctl = path.join(root, 'launchctl'), calls = path.join(root, 'launchctl.calls');
+  fs.writeFileSync(launchctl, `#!/bin/sh\necho "$*" >> ${calls}\n[ "$1" = print ] && exit 1\nif [ "$1" = bootstrap ] && [ ! -e ${root}/loaded-once ]; then touch ${root}/loaded-once; echo "Bootstrap failed: 5: Input/output error" >&2; exit 5; fi\nexit 0\n`, { mode: 0o755 });
   const env = { ...process.env, HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist,
-    RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: 'true' };
+    RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: launchctl };
   const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env, encoding: 'utf8' });
   const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8' }).trim();
   const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); };
-  return { root, home, bin, plist, run, org, cleanup };
+  const launchctlCalls = () => fs.readFileSync(calls, 'utf8').trim().split('\n');
+  return { root, home, bin, plist, run, org, cleanup, launchctlCalls };
 }
 
 test('a release is a read-only copy of a tag, never rebuilt in place, and only from a tag', () => {
@@ -67,6 +72,7 @@ test('activate moves the launchers and the Brain service onto current; rollback 
     const plist = fs.readFileSync(s.plist, 'utf8');
     assert.match(plist, new RegExp(`${s.home}/current/brain/bin/brain.mjs`));
     assert.match(plist, /<string>\/node<\/string>/, 'the node path and arguments are kept');
+    assert.deepEqual(s.launchctlCalls().map(c => c.split(' ')[0]), ['bootout', 'print', 'bootstrap', 'bootstrap'], 'a failed load is retried');
     s.run('activate', 't2');
     assert.equal(s.org(), 'org t2');
     assert.equal(s.run('rollback').status, 0);
@@ -97,5 +103,17 @@ test('the dev plugin is a second id pointed at a worktree', () => {
     assert.match(m, new RegExp(`exec \\\\"${wt}/herdr/console.sh\\\\"`));
     assert.match(m, /--plugin rewt\.herdr-monitor-dev --entrypoint console/);
     assert.doesNotMatch(m, /HERDR_PLUGIN_ROOT/);
+  } finally { s.cleanup(); }
+});
+
+test('activating the active release again (after a failed step) keeps its real previous release', () => {
+  const s = scratch();
+  try {
+    s.run('build', 't1'); s.run('build', 't2');
+    s.run('activate', 't1'); s.run('activate', 't2');
+    assert.equal(s.run('activate', 't2').status, 0);
+    assert.equal(fs.readlinkSync(path.join(s.home, 'previous')), path.join(s.home, 'releases/t1'));
+    s.run('rollback');
+    assert.equal(s.org(), 'org t1');
   } finally { s.cleanup(); }
 });

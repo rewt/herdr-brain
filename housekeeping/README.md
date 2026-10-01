@@ -21,11 +21,12 @@ Repeated `--start` reports the existing process. `--once` runs one full pass;
 unusual layouts. No dependency, launchd installation, user-specific path, release
 change, or inference call is required.
 
-Lane workers never start the project-wide loop. Live `--start` and `--loop`
-refuse when the script or record CLI lives in a linked Git worktree, or when the
-target checkout is linked. This keeps unreviewed, removable lane code out of the
-project schedule. Workers can run `--once --dry-run` with an isolated state
-directory. Installed plugin/release copies outside Git remain supported.
+Lane workers never start the project-wide loop. Every live mode (`--once`,
+`--start`, `--loop`) refuses when the script or record CLI lives in a linked Git
+worktree, or when the target checkout is linked. This prevents unreviewed,
+removable lane code from acting on live panes. Workers can run `--once --dry-run`
+with an isolated state directory. Installed plugin/release copies outside Git
+remain supported.
 
 The detached process is a timer, not an agent: resume every 60 seconds, cleanup
 on startup and every 600 seconds. A loop covers interruptions while watch waits,

@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from '../housekeeping.mjs';
 
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
-const cli = fileURLToPath(new URL('../housekeeping.mjs', import.meta.url));
 const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
 function installRuntime(root) {
   for (const relative of ['housekeeping/housekeeping.mjs', 'supervisor/tidy-tabs.mjs', 'lib/store.mjs']) {
@@ -246,23 +245,26 @@ test('the loop rereads opt-in and shuts down with its lock removed', async (t) =
   assert.equal(fs.existsSync(path.join(f.state, 'lock')), false);
 });
 
-test('no configuration defaults on and project record/main are discovered from a linked checkout', (t) => {
+for (const target of ['canonical checkout', 'linked preview']) {
+test(`no configuration defaults on and project record/main are discovered from a ${target}`, (t) => {
   const f = cliFixture(t);
   fs.mkdirSync(path.join(f.repo, '.org'));
   fs.writeFileSync(path.join(f.repo, '.org/events.jsonl'), '');
   f.git(['branch', '-m', 'main', 'trunk']);
   const args = f.args.filter((arg, i, all) => !['--org', '--config'].includes(arg) && !['--org', '--config'].includes(all[i - 1]));
-  args[args.indexOf('--cwd') + 1] = f.lane;
-  const r = spawnSync(process.execPath, [...args, '--once'], { encoding: 'utf8', env: { ...process.env, ORG_DIR: '' } });
+  if (target === 'linked preview') args[args.indexOf('--cwd') + 1] = f.lane;
+  const r = spawnSync(process.execPath, [...args, '--once', ...(target === 'linked preview' ? ['--dry-run'] : [])],
+    { encoding: 'utf8', env: { ...process.env, ORG_DIR: '' } });
   assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /scan/);
   assert.deepEqual(readConfig(path.join(f.root, 'missing')), { enabled: true, tick_seconds: 60, cleanup_seconds: 600 });
 });
+}
 
 test('no record and no Git project are quiet no-ops', (t) => {
   const f = cliFixture(t);
-  const r = spawnSync(process.execPath, [cli, '--once', '--cwd', f.lane], { encoding: 'utf8', env: { ...process.env, ORG_DIR: '' } });
+  const r = spawnSync(process.execPath, [f.runtime, '--once', '--cwd', f.repo], { encoding: 'utf8', env: { ...process.env, ORG_DIR: '' } });
   assert.equal(r.status, 0); assert.match(r.stdout, /no-record/);
-  const outside = spawnSync(process.execPath, [cli, '--once', '--cwd', f.root], { encoding: 'utf8' });
+  const outside = spawnSync(process.execPath, [f.runtime, '--once', '--cwd', f.root], { encoding: 'utf8' });
   assert.equal(outside.status, 0); assert.match(outside.stdout, /no-project/);
 });
 
@@ -313,7 +315,7 @@ test('old interruption with forty blank rows and a final reply is rejected withi
   assert.equal(interruptedComposer(feedback), true);
 });
 
-for (const mode of ['--start', '--loop']) {
+for (const mode of ['--once', '--start', '--loop']) {
   test(`lane code cannot ${mode} live housekeeping even with the canonical target`, (t) => {
     const f = cliFixture(t);
     const args = [...f.args]; args[0] = installRuntime(f.lane);

@@ -264,10 +264,10 @@ async function main() {
   if (!project?.org) { process.stdout.write(`${JSON.stringify({ action: project ? 'no-record' : 'no-project', cwd: project?.cwd ?? opt.cwd })}\n`); return; }
   const script = fs.realpathSync(SELF);
   const recordCLI = opt['org-cli'] ? [executablePath(opt['org-cli'])] : [fs.realpathSync(process.execPath), fs.realpathSync(LOCAL_RECORD)];
-  if ((opt.start || opt.loop) && !opt['dry-run']) {
+  if (!opt['dry-run']) {
     for (const file of [script, ...recordCLI]) requireStableRuntime(file);
     if (gitCheckout(canonicalPath(opt.cwd)) !== project.cwd) {
-      throw new Error('start live housekeeping from the canonical project checkout; lane workers use --once --dry-run');
+      throw new Error('run live housekeeping from the canonical project checkout; lane workers use --once --dry-run');
     }
   }
   const cwd = project.cwd, configFile = path.resolve(opt.config ?? path.join(cwd, '.housekeeping.json'));

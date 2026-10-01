@@ -5,7 +5,8 @@ accidental terminal interruptions without a model in the scheduler. It defaults
 on. A project needs no housekeeping configuration: the record supplies the runs,
 Git supplies repository and lane identity, and Herdr supplies live workers.
 
-An agent entering a project starts its schedule once:
+The project supervisor starts its schedule from the canonical project checkout,
+using that checkout's code or an installed plugin/release copy:
 
 ```sh
 node /path/to/herdr-monitor/housekeeping/housekeeping.mjs --start
@@ -19,6 +20,12 @@ Repeated `--start` reports the existing process. `--once` runs one full pass;
 `--loop` runs the timer in the foreground. Paths and `--main` can be overridden for
 unusual layouts. No dependency, launchd installation, user-specific path, release
 change, or inference call is required.
+
+Lane workers never start the project-wide loop. Live `--start` and `--loop`
+refuse when the script or record CLI lives in a linked Git worktree, or when the
+target checkout is linked. This keeps unreviewed, removable lane code out of the
+project schedule. Workers can run `--once --dry-run` with an isolated state
+directory. Installed plugin/release copies outside Git remain supported.
 
 The detached process is a timer, not an agent: resume every 60 seconds, cleanup
 on startup and every 600 seconds. A loop covers interruptions while watch waits,
@@ -95,6 +102,10 @@ must be used per project; `--state-dir` is intended for isolated tests/previews.
 A directory lock prevents overlap. After a crash it deliberately refuses startup:
 inspect the owner PID and log, verify that the process is gone, then remove only
 that stale lock and restart. It never kills a PID discovered in a stale lock.
+The owner record includes the canonical script path and resolved record CLI
+paths. An existing owner with missing paths, a different runtime, or no runtime
+identity (a legacy lock) refuses startup instead of reporting already-running;
+inspect it and stop the old schedule before removing its lock and restarting.
 
 For a preview without changing panes or starting a timer:
 

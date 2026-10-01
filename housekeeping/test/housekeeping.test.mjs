@@ -9,6 +9,15 @@ import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from
 
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
 const cli = fileURLToPath(new URL('../housekeeping.mjs', import.meta.url));
+const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
+function installRuntime(root) {
+  for (const relative of ['housekeeping/housekeeping.mjs', 'supervisor/tidy-tabs.mjs', 'lib/store.mjs']) {
+    const target = path.join(root, relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(path.join(sourceRoot, relative), target);
+  }
+  return fs.realpathSync(path.join(root, 'housekeeping/housekeeping.mjs'));
+}
 function fixture(t, { promoted = true, reported = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'housekeeping-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -202,7 +211,9 @@ function cliFixture(t) {
   const fake = path.join(f.root, 'fake.mjs');
   fs.writeFileSync(fake, `#!${process.execPath}\nconst [group, op] = process.argv.slice(2);\nconst result = group === 'status' ? {runs:[], items:[]} : group === 'workspace' ? {workspaces:[]} : {agents:[]};\nconsole.log(JSON.stringify({result}));\n`);
   fs.chmodSync(fake, 0o755);
-  f.args = [cli, '--cwd', f.repo, '--org', f.root, '--config', f.config, '--state-dir', f.state, '--herdr', fake, '--org-cli', fake];
+  f.runtime = installRuntime(f.repo);
+  f.fake = fs.realpathSync(fake);
+  f.args = [f.runtime, '--cwd', f.repo, '--org', f.root, '--config', f.config, '--state-dir', f.state, '--herdr', fake, '--org-cli', fake];
   return f;
 }
 
@@ -255,13 +266,21 @@ test('no record and no Git project are quiet no-ops', (t) => {
   assert.equal(outside.status, 0); assert.match(outside.stdout, /no-project/);
 });
 
-test('agent-entry start runs one detached deterministic schedule and repeated start is idempotent', async (t) => {
+for (const runtimeKind of ['canonical checkout', 'installed copy']) {
+test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) => {
   const f = cliFixture(t);
+  if (runtimeKind === 'installed copy') { f.runtime = installRuntime(path.join(f.root, 'plugin')); f.args[0] = f.runtime; }
   const start = () => spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', timeout: 10000 });
   const first = start(); assert.equal(first.status, 0, first.stderr); assert.match(first.stdout, /started/);
   const lock = path.join(f.state, 'lock');
   const pid = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8')).pid;
+  const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+  assert.equal(owner.script, f.runtime);
+  assert.deepEqual(owner.record_cli, [f.fake]);
   t.after(() => { try { process.kill(pid, 'SIGTERM'); } catch {} });
+  f.git(['worktree', 'remove', f.lane]);
+  assert.equal(fs.existsSync(owner.script), true);
+  assert.equal(owner.record_cli.every((file) => fs.existsSync(file)), true);
   const again = start(); assert.equal(again.status, 0, again.stderr); assert.match(again.stdout, /already-running/);
   fs.writeFileSync(f.config, '{"enabled":false}');
   await new Promise((resolve, reject) => {
@@ -274,6 +293,7 @@ test('agent-entry start runs one detached deterministic schedule and repeated st
   });
   assert.match(fs.readFileSync(path.join(f.state, 'actions.jsonl'), 'utf8'), /disabled/);
 });
+}
 
 test('dry-run start leaves no timer process', (t) => {
   const f = cliFixture(t);
@@ -281,3 +301,69 @@ test('dry-run start leaves no timer process', (t) => {
   assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /would-start/);
   assert.equal(fs.existsSync(path.join(f.state, 'lock')), false);
 });
+
+test('old interruption with forty blank rows and a final reply is rejected within a bounded subprocess', () => {
+  const fixtureURL = new URL('./fixtures/old-interruption.txt', import.meta.url);
+  const moduleURL = new URL('../housekeeping.mjs', import.meta.url);
+  const script = `import fs from 'node:fs'; import { interruptedComposer } from ${JSON.stringify(moduleURL.href)}; console.log(interruptedComposer(fs.readFileSync(${JSON.stringify(fileURLToPath(fixtureURL))}, 'utf8')));`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '--eval', script], { encoding: 'utf8', timeout: 2000 });
+  assert.equal(r.error, undefined, r.error?.message);
+  assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout.trim(), 'false');
+  const feedback = screen.replace('\n›', '\nSomething went wrong? Hit /feedback to report the issue.\n\n›');
+  assert.equal(interruptedComposer(feedback), true);
+});
+
+for (const mode of ['--start', '--loop']) {
+  test(`lane code cannot ${mode} live housekeeping even with the canonical target`, (t) => {
+    const f = cliFixture(t);
+    const args = [...f.args]; args[0] = installRuntime(f.lane);
+    const r = spawnSync(process.execPath, [...args, mode], { encoding: 'utf8', timeout: 2000 });
+    assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /code from a linked worktree/);
+    assert.equal(fs.existsSync(f.state), false);
+  });
+  test(`canonical code cannot ${mode} live housekeeping from a linked target`, (t) => {
+    const f = cliFixture(t);
+    f.args[f.args.indexOf('--cwd') + 1] = f.lane;
+    const r = spawnSync(process.execPath, [...f.args, mode], { encoding: 'utf8', timeout: 2000 });
+    assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /canonical project checkout/);
+    assert.equal(fs.existsSync(f.state), false);
+  });
+}
+
+test('a record CLI override in a lane cannot pin a live schedule to removable code', (t) => {
+  const f = cliFixture(t);
+  const fake = path.join(f.lane, 'record.mjs'); fs.copyFileSync(f.fake, fake); fs.chmodSync(fake, 0o755);
+  f.args[f.args.indexOf('--org-cli') + 1] = fake;
+  const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', timeout: 2000 });
+  assert.equal(r.status, 1); assert.match(r.stderr, /code from a linked worktree/);
+  assert.equal(fs.existsSync(f.state), false);
+});
+
+test('linked code remains usable for isolated dry-run previews', (t) => {
+  const f = cliFixture(t); f.args[0] = installRuntime(f.lane);
+  f.args[f.args.indexOf('--cwd') + 1] = f.lane;
+  const r = spawnSync(process.execPath, [...f.args, '--once', '--dry-run'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /scan/);
+  assert.equal(fs.existsSync(path.join(f.state, 'lock')), false);
+});
+
+for (const variant of ['different-script', 'different-record', 'missing-script', 'missing-record', 'legacy']) {
+  test(`an existing ${variant} owner never reports already-running or alters the old lock`, (t) => {
+    const f = cliFixture(t), lock = path.join(f.state, 'lock');
+    fs.mkdirSync(lock, { recursive: true });
+    const owner = { pid: process.pid, cwd: fs.realpathSync(f.repo), org: f.root, config: f.config,
+      script: f.runtime, record_cli: [f.fake] };
+    if (variant === 'different-script') owner.script = installRuntime(path.join(f.root, 'other-plugin'));
+    if (variant === 'different-record') owner.record_cli = [fs.realpathSync(process.execPath)];
+    if (variant === 'missing-script') owner.script = path.join(f.root, 'removed-lane/housekeeping.mjs');
+    if (variant === 'missing-record') owner.record_cli = [path.join(f.root, 'removed-lane/org.mjs')];
+    if (variant === 'legacy') { delete owner.script; delete owner.record_cli; }
+    const original = JSON.stringify(owner);
+    fs.writeFileSync(path.join(lock, 'owner.json'), original);
+    const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', timeout: 2000 });
+    assert.equal(r.status, 1); assert.doesNotMatch(r.stdout, /already-running/);
+    assert.match(r.stderr, /different runtime|stale housekeeping runtime path|no runtime identity/);
+    assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), original);
+    assert.equal(fs.existsSync(path.join(f.state, 'schedule.log')), false);
+  });
+}

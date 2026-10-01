@@ -10,6 +10,7 @@ import { planTidy, isShellOnly } from '../supervisor/tidy-tabs.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 
 const LOCAL_RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
+const SELF = fileURLToPath(import.meta.url);
 const FINISHED = new Set(['idle', 'done']);
 const canonicalPath = (file) => fs.existsSync(file) ? fs.realpathSync(file) : path.resolve(file);
 export const RESUME = 'Housekeeping: a stray terminal mouse-wheel escape interrupted this open recorded run. Continue exactly where you left off and write the requested report.';
@@ -22,9 +23,40 @@ export function interruptedComposer(text) {
   // Only wheel junk: never erase an operator's words, even beside an escape.
   if (!/^(?:(?:\x1b\[)?<6[4-7];\d+;\d+[Mm]\s*)+$/.test(composer)) return false;
   if (lines[index + 1]?.trim()) return false; // Wrapped input isn't safe to erase.
-  const before = lines.slice(0, index).join('\n').trimEnd();
   // The interruption must be the most recent output, not history above a final reply.
-  return /(?:^|\n)\s*■ (?:Conversation|Turn) interrupted[^\n]*(?:\n\s*(?:Something went wrong\?[^\n]*)?)*$/.test(before);
+  // Scan rows once: a multiline whitespace regex can backtrack exponentially.
+  let last = index - 1;
+  while (last >= 0) {
+    const line = lines[last].trim();
+    if (line && !/^Something went wrong\?/.test(line)) break;
+    last--;
+  }
+  return last >= 0 && /^■ (?:Conversation|Turn) interrupted\b/.test(lines[last].trim());
+}
+
+function gitCheckout(directory) {
+  const result = spawnSync('git', ['-C', directory, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+  return result.status === 0 ? canonicalPath(result.stdout.trim()) : null;
+}
+
+function requireStableRuntime(file) {
+  const checkout = gitCheckout(path.dirname(file));
+  if (!checkout) return; // Installed release/plugin copies need no Git checkout.
+  const result = spawnSync('git', ['-C', checkout, 'worktree', 'list', '--porcelain'], { encoding: 'utf8' });
+  const first = result.stdout?.split('\n').find((line) => line.startsWith('worktree '));
+  if (result.status !== 0 || !first) throw new Error(`cannot establish runtime checkout: ${file}`);
+  if (checkout !== canonicalPath(first.slice(9))) {
+    throw new Error(`live housekeeping cannot run code from a linked worktree: ${file}; use the canonical checkout or installed plugin, or --once --dry-run`);
+  }
+}
+
+function executablePath(command) {
+  const candidates = command.includes(path.sep) ? [path.resolve(command)] :
+    (process.env.PATH ?? '').split(path.delimiter).map((directory) => path.resolve(directory, command));
+  for (const file of candidates) {
+    try { fs.accessSync(file, fs.constants.X_OK); if (fs.statSync(file).isFile()) return fs.realpathSync(file); } catch {}
+  }
+  throw new Error(`record CLI is missing or not executable: ${command}`);
 }
 
 export function matchingRun(agent, runs) {
@@ -230,6 +262,14 @@ async function main() {
   if ([opt.once, opt.loop, opt.start].filter(Boolean).length !== 1) throw new Error('usage: housekeeping.mjs (--start|--once|--loop) [--cwd PROJECT] [--org DIR] [--config FILE] [--dry-run] [--state-dir DIR]');
   const project = discoverProject(opt.cwd, opt.org);
   if (!project?.org) { process.stdout.write(`${JSON.stringify({ action: project ? 'no-record' : 'no-project', cwd: project?.cwd ?? opt.cwd })}\n`); return; }
+  const script = fs.realpathSync(SELF);
+  const recordCLI = opt['org-cli'] ? [executablePath(opt['org-cli'])] : [fs.realpathSync(process.execPath), fs.realpathSync(LOCAL_RECORD)];
+  if ((opt.start || opt.loop) && !opt['dry-run']) {
+    for (const file of [script, ...recordCLI]) requireStableRuntime(file);
+    if (gitCheckout(canonicalPath(opt.cwd)) !== project.cwd) {
+      throw new Error('start live housekeeping from the canonical project checkout; lane workers use --once --dry-run');
+    }
+  }
   const cwd = project.cwd, configFile = path.resolve(opt.config ?? path.join(cwd, '.housekeeping.json'));
   // Keep a project with no ignore/config setup clean. Bookkeeping lives beside
   // the discovered record, separated by canonical repository identity.
@@ -249,15 +289,24 @@ async function main() {
     if (fs.existsSync(lock)) {
       const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
       if (!Number.isInteger(owner.pid) || owner.pid < 1 || owner.cwd !== cwd || owner.org !== project.org || owner.config !== configFile) throw new Error('housekeeping lock belongs to a different project/record/config');
+      if (typeof owner.script !== 'string' || !Array.isArray(owner.record_cli) || !owner.record_cli.length) {
+        throw new Error(`housekeeping lock has no runtime identity; inspect ${lock} before restarting`);
+      }
+      if ([owner.script, ...owner.record_cli].some((file) => typeof file !== 'string' || !fs.existsSync(file))) {
+        throw new Error(`stale housekeeping runtime path; inspect ${lock} before restarting`);
+      }
+      if (owner.script !== script || JSON.stringify(owner.record_cli) !== JSON.stringify(recordCLI)) {
+        throw new Error(`housekeeping lock belongs to a different runtime; inspect ${lock} before restarting`);
+      }
       try { process.kill(owner.pid, 0); log({ action: 'already-running', pid: owner.pid, state_dir: stateDir }); return; }
       catch (error) { if (error.code !== 'ESRCH') throw error; }
       throw new Error(`stale housekeeping lock for pid ${owner.pid}; inspect ${lock} before removing it`);
     }
     const args = ['--cwd', cwd, '--org', project.org, '--config', configFile, '--state-dir', stateDir,
       '--main', opt.main ?? project.main, '--herdr', opt.herdr,
-      ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : [])];
+      ...(opt['org-cli'] ? ['--org-cli', recordCLI[0]] : [])];
     const output = fs.openSync(path.join(stateDir, 'schedule.log'), 'a');
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...args, '--loop'], {
+    const child = spawn(process.execPath, [script, ...args, '--loop'], {
       cwd, detached: true, stdio: ['ignore', output, output, 'ipc'],
       // A detached timer owns no pane/tab. Inheriting its first worker's tab
       // would permanently exempt that worker after it finishes.
@@ -277,7 +326,8 @@ async function main() {
     return;
   }
   fs.mkdirSync(lock); // Fail closed on overlap or an unrecovered crash.
-  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, cwd, org: project.org, config: configFile }));
+  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, cwd, org: project.org, config: configFile,
+    script, record_cli: recordCLI }));
   let stopped = false, wake;
   const stop = () => { stopped = true; wake?.(); };
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
@@ -285,7 +335,7 @@ async function main() {
     const seenFile = path.join(stateDir, 'resume-attempts.jsonl');
     const seen = new Set(fs.existsSync(seenFile) ? fs.readFileSync(seenFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []);
     const runner = createHousekeeping({ cwd, org: project.org, main: opt.main ?? project.main, herdr: opt.herdr, log,
-      ...(opt['org-cli'] ? { record: [opt['org-cli']] } : {}) });
+      record: recordCLI });
     process.send?.({ ready: true });
     let lastCleanup = -Infinity;
     do {

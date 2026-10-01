@@ -1,0 +1,46 @@
+■ Conversation interrupted - tell the model what to do differently.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+• Finished the task and wrote the report.
+
+› <65;12;9M
+
+  GPT-6.1-Sol high · ~/project

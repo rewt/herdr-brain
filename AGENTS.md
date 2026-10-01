@@ -8,11 +8,13 @@
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
   and never writes `events.jsonl`. `supervisor/` holds the tracked settle prompt and the scripts that run it.
 - Run `npm test` before and after a change. Tests are offline and never call a model.
-- At project entry, start the default housekeeping schedule with
+- Only the project supervisor, from the canonical checkout, starts the default
+  project-wide housekeeping schedule with
   `node housekeeping/housekeeping.mjs --start` ([module guide](housekeeping/README.md)).
-  It discovers the project and record; no housekeeping config is required. A task
-  that forbids live pane mutations takes precedence: use `--once --dry-run` with
-  `--state-dir "$PWD/.lane/housekeeping-preview"` instead.
+  Lane workers must never start the project-wide loop (`--start` or `--loop`).
+  It discovers the project and record; no housekeeping config is required. For
+  worker checks or tasks that forbid live pane mutations, use `--once --dry-run`
+  with `--state-dir "$PWD/.lane/housekeeping-preview"` instead.
 - bch-cloak runs `contrib/settle-watch.mjs` from this checkout by absolute path, with `--model` and
   `--effort`. Keep that file's path, flags and behaviour until bch-cloak's release-gated switch (ENG-64).
 

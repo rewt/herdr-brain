@@ -129,6 +129,7 @@ test('answering from the pane sends one message to the supervisor, never over an
   const session = createFeedSession({ config: { projects: [{ name: 'Alpha', org: '/org' }] }, env: { HERDR_FEED_WATCH: 'w:p1' },
     deps: { now: () => now, orgStatus: async () => status, orgLog: async () => events.filter(e => e.seq !== 5),
       herdrAgents: async () => ({ ok: true, agents: [...agents, { name: 'supervisor', pane: 'w:p1', status: 'idle' }] }),
+      herdrList: async () => [],
       herdrVisible: async () => ({ ok: true, text: screen }), herdrPrompt: async (agent, text) => { sent.push([agent, text]); return { ok: true }; } } });
   await session.refresh();
   assert.ok(session.model.waiting.find(w => w.key === 'HUM-3'), 'the open question waits on the operator');
@@ -263,7 +264,7 @@ test('a narrow pane still renders: wrap takes a cell per line at any width, and 
     runs: runs.map(id => ({ id, item: 'ORCH-9', started: { at: at(50) }, report: { outcome: 'done' }, meta: {} })) };
   const session = createFeedSession({ config: { projects: [{ name: 'Alpha', org: '/org' }] }, env: { HERDR_FEED_WATCH: 'w:p1' },
     deps: { now: () => now, orgStatus: async () => st, orgLog: async () => [], herdrAgents: async () => ({ ok: true, agents: [{ name: 'sup', pane: 'w:p1', status: 'idle' }] }),
-      herdrVisible: async () => ({ ok: true, text: runs.join(' ') }), chatIndex: { data: { mentions: Object.fromEntries(runs.map(r => [r, { last: at(1), messages: [] }])) }, update: () => {} } } });
+      herdrList: async () => [], herdrVisible: async () => ({ ok: true, text: runs.join(' ') }), chatIndex: { data: { mentions: Object.fromEntries(runs.map(r => [r, { last: at(1), messages: [] }])) }, update: () => {} } } });
   await session.refresh();
   const text = session.frame(40, 40).lines.map(lineText).join('\n');
   assert.match(text, /R-100 R-101 \+28 → ORCH-9/);

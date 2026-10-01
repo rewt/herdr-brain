@@ -46,21 +46,22 @@ build() {
   say "built $tag at $dir ($(cut -c1-8 "$dir/.release-commit"))"
 }
 
-# The first activation records where the launchers and the Brain service pointed, so
-# `restore` can put them back exactly.
+# Remember each launcher's original state once, including launchers introduced after
+# the first activation, so `restore` can put the set back exactly.
 remember() {
   local before="$HOME_DIR/before"
-  [ -e "$before" ] && return 0
   mkdir -p "$before"
   for l in $LAUNCHERS; do
     local name=${l%%:*}
-    if [ -L "$BIN_DIR/$name" ]; then
-      readlink "$BIN_DIR/$name" > "$before/$name"
-    elif [ ! -e "$BIN_DIR/$name" ]; then
-      : > "$before/$name.missing"
+    if [ ! -f "$before/$name" ] && [ ! -f "$before/$name.missing" ]; then
+      if [ -L "$BIN_DIR/$name" ]; then
+        readlink "$BIN_DIR/$name" > "$before/$name"
+      elif [ ! -e "$BIN_DIR/$name" ]; then
+        : > "$before/$name.missing"
+      fi
     fi
   done
-  [ -f "$PLIST" ] && cp "$PLIST" "$before/plist"
+  if [ ! -f "$before/plist" ] && [ -f "$PLIST" ]; then cp "$PLIST" "$before/plist"; fi
   return 0
 }
 

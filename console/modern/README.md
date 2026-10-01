@@ -19,14 +19,14 @@ palette that matches the light browser preview, or launch with
 From this worktree:
 
 ```sh
-node bin/record.mjs console --modern --project bch-cloak
-node bin/record.mjs console --modern --project herdr-brain
+node bin/org.mjs console --modern --project bch-cloak
+node bin/org.mjs console --modern --project herdr-brain
 
 # Follow the calling Herdr workspace, or discover available projects.
-node bin/record.mjs console --modern
+node bin/org.mjs console --modern
 
 # Inspect an existing repository or an ordinary folder, without setting it up.
-node bin/record.mjs console --modern --folder /absolute/path/to/folder
+node bin/org.mjs console --modern --folder /absolute/path/to/folder
 ```
 
 To keep it open while the code changes, run the development loop in its own
@@ -160,7 +160,7 @@ task, and `herdr tab create` / `agent start` / `agent prompt` for a chat, on the
 operator's typed text and Enter. Renaming sets only a pane label. A Needs you
 answer goes through the Brain CLI or `record answer` after the answer line says
 what it will do. There is no dispatch or model-call path; use
-`node bin/record.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
+`node bin/org.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
 
 Goal/session associations use recorded run data. A title resemblance does not
 establish a link; unmatched sessions say Unlinked and older recorded associations

@@ -9,7 +9,7 @@
     "test:lanes": "node --test lanes/test/*.test.mjs"
   },
   "bin": {
-    "record": "./bin/record.mjs",
+    "record": "./bin/org.mjs",
     "org": "./bin/org.mjs"
   },
   "engines": { "node": ">=20" }

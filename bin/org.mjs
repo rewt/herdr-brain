@@ -22,7 +22,6 @@ import {
 } from '../lib/render.mjs';
 
 const BIN = fileURLToPath(import.meta.url);
-const RECORD_BIN = path.join(path.dirname(BIN), 'record.mjs');
 
 const USAGE = `record: durable organizational state for agent R&D (no daemon, no inference)
 
@@ -87,7 +86,7 @@ function shq(text) {
 }
 
 function cliString(dir) {
-  return `ORG_DIR=${shq(dir)} node ${shq(RECORD_BIN)}`;
+  return `ORG_DIR=${shq(dir)} node ${shq(BIN)}`;
 }
 
 function openOrg() {

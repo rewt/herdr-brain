@@ -11,8 +11,8 @@ inference tokens, and a completely fresh session of any harness can continue fro
 - Reasoning costs tokens. Coordination mostly should not.
 
 Node ≥ 20, no dependencies (the optional `console/` has its own). `npm link` installs
-`record` and its permanent `org` alias. Without npm, put `bin/record.mjs` on your PATH as
-`record`.
+`record` and its permanent `org` alias. Without npm, symlink `bin/org.mjs` onto your PATH as
+`record`; do not copy it away from its sibling `lib/` directory.
 
 The public module name is **record**. Existing automation keeps working unchanged: `org` runs
 the same implementation and prints the same output, while `.org/`, `ORG_DIR`, `ORG_ACTOR`, the
@@ -24,8 +24,7 @@ look like one project.
 
 | Piece | What lives there |
 |---|---|
-| `bin/record.mjs` | The public `record` command; a thin entry point into the shared CLI. |
-| `bin/org.mjs` | The shared CLI implementation and permanent `org` compatibility entry point. |
+| `bin/org.mjs` | The shared CLI implementation; installation exposes it as both `record` and the permanent `org` compatibility name. |
 | `lib/` | The dependency-free core: event storage, state folding, reports and views. |
 | `brain/` | The Herdr watcher, operator queue and commands that start or answer sessions. |
 | `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
@@ -438,7 +437,7 @@ last_pane = ["prefix+backtick", "ctrl+alt+b"]   # back to where you were, one ch
 [[keys.command]]
 key = "ctrl+alt+c"
 type = "popup"
-command = "node /path/to/herdr-org/bin/record.mjs console"
+command = "node /path/to/herdr-org/bin/org.mjs console"
 width = "100%"
 height = "100%"
 description = "Herdr Monitor"

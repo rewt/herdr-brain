@@ -87,6 +87,24 @@ test('activate moves the launchers and the Brain service onto current; rollback 
   } finally { s.cleanup(); }
 });
 
+test('an existing before directory learns that the new record launcher was absent', () => {
+  const s = scratch();
+  try {
+    const before = path.join(s.home, 'before');
+    fs.mkdirSync(before, { recursive: true });
+    fs.writeFileSync(path.join(before, 'org'), '/dev/checkout/bin/org.mjs\n');
+    fs.writeFileSync(path.join(before, 'lane'), '/dev/checkout/lanes/lane.mjs\n');
+    fs.symlinkSync('/dev/checkout/lanes/lane.mjs', path.join(s.bin, 'lane'));
+    fs.copyFileSync(s.plist, path.join(before, 'plist'));
+    s.run('build', 't1');
+    assert.equal(s.run('activate', 't1').status, 0);
+    assert.equal(fs.existsSync(path.join(before, 'record.missing')), true);
+    assert.equal(s.run('restore').status, 0);
+    assert.equal(fs.existsSync(path.join(s.bin, 'record')), false);
+    assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), '/dev/checkout/bin/org.mjs');
+  } finally { s.cleanup(); }
+});
+
 test('a launcher that is a real file is never replaced', () => {
   const s = scratch();
   try {

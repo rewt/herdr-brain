@@ -1,6 +1,6 @@
-# Herdr Monitor as a Herdr plugin. A release is installed into
-# ~/.local/share/herdr-monitor/releases/<tag> by herdr/release.sh and linked through
-# ~/.local/share/herdr-monitor/current, so switching releases never re-links the plugin.
+# Herdr Monitor as a Herdr plugin. herdr/release.sh installs a release into
+# ~/.local/share/herdr-monitor/releases/<tag> and links the plugin to it, re-linking
+# whenever the active release changes (Herdr resolves links to a fixed directory).
 id = "rewt.herdr-monitor"
 name = "Herdr Monitor"
 version = "0.1.2"

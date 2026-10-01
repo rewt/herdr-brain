@@ -4,11 +4,12 @@
 #
 #   release.sh build TAG       copy TAG into $HOME_DIR/releases/TAG and run its build step
 #   release.sh activate TAG    point $HOME_DIR/current at it; on first use, move the org and
-#                              lane launchers and the Brain service onto current, and link
-#                              the Herdr plugin through current
+#                              lane launchers and the Brain service onto current; link the
+#                              Herdr plugin to the release (Herdr resolves links, so the
+#                              plugin is re-linked whenever the release changes)
 #   release.sh rollback        point current back at the release before it
 #   release.sh restore         put the launchers and the Brain service back where they were
-#                              before the first activation (the dev checkout)
+#                              before the first activation (the dev checkout); unlink the plugin
 #   release.sh dev WORKTREE    link a second plugin, rewt.herdr-monitor-dev, to a worktree
 #   release.sh status          what is active and where the launchers point
 #
@@ -104,11 +105,28 @@ PY
   say "Brain service now runs $tree/brain/bin/brain.mjs"
 }
 
+# Herdr resolves the path it is given, so the plugin is bound to one release
+# directory, not to `current`: re-link it whenever the active release changes.
+plugin_root() {
+  "$(herdr_bin)" plugin list --plugin "$PLUGIN" --json 2>/dev/null \
+    | python3 -c 'import json,sys; p=json.load(sys.stdin)["result"]["plugins"]; print(p[0]["plugin_root"] if p else "")' 2>/dev/null || true
+}
+
 link_plugin() {
   [ "${RELEASE_NO_HERDR:-}" = 1 ] && return 0
-  if "$(herdr_bin)" plugin list --plugin "$PLUGIN" --json 2>/dev/null | grep -q "\"plugin_id\":\"$PLUGIN\""; then return 0; fi
-  "$(herdr_bin)" plugin link "$HOME_DIR/current" >/dev/null
-  say "linked Herdr plugin $PLUGIN through $HOME_DIR/current"
+  local target root
+  target=$(cd "$HOME_DIR/current" && pwd -P)
+  root=$(plugin_root)
+  [ "$root" = "$target" ] && return 0
+  [ -n "$root" ] && "$(herdr_bin)" plugin unlink "$PLUGIN" >/dev/null
+  "$(herdr_bin)" plugin link "$target" >/dev/null
+  say "linked Herdr plugin $PLUGIN to $target"
+}
+
+unlink_plugin() {
+  [ "${RELEASE_NO_HERDR:-}" = 1 ] && return 0
+  [ -n "$(plugin_root)" ] && "$(herdr_bin)" plugin unlink "$PLUGIN" >/dev/null && say "unlinked Herdr plugin $PLUGIN"
+  return 0
 }
 
 activate() {
@@ -132,6 +150,7 @@ rollback() {
   ln -sfn "$(readlink "$HOME_DIR/current")" "$HOME_DIR/previous"
   ln -sfn "$prev" "$HOME_DIR/current"
   brain_service "$HOME_DIR/current"
+  link_plugin
   say "active: $(basename "$prev")"
 }
 
@@ -146,7 +165,8 @@ restore() {
     cp "$before/plist" "$PLIST"
     reload_service
   fi
-  say "launchers and the Brain service are back where they were before the first activation"
+  unlink_plugin
+  say "launchers and the Brain service are back where they were before the first activation, and the plugin is unlinked"
 }
 
 dev() {

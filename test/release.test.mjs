@@ -117,3 +117,27 @@ test('activating the active release again (after a failed step) keeps its real p
     assert.equal(s.org(), 'org t1');
   } finally { s.cleanup(); }
 });
+
+test('the plugin is linked to the active release itself and re-linked on every switch; restore unlinks it', () => {
+  const s = scratch();
+  try {
+    // A fake herdr that resolves the linked path, as the real one does.
+    const fake = path.join(s.root, 'herdr'), state = path.join(s.root, 'plugin-root');
+    fs.writeFileSync(fake, `#!/bin/sh
+case "$2" in
+  list) r=$(cat ${state} 2>/dev/null); if [ -n "$r" ]; then echo "{\\"result\\":{\\"plugins\\":[{\\"plugin_id\\":\\"rewt.herdr-monitor\\",\\"plugin_root\\":\\"$r\\"}]}}"; else echo '{"result":{"plugins":[]}}'; fi ;;
+  link) (cd "$3" && pwd -P) > ${state} ;;
+  unlink) : > ${state} ;;
+esac
+`, { mode: 0o755 });
+    const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...process.env, HERDR_MONITOR_REPO: path.join(s.root, 'repo'), HERDR_MONITOR_HOME: s.home,
+      HERDR_MONITOR_BIN: s.bin, HERDR_MONITOR_PLIST: s.plist, RELEASE_NO_NPM: '1', RELEASE_NO_LAUNCHD: '1', HERDR_BIN_PATH: fake }, encoding: 'utf8' });
+    const root = () => fs.readFileSync(state, 'utf8').trim();
+    const real = t => fs.realpathSync(path.join(s.home, 'releases', t));
+    run('build', 't1'); run('build', 't2');
+    assert.equal(run('activate', 't1').status, 0); assert.equal(root(), real('t1'));
+    run('activate', 't2'); assert.equal(root(), real('t2'));
+    run('rollback'); assert.equal(root(), real('t1'));
+    run('restore'); assert.equal(root(), '');
+  } finally { s.cleanup(); }
+});

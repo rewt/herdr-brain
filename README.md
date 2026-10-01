@@ -457,8 +457,8 @@ herdr/release.sh status
 
 `herdr-plugin.toml` makes the repository a Herdr plugin (`rewt.herdr-monitor`): a console pane
 that opens as a split beside a chat, an action to open it, and a build step that installs the
-console's dependencies. A release is linked to Herdr once, through `current`, so switching
-releases never re-links it. A GitHub install (`herdr plugin install`) would use the same
+console's dependencies. Herdr resolves the path it is given, so the plugin is bound to one
+release directory; `activate` and `rollback` re-link it whenever the release changes. A GitHub install (`herdr plugin install`) would use the same
 manifest and build step.
 
 ## Guardrails are advisory

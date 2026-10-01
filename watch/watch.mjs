@@ -40,6 +40,8 @@ const { values: opt, positionals } = parseArgs({
     'org-cli': { type: 'string' },
     herdr: { type: 'string', default: 'herdr' },
     spawn: { type: 'boolean', default: false },
+    detach: { type: 'boolean', default: false },
+    log: { type: 'string' },
     workspace: { type: 'string' },
     cwd: { type: 'string', default: process.cwd() },
     'close-tab-on-exit': { type: 'boolean', default: false },
@@ -248,6 +250,39 @@ function spawnWatcher() {
   log(`watching ${runId} in ${pane}`);
 }
 
+// The parent returns only after the child has acquired the run lock and read
+// its worker/report configuration. No supervisor pane identity is inherited.
+async function detachWatcher() {
+  if (opt.spawn || dry || !opt.log) throw new Error('--detach requires --log and cannot combine with --spawn or --dry-run');
+  const logPath = path.resolve(opt.log);
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const fd = fs.openSync(logPath, 'a', 0o600);
+  const env = { ...process.env };
+  for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID']) delete env[key];
+  let child;
+  try {
+    child = spawn(process.execPath, [SELF, ...process.argv.slice(2).filter((arg) => arg !== '--detach')], {
+      cwd: path.resolve(opt.cwd), env, detached: true, stdio: ['ignore', fd, fd, 'ipc'],
+    });
+  } finally { fs.closeSync(fd); }
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`watcher startup timed out; inspect ${logPath}`));
+    }, 10_000);
+    child.once('error', (error) => { clearTimeout(timer); reject(error); });
+    child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`watcher exited during startup (${code}); inspect ${logPath}`)); });
+    child.once('message', (message) => {
+      if (message?.ready !== runId) return;
+      clearTimeout(timer);
+      child.disconnect();
+      child.unref();
+      resolve();
+    });
+  });
+  process.stdout.write(`${JSON.stringify({ run: runId, pid: child.pid, log: logPath })}\n`);
+}
+
 function acquireLock() {
   const digest = crypto.createHash('sha256').update(`${path.resolve(opt.org)}\0${runId}`).digest('hex').slice(0, 16);
   const lock = path.join(os.tmpdir(), `herdr-watch-${digest}.lock`);
@@ -293,6 +328,7 @@ async function watch() {
   if (!agent) throw new Error(`${runId} has no worker agent; pass --agent`);
   if (!current.report_path && !opt.report) throw new Error(`${runId} has no report path; pass --report`);
   log(`watching ${runId} (${item}): worker ${agent}, report ${reportPath}, supervisor ${opt.to}`);
+  if (process.send) process.send({ ready: runId });
 
   let lastNotice;
   let lastUnavailableLog;
@@ -438,7 +474,9 @@ async function watch() {
 }
 
 try {
-  if (opt.spawn) {
+  if (opt.detach) {
+    await detachWatcher();
+  } else if (opt.spawn) {
     spawnWatcher();
   } else {
     const release = dry ? () => {} : acquireLock();

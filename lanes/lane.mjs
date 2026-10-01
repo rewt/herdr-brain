@@ -30,6 +30,7 @@ import {
 } from "./board/registry.mjs";
 import { herdrSocketPath } from "./board/herdr-client.mjs";
 import {
+  readRoutesConfig,
   resolveLaunchRoute,
   routeNames as configuredRouteNames,
   selectRoute,
@@ -376,7 +377,8 @@ function routeNames() {
 
 function resolveDispatch(options = {}) {
   try {
-    return resolveLaunchRoute(CONFIG, options);
+    if (options.routeConfig !== undefined && options.route === undefined) fail("--route-config requires --route");
+    return resolveLaunchRoute(options.routeConfig === undefined ? CONFIG : readRoutesConfig(options.routeConfig), options);
   } catch (error) {
     fail(error.message);
   }
@@ -1261,7 +1263,12 @@ function dispatch(topic, promptText, options = {}) {
         `  steer:  herdr agent attach ${agentName}\n`,
     );
   }
-  return { agentName, pane, tabId, workspaceId };
+  return {
+    agentName, pane, tabId, workspaceId,
+    agentSessionId: record.agent_session_id ?? null,
+    terminalId: record.terminal_id ?? null,
+    cwd: path,
+  };
 }
 
 const REVIEW_MAX_PRIVATE_BYTES = 1024 * 1024;
@@ -2288,15 +2295,17 @@ switch (command) {
     const options = { env: [], args: [] };
     const positional = [];
     for (let i = 0; i < rest.length; i += 1) {
-      if (["--route", "--model", "--kind", "--env", "--arg"].includes(rest[i]) &&
+      if (["--route", "--route-config", "--model", "--kind", "--env", "--arg"].includes(rest[i]) &&
           (rest[i + 1] === undefined || rest[i + 1] === "")) {
         fail(`${rest[i]} requires a value`);
       }
       if (rest[i] === "--route") options.route = rest[(i += 1)];
+      else if (rest[i] === "--route-config") options.routeConfig = resolve(CALLER_CWD, rest[(i += 1)]);
       else if (rest[i] === "--model") options.model = rest[(i += 1)];
       else if (rest[i] === "--kind") options.kind = rest[(i += 1)];
       else if (rest[i] === "--env") options.env.push(rest[(i += 1)]);
       else if (rest[i] === "--arg") options.args.push(rest[(i += 1)]);
+      else if (rest[i] === "--json") options.silent = true;
       else positional.push(rest[i]);
     }
     if (options.route !== undefined && (options.kind !== undefined || options.model !== undefined)) {
@@ -2315,7 +2324,8 @@ switch (command) {
         promptText = positional.join(" ");
       }
     }
-    dispatch(topic, promptText, options);
+    const result = dispatch(topic, promptText, options);
+    if (options.silent) process.stdout.write(`${JSON.stringify(result)}\n`);
     break;
   }
   case "review":

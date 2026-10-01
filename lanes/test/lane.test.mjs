@@ -1952,12 +1952,22 @@ test("dispatch persists immutable occupant evidence as display-only optional met
     writeFakeHerdr(fixture, {
       lanePath: path, branch: "lane/occupant-evidence", initiallyOpened: true,
     });
-    const dispatched = lane(fixture, ["dispatch", "occupant-evidence", "Brief text"], { cwd: path });
+    const routeConfig = join(fixture.root, "pinned-routes.json");
+    writeFileSync(routeConfig, JSON.stringify({ routes: { pinned: { kind: "codex", model: "pinned-model", effort: "high" } } }));
+    const dispatched = lane(fixture, ["dispatch", "occupant-evidence", "--route", "pinned", "--route-config", routeConfig, "--json"], { cwd: path });
     assert.equal(dispatched.status, 0, dispatched.stderr);
+    const result = JSON.parse(dispatched.stdout);
+    assert.equal(result.cwd, path);
+    assert.equal(result.agentSessionId, "fixture-session-1");
+    assert.equal(result.terminalId, "fixture-terminal-1");
     const { loadRegistry } = await registryApi();
     const [session] = loadRegistry(fixture.repo, { registry: ".lane/sessions.json" }).sessions;
     assert.equal(session.agent_session_id, "fixture-session-1");
     assert.equal(session.terminal_id, "fixture-terminal-1");
+    assert.equal(session.name, result.agentName);
+    assert.equal(session.pane, result.pane);
+    assert.equal(session.model, "pinned-model");
+    assert.equal(session.effort, "high");
     assert.equal(session.lane, "lane/occupant-evidence");
     negativeControl("dispatch immutable display-only occupant metadata");
   } finally {

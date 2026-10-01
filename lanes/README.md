@@ -64,6 +64,13 @@ its reported cwd by real path, sends the brief, and only then records session
 metadata. A persistence failure after delivery is reported as partial success and
 never replays the prompt.
 
+`lane dispatch --json` emits the verified agent, pane, tab, workspace, cwd and
+available immutable occupant IDs as one JSON object. With no prompt operand it
+starts the worker without sending work. `--route-config FILE` selects a routing
+snapshot for this launch while retaining the lifecycle configuration's original
+paths. The [dispatch module](../dispatch/README.md) uses these options to record
+and watch the worker before prompting it in one command.
+
 Run an independent foreground review against a fixed clean commit:
 
 ```sh

@@ -31,6 +31,13 @@ notice cannot reach the supervisor after its retries, an operator notification
 is raised and the watcher continues waiting; failure to deliver the final report
 or a gone-worker notice remains fatal.
 
+For a detached watcher with a log, use `--detach --log /path/to/R-29.watch.log`
+instead of `--spawn`. This returns JSON with run, PID and log only after the child
+has acquired the per-run lock and read its worker/report configuration. Startup
+failure exits nonzero with the log path. The child inherits no supervisor pane,
+tab or workspace identity. [Dispatch](../dispatch/README.md) uses this acknowledgement
+before sending work to its worker; this mode does not create a Herdr tab.
+
 This module replaces bch-cloak's `notify-watch.sh` after that project switches
 over. It takes the proven blocking-wait and direct-prompt mechanics from
 `contrib/settle-watch.mjs`, but does not open a model session. That old entrypoint

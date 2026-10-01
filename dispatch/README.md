@@ -1,0 +1,100 @@
+# Dispatch
+
+One foreground command opens or reuses a Git lane, prepares it, records a routed
+run, starts a worker, records its agent and pane, arms the existing watcher and
+sends the work prompt. Node built-ins only; all record writes use its CLI.
+
+From the project checkout (or with `--repo /path/to/checkout`):
+
+```sh
+node /path/to/herdr-monitor/dispatch/dispatch.mjs ENG-71 \
+  --org /path/to/.org --lane dispatch --route engineer \
+  --brief /absolute/path/to/ask.md --report docs/reports/dispatch.md \
+  --to supervisor-herdr
+```
+
+`--report` is optional and defaults to the record's per-run report. Relative report
+paths resolve inside the selected lane worktree; absolute report paths remain
+absolute. Other file flags resolve from the invoking directory; `--repo` chooses
+where the lane CLI runs. A successful command prints one JSON object with run, item,
+lane, route, harness, model, effort, agent, pane, watcher PID/log and journal path.
+Route values come from `lanes/routes.mjs`, never copied by the caller. Dispatch
+freezes that request's route configuration for both `record start --route` and
+`lane dispatch --route`; retries keep it even if project config changes. Lifecycle
+configuration retains its original sources and path resolution.
+
+`--base REF` opens from that ref and fast-forwards a reused lane only when clean.
+It never rebases, pushes, or makes merge commits. `lane prepare` runs for both new
+and reused lanes. Git common-directory identity owns the request; no registry
+session metadata authorizes any action.
+
+A fix round starts a new run on the same item and lane. The default starts a fresh
+worker, on the requested route. To prompt the existing stopped worker, add
+`--reuse R-previous --extra 'Read the review and fix its findings.'`. Reuse requires
+the same item, lane, route and declared harness/model/effort, an idle/done worker,
+a live matching cwd/pane/workspace, and matching immutable occupant evidence
+recorded on the previous run. Older manually dispatched runs without that evidence
+need a fresh worker. The session registry is never read to choose or reuse workers.
+
+The generated prompt names the ask, run brief, exact report path and run ID, plus
+`--extra` text. Neither input brief is patched or replaced. The worker starts
+without a work prompt; the prompt is sent only after its record is complete and
+`watch/watch.mjs --detach` has acknowledged startup while holding the run lock.
+The watcher uses a log under `.org/dispatch/` and inherits no supervisor pane,
+tab or workspace ID. `--to` selects the supervisor; the default is
+`supervisor-herdr`. The core stays foreground and never calls a model.
+
+## Recovery
+
+Requests and errors live in `.org/dispatch/<request>.json`, separate from the
+record's derived item/run status. Started runs point at their journal and carry
+milestone and failure notes, so `record show R-n` exposes a partial dispatch.
+Open/prepare/base failure leaves a journal but creates no run. Read and retry with:
+
+```sh
+node dispatch/dispatch.mjs --org /path/to/.org --status R-n
+node dispatch/dispatch.mjs --org /path/to/.org --retry R-n
+# Before a run exists, use the printed journal path in place of R-n.
+```
+
+Retry uses the saved request. It checks repository ownership and live worker
+identity again, preserves the run, and does not replay a completed prompt. A
+watcher failure leaves a recorded, unprompted worker; retry arms the watcher and
+then prompts that same worker. If a previously acknowledged watcher has stopped,
+retry reports that fact and clears its saved PID; another retry re-arms it without
+replaying the prompt. A live saved watcher is retained. Watch's per-run lock
+refuses duplicate watchers, including one whose acknowledgement was lost.
+
+Some failures cannot be safely retried by guessing:
+
+- A lost `record start` result leaves `starting`. Inspect the record for the run
+  whose `meta.dispatch_journal` is this request, then retry the journal with
+  `--recover-run R-n`. If no run exists, resolve the start failure before creating
+  a new request; do not manufacture a run ID.
+- Failed/lost worker launch leaves `launching`. Inspect Herdr, then use
+  `--adopt AGENT` for the worker that actually started, or `--fresh` to explicitly
+  authorize another launch after checking the first attempt. Adoption verifies
+  cwd and captures live occupant identity; the caller must confirm that this is
+  the worker launched on the frozen route. Dispatch never infers that fact from
+  display metadata or guesses from an error string.
+- Failed/lost prompt delivery leaves `prompting`. Inspect the worker, then use
+  `--accept-delivered` if it landed, or `--resend` if it did not. Both require
+  `--retry`; neither is automatic.
+- A live watcher whose acknowledgement was lost still owns watch's run lock.
+  Inspect the log and stop that watcher before re-arming; the module refuses to
+  launch a duplicate. Do not remove a live lock.
+
+Dispatch serializes retries of the same request with a PID lock; dead-owner locks
+can be retried. Failed attempts leave workers/worktrees intact for inspection.
+Use the existing record abandon and lane close commands when choosing to discard
+work; lifecycle safety and archive recovery remain in the lane CLI.
+
+`--org-cli`, `--lane-cli` and `--watch-cli` select executable CLI adapters for
+integration tests. Production defaults use sibling modules from the same tree.
+Tests use a temporary record and Git repositories, fake Herdr and lane CLIs, and
+the real detached watcher; they never launch models or address real panes.
+
+The supervisor's next real dispatch is the canary acceptance step. See
+`supervisor/KICKOFF.md`. bch-cloak's script and activated release stay as they are;
+a later release-gated switch can replace its script with this command, its record
+path, supervisor target, route, brief/report paths and optional base.

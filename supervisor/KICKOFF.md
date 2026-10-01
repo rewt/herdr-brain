@@ -29,13 +29,21 @@ This is a starting context, not instructions. Read the sources, reason, and deci
 - **`org` and `lane` on your PATH are the canary**: this checkout's main, the newest code. bch-cloak
   runs the activated release (`herdr/release.sh status`). Everything you build is used here first,
   by you and your workers; that is how a change earns a release.
-- **Dispatch** with `org start` (the run and its brief) and `lane open` / `lane dispatch --route` /
-  `lane promote` / `lane close`. Routes are in `/Users/rewt/development/rewt/.lane.json`
+- **Dispatch** the next real worker with the [dispatch module](../dispatch/README.md):
+  `node dispatch/dispatch.mjs ITEM --org /Users/rewt/development/rewt/.org --lane TOPIC --route ROUTE --brief /absolute/path/to/ask.md --report docs/reports/REPORT.md`.
+  It opens/prepares the lane, records the run and worker, arms the watcher and sends the
+  generated prompt. Check the returned run with `record show R-n`: route, harness, model,
+  effort, lane, agent and pane should all be present without repeated input. A fix round
+  starts fresh by default; add `--reuse R-previous --extra 'fix instructions'` to use the
+  stopped worker on that same route. Inspect partial failures with `--status R-n` and
+  recover with `--retry R-n`; uncertain launch/delivery needs an explicit recovery choice.
+  Continue to use `lane promote` / `lane close`. Routes are in `/Users/rewt/development/rewt/.lane.json`
   (`lane routes`). Briefs give the outcome, why, how it will be judged, premises to test, what is
   decided, boundaries and where the worker is free, never the method. Reports use the record's
   template plus `decisions`, `questions` and `challenges`; `docs/briefs/BRIEF-ARCH-11-item-layer-20261001.md`
   is a worked example.
-- **Reports reach you** through `watch/watch.mjs`, armed by `supervisor/arm-watch.sh`. It is the
+- **Reports reach you** through `watch/watch.mjs`, armed by dispatch; `supervisor/arm-watch.sh`
+  remains available for manually started runs. It is the
   only worker lifecycle watcher: it validates the final report and prompts `supervisor-herdr`.
   On a final report notice, settle it yourself or hand it to a fresh settle session with
   `supervisor/settle.sh R-n`, which keeps this context small. If `settle.sh` refuses because a

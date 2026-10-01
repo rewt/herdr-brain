@@ -29,6 +29,7 @@ look like one project.
 | `brain/` | The Herdr watcher, operator queue and commands that start or answer sessions. |
 | `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
 | `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
+| `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
 | `contrib/settle-watch.mjs` | Waits for a worker to stop, then opens a fresh settle session. |
 | `contrib/tidy-tabs.mjs` | Closes finished Herdr tabs after their results are safely recorded. |
 | `supervisor/` | The prompt each settle session gets and the scripts that arm or continue it. |

@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs",
+    "test": "node --test test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs watch/test/*.test.mjs",
     "test:lanes": "node --test lanes/test/*.test.mjs"
   },
   "bin": {

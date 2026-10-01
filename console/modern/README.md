@@ -186,25 +186,19 @@ Mouse clicks inside the session are not forwarded; use `o` for those.
 
 ## Herdr plugin package
 
-The root `herdr-plugin.toml` declares a tab entrypoint and no automatic hooks.
-`console/plugin.mjs` opens the same live reader. It honors `HERDR_BIN_PATH` and
-the inherited socket context, and selects the calling workspace's project when
-no project/folder is specified. The tested CLI/server is Herdr 0.8.2; the manifest
-requires that version. Node 20+ and the console's installed dependencies are
-required. Local linking does not install dependencies.
+The root `herdr-plugin.toml` registers the Herdr Monitor plugin (`rewt.herdr-monitor`). Its
+`console` pane runs `herdr/console.sh`, which opens this modern console as a split beside the
+chat; with no project or folder given, it selects the calling workspace's project. It honors
+`HERDR_BIN_PATH` and the inherited socket context. Node 20+ and the console's dependencies are
+required; a release built by `herdr/release.sh` installs them.
 
-To register and open the local package, when desired:
+Releases are installed and switched with `herdr/release.sh` (see the root README). To run a
+worktree beside the active release:
 
 ```sh
-npm --prefix console ci
-herdr plugin link /absolute/path/to/this/worktree
-herdr plugin pane open --plugin rewt.brain-console-trial --entrypoint projects
+herdr/release.sh dev /absolute/path/to/this/worktree
+herdr plugin pane open --plugin rewt.herdr-monitor-dev --entrypoint console
 ```
-
-Linking registers the plugin in Herdr's user configuration. This development pass
-has not linked it globally or exercised the host-owned plugin tab lifecycle; the
-standalone Ink entrypoint and live sources were verified. The trial package ID
-avoids committing to a permanent brand or replacing another plugin.
 
 ## Validation
 

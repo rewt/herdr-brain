@@ -495,3 +495,20 @@ test('a Needs you item is answered from its page: choices, reply, later, and org
   await session.key('n'); for (const ch of 'not yet') await session.key(ch, {}); await session.key('', { return: true });
   assert.deepEqual(answers, [['Alpha', 'HUM-1', 'no', 'not yet']]);
 });
+
+import { lastRecorded } from '../modern/model.mjs';
+
+test('the overview says quiet when no session works and nothing was recorded for 20 minutes', async () => {
+  const hoursAgo = h => new Date(Date.now() - h * 3600e3 - 60e3).toISOString();
+  const items = [{ id: 'ENG-1', kind: 'task', role: 'engineer', title: 'Implement the result', parent: null, status: 'active', created: { at: hoursAgo(9) }, notes: [{ at: hoursAgo(5), text: 'refused' }] }];
+  assert.equal(lastRecorded({ items, runs: [{ id: 'R-1', started: { at: hoursAgo(7) }, report: null }] }), items[0].notes[0].at);
+  assert.equal(lastRecorded(null), null);
+  const idleAgents = [{ name: 'worker', pane: 'a-work:p1', tab: 'a-work:t1', workspace: 'a-work', cwd: '/a-lane', tool: 'codex', status: 'idle' }];
+  const quiet = fixture({ orgStatus: async () => ({ items, runs: [] }), herdrAgents: async () => ({ ok: true, agents: idleAgents }) });
+  await quiet.session.refresh();
+  assert.match(rendered(quiet.session, 140), /quiet 5h0\dm · nothing working, nothing recorded since \d\d:\d\d/);
+  const busy = fixture({ orgStatus: async () => ({ items, runs: [] }) });
+  await busy.session.refresh();
+  assert.doesNotMatch(rendered(busy.session, 140), /quiet \d/, 'a session working is progress, however quiet');
+  quiet.session.stop(); busy.session.stop();
+});

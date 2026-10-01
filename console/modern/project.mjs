@@ -7,6 +7,8 @@ import { pad, padStart, wrap, clip } from '../lib/text.mjs';
 
 const cell = (text, col, w, extra = {}) => ({ text, col, w, fg: 'fg', bg: 'bg', ...extra });
 const link = (kind, id, source) => `link-${kind}:${id}|${source}`;
+const QUIET_AFTER_MS = 20 * 60e3;
+const span = ms => ms < 3600e3 ? `${Math.floor(ms / 60e3)}m` : `${Math.floor(ms / 3600e3)}h${String(Math.floor(ms % 3600e3 / 60e3)).padStart(2, '0')}m`;
 const GLYPH = { working: '●', blocked: '!', idle: '○', done: '✔' };
 const stateColor = state => state === 'working' ? 'teal' : state === 'blocked' ? 'amber' : state === 'done' ? 'teal' : 'muted';
 const ORDER = { blocked: 0, working: 1, idle: 2, done: 3 };
@@ -73,6 +75,14 @@ export function projectRows({ model: m, state: s, project: p, width, height, now
     sx += digits.length + label.length + 4;
   }
   add('content', ...statCells);
+  // Quiet: nothing working and nothing recorded for a while. A long run keeps the
+  // record quiet with a session working; quiet with nothing working is a stall
+  // nobody reports (a refused promotion, a lost watcher). Its own line, never cut.
+  const quiet = m.lastAt ? now - Date.parse(m.lastAt) : null;
+  if (!count('working') && quiet >= QUIET_AFTER_MS) {
+    const d = new Date(m.lastAt), at = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    wrap(`quiet ${span(quiet)} · nothing working, nothing recorded since ${at}`, width - 1).forEach(t => add('content', cell(t, 1, width - 1, { fg: 'amber', bold: true })));
+  }
   add('content', cell('', 0, width));
 
   // Now: the block and its open tasks, the ones a session works on first.

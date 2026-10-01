@@ -51,8 +51,24 @@ export function catalog(configured, workspaces, identity, opened = [], agents = 
   return result;
 }
 
+// The newest moment the organization recorded: any `at` on its items and runs
+// (created, closed, notes, starts, reports). Status carries no last-event time.
+export function lastRecorded(status) {
+  let last = null;
+  const walk = v => {
+    if (Array.isArray(v)) { for (const x of v) walk(x); return; }
+    if (!v || typeof v !== 'object') return;
+    for (const [k, x] of Object.entries(v)) {
+      if (k === 'at' && typeof x === 'string') { if (!last || x > last) last = x; }
+      else if (x && typeof x === 'object') walk(x);
+    }
+  };
+  walk(status?.items); walk(status?.runs);
+  return last;
+}
+
 export function projectView(project, data, identity, now = Date.now()) {
-  const empty = { sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
+  const empty = { lastAt: null, sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
   if (!project) return empty;
   const spaces = data.workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey && project.repoKey);
   const spacesById = new Map(spaces.map(w => [w.workspace_id, w]));
@@ -93,7 +109,7 @@ export function projectView(project, data, identity, now = Date.now()) {
   };
   const waiting = settle(board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i))), itemsById,
     { live: new Set(data.agents.map(a => a.pane)), now });
-  return { ...empty, items, itemsById, board, sessions, spaces, tabs,
+  return { ...empty, items, itemsById, board, sessions, spaces, tabs, lastAt: lastRecorded(data.status),
     goals: items.filter(i => i.kind === 'goal' && !i.closed),
     tasks: items.filter(i => i.kind !== 'goal' && i.role !== 'human' && !['done', 'dropped'].includes(i.status)).map(i => ({ ...i, goal: goalOf(i) })),
     needs: waiting.filter(i => !i.foldedIn),

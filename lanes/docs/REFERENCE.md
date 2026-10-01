@@ -89,8 +89,10 @@ the complete same-named parent route. Dispatch's documented global-to-route-to-C
 resolution occurs after this file merge, so its existing environment append behavior
 is unchanged.
 
-The dependency-free resolver is `lanes/routes.mjs`. `lane dispatch`, routed
-`record start`, and `contrib/settle-watch.mjs` consume it. `schema`, `authority`,
+The dependency-free resolver is `lanes/routes.mjs`. `lane dispatch` and routed
+`record start` consume it. `contrib/settle-watch.mjs` keeps its own reading until
+bch-cloak's release-gated switch (ENG-64), because bch-cloak calls it by path with
+`--model` and `--effort`. `schema`, `authority`,
 `dispatch`, `always_args`, `routes`, and `selection_policy` from bch-cloak's
 `routing.json` all load without projection. Pool and task-class names are opaque;
 the resolver checks only that every policy choice names a real route.

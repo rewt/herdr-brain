@@ -21,7 +21,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { readRoutesConfig, resolveRoute } from '../lanes/routes.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const { values: opt, positionals } = parseArgs({
@@ -59,20 +58,28 @@ const subject = runId ?? 'executive';
 const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${msg}`);
 const die = (msg) => { log(`STOP: ${msg}`); notify(`settle-watch ${subject}: stopped`, msg); process.exit(1); };
 
-// Model and effort come only from the shared route resolver. A missing or invalid
-// route stops before launch instead of silently creating a differently routed run.
+// Model and effort come from the lane config's route table so there is one place
+// to tune what each role costs, and the console can show the same names. --model
+// and --effort still override for a single launch; the old flat opus/high remains
+// the fallback when a route is missing, so a stale config never silently downgrades.
 const ROUTE_FOR = { settle: 'settle', continue: 'executive' };
 function route(mode) {
   const key = ROUTE_FOR[mode] ?? mode;
-  if (opt.model || opt.effort) die('--model and --effort cannot override a named route');
-  let resolved;
-  try { resolved = resolveRoute(readRoutesConfig(opt['lane-config']), { route: key }); }
-  catch (error) { die(error.message); }
-  if (!['claude', 'codex'].includes(resolved.kind)) {
-    die(`route "${key}" is kind "${resolved.kind}", but settle-watch only starts claude or codex sessions`);
-  }
-  if (!resolved.model || !resolved.effort) die(`route "${key}" must resolve model and effort`);
-  return { key, ...resolved };
+  let routes = {};
+  try { routes = JSON.parse(fs.readFileSync(opt['lane-config'], 'utf8')).routes ?? {}; }
+  catch (err) { log(`route table unreadable (${err.message}); using opus/high`); }
+  const r = routes[key] ?? {};
+  // Two kinds are supported: claude (the original) and codex (added 2026-09-20 so the
+  // settle loop keeps running while the Claude plan is exhausted). Anything else dies.
+  const kind = r.kind ?? 'claude';
+  if (kind !== 'claude' && kind !== 'codex') die(`route "${key}" is kind "${r.kind}", but settle-watch only starts claude or codex sessions`);
+  if (!routes[key]) log(`no "${key}" route in ${opt['lane-config']}; using opus/high`);
+  // For codex the effort travels as `-c model_reasoning_effort=…`; a route may carry its
+  // own args (profile, extra -c), and the lane config's always_args.codex are appended
+  // unless the same option is already present — the rule lane.mjs dispatch applies.
+  let alwaysCodex = [];
+  try { alwaysCodex = JSON.parse(fs.readFileSync(opt['lane-config'], 'utf8')).always_args?.codex ?? []; } catch {}
+  return { key, kind, model: opt.model ?? r.model ?? 'opus', effort: opt.effort ?? r.effort ?? 'high', args: r.args ?? [], alwaysCodex };
 }
 
 function run(cmd, args, { env, quiet } = {}) {
@@ -239,7 +246,10 @@ function launchSettings() {
       else if (line.startsWith('arg ')) args.push(line.slice(4));
     }
   } else {
-    log(`cmem-domain unavailable (${(mem.stderr || '').trim().slice(0, 120)}); using resolved route launch settings`);
+    const cfg = JSON.parse(fs.readFileSync(opt['lane-config'], 'utf8'));
+    log(`cmem-domain unavailable (${(mem.stderr || '').trim().slice(0, 120)}); using ${opt['lane-config']} memory settings`);
+    env.push(...(cfg.dispatch?.env ?? []));
+    args.push(...(cfg.always_args?.claude ?? []));
   }
   env.push(`ORG_DIR=${opt.org}`);
   return { env, args };
@@ -312,18 +322,25 @@ function openSession({ mode, r }) {
 
   const pick = route(mode);
   log(`route ${pick.key}: model ${pick.model}, effort ${pick.effort}${opt.account ? `, account ${opt.account}` : ''}`);
-  env.push(...pick.env);
 
   const pane = newTab(label, env);
   let startArgs;
   if (pick.kind === 'codex') {
-    // Canonical model and effort are appended after route plumbing so raw args
-    // cannot silently replace routing authority.
-    const codexArgs = [...pick.args, '-m', pick.model, '-c', `model_reasoning_effort=${pick.effort}`];
+    // codex CLI: -m <model> -c model_reasoning_effort=<effort> [route args] [always_args.codex].
+    // No --add-dir / --permission-mode / --name: those are claude flags. Route args come
+    // after the effort so a route's own -c can override it.
+    const codexArgs = ['-m', pick.model, '-c', `model_reasoning_effort=${pick.effort}`, ...pick.args];
+    const groups = [];
+    for (const token of pick.alwaysCodex) {
+      if (token.startsWith('-') || groups.length === 0) groups.push([token]); else groups.at(-1).push(token);
+    }
+    for (const [option, ...values] of groups) {
+      if (!codexArgs.some((a) => a === option || a.startsWith(`${option}=`))) codexArgs.push(option, ...values);
+    }
     startArgs = ['agent', 'start', name, '--kind', 'codex', '--pane', pane, '--timeout', '120000', '--', ...codexArgs];
   } else {
     startArgs = ['agent', 'start', name, '--kind', 'claude', '--pane', pane, '--timeout', '120000', '--',
-      ...pick.args, ...extra, ...opt['add-dir'].flatMap((d) => ['--add-dir', d]),
+      ...extra, ...opt['add-dir'].flatMap((d) => ['--add-dir', d]),
       '--model', pick.model, '--effort', pick.effort, '--permission-mode', opt['permission-mode'], '--name', name];
   }
   let started;

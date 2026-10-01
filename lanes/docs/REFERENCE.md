@@ -90,7 +90,10 @@ resolution occurs after this file merge, so its existing environment append beha
 is unchanged.
 
 The dependency-free resolver is `lanes/routes.mjs`. `lane dispatch` and routed
-`record start` consume it. `contrib/settle-watch.mjs` keeps its own reading until
+`record start` consume it. The record copies only declared `effort` metadata;
+`resolveLaunchRoute` alone interprets legacy argument-encoded effort for lane
+launches. Add explicit effort fields to legacy config so both records agree.
+`contrib/settle-watch.mjs` keeps its own reading until
 bch-cloak's release-gated switch (ENG-64), because bch-cloak calls it by path with
 `--model` and `--effort`. `schema`, `authority`,
 `dispatch`, `always_args`, `routes`, and `selection_policy` from bch-cloak's
@@ -277,7 +280,10 @@ Without `--route`, values come from `dispatch`. With a route, its `kind`, `model
 `env` entries append to `dispatch.env`. A named route cannot be combined with
 `--kind` or `--model`, so the session cannot drift from route metadata. Supplying
 any `--arg` replaces route arguments, or `dispatch.args` when
-no route is selected. Command-line `--env` entries append after both configured
+no route is selected. On a named route, `--arg` cannot override canonical model,
+effort, profile, or Claude plugin options (including config expressions and
+attached/equal forms). Trusted configured arguments retain legacy compatibility.
+Command-line `--env` entries append after both configured
 environment lists. The route's `use` text is descriptive and never passed to Herdr.
 List supported kinds with `herdr agent start --help`.
 

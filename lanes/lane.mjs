@@ -30,7 +30,7 @@ import {
 } from "./board/registry.mjs";
 import { herdrSocketPath } from "./board/herdr-client.mjs";
 import {
-  resolveRoute,
+  resolveLaunchRoute,
   routeNames as configuredRouteNames,
   selectRoute,
   validateRoutesConfig,
@@ -376,7 +376,7 @@ function routeNames() {
 
 function resolveDispatch(options = {}) {
   try {
-    return resolveRoute(CONFIG, options);
+    return resolveLaunchRoute(CONFIG, options);
   } catch (error) {
     fail(error.message);
   }

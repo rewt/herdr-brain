@@ -54,10 +54,14 @@ Launch any harness (in a Herdr pane or anywhere) and give it that prompt. The wo
 report when it stops: done, blocked, needs a human, or failed. No progress updates. Then:
 
 `--route` reads the project route table used by `lane dispatch`; it records the
-resolved harness, model, and effort plus the route name. `--harness`, `--model`, and
+declared harness, model, and effort plus the route name. The record never infers
+effort from harness arguments: declare `effort` in the route or `dispatch` defaults.
+`--harness`, `--model`, and
 `--effort` remain available for unrouted or legacy callers, but cannot be mixed with
 `--route`. Use `--route-config FILE` only when selecting an explicit standalone route
-file; otherwise discovery follows the project's layered `.lane.json` files.
+file; otherwise discovery follows the canonical checkout's parent and repository
+`.lane.json` files, including from linked worktrees. Outside Git, it reads the
+nearest `.lane.json` at or above the working directory.
 
 ```sh
 record sync      # record reports waiting at open runs' report paths

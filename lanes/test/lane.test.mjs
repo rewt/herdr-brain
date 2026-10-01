@@ -1139,6 +1139,72 @@ test("routes prints configured routes with resolved dispatch defaults", () => {
   }
 });
 
+test("named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call", () => {
+  const fixture = makeFixture({
+    main: "main", validate: "true",
+    routes: {
+      legacy: { kind: "codex", model: "route-model", args: ["-c", "model_reasoning_effort=high"] },
+      declared: { kind: "codex", model: "route-model", effort: "high" },
+      claude: { kind: "claude", model: "route-model", effort: "high" },
+    },
+  });
+  try {
+    const fake = writeFakeHerdr(fixture, { lanePath: lanePath(fixture, "reserved"), branch: "lane/reserved" });
+    for (const flag of ["--kind", "--model"]) {
+      const run = lane(fixture, ["dispatch", "reserved", "--route", "legacy", flag, "other"]);
+      assert.equal(run.status, 1);
+      assert.match(run.stderr, /--kind and --model cannot override a named route/);
+    }
+    const codex = [
+      ["--model", "other"], ["--model=other"], ["-m", "other"], ["-mother"], ["-m=other"],
+      ["--profile", "other"], ["--profile=other"], ["-p", "other"], ["-pother"], ["-p=other"],
+    ];
+    for (const key of ["model", "model_reasoning_effort", "profile"]) {
+      codex.push(["-c", `${key}=other`], ["--config", `${key}=other`],
+        [`--config=${key}=other`], [`-c${key}=other`], [`-c=${key}=other`],
+        ["-c", ` "${key}" = "other" `], ["--config", ` '${key}' = 'other' `]);
+    }
+    const claude = [
+      ["--model", "other"], ["--model=other"], ["--effort", "low"], ["--effort=low"],
+      ["--plugin-dir", "/other"], ["--plugin-dir=/other"],
+    ];
+    for (const [route, variants] of [["legacy", codex], ["declared", codex], ["claude", claude]]) {
+      for (const args of variants) {
+        const run = lane(fixture, ["dispatch", "reserved", "--route", route, ...args.flatMap((arg) => ["--arg", arg])]);
+        assert.equal(run.status, 1, `${route}: ${args.join(" ")}`);
+        assert.match(run.stderr, /--arg may not override canonical model, effort, profile, or plugin arguments/);
+      }
+    }
+    assert.deepEqual(fake.calls(), []);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("always_args sees the canonical model and effort that dispatch emits", () => {
+  for (const kind of ["codex", "claude"]) {
+    const effortArgs = kind === "codex" ? ["-c", "model_reasoning_effort=low"] : ["--effort", "low"];
+    const fixture = makeFixture({
+      main: "main", validate: "true",
+      routes: { engineer: { kind, model: "route-model", effort: "high" } },
+      always_args: { [kind]: ["--model", "fallback-model", ...effortArgs, "--extra", "retained"] },
+    });
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, "canonical-options");
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/canonical-options", initiallyOpened: true });
+      const run = lane(fixture, ["dispatch", "canonical-options", "--route", "engineer"]);
+      assert.equal(run.status, 0, run.stderr);
+      const started = fake.calls().find((args) => args[0] === "agent" && args[1] === "start");
+      const args = started.slice(started.indexOf("--") + 1);
+      assert.deepEqual(args, ["--extra", "retained", "--model", "route-model",
+        ...(kind === "codex" ? ["-c", "model_reasoning_effort=high"] : ["--effort", "high"])]);
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
 test("always_args rejects a non-object value", () => {
   const fixture = makeFixture({ always_args: ["--profile", "shared"] });
   try {

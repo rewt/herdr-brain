@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { readRoutesConfig, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";
+import { readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const KIT = resolve(HERE, "../../kit/bch-cloak-20261001/lane/routing.json");
@@ -21,11 +21,20 @@ test("the bch-cloak route table loads without losing project fields", () => {
 
 test("one resolution supplies launch plumbing and opaque run metadata", () => {
   const config = readRoutesConfig(KIT);
-  const resolved = resolveRoute(config, { route: "engineer" });
+  const resolved = resolveLaunchRoute(config, { route: "engineer" });
   assert.deepEqual(
     { route: resolved.route, kind: resolved.kind, model: resolved.model, effort: resolved.effort },
     { route: "engineer", kind: "codex", model: "gpt-6.1-sol", effort: "high" },
   );
+  for (const route of Object.keys(config.routes)) {
+    const metadata = resolveRoute(config, { route });
+    const launch = resolveLaunchRoute(config, { route });
+    assert.deepEqual(
+      [launch.kind, launch.model, launch.effort],
+      [metadata.kind, metadata.model, metadata.effort],
+      route,
+    );
+  }
   assert.ok(resolved.env.includes("AI_PERSONA=personal"));
   assert.deepEqual(resolved.args, ["-p", "claude-mem-bastian"]);
 });
@@ -45,7 +54,18 @@ test("legacy effort arguments remain readable while explicit effort is canonical
     dispatch: { kind: "codex", model: "gpt-x", args: ["-c", "model_reasoning_effort=high"] },
     routes: { engineer: { args: ["-c", "model_reasoning_effort=xhigh"] } },
   };
-  assert.equal(resolveRoute(legacy, { route: "engineer" }).effort, "xhigh");
+  assert.equal(resolveRoute(legacy, { route: "engineer" }).effort, undefined);
+  assert.equal(resolveLaunchRoute(legacy, { route: "engineer" }).effort, "xhigh");
+  assert.equal(resolveLaunchRoute(legacy, { route: "engineer", args: ["--sandbox", "workspace-write"] }).effort, "xhigh");
+  assert.equal(resolveLaunchRoute(legacy, { args: ["-c", "model_reasoning_effort=low"] }).effort, "low");
   legacy.routes.engineer.effort = "max";
   assert.equal(resolveRoute(legacy, { route: "engineer" }).effort, "max");
+});
+
+test("always_args omits native aliases of emitted Codex model and effort options", () => {
+  const config = {
+    routes: { engineer: { kind: "codex", model: "route-model", effort: "high" } },
+    always_args: { codex: ["-m", "fallback", "--config", "model_reasoning_effort=low", "--sandbox", "workspace-write"] },
+  };
+  assert.deepEqual(resolveLaunchRoute(config, { route: "engineer" }).args, ["--sandbox", "workspace-write"]);
 });

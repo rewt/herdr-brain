@@ -12,9 +12,9 @@ const T0 = '2026-09-15T09:00:00Z';
 function setup() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'herdr-org-'));
   const dir = path.join(root, '.org');
-  const org = (argv, { now = T0, env = {} } = {}) => {
+  const org = (argv, { now = T0, env = {}, cwd = root } = {}) => {
     const r = spawnSync(process.execPath, [BIN, ...argv], {
-      cwd: root,
+      cwd,
       encoding: 'utf8',
       env: { ...process.env, ORG_DIR: dir, ORG_NOW: now, TZ: 'UTC', ...env },
     });
@@ -133,6 +133,78 @@ test('record start resolves a named route without copied harness metadata', () =
   const copied = org(['start', 'ENG-1', '--route', 'engineer', '--route-config', routeConfig, '--model', 'other']);
   assert.equal(copied.code, 1);
   assert.match(copied.err, /--route cannot be combined with --model/);
+  const orphanConfig = org(['start', 'ENG-1', '--route-config', routeConfig]);
+  assert.equal(orphanConfig.code, 1);
+  assert.match(orphanConfig.err, /--route-config requires --route/);
+
+  // The core may copy declared metadata but may not interpret native CLI args.
+  fs.writeFileSync(routeConfig, JSON.stringify({ routes: {
+    legacy: { kind: 'codex', model: 'gpt-route', args: ['-c', 'model_reasoning_effort=high'] },
+  } }));
+  ok(['start', 'ENG-1', '--route', 'legacy', '--route-config', routeConfig]);
+  const legacy = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8')
+    .trim().split('\n').map(JSON.parse).findLast((entry) => entry.type === 'run.started');
+  assert.equal(legacy.meta.harness, 'codex');
+  assert.equal(legacy.meta.effort, undefined);
+});
+
+test('record start discovers canonical parent and repository routes from a linked worktree', (t) => {
+  const { dir, ok } = setup();
+  const root = path.dirname(dir);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const repo = path.join(root, 'repo');
+  const linked = path.join(root, 'elsewhere', 'linked');
+  const git = (args) => {
+    const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', env: {
+      ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Route Tests', GIT_AUTHOR_EMAIL: 'routes@example.invalid',
+      GIT_COMMITTER_NAME: 'Route Tests', GIT_COMMITTER_EMAIL: 'routes@example.invalid',
+    } });
+    assert.equal(result.status, 0, result.stderr);
+  };
+  git(['init', '-b', 'main', repo]);
+  fs.writeFileSync(path.join(repo, 'tracked.txt'), 'initial\n');
+  git(['-C', repo, 'add', 'tracked.txt']);
+  git(['-C', repo, 'commit', '-m', 'initial']);
+  git(['-C', repo, 'worktree', 'add', '-b', 'lane/test', linked]);
+  fs.writeFileSync(path.join(root, '.lane.json'), JSON.stringify({
+    dispatch: { kind: 'opaque-harness', model: 'parent-model', effort: 'parent-effort' },
+    routes: { inherited: {}, engineer: { model: 'replaced-parent-model' } },
+  }));
+  // Written after worktree creation: reading the linked copy cannot pass this.
+  fs.writeFileSync(path.join(repo, '.lane.json'), JSON.stringify({
+    routes: { engineer: { model: 'repo-model', effort: 'repo-effort' } },
+  }));
+  fs.writeFileSync(path.join(root, 'elsewhere', '.lane.json'), JSON.stringify({
+    dispatch: { kind: 'wrong-harness' }, routes: { inherited: {}, engineer: {} },
+  }));
+  ok(['add', 'Test discovery', '--role', 'engineer']);
+  for (const [route, model, effort] of [
+    ['engineer', 'repo-model', 'repo-effort'], ['inherited', 'parent-model', 'parent-effort'],
+  ]) {
+    ok(['start', 'ENG-1', '--route', route], { cwd: linked, env: { LANE_CONFIG: undefined } });
+    const event = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8')
+      .trim().split('\n').map(JSON.parse).findLast((entry) => entry.type === 'run.started');
+    assert.deepEqual(event.meta, { route, harness: 'opaque-harness', model, effort });
+  }
+});
+
+test('record start discovers the nearest route config from a non-Git record root', (t) => {
+  const { dir, ok } = setup();
+  const root = path.dirname(dir);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, '.lane.json'), JSON.stringify({
+    dispatch: { kind: 'opaque', model: 'root-model', effort: 'root-effort' },
+    routes: { engineer: {} },
+  }));
+  ok(['add', 'Test record root', '--role', 'engineer']);
+  for (const cwd of [root, dir]) {
+    ok(['start', 'ENG-1', '--route', 'engineer'], { cwd, env: { LANE_CONFIG: undefined } });
+    const event = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8')
+      .trim().split('\n').map(JSON.parse).findLast((entry) => entry.type === 'run.started');
+    assert.equal(event.meta.effort, 'root-effort');
+    assert.equal(event.meta.model, 'root-model');
+  }
 });
 
 test('budgets are advisory: exceeding them is surfaced, never refused', () => {

@@ -104,8 +104,9 @@ function optionGroups(args) {
   return groups;
 }
 
-function withAlwaysArgs(args, always) {
-  const supplied = (option) => args.some((arg) => arg === option || arg.startsWith(`${option}=`));
+function withAlwaysArgs(args, always, emitted = []) {
+  const present = [...args, ...emitted];
+  const supplied = (option) => present.some((arg) => arg === option || arg.startsWith(`${option}=`));
   return [...args, ...optionGroups(always).filter(([option]) => !supplied(option)).flat()];
 }
 
@@ -123,10 +124,54 @@ function effortFromArgs(kind, args) {
   return index >= 0 ? args[index + 1] : args.find((arg) => arg.startsWith("--effort="))?.slice(9);
 }
 
+function reservedCodexConfig(expression) {
+  if (typeof expression !== "string") return false;
+  let normalized = expression.trim();
+  if (normalized.startsWith("=")) normalized = normalized.slice(1).trimStart();
+  const equals = normalized.indexOf("=");
+  if (equals === -1) return false;
+  let key = normalized.slice(0, equals).trim();
+  if (
+    key.length >= 2 &&
+    ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'")))
+  ) {
+    key = key.slice(1, -1);
+  }
+  return ["model", "model_reasoning_effort", "profile"].includes(key);
+}
+
+function reservedArgument(args, kind) {
+  const exact = kind === "codex"
+    ? new Set(["-m", "--model", "-p", "--profile"])
+    : new Set(["--model", "--effort", "--plugin-dir"]);
+  for (let index = 0; index < args.length; index += 1) {
+    const option = args[index];
+    if (exact.has(option) || [...exact].some((name) => option.startsWith(`${name}=`))) return option;
+    if (kind === "codex" && (/^-m.+/u.test(option) || /^-p.+/u.test(option))) return option;
+    if (kind === "codex" && ["-c", "--config"].includes(option)) {
+      const value = args[index + 1];
+      if (reservedCodexConfig(value)) return `${option} ${value}`;
+      index += 1;
+    }
+    if (kind === "codex" && option.startsWith("--config=") && reservedCodexConfig(option.slice(9))) return option;
+    if (kind === "codex" && option.startsWith("-c") && reservedCodexConfig(option.slice(2))) return option;
+  }
+  return undefined;
+}
+
+function assertUnreservedArguments(args, kind, label) {
+  const collision = reservedArgument(args, kind);
+  if (collision !== undefined) {
+    throw new Error(`${label} may not override canonical model, effort, profile, or plugin arguments: ${collision}`);
+  }
+}
+
 export function routeNames(config) {
   return Object.keys(config.routes ?? {}).sort();
 }
 
+// Record callers copy declared metadata only; native CLI interpretation belongs
+// exclusively to resolveLaunchRoute below.
 export function resolveRoute(config, options = {}) {
   validateRoutesConfig(config);
   const defaults = config.dispatch ?? {};
@@ -142,17 +187,45 @@ export function resolveRoute(config, options = {}) {
   const model = options.model ?? selected.model ?? defaults.model;
   const routeArgs = options.args?.length ? options.args : (selected.args ?? defaults.args ?? []);
   const effortConfigured = selected.effort !== undefined || defaults.effort !== undefined;
-  const effort = selected.effort ?? defaults.effort ?? effortFromArgs(kind, routeArgs);
+  const effort = selected.effort ?? defaults.effort;
   return {
     route: options.route,
     kind,
     model,
     effort,
     effortConfigured,
-    args: withAlwaysArgs(routeArgs, config.always_args?.[kind] ?? []),
+    args: [...routeArgs],
     env: [...(defaults.env ?? []), ...(selected.env ?? []), ...(options.env ?? [])],
     use: selected.use,
   };
+}
+
+// Lane-only compatibility and launch plumbing. Infer from configured arguments,
+// never overrides of a named route, so replacing plumbing cannot change metadata.
+export function resolveLaunchRoute(config, options = {}) {
+  if (options.route !== undefined) {
+    for (const field of ["kind", "model", "effort"]) {
+      if (options[field] !== undefined) throw new Error(`--route cannot be combined with --${field}`);
+    }
+  }
+  const resolved = resolveRoute(config, options);
+  if (options.route !== undefined && options.args?.length) {
+    assertUnreservedArguments(options.args, resolved.kind, "--arg");
+  }
+  const inferenceArgs = options.route === undefined
+    ? resolved.args
+    : resolveRoute(config, { route: options.route }).args;
+  resolved.effort ??= effortFromArgs(resolved.kind, inferenceArgs);
+  const emitted = [];
+  if (resolved.model !== undefined) {
+    emitted.push("--model");
+    if (resolved.kind === "codex") emitted.push("-m");
+  }
+  if (resolved.effort !== undefined) {
+    emitted.push(...(resolved.kind === "codex" ? ["-c", "--config"] : ["--effort"]));
+  }
+  resolved.args = withAlwaysArgs(resolved.args, config.always_args?.[resolved.kind] ?? [], emitted);
+  return resolved;
 }
 
 export function selectRoute(config, taskClass, pool) {
@@ -198,7 +271,7 @@ function nearestParentConfig(repository) {
 }
 
 function canonicalCheckout(cwd) {
-  const top = realpathSync(execFileSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim());
+  const top = realpathSync(execFileSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim());
   const common = realpathSync(execFileSync("git", ["-C", top, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim());
   const gitDir = realpathSync(execFileSync("git", ["-C", top, "rev-parse", "--path-format=absolute", "--git-dir"], { encoding: "utf8" }).trim());
   if (common === gitDir) return top;
@@ -225,7 +298,11 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), file = process.env.L
   try {
     repository = canonicalCheckout(cwd);
   } catch {
-    throw new Error("cannot find route config outside a Git checkout; set LANE_CONFIG or pass --route-config");
+    const directory = realpathSync(cwd);
+    const local = join(directory, ".lane.json");
+    const nearest = existsSync(local) ? local : nearestParentConfig(directory);
+    if (!nearest) throw new Error("no route config found; set LANE_CONFIG or pass --route-config");
+    return { config: readRoutesConfig(nearest), files: [nearest] };
   }
   const files = [nearestParentConfig(repository), join(repository, ".lane.json")].filter((candidate) => candidate && existsSync(candidate));
   if (files.length === 0) throw new Error(`no route config found for ${repository}`);

@@ -1,0 +1,110 @@
+--- a/.lane.json
++++ b/.lane.json
+@@ -2,15 +2,14 @@
+   "dispatch": {
+     "kind": "codex",
+     "model": "gpt-6.1-sol",
++    "effort": "high",
+     "env": [
+       "CLAUDE_MEM_DATA_DIR=/Users/rewt/development/claude-mem/rewt",
+       "CLAUDE_MEM_LLM_TIMEOUT_MS=120000"
+     ],
+     "args": [
+       "-p",
+-      "claude-mem-rewt",
+-      "-c",
+-      "model_reasoning_effort=high"
++      "claude-mem-rewt"
+     ]
+   },
+   "always_args": {
+@@ -27,55 +26,50 @@
+     "engineer": {
+       "kind": "codex",
+       "model": "gpt-6.1-sol",
++      "effort": "high",
+       "args": [
+         "-p",
+-        "claude-mem-rewt",
+-        "-c",
+-        "model_reasoning_effort=high"
++        "claude-mem-rewt"
+       ],
+       "use": "Default engineering lane: Sol at high effort."
+     },
+     "engineer-xhigh": {
+       "kind": "codex",
+       "model": "gpt-6.1-sol",
++      "effort": "xhigh",
+       "args": [
+         "-p",
+-        "claude-mem-rewt",
+-        "-c",
+-        "model_reasoning_effort=xhigh"
++        "claude-mem-rewt"
+       ],
+       "use": "Specific hard problems: cross-cutting features, tricky concurrency or protocol work."
+     },
+     "engineer-max": {
+       "kind": "codex",
+       "model": "gpt-6.1-sol",
++      "effort": "max",
+       "args": [
+         "-p",
+-        "claude-mem-rewt",
+-        "-c",
+-        "model_reasoning_effort=max"
++        "claude-mem-rewt"
+       ],
+       "use": "Correctness-critical logic only."
+     },
+     "chore": {
+       "kind": "codex",
+       "model": "gpt-5.6-terra",
++      "effort": "medium",
+       "args": [
+         "-p",
+-        "claude-mem-rewt",
+-        "-c",
+-        "model_reasoning_effort=medium"
++        "claude-mem-rewt"
+       ],
+       "use": "Mechanical, isolated changes: renames, doc sweeps, generated-file refreshes."
+     },
+     "unblock": {
+       "kind": "codex",
+       "model": "gpt-6-astra",
++      "effort": "xhigh",
+       "args": [
+         "-p",
+-        "claude-mem-rewt",
+-        "-c",
+-        "model_reasoning_effort=xhigh"
++        "claude-mem-rewt"
+       ],
+       "use": "Single session for a plan or spec when a lane is stuck or scope is unclear."
+     },
+@@ -89,19 +83,15 @@
+     "monitor": {
+       "kind": "codex",
+       "model": "gpt-5.6-luna",
+-      "args": [
+-        "-c",
+-        "model_reasoning_effort=low"
+-      ],
++      "effort": "low",
++      "args": [],
+       "use": "One-shot read-only status from concise durable evidence; no repeated agent waits; exit after the answer."
+     },
+     "review-codex": {
+       "kind": "codex",
+       "model": "gpt-6-astra",
+-      "args": [
+-        "-c",
+-        "model_reasoning_effort=xhigh"
+-      ],
++      "effort": "xhigh",
++      "args": [],
+       "use": "Independent fixed-commit review when a Codex-only route is required; follow the review template."
+     },
+     "review-max": {

@@ -2283,7 +2283,7 @@ switch (command) {
     break;
   case "dispatch": {
     if (topic === undefined) {
-      fail("usage: lane.mjs dispatch <topic> [--route <name>] [--kind <agent>] [--model <m>] [--env K=V ...] [--arg <raw> ...] [@brief-file | prompt text]");
+      fail("usage: lane.mjs dispatch <topic> [--route <name> | --kind <agent> --model <m>] [--env K=V ...] [--arg <raw> ...] [@brief-file | prompt text]");
     }
     const options = { env: [], args: [] };
     const positional = [];
@@ -2376,7 +2376,7 @@ switch (command) {
         "  routes [--for <task-class> [--pool <pool>]]\n" +
         "                   list routes, or resolve the configured selection policy\n" +
         "  config           print resolved configuration as key, JSON value, and source\n" +
-        "  dispatch <topic> [--route <name>] [--kind <agent>] [--model <m>] [@brief-file | prompt]\n" +
+        "  dispatch <topic> [--route <name> | --kind <agent> --model <m>] [@brief-file | prompt]\n" +
         "                   start a visible agent session (any herdr kind) in the\n" +
         "                   lane's workspace and record display metadata; defaults\n" +
         "                   in .lane.json routes/dispatch\n" +

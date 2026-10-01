@@ -1142,6 +1142,7 @@ test("routes prints configured routes with resolved dispatch defaults", () => {
 test("named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call", () => {
   const fixture = makeFixture({
     main: "main", validate: "true",
+    always_args: { codex: ["-p", "NAME"] },
     routes: {
       legacy: { kind: "codex", model: "route-model", args: ["-c", "model_reasoning_effort=high"] },
       declared: { kind: "codex", model: "route-model", effort: "high" },
@@ -1159,11 +1160,21 @@ test("named dispatch refuses copied metadata and reserved CLI arguments before a
       ["--model", "other"], ["--model=other"], ["-m", "other"], ["-mother"], ["-m=other"],
       ["--profile", "other"], ["--profile=other"], ["-p", "other"], ["-pother"], ["-p=other"],
     ];
-    for (const key of ["model", "model_reasoning_effort", "profile"]) {
+    for (const key of [
+      "model", "model_reasoning_effort", "profile",
+      "profiles.NAME.model", "profiles.NAME.model_reasoning_effort", "profiles.NAME.profile",
+      "profiles.NAME.history.persistence",
+    ]) {
       codex.push(["-c", `${key}=other`], ["--config", `${key}=other`],
         [`--config=${key}=other`], [`-c${key}=other`], [`-c=${key}=other`],
         ["-c", ` "${key}" = "other" `], ["--config", ` '${key}' = 'other' `]);
     }
+    codex.push(
+      ["-c", 'profiles . "NAME" . "model_reasoning_effort" = "low"'],
+      ["--config", "'profiles'.'NAME'.'model' = 'other'"],
+      ["-c", 'profiles.NAME={model_reasoning_effort="low"}'],
+      ["--config", 'profiles={NAME={model_reasoning_effort="low"}}'],
+    );
     const claude = [
       ["--model", "other"], ["--model=other"], ["--effort", "low"], ["--effort=low"],
       ["--plugin-dir", "/other"], ["--plugin-dir=/other"],
@@ -1184,10 +1195,11 @@ test("named dispatch refuses copied metadata and reserved CLI arguments before a
 test("always_args sees the canonical model and effort that dispatch emits", () => {
   for (const kind of ["codex", "claude"]) {
     const effortArgs = kind === "codex" ? ["-c", "model_reasoning_effort=low"] : ["--effort", "low"];
+    const unrelatedConfig = kind === "codex" ? ["-c", "sandbox_workspace_write.network_access=true"] : [];
     const fixture = makeFixture({
       main: "main", validate: "true",
       routes: { engineer: { kind, model: "route-model", effort: "high" } },
-      always_args: { [kind]: ["--model", "fallback-model", ...effortArgs, "--extra", "retained"] },
+      always_args: { [kind]: ["--model", "fallback-model", ...effortArgs, ...unrelatedConfig, "--extra", "retained"] },
     });
     try {
       ignoreLaneState(fixture);
@@ -1197,7 +1209,7 @@ test("always_args sees the canonical model and effort that dispatch emits", () =
       assert.equal(run.status, 0, run.stderr);
       const started = fake.calls().find((args) => args[0] === "agent" && args[1] === "start");
       const args = started.slice(started.indexOf("--") + 1);
-      assert.deepEqual(args, ["--extra", "retained", "--model", "route-model",
+      assert.deepEqual(args, [...unrelatedConfig, "--extra", "retained", "--model", "route-model",
         ...(kind === "codex" ? ["-c", "model_reasoning_effort=high"] : ["--effort", "high"])]);
     } finally {
       fixture.cleanup();
@@ -4238,6 +4250,11 @@ test("usage exits one with no command and with an unknown command", () => {
     const missing = lane(fixture, []);
     assert.equal(missing.status, 1);
     assert.match(missing.stdout, /^usage:/);
+    const dispatchAlternatives = "dispatch <topic> [--route <name> | --kind <agent> --model <m>]";
+    assert.ok(missing.stdout.includes(dispatchAlternatives));
+    const missingTopic = lane(fixture, ["dispatch"]);
+    assert.equal(missingTopic.status, 1);
+    assert.ok(missingTopic.stderr.includes(dispatchAlternatives));
     assert.match(missing.stdout, /check \[--cmd <validate command>\]/);
     assert.match(
       missing.stdout,

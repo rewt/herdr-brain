@@ -104,10 +104,29 @@ function optionGroups(args) {
   return groups;
 }
 
-function withAlwaysArgs(args, always, emitted = []) {
+function codexConfigExpression(token, value) {
+  if (["-c", "--config"].includes(token)) return value;
+  if (token.startsWith("--config=")) return token.slice(9);
+  if (token.startsWith("-c")) return token.slice(2);
+  return undefined;
+}
+
+function withAlwaysArgs(args, always, emitted = [], kind) {
   const present = [...args, ...emitted];
-  const supplied = (option) => present.some((arg) => arg === option || arg.startsWith(`${option}=`));
-  return [...args, ...optionGroups(always).filter(([option]) => !supplied(option)).flat()];
+  const presentGroups = optionGroups(present);
+  const supplied = ([option, value]) => {
+    if (kind === "codex") {
+      const key = codexConfigKey(codexConfigExpression(option, value));
+      if (key !== undefined) {
+        // Codex config flags are repeatable: supplying one key does not supply
+        // all the other defaults, even when both use the same -c/--config flag.
+        return presentGroups.some(([token, expression]) =>
+          codexConfigKey(codexConfigExpression(token, expression)) === key);
+      }
+    }
+    return present.some((arg) => arg === option || arg.startsWith(`${option}=`));
+  };
+  return [...args, ...optionGroups(always).filter((group) => !supplied(group)).flat()];
 }
 
 function effortFromArgs(kind, args) {
@@ -124,20 +143,25 @@ function effortFromArgs(kind, args) {
   return index >= 0 ? args[index + 1] : args.find((arg) => arg.startsWith("--effort="))?.slice(9);
 }
 
-function reservedCodexConfig(expression) {
-  if (typeof expression !== "string") return false;
+function codexConfigKey(expression) {
+  if (typeof expression !== "string") return undefined;
   let normalized = expression.trim();
   if (normalized.startsWith("=")) normalized = normalized.slice(1).trimStart();
   const equals = normalized.indexOf("=");
-  if (equals === -1) return false;
-  let key = normalized.slice(0, equals).trim();
-  if (
-    key.length >= 2 &&
-    ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'")))
-  ) {
-    key = key.slice(1, -1);
-  }
-  return ["model", "model_reasoning_effort", "profile"].includes(key);
+  if (equals === -1) return undefined;
+  // Normalize both a quoted whole key and quoted dotted-key segments. Only
+  // key identity is needed here; the value stays opaque and passes unchanged.
+  return normalized.slice(0, equals).trim().split(".")
+    .map((segment) => segment.trim().replace(/^["']|["']$/gu, ""))
+    .join(".");
+}
+
+function reservedCodexConfig(expression) {
+  const key = codexConfigKey(expression);
+  return key !== undefined && (
+    ["model", "model_reasoning_effort", "profile", "profiles"].includes(key) ||
+    key.startsWith("profiles.")
+  );
 }
 
 function reservedArgument(args, kind) {
@@ -222,9 +246,9 @@ export function resolveLaunchRoute(config, options = {}) {
     if (resolved.kind === "codex") emitted.push("-m");
   }
   if (resolved.effort !== undefined) {
-    emitted.push(...(resolved.kind === "codex" ? ["-c", "--config"] : ["--effort"]));
+    emitted.push(...(resolved.kind === "codex" ? ["-c", `model_reasoning_effort=${resolved.effort}`] : ["--effort"]));
   }
-  resolved.args = withAlwaysArgs(resolved.args, config.always_args?.[resolved.kind] ?? [], emitted);
+  resolved.args = withAlwaysArgs(resolved.args, config.always_args?.[resolved.kind] ?? [], emitted, resolved.kind);
   return resolved;
 }
 

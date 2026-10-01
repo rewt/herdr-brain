@@ -282,7 +282,9 @@ Without `--route`, values come from `dispatch`. With a route, its `kind`, `model
 any `--arg` replaces route arguments, or `dispatch.args` when
 no route is selected. On a named route, `--arg` cannot override canonical model,
 effort, profile, or Claude plugin options (including config expressions and
-attached/equal forms). Trusted configured arguments retain legacy compatibility.
+attached/equal forms). Named Codex routes also reject `profiles` and `profiles.*`
+config overrides, since profile settings can change canonical launch values.
+Trusted configured arguments retain legacy compatibility.
 Command-line `--env` entries append after both configured
 environment lists. The route's `use` text is descriptive and never passed to Herdr.
 List supported kinds with `herdr agent start --help`.

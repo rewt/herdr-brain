@@ -146,7 +146,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     row(); row('Open a folder…', { id: 'folder', fg: 'blue' }); row('Start with an idea', { id: 'ideas', fg: 'goal' });
     paragraph('Discovered projects are available to inspect. They are not registered or changed by opening them.');
   } else if (s.view === 'folder') {
-    paragraph('Choose an existing directory. Git, goals and an organization are optional.'); row();
+    paragraph('Choose an existing directory. Git, goals and a record are optional.'); row();
     row(`Path: ${s.text}▏`, { fg: 'bright' }); row(); row('Enter  Open folder', { id: 'open-folder', fg: 'blue' });
     paragraph('Opening only reads this folder. It does not create files, run setup scripts or register a project.');
   } else if (s.view === 'ideas') {

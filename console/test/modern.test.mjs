@@ -78,6 +78,12 @@ test('an answered question has one answered activity moment, not a duplicate dec
   assert.deepEqual(activityEntries(status, events).map(event => [event.verb, event.id]), [['answered', 'HUM-1']]);
 });
 
+test('a dropped question reads as dropped, not answered', () => {
+  const status = { items: [{ id: 'HUM-2', kind: 'question', title: 'Publish?', status: 'dropped' }], runs: [] };
+  const events = [{ seq: 1, at: '2026-10-01T15:00:00Z', type: 'item.closed', id: 'HUM-2', as: 'dropped', note: 'moot' }];
+  assert.deepEqual(activityEntries(status, events).map(event => [event.verb, event.id]), [['dropped', 'HUM-2']]);
+});
+
 test('output reads the selected pane, history restores task and its keyboard focus', async () => {
   const { session, reads } = fixture(); await session.refresh();
   session.ui.focus = 'item:ENG-1'; await session.activate('item:ENG-1');

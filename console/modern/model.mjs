@@ -39,7 +39,7 @@ export function activityEntries(status, events = []) {
       }
       case 'item.closed':
         if (item?.kind === 'goal') return null;
-        return { mark: event.as === 'dropped' ? '×' : '■', verb: /^HUM-/.test(event.id) ? 'answered' : event.as === 'dropped' ? 'dropped' : 'closed', id: event.id,
+        return { mark: event.as === 'dropped' ? '×' : '■', verb: event.as === 'dropped' ? 'dropped' : /^HUM-/.test(event.id) ? 'answered' : 'closed', id: event.id,
           title: item?.title ?? '', summary: event.note ?? null };
       case 'note.added':
         return event.decision && event.kind !== 'answer' ? { mark: '◆', verb: 'decided', id: event.id, title: item?.title ?? '', summary: event.text } : null;

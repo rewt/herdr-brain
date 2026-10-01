@@ -290,14 +290,22 @@ async function watch() {
   let lastUnavailableLog;
   let pendingUnavailable;
   let longNotified = false;
+  let longNextAt;
   let observedWorking = false;
   let startupWaitingLogged = false;
   const armedAt = Date.now();
   const startedAt = Date.parse(current.started?.at ?? '') || Date.now();
-  const sendOnce = async (message, sound) => {
-    if (message === lastNotice) return;
-    await deliver(message, sound);
-    lastNotice = message;
+  const sendOnce = async (message, sound, { fatal = false } = {}) => {
+    if (message === lastNotice) return true;
+    try {
+      await deliver(message, sound);
+      lastNotice = message;
+      return true;
+    } catch (error) {
+      if (fatal) throw error;
+      log(`${error.message}; continuing to watch ${runId}`);
+      return false;
+    }
   };
 
   if (dry) {
@@ -315,11 +323,16 @@ async function watch() {
       return;
     }
     const beforeStamp = fileStamp(reportPath);
-    const report = reportState(reportPath);
+    let report = reportState(reportPath);
     const status = agentStatus(agent);
     const state = status.state;
 
-    if (report.kind === 'valid') {
+    const workerStillRunning = state === 'working' || state === 'unknown';
+    // The worker can finish and rewrite its report between the first report
+    // read and the state read. Once it is terminal, read again so delivery
+    // reflects the file it actually stopped with.
+    if (!workerStillRunning && state !== 'unavailable') report = reportState(reportPath);
+    if (report.kind === 'valid' && !workerStillRunning && state !== 'unavailable') {
       const headline = report.report.headline ?? report.report.summary;
       await deliver(reportNotice({
         run: runId, item, outcome: report.report.outcome, headline,
@@ -344,12 +357,11 @@ async function watch() {
       lastNotice = undefined;
     }
     if (pendingUnavailable) {
-      await sendOnce(pendingUnavailable);
-      pendingUnavailable = undefined;
+      if (await sendOnce(pendingUnavailable)) pendingUnavailable = undefined;
     }
 
     const startupGraceRemaining = observedWorking ? 0 : Math.max(0, (armedAt + startGraceMs) - Date.now());
-    if (!observedWorking && state !== 'working' && startupGraceRemaining > 0) {
+    if (!observedWorking && !workerStillRunning && startupGraceRemaining > 0) {
       if (!startupWaitingLogged) {
         log(`waiting up to ${startGraceMs / 1_000}s for ${agent} to start before treating ${state ?? 'gone'} as terminal`);
         startupWaitingLogged = true;
@@ -359,10 +371,18 @@ async function watch() {
       continue;
     }
     if (report.kind === 'invalid' && !['working', 'unknown'].includes(state)) {
-      await sendOnce(invalidReportNotice({ run: runId, item, agent, report: reportPath, error: report.error }));
+      await sendOnce(
+        invalidReportNotice({ run: runId, item, agent, report: reportPath, error: report.error }),
+        undefined,
+        { fatal: state === null },
+      );
       if (state === null) throw new Error(`worker ${agent} is gone with an invalid report`);
     } else if (state === null) {
-      await sendOnce(noReportNotice({ run: runId, item, agent, state: 'gone', report: reportPath }));
+      await sendOnce(
+        noReportNotice({ run: runId, item, agent, state: 'gone', report: reportPath }),
+        undefined,
+        { fatal: true },
+      );
       throw new Error(`worker ${agent} is gone without a valid report`);
     } else if (state === 'blocked') {
       await sendOnce(blockedNotice({ run: runId, item, agent, report: reportPath }));
@@ -371,16 +391,19 @@ async function watch() {
     }
 
     const elapsed = Date.now() - startedAt;
-    if (!longNotified && elapsed >= longAfterMs && (state === 'working' || state === 'unknown')) {
-      await deliver(longRunningNotice({ run: runId, item, agent, minutes: Math.max(1, Math.floor(elapsed / 60_000)) }));
-      longNotified = true;
+    longNextAt ??= startedAt + longAfterMs;
+    if (!longNotified && Date.now() >= longNextAt && workerStillRunning) {
+      longNotified = await sendOnce(longRunningNotice({
+        run: runId, item, agent, minutes: Math.max(1, Math.floor(elapsed / 60_000)),
+      }));
+      if (!longNotified) longNextAt = Date.now() + retryAfterMs;
     }
 
-    const until = state === 'working' || state === 'unknown'
+    const until = workerStillRunning
       ? ['idle', 'done', 'blocked']
       : ['working'];
-    const untilLong = !longNotified && (state === 'working' || state === 'unknown')
-      ? Math.max(0, longAfterMs - elapsed)
+    const untilLong = !longNotified && workerStillRunning
+      ? Math.max(0, longNextAt - Date.now())
       : undefined;
     const signal = await waitForSignal(agent, until, reportPath, untilLong, beforeStamp);
     if (signal === 'long') continue;

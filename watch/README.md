@@ -1,8 +1,10 @@
 # Watch
 
-`watch.mjs` waits for one org run without inference, validates the report with
-`org check`, and prompts the supervisor with the run, outcome, headline, check
-result and report path.
+`watch.mjs` waits for one org run without inference. Once its worker stops, it
+re-validates the final report with `org check` and prompts the supervisor with
+the run, outcome, headline, check result and report path. A valid report written
+while the worker is still working or unknown wakes the watcher but is not
+delivered early.
 
 It listens to two signals at once: Herdr's blocking `agent wait` for worker
 lifecycle changes and `fs.watch` for the report. A timer emits one distinct
@@ -16,11 +18,14 @@ node watch/watch.mjs R-29 --org /path/to/.org --to supervisor-herdr --spawn
 ```
 
 The tab is labelled `watch R-29`, so the wait is visible in Herdr, and closes
-after a valid report is delivered. Without `--spawn`, the command blocks in the
-current terminal. A newly armed watcher gives the worker 60 seconds to be seen
-working before an initial idle or missing agent is treated as terminal;
-`--start-grace` changes that window. `--long-after` changes the default one-hour
-long-run notice.
+after a stopped worker's valid report is delivered. Without `--spawn`, the
+command blocks in the current terminal. A newly armed watcher gives the worker
+60 seconds to be seen working before an initial idle or missing agent is treated
+as terminal; `--start-grace` changes that window. `--long-after` changes the
+default one-hour long-run notice. If an intermediate notice cannot reach the
+supervisor after its retries, an operator notification is raised and the watcher
+continues waiting; failure to deliver the final report or a gone-worker notice
+remains fatal.
 
 This module replaces bch-cloak's `notify-watch.sh` after that project switches
 over. It takes the proven blocking-wait and direct-prompt mechanics from

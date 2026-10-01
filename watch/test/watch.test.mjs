@@ -111,16 +111,19 @@ test('a report landing wakes the watcher without polling Herdr', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-landing-'));
   const report = path.join(root, 'report.md');
   const calls = path.join(root, 'herdr-calls');
+  const state = path.join(root, 'worker-state');
   const org = path.join(root, 'org');
   const herdr = path.join(root, 'herdr');
+  const started = new Date().toISOString();
+  fs.writeFileSync(state, 'working');
   executable(org, `case "$1" in
-  show) printf '%s\\n' '{"id":"R-8","item":"ENG-4","meta":{"agent":"lane-eight"},"report_path":"${report}","started":{"at":"2026-10-01T00:00:00.000Z"}}' ;;
+  show) printf '%s\\n' '{"id":"R-8","item":"ENG-4","meta":{"agent":"lane-eight"},"report_path":"${report}","started":{"at":"${started}"}}' ;;
   check) printf '%s\\n' 'ok: done · 0 blockers' ;;
   *) exit 2 ;;
 esac`);
   executable(herdr, `case "$1 $2" in
-  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"working"}}}' ;;
-  "agent wait") sleep 10 ;;
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") while [ "$(cat '${state}')" = working ]; do sleep 0.02; done ;;
   "agent prompt") printf '%s\\n' "$*" >> "${calls}" ;;
   *) exit 2 ;;
 esac`);
@@ -128,10 +131,40 @@ esac`);
     WATCH, 'R-8', '--org', path.join(root, '.org'), '--org-cli', org, '--herdr', herdr, '--to', 'supervisor-test',
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((resolve) => setTimeout(resolve, 100));
-  fs.writeFileSync(report, `---\nrun: R-8\noutcome: done\nsummary: Report arrived.\nheadline: The report arrived\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
+  fs.writeFileSync(report, reportText('R-8', 'Draft report'));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const afterDraft = fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '';
+  fs.writeFileSync(report, reportText('R-8', 'Final report'));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const afterFinal = fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '';
+  fs.writeFileSync(state, 'idle');
   const result = await waitForExit(child);
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(fs.readFileSync(calls, 'utf8'), /\[org-report\] run=R-8 item=ENG-4/);
+  assert.doesNotMatch(afterDraft, /\[org-report\]/, 'a valid report is not delivered while the worker is working');
+  assert.doesNotMatch(afterFinal, /\[org-report\]/, 'a rewritten valid report still waits for the worker to stop');
+  const sent = fs.readFileSync(calls, 'utf8');
+  assert.match(sent, /\[org-report\] run=R-8 item=ENG-4.*headline="Final report"/);
+  assert.doesNotMatch(sent, /Draft report/);
+});
+
+test('a valid report also waits while the worker state is unknown', async () => {
+  const fixture = watcherFixture('R-17');
+  const state = path.join(fixture.root, 'worker-state');
+  fs.writeFileSync(fixture.report, reportText('R-17'));
+  fs.writeFileSync(state, 'unknown');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") while [ "$(cat '${state}')" = unknown ]; do sleep 0.02; done ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  *) exit 2 ;;
+esac`);
+  const child = startWatcher(fixture.args);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(fs.existsSync(fixture.calls), false, 'an unknown worker is not treated as stopped');
+  fs.writeFileSync(state, 'idle');
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(fs.readFileSync(fixture.calls, 'utf8'), /\[org-report\] run=R-17/);
 });
 
 test('a mismatched report is invalid even when org check passes', async () => {
@@ -207,26 +240,53 @@ esac`);
   assert.match(fs.readFileSync(fixture.calls, 'utf8'), /\[watch-blocked\].*state=blocked/);
 });
 
+test('a failed intermediate delivery notifies the operator and keeps watching for the final report', async () => {
+  const fixture = watcherFixture('R-16');
+  const state = path.join(fixture.root, 'worker-state');
+  fs.writeFileSync(state, 'blocked');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") sleep 10 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*) exit 1 ;; esac ;;
+  "notification show") printf '%s\\n' "$*" >> "${fixture.calls}"; "${fixture.writer}"; printf '%s' idle > '${state}' ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher([
+    ...fixture.args, '--start-grace', '0', '--delivery-attempts', '1',
+  ]));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.match(calls, /agent prompt supervisor-test \[watch-blocked\]/);
+  assert.match(calls, /notification show R-16 watch could not deliver/);
+  assert.match(calls, /agent prompt supervisor-test \[org-report\] run=R-16/);
+});
+
 test('a still-working worker delivers the long-running notice', async () => {
   const fixture = watcherFixture('R-14');
+  const state = path.join(fixture.root, 'worker-state');
+  fs.writeFileSync(state, 'working');
   executable(fixture.herdr, `case "$1 $2" in
-  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"working"}}}' ;;
-  "agent wait") sleep 10 ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-long-running*) "${fixture.writer}" ;; esac ;;
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") while [ "$(cat '${state}')" = working ]; do sleep 0.02; done ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-long-running*) "${fixture.writer}"; printf '%s' idle > '${state}' ;; esac ;;
   *) exit 2 ;;
 esac`);
   const result = await waitForExit(startWatcher([...fixture.args, '--long-after', '0']));
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(fs.readFileSync(fixture.calls, 'utf8'), /\[watch-long-running\].*still-running=/);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.match(calls, /\[watch-long-running\].*still-running=/);
+  assert.ok(calls.indexOf('[watch-long-running]') < calls.indexOf('[org-report]'), calls);
 });
 
 test('a Herdr outage is delivered after Herdr recovers, never reported as gone', async () => {
   const fixture = watcherFixture('R-15');
   const counter = path.join(fixture.root, 'gets');
+  const state = path.join(fixture.root, 'worker-state');
+  fs.writeFileSync(state, 'working');
   executable(fixture.herdr, `case "$1 $2" in
-  "agent get") n=$(($(cat "${counter}" 2>/dev/null || echo 0)+1)); printf '%s' "$n" > "${counter}"; if [ "$n" -eq 1 ]; then printf '%s\\n' '{"error":{"code":"socket_unavailable","message":"server down"}}' >&2; exit 1; fi; printf '%s\\n' '{"result":{"agent":{"agent_status":"working"}}}' ;;
-  "agent wait") sleep 10 ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-unavailable*) "${fixture.writer}" ;; esac ;;
+  "agent get") n=$(($(cat "${counter}" 2>/dev/null || echo 0)+1)); printf '%s' "$n" > "${counter}"; if [ "$n" -eq 1 ]; then printf '%s\\n' '{"error":{"code":"socket_unavailable","message":"server down"}}' >&2; exit 1; fi; printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") while [ "$(cat '${state}')" = working ]; do sleep 0.02; done ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-unavailable*) "${fixture.writer}"; printf '%s' idle > '${state}' ;; esac ;;
   *) exit 2 ;;
 esac`);
   const result = await waitForExit(startWatcher(fixture.args));

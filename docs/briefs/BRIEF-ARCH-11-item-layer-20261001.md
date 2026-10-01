@@ -45,8 +45,8 @@ The people who live with the answer:
 
 ## Premises to test
 
-The operator wants these challenged, not confirmed. Each was said by the operator or by
-the agent in a chat, and each may be wrong:
+Each was said by the operator or by the agent in a chat. Test each one: confirm what
+holds, correct what doesn't, and say when you can't tell. Give the evidence either way.
 
 1. "A standard tracker makes us portable." Portability may come from an interface (MCP,
    import/export) rather than from the storage format.
@@ -93,8 +93,8 @@ until it passes.
 The three fields after `artifacts` are new and are kept as given:
 - `decisions` are the choices you made yourself;
 - `questions` are what you could not decide;
-- `challenges` are the premises above, or anything else, that you found wrong, with the
-  evidence.
+- `challenges` gives your verdict on each premise above (holds, partly, wrong or can't
+  tell), plus anything else you found wrong, with the evidence.
 
 ```markdown
 ---
@@ -109,7 +109,7 @@ learnings: []
 artifacts: []       # scratch paths, commands run, files read
 decisions: []       #  - decision: …   why: …
 questions: []       #  - question: …  recommend: …  why: …  category: design|tooling|other
-challenges: []      #  - premise: …   verdict: holds|wrong|partly   evidence: …
+challenges: []      #  - premise: …   verdict: holds|partly|wrong|unknown   evidence: …
 ---
 
 (the comparison, the trial's evidence, and the cost of moving bch-cloak's record)

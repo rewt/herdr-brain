@@ -202,7 +202,7 @@ test('plugin/caller workspace selects its canonical project without relying on l
 test('appearance changes preserve navigation and unsupported preview actions have an honest handoff', async () => {
   const { session, calls } = fixture(); await session.refresh(); await session.key('g');
   const history = session.ui.history.length, focus = session.ui.focus;
-  assert.equal(session.ui.appearance, 'light'); await session.key('D'); assert.equal(session.ui.appearance, 'dark');
+  assert.equal(session.ui.appearance, 'dark'); await session.key('D'); assert.equal(session.ui.appearance, 'light');
   assert.equal(session.ui.history.length, history); assert.equal(session.ui.focus, focus);
   await session.activate('unavailable'); assert.match(session.ui.message, /Read-only trial/); assert.deepEqual(calls, []);
 });

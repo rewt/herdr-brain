@@ -12,9 +12,9 @@ The visual reference is the accepted `modern-console-preview.html` browser
 preview, sourced from `.lane/design-preview/modern-console-overview.html`.
 The first live renderer diverged from that reference; the September 20 fidelity
 correction restores its color tokens, section surfaces, task grouping, central
-navigation and overview composition. It starts light, matching the light browser
-preview; press `D` for its dark palette, or launch with
-`HERDR_CONSOLE_THEME=dark`. The terminal controls font and cell dimensions.
+navigation and overview composition. It starts dark; press `D` for the light
+palette that matches the light browser preview, or launch with
+`HERDR_CONSOLE_THEME=light`. The terminal controls font and cell dimensions.
 
 From this worktree:
 

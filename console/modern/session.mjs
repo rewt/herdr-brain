@@ -28,7 +28,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, brain: { rows: [], off: true } };
   const s = { projects: [], projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
     view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'scope', scroll: 0, outputScroll: 0,
-    appearance: env.HERDR_CONSOLE_THEME === 'dark' ? 'dark' : 'light',
+    appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark',
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
     picker: null, regionFocus: {}, outputX: 0, screenScroll: 0,
     outputMode: 'mirror', interactive: false, terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },

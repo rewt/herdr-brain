@@ -1,0 +1,316 @@
+#!/usr/bin/env node
+// Project housekeeping: a deterministic schedule, with record/Git authority.
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+import { planTidy, isShellOnly } from '../supervisor/tidy-tabs.mjs';
+import { findOrgDir } from '../lib/store.mjs';
+
+const LOCAL_RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
+const FINISHED = new Set(['idle', 'done']);
+const canonicalPath = (file) => fs.existsSync(file) ? fs.realpathSync(file) : path.resolve(file);
+export const RESUME = 'Housekeeping: a stray terminal mouse-wheel escape interrupted this open recorded run. Continue exactly where you left off and write the requested report.';
+
+export function interruptedComposer(text) {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const index = lines.findLastIndex((line) => /^\s*›/.test(line));
+  if (index < 0) return false;
+  const composer = lines[index].replace(/^\s*›\s*/, '').trim();
+  // Only wheel junk: never erase an operator's words, even beside an escape.
+  if (!/^(?:(?:\x1b\[)?<6[4-7];\d+;\d+[Mm]\s*)+$/.test(composer)) return false;
+  if (lines[index + 1]?.trim()) return false; // Wrapped input isn't safe to erase.
+  const before = lines.slice(0, index).join('\n').trimEnd();
+  // The interruption must be the most recent output, not history above a final reply.
+  return /(?:^|\n)\s*■ (?:Conversation|Turn) interrupted[^\n]*(?:\n\s*(?:Something went wrong\?[^\n]*)?)*$/.test(before);
+}
+
+export function matchingRun(agent, runs) {
+  const matches = runs.filter((r) => r.meta?.agent === agent.name);
+  // Reused names: the newest run owns this worker, including an open fix round.
+  matches.sort((a, b) => (b.started?.seq ?? 0) - (a.started?.seq ?? 0));
+  if (!matches.length || (matches[1] && matches[0].started?.seq === matches[1].started?.seq)) return null;
+  const run = matches[0];
+  const meta = run.meta;
+  if (!run.workspace || !meta.pane || meta.pane !== agent.pane_id ||
+      (meta.worker_workspace && meta.worker_workspace !== agent.workspace_id) ||
+      (meta.terminal_id && meta.terminal_id !== agent.terminal_id) ||
+      (meta.agent_session_id && meta.agent_session_id !== agent.agent_session?.value) ||
+      (!meta.terminal_id && !meta.agent_session_id)) return null;
+  if (!agent.cwd || canonicalPath(agent.cwd) !== canonicalPath(run.workspace)) return null;
+  return run;
+}
+
+export function resumeKey(run, agent) {
+  return JSON.stringify([run.id, agent.pane_id, agent.terminal_id, agent.agent_session?.value, agent.state_change_seq]);
+}
+
+export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
+  command = spawnSync, log = () => {}, selfTab = process.env.HERDR_TAB_ID ?? null }) {
+  const invoke = (exe, args, extra = {}) => {
+    const r = command(exe, args, { cwd, encoding: 'utf8', timeout: 10000,
+      maxBuffer: 32 * 1024 * 1024, env: { ...process.env, ORG_DIR: org }, ...extra });
+    if (r.error || r.status !== 0) throw new Error(`${exe} ${args.slice(0, 2).join(' ')}: ${(r.stderr || r.error?.message || r.stdout || `exit ${r.status}`).trim()}`);
+    return r.stdout.trim();
+  };
+  const json = (text) => { const data = JSON.parse(text); if (data.error) throw new Error(JSON.stringify(data.error)); return data.result ?? data; };
+  const h = (args) => json(invoke(herdr, args));
+  const git = (args, root = cwd) => invoke('git', ['-C', root, ...args]);
+  const commonAt = (root) => fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], root));
+  const common = commonAt(cwd);
+  const recordState = () => {
+    const data = json(invoke(record[0], [...record.slice(1), 'status', '--json']));
+    if (!Array.isArray(data.runs)) throw new Error('record returned no runs');
+    if (!Array.isArray(data.items)) throw new Error('record returned no items');
+    return data;
+  };
+  function mine(w) {
+    const wt = w.worktree;
+    if (!wt?.checkout_path || !wt.repo_root || !wt.repo_key) return false;
+    try {
+      if (fs.realpathSync(wt.repo_key) !== common || commonAt(wt.repo_root) !== common) return false;
+      return !fs.existsSync(wt.checkout_path) || commonAt(wt.checkout_path) === common;
+    } catch { return false; }
+  }
+  function observe() {
+    const workspaces = h(['workspace', 'list']).workspaces;
+    if (!Array.isArray(workspaces)) throw new Error('Herdr returned no workspaces');
+    const owned = workspaces.filter(mine);
+    const tabs = [], panes = [];
+    for (const w of owned) {
+      const ts = h(['tab', 'list', '--workspace', w.workspace_id]).tabs;
+      const ps = h(['pane', 'list', '--workspace', w.workspace_id]).panes;
+      if (!Array.isArray(ts) || !Array.isArray(ps)) throw new Error('incomplete Herdr topology');
+      for (const t of ts) tabs.push({ ...t, workspace_id: w.workspace_id, lane: Boolean(w.worktree.is_linked_worktree) });
+      for (const p of ps) panes.push({ ...p, shellOnly: isShellOnly(h(['pane', 'process-info', '--pane', p.pane_id]).process_info) });
+    }
+    const agents = h(['agent', 'list']).agents;
+    if (!Array.isArray(agents)) throw new Error('Herdr returned no agents');
+    const state = recordState();
+    return { workspaces: owned, tabs, panes, agents, runs: state.runs, items: state.items };
+  }
+  function waiting(snapshot, run) {
+    const item = snapshot.items.find((i) => i.id === run.item);
+    return !item || ['blocked', 'needs_human'].includes(item.status) ||
+      ['blocked', 'needs_human'].includes(run.report?.outcome) ||
+      (item.blocked_by ?? []).some((id) => {
+        const blocker = snapshot.items.find((i) => i.id === id);
+        return !blocker || !['done', 'dropped'].includes(blocker.status) ||
+          (blocker.closed && blocker.meta?.answer === 'no');
+      });
+  }
+  function settled(run, workspace) {
+    const topic = run.meta?.lane;
+    if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic ?? '') || !workspace?.worktree.is_linked_worktree ||
+        canonicalPath(workspace.worktree.checkout_path) !== canonicalPath(run.workspace)) return false;
+    const branch = `refs/heads/lane/${topic}`;
+    const entries = git(['worktree', 'list', '--porcelain']).split('\n\n');
+    const entry = entries.find((e) => e.split('\n').some((line) => line.startsWith('worktree ') && canonicalPath(line.slice(9)) === canonicalPath(run.workspace)));
+    let tip;
+    try { tip = git(['rev-parse', '--verify', branch]); } catch {
+      // An unmerged CLI close leaves its recoverable archive tag. Metadata's
+      // display-only "done" marker is deliberately never read.
+      if (entry || entries.some((e) => e.split('\n').includes(`branch ${branch}`))) return false;
+      try { git(['rev-parse', '--verify', `refs/tags/archive/lane/${topic}`]); return true; } catch { return false; }
+    }
+    if (!entry || !entry.split('\n').includes(`branch ${branch}`) || !fs.existsSync(run.workspace)) return false;
+    if (git(['status', '--porcelain'], run.workspace)) return false;
+    if (git(['rev-parse', 'HEAD'], run.workspace) !== tip) return false;
+    try { git(['merge-base', '--is-ancestor', tip, `refs/heads/${main}`]); return true; } catch { return false; }
+  }
+  function eligibility(snapshot) {
+    const allowed = new Map();
+    for (const agent of snapshot.agents) {
+      if (!FINISHED.has(agent.agent_status)) continue;
+      const run = matchingRun(agent, snapshot.runs);
+      const workspace = snapshot.workspaces.find((w) => w.workspace_id === agent.workspace_id);
+      const openLaneRun = snapshot.runs.some((r) => r.workspace && agent.cwd &&
+        canonicalPath(r.workspace) === canonicalPath(agent.cwd) && !r.report && !r.abandoned);
+      if (run && !openLaneRun && !waiting(snapshot, run) && (run.report || run.abandoned) && settled(run, workspace)) {
+        allowed.set(agent.pane_id, `${run.id} recorded ${run.report ? 'report' : 'abandonment'}; lane promoted or archived`);
+      }
+    }
+    return allowed;
+  }
+  function tidy(snapshot) {
+    return planTidy({ ...snapshot,
+      agents: snapshot.agents.map((a) => ({ ...a, status: a.agent_status })),
+      workerEligibility: eligibility(snapshot), selfTab });
+  }
+  function candidate(snapshot, agent) {
+    if (agent.agent !== 'codex' || !FINISHED.has(agent.agent_status) || !Number.isInteger(agent.state_change_seq)) return null;
+    const run = matchingRun(agent, snapshot.runs);
+    const ws = snapshot.workspaces.find((w) => w.workspace_id === agent.workspace_id);
+    if (!run || waiting(snapshot, run) || run.report || run.abandoned || !ws?.worktree.is_linked_worktree ||
+        canonicalPath(ws.worktree.checkout_path) !== canonicalPath(run.workspace) || agent.tab_id === selfTab) return null;
+    // A report on disk may be awaiting ingestion: don't restart finished work.
+    if (run.report_path && fs.existsSync(run.report_path)) return null;
+    if (!interruptedComposer(invoke(herdr, ['agent', 'read', agent.pane_id, '--source', 'visible']))) return null;
+    return run;
+  }
+  function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {} } = {}) {
+    const snapshot = observe(); // Any failed read aborts the tick, never implies gone.
+    const plan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
+    log({ action: 'scan', close: plan.close.length, keep: plan.keep.length, dryRun });
+    if (dryRun) for (const tab of plan.keep) log({ action: 'keep', ...tab });
+    for (const tab of plan.close) {
+      if (dryRun) { log({ action: 'would-close', ...tab }); continue; }
+      // Re-read record, topology, process state and Git before every deletion.
+      if (!tidy(observe()).close.some((t) => t.tab_id === tab.tab_id)) { log({ action: 'skip-close', ...tab }); continue; }
+      try { invoke(herdr, ['tab', 'close', tab.tab_id]); log({ action: 'closed', ...tab }); }
+      catch (error) { log({ action: 'close-failed', ...tab, error: error.message }); }
+    }
+    if (resume) for (const agent of snapshot.agents) {
+      const run = candidate(snapshot, agent);
+      if (!run || seen.has(resumeKey(run, agent))) continue;
+      if (dryRun) { log({ action: 'would-resume', run: run.id, pane: agent.pane_id }); continue; }
+      const fresh = observe();
+      const live = fresh.agents.find((a) => a.pane_id === agent.pane_id);
+      if (!live || resumeKey(run, live) !== resumeKey(run, agent) || !candidate(fresh, live)) continue;
+      const key = resumeKey(run, agent);
+      // Persist BEFORE input: uncertain input is never replayed, including after restart.
+      remember(key); seen.add(key);
+      try {
+        invoke(herdr, ['agent', 'send-keys', agent.pane_id, 'ctrl+e', 'ctrl+u', 'ctrl+u']);
+        const checked = observe();
+        const occupant = checked.agents.find((a) => a.pane_id === agent.pane_id);
+        const currentRun = occupant && matchingRun(occupant, checked.runs);
+        if (!currentRun || currentRun.id !== run.id || currentRun.report || currentRun.abandoned ||
+            waiting(checked, currentRun) || !FINISHED.has(occupant.agent_status) ||
+            resumeKey(run, occupant) !== key || (currentRun.report_path && fs.existsSync(currentRun.report_path))) {
+          log({ action: 'skip-resume', run: run.id, pane: agent.pane_id, why: 'worker or record changed after clearing wheel junk' });
+          continue;
+        }
+        invoke(herdr, ['agent', 'prompt', agent.pane_id, RESUME]);
+        log({ action: 'resumed', run: run.id, pane: agent.pane_id, seq: agent.state_change_seq });
+      } catch (error) { log({ action: 'resume-failed', run: run.id, pane: agent.pane_id, error: error.message }); }
+    }
+    return plan;
+  }
+  return { tick, common };
+}
+
+export function readConfig(file) {
+  const config = file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  config.enabled ??= true;
+  if (typeof config.enabled !== 'boolean') throw new Error('config needs enabled: true|false');
+  if (config.resume !== undefined && typeof config.resume !== 'boolean') throw new Error('resume must be boolean');
+  for (const [key, fallback] of [['tick_seconds', 60], ['cleanup_seconds', 600]]) {
+    config[key] ??= fallback;
+    if (!Number.isFinite(config[key]) || config[key] < 1) throw new Error(`${key} must be >= 1`);
+  }
+  return config;
+}
+
+export function discoverProject(directory, orgOverride, env = process.env) {
+  const cwd = canonicalPath(directory);
+  const r = spawnSync('git', ['-C', cwd, 'worktree', 'list', '--porcelain'], { encoding: 'utf8' });
+  if (r.status !== 0) return null;
+  const first = r.stdout.split('\n').find((line) => line.startsWith('worktree '));
+  if (!first) throw new Error('no canonical Git checkout');
+  const checkout = canonicalPath(first.slice(9));
+  const org = orgOverride ? path.resolve(orgOverride) : findOrgDir({ cwd, env }) ?? findOrgDir({ cwd: checkout, env });
+  const branch = spawnSync('git', ['-C', checkout, 'symbolic-ref', '--short', 'HEAD'], { encoding: 'utf8' });
+  if (branch.status !== 0) throw new Error('canonical checkout is detached; supply an attached project checkout');
+  const identity = spawnSync('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+  if (identity.status !== 0) throw new Error('cannot establish repository identity');
+  const common = fs.realpathSync(identity.stdout.trim());
+  return { cwd: checkout, org, main: branch.stdout.trim(), common };
+}
+
+async function main() {
+  const { values: opt } = parseArgs({ options: {
+    cwd: { type: 'string', default: process.cwd() }, org: { type: 'string' }, config: { type: 'string' },
+    main: { type: 'string' }, 'state-dir': { type: 'string' },
+    herdr: { type: 'string', default: 'herdr' }, 'org-cli': { type: 'string' },
+    once: { type: 'boolean' }, loop: { type: 'boolean' }, start: { type: 'boolean' }, 'dry-run': { type: 'boolean', default: false },
+  } });
+  if ([opt.once, opt.loop, opt.start].filter(Boolean).length !== 1) throw new Error('usage: housekeeping.mjs (--start|--once|--loop) [--cwd PROJECT] [--org DIR] [--config FILE] [--dry-run] [--state-dir DIR]');
+  const project = discoverProject(opt.cwd, opt.org);
+  if (!project?.org) { process.stdout.write(`${JSON.stringify({ action: project ? 'no-record' : 'no-project', cwd: project?.cwd ?? opt.cwd })}\n`); return; }
+  const cwd = project.cwd, configFile = path.resolve(opt.config ?? path.join(cwd, '.housekeeping.json'));
+  // Keep a project with no ignore/config setup clean. Bookkeeping lives beside
+  // the discovered record, separated by canonical repository identity.
+  const key = createHash('sha256').update(project.common).digest('hex');
+  const stateDir = path.resolve(opt['state-dir'] ?? path.join(project.org, 'housekeeping', key));
+  const config = readConfig(configFile);
+  if (!config.enabled && !opt['dry-run']) { process.stdout.write(`${JSON.stringify({ action: 'disabled' })}\n`); return; }
+  fs.mkdirSync(stateDir, { recursive: true });
+  const log = (entry) => {
+    const line = `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`;
+    fs.appendFileSync(path.join(stateDir, 'actions.jsonl'), line);
+    process.stdout.write(line);
+  };
+  const lock = path.join(stateDir, 'lock');
+  if (opt.start) {
+    if (opt['dry-run']) { log({ action: 'would-start', cwd, org: project.org }); return; }
+    if (fs.existsSync(lock)) {
+      const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+      if (!Number.isInteger(owner.pid) || owner.pid < 1 || owner.cwd !== cwd || owner.org !== project.org || owner.config !== configFile) throw new Error('housekeeping lock belongs to a different project/record/config');
+      try { process.kill(owner.pid, 0); log({ action: 'already-running', pid: owner.pid, state_dir: stateDir }); return; }
+      catch (error) { if (error.code !== 'ESRCH') throw error; }
+      throw new Error(`stale housekeeping lock for pid ${owner.pid}; inspect ${lock} before removing it`);
+    }
+    const args = ['--cwd', cwd, '--org', project.org, '--config', configFile, '--state-dir', stateDir,
+      '--main', opt.main ?? project.main, '--herdr', opt.herdr,
+      ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : [])];
+    const output = fs.openSync(path.join(stateDir, 'schedule.log'), 'a');
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...args, '--loop'], {
+      cwd, detached: true, stdio: ['ignore', output, output, 'ipc'],
+      // A detached timer owns no pane/tab. Inheriting its first worker's tab
+      // would permanently exempt that worker after it finishes.
+      env: { ...process.env, HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' },
+    });
+    fs.closeSync(output);
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { child.disconnect(); child.unref(); reject(new Error('schedule startup unconfirmed; inspect schedule.log before retrying')); }, 5000);
+      child.once('message', (message) => {
+        clearTimeout(timer); child.disconnect(); child.unref();
+        if (message?.ready) { log({ action: 'started', pid: child.pid, state_dir: stateDir }); resolve(); }
+        else reject(new Error('schedule startup failed'));
+      });
+      child.once('error', (error) => { clearTimeout(timer); reject(error); });
+      child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`schedule exited ${code}; inspect schedule.log`)); });
+    });
+    return;
+  }
+  fs.mkdirSync(lock); // Fail closed on overlap or an unrecovered crash.
+  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, cwd, org: project.org, config: configFile }));
+  let stopped = false, wake;
+  const stop = () => { stopped = true; wake?.(); };
+  process.on('SIGINT', stop); process.on('SIGTERM', stop);
+  try {
+    const seenFile = path.join(stateDir, 'resume-attempts.jsonl');
+    const seen = new Set(fs.existsSync(seenFile) ? fs.readFileSync(seenFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : []);
+    const runner = createHousekeeping({ cwd, org: project.org, main: opt.main ?? project.main, herdr: opt.herdr, log,
+      ...(opt['org-cli'] ? { record: [opt['org-cli']] } : {}) });
+    process.send?.({ ready: true });
+    let lastCleanup = -Infinity;
+    do {
+      let config;
+      try {
+        config = readConfig(configFile);
+        if (!config.enabled && !opt['dry-run']) { log({ action: 'disabled' }); break; }
+        const cleanup = Date.now() - lastCleanup >= config.cleanup_seconds * 1000;
+        runner.tick({ cleanup, resume: config.resume !== false, dryRun: opt['dry-run'], seen,
+          remember: (key) => fs.appendFileSync(seenFile, `${JSON.stringify(key)}\n`) });
+        if (cleanup) lastCleanup = Date.now();
+      } catch (error) {
+        log({ action: 'error', error: error.message });
+        if (opt.once) throw error;
+        // Invalid config switches off; an absent override uses defaults.
+        if (!config) break;
+      }
+      if (opt.once || stopped) break;
+      await new Promise((resolve) => { const timer = setTimeout(resolve, config.tick_seconds * 1000); wake = () => { clearTimeout(timer); resolve(); }; });
+    } while (!stopped);
+  } finally {
+    fs.rmSync(lock, { recursive: true });
+    process.off('SIGINT', stop); process.off('SIGTERM', stop);
+  }
+}
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => { console.error(`housekeeping: ${error.message}`); process.exitCode = 1; });
+}

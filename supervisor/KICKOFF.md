@@ -51,6 +51,13 @@ This is a starting context, not instructions. Read the sources, reason, and deci
   (`supervisor/SETTLE.md`).
 - **The console** (`lane/console-autonomy`'s modern screen, now on main) is where the operator
   watches. Its live tab runs in workspace `wHJ`.
+- **Housekeeping** defaults on without project configuration. At project entry,
+  `node housekeeping/housekeeping.mjs --start` discovers this record and schedules
+  settled-worker cleanup, exited-watcher cleanup and narrowly evidenced interruption
+  recovery. Its [guide](../housekeeping/README.md) describes previews, stopping and
+  the discovered record's `housekeeping/<repository-key>/actions.jsonl`, where you
+  can see what it did. Workers whose
+  record or Git work is unsettled stay; session registry metadata is never authority.
 
 ## Boundaries
 

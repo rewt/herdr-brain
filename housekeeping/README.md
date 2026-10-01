@@ -1,0 +1,107 @@
+# Housekeeping
+
+Housekeeping closes settled worker tabs, tidies exited watcher tabs, and recovers
+accidental terminal interruptions without a model in the scheduler. It defaults
+on. A project needs no housekeeping configuration: the record supplies the runs,
+Git supplies repository and lane identity, and Herdr supplies live workers.
+
+An agent entering a project starts its schedule once:
+
+```sh
+node /path/to/herdr-monitor/housekeeping/housekeeping.mjs --start
+```
+
+The command discovers the canonical Git checkout, its checked-out base branch,
+and the nearest record using the record's existing discovery (`ORG_DIR`, then
+`.org/events.jsonl` above the entered checkout or canonical checkout). Outside Git,
+or without a record, it exits without starting anything. It never creates a record.
+Repeated `--start` reports the existing process. `--once` runs one full pass;
+`--loop` runs the timer in the foreground. Paths and `--main` can be overridden for
+unusual layouts. No dependency, launchd installation, user-specific path, release
+change, or inference call is required.
+
+The detached process is a timer, not an agent: resume every 60 seconds, cleanup
+on startup and every 600 seconds. A loop covers interruptions while watch waits,
+and catches promotion/closure long after watch's final notice. Herdr events alone
+do not include Git promotion or record ingestion; a small timer avoids wiring
+several imperfect triggers together. The supervisor can start the same command;
+no supervisor context is consumed after that.
+
+## Evidence before action
+
+- A live worker must match the newest run for its name, recorded pane and cwd,
+  and at least one recorded occupant identity (`terminal_id` or `agent_session_id`).
+  Workspace and both identities are also checked when recorded. Legacy runs
+  without occupant identity are preserved; session registry data cannot fill it in.
+- Closing requires a recorded report or abandonment, no open run in the same lane,
+  no unresolved blocking item or waiting report, and an idle/done worker. Git
+  must show its clean attached lane tip contained in the base branch, or an absent
+  lane branch/worktree with its `archive/lane/TOPIC` tag. Unmerged work stays
+  recoverable. A removed merged lane without archive evidence is left alone.
+- Every agent in a tab must qualify. Unnamed/operator chats, blocked/working/unknown
+  agents, running extra programs, unknown sessions and a foreground timer's own tab stay.
+  A detached timer clears inherited pane/tab/workspace IDs; it has no terminal to protect.
+  Topology, processes, record and Git are reread before each close. This uses
+  `supervisor/tidy-tabs.mjs`'s shared planner in strict mode; its older standalone
+  command retains its existing behavior and is not the housekeeping entry point.
+- Recovery requires an open run, idle/done Codex, a current `■ Conversation
+  interrupted` (or `■ Turn interrupted`) banner at the end of the visible output,
+  and only SGR wheel junk (`<64` through `<67`; coordinates; `M`/`m`) in the composer.
+  Human words, wrapped input, an old interruption above a final reply, any report
+  file awaiting ingestion, and an approval/question are preserved. Other kinds of
+  interruption need human judgment and receive no automatic input.
+- Recovery attempts are persisted before input, keyed by run, pane, occupant and
+  Herdr `state_change_seq`. An uncertain failure is logged and never replayed at
+  that sequence, even after restart. Identity/record are checked again before
+  input and between composer clearing and the continue prompt. Herdr's CLI does
+  not offer a compare-and-act transaction; a change in the final command window
+  remains possible. Failed or incomplete reads stop the pass.
+
+Herdr evidence: installed `agent list` exposes `agent_status`, `state_change_seq`,
+`terminal_id`, `agent_session`, pane/workspace and cwd. `agent explain` on our live
+worker matched `osc_title_working`, manifest `2026.10.01.1`. A read of an older,
+finished Codex worker showed its final response and empty placeholder composer,
+with `idle` in `agent list`. The synthetic interruption fixture in
+`test/fixtures/interrupted.txt`, evaluated through the installed
+`herdr agent explain --file ... --agent codex --json`, returned `idle`,
+`default_known_agent_idle_fallback`. Thus idle/done alone cannot distinguish an
+interrupted turn from a finished one; the visible banner and composer supply the
+extra evidence. We did not interrupt a real worker to obtain a specimen.
+The original mouse-wheel incident is documented in the tracked
+`kit/bch-cloak-20261001/supervisor/WORK-PATTERN.md`.
+
+## Optional overrides and stopping
+
+An optional `.housekeeping.json` in the canonical checkout overrides defaults:
+
+```json
+{ "enabled": true, "resume": true, "tick_seconds": 60, "cleanup_seconds": 600 }
+```
+
+Set `enabled` to `false` to stop at the next tick, or send SIGTERM/SIGINT to the
+PID in the reported state directory's `lock/owner.json`. Setting `resume` to `false` keeps
+cleanup and disables input recovery. Invalid configuration stops the loop. A
+missing configuration uses defaults; removing an override does not disable it.
+
+Actions, failures, scan counts and dry-run plans go to
+`ORG/housekeeping/REPOSITORY_KEY/actions.jsonl`, readable by the supervisor and future
+console integration. The key hashes the canonical Git common directory, separating
+projects that share a record. `--start` prints the state directory. This avoids
+creating untracked files in a project that has configured no ignore rules.
+Detached stdout/stderr also go to `schedule.log`; recovery attempt
+keys go to `resume-attempts.jsonl`. These are module bookkeeping, never org events
+or stored work status. Logs currently have no retention policy. One state directory
+must be used per project; `--state-dir` is intended for isolated tests/previews.
+A directory lock prevents overlap. After a crash it deliberately refuses startup:
+inspect the owner PID and log, verify that the process is gone, then remove only
+that stale lock and restart. It never kills a PID discovered in a stale lock.
+
+For a preview without changing panes or starting a timer:
+
+```sh
+node housekeeping/housekeeping.mjs --once --dry-run --state-dir "$PWD/.lane/housekeeping-preview"
+```
+
+`--dry-run` previews even a disabled project. Tests use disposable Git repositories,
+fake Herdr/record commands and synthetic screens; they never call a model or mutate
+real panes. `npm test` includes them.

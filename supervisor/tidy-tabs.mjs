@@ -34,7 +34,7 @@ const SHELLS = new Set(['zsh', '-zsh', 'bash', '-bash', 'sh', '-sh', 'fish', '-f
 export function planTidy(snapshot) {
   const {
     tabs, panes, agents, reportedAgents = new Set(), reviewedAgents = new Set(),
-    sessionOrder = new Map(), selfTab = null, keepSessions = 1,
+    sessionOrder = new Map(), selfTab = null, keepSessions = 1, workerEligibility = null,
   } = snapshot;
   const close = [];
   const keep = [];
@@ -53,6 +53,15 @@ export function planTidy(snapshot) {
     if (!tab.lane && WATCHER.test(tab.label)) {
       if (tabAgents.length) skip('an agent is in a watcher tab');
       else close.push({ tab_id: tab.tab_id, label: tab.label, why: 'the watcher has exited' });
+      continue;
+    }
+    // Housekeeping supplies record + Git authorization, keyed by live pane.
+    // Its strict mode never falls back to labels, review files or session metadata.
+    if (workerEligibility !== null) {
+      if (tabAgents.length && tabAgents.every((a) => workerEligibility.has(a.pane_id))) {
+        close.push({ tab_id: tab.tab_id, label: tab.label,
+          why: tabAgents.map((a) => workerEligibility.get(a.pane_id)).join('; ') });
+      } else skip('no settled recorded worker authorization for every agent');
       continue;
     }
     if (!tab.lane && SESSION_LABEL.test(tab.label)) {

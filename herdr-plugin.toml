@@ -24,3 +24,9 @@ id = "open"
 title = "Herdr Monitor: open the console"
 contexts = ["pane", "workspace"]
 command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console"]
+
+[[actions]]
+id = "housekeeping"
+title = "Herdr Monitor: start project housekeeping"
+contexts = ["pane", "workspace"]
+command = ["sh", "-c", "exec node \"$HERDR_PLUGIN_ROOT/housekeeping/housekeeping.mjs\" --start"]

@@ -92,10 +92,17 @@ The paths below are the live counterparts of the copies in `kit/bch-cloak-202610
 - `scripts/lane/launch-supervisor.mjs`: replace the absolute
   `herdr-brain/contrib/settle-watch.mjs` target with the activated release's
   `supervisor/open-session.mjs`; it remains only a routed model-session launcher.
-- `.lane/supervisor/continue.sh`: its arguments remain valid, but verify it through the repointed
-  launch wrapper; change only its comment if needed to name `open-session` rather than a watcher.
+- `.lane/supervisor/continue.sh`: its arguments remain valid, but the repointed launch wrapper
+  changes it from waiting for a working settle or exec session to refusing immediately. Update
+  its comment to name `open-session` and the refusal, and verify the retry rule below.
 - `.lane/supervisor/SETTLE.md`: say that arm-watch delivers to the live supervisor and that fresh
-  session launch is separate; remove claims that arming itself opens a settle session.
+  session launch is separate; remove claims that arming itself opens a settle session. Carry the
+  refusal-and-retry rule into the live supervisor's instructions: if `settle.sh` refuses because
+  a settle or exec session is working, retain the original `[org-report]` notice, wait for the
+  named session with `herdr agent wait NAME --until idle --until done --until blocked`, and retry
+  `settle.sh R-n`. The report is handled only when the retry opens its fresh session or says the
+  run already has a recorded report. If `continue.sh` refuses, wait for the named session the
+  same way and retry the original continuation when it is still needed.
 - `scripts/lane/routing.test.mjs`: update the launcher assertions to require the activated
   `open-session.mjs` and standalone `watch/watch.mjs` paths, and forbid the retired contrib path.
 - `.lane/supervisor/notify-watch.sh`: remove every caller and mark it retired; retain its exact
@@ -124,11 +131,12 @@ arms after recording the worker.
 
 ### Behavior parity and intentional ownership changes
 
-| `notify-watch.sh` behavior | Cutover disposition |
+| Existing watcher / launcher behavior | Cutover disposition |
 |---|---|
 | Appends every attempted notice to `notify-log.tsv`, allowing recovery when a supervisor dialog swallows a prompt. | `watch/watch.mjs` already writes each notice to its redirected `watch-logs/R-n.log` before prompting. Change `tidy-tabs.sh` to merge and tail those logs, then prove a delivered canary line appears in its recovery output. |
 | Closes a finished worker tab after delivering an `outcome: done` report. | Do not put cleanup in the generic watcher. Update `WORK-PATTERN.md` to give this job to the existing janitor/`close-finished-agents.sh`; verify an outcome-done tab closes within one janitor cycle while blocked and needs-human tabs remain. |
-| Waits 900 seconds through a worker's transient idle-without-report state. | Pass the new `--idle-grace 900` option from bch-cloak's `arm-watch.sh`. The watcher still wakes immediately for a report or resumed worker. |
+| Waits 900 seconds through a worker's transient idle-without-report state. | Pass the new `--idle-grace 900` option from bch-cloak's `arm-watch.sh`. The grace applies only after the watcher has seen the worker working; it still wakes immediately for a report, resumed worker or blocked worker. |
+| `continue.sh` waits for a working settle or exec session before launching. | Repointing the launcher to `open-session.mjs` deliberately changes waiting to immediate refusal, keeping the supervisor available. Carry the retry rule into the planned `SETTLE.md` edit: wait for the named busy session and retry the original continuation if it is still needed. A refused `settle.sh` also retains its original report notice until a retry opens the fresh session or confirms an already-recorded report. |
 | Finds the pane in the tab labelled `supervisor`, renames it and falls back to `supervisor-opus`. | Deliberately narrow to one stable delivery name. `session-start.sh` owns that name and `dispatch.sh` already refuses before starting a run when it is absent. Make rename failure visible and update `WORK-PATTERN.md`; verify both the preflight refusal and successful canary delivery after a supervisor restart. |
 | Uses `[watch]` for non-final notices and includes `verdict=` in `[org-report]`. | Update `WORK-PATTERN.md`'s supervisor parsing to accept `[watch-blocked]`, `[watch-no-report]`, `[watch-invalid-report]`, `[watch-long-running]` and `[watch-unavailable]`. Final handling uses `outcome=`, `headline=`, `check=` and `report=`; it does not depend on the old unreliable verdict field. Exercise every notice fixture before cutover. |
 
@@ -165,7 +173,9 @@ arms after recording the worker.
 - A blocked, missing or invalid report produces the matching `watch-*` notice and remains watched;
   it does not open a settle session.
 - With `--idle-grace 900`, an observed-working canary that becomes idle without a report emits no
-  no-report notice during the grace, and a report write or worker resume wakes it immediately.
+  no-report notice during the grace, and a report write, worker resume or transition to blocked
+  wakes it immediately. The blocked transition emits `[watch-blocked]` and remains watched.
+  An initially idle worker never seen working gets only startup grace, not an extra idle grace.
 - A stopped worker's valid final report passes `org check` and produces one `[org-report]` prompt
   in `supervisor-opus` with the run, outcome, headline, check and report path; the supervisor flow
   does not read a `verdict=` field.
@@ -177,6 +187,12 @@ arms after recording the worker.
   expected; it does not prompt the supervisor or validate the report.
 - `continue.sh --dry-run`, the routing tests and the normal bch-cloak dispatch/settle path still
   work. No service, plist or record file changed as part of the switch.
+- With a controlled working settle or exec session, `continue.sh` refuses immediately, names
+  the busy session and opens no new session. Follow the planned `SETTLE.md` rule: wait with
+  `herdr agent wait NAME --until idle --until done --until blocked`, then retry the same requested
+  continuation if it is still needed. Confirm the retry opens exactly one fresh exec session.
+  Also confirm a refused `settle.sh R-n` keeps its original `[org-report]` notice and is retried
+  after the busy session stops, until it opens a fresh settle session or confirms a recorded report.
 
 ### Rollback
 

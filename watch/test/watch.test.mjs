@@ -266,6 +266,63 @@ esac`);
   assert.match(result.stdout, /waiting up to 1s .* report or resume/);
 });
 
+test('idle grace does not start before the worker has been seen working', async () => {
+  const fixture = watcherFixture('R-20');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"idle"}}}' ;;
+  "agent wait") sleep 10 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-no-report*) "${fixture.writer}" ;; esac ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher([
+    ...fixture.args, '--start-grace', '0', '--idle-grace', '10',
+  ]));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.match(calls, /\[watch-no-report\].*state=idle/);
+  assert.match(calls, /\[org-report\] run=R-20/);
+  assert.doesNotMatch(result.stdout, /report or resume before sending a no-report notice/);
+});
+
+test('idle grace notices a blocked worker immediately and keeps watching', async (t) => {
+  const fixture = watcherFixture('R-21');
+  const state = path.join(fixture.root, 'worker-state');
+  const waits = path.join(fixture.root, 'waits');
+  fs.writeFileSync(state, 'working');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait")
+    printf '%s state=%s\\n' "$*" "$(cat '${state}')" >> "${waits}"
+    while :; do
+      current=$(cat '${state}')
+      case " $* " in *" --until $current "*) exit 0 ;; esac
+      sleep 0.02
+    done ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  *) exit 2 ;;
+esac`);
+  const child = startWatcher([...fixture.args, '--idle-grace', '10']);
+  t.after(() => { if (child.exitCode === null) child.kill('SIGKILL'); });
+  await waitForText(waits, /state=working/);
+  fs.writeFileSync(state, 'idle');
+  await waitForText(waits, /state=idle/);
+  fs.writeFileSync(state, 'blocked');
+  const blockedCalls = await waitForText(fixture.calls, /\[watch-blocked\]/);
+  assert.doesNotMatch(blockedCalls, /\[watch-no-report\]|\[org-report\]/);
+  assert.equal(child.exitCode, null, 'a blocked worker remains watched');
+  fs.writeFileSync(fixture.report, reportText('R-21', 'Finished after grace block'));
+  await waitForText(waits, /state=blocked/);
+  assert.doesNotMatch(fs.readFileSync(fixture.calls, 'utf8'), /\[org-report\]/,
+    'a valid report stays intermediate while the worker is blocked');
+  fs.writeFileSync(state, 'idle');
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.equal((calls.match(/\[watch-blocked\]/g) ?? []).length, 1, calls);
+  assert.doesNotMatch(calls, /\[watch-no-report\]/);
+  assert.match(calls, /\[org-report\] run=R-21.*headline="Finished after grace block"/);
+});
+
 test('idle, working, idle without a report delivers both stop notices', async () => {
   const fixture = watcherFixture('R-12');
   const counter = path.join(fixture.root, 'gets');

@@ -417,14 +417,14 @@ async function watch() {
       if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, startupGraceRemaining));
       continue;
     }
-    if (report.kind === 'missing' && (state === 'idle' || state === 'done') && idleGraceMs > 0) {
+    if (observedWorking && report.kind === 'missing' && (state === 'idle' || state === 'done') && idleGraceMs > 0) {
       if (idleGraceUntil === undefined) {
         idleGraceUntil = Date.now() + idleGraceMs;
         log(`waiting up to ${idleGraceMs / 1_000}s for ${agent}'s report or resume before sending a no-report notice`);
       }
       const remaining = Math.max(0, idleGraceUntil - Date.now());
       if (remaining > 0) {
-        const signal = await waitForSignal(agent, ['working'], reportPath, remaining, beforeStamp);
+        const signal = await waitForSignal(agent, ['working', 'blocked'], reportPath, remaining, beforeStamp);
         if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, remaining));
         continue;
       }

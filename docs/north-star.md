@@ -5,8 +5,37 @@ reconstructing it from conversation history. It records the *destination and the
 reasoning*, not a milestone tree. If something here conflicts with an
 implementation, the implementation is what is wrong.
 
-Written 2026-09-15. Owner: operator. Status of each capability is tracked at the
-bottom and is expected to change; the principles above it are not.
+Written 2026-09-15; revised 2026-10-01 (how we work with agents, the platform
+destination, the supervisor chat). Owner: operator. Status of each capability is
+tracked at the bottom and is expected to change; the principles above it are not.
+
+## How we work with agents (operator, 2026-10-01)
+
+A spec written by a human changes the minute an agent picks it up: the agent adjusts
+it, finds discrepancies, finds new tasks. So we do not try to instruct agents in how
+to do the work. We partner with them and let them reason, because they hold more
+intelligence and context about the project's structure than the operator does.
+
+The operator's job is to give agents work to create and iterate on, and to guide it
+towards output that people, the operator included, will use. Instead of static
+instruction records (specs, spec-driven task lists), we give agents an environment
+to work in, a few guideposts and this North Star, let them go, observe the process,
+and build tools to steer it.
+
+In practice: **agents decide, the record captures, the console shows, the human
+steers.** Agents form their own questions, decisions, tasks and priorities; most
+decisions are made and recorded without waiting; the operator watches and redirects
+when the work drifts from what people need. A plan is a guidepost; its tasks come
+from the agents doing the work, not from a list written in advance.
+
+## The destination (2026-10-01)
+
+The agent cycle that works in bch-cloak (dispatch, routing, watching for reports,
+settling, review, promotion, housekeeping and the supervisor) becomes one Herdr
+plugin that any project on any machine can adopt, with the console as the place
+where the operator observes and steers, including its configuration (routes,
+models, desks). The roadmap is goal G-3 in herdr-brain's own record;
+`docs/roadmap.md` gives its shape.
 
 ## The problem
 
@@ -21,6 +50,12 @@ than reasoning. Splitting the day into shifts reduces the symptom without touchi
 the cause.
 
 The redesign keeps the behavior and removes the resident LLM.
+
+Revised 2026-10-01: the operator keeps a long-running supervisor chat, because
+conversation is how they steer, and clears its context often. The goal is not that
+the chat disappears but that **clearing it costs nothing**: priorities, decisions,
+open questions and plans live in the record, so a fresh chat picks up where the old
+one stopped.
 
 ## Principles
 
@@ -166,6 +201,13 @@ Updated 2026-09-16 after the first bch-cloak pilot; evidence and numbers in
 | 4. Disposable human-facing brain | `org status` / `org snapshot`; no curated view; notifications off | **No** — the operator's window was a long-running chat that cost 99M input tokens, more than the supervisor it replaced |
 
 2026-09-18: herdr-lanes was folded into `lanes/` as the dispatch layer for worktrees, dispatch, review and promotion.
+
+2026-10-01: bch-cloak's working cycle runs on its own scripts
+(`docs/reports/INVENTORY-bch-cloak-workflow-2026-10-01.md`), not on the fresh settle
+sessions of capability 2, which have not run since 2026-09-20. The operator window is
+the supervisor chat beside the console, by choice; what it still lacks is that its
+priorities and decisions live in the record rather than in the chat and
+`OPEN-STATE.md`.
 
 **The supervisor is not gone until jobs 2–5 of the pilot write-up (exceptions,
 planning, operator window, oversight) have homes that are not a live chat.**

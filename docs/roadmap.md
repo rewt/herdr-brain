@@ -38,6 +38,10 @@ proposed in HUM-15.
 
 ## Phases
 
+Phases are guideposts, not a task list. The tasks under each one come from the agents doing
+the work (their reports' proposals become items) when the phase starts; only what is
+actionable now is written in advance.
+
 | Phase | Item | Why it comes here |
 |---|---|---|
 | 0. Protect what works | ARCH-5 | bch-cloak's live kit is gitignored and has no history |

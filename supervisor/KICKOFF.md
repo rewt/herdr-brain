@@ -37,7 +37,10 @@ This is a starting context, not instructions. Read the sources, reason, and deci
   is a worked example.
 - **Reports reach you** through `watch/watch.mjs`, armed by `supervisor/arm-watch.sh`. It is the
   only worker lifecycle watcher: it validates the final report and prompts `supervisor-herdr`.
-  On a final report notice, open a fresh settle session with `supervisor/settle.sh R-n`.
+  On a final report notice, settle it yourself or hand it to a fresh settle session with
+  `supervisor/settle.sh R-n`, which keeps this context small. If `settle.sh` refuses because a
+  settle session is already working, keep the notice and retry after that session stops
+  (`supervisor/SETTLE.md`).
 - **The console** (`lane/console-autonomy`'s modern screen, now on main) is where the operator
   watches. Its live tab runs in workspace `wHJ`.
 

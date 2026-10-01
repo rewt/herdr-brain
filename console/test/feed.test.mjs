@@ -55,7 +55,7 @@ test('the pane renders narrow, opens an item, focuses its session, and never wri
   await session.refresh();
   let text = session.frame(60, 40).lines.map(lineText).join('\n');
   assert.match(text, /SESSIONS · 2 live/); assert.match(text, /● lane-wrapper +claude · 25m/); assert.match(text, /ENG-2 +Build the wrapper/);
-  assert.match(text, /WAITING ON YOU · 1/); assert.match(text, /HUM-3 +question · all recommended/); assert.match(text, /Spend on Chipnet\?/);
+  assert.match(text, /DECIDE · 1/); assert.match(text, /HUM-3 Spend on Chipnet\?/); assert.match(text, /question · all recommended/);
   assert.match(text, /ENG-2 +new Build the wrapper/); assert.match(text, /“The wrapper is missing\.”/);
   assert.ok(session.frame(60, 40).lines.every(l => lineText(l).length <= 60));
   const f = session.frame(60, 40), y = f.hits.findIndex(h => h.some(x => x.id.startsWith('item:ENG-2')));
@@ -64,7 +64,7 @@ test('the pane renders narrow, opens an item, focuses its session, and never wri
   assert.match(text, /The wrapper is missing\. It blocks stage 3\./); assert.match(text, /created .* by R-1 · under ARCH-1/); assert.match(text, /R-2 claude · eng-agent · working/);
   await session.key('o', {}); assert.deepEqual(gone, [{ agent: 'eng-agent' }]);
   await session.key('', { escape: true }); assert.equal(session.ui.view, 'feed');
-  await session.key('f', {}); assert.equal(session.ui.filter, 'HUM');
+  await session.key('F', {}); assert.equal(session.ui.filter, 'HUM');
   assert.equal(await session.key('q', {}), true);
 });
 
@@ -156,11 +156,86 @@ test('answering from the pane sends one message to the supervisor, never over an
   assert.match(session.frame(60, 60).lines.map(lineText).join('\n'), /sent .*: waiting for the supervisor/);
 });
 
-test('the chat legend lists codes in reading order, and plan labels as not in the org', () => {
-  const screen = '1. Promote R-2, then dispatch 3D. 2. Settle ARCH-1 and 4-DC2; OD-9 is about 1.06M sats. 3G waits.';
-  const m = feedModel({ status, events, agents, now, screen });
-  assert.deepEqual(m.onScreen.map(o => [o.id, o.said]), [['ENG-2', ['R-2']], ['ARCH-1', []]]);
-  assert.deepEqual(m.shorthand, ['3D', '4-DC2', 'OD-9', '3G'], 'reading order; 1.06M is not a label');
-  const text = renderFeed({ s: { view: 'feed', scroll: 0, watching: 'supervisor', errors: {}, events, sent: {} }, model: m, project: { name: 'Alpha' }, now }, 60, 40).lines.map(lineText).join('\n');
-  assert.match(text, /IN THE CHAT ◂ supervisor[\s\S]*R-2 +ENG-2 Build the wrapper[\s\S]*lane-wrapper · claude · working 25m[\s\S]*ARCH-1 +Plan stage 3[\s\S]*not in the org: 3D 4-DC2 OD-9 3G[\s\S]*SESSIONS/);
+
+import fsx from 'node:fs';
+import osx from 'node:os';
+import pathx from 'node:path';
+import { addLine, createChatIndex, transcriptPath } from '../modern/chatindex.mjs';
+import { unblockers, trackedItems, actionFor } from '../modern/feed.mjs';
+const line = (type, text, ts) => JSON.stringify({ type, timestamp: ts, message: { content: type === 'assistant' ? [{ type: 'text', text }] : text } });
+
+test('the chat index keeps every code the transcript mentions, incrementally and across handoffs', () => {
+  const dir = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'chatidx-'));
+  try {
+    const t1 = pathx.join(dir, 'a.jsonl'), file = pathx.join(dir, 'state', 'chat-index.json');
+    fsx.writeFileSync(t1, line('assistant', 'Promote R-876, then dispatch 3D. ENG-765 waits.', '2026-09-30T18:00:00Z') + '\n' + line('user', '[org-report] run=R-873 item=ENG-776', '2026-09-30T18:01:00Z') + '\n');
+    const idx = createChatIndex({ file });
+    assert.equal(idx.update('s1', t1), true);
+    assert.deepEqual(Object.keys(idx.data.mentions).sort(), ['3D', 'ENG-765', 'ENG-776', 'R-873', 'R-876']);
+    assert.equal(idx.data.mentions['R-876'].messages[0].role, 'supervisor'); assert.equal(idx.data.mentions['R-873'].messages[0].role, 'notice');
+    fsx.appendFileSync(t1, line('user', 'yes on R-876', '2026-09-30T18:05:00Z') + '\n' + '{"type":"assist');
+    idx.update('s1', t1);
+    assert.equal(idx.data.mentions['R-876'].count, 2); assert.equal(idx.data.lastOperatorAt, '2026-09-30T18:05:00Z');
+    // A new transcript after a handoff adds to the same index; nothing is forgotten.
+    const t2 = pathx.join(dir, 'b.jsonl'); fsx.writeFileSync(t2, line('assistant', 'Now ENG-788.', '2026-09-30T19:00:00Z') + '\n');
+    const again = createChatIndex({ file }); again.update('s2', t2);
+    assert.ok(again.data.mentions['R-876'] && again.data.mentions['ENG-788'], 'the saved index survives a restart and a new session');
+    assert.equal(addLine({ mentions: {} }, 'not json', 's'), false);
+  } finally { fsx.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a transcript is found by session id under any Claude config directory', () => {
+  const home = fsx.mkdtempSync(pathx.join(osx.tmpdir(), 'home-'));
+  try {
+    const d = pathx.join(home, '.claude-personal', 'projects', '-Users-x-repo'); fsx.mkdirSync(d, { recursive: true });
+    fsx.writeFileSync(pathx.join(d, 'abc-123.jsonl'), '');
+    assert.equal(transcriptPath('abc-123', '/Users/x/repo', { home, env: {} }), pathx.join(d, 'abc-123.jsonl'));
+    assert.equal(transcriptPath('../etc', '/Users/x/repo', { home, env: {} }), null);
+  } finally { fsx.rmSync(home, { recursive: true, force: true }); }
+});
+
+test('tracked items say what they need: decide, blocked with the actions that unblock them, stalled, working, resolved', () => {
+  const items = new Map([
+    ['ENG-10', { id: 'ENG-10', status: 'blocked', title: 'Blocked work', blocked_by: ['ENG-11', 'REV-12'], runs: [] }],
+    ['ENG-11', { id: 'ENG-11', status: 'blocked', title: 'Middle', blocked_by: ['HUM-13', 'ENG-14'], runs: [] }],
+    ['REV-12', { id: 'REV-12', status: 'active', title: 'Review', runs: ['R-12'] }],
+    ['HUM-13', { id: 'HUM-13', role: 'human', status: 'open', title: 'Spend?', runs: [] }],
+    ['ENG-14', { id: 'ENG-14', status: 'ready', title: 'Not started', runs: [] }],
+    ['ENG-15', { id: 'ENG-15', status: 'active', title: 'Lost session', runs: ['R-15'] }],
+    ['ENG-16', { id: 'ENG-16', status: 'done', title: 'Finished', closed: { at: at(5) }, runs: [] }],
+  ]);
+  const runs = new Map([['R-12', { id: 'R-12', item: 'REV-12', meta: { agent: 'rev' } }], ['R-15', { id: 'R-15', item: 'ENG-15', meta: { agent: 'gone' } }]]);
+  const live = new Map([['rev', { name: 'rev', status: 'working' }]]);
+  assert.deepEqual(unblockers(items.get('ENG-10'), items, runs, live).map(u => [u.id, u.kind]), [['HUM-13', 'decide'], ['ENG-14', 'dispatch'], ['REV-12', 'wait']]);
+  assert.equal(actionFor(items.get('ENG-15'), runs, live).kind, 'redeploy');
+  const chat = { mentions: Object.fromEntries(['ENG-10', 'HUM-13', 'R-15', 'ENG-16', 'R-12'].map((c, i) => [c, { last: at(10 - i), messages: [{ at: at(10 - i), role: 'supervisor', text: `about ${c}` }] }])), lastTurn: { codes: ['R-15'] } };
+  const onItem = new Map([['REV-12', { run: 'R-12', state: 'working', harness: 'codex', lane: 'lane-rev', for: 6e4 }]]);
+  const t = trackedItems({ items, runs, live, chat, waiting: [], onItem });
+  assert.deepEqual(Object.fromEntries(t.map(x => [x.id, x.state])), { 'ENG-10': 'blocked', 'HUM-13': 'decide', 'ENG-15': 'stalled', 'ENG-16': 'resolved', 'REV-12': 'working' });
+  assert.deepEqual(t.find(x => x.id === 'ENG-15').said, ['R-15']); assert.equal(t.find(x => x.id === 'ENG-15').latest, true);
+});
+
+test('the pane narrows by state, and asks the supervisor to dispatch what blocks an item', async () => {
+  const sent = [];
+  const items = [...status.items, { id: 'ENG-20', kind: 'work', role: 'engineer', title: 'Blocked thing', status: 'blocked', blocked_by: ['ENG-21'], created: { at: at(40) }, runs: [], notes: [] },
+    { id: 'ENG-21', kind: 'work', role: 'engineer', title: 'Prerequisite', status: 'ready', created: { at: at(40) }, runs: [], notes: [] }];
+  const chatData = { mentions: { 'ENG-20': { last: at(3), messages: [{ at: at(3), role: 'supervisor', text: 'ENG-20 waits on ENG-21.' }] } }, lastTurn: { codes: ['ENG-20'] } };
+  const session = createFeedSession({ config: { projects: [{ name: 'Alpha', org: '/org' }] }, env: { HERDR_FEED_WATCH: 'w:p1' },
+    deps: { now: () => now, orgStatus: async () => ({ ...status, items }), orgLog: async () => events, chatIndex: { data: chatData, update: () => false },
+      herdrAgents: async () => ({ ok: true, agents: [...agents, { name: 'supervisor', pane: 'w:p1', status: 'idle' }] }), herdrList: async () => [],
+      herdrVisible: async () => ({ ok: true, text: '' }), herdrPrompt: async (a, t) => { sent.push([a, t]); return { ok: true }; } } });
+  await session.refresh();
+  let text = session.frame(60, 80).lines.map(lineText).join('\n');
+  assert.match(text, /view: \[unresolved\]/); assert.match(text, /BLOCKED · 1[\s\S]*ENG-20 Blocked thing ◂[\s\S]*→ ENG-21 not started; dispatch it[\s\S]*SESSIONS/);
+  await session.key('f', {}); await session.key('f', {}); text = session.frame(60, 80).lines.map(lineText).join('\n');
+  assert.match(text, /\[blocked\]/); assert.doesNotMatch(text, /SESSIONS/);
+  const f = session.frame(60, 80), y = f.hits.findIndex(h => h.some(x => x.id === 'item:ENG-20~t'));
+  await session.mouse({ x: 2, y, button: 'left', press: true });
+  text = session.frame(60, 80).lines.map(lineText).join('\n');
+  assert.match(text, /BLOCKED BY · 1/); assert.match(text, /IN THE CHAT · 1[\s\S]*ENG-20 waits on ENG-21/);
+  const g = session.frame(60, 80), yy = g.hits.findIndex(h => h.some(x => x.id === 'ask:ENG-21'));
+  await session.mouse({ x: 2, y: yy, button: 'left', press: true });
+  assert.match(session.frame(60, 80).lines.map(lineText).join('\n'), /Enter sends to the supervisor:[\s\S]*please dispatch ENG-21; it/); assert.equal(session.ui.ask.text, 'Operator from the items pane: please dispatch ENG-21; it blocks ENG-20.'); assert.deepEqual(sent, []);
+  await session.key('', { return: true });
+  assert.deepEqual(sent, [['supervisor', 'Operator from the items pane: please dispatch ENG-21; it blocks ENG-20.']]);
 });

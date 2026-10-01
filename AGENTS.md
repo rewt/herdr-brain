@@ -8,6 +8,8 @@
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
   and never writes `events.jsonl`. `supervisor/` holds the tracked settle prompt and the scripts that run it.
 - Run `npm test` before and after a change. Tests are offline and never call a model.
+- bch-cloak runs `contrib/settle-watch.mjs` from this checkout by absolute path, with `--model` and
+  `--effort`. Keep that file's path, flags and behaviour until bch-cloak's release-gated switch (ENG-64).
 
 Contract:
 

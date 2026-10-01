@@ -11,7 +11,7 @@ learnings:
   - "The live herdr-brain record produced 138 useful lifecycle moments in the 36-hour Activity window without reading a supervisor transcript."
   - "Only settle-watch still belongs in contrib today; it has live supervisor callers and its later retirement is already ENG-64's concern."
 artifacts:
-  - "7240b3c Fold item activity into the modern console"
+  - "79986bb Fold item activity into the modern console"
   - "console/modern/model.mjs, console/modern/frame.mjs, console/modern/session.mjs"
   - "console/test/modern.test.mjs"
   - "node console/app.mjs --modern --project herdr-brain --print 100x34 --keys a"

@@ -115,7 +115,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
 
   const body = [];
   let bodyRegion = 'content';
-  const row = (text = '', { id = null, fg = 'fg', bold = false, col = 0, w = width, bg = 'bg', region = bodyRegion, spans = null, native = false } = {}) => { body.push([{ text, id, fg, bold, col, w, bg, region, spans, native }]); return body.length - 1; };
+  const row = (text = '', { id = null, fg = 'fg', bold = false, col = 0, w = width, bg = 'bg', region = bodyRegion, spans = null, native = false, hitOnly = false, focusAs = null } = {}) => { body.push([{ text, id, fg, bold, col, w, bg, region, spans, native, hitOnly, focusAs }]); return body.length - 1; };
   const paragraph = (text, fg = 'muted') => { for (const line of wrap(clean(text), width)) row(line, { fg }); };
   const section = (title, fg = 'blue') => row(title, { fg, bold: true, bg: 'panel' });
   const compactSessions = width < 90;
@@ -170,10 +170,11 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
       : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
     for (const event of m.activity) {
+      const id = `activity:${event.seq}`, selected = s.focus === id;
       const color = event.mark === '!' || event.mark === '?' ? 'amber' : event.mark === '✓' || event.mark === '■' ? 'teal' : event.mark === '▶' || event.mark === '+' ? 'blue' : 'muted';
-      row(`${pad(when(event.at), 12)} ${event.mark} ${pad(event.id, 9)} ${pad(event.verb, 11)} ${event.title}`, { id: `item:${event.id}`, fg: color, bold: true });
-      if (event.detail) row(`              ${event.detail}`, { id: `item:${event.id}`, fg: 'muted' });
-      if (event.summary) for (const line of wrap(`“${event.summary}”`, Math.max(1, width - 14)).slice(0, 2)) row(`              ${line}`, { id: `item:${event.id}`, fg: 'fg' });
+      row(`${selected ? '›' : ' '} ${pad(when(event.at), 12)} ${event.mark} ${pad(event.id, 9)} ${pad(event.verb, 11)} ${event.title}`, { id, fg: color, bold: true });
+      if (event.detail) row(`                ${event.detail}`, { id, hitOnly: true, focusAs: id, fg: 'muted' });
+      if (event.summary) for (const line of wrap(`“${event.summary}”`, Math.max(1, width - 16)).slice(0, 2)) row(`                ${line}`, { id, hitOnly: true, focusAs: id, fg: 'fg' });
     }
     if (!m.activity.length) paragraph(s.errors.events ? 'Activity is unavailable. Refresh to reconnect.' : p?.org ? 'No item activity was recorded in the last 36 hours.' : 'No record connected.');
   } else if (NEED_FOLDS.some(f => f.view === s.view)) {
@@ -318,7 +319,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'For answers and dispatch: record console --project NAME', 'Writes: the start bar, and what you type into a session. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Needs you; n adds a task or starts a chat.', 'Writes: the start bar, answers, and what you type into a session. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {

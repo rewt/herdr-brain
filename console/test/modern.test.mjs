@@ -55,11 +55,27 @@ test('activity keeps item lifecycle moments and item pages explain agent-created
   assert.equal(entries[2].summary, 'The agent found a missing piece.');
   assert.deepEqual(itemOrigin(items[1]), { source: 'proposed by R-0', at: '2026-10-01T15:00:00Z', why: 'The agent found a missing piece.', unattributed: false });
   await session.refresh(); await session.key('a');
-  const activity = rendered(session, 100, 32);
+  let frame = session.frame(100, 32), activity = frame.lines.map(lineText).join('\n');
   assert.match(activity, /Activity · 3 moments/); assert.match(activity, /ENG-1\s+created\s+Implement the result/); assert.match(activity, /The agent found a missing piece/);
-  await session.activate('item:ENG-1');
+  assert.equal(session.ui.focus, 'activity:3');
+  const selected = () => frame.lines.filter(line => line.spans.some(span => span.bg === 'selected')).map(lineText).join('\n');
+  assert.match(selected(), /reported/); assert.match(selected(), /R-1/); assert.match(selected(), /The missing piece now works/);
+  assert.doesNotMatch(selected(), /started|created/);
+  await session.key('j'); frame = session.frame(100, 32);
+  assert.equal(session.ui.focus, 'activity:2', 'j reaches an older moment for the same item');
+  assert.match(selected(), /started/); assert.doesNotMatch(selected(), /reported|created/);
+  await session.key('', { return: true });
   const detail = rendered(session, 100, 32);
   assert.match(detail, /proposed by R-0/); assert.match(detail, /Why: The agent found a missing piece\./);
+});
+
+test('an answered question has one answered activity moment, not a duplicate decision', () => {
+  const status = { items: [{ id: 'HUM-1', kind: 'question', title: 'Publish?', status: 'done' }], runs: [] };
+  const events = [
+    { seq: 1, at: '2026-10-01T15:00:00Z', type: 'note.added', id: 'HUM-1', kind: 'answer', decision: true, text: 'ANSWER: yes' },
+    { seq: 2, at: '2026-10-01T15:01:00Z', type: 'item.closed', id: 'HUM-1', as: 'done', note: 'yes' },
+  ];
+  assert.deepEqual(activityEntries(status, events).map(event => [event.verb, event.id]), [['answered', 'HUM-1']]);
 });
 
 test('output reads the selected pane, history restores task and its keyboard focus', async () => {

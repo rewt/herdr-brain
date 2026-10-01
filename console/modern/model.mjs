@@ -42,7 +42,7 @@ export function activityEntries(status, events = []) {
         return { mark: event.as === 'dropped' ? '×' : '■', verb: /^HUM-/.test(event.id) ? 'answered' : event.as === 'dropped' ? 'dropped' : 'closed', id: event.id,
           title: item?.title ?? '', summary: event.note ?? null };
       case 'note.added':
-        return event.decision ? { mark: '◆', verb: 'decided', id: event.id, title: item?.title ?? '', summary: event.text } : null;
+        return event.decision && event.kind !== 'answer' ? { mark: '◆', verb: 'decided', id: event.id, title: item?.title ?? '', summary: event.text } : null;
       case 'run.abandoned': {
         const run = runs.get(event.id);
         return { mark: '×', verb: 'abandoned', id: run?.item, title: items.get(run?.item)?.title ?? '', detail: event.id };

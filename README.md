@@ -268,7 +268,13 @@ node console/app.mjs --modern --print 140x40 [--keys 'a']   # one frame as text,
 The core stays dependency-free: only `console/` has dependencies, and root `npm test` passes
 without them. `npm --prefix console test` runs the console tests alone.
 
-### Font
+### Legacy compatibility console
+
+Plain `record console [--project NAME]` still opens the older console for compatibility. The
+Font, Configuration, Screen, and Keys sections below describe that legacy screen; the modern
+project screen above is the operator-facing console used by the Herdr plugin.
+
+#### Font
 
 The terminal owns the font, so set Herdr's font to a **Nerd Font**: Maple Mono NF for a rounded
 look, or JetBrains Mono Nerd Font. The header and footer are powerline segments and the group
@@ -280,7 +286,7 @@ and turns colour off; the `>` selection mark and every state word stay.
 The screen is painted black (`#000000`) on every row. Colours are true colour; Ink falls back to
 the nearest 256 colour on a terminal without it.
 
-### Configuration
+#### Configuration
 
 `~/.config/herdr-org/console.json` (or `$HERDR_ORG_CONSOLE_CONFIG`). On first run the console
 writes an example there and exits; edit it and delete its `"example"` line.
@@ -316,7 +322,7 @@ writes an example there and exits; edit it and delete its `"example"` line.
 - `glyphs`: `nerd` (default) or `plain`.
 - Herdr: `herdr agent list` and `herdr tab list` on the same cadence.
 
-### Screen
+#### Screen
 
 From the top:
 
@@ -364,7 +370,7 @@ last assistant message), **Brief** and **Context** for a session; **Summary**, *
 **Context** for a question; **Summary**, **Document** and **Context** in the history. Context is
 the only place codes appear.
 
-### Keys and mouse
+#### Keys and mouse
 
 Waiting on you is a work queue, written the way the operator reads work: the item's id, a quoted
 gist of what is at stake, a few plain sentences on why it matters (all of them on the selected

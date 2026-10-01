@@ -29,6 +29,23 @@ see `AGENTS.md`). The operator should be able to read one screen and know a rele
   record, routes, dispatch and watch on its own? Does the cycle below run on defaults while the
   record populates from the work? Where something today needs hand configuration, make that a
   failing or pending case and name it, rather than working around it.
+- **Agents discover the lane policy and work side by side (a main use case, operator
+  2026-10-01):** two or three agents enter the same unconfigured project at once with
+  overlapping tasks. Each must discover, without being told, that work happens in its own lane
+  (worktree), run there without colliding with the others (no shared checkout, no write to main,
+  no clobbered record), and then follow the promotion process (clean worktree, rebase onto
+  main, green validation, fast-forward only; no push, no merge commit). Show what each agent
+  read to learn the policy, and that the record holds each agent's work.
+- **An agent asks the operator how to route models (a main use case):** on finding no routing
+  policy, an agent files a question to the operator proposing today's routes as the default
+  (the shape of `/Users/rewt/development/rewt/.lane.json`: engineer on gpt-6.1-sol high, review on
+  opus, and so on), and the answer becomes the project's configuration. The question must reach
+  the operator: in this record `tooling` questions are answered automatically, so show which
+  category and defaults make it wait for a human in a fresh project, and that a scripted operator
+  answer is applied.
+- Discovery is something only a real agent can show; a scripted stand-in cannot. Use real
+  sessions on the cheapest route that can do the work for these cases, keep them out of
+  `npm test`, report their token cost per run, and keep the scripted cases for the mechanics.
 - **The cycle, end to end, in a scratch project:** a scratch git repo with a scratch record and
   lane config; dispatch an item by route (`dispatch/dispatch.mjs`) to a scripted stand-in worker
   (a real Herdr pane running a script, not a model) that commits and writes a report; the watcher
@@ -49,7 +66,7 @@ see `AGENTS.md`). The operator should be able to read one screen and know a rele
 
 - One command runs every case and prints a one-screen result the operator can read: each case,
   pass or fail, and where its evidence is.
-- No model calls. Nothing outside scratch directories, scratch Herdr workspaces it creates and
+- No model calls except the discovery cases above, on the cheapest workable route. Nothing outside scratch directories, scratch Herdr workspaces it creates and
   closes, and scratch homes changes. It cleans up after itself, or says what it left.
 - It runs against a chosen release directory or tag, so the supervisor can run it against v0.1.3
   now and against each later candidate.
@@ -71,7 +88,7 @@ see `AGENTS.md`). The operator should be able to read one screen and know a rele
 - Never write bch-cloak's repository, record or workspaces; read its live scripts only to copy
   them into scratch. Never touch the activated release, `~/.local/bin`, `~/.local/share/
   herdr-monitor` (use a scratch home), launchd, or the shared `.lane.json`. Keep
-  `contrib/settle-watch.mjs` as `AGENTS.md` says. No push, publish or model calls.
+  `contrib/settle-watch.mjs` as `AGENTS.md` says. No push or publish; model calls only for the discovery cases.
 - Never prompt, close or type into panes you did not create.
 
 ## Where you are free

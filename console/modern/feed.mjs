@@ -7,7 +7,10 @@
 import { pad, clip, wrap, sanitize } from '../lib/text.mjs';
 import fs from 'node:fs';
 import * as cli from '../lib/cli.mjs';
+import path from 'node:path';
 import { createChatIndex, indexFile, transcriptPath } from './chatindex.mjs';
+import { MAX_RUNNING, createDelegations, decisionPath, delegateBrief, forwardMessage, parseDecision } from './delegate.mjs';
+import { brainAct } from '../lib/brain.mjs';
 
 const clean = t => sanitize(String(t ?? '')).replace(/\s+/g, ' ').trim();
 const hhmm = at => { const d = new Date(at); return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
@@ -124,6 +127,13 @@ export function waitingQueue(items, runs, events, decisionsByRun = new Map(), so
     const answered = (item.notes ?? []).some(n => n.decision && Date.parse(n.at ?? 0) > Date.parse(e.at)) || events.some(x => x.type === 'note.added' && x.decision && x.id === e.item && x.seq > e.seq);
     if (answered) continue;
     q.push({ key: e.run, id: e.item, run: e.run, title: item.title, at: e.at, blocks: item.blocks?.length ?? 0, source: 'report', headline: e.report?.headline ?? null, summary: e.report?.summary ?? null, decisions });
+  }
+  // A report waiting on the operator with no listed questions is one question.
+  for (const i of items.values()) {
+    if (i.status !== 'needs_human' || q.some(w => w.id === i.id)) continue;
+    const run = (i.runs ?? []).at(-1), rep = events.find(e => e.type === 'report.ingested' && e.run === run);
+    q.push({ key: `nh:${i.id}`, id: i.id, run, title: i.title, at: rep?.at ?? i.created?.at, blocks: i.blocks?.length ?? 0, source: 'report', headline: rep?.report?.headline ?? null, summary: rep?.report?.summary ?? null,
+      decisions: [{ n: 1, question: `The report${run ? ` from ${run}` : ''} on ${i.id} needs a decision: what should happen next?`, recommend: null, detail: '' }] });
   }
   const order = { blocking: (a, b) => b.blocks - a.blocks || Date.parse(b.at) - Date.parse(a.at), oldest: (a, b) => Date.parse(a.at) - Date.parse(b.at), id: (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }) }[sort] ?? (() => 0);
   return q.sort(order);
@@ -292,6 +302,13 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
       if (summary) { section('SUMMARY'); para(summary, 'fg', 1, 6); }
       if (entry) {
         const a = s.answer?.key === entry.key ? s.answer : { picks: {}, note: '', sel: 1 };
+        const del = (s.delegations ?? []).find(x => x.key === entry.key || x.id === entry.id);
+        if (del) {
+          section('DELEGATED', 'teal');
+          para(del.status === 'escalated' ? `The decider escalated this to you: ${del.decision?.reason ?? 'no reason given'}. Its answers are filled in below; change any, then Enter sends.` : `Status: ${del.status}${del.agent ? ` · ${del.agent}` : ''}${del.error ? ` · ${del.error}` : ''}`, del.status === 'escalated' ? 'amber' : 'fg');
+          if (del.decision?.why) para(del.decision.why, 'muted', 2, 8);
+          if (del.status === 'escalated' && !Object.keys(a.picks).length) for (const q of entry.decisions) if (del.decision.answers?.[q.n]) a.picks[q.n] = del.decision.answers[q.n];
+        }
         section(`DECISIONS · ${entry.decisions.length}`, 'amber');
         for (const d of entry.decisions) {
           const pick = a.picks[d.n], mark = pick ? `  → ${pick === 'rec' ? 'as recommended' : pick}` : '';
@@ -337,6 +354,25 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
     }
   } else {
     row([text(` view: ${VIEWS.map(v => v === (s.view2 ?? 'unresolved') ? `[${v}]` : v).join(' ')}   f`, 'muted')]);
+    // The decisions handed to agents, and an approval waiting for Enter.
+    if (s.delegateArm) {
+      section(`DELEGATE · ${s.delegateArm.length}`, 'amber');
+      para(`${s.delegateArm.map(e => e.id).join(', ')}: Enter starts ${s.delegateArm.length === 1 ? 'a decider' : 'deciders'} (Claude ${s.delegateModel ?? 'opus'}, ${2} at a time). Each reads the report and the code and decides on your behalf; its answer goes to ${s.watching ?? 'the supervisor'}. Money, legal, irreversible or unverifiable decisions come back to you. Esc cancels.`, 'bright', 1);
+      row([]);
+    }
+    const dl = (s.delegations ?? []).filter(x => x.status !== 'forwarded' || now - Date.parse(x.forwardedAt) < 12 * 3600e3);
+    if (dl.length && ['unresolved', 'decide', 'all'].includes(s.view2 ?? 'unresolved')) {
+      section(`DELEGATED · ${dl.length}`, 'teal');
+      for (const x of dl.slice().reverse()) {
+        const st = { queued: 'queued', starting: 'starting a decider', running: `deciding · ${x.agent} · ${ago(now - Date.parse(x.startedAt))}`, decided: 'decided · waiting to reach the supervisor', forwarded: `sent to the supervisor ${when(x.forwardedAt, now)}`, escalated: `escalated to you: ${x.decision?.reason ?? 'no reason given'}`, failed: `failed: ${x.error}` }[x.status] ?? x.status;
+        row([text(` ${pad(x.id, 9)}`, categoryColor(x.id), true), text(st, x.status === 'escalated' || x.status === 'failed' ? 'amber' : x.status === 'forwarded' ? 'teal' : 'fg')], { id: `item:${x.id}~d` });
+        if (x.decision && ['decided', 'forwarded', 'escalated'].includes(x.status)) {
+          const ans = x.entry.decisions.map(q => x.entry.decisions.length === 1 ? x.decision.answers[q.n] : `${q.n} ${x.decision.answers[q.n] ?? '?'}`).join('; ');
+          for (const l of wrap(`${ans}${x.decision.confidence ? ` · ${x.decision.confidence}` : ''}`, W - 12)) row([text(`          ${l}`, 'muted')], { id: `item:${x.id}~d` });
+        }
+      }
+      row([]);
+    }
     // Everything the chat surfaced, by what it needs now; f narrows the view.
     const view = s.view2 ?? 'unresolved', groups = { decide: [], blocked: [], stalled: [], working: [], ready: [], resolved: [] };
     for (const t of model.tracked) groups[t.state].push(t);
@@ -353,7 +389,8 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
         const ind = ' '.repeat(Math.min(10, head.length + 2));
         if (g === 'decide') {
           const w = t.wait, recs = w ? w.decisions.filter(d => d.recommend).length : 0;
-          row([text(`${ind}${w ? [w.decisions.length > 1 ? `${w.decisions.length} decisions` : 'question', recs ? `${recs === w.decisions.length ? 'all' : recs} recommended` : 'no rec', w.run, when(w.at, now), s.sent?.[w.key] ? 'sent' : null].filter(Boolean).join(' · ') : t.item.status === 'needs_human' ? 'its report needs your decision' : 'answer it'}`, s.sent?.[w?.key] ? 'teal' : 'amber')], { id });
+          const del = (s.delegations ?? []).find(x => x.id === t.id && x.status !== 'failed');
+          row([text(`${ind}${w ? [w.decisions.length > 1 ? `${w.decisions.length} decisions` : 'question', recs ? `${recs === w.decisions.length ? 'all' : recs} recommended` : 'no rec', w.run, when(w.at, now), s.sent?.[w.key] ? 'sent' : null].filter(Boolean).join(' · ') : t.item.status === 'needs_human' ? 'its report needs your decision' : 'answer it'}`, s.sent?.[w?.key] ? 'teal' : 'amber'), text(del ? `  ${del.status === 'escalated' ? '· agent escalated' : `· delegated (${del.status})`}` : '  · d delegate', del ? 'teal' : 'muted')], { id });
         } else if (g === 'blocked') {
           for (const u of t.unblock.slice(0, 4)) row([text(`${ind}→ `, 'amber'), text(`${u.id} `, categoryColor(u.id), true), text(u.text, u.kind === 'wait' ? 'teal' : 'amber')], { id });
           if (!t.unblock.length) row([text(`${ind}${(t.item.blocked_reason ?? []).join(' · ') || 'blocked, no open blocker recorded'}`, 'muted')], { id });
@@ -440,7 +477,7 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
     spans.push(span(' '.repeat(Math.max(0, W - used)), 'fg', bg));
     lines.push({ spans }); hits.push(r.id ? [{ from: 0, to: W, id: r.id }] : []);
   }
-  const hint = s.message || (s.view === 'item' ? (s.entryKey ? ' y/n answer · a all recommended · e words · Enter send · Esc' : ' Esc back · o open the session · ↑↓ · q quit') : ' ↑↓ select · Enter open · s sort · f filter · q quit');
+  const hint = s.message || (s.delegateArm ? ' Enter starts the deciders · Esc cancels' : s.view === 'item' ? (s.entryKey ? ' y/n answer · a all rec · d delegate · Enter send · Esc' : ' Esc back · d delegate · o open · q quit') : ' Enter open · d delegate · A delegate all decide · f view · q');
   lines.push({ spans: [span(pad(clip(hint, W), W), s.message ? 'amber' : 'muted', 'panel')] }); hits.push([]);
   return { lines, hits, controls, bodyHeight: height, maxScroll: Math.max(0, body.length - height) };
 }
@@ -450,6 +487,15 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
     readFile: file => fs.promises.readFile(file, 'utf8'), now: () => Date.now(), ...deps };
   const project = config.projects[projectIndex] ?? null;
   const chat = project ? (deps.chatIndex ?? createChatIndex({ file: indexFile(project.name, env) })) : null;
+  const stateDir = project ? path.dirname(indexFile(project.name, env)) : null;
+  const delegations = project ? (deps.delegations ?? createDelegations({ dir: stateDir })) : null;
+  // A decider is a Claude session opened by `brain start` in the checkout.
+  const startDecider = deps.startDecider ?? (async ({ name, label, brief, addDirs }) => {
+    const r = await brainAct(config.brain_bin, ['start', '--json', '--cwd', project.cwd, '--name', name, '--label', label,
+      '--model', config.delegate_model ?? 'opus', '--effort', config.delegate_effort ?? 'high', ...addDirs.flatMap(x => ['--add-dir', x]), '--', brief], { timeout: 240000 });
+    if (r.ok) return { ok: true };
+    try { return { ok: false, error: JSON.parse(r.error).error }; } catch { return { ok: false, error: r.error }; }
+  });
   const s = { view: 'feed', detail: null, screen: '', workspaces: [], watching: null, sort: 'blocking', decisionsByRun: new Map(), answers: {}, answer: null, sent: {}, entryKey: null, selected: null, scroll: 0, filter: null, events: [], status: null, agents: [], errors: {}, message: '',
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', interactive: false, targets: [], timer: null, stopped: false, pending: null, history: [] };
   const changed = () => { if (!s.stopped) onChange(); };
@@ -464,6 +510,7 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
       await readBeside();
       await loadDecisions();
       readChat();
+      await tickDelegations();
     })().finally(() => { s.pending = null; changed(); });
     return s.pending;
   }
@@ -504,7 +551,58 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
       try { s.decisionsByRun.set(e.run, file ? reportDecisions(await d.readFile(file)) : []); } catch { s.decisionsByRun.set(e.run, []); }
     }
   }
-  const entryOf = key => model().waiting.find(w => w.key === key);
+  const entryOf = key => model().waiting.find(w => w.key === key) ?? reportEntry(key);
+  // A report that needs a decision but lists no questions: one question, to be
+  // answered from the report itself.
+  function reportEntry(key) {
+    if (!key?.startsWith('nh:')) return null;
+    const m = model(), item = m.items.get(key.slice(3)); if (!item) return null;
+    const run = (item.runs ?? []).at(-1);
+    return { key, id: item.id, run, source: 'report', title: item.title, at: item.created?.at,
+      decisions: [{ n: 1, question: `The report${run ? ` from ${run}` : ''} on ${item.id} needs a decision: what should happen next?`, recommend: null, detail: '' }] };
+  }
+  const entryForItem = id => { const t = model().tracked.find(x => x.id === id); return t?.wait ?? (t?.state === 'decide' ? reportEntry(`nh:${id}`) : null); };
+  // Delegation: approve once, an agent decides, the supervisor gets the answer.
+  function armDelegate(entries) {
+    const list = entries.filter(Boolean).filter(e => !['queued', 'running', 'decided'].includes(delegations?.find(e.key)?.status));
+    if (!list.length) { s.message = 'Nothing here to delegate (or it is already delegated).'; changed(); return; }
+    s.delegateArm = list; changed();
+  }
+  function confirmDelegate() {
+    for (const e of s.delegateArm ?? []) delegations.add({ key: e.key, id: e.id, run: e.run ?? null, status: 'queued', at: new Date(d.now()).toISOString(), entry: e });
+    s.message = `${s.delegateArm.length} delegated; deciders start as slots free (${MAX_RUNNING} at a time).`; s.delegateArm = null; changed();
+    return tickDelegations();
+  }
+  async function tickDelegations() {
+    if (!delegations) return;
+    const m = model(), live = new Set(s.agents.map(a => a.name));
+    for (const x of delegations.list.filter(y => y.status === 'running')) {
+      let text = null; try { text = await d.readFile(x.file); } catch {}
+      if (text) {
+        const r = parseDecision(text, x.entry);
+        if (!r.ok) delegations.update(x.key, { status: 'failed', error: r.error });
+        else delegations.update(x.key, { status: r.escalate ? 'escalated' : 'decided', decision: r, decidedAt: new Date(d.now()).toISOString() });
+      } else if (!live.has(x.agent) && d.now() - Date.parse(x.startedAt) > 180e3) delegations.update(x.key, { status: 'failed', error: 'the decider stopped without writing a decision' });
+    }
+    // A decision goes to the supervisor as the operator's delegated answer;
+    // if its prompt box is busy, it waits for the next tick.
+    for (const x of delegations.list.filter(y => y.status === 'decided')) {
+      if (await sendText(forwardMessage(x.entry, x.decision, x.agent, x.file), { quiet: true })) delegations.update(x.key, { status: 'forwarded', forwardedAt: new Date(d.now()).toISOString() });
+    }
+    let running = delegations.list.filter(y => y.status === 'running').length;
+    for (const x of delegations.list.filter(y => y.status === 'queued')) {
+      if (running >= MAX_RUNNING) break;
+      const item = m.items.get(x.id), stamp = new Date(d.now());
+      const name = `decide-${x.id.toLowerCase()}-${String(stamp.getHours()).padStart(2, '0')}${String(stamp.getMinutes()).padStart(2, '0')}`.slice(0, 32);
+      const file = decisionPath(stateDir, x.key), run = m.runs.get(x.run);
+      const brief = delegateBrief({ project, entry: x.entry, item, file, orgBin: cli.ORG_BIN, reportPath: run?.report_path ?? null, blocks: item?.blocks ?? [] });
+      delegations.update(x.key, { status: 'starting', agent: name, file });
+      const r = await startDecider({ name, label: `decide ${x.id}`, brief, addDirs: [stateDir, path.dirname(project.org)] });
+      delegations.update(x.key, r.ok ? { status: 'running', startedAt: new Date(d.now()).toISOString() } : { status: 'failed', error: r.error });
+      if (r.ok) running++;
+    }
+    changed();
+  }
   // Answering: the picks and words live per entry, so leaving and returning keeps them.
   function answerFor(key) { return (s.answers[key] ??= { key, picks: {}, note: '', sel: 1, typing: false }); }
   async function send() {
@@ -514,14 +612,14 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
     if (await sendText(text)) s.sent[entry.key] = { at: new Date(d.now()).toISOString(), text };
   }
   // One message to the supervisor chat, never over its unsent draft.
-  async function sendText(text) {
+  async function sendText(text, { quiet = false } = {}) {
     const agent = s.agents.find(x => x.name === s.watching || x.pane === s.watching);
-    if (!agent?.name) { s.message = 'No supervisor chat with a Herdr agent name beside this pane.'; changed(); return false; }
+    if (!agent?.name) { if (!quiet) s.message = 'No supervisor chat with a Herdr agent name beside this pane.'; changed(); return false; }
     const screen = await d.herdrVisible(agent.pane);
     const draft = screen.ok ? promptDraft(screen.text) : null;
-    if (draft) { s.message = `${agent.name} has unsent text in its prompt box (“${clip(draft, 30)}”). Send or clear it first.`; changed(); return false; }
+    if (draft) { if (!quiet) s.message = `${agent.name} has unsent text in its prompt box (“${clip(draft, 30)}”). Send or clear it first.`; changed(); return false; }
     const r = await d.herdrPrompt(agent.name, text);
-    s.message = r.ok ? `Sent to ${agent.name}.` : r.blocked ? `${agent.name} is stuck at a prompt and refused it; answer that first.` : `Not sent: ${r.error}`;
+    if (!quiet || r.ok) s.message = r.ok ? `Sent to ${agent.name}.` : r.blocked ? `${agent.name} is stuck at a prompt and refused it; answer that first.` : `Not sent: ${r.error}`;
     changed(); return r.ok;
   }
   const move = n => {
@@ -562,7 +660,7 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
   }
   return {
     get ui() { return s; }, set ui(v) { Object.assign(s, v); }, get model() { return model(); },
-    frame(cols, rows) { const f = renderFeed({ s, model: model(), project, now: d.now() }, cols, rows); s.lastHits = f.hits; return f; },
+    frame(cols, rows) { s.delegations = delegations?.list ?? []; s.delegateModel = config.delegate_model; const f = renderFeed({ s, model: model(), project, now: d.now() }, cols, rows); s.lastHits = f.hits; return f; },
     refresh, input: async () => false, waitForOutput: async () => {},
     async key(input, k = {}) {
       const entry = s.view === 'item' && s.entryKey ? entryOf(s.entryKey) : null, a = entry ? answerFor(entry.key) : null;
@@ -581,6 +679,15 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
         if (input === 'e') { a.typing = true; changed(); return false; }
         if (k.return && (!s.selected || /^(pick:|send$)/.test(s.selected))) { await send(); return false; }
       }
+      if (s.delegateArm) {
+        if (k.return) { await confirmDelegate(); return false; }
+        if (k.escape) { s.delegateArm = null; changed(); return false; }
+      }
+      if (input === 'd' && !k.ctrl) {
+        const id = s.view === 'item' ? s.detail : s.selected?.startsWith('wait:') ? entryOf(s.selected.slice(5))?.id : idOf(s.selected);
+        armDelegate([id ? (s.view === 'item' && s.entryKey ? entryOf(s.entryKey) : entryForItem(id)) : null]); return false;
+      }
+      if (input === 'A' && s.view === 'feed') { armDelegate(model().tracked.filter(t => t.state === 'decide').map(t => entryForItem(t.id))); return false; }
       if (input === 'q' || (k.ctrl && input === 'c')) return true;
       if (input === 's' && s.view === 'feed') { s.sort = { blocking: 'oldest', oldest: 'id', id: 'blocking' }[s.sort]; changed(); return false; }
       if (k.escape || input === 'b') { back(); return false; }

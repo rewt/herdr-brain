@@ -109,7 +109,8 @@ if (opt.print) {
     herdrRename: async () => ({ ok: false, error: '--print does not rename sessions' }),
     orgAnswer: async () => ({ ok: false, error: '--print does not record answers' }),
     brainAct: async () => ({ ok: false, error: '--print does not act on the queue' }),
-    herdrPrompt: async () => ({ ok: false, error: '--print does not send to sessions' }) } : {};
+    herdrPrompt: async () => ({ ok: false, error: '--print does not send to sessions' }),
+    startDecider: async () => ({ ok: false, error: '--print does not start deciders' }) } : {};
   const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps });
   await session.refresh({ reorder: true });
   const [cols, rows] = [Number(m[1]), Number(m[2])];

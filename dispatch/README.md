@@ -35,6 +35,8 @@ the same item, lane, route and declared harness/model/effort, an idle/done worke
 a live matching cwd/pane/workspace, and matching immutable occupant evidence
 recorded on the previous run. Older manually dispatched runs without that evidence
 need a fresh worker. The session registry is never read to choose or reuse workers.
+The previous run must already be reported or abandoned, even when its worker is
+idle; an open run cannot share its worker with a new fix round.
 
 The generated prompt names the ask, run brief, exact report path and run ID, plus
 `--extra` text. Neither input brief is patched or replaced. The worker starts
@@ -67,10 +69,14 @@ refuses duplicate watchers, including one whose acknowledgement was lost.
 
 Some failures cannot be safely retried by guessing:
 
-- A lost `record start` result leaves `starting`. Inspect the record for the run
-  whose `meta.dispatch_journal` is this request, then retry the journal with
-  `--recover-run R-n`. If no run exists, resolve the start failure before creating
-  a new request; do not manufacture a run ID.
+- A lost `record start` result leaves `starting`. Retry reconciles the item's
+  runs against `meta.dispatch_journal` and adopts a single matching run. If none
+  exists and the earlier command returned a record refusal (exit 1 with
+  `record:` diagnostics), retry starts again using the saved request. A missing
+  run after an unknown outcome, or multiple matches, still requires inspection
+  and `--recover-run R-n`; dispatch never guesses or creates another run in
+  those cases. A committed run's missing brief is restored by `record brief`
+  before worker launch.
 - Failed/lost worker launch leaves `launching`. Inspect Herdr, then use
   `--adopt AGENT` for the worker that actually started, or `--fresh` to explicitly
   authorize another launch after checking the first attempt. Adoption verifies
@@ -84,8 +90,12 @@ Some failures cannot be safely retried by guessing:
   Inspect the log and stop that watcher before re-arming; the module refuses to
   launch a duplicate. Do not remove a live lock.
 
-Dispatch serializes retries of the same request with a PID lock; dead-owner locks
-can be retried. Failed attempts leave workers/worktrees intact for inspection.
+Dispatch acquires its request lock before reading the retry journal. Unique PID
+contenders under `<journal>.locks/` serialize acquisition and stale-owner cleanup
+of `<journal>.lock`; a contender never removes another live contender. Concurrent
+requests may both refuse and can be retried. Dead-owner files from either phase
+are removed safely on retry. Invalid owner files require inspection. Failed
+attempts leave workers/worktrees intact for inspection.
 Use the existing record abandon and lane close commands when choosing to discard
 work; lifecycle safety and archive recovery remain in the lane CLI.
 

@@ -22,7 +22,7 @@ const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [pro
 const recordCLI = cli('org', '../bin/org.mjs');
 const laneCLI = cli('lane', '../lanes/lane.mjs');
 const watchCLI = cli('watch', '../watch/watch.mjs');
-let job, journal, lock, ownsLock = false;
+let job, journal, lock, contender, ownsLock = false;
 const atomic = (file, value) => {
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -34,7 +34,12 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
     cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, ORG_DIR: job?.org ?? opt.org },
   });
-  if (result.error || result.status !== 0) throw new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
+  if (result.error || result.status !== 0) {
+    const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
+    error.recordRefusal = !result.error && !result.signal && result.status === 1 &&
+      result.stderr.trim().split('\n').at(-1).startsWith('record: ');
+    throw error;
+  }
   return result.stdout.trim();
 }
 const record = (args) => command(recordCLI, args);
@@ -73,8 +78,25 @@ function capture(name) {
 }
 function lockJob() {
   lock = `${journal}.lock`;
+  // Publish a unique contender before inspecting any owner. Every later contender
+  // sees this live PID and refuses; stale cleanup can never delete a new owner's
+  // contender. This also serializes takeover of the original single-file lock.
+  const directory = `${lock}s`;
+  fs.mkdirSync(directory, { recursive: true });
+  contender = path.join(directory, `${process.pid}-${randomUUID()}`);
+  fs.writeFileSync(contender, '', { flag: 'wx', mode: 0o600 });
+  for (const entry of fs.readdirSync(directory)) {
+    const file = path.join(directory, entry);
+    if (file === contender) continue;
+    const pid = Number(entry.split('-')[0]);
+    if (!Number.isInteger(pid) || pid < 1) throw new Error('invalid dispatch lock owner; inspect request locks');
+    try { process.kill(pid, 0); throw new Error(`dispatch is already running (pid ${pid})`); }
+    catch (error) { if (error.code !== 'ESRCH') throw error; }
+    try { fs.unlinkSync(file); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
   try {
     const pid = Number(fs.readFileSync(lock, 'utf8'));
+    if (!Number.isInteger(pid) || pid < 1) throw new Error('invalid dispatch lock owner; inspect request lock');
     try { process.kill(pid, 0); throw new Error(`dispatch is already running (pid ${pid})`); }
     catch (error) { if (error.code !== 'ESRCH') throw error; }
     fs.unlinkSync(lock);
@@ -95,8 +117,10 @@ async function main() {
       throw new Error('--retry uses the saved request; do not supply new work flags');
     }
     journal = locate(opt.retry);
-    job = JSON.parse(fs.readFileSync(journal, 'utf8'));
-    if (job.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    lockJob();
+    const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
+    if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    job = saved;
   } else {
     if (opt.adopt || opt.fresh || opt.resend || opt['accept-delivered'] || opt['recover-run']) throw new Error('recovery flags require --retry');
     if (positionals.length !== 1 || !opt.lane || !opt.route || !opt.brief) throw new Error('usage: dispatch.mjs ITEM --org DIR --lane TOPIC --route ROUTE --brief FILE [--report FILE] [--to AGENT] [--base REF] [--reuse R-n] [--extra TEXT] | --retry R-n|JOURNAL | --status R-n|JOURNAL');
@@ -106,7 +130,12 @@ async function main() {
     const brief = fs.realpathSync(path.resolve(opt.brief));
     if (!fs.statSync(brief).isFile() || !fs.readFileSync(brief, 'utf8').trim()) throw new Error('brief must be a nonempty file');
     // Validate item, target and launch route before opening a lane or starting a run.
-    record(['show', positionals[0], '--json']);
+    const item = json(record(['show', positionals[0], '--json']));
+    if (Object.hasOwn(item, 'item') || !Array.isArray(item.runs)) throw new Error('dispatch ITEM must be an item, not a run');
+    if (opt.reuse) {
+      const prior = json(record(['show', opt.reuse, '--json']));
+      if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
+    }
     herdr(['agent', 'get', opt.to]);
     const { config } = loadDiscoveredRoutes({ cwd: repo });
     const declared = resolveRoute(config, { route: opt.route });
@@ -125,8 +154,8 @@ async function main() {
     job.routeConfig = path.join(directory, `${token}.routes.json`);
     atomic(job.routeConfig, config);
     save();
+    lockJob();
   }
-  lockJob();
   const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir']));
   if (common !== job.common) throw new Error('repository common-directory identity changed');
   if (opt['recover-run']) {
@@ -145,12 +174,26 @@ async function main() {
     }
     job.stage = 'start'; save();
   }
-  if (job.stage === 'starting') throw new Error('record start outcome is unknown; inspect record and use --recover-run R-n');
+  if (job.stage === 'starting') {
+    const item = json(record(['show', job.item, '--json']));
+    const matches = item.runs.map((id) => json(record(['show', id, '--json'])))
+      .filter((run) => run.meta?.dispatch_journal === journal);
+    if (matches.length === 1) {
+      job.run = matches[0].id; job.stage = 'worker'; save();
+    } else if (matches.length === 0 && job.startRefused) {
+      job.stage = 'start'; save();
+    } else {
+      throw new Error('record start outcome is unknown or has multiple matches; inspect record and use --recover-run R-n');
+    }
+  }
   if (job.stage === 'start') {
+    delete job.startRefused;
     job.stage = 'starting'; save();
-    const output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
+    let output;
+    try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
-      ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]);
+      ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
+    catch (error) { job.startRefused = error.recordRefusal === true; save(); throw error; }
     job.run = output.match(/^(R-\d+) started/m)?.[1];
     if (!job.run) throw new Error('record start returned no run id; inspect record before retry');
     job.stage = 'worker'; save();
@@ -160,6 +203,9 @@ async function main() {
   if (run.abandoned || run.report) throw new Error('run is already abandoned or reported; start a new run');
   if (run.item !== job.item || run.meta?.dispatch_journal !== journal || fs.realpathSync(run.workspace) !== job.workspace) throw new Error('run no longer matches dispatch request');
   if (run.meta?.route !== job.route || Object.entries(job.declared).some(([key, value]) => (run.meta?.[key] ?? null) !== value)) throw new Error('run routing metadata changed; inspect before recovery');
+  // start may have committed the run before failing to materialize its brief.
+  // The existing record command recreates a missing brief from durable context.
+  if (!fs.existsSync(run.brief_path)) record(['brief', job.run]);
   if (job.stage === 'launching') {
     if (opt.fresh) {
       job.stage = 'worker'; save();
@@ -173,6 +219,7 @@ async function main() {
   if (job.stage === 'worker') {
     if (job.reuse) {
       const prior = json(record(['show', job.reuse, '--json']));
+      if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
       if (prior.item !== job.item || prior.meta?.lane !== job.lane || prior.meta?.route !== job.route ||
           fs.realpathSync(prior.workspace) !== job.workspace ||
           Object.entries(job.declared).some(([key, value]) => (prior.meta?.[key] ?? null) !== value)) throw new Error('reuse run must match item, lane, route and declared harness/model/effort; use a fresh worker');
@@ -245,4 +292,5 @@ catch (error) {
   process.exitCode = 1;
 } finally {
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
+  if (contender) try { fs.unlinkSync(contender); } catch {}
 }

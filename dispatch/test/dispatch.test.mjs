@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
@@ -85,7 +85,14 @@ function fixture(t, { realWatch = false } = {}) {
     for(const pid of new Set(pids)) try {process.kill(pid,'SIGTERM');} catch {}
     fs.rmSync(root,{recursive:true,force:true});
   });
-  return {root,repo,org,brief,item,start,dispatch,rec,show,calls,jobs,fail,git};
+  const concurrent=(args,extraEnv={})=>{
+    const child=spawn(process.execPath,[DISPATCH,...common,...args],{cwd:repo,env:{...env,...extraEnv},stdio:['ignore','pipe','pipe']});
+    let stdout='',stderr='';child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);
+    const done=new Promise(resolve=>child.on('close',status=>resolve({status,stdout,stderr})));
+    t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
+    return {child,done};
+  };
+  return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
 test('one command records exact route/worker fields, arms watch before prompt, and preserves briefs',t=>{
@@ -129,6 +136,8 @@ test('uncertain prompt refuses automatic resend; caller can authorize it after i
 });
 test('a fix round can reuse a stopped worker or start fresh; changed route is refused',t=>{
   const f=fixture(t);let r=f.start();assert.equal(r.status,0,r.stderr);const first=JSON.parse(r.stdout);
+  const report=path.join(f.root,'first-report.md');
+  fs.writeFileSync(report,`---\nrun: ${first.run}\noutcome: done\nsummary: First round complete\n---\n`);f.rec(['ingest',report]);
   const workerFile=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(workerFile));workers[first.agent].agent_status='idle';fs.writeFileSync(workerFile,JSON.stringify(workers));
   r=f.start(['--reuse',first.run]);assert.equal(r.status,0,r.stderr);const second=JSON.parse(r.stdout);assert.notEqual(second.run,first.run);assert.equal(second.agent,first.agent);
   r=f.start();assert.equal(r.status,0,r.stderr);assert.notEqual(JSON.parse(r.stdout).agent,first.agent);
@@ -168,8 +177,8 @@ process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.sta
 `,{mode:0o755});
   let r=f.start(['--org-cli',adapter]);assert.equal(r.status,1);const journal=f.jobs()[0],job=JSON.parse(fs.readFileSync(journal));assert.equal(job.stage,'starting');assert.equal(job.run,null);
   assert.equal(f.show('R-1').meta.dispatch_journal,journal);
-  r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/--recover-run/);
-  r=f.dispatch(['--retry',journal,'--recover-run','R-1']);assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).run,'R-1');
+  r=f.dispatch(['--retry',journal]);assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).run,'R-1');
+  assert.equal(f.show(f.item).runs.length,1);
 });
 test('live request locks refuse retries without changing the journal',t=>{
   const f=fixture(t);f.fail('watch');assert.equal(f.start().status,1);const journal=f.jobs()[0],before=fs.readFileSync(journal,'utf8');
@@ -185,4 +194,129 @@ test('invalid route and empty brief mutate neither lane nor record',t=>{
   const f=fixture(t);let r=f.dispatch([f.item,'--lane','topic','--route','missing','--brief',f.brief]);assert.equal(r.status,1);assert.match(r.stderr,/unknown route/);
   fs.writeFileSync(f.brief,'');r=f.start();assert.equal(r.status,1);assert.match(r.stderr,/nonempty/);
   assert.equal(f.calls().filter(x=>x.type==='lane').length,0);assert.equal(fs.existsSync(path.join(f.org,'dispatch')),false);
+});
+
+test('a refused record start with no matching run retries the saved request',t=>{
+  const f=fixture(t),adapter=path.join(f.root,'record-adapter'),refuse=path.join(f.root,'refuse-start');
+  fs.writeFileSync(refuse,'yes');
+  fs.writeFileSync(adapter,`#!/usr/bin/env node
+import fs from 'node:fs';
+import {spawnSync} from 'node:child_process';
+const a=process.argv.slice(2);
+if(a[0]==='start' && fs.existsSync(${JSON.stringify(refuse)})) { console.error('record: injected record refusal');process.exit(1); }
+const r=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...a],{encoding:'utf8',env:process.env});
+process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.status);
+`,{mode:0o755});
+  let r=f.start(['--org-cli',adapter]);assert.equal(r.status,1);
+  const journal=f.jobs()[0];assert.equal(JSON.parse(fs.readFileSync(journal)).stage,'starting');
+  assert.deepEqual(f.show(f.item).runs,[]);
+  fs.unlinkSync(refuse);r=f.dispatch(['--retry',journal,'--org-cli',adapter]);assert.equal(r.status,0,r.stderr);
+  assert.equal(JSON.parse(r.stdout).run,'R-1');assert.equal(promptCalls(f).length,1);
+  assert.equal(f.calls().filter(x=>x.type==='lane'&&x.a[0]==='open').length,1);
+});
+test('a run ID supplied as ITEM is refused before creating a lane or journal',t=>{
+  const f=fixture(t),run=f.rec(['start',f.item]).match(/^(R-\d+) started/m)[1];
+  const r=f.dispatch([run,'--lane','topic','--route','engineer','--brief',f.brief]);
+  assert.equal(r.status,1);assert.match(r.stderr,/must be an item/);
+  assert.equal(f.calls().filter(x=>x.type==='lane').length,0);
+  assert.equal(fs.existsSync(path.join(f.org,'dispatch')),false);
+  assert.deepEqual(f.show(f.item).runs,[run]);
+});
+test('reuse refuses an idle worker whose previous run is still open',t=>{
+  const f=fixture(t),first=JSON.parse(f.start().stdout);
+  const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
+  workers[first.agent].agent_status='idle';fs.writeFileSync(file,JSON.stringify(workers));
+  const r=f.start(['--reuse',first.run]);assert.equal(r.status,1);assert.match(r.stderr,/reported or abandoned/);
+  assert.equal(promptCalls(f).length,1);
+  assert.equal(f.calls().filter(x=>x.type==='lane'&&x.a[0]==='dispatch').length,1);
+  assert.deepEqual(f.show(f.item).runs,[first.run]);
+});
+test('reuse accepts an abandoned run with the same stopped occupant',t=>{
+  const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
+  const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
+  workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
+  const r=f.start(['--reuse',first.run]);assert.equal(r.status,0,r.stderr);
+  assert.equal(JSON.parse(r.stdout).agent,first.agent);
+});
+async function until(predicate) {
+  const end=Date.now()+5000;
+  while(!predicate()) { if(Date.now()>end)throw new Error('test barrier timed out');await new Promise(r=>setTimeout(r,10)); }
+}
+function pauseHook(f,body) {
+  const hook=path.join(f.root,'pause.mjs');
+  fs.writeFileSync(hook,`import fs from 'node:fs';
+const read=fs.readFileSync,kill=process.kill;
+function pause() {
+ fs.writeFileSync(process.env.PAUSE_MARKER,'ready');
+ const end=Date.now()+10000;
+ while(!fs.existsSync(process.env.PAUSE_RELEASE)) {
+  if(Date.now()>end)throw new Error('hook barrier timed out');
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+ }
+}
+if(process.argv[1]===${JSON.stringify(DISPATCH)}) { ${body} }
+`);
+  return {NODE_OPTIONS:`--import=${hook}`,PAUSE_MARKER:path.join(f.root,'paused'),PAUSE_RELEASE:path.join(f.root,'release')};
+}
+test('retry locks before reading its journal so another retry cannot replay stale progress',async t=>{
+  const f=fixture(t);f.fail('watch');assert.equal(f.start().status,1);
+  const journal=f.jobs()[0];f.fail('');
+  const hook=pauseHook(f,`let once=true;fs.readFileSync=function(file,...args) {
+ const value=read.call(fs,file,...args);
+ if(once && String(file)===${JSON.stringify(journal)}) {once=false;pause();}
+ return value;
+};`);
+  const first=f.concurrent(['--retry',journal],hook);
+  try {
+    await until(()=>fs.existsSync(hook.PAUSE_MARKER));
+    const second=f.dispatch(['--retry',journal]);
+    assert.equal(second.status,1,second.stderr);assert.match(second.stderr,/already running/);
+  } finally { fs.writeFileSync(hook.PAUSE_RELEASE,'go');await first.done; }
+  assert.equal((await first.done).status,0);
+  assert.equal(promptCalls(f).length,1);assert.equal(f.calls().filter(x=>x.type==='watch').length,2);
+  assert.equal(f.dispatch(['--retry',journal]).status,0);assert.equal(promptCalls(f).length,1);
+});
+test('two retries cannot both take over a dead-owner lock',async t=>{
+  const f=fixture(t);f.fail('watch');assert.equal(f.start().status,1);
+  const journal=f.jobs()[0];f.fail('');
+  const dead=spawnSync(process.execPath,['-e',''],{encoding:'utf8'}).pid;
+  fs.writeFileSync(journal+'.lock',String(dead));
+  fs.mkdirSync(journal+'.locks',{recursive:true});fs.writeFileSync(path.join(journal+'.locks',`${dead}-crashed`),'');
+  const hook=pauseHook(f,`process.kill=function(pid,...args) {
+ if(pid===${dead}) { try {return kill.call(process,pid,...args);} catch(error) {pause();throw error;} }
+ return kill.call(process,pid,...args);
+};`);
+  const first=f.concurrent(['--retry',journal],hook);
+  try {
+    await until(()=>fs.existsSync(hook.PAUSE_MARKER));
+    const second=f.dispatch(['--retry',journal]);
+    assert.equal(second.status,1,second.stderr);assert.match(second.stderr,/already running/);
+  } finally { fs.writeFileSync(hook.PAUSE_RELEASE,'go');await first.done; }
+  assert.equal((await first.done).status,0);assert.equal(promptCalls(f).length,1);
+  assert.equal(fs.existsSync(journal+'.lock'),false);
+  assert.deepEqual(fs.readdirSync(journal+'.locks'),[]);
+});
+
+test('an unknown start outcome with no match stays conservative; multiple matches require explicit recovery',t=>{
+  const f=fixture(t),adapter=path.join(f.root,'record-adapter');
+  fs.writeFileSync(adapter,`#!/usr/bin/env node
+import {spawnSync} from 'node:child_process';
+const a=process.argv.slice(2);
+if(a[0]==='start') {console.error('unknown transport failure');process.exit(1);}
+const r=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...a],{encoding:'utf8',env:process.env});
+process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.status);
+`,{mode:0o755});
+  assert.equal(f.start(['--org-cli',adapter]).status,1);
+  const journal=f.jobs()[0],job=JSON.parse(fs.readFileSync(journal));
+  let r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/--recover-run/);
+  assert.deepEqual(f.show(f.item).runs,[]);
+  for(let i=0;i<2;i++)f.rec(['start',f.item,'--route',job.route,'--route-config',job.routeConfig,
+    '--workspace',job.workspace,'--meta',`lane=${job.lane}`,'--meta',`dispatch_journal=${journal}`]);
+  r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/multiple matches/);
+  assert.equal(promptCalls(f).length,0);assert.equal(f.show(f.item).runs.length,2);
+  // Also cover a committed run whose brief was never materialized.
+  fs.unlinkSync(f.show('R-1').brief_path);
+  r=f.dispatch(['--retry',journal,'--recover-run','R-1']);assert.equal(r.status,0,r.stderr);
+  assert.ok(fs.readFileSync(f.show('R-1').brief_path,'utf8').includes('R-1'));
+  assert.equal(JSON.parse(r.stdout).run,'R-1');assert.equal(f.show(f.item).runs.length,2);
 });

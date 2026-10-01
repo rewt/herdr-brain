@@ -105,6 +105,29 @@ test('an existing before directory learns that the new record launcher was absen
   } finally { s.cleanup(); }
 });
 
+test('restore preserves a replacement at a launcher that was originally missing', () => {
+  const s = scratch();
+  try {
+    s.run('build', 't1');
+    assert.equal(s.run('activate', 't1').status, 0);
+
+    const record = path.join(s.bin, 'record');
+    fs.unlinkSync(record);
+    fs.writeFileSync(record, '#!/bin/sh\necho user record\n');
+    const fileRestore = s.run('restore');
+    assert.equal(fileRestore.status, 0);
+    assert.match(fileRestore.stderr, /record changed since activation; leaving it alone/);
+    assert.equal(fs.readFileSync(record, 'utf8'), '#!/bin/sh\necho user record\n');
+
+    fs.unlinkSync(record);
+    fs.symlinkSync('/user/bin/record', record);
+    const linkRestore = s.run('restore');
+    assert.equal(linkRestore.status, 0);
+    assert.match(linkRestore.stderr, /record changed since activation; leaving it alone/);
+    assert.equal(fs.readlinkSync(record), '/user/bin/record');
+  } finally { s.cleanup(); }
+});
+
 test('a launcher that is a real file is never replaced', () => {
   const s = scratch();
   try {

@@ -18,7 +18,7 @@ learnings:
 artifacts:
   - "implementation commit: 5d75562 (Name the public record CLI)"
   - bin/org.mjs exposed under both package and release launcher names
-  - test/name-alias.test.mjs (help, package entry points, and byte-for-byte record/org parity for every command in the dispatch table)
+  - test/name-alias.test.mjs (help, package entry points, argument-parsing parity for every dispatched command, and one successful stateful workflow)
   - herdr/release.sh and test/release.test.mjs (record launcher plus reversible restore)
   - README.md, docs/north-star.md, docs/roadmap.md, lib/render.mjs, and console/ (record and Herdr Monitor naming)
   - "npm test: 283 passed, 1 skipped because optional console dependencies are not installed, 0 failed"
@@ -39,7 +39,7 @@ challenges:
     evidence: record init still creates .org/ and discovery still has one precedence rule, ORG_DIR then nearest .org/. README and help explain these as retained compatibility names. Adding parallel names would create ambiguity over which record wins and would touch every integration for no operator-visible gain.
   - premise: org must remain forever.
     verdict: holds
-    evidence: org is retained in package bins, the release launcher set and bin/org.mjs. test/name-alias.test.mjs enumerates all 23 dispatched commands and proves both entry points return byte-for-byte identical results; help calls org a permanent alias without treating its user as wrong.
+    evidence: org is retained in package bins, the release launcher set and bin/org.mjs. test/name-alias.test.mjs compares the same invalid-option result through both entry points for all 23 dispatched commands, then separately proves init, add, status and show end to end through a successful stateful workflow; help calls org a permanent alias without treating its user as wrong.
   - premise: Internal identifiers such as bin/org.mjs and event fields should stay.
     verdict: holds
     evidence: The implementation file, storage layout, JSON/read-model fields and environment variables did not move. The public wrapper and presentation changes are sufficient, and keeping the old identifiers preserves bch-cloak and current tooling while keeping the diff localized.
@@ -67,12 +67,12 @@ branding.
 
 ## Evidence
 
-The parity test mirrors the CLI's complete dispatch surface: init, add,
+The argument-parsing parity test mirrors the CLI's complete dispatch surface: init, add,
 block, unblock, note, ask, answer, set, close, reopen, start, check, ingest, sync, abandon, brief,
-status, snapshot, show, log, today, recap and console. For each it invokes both entry points and
-compares exit status, signal, stdout and stderr. It also runs init, add, status --json and show
-successfully through separately named `record` and `org` command links against separate temporary
-records and compares their output and event logs.
+status, snapshot, show, log, today, recap and console. For each it invokes both entry points with
+the same invalid option and compares exit status, signal, stdout and stderr. A separate workflow
+test runs init, add, status --json and show successfully through separately named `record` and
+`org` command links against separate temporary records and compares their output and event logs.
 
 The final `npm test` run passed 283 tests with zero failures. One console-launch test skipped
 explicitly because the optional console dependencies are absent. Release tests prove activation
@@ -82,8 +82,10 @@ removes `record` when it did not exist before activation while restoring the old
 ## Canary handoff
 
 This run did not touch `~/.local/bin`, the installed releases, `current`, or bch-cloak. After this
-commit is promoted, the supervisor should canary the command by first verifying
-`~/.local/bin/record` is absent or a symlink, then link that command name to the promoted main
-checkout's `bin/org.mjs`; it should not repoint `org` or `current`. When a release containing this
-commit is later built and activated, `herdr/release.sh` will manage `record`, `org` and `lane`
-together, and `restore` will return the launcher set to its pre-activation state.
+commit is promoted, the supervisor should canary the command by linking
+`~/.local/share/herdr-monitor/canary/bin/record` to the promoted main checkout's `bin/org.mjs`,
+beside the existing `org` and `lane` canary links. `herdr/canary-env.sh` puts that directory first
+only for this repository's canary sessions. Leave `~/.local/bin/record` to release activation so
+other projects stay on the active release. When a release containing this commit is later built
+and activated, `herdr/release.sh` will manage `record`, `org` and `lane` together, and `restore`
+will return each launcher to the state recorded when it was first managed.

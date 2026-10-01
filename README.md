@@ -260,7 +260,7 @@ the bar is drawn but `n` only says so.)
 ```text
  herdr-org  20:50  4/30 sessions today  1 waiting on you                       console 0.0.2  ? help
  ( WAITING ON YOU ) ─────────────────────────────────────────────────────────────────────────── ( 1 )
-   ! Promote the Herdr Monitor into main?                  tooling · recommend yes · asked 19:19
+   ! Promote the modern console lane into main?                  tooling · recommend yes · asked 19:19
      SESSION                    WHO                    WHERE              UP      STATE     DOING
  ( herdr-org ) ~/development/rewt/herdr-brain ────────────────────────────────────────────────── ( 2 )
  >   lane brain-console-v1 r3   Claude Opus 5 · high   lane-brain-consol… 44m     ● working Verifying…
@@ -474,9 +474,9 @@ release is activated. `herdr/release.sh` manages them:
 
 ```sh
 herdr/release.sh build v0.1.1      # copy the tag into ~/.local/share/herdr-monitor/releases/v0.1.1 (read-only) and run its build step
-herdr/release.sh activate v0.1.1   # point current at it; the first time, move the record, org and lane launchers and the Brain service onto current
+herdr/release.sh activate v0.1.1   # point current at it; manage record, org and lane, remembering each launcher the first time it is managed
 herdr/release.sh rollback          # back to the release before
-herdr/release.sh restore           # launchers and the Brain service back to where they were before the first activation
+herdr/release.sh restore           # each launcher back to before it was first managed; the Brain service back to before the first activation
 herdr/release.sh dev <worktree>    # a second plugin, rewt.herdr-monitor-dev, running a worktree beside the release
 herdr/release.sh status
 ```

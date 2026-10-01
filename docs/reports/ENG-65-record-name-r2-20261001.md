@@ -45,8 +45,8 @@ challenges:
    The regression test starts with a legacy-shaped `before` directory, activates a temporary
    release, restores it, and verifies that `record` is gone.
 2. **R-27 report claim:** the earlier report now describes the fixed per-launcher restore behavior
-   and the direct alias implementation. Its canary statement is true after this change, including
-   for installations whose snapshot predates the `record` launcher.
+   and the direct alias implementation. Its canary handoff now uses the repository-only canary bin
+   directory and leaves the release launcher directory to release activation.
 3. **Successful alias coverage:** the alias test creates separate temporary records and runs
    `init`, `add`, `status --json`, and `show --json` through command links named `record` and `org`.
    It compares normalized command results and the resulting event logs.

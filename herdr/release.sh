@@ -3,13 +3,15 @@
 # changes what a running project uses. A release is an immutable copy of a tag:
 #
 #   release.sh build TAG       copy TAG into $HOME_DIR/releases/TAG and run its build step
-#   release.sh activate TAG    point $HOME_DIR/current at it; on first use, move the org and
-#                              lane launchers and the Brain service onto current; link the
-#                              Herdr plugin to the release (Herdr resolves links, so the
-#                              plugin is re-linked whenever the release changes)
+#   release.sh activate TAG    point $HOME_DIR/current at it; manage the record, org and lane
+#                              launchers, remembering each the first time it is managed; move
+#                              the Brain service onto current; link the Herdr plugin to the
+#                              release (Herdr resolves links, so the plugin is re-linked whenever
+#                              the release changes)
 #   release.sh rollback        point current back at the release before it
-#   release.sh restore         put the launchers and the Brain service back where they were
-#                              before the first activation (the dev checkout); unlink the plugin
+#   release.sh restore         put each launcher back where it was before it was first managed
+#                              and the Brain service back where it was before the first activation
+#                              (the dev checkout); unlink the plugin
 #   release.sh dev WORKTREE    link a second plugin, rewt.herdr-monitor-dev, to a worktree
 #   release.sh status          what is active and where the launchers point
 #
@@ -31,6 +33,7 @@ LAUNCHERS="record:bin/org.mjs org:bin/org.mjs lane:lanes/lane.mjs"
 
 die() { echo "release: $*" >&2; exit 1; }
 say() { echo "release: $*"; }
+warn() { echo "release: warning: $*" >&2; }
 herdr_bin() { echo "${HERDR_BIN_PATH:-herdr}"; }
 
 build() {
@@ -72,6 +75,16 @@ launchers() {
     [ -e "$BIN_DIR/$name" ] && [ ! -L "$BIN_DIR/$name" ] && die "$BIN_DIR/$name is not a link; refusing to replace it"
     ln -sfn "$HOME_DIR/current/$rel" "$BIN_DIR/$name"
   done
+}
+
+managed_launcher() {
+  local target
+  [ -L "$1" ] || return 1
+  target=$(readlink "$1")
+  case "$target" in
+    "$HOME_DIR/current/"*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # Reload the Brain service. launchd unloads asynchronously, so bootstrap right after
@@ -167,7 +180,13 @@ restore() {
     if [ -f "$before/$name" ]; then
       ln -sfn "$(cat "$before/$name")" "$BIN_DIR/$name"
     elif [ -f "$before/$name.missing" ]; then
-      rm -f "$BIN_DIR/$name"
+      if [ ! -e "$BIN_DIR/$name" ] && [ ! -L "$BIN_DIR/$name" ]; then
+        :
+      elif managed_launcher "$BIN_DIR/$name"; then
+        rm -f "$BIN_DIR/$name"
+      else
+        warn "$BIN_DIR/$name changed since activation; leaving it alone"
+      fi
     fi
   done
   if [ -f "$before/plist" ] && [ "${RELEASE_NO_LAUNCHD:-}" != 1 ]; then
@@ -175,7 +194,7 @@ restore() {
     reload_service
   fi
   unlink_plugin
-  say "launchers and the Brain service are back where they were before the first activation, and the plugin is unlinked"
+  say "launchers and the Brain service are back where they were before release management, and the plugin is unlinked"
 }
 
 dev() {

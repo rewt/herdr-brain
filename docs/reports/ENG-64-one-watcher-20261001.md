@@ -13,7 +13,7 @@ learnings:
   - "The Brain LaunchAgent runs brain/bin/brain.mjs from the activated current release, while the console reads and controls that queue through the Brain CLI."
   - "watch --spawn can now resolve the Herdr workspace from --cwd, so supervisor/arm-watch.sh still works when invoked outside a Herdr-managed pane."
 artifacts:
-  - "e392f9b Use one worker watcher"
+  - "c143a05 Use one worker watcher"
   - "supervisor/open-session.mjs, supervisor/settle.sh, supervisor/arm-watch.sh and supervisor/continue.sh"
   - "watch/watch.mjs, watch/README.md and watch/test/watch.test.mjs"
   - "test/open-session.test.mjs and test/one-watcher.test.mjs"

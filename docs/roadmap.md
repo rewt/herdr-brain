@@ -21,20 +21,20 @@ agent's narrative.
 ## Shape
 
 One plugin made of modules a project switches on in its config. Herdr installs plugins per machine
-and has no plugin-to-plugin dependencies, so modules share one install and one version. Names are
-proposed in HUM-15.
+and has no plugin-to-plugin dependencies, so modules share one install and one version. Names: plain module names, chosen by the operator
+(HUM-15).
 
 | Module | Job | Comes from (bch-cloak) |
 |---|---|---|
-| tally | The record: items, runs, reports, questions, decisions, priorities | `org` |
+| record | The record: items, runs, reports, questions, decisions, priorities | `org` |
 | routes | Models, efforts, route table, selection policy | `scripts/lane/routing.json`, `routing.mjs` |
 | dispatch | Record the run, brief, lane, routed agent, watcher | `dispatch.sh`, `lane.mjs dispatch` |
-| lookout | Wait for the worker, validate the report, deliver it | `notify-watch.sh` |
+| watch | Wait for the worker, validate the report, deliver it | `notify-watch.sh` |
 | settle | Settle and review desks, hand-off to review, fix rounds | `settle.sh`, `apply-settle.sh`, `review-desk.sh` |
-| chute | Promotion queue | `promote-queue.sh`, `promote.sh` |
-| wrangler | Housekeeping | `janitor.sh` and the scripts it runs |
-| trail boss | Supervisor session setup and protocol | `session-start.sh`, `SETTLE.md`, `WORK-PATTERN.md` |
-| monitor | The console, as a pane; edits the configuration | `lane/console-autonomy` |
+| promote | Promotion queue | `promote-queue.sh`, `promote.sh` |
+| housekeeping | Housekeeping | `janitor.sh` and the scripts it runs |
+| supervisor | Supervisor session setup and protocol | `session-start.sh`, `SETTLE.md`, `WORK-PATTERN.md` |
+| console | The console, as a pane; edits the configuration | `lane/console-autonomy` |
 
 ## Phases
 
@@ -46,8 +46,8 @@ actionable now is written in advance.
 |---|---|---|
 | 0. Protect what works | ARCH-5 | bch-cloak's live kit is gitignored and has no history |
 | 1. Separate deploying from developing | ARCH-6 | Today a merge to main is a live deploy, because bch-cloak's `org` is a symlink into this working tree |
-| 2. Restructure and rename | ARCH-7 | Decide the item layer (ARCH-11) and the names (HUM-15) once, before anything is built on them |
-| 3. Bring the cycle over, module by module | ARCH-8 | Each module runs alongside the bch-cloak piece it replaces, then is switched at a quiet point; order: routes, lookout, wrangler, dispatch, settle, chute, trail boss |
+| 2. Restructure and rename | ARCH-7 | The item layer stays our own record (ARCH-11) and the names are plain (HUM-15) |
+| 3. Bring the cycle over, module by module | ARCH-8 | Each module runs alongside the bch-cloak piece it replaces, then is switched at a quiet point; order: routes, watch, housekeeping, dispatch, settle, promote, supervisor |
 | 4. The console as control plane | ARCH-9 | Decided / Asked / Waiting on you, priorities, routes and desks, all written through validating commands into tracked config |
 | 5. Adoption | ARCH-10 | `init`, a pilot on herdr-brain itself, docs, the marketplace when the operator decides |
 

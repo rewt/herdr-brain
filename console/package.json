@@ -1,7 +1,7 @@
 {
   "name": "herdr-brain-console",
   "version": "0.0.2",
-  "description": "Herdr Brain console: the operator's view of an organization, in one terminal pane.",
+  "description": "Herdr Monitor: the operator's view of the record and live work, in one terminal pane.",
   "type": "module",
   "private": true,
   "main": "app.mjs",

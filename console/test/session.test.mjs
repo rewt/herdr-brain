@@ -249,7 +249,7 @@ test('open suspends for an editor, a failed read keeps the last data, and the he
   await session.refresh();
   const header = screen(session, 160, 29)[0];
   assert.match(header, /no session ledger/);
-  assert.match(header, /org data \d+s old \(events\.jsonl line 3 is not valid JSON\)/);
+  assert.match(header, /record data \d+s old \(events\.jsonl line 3 is not valid JSON\)/);
   assert.equal(session.board.waiting.length, 3, 'the last good data stays');
   session.stop();
 });

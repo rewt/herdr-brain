@@ -44,9 +44,10 @@ function scratch() {
     RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: launchctl };
   const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env, encoding: 'utf8' });
   const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8' }).trim();
+  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8' }).trim();
   const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); };
   const launchctlCalls = () => fs.readFileSync(calls, 'utf8').trim().split('\n');
-  return { root, home, bin, plist, run, org, cleanup, launchctlCalls };
+  return { root, home, bin, plist, run, org, record, cleanup, launchctlCalls };
 }
 
 test('a release is a read-only copy of a tag, never rebuilt in place, and only from a tag', () => {
@@ -67,7 +68,9 @@ test('activate moves the launchers and the Brain service onto current; rollback 
   try {
     s.run('build', 't1'); s.run('build', 't2');
     assert.equal(s.run('activate', 't1').status, 0);
+    assert.equal(fs.readlinkSync(path.join(s.bin, 'record')), path.join(s.home, 'current/bin/org.mjs'));
     assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), path.join(s.home, 'current/bin/org.mjs'));
+    assert.equal(s.record(), 'org t1');
     assert.equal(s.org(), 'org t1');
     const plist = fs.readFileSync(s.plist, 'utf8');
     assert.match(plist, new RegExp(`${s.home}/current/brain/bin/brain.mjs`));
@@ -78,6 +81,7 @@ test('activate moves the launchers and the Brain service onto current; rollback 
     assert.equal(s.run('rollback').status, 0);
     assert.equal(s.org(), 'org t1');
     assert.equal(s.run('restore').status, 0);
+    assert.equal(fs.existsSync(path.join(s.bin, 'record')), false, 'a new launcher is removed on restore');
     assert.equal(fs.readlinkSync(path.join(s.bin, 'org')), '/dev/checkout/bin/org.mjs', 'back to the dev checkout');
     assert.match(fs.readFileSync(s.plist, 'utf8'), /\/dev\/checkout\/brain\/bin\/brain.mjs/);
   } finally { s.cleanup(); }

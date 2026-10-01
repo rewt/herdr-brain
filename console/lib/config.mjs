@@ -11,8 +11,8 @@ export function configPath(env = process.env) {
 
 export const EXAMPLE = {
   '//': [
-    'Herdr Brain console configuration. Edit the project below, then delete the "example" line.',
-    'projects[].org          the organization directory (what ORG_DIR would be)',
+    'Herdr Monitor configuration. Edit the project below, then delete the "example" line.',
+    'projects[].org          the record directory (what ORG_DIR would be)',
     'projects[].cwd          the checkout the executive sessions run in (finds their transcripts)',
     'projects[].ledger_dir   where settle-watch writes sessions-YYYY-MM-DD.log and the STOP file',
     'projects[].claude_config_dirs  Claude config dirs to search for session transcripts',
@@ -48,7 +48,7 @@ export function normalizeConfig(raw, file, { allowUnmanaged = false } = {}) {
   if (!projects.length && !allowUnmanaged) throw new ConfigError(`${file} lists no projects`);
   const out = projects.map((p, i) => {
     if (!p?.name) throw new ConfigError(`${file}: projects[${i}] needs a name`);
-    if (!p.org && !allowUnmanaged) throw new ConfigError(`${file}: project ${p.name} needs "org" (its organization directory)`);
+    if (!p.org && !allowUnmanaged) throw new ConfigError(`${file}: project ${p.name} needs "org" (its record directory)`);
     return {
       name: String(p.name),
       org: expand(p.org),
@@ -84,7 +84,7 @@ export function loadConfig(file = configPath()) {
   if (!fs.existsSync(file)) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(EXAMPLE, null, 2) + '\n', { flag: 'wx' });
-    throw new ConfigError(`wrote an example configuration to ${file}\nedit its project paths, delete the "example" line, then run org console again`);
+    throw new ConfigError(`wrote an example configuration to ${file}\nedit its project paths, delete the "example" line, then run record console again`);
   }
   let raw;
   try {

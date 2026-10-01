@@ -1,7 +1,7 @@
 # Roadmap: the Herdr platform
 
 Status lives in herdr-brain's own record (`/Users/rewt/development/rewt/.org`, goal **G-3**):
-`org show G-3`, `org status`, or the console's herdr-brain project. This page holds only the
+`record show G-3`, `record status`, or the console's herdr-brain project. This page holds only the
 shape and the reasons; it names items by ID and never repeats their state.
 
 ## Goal
@@ -26,7 +26,7 @@ and has no plugin-to-plugin dependencies, so modules share one install and one v
 
 | Module | Job | Comes from (bch-cloak) |
 |---|---|---|
-| record | The record: items, runs, reports, questions, decisions, priorities | `org` |
+| record | The record: items, runs, reports, questions, decisions, priorities | `org` (permanent alias) |
 | routes | Models, efforts, route table, selection policy | `scripts/lane/routing.json`, `routing.mjs` |
 | dispatch | Record the run, brief, lane, routed agent, watcher | `dispatch.sh`, `lane.mjs dispatch` |
 | watch | Wait for the worker, validate the report, deliver it | `notify-watch.sh` |

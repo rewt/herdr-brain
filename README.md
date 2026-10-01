@@ -1,4 +1,4 @@
-# herdr-org
+# Herdr Monitor
 
 Durable organizational state for agent-driven R&D, so that no LLM session has to stay alive to
 remember what the organization is doing.
@@ -10,14 +10,22 @@ inference tokens, and a completely fresh session of any harness can continue fro
 - Durability replaces conversational context; it does not add bureaucracy around it.
 - Reasoning costs tokens. Coordination mostly should not.
 
-Node ≥ 20, no dependencies (the optional `console/` has its own). Put `bin/org.mjs` on your PATH as `org` (`npm link`, or
-`alias org="node /path/to/herdr-org/bin/org.mjs"`).
+Node ≥ 20, no dependencies (the optional `console/` has its own). `npm link` installs
+`record` and its permanent `org` alias. Without npm, put `bin/record.mjs` on your PATH as
+`record`.
+
+The public module name is **record**. Existing automation keeps working unchanged: `org` runs
+the same implementation and prints the same output, while `.org/`, `ORG_DIR`, `ORG_ACTOR`, the
+`org` project-config key, and existing absolute paths to `bin/org.mjs` keep their names and
+meaning. A fresh `record init` also creates `.org/`; using one directory avoids two records that
+look like one project.
 
 ## Where things live
 
 | Piece | What lives there |
 |---|---|
-| `bin/org.mjs` | The command-line entry point for reading and changing organizational state. |
+| `bin/record.mjs` | The public `record` command; a thin entry point into the shared CLI. |
+| `bin/org.mjs` | The shared CLI implementation and permanent `org` compatibility entry point. |
 | `lib/` | The dependency-free core: event storage, state folding, reports and views. |
 | `brain/` | The Herdr watcher, operator queue and commands that start or answer sessions. |
 | `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
@@ -32,11 +40,11 @@ Node ≥ 20, no dependencies (the optional `console/` has its own). Put `bin/org
 ## The loop (you are the scheduler)
 
 ```sh
-org init                                     # creates ./.org
-org add --goal "Rate limiting shipped"       # → G-1
-org add "Persist rate-limit state" --parent G-1 --role engineer --capability deep \
+record init                                     # creates ./.org
+record add --goal "Rate limiting shipped"       # → G-1
+record add "Persist rate-limit state" --parent G-1 --role engineer --capability deep \
     --accept "survives restart"              # → ENG-1
-org start ENG-1 --harness claude-code --model opus
+record start ENG-1 --harness claude-code --model opus
 # R-1 started on ENG-1 "Persist rate-limit state" [claude-code · opus]
 #   brief   /…/.org/runs/R-1/brief.md  (1830 chars ≈ 458 tokens)
 #   report  /…/.org/runs/R-1/report.md
@@ -47,13 +55,13 @@ Launch any harness (in a Herdr pane or anywhere) and give it that prompt. The wo
 report when it stops: done, blocked, needs a human, or failed. No progress updates. Then:
 
 ```sh
-org sync      # record reports waiting at open runs' report paths
-org status    # one screen, no inference
+record sync      # record reports waiting at open runs' report paths
+record status    # one screen, no inference
 ```
 
-Kill every session whenever you like. `org status` rebuilds the picture from `.org/` alone, and
-`org snapshot` prints markdown meant to be handed to a fresh Claude, Codex, Gemini or other
-session ("Read the output of `org snapshot`, then …").
+Kill every session whenever you like. `record status` rebuilds the picture from `.org/` alone, and
+`record snapshot` prints markdown meant to be handed to a fresh Claude, Codex, Gemini or other
+session ("Read the output of `record snapshot`, then …").
 
 ## Reports
 
@@ -80,12 +88,12 @@ artifacts: []       # commits, branches, files, commands that show the work
 
 - Only `outcome` and `summary` are required. Unknown fields are kept.
 - `headline` is the one plain sentence the operator reads in the console: no item codes or
-  hashes. It is optional; `org check` and `org ingest` warn when it is missing and never refuse.
+  hashes. It is optional; `record check` and `record ingest` warn when it is missing and never refuse.
 - **Workers decompose their own blockers.** Each proposal becomes a child item of the reporting
   item. When the outcome is `blocked`, proposals also block it (override per proposal with
   `blocking: true|false`), so it becomes ready again when they are done. No triage session needed.
 - `learnings`, summaries and decisions flow into later briefs and the snapshot.
-- `org check <file>` validates a report without recording it.
+- `record check <file>` validates a report without recording it.
 
 ## Questions for the operator
 
@@ -93,7 +101,7 @@ Agents never hand the operator an open question or a list of options. They resea
 and ask one plain yes/no question:
 
 ```sh
-org ask "Adopt the theft fix once its review passes?" --parent G-1 --category design \
+record ask "Adopt the theft fix once its review passes?" --parent G-1 --category design \
     --recommend yes --why "O1 is the only option where the network refuses the theft. The review passed." \
     --on-yes "Implementation and its review start." --on-no "The fix path stops." \
     --memo archive/DECISION-THEFT-FIX-20260916.md --blocks ENG-7 --blocks REV-3 [--priority 80]
@@ -107,23 +115,23 @@ org ask "Adopt the theft fix once its review passes?" --parent G-1 --category de
   regular file (it is stored as an absolute path; directories and app bundles are refused). Unknown categories are refused with the list of known ones.
 
 ```sh
-org answer HUM-5 yes|no|"<short text>" [--note "why"] [--overrule]
+record answer HUM-5 yes|no|"<short text>" [--note "why"] [--overrule]
 ```
 
 - Records a decision note, sets `meta.answer` and `meta.answered_by` (the actor: `human` unless
   `ORG_ACTOR` is set), and closes the question as done.
 - **`no` does not release the work.** A question closed with `meta.answer=no` counts as unresolved
   for the items it blocks: they stay `blocked` (status shows `declined: <question>`) until someone
-  re-plans them and runs `org unblock <ID> --by HUM-5`. `yes` and text answers release them.
+  re-plans them and runs `record unblock <ID> --by HUM-5`. `yes` and text answers release them.
   A `no` does not stop a dependent that is already running, nor reopen one that is already
-  closed; `org answer` and the console Summary say so for each of them.
+  closed; `record answer` and the console Summary say so for each of them.
 - A reply whose first word is `yes` or `no` is that answer: `"No."` and `"no, not yet"` decline,
   and whatever follows the word is kept in front of the `--note`. Other replies are text answers.
-  `org ask --recommend` takes the same word alone (`"Yes."` is fine; `"yes, after review"` is
+  `record ask --recommend` takes the same word alone (`"Yes."` is fine; `"yes, after review"` is
   refused: the rest belongs in `--why`).
 - A second answer is refused. `--overrule` re-answers an answered question (typically one answered
   automatically) and records `meta.overruled=true`; it is refused when the answer would not change.
-- `org show` and run briefs list a declined blocker as `declined (answered no)`, not `done`.
+- `record show` and run briefs list a declined blocker as `declined (answered no)`, not `done`.
 
 ### Categories and approval policy
 
@@ -144,7 +152,7 @@ Missing entries fall back to these defaults, and configured categories are added
 category set to `auto` is answered with its recommendation as soon as it is asked
 (`meta.answered_by=auto`, the asking session as actor); it shows in the console's history (`h`), where
 the operator can still overrule it. Everything ships as `ask`. Relax a category only when its
-`answered_as_recommended` count in `org today --json` shows the agents decide it well.
+`answered_as_recommended` count in `record today --json` shows the agents decide it well.
 
 | Category | Covers |
 |---|---|
@@ -165,7 +173,7 @@ the operator can still overrule it. Everything ships as `ask`. Relax a category 
 Agents record their own decisions with one plain sentence for the operator:
 
 ```sh
-org note ENG-7 --decision --summary "Leave the exposed test cells alone until the fix lands" \
+record note ENG-7 --decision --summary "Leave the exposed test cells alone until the fix lands" \
     "Per archive/DECISION-CELLS-20260916.md: …"
 ```
 
@@ -175,10 +183,10 @@ removed, marked `· no plain summary`.
 Sessions opened by `contrib/settle-watch.mjs` get `ORG_ACTOR=<session name>`, so the record tells
 their answers and notes apart from the operator's.
 
-## `org today`: the operator's read model
+## `record today`: the operator's read model
 
-`org today` prints what waits on the operator, what was decided, what runs and what finished
-today, one line each, codes only in parentheses at the end. `org today --json` is the console's
+`record today` prints what waits on the operator, what was decided, what runs and what finished
+today, one line each, codes only in parentheses at the end. `record today --json` is the console's
 only view of the organization. It is deterministic for a fixed record, config, `ORG_NOW` and `TZ`
 ("today" is the local day of `TZ`).
 
@@ -221,15 +229,15 @@ only view of the organization. It is deterministic for a fixed record, config, `
 - *Waiting* is ranked by `unblocks_prioritized`, then priority, then age.
 - *Decided* holds questions answered today and today's decision notes (answer notes excluded).
 - *Finished* holds reports recorded today and items closed today (answered questions excluded).
-- Live Herdr state and session notes are not part of `org today`: the core never talks to Herdr.
+- Live Herdr state and session notes are not part of `record today`: the core never talks to Herdr.
 
-## `org recap`: one work block, top down
+## `record recap`: one work block, top down
 
-`org recap [--back N] [--json]` derives the latest work block from the log (`--back 1` is
+`record recap [--back N] [--json]` derives the latest work block from the log (`--back 1` is
 the one before). A block is a stretch of activity with no gap over two hours; one longer
 than eight hours is cut at 06:00, 12:00, 18:00 and 22:00 local, and a piece under an hour
 and a half joins its neighbour, so an overnight run reads as one block. For the block it
-gives: the items its threads grew from; the open questions (the same list as `org today`);
+gives: the items its threads grew from; the open questions (the same list as `record today`);
 each thread (an item worked or created in the block whose parent was not) with its runs,
 the items it spawned and which are still open, its questions and decisions; every
 question asked or answered and every decision note; the sessions (the actors that started
@@ -244,7 +252,7 @@ do); the console writes as `ORG_ACTOR=human`.
 
 ## The console
 
-`org console` (version 0.0.2) is a terminal app for a Herdr tab. It costs no model tokens and
+`record console` (version 0.0.2) is a terminal app for a Herdr tab. It costs no model tokens and
 answers three questions: which agent sessions are running, what they are doing, and what is
 waiting on me. From it the operator goes straight to any session's Herdr tab and answers the
 questions agents wait on. (Starting new work from its launch bar comes in the next round;
@@ -253,7 +261,7 @@ the bar is drawn but `n` only says so.)
 ```text
  herdr-org  20:50  4/30 sessions today  1 waiting on you                       console 0.0.2  ? help
  ( WAITING ON YOU ) ─────────────────────────────────────────────────────────────────────────── ( 1 )
-   ! Promote the Herdr Brain console into main?                  tooling · recommend yes · asked 19:19
+   ! Promote the Herdr Monitor into main?                  tooling · recommend yes · asked 19:19
      SESSION                    WHO                    WHERE              UP      STATE     DOING
  ( herdr-org ) ~/development/rewt/herdr-brain ────────────────────────────────────────────────── ( 2 )
  >   lane brain-console-v1 r3   Claude Opus 5 · high   lane-brain-consol… 44m     ● working Verifying…
@@ -268,7 +276,7 @@ the bar is drawn but `n` only says so.)
 
 ```sh
 npm --prefix console ci          # Ink and React, pinned by console/package-lock.json
-org console [--project NAME]     # or: node console/app.mjs [--project NAME] [--config FILE]
+record console [--project NAME]     # or: node console/app.mjs [--project NAME] [--config FILE]
 contrib/console-pane.sh [NAME]   # an unfocused Herdr tab labelled "console" in the project's workspace
 node console/app.mjs --print 140x40 [--select N] [--keys 'sh']   # one frame as text, no terminal needed
 ```
@@ -311,7 +319,7 @@ writes an example there and exits; edit it and delete its `"example"` line.
 }
 ```
 
-- `org`: read with `org today --json`, again whenever `events.jsonl` changes and every
+- `org`: the retained project-config key for the record directory; read with `record today --json`, again whenever `events.jsonl` changes and every
   `refresh_seconds`. If a read fails, the last good data stays and the header shows its age.
 - `ledger_dir`: `sessions-YYYY-MM-DD.log` (the count against `session_cap`) and the `STOP` file.
 - `claude_config_dirs` (of every project): where Claude session transcripts are found, by the
@@ -329,13 +337,13 @@ writes an example there and exits; edit it and delete its `"example"` line.
 From the top:
 
 1. **Header** segments: project, clock, sessions today against the cap, questions waiting (orange
-   when any), alerts, `STOP`, Herdr unavailable or stale org data, the scope when one is set, and
+   when any), alerts, `STOP`, Herdr unavailable or stale record data, the scope when one is set, and
    the version. `? help` on the right.
 2. **Waiting on you**, only when a question is open: the plain question, its category, the
-   recommendation and when it was asked, ranked as `org today` ranks them.
+   recommendation and when it was asked, ranked as `record today` ranks them.
 3. **Sessions**: every Herdr agent, grouped by repository (a worktree belongs to its main
    repository; git's common directory decides), groups ordered by their most urgent session
-   (blocked, working, idle, done), then by name. An org run whose agent has gone stays for an
+   (blocked, working, idle, done), then by name. A record run whose agent has gone stays for an
    hour as `gone`. For a lane agent, the console also reads the optional herdr-lanes session
    registry in the canonical checkout (`.lane/sessions.json` and live records in
    `.lane/sessions.json.d/`) read-only; malformed and completed records are ignored.
@@ -344,12 +352,12 @@ From the top:
 
 | Column | Shows | From |
 |---|---|---|
-| SESSION | `lane <topic> r<round>` from an org run; else `review <topic>` or `lane <topic>` from the lane session registry; else `lane <topic>` from an unnamed or generated-name lane worktree; else the agent's name, then the tab label (`tab 1` for a bare number) | org run `lane`/`round` (the agent's open run, else the latest finished run with its name); read-only `.lane/sessions.json.d/` matched by Herdr name or transcript session id; Herdr `cwd`, agent and tab |
-| WHO | tool and model in words, plus effort: `Claude Opus 5 · high`, `Codex Astra · xhigh`; `Claude · unknown` without a model | org run `harness`/`model`/`effort`; else Herdr's `agent` and the transcript's last model. An alias recorded in org (`opus`) gives way to the exact model in the transcript. |
-| WHERE | the checkout folder | Herdr `cwd` (org `workspace` for a gone run) |
-| UP | `9m`, `2h`, `3d` or `unknown` | org run `started`, else the transcript's first entry |
+| SESSION | `lane <topic> r<round>` from a record run; else `review <topic>` or `lane <topic>` from the lane session registry; else `lane <topic>` from an unnamed or generated-name lane worktree; else the agent's name, then the tab label (`tab 1` for a bare number) | record run `lane`/`round` (the agent's open run, else the latest finished run with its name); read-only `.lane/sessions.json.d/` matched by Herdr name or transcript session id; Herdr `cwd`, agent and tab |
+| WHO | tool and model in words, plus effort: `Claude Opus 5 · high`, `Codex Astra · xhigh`; `Claude · unknown` without a model | record run `harness`/`model`/`effort`; else Herdr's `agent` and the transcript's last model. An alias recorded in the record (`opus`) gives way to the exact model in the transcript. |
+| WHERE | the checkout folder | Herdr `cwd` (record `workspace` for a gone run) |
+| UP | `9m`, `2h`, `3d` or `unknown` | record run `started`, else the transcript's first entry |
 | STATE | `working`, `idle`, `blocked`, `done`, `gone`, `unknown` | Herdr `agent_status` |
-| DOING | at most ten words | Herdr's terminal title (unless it only repeats the agent's name), else the first sentence of the brief's work (what follows its Work item heading; the fixed opening every org brief has is skipped), else the org item title, else `no description` |
+| DOING | at most ten words | Herdr's terminal title (unless it only repeats the agent's name), else the first sentence of the brief's work (what follows its Work item heading; the fixed opening every record brief has is skipped), else the record item title, else `no description` |
 
 Model IDs are turned into words by a table in `console/lib/names.mjs`; an ID not in it is shown
 as it is. Codes (`ENG-7`, `R-12`, commit hashes) are stripped from SESSION and DOING; a title left
@@ -382,10 +390,10 @@ row, two on the others), then the actions, one line each, with what each causes 
 session folder to a configured checkout or that checkout's supported worktree layouts; unmatched
 folders are named `other`. Each project tab shows its own results plus `other` (so unmatched work
 is always reachable), and one line counts results waiting in the other configured projects. Use
-`p` to switch project tabs. Under the Brain results, org questions for the stage the project is
+`p` to switch project tabs. Under the Brain results, record questions for the stage the project is
 working on now (`G-1 meta.stage_now`), each read once by `brain explain` (one small model call per
 question, cached by its content; `"explain": false` in `console.json` turns it off). Items saved
-for later, and org questions that are parked or belong to a later stage, fold into one line each;
+for later, and record questions that are parked or belong to a later stage, fold into one line each;
 Enter opens a fold. The project's newest instruction from the operator sits above the list.
 
 | Key | Action |
@@ -401,13 +409,13 @@ Enter opens a fold. The project's newest instruction from the operator sits abov
 | x | Drop a result for good (`brain never`), or clear a finished report you have read (`brain dismiss`). Confirmed first. |
 | i | Give the whole project an instruction in your own words. It is recorded as an operator decision note on the project's top goal (`OPERATOR DIRECTION <date time>: …`), which its sessions read first, newest first, before deciding anything. Nothing is sent into a running session. |
 | L | Turn the brain loop off or on (`brain service stop|start`), after a confirmation. The header says `loop ok`, `loop stalled`, `loop down` or `loop off`. |
-| 1–9 on an org question | When the question has been read, its worked-out answers are choices too: the number records that answer with `org answer`, after a confirmation. |
-| d | On an org question: start a session that works it out (`brain start`: a new Herdr tab in the project's checkout, on the folder's Claude account, with a brief that asks for the real choices and a recommendation and forbids deciding). When it stops, its choices come back to Waiting on you. The question gets an org note naming the session. |
+| 1–9 on a record question | When the question has been read, its worked-out answers are choices too: the number records that answer with `record answer`, after a confirmation. |
+| d | On a record question: start a session that works it out (`brain start`: a new Herdr tab in the project's checkout, on the folder's Claude account, with a brief that asks for the real choices and a recommendation and forbids deciding). When it stops, its choices come back to Waiting on you. The question gets a record note naming the session. |
 | s | Summary popup: 1/2/3 tabs, j/k and page keys scroll, `o` opens the file, Enter peeks, Esc closes |
 | m, right click | Row menu with the verbs the row offers. Arrows and Enter pick; Esc closes. |
 | Tab | New task (next round) |
 | h | Today's history, newest first: answers, decisions and finished work. `h` or Esc returns. |
-| / | Scope: all repositories, one repository, *needs you*, *working*, or the history. A repository (a click on the rail, too) narrows the sessions and Waiting on you alike: brain results whose session ran in that repository or one of its worktrees, and org questions when it is the project's own checkout. *working* hides Waiting on you |
+| / | Scope: all repositories, one repository, *needs you*, *working*, or the history. A repository (a click on the rail, too) narrows the sessions and Waiting on you alike: brain results whose session ran in that repository or one of its worktrees, and record questions when it is the project's own checkout. *working* hides Waiting on you |
 | ! / w | Show only what needs you / only working sessions (again to show all) |
 | wheel | Scroll the list, or the open popup |
 | o | Open the brief, memo, report or message with `$VISUAL`, `$EDITOR` (the console suspends and returns) or macOS `open -t` (the default text editor) |
@@ -430,10 +438,10 @@ last_pane = ["prefix+backtick", "ctrl+alt+b"]   # back to where you were, one ch
 [[keys.command]]
 key = "ctrl+alt+c"
 type = "popup"
-command = "node /path/to/herdr-org/bin/org.mjs console"
+command = "node /path/to/herdr-org/bin/record.mjs console"
 width = "100%"
 height = "100%"
-description = "Herdr Brain console"
+description = "Herdr Monitor"
 ```
 
 As a popup (no `HERDR_PANE_ID`, `HERDR_ACTIVE_PANE_ID` set, or `HERDR_CONSOLE_POPUP=1`) the
@@ -449,7 +457,7 @@ Herdr's own pane menu is not available in that pane. Without `HERDR_PANE_ID`, or
 fails, right clicks stay Herdr's; `m` opens the same menu. The keyboard does everything the mouse
 does.
 
-The console records answers only through `org answer` (a child process with an argument array,
+The console records answers only through `record answer` (a child process with an argument array,
 `ORG_ACTOR=human`, so the answer is the operator's; the reason goes as `--note=<reason>`) and
 re-reads at once. Everything agents wrote is shown with terminal escape sequences and control
 characters removed. A text document opened with `o` is written to a private temporary folder and
@@ -467,7 +475,7 @@ release is activated. `herdr/release.sh` manages them:
 
 ```sh
 herdr/release.sh build v0.1.1      # copy the tag into ~/.local/share/herdr-monitor/releases/v0.1.1 (read-only) and run its build step
-herdr/release.sh activate v0.1.1   # point current at it; the first time, move the org and lane launchers and the Brain service onto current
+herdr/release.sh activate v0.1.1   # point current at it; the first time, move the record, org and lane launchers and the Brain service onto current
 herdr/release.sh rollback          # back to the release before
 herdr/release.sh restore           # launchers and the Brain service back to where they were before the first activation
 herdr/release.sh dev <worktree>    # a second plugin, rewt.herdr-monitor-dev, running a worktree beside the release
@@ -482,7 +490,7 @@ manifest and build step.
 ## The items pane
 
 `node console/items.mjs [--project NAME]` is a narrow live view of an organization's items, made
-to sit beside a supervisor chat in the same Herdr tab. It reads `org status`, `org log` and
+to sit beside a supervisor chat in the same Herdr tab. It reads `record status`, `record log` and
 Herdr's agent and pane lists every few seconds, and the chat's visible screen and transcript, and
 shows what the chat has surfaced by what it needs now (decide, blocked with what unblocks it,
 stalled, working, resolved), then the live sessions and their work, then recent activity. It never
@@ -503,7 +511,7 @@ dependencies (`npm --prefix console ci`).
 ## Guardrails are advisory
 
 `max_runs`, `max_children`, `max_depth` and `escalation_budget` default from `.org/config.json`
-and can be set per item (`--budget max_children=8`, `org set ID budget.max_runs=5`); descendants
+and can be set per item (`--budget max_children=8`, `record set ID budget.max_runs=5`); descendants
 inherit them. Exceeding one is shown under ATTENTION and never stops work.
 
 The CLI refuses only what would make the record inconsistent: unknown ids, blocking or parent
@@ -520,15 +528,15 @@ Derived, never stored, checked in this order:
 4. otherwise from the latest report: `done`, `needs_human`, `blocked` (nothing linked yet), or
    `ready` (blockers resolved, last run failed, or nothing reported yet).
 
-Goals roll up their descendants. An abandoned run frees its item; `org sync` and `org ingest` skip
-any report that arrives later, and `org abandon` says that late reports will not be ingested.
+Goals roll up their descendants. An abandoned run frees its item; `record sync` and `record ingest` skip
+any report that arrives later, and `record abandon` says that late reports will not be ingested.
 
 ## Measuring cost
 
-- `org start` prints each brief's size and `org snapshot` prints its size on stderr: these are the
+- `record start` prints each brief's size and `record snapshot` prints its size on stderr: these are the
   cold-start context the organization adds.
-- Record usage when a harness shows it: `org set R-3 tokens_in=48210 tokens_out=5120 cost=0.42`,
-  or add a `usage:` block to the report. `org status` and `org show <item>` total it.
+- Record usage when a harness shows it: `record set R-3 tokens_in=48210 tokens_out=5120 cost=0.42`,
+  or add a `usage:` block to the report. `record status` and `record show <item>` total it.
 
 ## Storage
 
@@ -542,7 +550,7 @@ any report that arrives later, and `org abandon` says that late reports will not
 
 Only the CLI writes `events.jsonl`, under a lock. It is plain JSONL, so `jq`, `grep` and
 `git diff` work on it. Whether to commit `.org/` is your call. A sandboxed harness that cannot
-write outside its workspace can be started with `org start ID --report <path-in-workspace>`.
+write outside its workspace can be started with `record start ID --report <path-in-workspace>`.
 
 ## Not in this version
 

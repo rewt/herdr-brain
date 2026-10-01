@@ -114,7 +114,7 @@ test('frame is cell-exact and source text cannot inject terminal escapes at targ
     const f = session.frame(cols, rows); assert.equal(f.lines.length, rows);
     for (const l of f.lines) { assert.equal(cellWidth(lineText(l)), cols); assert.doesNotMatch(lineText(l), /\x1b|secret/); }
     assert.ok(f.hits.flat().every(h => h.from >= 0 && h.to <= cols));
-    assert.match(lineText(f.lines[0]), /^ herdr brain/);
+    assert.match(lineText(f.lines[0]), /^ Herdr Monitor/);
   }
 });
 

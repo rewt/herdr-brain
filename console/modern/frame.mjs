@@ -18,8 +18,8 @@ export const MODERN_PALETTE = MODERN_PALETTES.light;
 // Needs you, then the groups folded out of it; each stays one keypress away.
 export const NEED_FOLDS = [
   { view: 'needs', list: 'needs', title: 'Needs you', label: 'Open' },
-  { view: 'resolved', list: 'resolved', title: 'Resolved in the org', label: 'Resolved', about: 'Session questions whose org item has closed, or that a newer result about the same item replaced.' },
-  { view: 'ended', list: 'ended', title: 'Ended sessions', label: 'Ended sessions', about: 'Questions from sessions that ended over a day ago, with no org item recording them.' },
+  { view: 'resolved', list: 'resolved', title: 'Resolved in the record', label: 'Resolved', about: 'Session questions whose record item has closed, or that a newer result about the same item replaced.' },
+  { view: 'ended', list: 'ended', title: 'Ended sessions', label: 'Ended sessions', about: 'Questions from sessions that ended over a day ago, with no record item recording them.' },
   { view: 'reports', list: 'reports', title: 'Session reports', label: 'Reports', about: 'Sessions that finished and reported without asking for a decision.' },
   { view: 'later', list: 'later', title: 'Saved for later', label: 'Saved for later' },
   { view: 'parked', list: 'parked', title: 'Future stages', label: 'Future stages' },
@@ -58,7 +58,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   // second rail; checkouts remain available on demand with w.
   if (rail) {
   for (let y = 0; y < rows - 1; y++) put(y, 0, '', 'fg', 'panel', false, rail);
-  put(0, 1, 'herdr brain', 'bright', 'panel', true, rail - 2);
+  put(0, 1, 'Herdr Monitor', 'bright', 'panel', true, rail - 2);
   put(2, 1, 'Project', 'muted', 'panel', false, rail - 2);
   control('scope', `${p?.name ?? 'Choose project'} ▾`, 3, 1, rail - 2, 'blue', null, 'panel');
   control('home', `${s.view === 'overview' ? '▏' : ' '}Project overview`, 5, 0, rail, 'blue', null, s.view === 'overview' ? 'selected' : 'panel');
@@ -163,7 +163,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   } else if (s.view === 'goals' || s.view === 'tasks') {
     const list = s.view === 'goals' ? m.goals : m.tasks;
     section(`${s.view === 'goals' ? 'Goals' : 'Tasks'} · ${list.length}`, s.view === 'goals' ? 'goal' : 'blue'); list.forEach(itemRow);
-    if (!list.length) paragraph(s.errors.status ? 'Organization data is unavailable. Refresh to reconnect.' : p?.org ? 'Nothing defined yet. Explore first; structure can follow.' : 'No organization connected. Goals and tasks require project setup, which is not connected in this trial. Open a folder or inspect an existing Herdr conversation first.');
+    if (!list.length) paragraph(s.errors.status ? 'Record data is unavailable. Refresh to reconnect.' : p?.org ? 'Nothing defined yet. Explore first; structure can follow.' : 'No record connected. Goals and tasks require project setup, which is not connected in this trial. Open a folder or inspect an existing Herdr conversation first.');
   } else if (NEED_FOLDS.some(f => f.view === s.view)) {
     const fold = NEED_FOLDS.find(f => f.view === s.view), list = m[fold.list];
     section(`${fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
@@ -196,7 +196,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const n = m.allNeeds.find(n => n.key === s.detail);
     if (!n) paragraph('This item has left the queue. Return to Needs you for the current list.');
     else {
-      const g = n.data?.digest, from = n.kind === 'result' ? `from ${n.data?.tab_label ?? n.session ?? 'a session'}` : 'org question';
+      const g = n.data?.digest, from = n.kind === 'result' ? `from ${n.data?.tab_label ?? n.session ?? 'a session'}` : 'record question';
       section(`${n.handle ?? n.question ?? 'Decision'} · ${from}`, 'amber');
       paragraph(g?.question ?? n.title ?? n.headline, 'bright'); row();
       if (n.settled) { paragraph(`Folded · ${n.settled}`, 'teal'); row(); }
@@ -300,7 +300,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'For answers and dispatch: org console --project NAME', 'Writes: the start bar, and what you type into a session. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'For answers and dispatch: record console --project NAME', 'Writes: the start bar, and what you type into a session. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {

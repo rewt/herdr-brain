@@ -1,13 +1,16 @@
 {
   "name": "herdr-brain",
   "version": "0.1.0",
-  "description": "Durable organizational state for agent R&D: work items, runs, reports and zero-inference status outside any LLM session.",
+  "description": "Herdr Monitor: a durable record of work items, runs, reports and zero-inference status outside any LLM session.",
   "type": "module",
   "private": true,
   "scripts": {
     "test": "node --test test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs",
     "test:lanes": "node --test lanes/test/*.test.mjs"
   },
-  "bin": { "org": "./bin/org.mjs" },
+  "bin": {
+    "record": "./bin/record.mjs",
+    "org": "./bin/org.mjs"
+  },
   "engines": { "node": ">=20" }
 }

@@ -333,10 +333,10 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
     h.alerts = s.today?.attention?.length ?? 0;
     h.loop = loopWords(s.loop);
     if (s.herdr && !s.herdr.ok) h.herdr = 'Herdr unavailable';
-    if (!s.today && s.todayError) h.stale = `org unreadable: ${s.todayError}`;
+    if (!s.today && s.todayError) h.stale = `record unreadable: ${s.todayError}`;
     else if (!s.today) h.stale = 'loading…';
-    else if (s.todayError) h.stale = `org data ${ago(now - s.todayAt)} old (${s.todayError})`;
-    else if (now - s.todayAt > 3 * config.refresh_seconds * 1000) h.stale = `org data ${ago(now - s.todayAt)} old`;
+    else if (s.todayError) h.stale = `record data ${ago(now - s.todayAt)} old (${s.todayError})`;
+    else if (now - s.todayAt > 3 * config.refresh_seconds * 1000) h.stale = `record data ${ago(now - s.todayAt)} old`;
     const scope = s.ui.scope;
     if (scope.repo) h.scope = s.board.groups.find((g) => g.key === scope.repo)?.name ?? 'a repository';
     if (scope.view !== 'all') h.scope = `${h.scope ? `${h.scope}, ` : ''}${scope.view === 'needs' ? 'needs you' : 'working'}`;
@@ -462,7 +462,7 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
         const stamp = `${d.now().toLocaleDateString('sv')} ${hhmm(d.now().toISOString())}`;
         const r = await d.orgNote(p, goal, `OPERATOR DIRECTION ${stamp}: ${effect.text}`, { decision: true });
         if (!r?.ok) {
-          say(`Not recorded: ${r?.error ?? 'org note failed'}`, 'error');
+          say(`Not recorded: ${r?.error ?? 'record note failed'}`, 'error');
           return;
         }
         await refresh();

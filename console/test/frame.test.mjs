@@ -224,7 +224,7 @@ test('the menu opens at its row; the scope and help popups list their choices', 
 
   f = renderFrame(view({ help: true }), 100, 30);
   t = text(f).join('\n');
-  assert.match(t, /Herdr Brain console 0\.0\.2/);
+  assert.match(t, /Herdr Monitor 0\.0\.2/);
   assert.match(t, /Enter, left click +peek at the session here/);
   assert.match(t, /Ctrl\+Alt\+B, or Ctrl\+B then `/);
   assert.match(t, /m, right click +row menu/);

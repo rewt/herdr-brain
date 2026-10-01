@@ -269,7 +269,7 @@ export function renderFeed({ s, model, project, now }, cols, rows) {
     const t = itemThread(model, s.detail, s.events);
     const entry = model.waiting.find(w => w.key === s.entryKey) ?? model.waiting.find(w => w.id === s.detail);
     row([text('‹ back', 'blue', true), text(`   ${s.detail}`, categoryColor(s.detail), true), text(t ? ` · ${t.item.status}` : '', 'muted'), ], { id: 'back' });
-    if (!t) row([text('This item is not in the organization.', 'muted')]);
+    if (!t) row([text('This item is not in the record.', 'muted')]);
     else {
       section('TITLE'); para(t.item.title, 'bright');
       const summary = t.item.created?.why;
@@ -443,7 +443,7 @@ export function createFeedSession({ config, projectIndex = 0, deps = {}, onChang
   const changed = () => { if (!s.stopped) onChange(); };
   const model = () => feedModel({ chat: chat?.data ?? null, status: s.status, events: s.events, agents: s.agents, workspaces: s.workspaces, now: d.now(), filter: s.filter, screen: s.screen, sort: s.sort });
   async function refresh() {
-    if (s.pending || !project?.org) { if (!project?.org) s.errors.org = 'This project has no organization.'; return s.pending; }
+    if (s.pending || !project?.org) { if (!project?.org) s.errors.org = 'This project has no record.'; return s.pending; }
     s.pending = (async () => {
       const load = async (key, fn) => { try { const v = await fn(); delete s.errors[key]; return v; } catch (e) { s.errors[key] = `${key}: ${e.message}`; return undefined; } };
       const [status, events, agents] = await Promise.all([load('status', () => d.orgStatus(project)), load('log', () => d.orgLog(project, env.HERDR_FEED_SINCE ?? '36h')), load('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; })]);

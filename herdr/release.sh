@@ -27,7 +27,7 @@ PLIST=${HERDR_MONITOR_PLIST:-$HOME/Library/LaunchAgents/com.rewt.herdr-brain.pli
 LABEL=com.rewt.herdr-brain
 LAUNCHCTL=${RELEASE_LAUNCHCTL:-launchctl}
 PLUGIN=rewt.herdr-monitor
-LAUNCHERS="org:bin/org.mjs lane:lanes/lane.mjs"
+LAUNCHERS="record:bin/org.mjs org:bin/org.mjs lane:lanes/lane.mjs"
 
 die() { echo "release: $*" >&2; exit 1; }
 say() { echo "release: $*"; }
@@ -54,7 +54,11 @@ remember() {
   mkdir -p "$before"
   for l in $LAUNCHERS; do
     local name=${l%%:*}
-    if [ -L "$BIN_DIR/$name" ]; then readlink "$BIN_DIR/$name" > "$before/$name"; fi
+    if [ -L "$BIN_DIR/$name" ]; then
+      readlink "$BIN_DIR/$name" > "$before/$name"
+    elif [ ! -e "$BIN_DIR/$name" ]; then
+      : > "$before/$name.missing"
+    fi
   done
   [ -f "$PLIST" ] && cp "$PLIST" "$before/plist"
   return 0
@@ -159,7 +163,11 @@ restore() {
   [ -d "$before" ] || die "nothing to restore: no activation was recorded"
   for l in $LAUNCHERS; do
     local name=${l%%:*}
-    [ -f "$before/$name" ] && ln -sfn "$(cat "$before/$name")" "$BIN_DIR/$name"
+    if [ -f "$before/$name" ]; then
+      ln -sfn "$(cat "$before/$name")" "$BIN_DIR/$name"
+    elif [ -f "$before/$name.missing" ]; then
+      rm -f "$BIN_DIR/$name"
+    fi
   done
   if [ -f "$before/plist" ] && [ "${RELEASE_NO_LAUNCHD:-}" != 1 ]; then
     cp "$before/plist" "$PLIST"

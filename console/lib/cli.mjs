@@ -34,27 +34,27 @@ function orgEnv(project) {
 }
 
 function firstLine(text) {
-  return String(text ?? '').trim().split('\n')[0].replace(/^org:\s*/, '');
+  return String(text ?? '').trim().split('\n')[0].replace(/^(?:record|org):\s*/, '');
 }
 
 export async function orgToday(project) {
   const r = await run(process.execPath, [ORG_BIN, 'today', '--json'], { env: orgEnv(project) });
-  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org today failed');
+  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'record today failed');
   return JSON.parse(r.stdout);
 }
 
 // Recent events, one JSON object per line, for the items pane.
 export async function orgLog(project, since = '36h') {
   const r = await run(process.execPath, [ORG_BIN, 'log', '--since', since, '--json'], { env: orgEnv(project) });
-  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org log failed');
+  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'record log failed');
   return r.stdout.split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
 }
 
 export async function orgStatus(project) {
   const r = await run(process.execPath, [ORG_BIN, 'status', '--json'], { env: orgEnv(project) });
-  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'org status failed');
+  if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'record status failed');
   const doc = JSON.parse(r.stdout);
-  if (!Array.isArray(doc.items) || !Array.isArray(doc.runs)) throw new Error('unexpected org status output');
+  if (!Array.isArray(doc.items) || !Array.isArray(doc.runs)) throw new Error('unexpected record status output');
   return doc;
 }
 
@@ -76,13 +76,13 @@ export function answerArgs({ question, answer, note, overrule }) {
 
 export async function orgAnswer(project, request) {
   const r = await run(process.execPath, [ORG_BIN, ...answerArgs(request)], { env: orgEnv(project) });
-  return r.ok ? { ok: true, output: r.stdout.trim() } : { ok: false, error: firstLine(r.stderr) || r.error?.message || 'org answer failed' };
+  return r.ok ? { ok: true, output: r.stdout.trim() } : { ok: false, error: firstLine(r.stderr) || r.error?.message || 'record answer failed' };
 }
 
 // A plain note on an item, as the operator. Best effort: a failure is reported, never fatal.
 export async function orgNote(project, id, text, { decision = false } = {}) {
   const r = await run(process.execPath, [ORG_BIN, 'note', id, text, ...(decision ? ['--decision'] : [])], { env: orgEnv(project) });
-  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || 'org note failed' };
+  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || 'record note failed' };
 }
 
 // A task the operator typed, under the work block when there is one.
@@ -93,7 +93,7 @@ export function addArgs({ title, parent }) {
 
 export async function orgAdd(project, request) {
   const r = await run(process.execPath, [ORG_BIN, ...addArgs(request)], { env: orgEnv(project) });
-  return r.ok ? { ok: true, id: firstLine(r.stdout) } : { ok: false, error: firstLine(r.stderr) || r.error?.message || 'org add failed' };
+  return r.ok ? { ok: true, id: firstLine(r.stdout) } : { ok: false, error: firstLine(r.stderr) || r.error?.message || 'record add failed' };
 }
 
 // A new chat the operator asked for: a tab in the chosen checkout, a supported

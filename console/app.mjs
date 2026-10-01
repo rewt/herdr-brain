@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Herdr Brain console: the Ink entry point. Everything it shows comes from
+// Herdr Monitor console: the Ink entry point. Everything it shows comes from
 // lib/session.mjs (data, keys and clicks) and lib/frame.mjs (lines of coloured
 // spans); this file only draws those spans, forwards keys and mouse reports, and
 // keeps the terminal's modes (alternate screen, mouse reporting) balanced.
@@ -35,17 +35,17 @@ try {
     },
   }));
 } catch (error) {
-  process.stderr.write(`org console: ${error.message}\nTry --help.\n`);
+  process.stderr.write(`record console: ${error.message}\nTry --help.\n`);
   process.exit(1);
 }
 
 if (opt.help) {
-  process.stdout.write(`Herdr Brain console ${VERSION}
-usage: org console [--project NAME] [--modern]
-       org console --modern --folder PATH
+  process.stdout.write(`Herdr Monitor ${VERSION}
+usage: record console [--project NAME] [--modern]
+       record console --modern --folder PATH
        node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
 
---modern opens the live, read-only native-spaces trial. No model calls or org writes.
+--modern opens the live, read-only native-spaces trial. No model calls or record writes.
 --keys sends characters in order: literal \\n means Enter and \\e means Escape.
 Modern keys: p scope dropdown, h overview, g goals, t tasks, s sessions, ! needs.
 Tab changes section; Up/Down select rows; Left/Right change views; Enter opens; Esc goes back.
@@ -75,7 +75,7 @@ try {
   }
 } catch (error) {
   if (!(error instanceof ConfigError)) throw error;
-  process.stderr.write(`org console: ${error.message}\n`);
+  process.stderr.write(`record console: ${error.message}\n`);
   process.exit(1);
 }
 
@@ -83,7 +83,7 @@ let projectIndex = folderIndex ?? (opt.modern && !opt.project ? -1 : 0);
 if (opt.project) {
   projectIndex = config.projects.findIndex((p) => p.name === opt.project);
   if (projectIndex < 0) {
-    process.stderr.write(`org console: no project named "${opt.project}" (configured: ${config.projects.map((p) => p.name).join(', ')})\n`);
+    process.stderr.write(`record console: no project named "${opt.project}" (configured: ${config.projects.map((p) => p.name).join(', ')})\n`);
     process.exit(1);
   }
 }
@@ -94,7 +94,7 @@ const createConsole = opt.modern ? createModernSession : createSession;
 if (opt.print) {
   const m = /^(\d+)x(\d+)$/.exec(opt.print);
   if (!m) {
-    process.stderr.write('org console: --print expects COLSxROWS, e.g. 140x40\n');
+    process.stderr.write('record console: --print expects COLSxROWS, e.g. 140x40\n');
     process.exit(1);
   }
   // A snapshot is read-only: it must never move the operator's Herdr focus,
@@ -123,7 +123,7 @@ if (opt.print) {
 }
 
 if (!process.stdin.isTTY || !process.stdout.isTTY) {
-  process.stderr.write('org console: needs an interactive terminal (try --print 140x40 for a snapshot)\n');
+  process.stderr.write('record console: needs an interactive terminal (try --print 140x40 for a snapshot)\n');
   process.exit(1);
 }
 
@@ -299,7 +299,7 @@ for (const event of ['uncaughtException', 'unhandledRejection']) {
     // Stop observers and timers too, or a live-screen subprocess outlives us.
     try { session.stop(); } catch {}
     giveBackTerminal();
-    process.stderr.write(`org console crashed: ${error?.stack ?? error}\n`);
+    process.stderr.write(`record console crashed: ${error?.stack ?? error}\n`);
     process.exit(1);
   });
 }

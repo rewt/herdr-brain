@@ -180,7 +180,7 @@ proposals:
   ok(['start', 'ARCH-1']);
   const brief = fs.readFileSync(path.join(dir, 'runs/R-2/brief.md'), 'utf8');
   assert.match(brief, /Related items \(same parent\)\n- \*\*RES-1\*\* Measure latency — ready/);
-  assert.match(brief, /full report: `org show R-1`/);
+  assert.match(brief, /full report: `record show R-1`/);
 });
 
 test('an abandoned run frees its item and a late report is not ingested', () => {

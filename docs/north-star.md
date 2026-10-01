@@ -93,7 +93,7 @@ of the orchestration is not a goal and is usually evidence of a wrong turn.
 
 ## The architecture
 
-Herdr Brain is not a process. It is durable organizational intelligence plus
+Herdr Monitor is not a process. It is durable organizational intelligence plus
 short-lived reasoning sessions. **The brain is durable; the executive function is
 ephemeral.** There is no resident head.
 
@@ -123,7 +123,7 @@ ephemeral.** There is no resident head.
 Four sources feed the durable brain, and no single one should be made responsible
 for everything:
 
-- **`org`** — operational knowledge: goals, work items, runs, reports, blockers,
+- **the record (`record`, with `org` as its permanent alias)** — operational knowledge: goals, work items, runs, reports, blockers,
   progress, decisions or decision references, priorities, what needs attention.
 - **Git / specs / ADRs / evidence** — authoritative project truth: what code exists,
   accepted architecture, implementation state, tests and gates, accepted decisions
@@ -210,7 +210,7 @@ And, since the point is freeing humans (2026-10-01), by the human time the work 
 
 ## What is not the destination
 
-`org` is a deterministic substrate for *some* organizational state. It is not the
+The record is a deterministic substrate for *some* organizational state. It is not the
 brain, and a passing test suite is not evidence of continuity. Do not treat storage
 as the finished system: nothing is proven until real work has depended on it across
 a real session boundary.
@@ -225,10 +225,10 @@ Updated 2026-09-16 after the first bch-cloak pilot; evidence and numbers in
 
 | Capability | Exists | Proven |
 | --- | --- | --- |
-| 1. Durable organizational state | `org` M1, live for bch-cloak (goals, items, runs, reports, decisions, priorities); still 1 of the 4 sources | **Partly** — sessions continued real work from it all afternoon; no link yet to git/evidence or memory; org cannot yet say "done by worker, awaiting review" |
+| 1. Durable organizational state | `record` M1, live for bch-cloak through its `org` alias (goals, items, runs, reports, decisions, priorities); still 1 of the 4 sources | **Partly** — sessions continued real work from it all afternoon; no link yet to git/evidence or memory; the record cannot yet say "done by worker, awaiting review" |
 | 2. Cross-session execution continuity | Watchers (`contrib/settle-watch.mjs`) + fresh settle sessions under `SETTLE.md` | **Yes, for transitions** — 13 real runs handed off with no resident LLM, flat 54k–124k context per session; workers wrote valid reports and decomposed their own follow-ups |
 | 3. Ephemeral executive / planning | `continue.sh` opens a fresh executive; decides within delegated authority | **No** — the day's plan (protocol release) was missing from org until the operator intervened and a long chat rebuilt it; no planning session exists |
-| 4. Disposable human-facing brain | `org status` / `org snapshot`; no curated view; notifications off | **No** — the operator's window was a long-running chat that cost 99M input tokens, more than the supervisor it replaced |
+| 4. Disposable human-facing brain | `record status` / `record snapshot`; no curated view; notifications off | **No** — the operator's window was a long-running chat that cost 99M input tokens, more than the supervisor it replaced |
 
 2026-09-18: herdr-lanes was folded into `lanes/` as the dispatch layer for worktrees, dispatch, review and promotion.
 

@@ -199,7 +199,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     }
     if (s.picker) { s.focus = s.picker.returnFocus; s.picker = null; }
     if (id === 'appearance') { s.appearance = s.appearance === 'dark' ? 'light' : 'dark'; changed(); return; }
-    if (id === 'unavailable') { s.message = 'Read-only trial: use the existing org console for actions; Herdr for new chats.'; changed(); return; }
+    if (id === 'unavailable') { s.message = 'Read-only trial: use Herdr Monitor for actions; Herdr for new chats.'; changed(); return; }
     if (id.startsWith('link-item:')) return activate(`item:${id.slice(10).split('|')[0]}`);
     if (id.startsWith('link-space:')) return activate(`space:${id.slice(11).split('|')[0]}`);
     if (id === 'back') return restore(s.history, s.future);

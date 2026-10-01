@@ -698,7 +698,7 @@ function scopePopup(view, cols, rows, G) {
 
 export function helpLines(version) {
   return [
-    `Herdr Brain console ${version ?? ''}`.trim(),
+    `Herdr Monitor ${version ?? ''}`.trim(),
     '',
     'j/k ↑/↓ PgUp/PgDn Home/End   move (or scroll a popup)',
     'Enter, left click            peek at the session here (Esc comes back)',
@@ -714,7 +714,7 @@ export function helpLines(version) {
     'r                            reply in your own words',
     'l                            save for later      x  drop it, or clear a finished one',
     '',
-    'A question filed in org:',
+    'A question filed in the record:',
     '1-9                          record one of the worked-out answers',
     'y / n                        approve / decline (n in history: overrule)',
     'd                            start a session to work it out; it comes back here',

@@ -22,50 +22,54 @@ import {
 } from '../lib/render.mjs';
 
 const BIN = fileURLToPath(import.meta.url);
+const RECORD_BIN = path.join(path.dirname(BIN), 'record.mjs');
 
-const USAGE = `org: durable organizational state for agent R&D (no daemon, no inference)
+const USAGE = `record: durable organizational state for agent R&D (no daemon, no inference)
 
 Setup
-  org init [dir]                          create an organization (default ./.org)
+  record init [dir]                       create a record (default ./.org)
 
 Work
-  org add <title> [--goal] [--role R] [--capability C] [--parent ID]
+  record add <title> [--goal] [--role R] [--capability C] [--parent ID]
           [--blocked-by ID]... [--accept TEXT]... [--priority N] [--budget key=N]...
-  org block <ID> --by <ID>                record that --by blocks ID (org unblock undoes it)
-  org note <ID> <text> [--decision [--summary TEXT]]
+  record block <ID> --by <ID>             record that --by blocks ID
+  record unblock <ID> --by <ID>           remove that blocking link
+  record note <ID> <text> [--decision [--summary TEXT]]
                                           attach a note or decision (summary: one plain sentence)
 
 Questions for the operator
-  org ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT
+  record ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT
           [--on-yes T] [--on-no T] [--memo PATH] [--blocks ID]... [--priority N]
                                           a role=human item; auto categories answer at once
-  org answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
+  record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
                                           a "no" keeps the work it blocks blocked
-  org set <ID> key=value...               edit an item (title role capability priority parent
+  record set <ID> key=value...            edit an item (title role capability priority parent
                                           budget.<key> meta.<key>) or record run metadata
-                                          (e.g. org set R-3 tokens_in=48210 tokens_out=5120)
-  org close <ID> [--dropped] [--note T]   org reopen <ID> [--note T]
+                                          (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
+  record close <ID> [--dropped] [--note T]
+  record reopen <ID> [--note T]
 
 Runs and reports
-  org start <ID> [--harness H] [--model M] [--effort E] [--workspace DIR]
+  record start <ID> [--harness H] [--model M] [--effort E] [--workspace DIR]
           [--report PATH] [--escalation] [--meta key=value]...
-  org check <report.md>                   validate a report without recording anything
-  org ingest <report.md> [--run R-n]      record a report
-  org sync                                record every report waiting at an open run's report path
-  org abandon <R-n> [--note T]            give up on a run (a later report is still accepted)
-  org brief <R-n>                         print the brief a run was given
+  record check <report.md>                validate a report without recording anything
+  record ingest <report.md> [--run R-n]   record a report
+  record sync                             record every report waiting at an open run's report path
+  record abandon <R-n> [--note T]         give up on a run (a later report is still accepted)
+  record brief <R-n>                      print the brief a run was given
 
 Views (zero inference)
-  org status [--json]                     one-screen overview
-  org snapshot                            markdown state for a fresh session of any harness
-  org show <ID> [--json]                  an item or run with its reports and history
-  org log [--since 2h|09:00|DATE] [--limit N] [--json]
-  org today [--json]                      what waits on the operator, was decided, runs and finished today
-  org recap [--back N] [--json]           the latest work block top down: threads, what they spawned,
+  record status [--json]                  one-screen overview
+  record snapshot                         markdown state for a fresh session of any harness
+  record show <ID> [--json]               an item or run with its reports and history
+  record log [--since 2h|09:00|DATE] [--limit N] [--json]
+  record today [--json]                   what waits on the operator, was decided, runs and finished today
+  record recap [--back N] [--json]        the latest work block top down: threads, what they spawned,
                                           asked and were told, what is pending (--back 1: the one before)
-  org console [--project NAME] [--modern] the operator console (needs: npm --prefix console ci)
+  record console [--project NAME] [--modern] the Herdr Monitor console (needs: npm --prefix console ci)
 
-The organization is found from $ORG_DIR or the nearest .org/ above the current directory.
+The record is found from $ORG_DIR or the nearest .org/ above the current directory.
+The org command is a permanent alias; .org/, ORG_DIR and ORG_ACTOR remain supported.
 `;
 
 const out = (text) => process.stdout.write(text);
@@ -83,15 +87,15 @@ function shq(text) {
 }
 
 function cliString(dir) {
-  return `ORG_DIR=${shq(dir)} node ${shq(BIN)}`;
+  return `ORG_DIR=${shq(dir)} node ${shq(RECORD_BIN)}`;
 }
 
 function openOrg() {
   const dir = findOrgDir();
   if (!isOrgDir(dir)) {
     throw new UserError(dir
-      ? `${dir} is not an initialized organization (run: org init ${dir})`
-      : 'no organization found: run org init, or set ORG_DIR');
+      ? `${dir} is not an initialized record (run: record init ${dir})`
+      : 'no record found: run record init, or set ORG_DIR');
   }
   const { events, tornTail } = loadEvents(dir);
   return { dir, events, tornTail, state: fold(events), config: readConfig(dir), now: clock() };
@@ -106,14 +110,14 @@ function mutate(ctx, fn) {
   const who = writer();
   if (who.unattributed && !warnedUnattributed) {
     warnedUnattributed = true;
-    err('org: recorded as human but unattributed (no ORG_ACTOR, no terminal). An agent session sets ORG_ACTOR=<its session name>.\n');
+    err('record: recorded as human but unattributed (no ORG_ACTOR, no terminal). An agent session sets ORG_ACTOR=<its session name>.\n');
   }
   const res = transact(ctx.dir, (events) => fn(fold(events), events), {
     at: ctx.now,
     actor: who.actor,
     unattributed: who.unattributed,
   });
-  if (res.repaired) err('org: repaired an incomplete last event left by an interrupted write\n');
+  if (res.repaired) err('record: repaired an incomplete last event left by an interrupted write\n');
   return res;
 }
 
@@ -147,16 +151,16 @@ function checkBudget(key, value) {
 }
 
 function init(argv) {
-  const { positionals } = args(argv, {}, { max: 1, usage: 'org init [dir]' });
+  const { positionals } = args(argv, {}, { max: 1, usage: 'record init [dir]' });
   const dir = path.resolve(positionals[0] ?? process.env.ORG_DIR ?? '.org');
   if (isOrgDir(dir)) {
-    out(`${dir} is already an organization\n`);
+    out(`${dir} is already a record\n`);
     return 0;
   }
   initOrg(dir);
   out(`initialized ${dir}\n`);
   out(path.basename(dir) === '.org'
-    ? `org finds it from anywhere under ${path.dirname(dir)}; elsewhere set ORG_DIR=${dir}\n`
+    ? `record finds it from anywhere under ${path.dirname(dir)}; elsewhere set ORG_DIR=${dir}\n`
     : `set ORG_DIR=${dir} to use it\n`);
   return 0;
 }
@@ -172,7 +176,7 @@ function add(argv) {
     priority: { type: 'string' },
     budget: { type: 'string', multiple: true },
     meta: { type: 'string', multiple: true },
-  }, { min: 1, usage: 'org add <title> [options]' });
+  }, { min: 1, usage: 'record add <title> [options]' });
   const title = positionals.join(' ').trim();
   if (!title) throw new UserError('a title is required');
   const budget = parsePairs(values.budget, '--budget');
@@ -203,7 +207,7 @@ function add(argv) {
 }
 
 function block(argv, remove = false) {
-  const usage = `org ${remove ? 'unblock' : 'block'} <ID> --by <ID>`;
+  const usage = `record ${remove ? 'unblock' : 'block'} <ID> --by <ID>`;
   const { values, positionals } = args(argv, { by: { type: 'string', multiple: true } }, { min: 1, max: 1, usage });
   if (!values.by?.length) throw new UserError(`usage: ${usage}`);
   const target = positionals[0];
@@ -228,7 +232,7 @@ function block(argv, remove = false) {
 
 function note(argv) {
   const { values, positionals } = args(argv, { decision: { type: 'boolean' }, summary: { type: 'string' } },
-    { min: 2, usage: 'org note <ID> <text> [--decision [--summary TEXT]]' });
+    { min: 2, usage: 'record note <ID> <text> [--decision [--summary TEXT]]' });
   const [id, ...words] = positionals;
   const summary = values.summary?.replace(/\s+/g, ' ').trim();
   if (values.summary != null && !values.decision) throw new UserError('--summary needs --decision (it is the plain sentence the operator reads)');
@@ -269,7 +273,7 @@ function ask(argv) {
     memo: { type: 'string' },
     blocks: { type: 'string', multiple: true },
     priority: { type: 'string' },
-  }, { min: 1, usage: 'org ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT [options]' });
+  }, { min: 1, usage: 'record ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT [options]' });
   const title = positionals.join(' ').replace(/\s+/g, ' ').trim();
   if (!title) throw new UserError('a question is required');
   const text = (value) => value?.replace(/\s+/g, ' ').trim() || null;
@@ -317,14 +321,14 @@ function ask(argv) {
     return { add: events, result: id };
   });
   out(`${result}\n`);
-  if (policy === 'auto') err(`${result} answered ${recommend} automatically (${values.category} is auto); overrule with: org answer ${result} <answer> --overrule\n`);
+  if (policy === 'auto') err(`${result} answered ${recommend} automatically (${values.category} is auto); overrule with: record answer ${result} <answer> --overrule\n`);
   else if (actor !== 'human') err(`${result} is waiting for the operator\n`);
   return 0;
 }
 
 function answer(argv) {
   const { values, positionals } = args(argv, { note: { type: 'string' }, overrule: { type: 'boolean' } },
-    { min: 2, usage: 'org answer <ID> yes|no|"<text>" [--note WHY] [--overrule]' });
+    { min: 2, usage: 'record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]' });
   const [id, ...words] = positionals;
   const { answer: reply, rest } = parseReply(words.join(' '));
   if (!reply) throw new UserError('an answer is required: yes, no or a short text');
@@ -336,7 +340,7 @@ function answer(argv) {
     const answered = item.closed && item.meta.answer != null;
     if (values.overrule && !answered) throw new UserError(`${id} has not been answered; nothing to overrule (drop --overrule)`);
     if (!values.overrule && answered) {
-      throw new UserError(`${id} was already answered ${item.meta.answer} by ${item.meta.answered_by ?? 'unknown'}; to change it: org answer ${id} <answer> --overrule`);
+      throw new UserError(`${id} was already answered ${item.meta.answer} by ${item.meta.answered_by ?? 'unknown'}; to change it: record answer ${id} <answer> --overrule`);
     }
     if (values.overrule && String(item.meta.answer).trim().toLowerCase() === reply.toLowerCase()) {
       throw new UserError(`${id} is already answered ${item.meta.answer}; an overrule must change the answer`);
@@ -364,7 +368,7 @@ function answer(argv) {
       // An open run counts before blockers in itemStatus, so the item is active, not blocked.
       out(`${blocked} is already running (${running.map((r) => r.id).join(', ')}); the decline does not stop it\n`);
     } else if (reply === 'no') {
-      out(`${blocked} stays blocked: declined (re-plan it, then: org unblock ${blocked} --by ${id})\n`);
+      out(`${blocked} stays blocked: declined (re-plan it, then: record unblock ${blocked} --by ${id})\n`);
     } else if (now !== 'blocked') {
       out(`${blocked} is no longer blocked by ${id} (now ${now})\n`);
     } else {
@@ -377,10 +381,10 @@ function answer(argv) {
 const ITEM_FIELDS = ['title', 'role', 'capability', 'priority', 'parent'];
 
 function set(argv) {
-  const { positionals } = args(argv, {}, { min: 2, usage: 'org set <ID> key=value...' });
+  const { positionals } = args(argv, {}, { min: 2, usage: 'record set <ID> key=value...' });
   const [id, ...pairs] = positionals;
   const { added } = mutate(openOrg(), (s) => {
-    const parsed = parsePairs(pairs, 'org set');
+    const parsed = parsePairs(pairs, 'record set');
     if (s.runs.has(id)) {
       const meta = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k.replace(/^meta\./, ''), v]));
       return { add: [{ type: 'run.updated', id, meta }] };
@@ -419,7 +423,7 @@ function set(argv) {
 
 function close(argv) {
   const { values, positionals } = args(argv, { dropped: { type: 'boolean' }, note: { type: 'string' } },
-    { min: 1, max: 1, usage: 'org close <ID> [--dropped] [--note TEXT]' });
+    { min: 1, max: 1, usage: 'record close <ID> [--dropped] [--note TEXT]' });
   const id = positionals[0];
   const as = values.dropped ? 'dropped' : 'done';
   const { added, result } = mutate(openOrg(), (s) => {
@@ -437,7 +441,7 @@ function close(argv) {
 }
 
 function reopen(argv) {
-  const { values, positionals } = args(argv, { note: { type: 'string' } }, { min: 1, max: 1, usage: 'org reopen <ID> [--note TEXT]' });
+  const { values, positionals } = args(argv, { note: { type: 'string' } }, { min: 1, max: 1, usage: 'record reopen <ID> [--note TEXT]' });
   const id = positionals[0];
   const { added } = mutate(openOrg(), (s) => {
     const item = requireItem(s, id);
@@ -457,7 +461,7 @@ function start(argv) {
     report: { type: 'string' },
     escalation: { type: 'boolean' },
     meta: { type: 'string', multiple: true },
-  }, { min: 1, max: 1, usage: 'org start <ID> [--harness H] [--model M] [--effort E] [options]' });
+  }, { min: 1, max: 1, usage: 'record start <ID> [--harness H] [--model M] [--effort E] [options]' });
   const id = positionals[0];
   const meta = parsePairs(values.meta, '--meta');
   for (const key of ['harness', 'model', 'effort']) if (values[key]) meta[key] = values[key];
@@ -594,12 +598,12 @@ function printIngest(res) {
 }
 
 function ingest(argv) {
-  const { values, positionals } = args(argv, { run: { type: 'string' } }, { min: 1, max: 1, usage: 'org ingest <report.md> [--run R-n]' });
+  const { values, positionals } = args(argv, { run: { type: 'string' } }, { min: 1, max: 1, usage: 'record ingest <report.md> [--run R-n]' });
   return printIngest(ingestFile(openOrg(), positionals[0], values.run)) ? 0 : 1;
 }
 
 function sync(argv) {
-  args(argv, {}, { max: 0, usage: 'org sync' });
+  args(argv, {}, { max: 0, usage: 'record sync' });
   const ctx = openOrg();
   const runs = [...ctx.state.runs.values()];
   const waiting = runs.filter((r) => !r.report && fs.existsSync(r.report_path));
@@ -620,7 +624,7 @@ function sync(argv) {
 }
 
 function check(argv) {
-  const { positionals } = args(argv, {}, { min: 1, max: 1, usage: 'org check <report.md>' });
+  const { positionals } = args(argv, {}, { min: 1, max: 1, usage: 'record check <report.md>' });
   const abs = path.resolve(positionals[0]);
   let text;
   try {
@@ -638,7 +642,7 @@ function check(argv) {
     err('warning: no "run:" field; recording it will need --run\n');
   } else if (isOrgDir(dir)) {
     const run = fold(loadEvents(dir).events).runs.get(r.run);
-    if (!run) err(`warning: run ${r.run} is not in the organization at ${dir}\n`);
+    if (!run) err(`warning: run ${r.run} is not in the record at ${dir}\n`);
     else if (run.report) err(`warning: ${r.run} already has a recorded report\n`);
   }
   const count = (list, word) => `${list.length} ${word}${list.length === 1 ? '' : 's'}`;
@@ -647,7 +651,7 @@ function check(argv) {
 }
 
 function abandon(argv) {
-  const { values, positionals } = args(argv, { note: { type: 'string' } }, { min: 1, max: 1, usage: 'org abandon <R-n> [--note TEXT]' });
+  const { values, positionals } = args(argv, { note: { type: 'string' } }, { min: 1, max: 1, usage: 'record abandon <R-n> [--note TEXT]' });
   const id = positionals[0];
   const { added } = mutate(openOrg(), (s) => {
     const run = s.runs.get(id);
@@ -663,7 +667,7 @@ function abandon(argv) {
 }
 
 function brief(argv) {
-  const { positionals } = args(argv, {}, { min: 1, max: 1, usage: 'org brief <R-n>' });
+  const { positionals } = args(argv, {}, { min: 1, max: 1, usage: 'record brief <R-n>' });
   const ctx = openOrg();
   const run = ctx.state.runs.get(positionals[0]);
   if (!run) throw new UserError(`unknown run ${positionals[0]}`);
@@ -673,14 +677,14 @@ function brief(argv) {
 }
 
 function status(argv) {
-  const { values } = args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'org status [--json]' });
+  const { values } = args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'record status [--json]' });
   const ctx = openOrg();
   out(values.json ? JSON.stringify(statusJson(ctx.state, view(ctx)), null, 2) + '\n' : renderStatus(ctx.state, view(ctx)));
   return 0;
 }
 
 function snapshot(argv) {
-  args(argv, {}, { max: 0, usage: 'org snapshot' });
+  args(argv, {}, { max: 0, usage: 'record snapshot' });
   const ctx = openOrg();
   const text = renderSnapshot(ctx.state, view(ctx));
   out(text);
@@ -689,7 +693,7 @@ function snapshot(argv) {
 }
 
 function show(argv) {
-  const { values, positionals } = args(argv, { json: { type: 'boolean' } }, { min: 1, max: 1, usage: 'org show <ID> [--json]' });
+  const { values, positionals } = args(argv, { json: { type: 'boolean' } }, { min: 1, max: 1, usage: 'record show <ID> [--json]' });
   const ctx = openOrg();
   const id = positionals[0];
   if (ctx.state.items.has(id)) {
@@ -703,7 +707,7 @@ function show(argv) {
 }
 
 function today(argv) {
-  const { values } = args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'org today [--json]' });
+  const { values } = args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'record today [--json]' });
   const ctx = openOrg();
   const doc = todayJson(ctx.state, { orgDir: ctx.dir, config: ctx.config, now: ctx.now });
   out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderToday(doc));
@@ -711,7 +715,7 @@ function today(argv) {
 }
 
 function recap(argv) {
-  const { values } = args(argv, { json: { type: 'boolean' }, back: { type: 'string' } }, { max: 0, usage: 'org recap [--back N] [--json]' });
+  const { values } = args(argv, { json: { type: 'boolean' }, back: { type: 'string' } }, { max: 0, usage: 'record recap [--back N] [--json]' });
   const back = values.back == null ? 0 : Number(values.back);
   if (!Number.isInteger(back) || back < 0) throw new UserError('--back expects a whole number of blocks (0 is the latest)');
   const ctx = openOrg();
@@ -722,7 +726,7 @@ function recap(argv) {
 
 // The console is an isolated package with its own dependencies; the core only launches it.
 function consoleApp(argv) {
-  const { values } = args(argv, { project: { type: 'string' }, modern: { type: 'boolean' }, folder: { type: 'string' }, help: { type: 'boolean' } }, { max: 0, usage: 'org console [--project NAME] [--modern] [--folder PATH] [--help]' });
+  const { values } = args(argv, { project: { type: 'string' }, modern: { type: 'boolean' }, folder: { type: 'string' }, help: { type: 'boolean' } }, { max: 0, usage: 'record console [--project NAME] [--modern] [--folder PATH] [--help]' });
   const dir = path.resolve(process.env.HERDR_ORG_CONSOLE_DIR || path.join(path.dirname(BIN), '..', 'console'));
   if (!fs.existsSync(path.join(dir, 'node_modules', 'ink', 'package.json'))) {
     throw new UserError(`the console's dependencies are not installed; run: npm --prefix ${shq(dir)} ci`);
@@ -751,7 +755,7 @@ export function parseSince(text, now) {
 
 function log(argv) {
   const { values } = args(argv, { since: { type: 'string' }, limit: { type: 'string' }, json: { type: 'boolean' } },
-    { max: 0, usage: 'org log [--since 2h|09:00|DATE] [--limit N] [--json]' });
+    { max: 0, usage: 'record log [--since 2h|09:00|DATE] [--limit N] [--json]' });
   const ctx = openOrg();
   let events = ctx.events;
   if (values.since) {
@@ -775,7 +779,7 @@ function main(argv) {
     out(USAGE);
     return 0;
   }
-  if (!Object.hasOwn(COMMANDS, command)) throw new UserError(`unknown command "${command}" (see: org help)`);
+  if (!Object.hasOwn(COMMANDS, command)) throw new UserError(`unknown command "${command}" (see: record help)`);
   return COMMANDS[command](rest);
 }
 
@@ -788,7 +792,7 @@ try {
   process.exitCode = main(process.argv.slice(2));
 } catch (error) {
   if (error instanceof UserError || String(error.code).startsWith('ERR_PARSE_ARGS')) {
-    err(`org: ${error.message}\n`);
+    err(`record: ${error.message}\n`);
     process.exitCode = 1;
   } else {
     throw error;

@@ -19,14 +19,14 @@ palette that matches the light browser preview, or launch with
 From this worktree:
 
 ```sh
-node bin/org.mjs console --modern --project bch-cloak
-node bin/org.mjs console --modern --project herdr-brain
+node bin/record.mjs console --modern --project bch-cloak
+node bin/record.mjs console --modern --project herdr-brain
 
 # Follow the calling Herdr workspace, or discover available projects.
-node bin/org.mjs console --modern
+node bin/record.mjs console --modern
 
 # Inspect an existing repository or an ordinary folder, without setting it up.
-node bin/org.mjs console --modern --folder /absolute/path/to/folder
+node bin/record.mjs console --modern --folder /absolute/path/to/folder
 ```
 
 To keep it open while the code changes, run the development loop in its own
@@ -59,10 +59,10 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   change), uptime, harness, and its task or what it is doing.
 - A session's number opens it (two digits when there are ten or more).
   Clicking its name renames it: a display-only Herdr pane label (`herdr pane
-  rename`); the agent name that org runs link to is never changed. `e`
+  rename`); the agent name that record runs link to is never changed. `e`
   renames the focused session; an empty name clears the label.
 - The prompt at the bottom (`n`, or click it) adds a task under the block
-  through `org add`, or starts a chat with a configured agent kind
+  through `record add`, or starts a chat with a configured agent kind
   (`chat_kinds`, default claude and codex) in a chosen checkout. The bar
   always shows which and where (`task → G-15`, `claude → main`); Tab and
   Up/Down change them, and one Enter starts it. `--print` never writes.
@@ -71,8 +71,8 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   Drop. A number (or `y` for the recommended choice) arms the answer line,
   which says exactly what will happen; Enter does it. A reply or an org
   decline asks for its words first. Session results go through the Brain CLI
-  (the same verbs as the classic console); org questions through `org answer`.
-- Current project sessions lead the overview. Goals/tasks come from `org status
+  (the same verbs as the classic console); record questions through `record answer`.
+- Current project sessions lead the overview. Goals/tasks come from `record status
   --json`; decisions and stopped-session results reuse the existing org/Brain
   read projections. Finished tasks are excluded from the active list.
 - Main checkout and worktrees use canonical Git common-directory identity. No
@@ -112,9 +112,9 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   the project is empty.
 - Current, deferred and future-stage decisions remain separately reachable.
 - Needs you holds only what still asks something open. A session result folds
-  out, still readable, when its org item has closed or a newer result about the
+  out, still readable, when its record item has closed or a newer result about the
   same item replaced it (Resolved), when it reported without asking (Reports),
-  or when its session ended over a day ago and no org item records it (Ended
+  or when its session ended over a day ago and no record item holds it (Ended
   sessions). A stranded reply never folds. Org questions are never folded here.
 
 ## Keys
@@ -155,12 +155,12 @@ show the remaining facts in session detail.
 ## Boundaries
 
 Typing into a session writes only to that session's terminal, and only while
-the operator is in it. The prompt bar writes `org add` through the CLI for a
+the operator is in it. The prompt bar writes `record add` through the CLI for a
 task, and `herdr tab create` / `agent start` / `agent prompt` for a chat, on the
 operator's typed text and Enter. Renaming sets only a pane label. A Needs you
-answer goes through the Brain CLI or `org answer` after the answer line says
+answer goes through the Brain CLI or `record answer` after the answer line says
 what it will do. There is no dispatch or model-call path; use
-`node bin/org.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
+`node bin/record.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
 
 Goal/session associations use recorded run data. A title resemblance does not
 establish a link; unmatched sessions say Unlinked and older recorded associations
@@ -173,7 +173,7 @@ registration, chat creation, and new-shell write workflows are follow-on work in
 the [onboarding design](../../docs/design/console-projects-onboarding-2026-09-20.md).
 The browser URL on port 8765 remains a captured-data design preview.
 Goal creation is not connected; the header offers `n Start` on the project
-screen and states Read only elsewhere. The existing `herdr brain` brand is retained
+screen and states Read only elsewhere. The product is shown as `Herdr Monitor`
 while Projects remains a naming recommendation. Daily/weekly planning is
 specified in the [backlog review design](../../docs/design/console-backlog-review-2026-09-20.md);
 no scheduler or autonomous backlog mutation is enabled by this trial.

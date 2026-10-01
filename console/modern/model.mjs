@@ -139,10 +139,10 @@ export function settle(waiting, itemsById, { live = new Set(), now = Date.now() 
     // A reply that never left its prompt box is the operator's own words; it stays.
     if (r.kind !== 'result' || r.foldedIn || r.category === 'stranded') return r;
     const id = r.data?.digest?.item, item = itemsById.get(id);
-    if (closedItem(item)) return { ...r, foldedIn: 'resolved', settled: `${item.id} is ${item.status === 'dropped' ? 'dropped' : 'closed'} in the organization.` };
+    if (closedItem(item)) return { ...r, foldedIn: 'resolved', settled: `${item.id} is ${item.status === 'dropped' ? 'dropped' : 'closed'} in the record.` };
     if (id && newest.get(id) !== r) return { ...r, foldedIn: 'resolved', settled: `A newer session result about ${id} replaces this one.` };
     if (['report', 'finished'].includes(r.category) || r.data?.digest?.needs_you === false) return { ...r, foldedIn: 'reports', settled: 'This session reported without asking for a decision.' };
-    if (!id && !live.has(r.data?.pane) && now - Date.parse(r.data?.at) > ENDED_AFTER_MS) return { ...r, foldedIn: 'ended', settled: 'Its session has ended and no org item records this question. Raise it in the org if it still matters.' };
+    if (!id && !live.has(r.data?.pane) && now - Date.parse(r.data?.at) > ENDED_AFTER_MS) return { ...r, foldedIn: 'ended', settled: 'Its session has ended and no record item holds this question. Raise it in the record if it still matters.' };
     return r;
   });
 }

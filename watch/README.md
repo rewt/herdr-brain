@@ -17,7 +17,10 @@ node watch/watch.mjs R-29 --org /path/to/.org --to supervisor-herdr --spawn
 
 The tab is labelled `watch R-29`, so the wait is visible in Herdr, and closes
 after a valid report is delivered. Without `--spawn`, the command blocks in the
-current terminal. `--long-after` changes the default one-hour long-run notice.
+current terminal. A newly armed watcher gives the worker 60 seconds to be seen
+working before an initial idle or missing agent is treated as terminal;
+`--start-grace` changes that window. `--long-after` changes the default one-hour
+long-run notice.
 
 This module replaces bch-cloak's `notify-watch.sh` after that project switches
 over. It takes the proven blocking-wait and direct-prompt mechanics from

@@ -32,6 +32,7 @@ const { values: opt, positionals } = parseArgs({
     to: { type: 'string', default: 'supervisor-herdr' },
     agent: { type: 'string' },
     report: { type: 'string' },
+    'start-grace': { type: 'string', default: '60' },
     'long-after': { type: 'string', default: '3600' },
     'retry-after': { type: 'string', default: '10' },
     'delivery-attempts': { type: 'string', default: '5' },
@@ -47,7 +48,7 @@ const { values: opt, positionals } = parseArgs({
 
 const runId = positionals[0];
 if (!/^R-\d+$/.test(runId ?? '') || !opt.org) {
-  process.stderr.write('usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--long-after SECONDS] [--dry-run]\n');
+  process.stderr.write('usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--start-grace SECONDS] [--long-after SECONDS] [--dry-run]\n');
   process.exit(2);
 }
 
@@ -60,6 +61,7 @@ function numberOption(name, { min = 0 } = {}) {
   return value;
 }
 
+const startGraceMs = numberOption('start-grace') * 1_000;
 const longAfterMs = numberOption('long-after') * 1_000;
 const retryAfterMs = numberOption('retry-after') * 1_000;
 const deliveryAttempts = numberOption('delivery-attempts', { min: 1 });
@@ -132,6 +134,9 @@ function reportState(reportPath) {
   if (!parsed.report || parsed.errors.length > 0) {
     return { kind: 'invalid', error: parsed.errors.join('; ') || 'report could not be parsed' };
   }
+  if (parsed.report.run && parsed.report.run !== runId) {
+    return { kind: 'invalid', error: `report run ${parsed.report.run} does not match watched run ${runId}` };
+  }
   const ok = checked.stdout.split('\n').findLast((line) => line.startsWith('ok:')) ?? 'ok';
   return { kind: 'valid', report: parsed.report, check: ok };
 }
@@ -176,6 +181,12 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
         const reportName = path.basename(reportPath);
         watcher = fs.watch(directory, (_event, filename) => {
           if (directory !== reportDirectory || filename == null || String(filename) === reportName) finish('report');
+        });
+        // Resource exhaustion and filesystem teardown can surface after
+        // fs.watch returns. Herdr remains an independent wake-up path.
+        watcher.on('error', () => {
+          watcher?.close();
+          watcher = undefined;
         });
       } catch { /* Herdr state still wakes us. */ }
     }
@@ -276,7 +287,12 @@ async function watch() {
   log(`watching ${runId} (${item}): worker ${agent}, report ${reportPath}, supervisor ${opt.to}`);
 
   let lastNotice;
+  let lastUnavailableLog;
+  let pendingUnavailable;
   let longNotified = false;
+  let observedWorking = false;
+  let startupWaitingLogged = false;
+  const armedAt = Date.now();
   const startedAt = Date.parse(current.started?.at ?? '') || Date.now();
   const sendOnce = async (message, sound) => {
     if (message === lastNotice) return;
@@ -314,9 +330,32 @@ async function watch() {
     }
     if (state === 'unavailable') {
       const message = unavailableNotice({ run: runId, item, agent, error: status.error });
-      if (message !== lastNotice) log(message);
-      lastNotice = message;
+      if (message !== lastUnavailableLog) log(message);
+      lastUnavailableLog = message;
+      pendingUnavailable = message;
       await delay(retryAfterMs);
+      continue;
+    }
+    lastUnavailableLog = undefined;
+    if (state === 'working' || state === 'unknown') {
+      if (state === 'working') observedWorking = true;
+      // A resumed worker starts a new attempt. Its next identical stop must be
+      // reported again rather than deduped against the previous attempt.
+      lastNotice = undefined;
+    }
+    if (pendingUnavailable) {
+      await sendOnce(pendingUnavailable);
+      pendingUnavailable = undefined;
+    }
+
+    const startupGraceRemaining = observedWorking ? 0 : Math.max(0, (armedAt + startGraceMs) - Date.now());
+    if (!observedWorking && state !== 'working' && startupGraceRemaining > 0) {
+      if (!startupWaitingLogged) {
+        log(`waiting up to ${startGraceMs / 1_000}s for ${agent} to start before treating ${state ?? 'gone'} as terminal`);
+        startupWaitingLogged = true;
+      }
+      const signal = await waitForSignal(agent, ['working'], reportPath, startupGraceRemaining, beforeStamp);
+      if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, startupGraceRemaining));
       continue;
     }
     if (report.kind === 'invalid' && !['working', 'unknown'].includes(state)) {

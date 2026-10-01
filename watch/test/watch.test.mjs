@@ -21,6 +21,35 @@ function executable(file, body) {
   fs.writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
 }
 
+function reportText(run, headline = 'The report arrived') {
+  return `---\nrun: ${run}\noutcome: done\nsummary: Report arrived.\nheadline: ${headline}\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`;
+}
+
+function watcherFixture(run) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-branch-'));
+  const report = path.join(root, 'report.md');
+  const calls = path.join(root, 'herdr-calls');
+  const org = path.join(root, 'org');
+  const herdr = path.join(root, 'herdr');
+  const writer = path.join(root, 'write-report');
+  const started = new Date().toISOString();
+  executable(org, `case "$1" in
+  show) printf '%s\\n' '{"id":"${run}","item":"ENG-9","meta":{"agent":"lane-nine"},"report_path":"${report}","started":{"at":"${started}"}}' ;;
+  check) printf '%s\\n' 'ok: done · 0 blockers' ;;
+  *) exit 2 ;;
+esac`);
+  executable(writer, `printf '%s' '${reportText(run)}' > '${report}'`);
+  const args = [
+    WATCH, run, '--org', path.join(root, '.org'), '--org-cli', org, '--herdr', herdr,
+    '--to', 'supervisor-test', '--retry-after', '0',
+  ];
+  return { root, report, calls, org, herdr, writer, args };
+}
+
+function startWatcher(args) {
+  return spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
 function waitForExit(child, timeoutMs = 3_000) {
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -103,4 +132,106 @@ esac`);
   const result = await waitForExit(child);
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(fs.readFileSync(calls, 'utf8'), /\[org-report\] run=R-8 item=ENG-4/);
+});
+
+test('a mismatched report is invalid even when org check passes', async () => {
+  const fixture = watcherFixture('R-9');
+  fs.writeFileSync(fixture.report, reportText('R-99', 'Stale report'));
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;
+  "agent wait") sleep 10 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-invalid-report*) "${fixture.writer}" ;; esac ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher([...fixture.args, '--start-grace', '0']));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.match(calls, /\[watch-invalid-report\].*report run R-99 does not match watched run R-9/);
+  assert.match(calls, /\[org-report\] run=R-9/);
+});
+
+test('a vanished worker delivers exited-without-report and stops', async () => {
+  const fixture = watcherFixture('R-10');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '%s\\n' '{"error":{"code":"agent_not_found","message":"gone"}}' >&2; exit 1 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher([...fixture.args, '--start-grace', '0']));
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(fs.readFileSync(fixture.calls, 'utf8'), /\[watch-no-report\].*state=gone/);
+});
+
+test('an initially idle worker is not terminal until it has worked', async () => {
+  const fixture = watcherFixture('R-11');
+  const counter = path.join(fixture.root, 'gets');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") n=$(($(cat "${counter}" 2>/dev/null || echo 0)+1)); printf '%s' "$n" > "${counter}"; case "$n" in 1) state=idle ;; 2) state=working ;; *) state=idle ;; esac; printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$state" ;;
+  "agent wait") exit 0 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-no-report*) "${fixture.writer}" ;; esac ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher([...fixture.args, '--start-grace', '10']));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.equal((calls.match(/\[watch-no-report\]/g) ?? []).length, 1, calls);
+  assert.match(calls, /\[org-report\] run=R-11/);
+});
+
+test('idle, working, idle without a report delivers both stop notices', async () => {
+  const fixture = watcherFixture('R-12');
+  const counter = path.join(fixture.root, 'gets');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") n=$(($(cat "${counter}" 2>/dev/null || echo 0)+1)); printf '%s' "$n" > "${counter}"; case "$n" in 2|4) state=idle ;; *) state=working ;; esac; printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$state" ;;
+  "agent wait") exit 0 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-no-report*) n=$(grep -c watch-no-report "${fixture.calls}"); [ "$n" -eq 2 ] && "${fixture.writer}" ;; esac ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher(fixture.args));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.equal((calls.match(/\[watch-no-report\]/g) ?? []).length, 2, calls);
+  assert.match(calls, /\[org-report\] run=R-12/);
+});
+
+test('a blocked worker delivers its distinct notice', async () => {
+  const fixture = watcherFixture('R-13');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"blocked"}}}' ;;
+  "agent wait") sleep 10 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*) "${fixture.writer}" ;; esac ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher([...fixture.args, '--start-grace', '0']));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(fs.readFileSync(fixture.calls, 'utf8'), /\[watch-blocked\].*state=blocked/);
+});
+
+test('a still-working worker delivers the long-running notice', async () => {
+  const fixture = watcherFixture('R-14');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"working"}}}' ;;
+  "agent wait") sleep 10 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-long-running*) "${fixture.writer}" ;; esac ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher([...fixture.args, '--long-after', '0']));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(fs.readFileSync(fixture.calls, 'utf8'), /\[watch-long-running\].*still-running=/);
+});
+
+test('a Herdr outage is delivered after Herdr recovers, never reported as gone', async () => {
+  const fixture = watcherFixture('R-15');
+  const counter = path.join(fixture.root, 'gets');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") n=$(($(cat "${counter}" 2>/dev/null || echo 0)+1)); printf '%s' "$n" > "${counter}"; if [ "$n" -eq 1 ]; then printf '%s\\n' '{"error":{"code":"socket_unavailable","message":"server down"}}' >&2; exit 1; fi; printf '%s\\n' '{"result":{"agent":{"agent_status":"working"}}}' ;;
+  "agent wait") sleep 10 ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-unavailable*) "${fixture.writer}" ;; esac ;;
+  *) exit 2 ;;
+esac`);
+  const result = await waitForExit(startWatcher(fixture.args));
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.match(calls, /\[watch-unavailable\].*socket_unavailable.*server down/);
+  assert.doesNotMatch(calls, /\[watch-no-report\]/);
 });

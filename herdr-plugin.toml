@@ -3,7 +3,7 @@
 # ~/.local/share/herdr-monitor/current, so switching releases never re-links the plugin.
 id = "rewt.herdr-monitor"
 name = "Herdr Monitor"
-version = "0.1.1"
+version = "0.1.2"
 min_herdr_version = "0.8.0"
 platforms = ["macos", "linux"]
 description = "The record, lanes and console for autonomous agent work, beside the supervisor chat."

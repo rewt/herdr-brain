@@ -69,9 +69,17 @@ function route(mode) {
   try { routes = JSON.parse(fs.readFileSync(opt['lane-config'], 'utf8')).routes ?? {}; }
   catch (err) { log(`route table unreadable (${err.message}); using opus/high`); }
   const r = routes[key] ?? {};
-  if (r.kind && r.kind !== 'claude') die(`route "${key}" is kind "${r.kind}", but settle-watch only starts claude sessions`);
+  // Two kinds are supported: claude (the original) and codex (added 2026-09-20 so the
+  // settle loop keeps running while the Claude plan is exhausted). Anything else dies.
+  const kind = r.kind ?? 'claude';
+  if (kind !== 'claude' && kind !== 'codex') die(`route "${key}" is kind "${r.kind}", but settle-watch only starts claude or codex sessions`);
   if (!routes[key]) log(`no "${key}" route in ${opt['lane-config']}; using opus/high`);
-  return { key, model: opt.model ?? r.model ?? 'opus', effort: opt.effort ?? r.effort ?? 'high' };
+  // For codex the effort travels as `-c model_reasoning_effort=…`; a route may carry its
+  // own args (profile, extra -c), and the lane config's always_args.codex are appended
+  // unless the same option is already present — the rule lane.mjs dispatch applies.
+  let alwaysCodex = [];
+  try { alwaysCodex = JSON.parse(fs.readFileSync(opt['lane-config'], 'utf8')).always_args?.codex ?? []; } catch {}
+  return { key, kind, model: opt.model ?? r.model ?? 'opus', effort: opt.effort ?? r.effort ?? 'high', args: r.args ?? [], alwaysCodex };
 }
 
 function run(cmd, args, { env, quiet } = {}) {
@@ -316,9 +324,25 @@ function openSession({ mode, r }) {
   log(`route ${pick.key}: model ${pick.model}, effort ${pick.effort}${opt.account ? `, account ${opt.account}` : ''}`);
 
   const pane = newTab(label, env);
-  const startArgs = ['agent', 'start', name, '--kind', 'claude', '--pane', pane, '--timeout', '120000', '--',
-    ...extra, ...opt['add-dir'].flatMap((d) => ['--add-dir', d]),
-    '--model', pick.model, '--effort', pick.effort, '--permission-mode', opt['permission-mode'], '--name', name];
+  let startArgs;
+  if (pick.kind === 'codex') {
+    // codex CLI: -m <model> -c model_reasoning_effort=<effort> [route args] [always_args.codex].
+    // No --add-dir / --permission-mode / --name: those are claude flags. Route args come
+    // after the effort so a route's own -c can override it.
+    const codexArgs = ['-m', pick.model, '-c', `model_reasoning_effort=${pick.effort}`, ...pick.args];
+    const groups = [];
+    for (const token of pick.alwaysCodex) {
+      if (token.startsWith('-') || groups.length === 0) groups.push([token]); else groups.at(-1).push(token);
+    }
+    for (const [option, ...values] of groups) {
+      if (!codexArgs.some((a) => a === option || a.startsWith(`${option}=`))) codexArgs.push(option, ...values);
+    }
+    startArgs = ['agent', 'start', name, '--kind', 'codex', '--pane', pane, '--timeout', '120000', '--', ...codexArgs];
+  } else {
+    startArgs = ['agent', 'start', name, '--kind', 'claude', '--pane', pane, '--timeout', '120000', '--',
+      ...extra, ...opt['add-dir'].flatMap((d) => ['--add-dir', d]),
+      '--model', pick.model, '--effort', pick.effort, '--permission-mode', opt['permission-mode'], '--name', name];
+  }
   let started;
   for (let attempt = 1; attempt <= 4; attempt++) {
     if (!dry) sleep(3_000); // a new tab's shell needs a moment to reach its prompt
@@ -330,7 +354,7 @@ function openSession({ mode, r }) {
   }
   if (!started.ok) die(`settle session did not start in ${pane}: ${started.error}`);
   const want = env.find((e) => e.startsWith('CLAUDE_CONFIG_DIR='));
-  if (!dry && want) {
+  if (!dry && want && pick.kind === 'claude') {
     const shell = herdr(['pane', 'process-info', '--pane', pane]).result?.process_info?.shell_pid;
     const kids = shell ? run('pgrep', ['-P', String(shell)], { quiet: true }).stdout.trim().split('\n').filter(Boolean) : [];
     const envs = kids.map((k) => run('ps', ['eww', '-o', 'command=', '-p', k], { quiet: true }).stdout);

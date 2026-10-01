@@ -81,3 +81,31 @@ esac`);
   assert.equal(fs.statSync(missingRuntime).isDirectory(), true);
   assert.match(prepared.stdout, /no Herdr workspace has .*not-the-checkout/);
 });
+
+test('a codex route starts a codex session with its model, effort, route args and always_args (dry run)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'settle-watch-codex-'));
+  const bin = path.join(root, 'bin'), cwd = path.join(root, 'checkout'), supervisor = path.join(root, 'supervisor');
+  for (const d of [bin, cwd, supervisor]) fs.mkdirSync(d);
+  const checklist = path.join(supervisor, 'SETTLE.md'), laneConfig = path.join(root, 'lane.json');
+  fs.writeFileSync(checklist, '# checklist\n');
+  fs.writeFileSync(laneConfig, JSON.stringify({
+    routes: { executive: { kind: 'codex', model: 'gpt-x', effort: 'high', args: ['-c', 'model_reasoning_effort=xhigh'] } },
+    always_args: { codex: ['-p', 'prof', '-c', 'model_reasoning_effort=low'] },
+  }));
+  script(path.join(bin, 'herdr'), `case "$1 $2" in
+  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1","worktree":{"is_linked_worktree":false,"checkout_path":"${cwd}"}}]}}' ;;
+  *) echo '{"result":{"tabs":[],"panes":[],"agents":[]}}' ;;
+esac`);
+  script(path.join(root, 'launcher'), `echo CLAUDE_CONFIG_DIR=${root}/claude`);
+  script(path.join(root, 'cmem'), 'exit 1');
+  const r = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+    '--lane-config', laneConfig, '--checklist', checklist, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
+    encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const start = r.stdout.split('\n').find((l) => l.includes('[dry-run] start agent:'));
+  assert.ok(start, r.stdout);
+  assert.match(start, /--kind codex .* -- -m gpt-x -c model_reasoning_effort=high -c model_reasoning_effort=xhigh -p prof$/,
+    'route args follow the effort; always_args are added only for options the route did not set');
+  assert.doesNotMatch(start, /--permission-mode|--add-dir|--effort/);
+});

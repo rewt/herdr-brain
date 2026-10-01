@@ -328,11 +328,12 @@ async function watch() {
     const state = status.state;
 
     const workerStillRunning = state === 'working' || state === 'unknown';
+    const workerFinished = state === 'idle' || state === 'done' || state === null;
     // The worker can finish and rewrite its report between the first report
     // read and the state read. Once it is terminal, read again so delivery
     // reflects the file it actually stopped with.
-    if (!workerStillRunning && state !== 'unavailable') report = reportState(reportPath);
-    if (report.kind === 'valid' && !workerStillRunning && state !== 'unavailable') {
+    if (workerFinished) report = reportState(reportPath);
+    if (report.kind === 'valid' && workerFinished) {
       const headline = report.report.headline ?? report.report.summary;
       await deliver(reportNotice({
         run: runId, item, outcome: report.report.outcome, headline,
@@ -401,7 +402,7 @@ async function watch() {
 
     const until = workerStillRunning
       ? ['idle', 'done', 'blocked']
-      : ['working'];
+      : state === 'blocked' ? ['working', 'idle', 'done'] : ['working'];
     const untilLong = !longNotified && workerStillRunning
       ? Math.max(0, longNextAt - Date.now())
       : undefined;

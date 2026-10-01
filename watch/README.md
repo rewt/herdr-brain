@@ -1,10 +1,11 @@
 # Watch
 
-`watch.mjs` waits for one org run without inference. Once its worker stops, it
-re-validates the final report with `org check` and prompts the supervisor with
-the run, outcome, headline, check result and report path. A valid report written
-while the worker is still working or unknown wakes the watcher but is not
-delivered early.
+`watch.mjs` waits for one org run without inference. Once its worker reaches
+`idle`, `done`, or is gone, it re-validates the final report with `org check`
+and prompts the supervisor with the run, outcome, headline, check result and
+report path. A valid report written while the worker is working, unknown, or
+blocked wakes the watcher but is not delivered early; a blocked worker gets a
+distinct intermediate notice and remains watched.
 
 It listens to two signals at once: Herdr's blocking `agent wait` for worker
 lifecycle changes and `fs.watch` for the report. A timer emits one distinct

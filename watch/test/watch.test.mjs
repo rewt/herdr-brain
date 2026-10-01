@@ -67,6 +67,16 @@ function waitForExit(child, timeoutMs = 3_000) {
   });
 }
 
+async function waitForText(file, pattern, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const body = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+    if (pattern.test(body)) return body;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timed out waiting for ${pattern} in ${file}`);
+}
+
 test('every terminal condition has a distinct, compact supervisor notice', () => {
   const common = { run: 'R-7', item: 'ENG-3', agent: 'lane-seven', report: '/tmp/report.md' };
   assert.equal(
@@ -229,15 +239,39 @@ esac`);
 
 test('a blocked worker delivers its distinct notice', async () => {
   const fixture = watcherFixture('R-13');
+  const state = path.join(fixture.root, 'worker-state');
+  fs.writeFileSync(state, 'blocked');
   executable(fixture.herdr, `case "$1 $2" in
-  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"blocked"}}}' ;;
-  "agent wait") sleep 10 ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*) "${fixture.writer}" ;; esac ;;
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") while [ "$(cat '${state}')" = blocked ]; do sleep 0.02; done ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*) "${fixture.writer}"; printf '%s' idle > '${state}' ;; esac ;;
   *) exit 2 ;;
 esac`);
   const result = await waitForExit(startWatcher([...fixture.args, '--start-grace', '0']));
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(fs.readFileSync(fixture.calls, 'utf8'), /\[watch-blocked\].*state=blocked/);
+});
+
+test('a valid report stays intermediate while blocked and is final only after idle', async () => {
+  const fixture = watcherFixture('R-18');
+  const state = path.join(fixture.root, 'worker-state');
+  fs.writeFileSync(fixture.report, reportText('R-18', 'Finished after unblocking'));
+  fs.writeFileSync(state, 'blocked');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") while [ "$(cat '${state}')" = blocked ]; do sleep 0.02; done ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  *) exit 2 ;;
+esac`);
+  const child = startWatcher([...fixture.args, '--start-grace', '0']);
+  const whileBlocked = await waitForText(fixture.calls, /\[watch-blocked\]/);
+  assert.doesNotMatch(whileBlocked, /\[org-report\]/);
+  fs.writeFileSync(state, 'idle');
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.ok(calls.indexOf('[watch-blocked]') < calls.indexOf('[org-report]'), calls);
+  assert.match(calls, /\[org-report\] run=R-18.*headline="Finished after unblocking"/);
 });
 
 test('a failed intermediate delivery notifies the operator and keeps watching for the final report', async () => {

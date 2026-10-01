@@ -43,7 +43,7 @@ export async function orgToday(project) {
   return JSON.parse(r.stdout);
 }
 
-// Recent events, one JSON object per line, for the items pane.
+// Recent events, one JSON object per line, for the modern console's Activity view.
 export async function orgLog(project, since = '36h') {
   const r = await run(process.execPath, [ORG_BIN, 'log', '--since', since, '--json'], { env: orgEnv(project) });
   if (!r.ok) throw new Error(firstLine(r.stderr) || r.error?.message || 'record log failed');

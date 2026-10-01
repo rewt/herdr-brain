@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tidy-tabs: close the Herdr tabs a project's loop has finished with, so they
-// don't pile up. Pilot tooling beside settle-watch; no model is involved.
+// don't pile up. Supervisor housekeeping; no model is involved.
 //
 //   tidy-tabs.mjs --cwd CHECKOUT [--org DIR] [--ledger-dir DIR] [--keep-sessions N] [--dry-run]
 //

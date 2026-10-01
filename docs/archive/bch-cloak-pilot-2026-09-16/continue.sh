@@ -1,5 +1,5 @@
 #!/bin/sh
-# Open a fresh executive session now, with no finished run to settle: it acts on
+# Archived pilot launcher. Open a fresh executive session now, with no finished run to settle: it acts on
 # pending decisions and ready work within its authority (see SETTLE.md), then stops.
 # Usage: continue.sh ["what to focus on"] [--dry-run]
 set -eu

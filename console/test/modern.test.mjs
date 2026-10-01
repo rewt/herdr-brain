@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { catalog, projectView, createIdentityReader, folderPath } from '../modern/model.mjs';
+import { activityEntries, catalog, projectView, createIdentityReader, folderPath, itemOrigin } from '../modern/model.mjs';
 import { createModernSession } from '../modern/session.mjs';
 import { loadModernConfig, normalizeConfig } from '../lib/config.mjs';
 import { parseMouse } from '../lib/mouse.mjs';
@@ -18,14 +18,16 @@ function fixture(overrides = {}) {
   const workspaces = [space('a', '/a'), space('a-work', '/a', true), space('b', '/b')];
   const tabs = workspaces.map(w => ({ tab_id: `${w.workspace_id}:t1`, workspace_id: w.workspace_id, label: 'Terminal' }));
   const agents = [{ name: 'worker', pane: 'a-work:p1', tab: 'a-work:t1', workspace: 'a-work', cwd: '/a-lane', tool: 'codex', status: 'working' }, { name: 'beta', pane: 'b:p1', tab: 'b:t1', workspace: 'b', cwd: '/b', tool: 'claude', status: 'idle' }];
-  const items = [{ id: 'G-1', kind: 'goal', title: 'Ship the result', status: 'open', parent: null, notes: [] }, { id: 'ENG-1', kind: 'task', role: 'engineer', title: 'Implement the result', parent: 'G-1', status: 'active', notes: [] }, { id: 'ENG-2', kind: 'task', role: 'engineer', title: 'Completed work', parent: 'G-1', status: 'done', notes: [] }];
+  const items = [{ id: 'G-1', kind: 'goal', title: 'Ship the result', status: 'open', parent: null, notes: [] }, { id: 'ENG-1', kind: 'task', role: 'engineer', title: 'Implement the result', parent: 'G-1', status: 'active', created: { at: '2026-10-01T15:00:00Z', run: 'R-0', why: 'The agent found a missing piece.' }, runs: ['R-1'], notes: [] }, { id: 'ENG-2', kind: 'task', role: 'engineer', title: 'Completed work', parent: 'G-1', status: 'done', notes: [] }];
+  const events = [{ seq: 1, at: '2026-10-01T15:00:00Z', type: 'item.added', id: 'ENG-1', kind: 'task', title: 'Implement the result', parent: 'G-1', by: 'worker' },
+    { seq: 2, at: '2026-10-01T15:01:00Z', type: 'run.started', id: 'R-1', item: 'ENG-1', meta: { agent: 'worker', harness: 'codex' } }];
   const today = p => ({ project: { top_goal: null }, waiting: [], running: p.name === 'Alpha' ? [{ run: 'R-1', item: 'ENG-1', title: 'Implement the result', agent: 'worker', workspace: '/a-lane', started: new Date().toISOString() }] : [], agent_runs: [], decided: [], finished: [] });
   const reads = [], calls = [], panes = [];
-  const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), brainQueue: async () => ({ rows: [], off: true }),
+  const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), orgLog: async p => p.name === 'Alpha' ? events : [], brainQueue: async () => ({ rows: [], off: true }),
     herdrList: async what => what === 'workspace' ? workspaces : what === 'pane' ? panes : tabs, herdrAgents: async () => ({ ok: true, agents }),
     herdrRead: async target => { reads.push(target); return { ok: true, text: `EXACT ${target.pane}\n${'output\n'.repeat(45)}` }; }, herdrGo: async target => { calls.push(target); return { ok: true }; }, gitSummary: async () => ({ branch: 'lane/alpha', changes: 2 }), ...overrides };
   const session = createModernSession({ config, deps, env: {} });
-  return { session, config, deps, workspaces, tabs, agents, items, reads, calls, panes };
+  return { session, config, deps, workspaces, tabs, agents, items, events, reads, calls, panes };
 }
 const rendered = (s, cols = 100, rows = 32) => s.frame(cols, rows).lines.map(lineText).join('\n');
 
@@ -43,6 +45,21 @@ test('live scope keeps the exact sessions, run relationships and active work onl
   await session.activate('project:configured:Beta');
   assert.deepEqual(session.model.sessions.map(a => a.pane), ['b:p1']); assert.equal(session.model.goals.length, 0);
   assert.doesNotMatch(rendered(session), /Ship the result|ENG-1/);
+});
+
+test('activity keeps item lifecycle moments and item pages explain agent-created work', async () => {
+  const { session, items, events } = fixture();
+  events.push({ seq: 3, at: '2026-10-01T15:02:00Z', type: 'report.ingested', run: 'R-1', item: 'ENG-1', report: { outcome: 'done', headline: 'The missing piece now works.' } });
+  const entries = activityEntries({ items, runs: [{ id: 'R-1', item: 'ENG-1' }] }, events);
+  assert.deepEqual(entries.map(e => [e.mark, e.verb, e.id]), [['✓', 'reported', 'ENG-1'], ['▶', 'started', 'ENG-1'], ['+', 'created', 'ENG-1']]);
+  assert.equal(entries[2].summary, 'The agent found a missing piece.');
+  assert.deepEqual(itemOrigin(items[1]), { source: 'proposed by R-0', at: '2026-10-01T15:00:00Z', why: 'The agent found a missing piece.', unattributed: false });
+  await session.refresh(); await session.key('a');
+  const activity = rendered(session, 100, 32);
+  assert.match(activity, /Activity · 3 moments/); assert.match(activity, /ENG-1\s+created\s+Implement the result/); assert.match(activity, /The agent found a missing piece/);
+  await session.activate('item:ENG-1');
+  const detail = rendered(session, 100, 32);
+  assert.match(detail, /proposed by R-0/); assert.match(detail, /Why: The agent found a missing piece\./);
 });
 
 test('output reads the selected pane, history restores task and its keyboard focus', async () => {

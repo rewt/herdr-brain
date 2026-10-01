@@ -1,5 +1,5 @@
 #!/bin/sh
-# Arm a visible settle watcher for one org run: when that run's worker stops with
+# Archived pilot launcher. Arm a visible settle watcher for one org run: when that run's worker stops with
 # a report, a fresh orchestrator session opens to settle it (see SETTLE.md).
 # Usage: arm-watch.sh R-n [--dry-run]
 set -eu

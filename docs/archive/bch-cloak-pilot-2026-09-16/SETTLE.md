@@ -1,4 +1,4 @@
-# Executive protocol — bch-cloak
+# Executive protocol — bch-cloak (archived pilot prompt)
 
 You are a **fresh, short-lived orchestrator**. There is no resident supervisor: you
 replace it for one pass, with the same authority it had, and then you stop. Nothing

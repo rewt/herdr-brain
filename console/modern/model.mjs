@@ -5,6 +5,65 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { buildBoard } from '../lib/model.mjs';
 
+const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+const firstSentence = value => {
+  const text = clean(value);
+  const match = /^(.{20,}?[.!?])\s/.exec(text);
+  return match ? match[1] : text;
+};
+
+// The small part of the retired items pane worth keeping: a factual chronology
+// of item lifecycle moments. Raw events still come only through `record log`.
+export function activityEntries(status, events = []) {
+  const items = new Map((status?.items ?? []).map(item => [item.id, item]));
+  const runs = new Map((status?.runs ?? []).map(run => [run.id, run]));
+  const entry = event => {
+    const item = items.get(event.id) ?? items.get(event.item);
+    switch (event.type) {
+      case 'item.added': {
+        if (event.kind === 'goal') return null;
+        const created = item?.created ?? {};
+        const source = created.run ?? (event.by && event.by !== 'human' ? event.by : null);
+        return { mark: /^HUM-/.test(event.id) ? '?' : '+', verb: /^HUM-/.test(event.id) ? 'asked' : 'created', id: event.id,
+          title: event.title ?? item?.title ?? '', detail: [source ? `by ${source}` : null, event.parent ? `under ${event.parent}` : null].filter(Boolean).join(' · '), summary: created.why ?? null };
+      }
+      case 'run.started': {
+        const meta = event.meta ?? {};
+        return { mark: '▶', verb: 'started', id: event.item, title: item?.title ?? '', detail: [event.id, meta.agent, meta.harness, meta.model].filter(Boolean).join(' · ') };
+      }
+      case 'report.ingested': {
+        const report = event.report ?? {};
+        return { mark: report.outcome === 'done' ? '✓' : '!', verb: report.outcome === 'done' ? 'reported' : report.outcome ?? 'reported', id: event.item,
+          title: item?.title ?? '', detail: [event.run, report.proposals?.length ? `${report.proposals.length} proposed` : null].filter(Boolean).join(' · '),
+          summary: report.headline ?? firstSentence(report.summary) };
+      }
+      case 'item.closed':
+        if (item?.kind === 'goal') return null;
+        return { mark: event.as === 'dropped' ? '×' : '■', verb: /^HUM-/.test(event.id) ? 'answered' : event.as === 'dropped' ? 'dropped' : 'closed', id: event.id,
+          title: item?.title ?? '', summary: event.note ?? null };
+      case 'note.added':
+        return event.decision ? { mark: '◆', verb: 'decided', id: event.id, title: item?.title ?? '', summary: event.text } : null;
+      case 'run.abandoned': {
+        const run = runs.get(event.id);
+        return { mark: '×', verb: 'abandoned', id: run?.item, title: items.get(run?.item)?.title ?? '', detail: event.id };
+      }
+      default:
+        return null;
+    }
+  };
+  return events.slice().sort((a, b) => (b.seq ?? 0) - (a.seq ?? 0)).map(event => {
+    const value = entry(event);
+    return value?.id ? { ...value, at: event.at, seq: event.seq } : null;
+  }).filter(Boolean);
+}
+
+export function itemOrigin(item) {
+  const created = item?.created;
+  if (!created) return null;
+  const source = created.run ? `proposed by ${created.run}` : created.by && created.by !== 'human' ? `created by ${created.by}` : 'created by the operator';
+  return { source, at: created.at ?? null, why: created.why ?? null, unattributed: Boolean(created.unattributed) };
+}
+
 export function canonical(file) {
   if (!file) return null;
   try { return fs.realpathSync(file); } catch { return path.resolve(file); }
@@ -68,7 +127,7 @@ export function lastRecorded(status) {
 }
 
 export function projectView(project, data, identity, now = Date.now()) {
-  const empty = { lastAt: null, sessions: [], goals: [], tasks: [], needs: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
+  const empty = { lastAt: null, sessions: [], goals: [], tasks: [], activity: [], needs: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
   if (!project) return empty;
   const spaces = data.workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey && project.repoKey);
   const spacesById = new Map(spaces.map(w => [w.workspace_id, w]));
@@ -109,7 +168,7 @@ export function projectView(project, data, identity, now = Date.now()) {
   };
   const waiting = settle(board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i))), itemsById,
     { live: new Set(data.agents.map(a => a.pane)), now });
-  return { ...empty, items, itemsById, board, sessions, spaces, tabs, lastAt: lastRecorded(data.status),
+  return { ...empty, items, itemsById, board, sessions, spaces, tabs, lastAt: lastRecorded(data.status), activity: activityEntries(data.status, data.events),
     goals: items.filter(i => i.kind === 'goal' && !i.closed),
     tasks: items.filter(i => i.kind !== 'goal' && i.role !== 'human' && !['done', 'dropped'].includes(i.status)).map(i => ({ ...i, goal: goalOf(i) })),
     needs: waiting.filter(i => !i.foldedIn),

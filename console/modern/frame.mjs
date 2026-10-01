@@ -7,7 +7,7 @@ import { pad, clip, wrap, sanitize, cellWidth } from '../lib/text.mjs';
 import { projectRows, composeModes, currentBlock, checkoutName } from './project.mjs';
 import { needChoices, needActions, needEffect } from './needs.mjs';
 import { regionFor, pickerEntries } from './navigation.mjs';
-import { relatedWork, acceptanceCriteria } from './model.mjs';
+import { relatedWork, acceptanceCriteria, itemOrigin } from './model.mjs';
 
 // These are the actual light/dark tokens from modern-console-overview.html.
 export const MODERN_PALETTES = {
@@ -100,7 +100,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   put(5, rail, '─'.repeat(cols - rail), 'rule');
   if (s.view !== 'output') {
     let tx = x;
-    for (const [id, label] of [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['needs', `Needs you ${m.needs.length}`]]) {
+    for (const [id, label] of [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['activity', 'Activity'], ['needs', `Needs you ${m.needs.length}`]]) {
       control(`view:${id}`, label, 4, tx, label.length + 2, id === 'needs' ? 'amber' : 'fg');
       if (s.view === id || (id === 'needs' && NEED_FOLDS.some(f => f.view === s.view))) put(5, tx, '━'.repeat(label.length), 'blue', 'bg', false, label.length);
       tx += label.length + 3;
@@ -164,6 +164,18 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const list = s.view === 'goals' ? m.goals : m.tasks;
     section(`${s.view === 'goals' ? 'Goals' : 'Tasks'} · ${list.length}`, s.view === 'goals' ? 'goal' : 'blue'); list.forEach(itemRow);
     if (!list.length) paragraph(s.errors.status ? 'Record data is unavailable. Refresh to reconnect.' : p?.org ? 'Nothing defined yet. Explore first; structure can follow.' : 'No record connected. Goals and tasks require project setup, which is not connected in this trial. Open a folder or inspect an existing Herdr conversation first.');
+  } else if (s.view === 'activity') {
+    section(`Activity · ${m.activity.length} moments in the last 36 hours`, 'blue');
+    const when = at => { const d = new Date(at); if (Number.isNaN(d.getTime())) return ''; return d.toDateString() === new Date(now).toDateString()
+      ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+      : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    for (const event of m.activity) {
+      const color = event.mark === '!' || event.mark === '?' ? 'amber' : event.mark === '✓' || event.mark === '■' ? 'teal' : event.mark === '▶' || event.mark === '+' ? 'blue' : 'muted';
+      row(`${pad(when(event.at), 12)} ${event.mark} ${pad(event.id, 9)} ${pad(event.verb, 11)} ${event.title}`, { id: `item:${event.id}`, fg: color, bold: true });
+      if (event.detail) row(`              ${event.detail}`, { id: `item:${event.id}`, fg: 'muted' });
+      if (event.summary) for (const line of wrap(`“${event.summary}”`, Math.max(1, width - 14)).slice(0, 2)) row(`              ${line}`, { id: `item:${event.id}`, fg: 'fg' });
+    }
+    if (!m.activity.length) paragraph(s.errors.events ? 'Activity is unavailable. Refresh to reconnect.' : p?.org ? 'No item activity was recorded in the last 36 hours.' : 'No record connected.');
   } else if (NEED_FOLDS.some(f => f.view === s.view)) {
     const fold = NEED_FOLDS.find(f => f.view === s.view), list = m[fold.list];
     section(`${fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
@@ -174,6 +186,12 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     if (!i) paragraph('This item is no longer available in the current project.');
     else {
       section(`${i.id} · ${i.status}`, i.kind === 'goal' ? 'goal' : 'blue'); paragraph(i.title, 'fg'); row();
+      const origin = itemOrigin(i);
+      if (origin) {
+        const at = origin.at ? new Date(origin.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+        paragraph(`${origin.source}${at ? ` · ${at}` : ''}`, origin.unattributed ? 'amber' : 'muted');
+        if (origin.why) paragraph(`Why: ${origin.why}`, 'fg');
+      }
       if (i.parent) row(`Parent: ${i.parent} · ${m.itemsById.get(i.parent)?.title ?? ''}`, { id: `item:${i.parent}`, fg: 'goal' });
       const related = relatedWork(m, i.id);
       row(); bodyRegion = 'sessions'; section(`Current linked sessions · ${related.current.length}`, 'teal');
@@ -300,7 +318,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'For answers and dispatch: record console --project NAME', 'Writes: the start bar, and what you type into a session. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'For answers and dispatch: record console --project NAME', 'Writes: the start bar, and what you type into a session. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {

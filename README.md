@@ -31,8 +31,7 @@ look like one project.
 | `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
 | `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
 | `contrib/settle-watch.mjs` | Waits for a worker to stop, then opens a fresh settle session. |
-| `contrib/tidy-tabs.mjs` | Closes finished Herdr tabs after their results are safely recorded. |
-| `supervisor/` | The prompt each settle session gets and the scripts that arm or continue it. |
+| `supervisor/` | The prompt each settle session gets, the scripts that arm or continue it, and tab housekeeping. |
 | `.lane/` | Ignored runtime state, including session ledgers and the emergency `STOP` file. |
 | `~/.config/herdr-org/console.json` | The operator's local console project and Brain-path configuration. |
 | `~/Library/LaunchAgents/com.rewt.herdr-brain.plist` | The operator's local service definition for the always-on Brain watcher. |
@@ -252,33 +251,18 @@ do); the console writes as `ORG_ACTOR=human`.
 
 ## The console
 
-`record console` (version 0.0.2) is a terminal app for a Herdr tab. It costs no model tokens and
-answers three questions: which agent sessions are running, what they are doing, and what is
-waiting on me. From it the operator goes straight to any session's Herdr tab and answers the
-questions agents wait on. (Starting new work from its launch bar comes in the next round;
-the bar is drawn but `n` only says so.)
-
-```text
- herdr-org  20:50  4/30 sessions today  1 waiting on you                       console 0.0.2  ? help
- ( WAITING ON YOU ) ─────────────────────────────────────────────────────────────────────────── ( 1 )
-   ! Promote the modern console lane into main?                  tooling · recommend yes · asked 19:19
-     SESSION                    WHO                    WHERE              UP      STATE     DOING
- ( herdr-org ) ~/development/rewt/herdr-brain ────────────────────────────────────────────────── ( 2 )
- >   lane brain-console-v1 r3   Claude Opus 5 · high   lane-brain-consol… 44m     ● working Verifying…
-     settle-r-4-1912            Claude Fable 5.1       herdr-org          1h      ✓ done    no description
- ─────────────────────────────────────────────────────────────────────────────────────────────────────
- Task   n  Describe the outcome. Enter adds a line.
-        Where  choose repository    Who  choose route    Goal  choose goal          ( Review launch )
- LIST   j/k select  Enter go to session  s summary  n new task  m menu  h history  / scope  ? help
-```
+`record console --modern` opens Herdr Monitor's project screen. It costs no model tokens and
+shows current sessions, item-linked work, questions that need the operator, and recent item
+activity. The operator can open or type into a session, answer a recorded question, add a task,
+or start a chat. All record writes go through the `record` CLI. The Herdr plugin opens this
+screen directly beside the supervisor chat.
 
 ### Install and run
 
 ```sh
 npm --prefix console ci          # Ink and React, pinned by console/package-lock.json
-record console [--project NAME]     # or: node console/app.mjs [--project NAME] [--config FILE]
-contrib/console-pane.sh [NAME]   # an unfocused Herdr tab labelled "console" in the project's workspace
-node console/app.mjs --print 140x40 [--select N] [--keys 'sh']   # one frame as text, no terminal needed
+record console --modern [--project NAME]
+node console/app.mjs --modern --print 140x40 [--keys 'a']   # one frame as text, no terminal needed
 ```
 
 The core stays dependency-free: only `console/` has dependencies, and root `npm test` passes
@@ -487,26 +471,13 @@ that opens as a split beside a chat, an action to open it, and a build step that
 console's dependencies. Herdr resolves the path it is given, so the plugin is bound to one
 release directory; `activate` and `rollback` re-link it whenever the release changes. A GitHub install (`herdr plugin install`) would use the same
 manifest and build step.
-## The items pane
+## Item activity
 
-`node console/items.mjs [--project NAME]` is a narrow live view of an organization's items, made
-to sit beside a supervisor chat in the same Herdr tab. It reads `record status`, `record log` and
-Herdr's agent and pane lists every few seconds, and the chat's visible screen and transcript, and
-shows what the chat has surfaced by what it needs now (decide, blocked with what unblocks it,
-stalled, working, resolved), then the live sessions and their work, then recent activity. It never
-writes the record. Its effects are focusing a session in Herdr (`o`) and, when the operator picks
-an answer to an open question and presses Enter, one message to the supervisor chat, refused while
-the chat's prompt box holds unsent text.
-
-When no session is working and nothing has been recorded for 20 minutes, the status line turns
-amber: `idle 5h48m · no session working · last 02:02 report ingested ENG-776`. A long run leaves
-the record quiet with a session working, which is progress; a quiet record with nothing working is
-the stall nobody reports (a refused promotion, a lost watcher).
-
-`HERDR_FEED_WATCH` names the chat's pane or agent when it is not in the pane's own tab, and
-`HERDR_FEED_SINCE` widens the activity window (default `36h`). `--print COLSxROWS [--keys KEYS]`
-prints one frame as plain text and never focuses or sends. It uses the console's configuration and
-dependencies (`npm --prefix console ci`).
+The modern console's Activity view (`a`) reads the last 36 hours from `record log`: item creation,
+run starts, reports, decisions and closes. Agent-created items carry their recorded reason, and an
+item page says who or which run proposed it. The screen's existing Tasks, Needs you and Sessions
+views remain the current-state frame; Activity is the chronology. The retired standalone items
+pane is no longer installed or documented as a second console.
 
 ## Guardrails are advisory
 

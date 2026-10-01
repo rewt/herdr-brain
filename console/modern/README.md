@@ -75,6 +75,9 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 - Current project sessions lead the overview. Goals/tasks come from `record status
   --json`; decisions and stopped-session results reuse the existing org/Brain
   read projections. Finished tasks are excluded from the active list.
+- Activity (`a`) shows the last 36 hours of item creation, run starts, reports,
+  decisions and closes from `record log`. Agent-created items keep their recorded
+  reason there and on the item page.
 - Main checkout and worktrees use canonical Git common-directory identity. No
   basename, workspace label or branch prefix is used to establish ownership.
 - The scope dropdown overlays the current view, supports filtering, and cancels
@@ -123,7 +126,7 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | --- | --- |
 | `p` | Scope dropdown; type to filter, Up/Down choose, Enter selects, Esc dismisses |
 | `h` | Project overview |
-| `g` / `t` / `s` / `!` | Goals / Tasks / Sessions / Needs you |
+| `g` / `t` / `a` / `s` / `!` | Goals / Tasks / Activity / Sessions / Needs you |
 | `Tab` / `Shift+Tab` | Change section, remembering selection within it |
 | `j` / `k`, Up / Down | Select within the current section |
 | Left / Right | Change central view, or the selected checkout's horizontal tab |

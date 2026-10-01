@@ -189,7 +189,7 @@ operational step, run:
 
 ```sh
 cd "$CHECKOUT"
-node contrib/tidy-tabs.mjs --cwd "$CHECKOUT" --org "$ORG_DIR" --ledger-dir "$LEDGER"
+node supervisor/tidy-tabs.mjs --cwd "$CHECKOUT" --org "$ORG_DIR" --ledger-dir "$LEDGER"
 ```
 
 Then return the prepared summary and stop. Do not wait on or check back on

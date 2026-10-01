@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isShellOnly, planTidy, reviewedAgentsFromRecords, reviewVerdict, sessionOrderFromLedgers } from '../contrib/tidy-tabs.mjs';
+import { isShellOnly, planTidy, reviewedAgentsFromRecords, reviewVerdict, sessionOrderFromLedgers } from '../supervisor/tidy-tabs.mjs';
 
 const tab = (tab_id, label, lane = false) => ({ tab_id, label, workspace_id: lane ? 'wL' : 'wM', lane });
 const pane = (pane_id, tab_id, shellOnly = true) => ({ pane_id, tab_id, shellOnly });

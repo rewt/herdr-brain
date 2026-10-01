@@ -1,4 +1,4 @@
-# bch-cloak pilot snapshot, 2026-09-16
+# Archived bch-cloak pilot snapshot, 2026-09-16
 
 Copies of the operator-side files the first pilot ran with. The live copies are in
 `/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/`, which git ignores, and

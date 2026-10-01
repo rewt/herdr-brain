@@ -20,12 +20,12 @@ async function gitSummary(cwd) {
 }
 
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
-  const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
+  const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
     herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, herdrRename: cli.herdrRename, orgAnswer: cli.orgAnswer,
     brainAct: args => brainAct(config.brain_bin, args), gitSummary, folderPath,
     observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
-  const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, brain: { rows: [], off: true } };
+  const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, events: [], brain: { rows: [], off: true } };
   const s = { projects: [], projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
     view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'scope', scroll: 0, outputScroll: 0,
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark',
@@ -113,8 +113,8 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   }
   function adoptProject() {
     const cached = s.cache.get(s.projectId);
-    data.today = cached?.today ?? null; data.status = cached?.status ?? null;
-    for (const key of ['today', 'status']) { delete s.errors[key]; s.times[key] = cached?.times?.[key] ?? null; }
+    data.today = cached?.today ?? null; data.status = cached?.status ?? null; data.events = cached?.events ?? [];
+    for (const key of ['today', 'status', 'events']) { delete s.errors[key]; s.times[key] = cached?.times?.[key] ?? null; }
   }
   async function readOutput() {
     // A transcript read in flight must not delay taking the terminal to type.
@@ -163,13 +163,13 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       const p = project();
       if (p?.org && (selected === s.projectId || selected === null)) {
         const id = p.id, cached = s.cache.get(id) ?? { times: {} };
-        await Promise.all(['today', 'status'].map(async key => {
-          try { const value = await (key === 'today' ? d.orgToday(p) : d.orgStatus(p)); cached[key] = value; cached.times[key] = d.now();
+        await Promise.all(['today', 'status', 'events'].map(async key => {
+          try { const value = await (key === 'today' ? d.orgToday(p) : key === 'status' ? d.orgStatus(p) : d.orgLog(p)); cached[key] = value; cached.times[key] = d.now();
             if (s.projectId === id) { data[key] = value; delete s.errors[key]; s.times[key] = cached.times[key]; }
           } catch (e) { if (s.projectId === id) s.errors[key] = e.message; }
         }));
         s.cache.set(id, cached);
-      } else if (!p?.org) { data.today = null; data.status = null; delete s.errors.today; delete s.errors.status; }
+      } else if (!p?.org) { data.today = null; data.status = null; data.events = []; delete s.errors.today; delete s.errors.status; delete s.errors.events; }
       s.loading = false;
     })().finally(() => { s.pending = null; changed(); });
     await s.pending;
@@ -226,7 +226,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (next === s.projectId) { changed(); return; }
       navigate({ projectId: next, view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'view:overview' }); adoptProject(); return refresh();
     }
-    if (id.startsWith('view:')) { const view = id.slice(5); const first = { goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
+    if (id.startsWith('view:')) { const view = id.slice(5); const first = { goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, activity: m.activity[0] && `item:${m.activity[0].id}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
     if (id.startsWith('item:')) { if (m.itemsById.has(id.slice(5))) navigate({ view: 'item', detail: id.slice(5) }); return; }
     if (id.startsWith('need:')) { if (m.allNeeds.some(r => r.key === id.slice(5))) navigate({ view: 'need', detail: id.slice(5) }); return; }
     if (id.startsWith('space:')) {
@@ -463,14 +463,14 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
         const tabs = model().tabs.filter(t => t.workspace_id === s.space), index = tabs.findIndex(t => t.tab_id === s.tab);
         const next = tabs[(index + direction + tabs.length) % tabs.length]; if (next) { await activate(`tab:${next.tab_id}`); s.focus = `tab:${next.tab_id}`; changed(); }
       } else {
-        const views = ['overview', 'goals', 'tasks', 'needs'], index = Math.max(0, views.indexOf(s.view));
+        const views = ['overview', 'goals', 'tasks', 'activity', 'needs'], index = Math.max(0, views.indexOf(s.view));
         const next = views[(index + direction + views.length) % views.length]; await activate(`view:${next}`); s.focus = `view:${next}`; changed();
       }
       return false;
     }
     if (s.view === 'output' && (input === 'l' || input === 'v')) return activate(input === 'l' ? 'transcript' : 'mirror');
     if (s.view === 'output' && input === 'i') return activate('interact');
-    const shortcut = { p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
+    const shortcut = { p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
     if (shortcut) return activate(shortcut);
     return false;
   }

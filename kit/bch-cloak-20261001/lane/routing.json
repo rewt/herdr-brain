@@ -1,0 +1,218 @@
+{
+  "schema": 1,
+  "authority": "BCH Cloak's sole authority for named route selection, agent kind, model, reasoning effort, and route-selection criteria. Launchers must consume this file; prose may name routes but must not copy their kind, model, or effort values. Environment, persona, account, memory integration, and other launch plumbing are outside that authority.",
+  "dispatch": {
+    "kind": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "env": [
+      "AI_PERSONA=personal",
+      "CLAUDE_CONFIG_DIR=/Users/rewt/.claude-personal",
+      "GH_CONFIG_DIR=/Users/rewt/.config/gh-personal",
+      "GOOSE_PROVIDER=codex-acp",
+      "GOOSE_MODEL=current"
+    ]
+  },
+  "always_args": {
+    "claude": ["--plugin-dir", "/Users/rewt/development/claude-mem/adapters/claude-bastian"],
+    "codex": ["-p", "claude-mem-bastian"]
+  },
+  "routes": {
+    "chore": {
+      "kind": "codex",
+      "model": "gpt-5.6-terra",
+      "effort": "medium",
+      "use": "Mechanical, isolated work such as renames, documentation alignment, evidence bookkeeping, generated-file refreshes, and report formatting."
+    },
+    "engineer": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "use": "Default implementation route for a narrow, well-understood engineering slice."
+    },
+    "engineer-xhigh": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "use": "Cross-package, concurrent, protocol, parity, or otherwise difficult implementation work."
+    },
+    "engineer-max": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "max",
+      "use": "Exceptional implementation only after a measured repeated failure or for unusually difficult correctness-critical logic; never a default."
+    },
+    "engineer-opus": {
+      "kind": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "use": "Implementation on the Claude pool when the operator names Opus as the engineer for a workstream; same scope rules as engineer."
+    },
+    "engineer-opus-xhigh": {
+      "kind": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "use": "Cross-package, protocol, parity, or otherwise difficult implementation on the Claude pool when the operator names Opus as the engineer for a workstream."
+    },
+    "engineer-opus-max": {
+      "kind": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "use": "Escalation implementation on the Claude pool only after measured repeated failure (two failed fix rounds or a failed escalation) and with the operator naming Opus at max; never a default."
+    },
+    "engineer-astra": {
+      "kind": "codex",
+      "model": "gpt-6-astra",
+      "effort": "xhigh",
+      "use": "Implementation on the Codex pool when the operator names Astra as the engineer for a workstream (operator 2026-09-27, Claude quota low); same scope rules as engineer. A Daybreak cyber refusal gets one neutral re-prompt, then engineer-xhigh."
+    },
+    "review": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "use": "Ordinary independent exact-commit review of a bounded change with strong deterministic tests."
+    },
+    "review-critical": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "use": "Independent review involving privacy, cryptography, semantics, trust, recovery, lifecycle, package boundaries, frozen artifacts, proving, live-chain behavior, broad cross-package effects, or adversarial negative controls."
+    },
+    "review-opus": {
+      "kind": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "use": "Ordinary independent review on the Claude pool when that pool is available."
+    },
+    "review-critical-opus": {
+      "kind": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "use": "Critical independent review on the Claude pool when that pool is available."
+    },
+    "review-critical-astra": {
+      "kind": "codex",
+      "model": "gpt-6-astra",
+      "effort": "max",
+      "use": "First critical review of a custody or cryptography slice engineered on engineer-astra, when the operator routes reviews to Astra; falls back to review-critical if a Daybreak cyber check stops it."
+    },
+    "review-escalate": {
+      "kind": "codex",
+      "model": "gpt-6-astra",
+      "effort": "xhigh",
+      "use": "Escalation only after two stuck review/fix rounds on the same finding, or when the remaining issue is an unexplained result; never a first review."
+    },
+    "review-escalate-claude": {
+      "kind": "claude",
+      "model": "claude-fable-5-1",
+      "effort": "xhigh",
+      "use": "Claude-pool escalation only after two stuck review/fix rounds on the same finding; never a first review."
+    },
+    "research-opus-max": {
+      "kind": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "use": "Operator-requested design research on an open protocol problem with no known approach; produces a proposal for review, never an implementation."
+    },
+    "research-astra-max": {
+      "kind": "codex",
+      "model": "gpt-6-astra",
+      "effort": "max",
+      "use": "Operator-requested design research on an open protocol problem with no known approach; produces a proposal for review, never an implementation."
+    },
+    "research-sol-max": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "max",
+      "use": "Operator-requested design research on an open protocol problem with no known approach; produces a proposal for review, never an implementation."
+    },
+    "unblock": {
+      "kind": "codex",
+      "model": "gpt-6-astra",
+      "effort": "xhigh",
+      "use": "Research an unexplained result, clarify genuinely unknown scope, or find an unblocker that is not already known."
+    },
+    "settle": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "use": "Default fresh orchestrator that settles a finished run with a clean independent review and coherent evidence."
+    },
+    "settle-critical": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "use": "Settlement involving conflicting evidence, consequential acceptance, or unresolved semantic or security judgment."
+    },
+    "executive": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "use": "Fresh short-lived orchestrator for routine queue progression and dispatch decisions."
+    },
+    "monitor": {
+      "kind": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "use": "One-shot read-only status from concise durable evidence; no acceptance, dispatch, repeated waits, or implementation."
+    }
+  },
+  "selection_policy": {
+    "adopted": "operator 2026-09-28",
+    "rules": [
+      "Select by task class, not ad hoc per item. The route table below is the whole policy.",
+      "The reviewer always runs on the other provider from the engineer (independence and load balance). Settles and routine orchestration stay on Codex.",
+      "Opus trips its own cyber safeguard on adversarial, covert-channel and custody-attack work: those classes go to Codex whichever pool is primary.",
+      "Tier equivalence: Opus high = Sol high; Opus xhigh = Sol xhigh; escalation frontier = Fable (Claude) or Astra (Codex).",
+      "Pool switch: when one provider's weekly quota is the tighter one, the operator flips primary_implementation_pool; the cross-provider review rule does not change.",
+      "Balance is measured, not assumed: .lane/supervisor/tidy-tabs.sh prints runs per provider and effort for the last 24 hours."
+    ],
+    "primary_implementation_pool": "claude",
+    "by_task_class": {
+      "spec-design-docs": {
+        "claude": "engineer-opus-xhigh",
+        "codex": "engineer-xhigh"
+      },
+      "implementation-non-adversarial": {
+        "claude": "engineer-opus-xhigh",
+        "codex": "engineer-xhigh"
+      },
+      "implementation-narrow": {
+        "claude": "engineer-opus",
+        "codex": "engineer"
+      },
+      "implementation-adversarial-crypto-custody": {
+        "claude": "engineer-xhigh",
+        "codex": "engineer-xhigh"
+      },
+      "mechanical": {
+        "claude": "chore",
+        "codex": "chore"
+      },
+      "review-of-claude-work": {
+        "claude": "review-critical",
+        "codex": "review-critical"
+      },
+      "review-of-codex-work": {
+        "claude": "review-critical-opus",
+        "codex": "review-critical-opus"
+      },
+      "review-adversarial": {
+        "claude": "review-critical",
+        "codex": "review-critical"
+      },
+      "settle": {
+        "claude": "settle",
+        "codex": "settle"
+      },
+      "escalation-after-two-stuck-rounds": {
+        "claude": "review-escalate",
+        "codex": "review-escalate-claude"
+      },
+      "research-open-problem": {
+        "claude": "research-opus-max",
+        "codex": "research-sol-max"
+      }
+    }
+  }
+}

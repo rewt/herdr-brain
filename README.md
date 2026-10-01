@@ -441,6 +441,26 @@ session is stuck at (a choice), or a new session started to work out a question 
 Herdr actions are reading the agent and tab lists, reading a session's screen for the peek,
 focusing a tab or agent, and routing right clicks in its own pane.
 
+## Releases and the Herdr plugin
+
+Projects run a release, never this working tree, so a merge to main changes nothing until a
+release is activated. `herdr/release.sh` manages them:
+
+```sh
+herdr/release.sh build v0.1.1      # copy the tag into ~/.local/share/herdr-monitor/releases/v0.1.1 (read-only) and run its build step
+herdr/release.sh activate v0.1.1   # point current at it; the first time, move the org and lane launchers and the Brain service onto current
+herdr/release.sh rollback          # back to the release before
+herdr/release.sh restore           # launchers and the Brain service back to where they were before the first activation
+herdr/release.sh dev <worktree>    # a second plugin, rewt.herdr-monitor-dev, running a worktree beside the release
+herdr/release.sh status
+```
+
+`herdr-plugin.toml` makes the repository a Herdr plugin (`rewt.herdr-monitor`): a console pane
+that opens as a split beside a chat, an action to open it, and a build step that installs the
+console's dependencies. A release is linked to Herdr once, through `current`, so switching
+releases never re-links it. A GitHub install (`herdr plugin install`) would use the same
+manifest and build step.
+
 ## Guardrails are advisory
 
 `max_runs`, `max_children`, `max_depth` and `escalation_budget` default from `.org/config.json`

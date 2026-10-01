@@ -1,0 +1,26 @@
+# Herdr Monitor as a Herdr plugin. A release is installed into
+# ~/.local/share/herdr-monitor/releases/<tag> by herdr/release.sh and linked through
+# ~/.local/share/herdr-monitor/current, so switching releases never re-links the plugin.
+id = "rewt.herdr-monitor"
+name = "Herdr Monitor"
+version = "0.1.1"
+min_herdr_version = "0.8.0"
+platforms = ["macos", "linux"]
+description = "The record, lanes and console for autonomous agent work, beside the supervisor chat."
+
+# Runs on `herdr plugin install` (a GitHub install). `herdr plugin link` skips it, so
+# herdr/release.sh runs the same script when it builds a release.
+[[build]]
+command = ["bash", "herdr/install.sh"]
+
+[[panes]]
+id = "console"
+title = "Herdr Monitor"
+placement = "split"
+command = ["sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/herdr/console.sh\""]
+
+[[actions]]
+id = "open"
+title = "Herdr Monitor: open the console"
+contexts = ["pane", "workspace"]
+command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console"]

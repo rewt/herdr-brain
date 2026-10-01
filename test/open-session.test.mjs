@@ -109,3 +109,47 @@ esac`);
     'route args follow the effort; always_args are added only for options the route did not set');
   assert.doesNotMatch(start, /--permission-mode|--add-dir|--effort/);
 });
+
+test('open-session refuses a concurrent supervisor session instead of waiting', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'open-session-busy-'));
+  const bin = path.join(root, 'bin'), cwd = path.join(root, 'checkout'), supervisor = path.join(root, 'supervisor');
+  for (const directory of [bin, cwd, supervisor]) fs.mkdirSync(directory);
+  const checklist = path.join(supervisor, 'SETTLE.md'), laneConfig = path.join(root, 'lane.json');
+  const calls = path.join(root, 'herdr-calls');
+  fs.writeFileSync(checklist, '# checklist\n');
+  fs.writeFileSync(laneConfig, '{}');
+  script(path.join(bin, 'herdr'), `printf '%s\\n' "$*" >> "${calls}"
+case "$1 $2" in
+  "agent list") echo '{"result":{"agents":[{"name":"settle-r-8-1200","agent_status":"working"}]}}' ;;
+  *) echo '{"result":{}}' ;;
+esac`);
+
+  const result = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--org', path.join(root, '.org'), '--cwd', cwd,
+    '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', supervisor], {
+    encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, timeout: 2_000,
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(result.error, undefined, 'the launcher refuses promptly rather than waiting');
+  assert.match(result.stdout, /settle-r-8-1200 is already working; refusing .* retry this launch after it stops/);
+  assert.doesNotMatch(fs.readFileSync(calls, 'utf8'), /tab create|agent start/);
+});
+
+test('a run with a recorded report never opens a duplicate settle session', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'open-session-reported-'));
+  const bin = path.join(root, 'bin'), cwd = path.join(root, 'checkout'), supervisor = path.join(root, 'supervisor');
+  for (const directory of [bin, cwd, supervisor]) fs.mkdirSync(directory);
+  const checklist = path.join(supervisor, 'SETTLE.md'), laneConfig = path.join(root, 'lane.json');
+  const herdrCalls = path.join(root, 'herdr-calls');
+  fs.writeFileSync(checklist, '# checklist\n');
+  fs.writeFileSync(laneConfig, '{}');
+  script(path.join(bin, 'org'), `echo '{"id":"R-8","item":"ENG-8","report":{"outcome":"done"},"meta":{"agent":"lane-eight"},"report_path":"${root}/report.md"}'`);
+  script(path.join(bin, 'herdr'), `printf '%s\\n' "$*" >> "${herdrCalls}"`);
+
+  const result = spawnSync(process.execPath, [OPEN_SESSION, 'R-8', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
+    '--lane-config', laneConfig, '--checklist', checklist], {
+    encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /R-8 already has a recorded report; refusing to open another settle session/);
+  assert.equal(fs.existsSync(herdrCalls), false, 'no Herdr action is attempted for an already recorded run');
+});

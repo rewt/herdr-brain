@@ -7,6 +7,7 @@ test('the supervisor arms the standalone watcher and launches settle separately'
   const arm = read('../supervisor/arm-watch.sh');
   const settle = read('../supervisor/settle.sh');
   const launcher = read('../supervisor/open-session.mjs');
+  const protocol = read('../supervisor/SETTLE.md');
   const compatibilityWatcher = read('../contrib/settle-watch.mjs');
 
   assert.match(arm, /watch\/watch\.mjs/);
@@ -18,6 +19,7 @@ test('the supervisor arms the standalone watcher and launches settle separately'
   assert.equal(fs.existsSync(new URL('../contrib/settle-watch.mjs', import.meta.url)), true);
   assert.match(compatibilityWatcher, /settle-watch: wait for one org run's worker to stop/);
   assert.match(compatibilityWatcher, /opt\.spawn && !opt\.open/);
+  assert.match(protocol, /refuses instead of waiting[\s\S]*herdr agent wait NAME[\s\S]*settle\.sh R-n.*again/);
 });
 
 test('Brain remains an operator-queue capture service, not a run-report delivery path', () => {

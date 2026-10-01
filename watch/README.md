@@ -22,11 +22,14 @@ The tab is labelled `watch R-29`, so the wait is visible in Herdr, and closes
 after a stopped worker's valid report is delivered. Without `--spawn`, the
 command blocks in the current terminal. A newly armed watcher gives the worker
 60 seconds to be seen working before an initial idle or missing agent is treated
-as terminal; `--start-grace` changes that window. `--long-after` changes the
-default one-hour long-run notice. If an intermediate notice cannot reach the
-supervisor after its retries, an operator notification is raised and the watcher
-continues waiting; failure to deliver the final report or a gone-worker notice
-remains fatal.
+as terminal; `--start-grace` changes that window. `--idle-grace` optionally delays
+a no-report notice after a previously working agent becomes idle or done, while
+still waking immediately for a report or resumed worker. It defaults to zero;
+bch-cloak's cutover uses 900 seconds to preserve its current watcher behavior.
+`--long-after` changes the default one-hour long-run notice. If an intermediate
+notice cannot reach the supervisor after its retries, an operator notification
+is raised and the watcher continues waiting; failure to deliver the final report
+or a gone-worker notice remains fatal.
 
 This module replaces bch-cloak's `notify-watch.sh` after that project switches
 over. It takes the proven blocking-wait and direct-prompt mechanics from

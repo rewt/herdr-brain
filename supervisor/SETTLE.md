@@ -24,6 +24,17 @@ When the long-running supervisor receives a final `[org-report]` notice, run
 Blocked, invalid-report, no-report and unavailable notices are not settle
 launches; inspect or restore the worker and let the same watcher continue.
 
+Session launch deliberately refuses instead of waiting when a `settle-*` or
+`exec-*` session is already working: blocking here would strand the long-running
+supervisor inside a foreground command. If `settle.sh` reports that refusal,
+keep the original `[org-report]` notice in your hand, wait for the named busy
+session with `herdr agent wait NAME --until idle --until done --until blocked`,
+then run `settle.sh R-n` again.
+Do not consider that report handled until the retry opens its fresh session or
+says the run already has a recorded report. `continue.sh` has the same refusal;
+retry it after the named session stops when the requested continuation is still
+needed.
+
 ```sh
 export ORG_DIR=/Users/rewt/development/rewt/.org
 CHECKOUT=/Users/rewt/development/rewt/herdr-brain

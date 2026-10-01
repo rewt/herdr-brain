@@ -239,7 +239,7 @@ function takeTurn() {
     const busy = agents.filter((a) => /^(settle-|exec-)/.test(a.name ?? '') && a.agent_status === 'working');
     if (busy.length === 0) return;
     fs.rmSync(openLock, { recursive: true });
-    die(`${busy.map((a) => a.name).join(', ')} is already working; refusing to open a concurrent supervisor session`);
+    die(`${busy.map((a) => a.name).join(', ')} is already working; refusing to open a concurrent supervisor session; retry this launch after it stops`);
   }
 }
 const releaseTurn = () => { if (!dry) try { fs.rmSync(openLock, { recursive: true }); } catch {} };
@@ -344,6 +344,7 @@ if (opt.open) {
 // worker lifecycle watcher.
 const initial = orgRun();
 if (!initial) die(`${runId} is not in ${opt.org}`);
+if (initial.report) die(`${runId} already has a recorded report; refusing to open another settle session`);
 if (initial.abandoned) die(`${runId} was abandoned; refusing to open a settle session`);
 if (initial.meta.settled_by) {
   if (agentStatus(initial.meta.settled_by) !== null) die(`${runId} is already with live session ${initial.meta.settled_by}`);

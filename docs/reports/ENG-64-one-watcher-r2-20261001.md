@@ -12,7 +12,7 @@ learnings:
   - "The restored compatibility script's Git blob is 014fe114e2d76606bb5aa0e88f2ac48297ca9829, exactly main's blob; its restored test is also byte-identical to main."
   - "The compatibility path must be the final old-watcher path removed, after bch-cloak no longer names it and the release-gated canary passes."
 artifacts:
-  - "31d2710 Preserve settle watcher compatibility"
+  - "22cd104 Preserve settle watcher compatibility"
   - "contrib/settle-watch.mjs and test/settle-watch.test.mjs restored from main"
   - "README.md and watch/README.md mark the compatibility-only boundary"
   - "docs/reports/ENG-64-one-watcher-20261001.md now makes compatibility removal the final cutover step"

@@ -33,6 +33,7 @@ const { values: opt, positionals } = parseArgs({
     agent: { type: 'string' },
     report: { type: 'string' },
     'start-grace': { type: 'string', default: '60' },
+    'idle-grace': { type: 'string', default: '0' },
     'long-after': { type: 'string', default: '3600' },
     'retry-after': { type: 'string', default: '10' },
     'delivery-attempts': { type: 'string', default: '5' },
@@ -48,7 +49,7 @@ const { values: opt, positionals } = parseArgs({
 
 const runId = positionals[0];
 if (!/^R-\d+$/.test(runId ?? '') || !opt.org) {
-  process.stderr.write('usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--start-grace SECONDS] [--long-after SECONDS] [--dry-run]\n');
+  process.stderr.write('usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--start-grace SECONDS] [--idle-grace SECONDS] [--long-after SECONDS] [--dry-run]\n');
   process.exit(2);
 }
 
@@ -62,6 +63,7 @@ function numberOption(name, { min = 0 } = {}) {
 }
 
 const startGraceMs = numberOption('start-grace') * 1_000;
+const idleGraceMs = numberOption('idle-grace') * 1_000;
 const longAfterMs = numberOption('long-after') * 1_000;
 const retryAfterMs = numberOption('retry-after') * 1_000;
 const deliveryAttempts = numberOption('delivery-attempts', { min: 1 });
@@ -297,6 +299,7 @@ async function watch() {
   let pendingUnavailable;
   let longNotified = false;
   let longNextAt;
+  let idleGraceUntil;
   let observedWorking = false;
   let startupWaitingLogged = false;
   const armedAt = Date.now();
@@ -359,6 +362,7 @@ async function watch() {
     lastUnavailableLog = undefined;
     if (state === 'working' || state === 'unknown') {
       if (state === 'working') observedWorking = true;
+      idleGraceUntil = undefined;
       // A resumed worker starts a new attempt. Its next identical stop must be
       // reported again rather than deduped against the previous attempt.
       lastNotice = undefined;
@@ -376,6 +380,18 @@ async function watch() {
       const signal = await waitForSignal(agent, ['working'], reportPath, startupGraceRemaining, beforeStamp);
       if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, startupGraceRemaining));
       continue;
+    }
+    if (report.kind === 'missing' && (state === 'idle' || state === 'done') && idleGraceMs > 0) {
+      if (idleGraceUntil === undefined) {
+        idleGraceUntil = Date.now() + idleGraceMs;
+        log(`waiting up to ${idleGraceMs / 1_000}s for ${agent}'s report or resume before sending a no-report notice`);
+      }
+      const remaining = Math.max(0, idleGraceUntil - Date.now());
+      if (remaining > 0) {
+        const signal = await waitForSignal(agent, ['working'], reportPath, remaining, beforeStamp);
+        if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, remaining));
+        continue;
+      }
     }
     if (report.kind === 'invalid' && !['working', 'unknown'].includes(state)) {
       await sendOnce(

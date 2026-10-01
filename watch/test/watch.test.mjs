@@ -238,6 +238,34 @@ esac`);
   assert.match(calls, /\[org-report\] run=R-11/);
 });
 
+test('idle grace waits for a late report before sending a no-report notice', async () => {
+  const fixture = watcherFixture('R-19');
+  const state = path.join(fixture.root, 'worker-state');
+  const waitStarted = path.join(fixture.root, 'wait-started');
+  fs.writeFileSync(state, 'working');
+  executable(fixture.herdr, `case "$1 $2" in
+  "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
+  "agent wait") printf yes > "${waitStarted}"; case " $* " in
+    *" --until working "*) while [ "$(cat '${state}')" != working ]; do sleep 0.02; done ;;
+    *) while [ "$(cat '${state}')" = working ]; do sleep 0.02; done ;;
+  esac ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  *) exit 2 ;;
+esac`);
+  const child = startWatcher([...fixture.args, '--idle-grace', '1']);
+  await waitForText(waitStarted, /yes/);
+  fs.writeFileSync(state, 'idle');
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(fs.existsSync(fixture.calls), false, 'idle grace suppresses the early no-report notice');
+  fs.writeFileSync(fixture.report, reportText('R-19', 'Late final report'));
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const calls = fs.readFileSync(fixture.calls, 'utf8');
+  assert.match(calls, /\[org-report\] run=R-19.*headline="Late final report"/);
+  assert.doesNotMatch(calls, /\[watch-no-report\]/);
+  assert.match(result.stdout, /waiting up to 1s .* report or resume/);
+});
+
 test('idle, working, idle without a report delivers both stop notices', async () => {
   const fixture = watcherFixture('R-12');
   const counter = path.join(fixture.root, 'gets');

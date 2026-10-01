@@ -31,6 +31,7 @@ look like one project.
 | `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
 | `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
 | `supervisor/` | The settle prompt, explicit settle/continue session launchers, watcher wrapper and tab housekeeping. |
+| `contrib/settle-watch.mjs` | Temporary compatibility entrypoint kept unchanged for bch-cloak's canonical-checkout caller; remove only after its release-gated switch. |
 | `.lane/` | Ignored runtime state, including session ledgers and the emergency `STOP` file. |
 | `~/.config/herdr-org/console.json` | The operator's local console project and Brain-path configuration. |
 | `~/Library/LaunchAgents/com.rewt.herdr-brain.plist` | The operator's local service definition for the always-on Brain watcher. |

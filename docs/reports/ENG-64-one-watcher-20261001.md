@@ -2,7 +2,7 @@
 run: R-37
 outcome: done
 summary: |
-  Herdr Monitor now has one worker lifecycle watcher: watch/watch.mjs. The former settle-watch was retired and its distinct session-launch work moved to supervisor/open-session.mjs; watcher delivery and fresh settle launch are now two explicit steps. Brain watch stays unchanged because it captures every stopped session into the operator queue rather than validating and delivering one recorded run. No running service, plist, activated release, bch-cloak file, or external record was changed. A release-gated, reversible bch-cloak cutover is documented below.
+  Herdr Monitor now uses watch/watch.mjs for its worker lifecycle watcher. The distinct session-launch work moved to supervisor/open-session.mjs, while contrib/settle-watch.mjs remains byte-for-byte compatible only for bch-cloak's canonical-checkout caller until its release-gated switch. Watcher delivery and fresh settle launch are now two explicit steps. Brain watch stays unchanged because it captures every stopped session into the operator queue rather than validating and delivering one recorded run. No running service, plist, activated release, bch-cloak file, or external record was changed. A release-gated, reversible bch-cloak cutover is documented below.
 headline: Worker reports now have one watcher and a release-gated cutover plan
 blockers: []
 proposals: []
@@ -20,19 +20,19 @@ artifacts:
   - "npm test: 285 passed, 0 failed, 1 explicit Herdr-only skip"
   - "sh supervisor/arm-watch.sh R-37 --dry-run: resolved R-37, its worker, report and supervisor target without mutation"
 decisions:
-  - decision: Retire settle-watch as a watcher and keep its distinct model-session launch behavior under supervisor.
-    why: Waiting for a worker and telling the supervisor is watch's job; account selection, session brakes, routing, prompts and ledgers are launch policy and remain useful without observing worker lifecycle.
+  - decision: Retire settle-watch from Herdr Monitor's own flow while preserving its exact compatibility entrypoint for bch-cloak until cutover.
+    why: Waiting for a worker and telling the supervisor is watch's job; account selection, session brakes, routing, prompts and ledgers are launch policy, but bch-cloak still hard-codes the old file in this canonical checkout and main must not switch that project.
   - decision: Make final report delivery and settle-session launch two explicit steps.
     why: watch/watch.mjs delivers the validated report to supervisor-herdr, whose protocol then invokes supervisor/settle.sh once; this preserves fresh-context settlement without a second watcher.
   - decision: Keep Brain watch unchanged.
     why: Its consumer is the operator and console, its input is every stopped Herdr session's screen, and its durable output is the private Brain queue; watch/watch.mjs instead follows one recorded run and delivers a validated report to a supervisor.
   - decision: Gate every bch-cloak change on release activation and a quiet point.
-    why: Its dispatch currently calls notify-watch.sh directly, its copied supervisor launch wrapper names the retired canonical path, and changing either while runs are active could leave a run with zero or two watchers.
+    why: Its dispatch currently calls notify-watch.sh directly, its copied supervisor launch wrapper names the compatibility path in this canonical checkout, and changing either while runs are active could leave a run with zero or two watchers.
 questions: []
 challenges:
   - premise: settle-watch should retire.
     verdict: partly
-    evidence: Its worker-wait loop and contrib identity retired, but its session-opening half is distinct and remains as supervisor/open-session.mjs behind settle.sh and continue.sh.
+    evidence: Its worker-wait loop retired from this repository's own flow and its session-opening half remains as supervisor/open-session.mjs, but the original file and CLI must stay unchanged while bch-cloak hard-codes the canonical path.
   - premise: Brain watch duplicates watch/.
     verdict: wrong
     evidence: Brain captures done and blocked screens from all sessions into queue.jsonl for the console; it does not inspect report_path, run org check or send an org-report notice to a supervisor.
@@ -41,14 +41,14 @@ challenges:
     evidence: kit/bch-cloak-20261001/supervisor/dispatch.sh directly starts .lane/supervisor/notify-watch.sh; arm-watch.sh is not on that live path.
   - premise: The old bch-cloak fresh-session files can be ignored during the watcher switch.
     verdict: wrong
-    evidence: arm-watch.sh and continue.sh route through scripts/lane/launch-supervisor.mjs, whose absolute SETTLE_WATCH path names the retired contrib file. They are dormant but must be repointed in the same release-gated edit so an operator command does not break.
+    evidence: arm-watch.sh and continue.sh route through scripts/lane/launch-supervisor.mjs, whose absolute SETTLE_WATCH path names this checkout's contrib file rather than an activated release. The compatibility file must remain until those callers are repointed in the release-gated edit.
 ---
 
 ## What calls what today
 
 | Mechanism | Callers before this change | Job that `watch/` does not do | Disposition |
 |---|---|---|---|
-| `contrib/settle-watch.mjs` | This repository's `supervisor/arm-watch.sh` and `supervisor/continue.sh`; bch-cloak's dormant `arm-watch.sh` and `continue.sh` through `scripts/lane/launch-supervisor.mjs`. No launchd or console caller. | Chooses a settle/executive route and account, enforces STOP and the daily session cap, serializes supervisor launches, opens and prompts a fresh model session, records the actor and ledger, and prunes old session tabs. | The worker-following loop and contrib file retired. The launch half moved to `supervisor/open-session.mjs`; `settle.sh` and `continue.sh` call it explicitly. `arm-watch.sh` now calls only `watch/watch.mjs`. |
+| `contrib/settle-watch.mjs` | Before this change, this repository's `supervisor/arm-watch.sh` and `supervisor/continue.sh`; still today, bch-cloak's dormant `arm-watch.sh` and `continue.sh` through `scripts/lane/launch-supervisor.mjs`. No launchd or console caller. | Chooses a settle/executive route and account, enforces STOP and the daily session cap, serializes supervisor launches, opens and prompts a fresh model session, records the actor and ledger, and prunes old session tabs. | Removed from this repository's own flow, with the launch half moved to `supervisor/open-session.mjs`. The original file remains unchanged solely so moving main cannot break bch-cloak; it is removed last after the release-gated switch. |
 | Brain `watch` | The loaded LaunchAgent runs `~/.local/share/herdr-monitor/current/brain/bin/brain.mjs watch --digest`; `brain service` and the console's service control start or stop it, and the console reads its queue. | Observes all named sessions, captures their final terminal screens and stranded input, optionally digests prose, and appends a durable operator queue. It is not tied to org runs or reports. | Kept unchanged. This is capture for the operator, not worker-report delivery to the supervisor. |
 | `watch/watch.mjs` | `supervisor/arm-watch.sh` here; the live supervisor has already used it for real runs. | This is the canonical job: follow one recorded worker, validate its report, and deliver a compact notice to the supervisor. | Kept as the only worker lifecycle watcher. |
 
@@ -97,6 +97,12 @@ The paths below are the live counterparts of the copies in `kit/bch-cloak-202610
   pre-cutover copy in the backup until the canary and rollback window finish, then archive or
   delete it at a later quiet point.
 
+One Herdr Monitor path is also in scope: `contrib/settle-watch.mjs`. It is the absolute target
+hard-coded by bch-cloak's `scripts/lane/launch-supervisor.mjs`, even though it lives in this
+checkout rather than the activated release. Keep it byte-for-byte unchanged through every step
+above. It is the last path removed, in a later Herdr Monitor commit, only after bch-cloak has been
+repointed and its canary has passed.
+
 No change to bch-cloak's lane dispatch, route selection, run creation, report format, settle desk,
 review desk or promotion queue is part of this switch. The only dispatch edit is which watcher it
 arms after recording the worker.
@@ -117,10 +123,14 @@ arms after recording the worker.
 6. Dispatch one ordinary canary. Only after all checks below pass is `notify-watch.sh` retired.
    Keep the backup through the agreed rollback window; archive or delete the unused script only at
    another quiet point.
+7. Confirm bch-cloak has no reference to the canonical-checkout contrib path. Only then remove
+   Herdr Monitor's `contrib/settle-watch.mjs` in a separate commit. This compatibility file is the
+   last part of the old watcher removed; it must exist whenever main moves before that point.
 
 ### Checks
 
-- `rg` over `.lane/supervisor` and `scripts/lane` finds no live invocation of `notify-watch.sh` or
+- Before the compatibility file is removed, `rg` over bch-cloak's `.lane/supervisor` and
+  `scripts/lane` finds no live invocation of `notify-watch.sh` or the canonical-checkout
   `contrib/settle-watch.mjs`; historical comments or the isolated backup do not count as callers.
 - The canary's `watch-logs/R-n.log` names `watch/watch.mjs`, the worker and report path, and there
   is exactly one watcher process for that run.
@@ -141,6 +151,8 @@ preceding Herdr Monitor release, rerun the routing tests and both wrapper dry ru
 one canary and confirm its log says `notify-watch.sh`. If the failed canary's standalone watcher is
 still alive, let it finish or stop that exact recorded process before restoring dispatch. The
 backup contains the untracked live scripts, so rollback does not depend on bch-cloak Git history.
+If rollback happens after the final compatibility cleanup, restore the exact
+`contrib/settle-watch.mjs` blob before moving main or restoring bch-cloak's old launch wrapper.
 
 ## Verification
 

@@ -21,7 +21,9 @@ test('settle-watch tells org which session is acting (dry run, fake Herdr)', () 
   const checklist = path.join(supervisor, 'SETTLE.md');
   const laneConfig = path.join(root, 'lane.json');
   fs.writeFileSync(checklist, '# checklist\n');
-  fs.writeFileSync(laneConfig, '{}');
+  fs.writeFileSync(laneConfig, JSON.stringify({
+    routes: { executive: { kind: 'claude', model: 'opus', effort: 'high' } },
+  }));
   script(path.join(bin, 'herdr'), `case "$1 $2" in
   "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1","worktree":{"is_linked_worktree":false,"checkout_path":"${cwd}"}}]}}' ;;
   "tab list") echo '{"result":{"tabs":[]}}' ;;
@@ -105,7 +107,7 @@ esac`);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const start = r.stdout.split('\n').find((l) => l.includes('[dry-run] start agent:'));
   assert.ok(start, r.stdout);
-  assert.match(start, /--kind codex .* -- -m gpt-x -c model_reasoning_effort=high -c model_reasoning_effort=xhigh -p prof$/,
-    'route args follow the effort; always_args are added only for options the route did not set');
+  assert.match(start, /--kind codex .* -- -c model_reasoning_effort=xhigh -p prof -m gpt-x -c model_reasoning_effort=high$/,
+    'route metadata remains canonical after route plumbing; always_args are added only for absent options');
   assert.doesNotMatch(start, /--permission-mode|--add-dir|--effort/);
 });

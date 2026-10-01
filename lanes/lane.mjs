@@ -29,6 +29,12 @@ import {
   writeSessionRecord,
 } from "./board/registry.mjs";
 import { herdrSocketPath } from "./board/herdr-client.mjs";
+import {
+  resolveRoute,
+  routeNames as configuredRouteNames,
+  selectRoute,
+  validateRoutesConfig,
+} from "./routes.mjs";
 
 const IS_REVIEW_COMMAND = process.argv[2] === "review";
 const CALLER_CWD = process.cwd();
@@ -165,12 +171,12 @@ const REPO_ROOT = repositoryRoot();
 //             built dist), so validation fails there for environmental
 //             reasons that look like real failures. Each entry is
 //             {"unless": "<path that proves the step is done>", "run": "<cmd>"}.
-//   dispatch  {"kind", "model", "env": ["K=V"], "args": [...]} — global
+//   dispatch  {"kind", "model", "effort", "env": ["K=V"], "args": [...]} — global
 //             defaults for dispatching a herdr agent session.
-//   routes    {"name": {"kind", "model", "env": ["K=V"], "args": [...],
+//   routes    {"name": {"kind", "model", "effort", "env": ["K=V"], "args": [...],
 //             "use": "when to select it"}} — named dispatch defaults;
-//             kind/model/args override dispatch, while env is appended. CLI
-//             flags take final precedence; use is descriptive only.
+//             kind/model/effort/args override dispatch, while env is appended.
+//             A selected route owns kind/model/effort; use is descriptive only.
 //   always_args {"<kind>": ["--option", "value", ...]} — agent options appended
 //             to every dispatch of that kind after route and --arg replacement.
 //             An option already present in the arguments is not repeated.
@@ -196,7 +202,7 @@ function requireStringArray(config, key, label, file) {
 
 function validateDispatch(config, label, file, { route = false } = {}) {
   if (!isRecord(config)) fail(`invalid lane config ${file}: ${label} must be an object`);
-  for (const key of ["kind", "model", ...(route ? ["use"] : [])]) {
+  for (const key of ["kind", "model", "effort", ...(route ? ["use"] : [])]) {
     if (Object.hasOwn(config, key) && typeof config[key] !== "string") {
       fail(`invalid lane config ${file}: ${label}.${key} must be a string`);
     }
@@ -207,6 +213,11 @@ function validateDispatch(config, label, file, { route = false } = {}) {
 
 function validateConfig(config, file) {
   if (!isRecord(config)) fail(`invalid lane config ${file}: top level must be an object`);
+  try {
+    validateRoutesConfig(config, { references: false });
+  } catch (error) {
+    fail(`invalid lane config ${file}: ${error.message}`);
+  }
   for (const key of ["main", "validate", "registry", "seams_doc", "worktree_root"]) {
     requireString(config, key, file);
   }
@@ -311,6 +322,11 @@ const { config: CONFIG, sources: CONFIG_SOURCES, routeSources: ROUTE_SOURCES } =
   }
   return { config, sources, routeSources };
 })();
+try {
+  validateRoutesConfig(CONFIG);
+} catch (error) {
+  fail(`invalid merged lane config: ${error.message}`);
+}
 const MAIN = CONFIG.main ?? "main";
 const LANE_PREFIX = "lane/";
 const REPO_NAME = basename(REPO_ROOT);
@@ -355,64 +371,64 @@ function configuredRoutes() {
 }
 
 function routeNames() {
-  return Object.keys(configuredRoutes()).sort();
+  return configuredRouteNames(CONFIG);
 }
 
 function resolveDispatch(options = {}) {
-  const defaults = CONFIG.dispatch ?? {};
-  let route = {};
-  if (options.route !== undefined) {
-    const routes = configuredRoutes();
-    if (!Object.hasOwn(routes, options.route)) {
-      const names = routeNames();
-      fail(`unknown route: ${options.route} (${names.length > 0 ? `configured: ${names.join(", ")}` : "none configured"})`);
+  try {
+    return resolveRoute(CONFIG, options);
+  } catch (error) {
+    fail(error.message);
+  }
+}
+
+function routeRow(name, prefix = name) {
+  const resolved = resolveDispatch({ route: name });
+  process.stdout.write(
+    `${prefix}\tkind=${resolved.kind}\tmodel=${resolved.model ?? "(none)"}\teffort=${resolved.effort ?? "(none)"}` +
+      `\targs=${JSON.stringify(resolved.args)}` +
+      `\tuse=${resolved.use ?? "(none)"}\n`,
+  );
+}
+
+function routes(argv = []) {
+  if (argv.length > 0) {
+    let taskClass;
+    let pool;
+    for (let index = 0; index < argv.length; index += 1) {
+      const flag = argv[index];
+      if (!["--for", "--pool"].includes(flag) || argv[index + 1] === undefined || argv[index + 1] === "") {
+        fail("usage: lane routes [--for <task-class> [--pool <pool>]]");
+      }
+      if (flag === "--for") taskClass = argv[(index += 1)];
+      else pool = argv[(index += 1)];
     }
-    route = routes[options.route] ?? {};
+    if (taskClass === undefined) fail("--pool requires --for <task-class>");
+    let name;
+    try {
+      name = selectRoute(CONFIG, taskClass, pool);
+    } catch (error) {
+      fail(error.message);
+    }
+    routeRow(name, `${taskClass}\tpool=${pool ?? CONFIG.selection_policy?.primary_implementation_pool ?? "(none)"}\troute=${name}`);
+    return;
   }
-  const kind = options.kind ?? route.kind ?? defaults.kind ?? "claude";
-  const model = options.model ?? route.model ?? defaults.model;
-  const args = options.args?.length > 0 ? options.args : (route.args ?? defaults.args ?? []);
-  return {
-    kind,
-    model,
-    args: withAlwaysArgs(kind, model === undefined ? args : ["--model", ...args], args),
-    env: [...(defaults.env ?? []), ...(route.env ?? []), ...(options.env ?? [])],
-    use: route.use,
-  };
-}
-
-// Appends each always_args option group (an option and its following values)
-// whose option is absent from `present`, so replaced args cannot drop it.
-function withAlwaysArgs(kind, present, args) {
-  const groups = [];
-  for (const token of CONFIG.always_args?.[kind] ?? []) {
-    if (token.startsWith("-")) groups.push([token]);
-    else groups.at(-1).push(token);
-  }
-  const supplied = (option) => present.some((arg) => arg === option || arg.startsWith(`${option}=`));
-  return [...args, ...groups.filter(([option]) => !supplied(option)).flat()];
-}
-
-function routes() {
   const names = routeNames();
   if (names.length === 0) fail("no routes configured");
-  for (const name of names) {
-    const resolved = resolveDispatch({ route: name });
-    process.stdout.write(
-      `${name}\tkind=${resolved.kind}\tmodel=${resolved.model ?? "(none)"}\targs=${JSON.stringify(resolved.args)}` +
-        `\tuse=${resolved.use ?? "(none)"}\n`,
-    );
-  }
+  for (const name of names) routeRow(name);
 }
 
 function config() {
   const rows = [
     ["always_args", CONFIG.always_args ?? {}, CONFIG_SOURCES.get("always_args") ?? "default"],
+    ["authority", CONFIG.authority ?? null, CONFIG_SOURCES.get("authority") ?? "default"],
     ["dispatch", CONFIG.dispatch ?? {}, CONFIG_SOURCES.get("dispatch") ?? "default"],
     ["main", MAIN, CONFIG_SOURCES.get("main") ?? "default"],
     ["prepare", CONFIG.prepare ?? [], CONFIG_SOURCES.get("prepare") ?? "default"],
     ["registry", CONFIG.registry ?? ".lane/sessions.json", CONFIG_SOURCES.get("registry") ?? "default"],
+    ["schema", CONFIG.schema ?? null, CONFIG_SOURCES.get("schema") ?? "default"],
     ["seams_doc", CONFIG.seams_doc ?? null, CONFIG_SOURCES.get("seams_doc") ?? "default"],
+    ["selection_policy", CONFIG.selection_policy ?? null, CONFIG_SOURCES.get("selection_policy") ?? "default"],
     [
       "validate",
       process.env.LANE_VALIDATE ?? DEFAULT_VALIDATE,
@@ -1101,13 +1117,23 @@ function dispatch(topic, promptText, options = {}) {
   );
   let agentName = newAgentName(topic, liveAgentNames);
   // Dispatch is model-agnostic: the tier policy is the operator's, and the
-  // operator-owned role->agent mappings live in .lane.json "routes". Flags
-  // override a selected route and global dispatch defaults; extra agent-CLI
-  // arguments pass through verbatim via --arg. No config: kind falls back to
+  // operator-owned role->agent mappings live in .lane.json "routes". A named
+  // route owns kind/model/effort; extra agent-CLI arguments are launch plumbing
+  // passed through via --arg. No config: kind falls back to
   // claude, no model argument is sent.
-  const agentArgs = [];
+  const agentArgs = [...resolved.args];
   if (resolved.model !== undefined) agentArgs.push("--model", resolved.model);
-  agentArgs.push(...resolved.args);
+  const hasEffort = resolved.kind === "codex"
+    ? resolved.args.some((arg, index) => {
+      const expression = ["-c", "--config"].includes(arg) ? resolved.args[index + 1] :
+        arg.startsWith("--config=") ? arg.slice(9) : arg.startsWith("-c") ? arg.slice(2) : undefined;
+      return /^=?\s*model_reasoning_effort\s*=/u.test(expression ?? "");
+    })
+    : resolved.args.some((arg) => arg === "--effort" || arg.startsWith("--effort="));
+  if (resolved.effort !== undefined && (resolved.effortConfigured || !hasEffort)) {
+    if (resolved.kind === "codex") agentArgs.push("-c", `model_reasoning_effort=${resolved.effort}`);
+    else agentArgs.push("--effort", resolved.effort);
+  }
   const startArgsFor = (name) => {
     const args = ["agent", "start", name, "--kind", resolved.kind, "--pane", pane];
     if (agentArgs.length > 0) args.push("--", ...agentArgs);
@@ -1186,6 +1212,10 @@ function dispatch(topic, promptText, options = {}) {
     server: herdrSocketPath(),
     lane: branch,
     role: options.route ?? "agent",
+    route: options.route ?? null,
+    harness: resolved.kind,
+    model: resolved.model ?? null,
+    effort: resolved.effort ?? null,
     brief: options.briefPath ?? null,
     goal: dispatchGoal(topic, promptText, options.briefPath),
     report: `docs/reports/${topic}.md`,
@@ -2249,7 +2279,7 @@ switch (command) {
     seams(topic);
     break;
   case "routes":
-    routes();
+    routes([topic, ...rest].filter((value) => value !== undefined));
     break;
   case "dispatch": {
     if (topic === undefined) {
@@ -2258,12 +2288,19 @@ switch (command) {
     const options = { env: [], args: [] };
     const positional = [];
     for (let i = 0; i < rest.length; i += 1) {
+      if (["--route", "--model", "--kind", "--env", "--arg"].includes(rest[i]) &&
+          (rest[i + 1] === undefined || rest[i + 1] === "")) {
+        fail(`${rest[i]} requires a value`);
+      }
       if (rest[i] === "--route") options.route = rest[(i += 1)];
       else if (rest[i] === "--model") options.model = rest[(i += 1)];
       else if (rest[i] === "--kind") options.kind = rest[(i += 1)];
       else if (rest[i] === "--env") options.env.push(rest[(i += 1)]);
       else if (rest[i] === "--arg") options.args.push(rest[(i += 1)]);
       else positional.push(rest[i]);
+    }
+    if (options.route !== undefined && (options.kind !== undefined || options.model !== undefined)) {
+      fail("--kind and --model cannot override a named route");
     }
     let promptText;
     if (positional.length > 0) {
@@ -2336,7 +2373,8 @@ switch (command) {
         `  open <topic> [base]  cut lane/<topic> into a herdr worktree; base defaults to\n` +
         `                       ${MAIN} — pass a kept branch or archive/* tag to resume it\n` +
         "  seams [pattern]  list kept unfinished work (branches + archive tags)\n" +
-        "  routes           list configured dispatch routes and resolved defaults\n" +
+        "  routes [--for <task-class> [--pool <pool>]]\n" +
+        "                   list routes, or resolve the configured selection policy\n" +
         "  config           print resolved configuration as key, JSON value, and source\n" +
         "  dispatch <topic> [--route <name>] [--kind <agent>] [--model <m>] [@brief-file | prompt]\n" +
         "                   start a visible agent session (any herdr kind) in the\n" +

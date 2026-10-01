@@ -43,8 +43,8 @@ record init                                     # creates ./.org
 record add --goal "Rate limiting shipped"       # → G-1
 record add "Persist rate-limit state" --parent G-1 --role engineer --capability deep \
     --accept "survives restart"              # → ENG-1
-record start ENG-1 --harness claude-code --model opus
-# R-1 started on ENG-1 "Persist rate-limit state" [claude-code · opus]
+record start ENG-1 --route engineer
+# R-1 started on ENG-1 "Persist rate-limit state" [codex · configured-model · configured-effort]
 #   brief   /…/.org/runs/R-1/brief.md  (1830 chars ≈ 458 tokens)
 #   report  /…/.org/runs/R-1/report.md
 #   prompt  Read /…/.org/runs/R-1/brief.md and follow it.
@@ -52,6 +52,12 @@ record start ENG-1 --harness claude-code --model opus
 
 Launch any harness (in a Herdr pane or anywhere) and give it that prompt. The worker writes one
 report when it stops: done, blocked, needs a human, or failed. No progress updates. Then:
+
+`--route` reads the project route table used by `lane dispatch`; it records the
+resolved harness, model, and effort plus the route name. `--harness`, `--model`, and
+`--effort` remain available for unrouted or legacy callers, but cannot be mixed with
+`--route`. Use `--route-config FILE` only when selecting an explicit standalone route
+file; otherwise discovery follows the project's layered `.lane.json` files.
 
 ```sh
 record sync      # record reports waiting at open runs' report paths

@@ -36,7 +36,10 @@ gitignored, free of symlink escapes, and writable. It contains display metadata 
 dispatched sessions and never authorizes lifecycle work.
 
 Use `lane config` to print every resolved value and source, and `lane routes` to
-inspect dispatch defaults.
+inspect dispatch defaults. The same dependency-free resolver supplies
+`record start <ID> --route <name>`, so the run and the launched session receive the
+same harness, model, and effort without copied flags. Route selection policy is
+project configuration; pool and task-class names are opaque to Herdr.
 
 ## Lifecycle
 
@@ -105,7 +108,7 @@ metadata is marked done; metadata errors never rewrite the Git result.
 | `lane open <topic> [base-ref]` | Create a lane worktree and branch |
 | `lane dispatch <topic> [--route <name>] [options] [@brief \| prompt]` | Start and prompt a visible Herdr agent |
 | `lane review <topic> --round N [--brief <path>] [--route <name>] [--timeout <seconds>]` | Run one foreground independent review |
-| `lane routes` | List resolved dispatch routes |
+| `lane routes [--for <task-class> [--pool <pool>]]` | List routes or resolve selection policy |
 | `lane config` | Print resolved configuration values and sources |
 | `lane status` | Show lane state and overlapping files |
 | `lane check [--cmd <validate command>]` | Validate and record the current clean commit |

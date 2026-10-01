@@ -16,6 +16,7 @@ import { readReport } from '../lib/report.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 import { blockJson, renderBlock } from '../lib/block.mjs';
+import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate,
@@ -49,7 +50,7 @@ Questions for the operator
   record reopen <ID> [--note T]
 
 Runs and reports
-  record start <ID> [--harness H] [--model M] [--effort E] [--workspace DIR]
+  record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [--workspace DIR]
           [--report PATH] [--escalation] [--meta key=value]...
   record check <report.md>                validate a report without recording anything
   record ingest <report.md> [--run R-n]   record a report
@@ -453,6 +454,8 @@ function reopen(argv) {
 
 function start(argv) {
   const { values, positionals } = args(argv, {
+    route: { type: 'string' },
+    'route-config': { type: 'string' },
     harness: { type: 'string' },
     model: { type: 'string' },
     effort: { type: 'string' },
@@ -460,9 +463,27 @@ function start(argv) {
     report: { type: 'string' },
     escalation: { type: 'boolean' },
     meta: { type: 'string', multiple: true },
-  }, { min: 1, max: 1, usage: 'record start <ID> [--harness H] [--model M] [--effort E] [options]' });
+  }, { min: 1, max: 1, usage: 'record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [options]' });
   const id = positionals[0];
   const meta = parsePairs(values.meta, '--meta');
+  if (values['route-config'] !== undefined && values.route === undefined) {
+    throw new UserError('--route-config requires --route');
+  }
+  if (values.route !== undefined) {
+    const copied = ['harness', 'model', 'effort'].filter((key) => values[key] !== undefined);
+    if (copied.length > 0) throw new UserError(`--route cannot be combined with ${copied.map((key) => `--${key}`).join(', ')}`);
+    let resolved;
+    try {
+      const loaded = loadDiscoveredRoutes({ cwd: process.cwd(), file: values['route-config'] });
+      resolved = resolveRoute(loaded.config, { route: values.route });
+    } catch (error) {
+      throw new UserError(error.message);
+    }
+    meta.route = values.route;
+    meta.harness = resolved.kind;
+    if (resolved.model !== undefined) meta.model = resolved.model;
+    if (resolved.effort !== undefined) meta.effort = resolved.effort;
+  }
   for (const key of ['harness', 'model', 'effort']) if (values[key]) meta[key] = values[key];
   if (values.escalation) meta.escalation = true;
   const ctx = openOrg();

@@ -1112,15 +1112,22 @@ test("routes prints configured routes with resolved dispatch defaults", () => {
         use: "Complex implementation lanes",
       },
     },
+    selection_policy: {
+      primary_implementation_pool: "primary",
+      by_task_class: { implementation: { primary: "engineer", alternate: "review" } },
+    },
   });
   try {
     const run = lane(fixture, ["routes"]);
     assert.equal(run.status, 0, run.stderr);
     assert.equal(
       run.stdout,
-      "engineer\tkind=codex\tmodel=engineer-model\targs=[\"--profile\",\"implementation\",\"--sandbox\",\"workspace-write\"]\tuse=Complex implementation lanes\n" +
-        "review\tkind=reviewer\tmodel=default-model\targs=[\"--default-flag\",\"--review-extra\"]\tuse=(none)\n",
+      "engineer\tkind=codex\tmodel=engineer-model\teffort=(none)\targs=[\"--profile\",\"implementation\",\"--sandbox\",\"workspace-write\"]\tuse=Complex implementation lanes\n" +
+        "review\tkind=reviewer\tmodel=default-model\teffort=(none)\targs=[\"--default-flag\",\"--review-extra\"]\tuse=(none)\n",
     );
+    const selected = lane(fixture, ["routes", "--for", "implementation"]);
+    assert.equal(selected.status, 0, selected.stderr);
+    assert.match(selected.stdout, /^implementation\tpool=primary\troute=engineer\tkind=codex\tmodel=engineer-model/);
 
     writeConfig(fixture, { main: "main", validate: "true" });
     const empty = lane(fixture, ["routes"]);
@@ -1799,7 +1806,7 @@ test("dispatch records canonical session metadata with fenced-heading, prose, in
       main: "main",
       validate: "true",
       registry: ".lane/sessions.json",
-      routes: { engineer: { kind: "codex", model: "engineer-model" } },
+      routes: { engineer: { kind: "codex", model: "engineer-model", effort: "high" } },
     });
     try {
       ignoreLaneState(fixture);
@@ -1833,6 +1840,10 @@ test("dispatch records canonical session metadata with fenced-heading, prose, in
       assert.equal(session.server, fixture.env.HERDR_SOCKET_PATH);
       assert.equal(session.lane, `lane/${scenario.topic}`);
       assert.equal(session.role, "engineer");
+      assert.equal(session.route, "engineer");
+      assert.equal(session.harness, "codex");
+      assert.equal(session.model, "engineer-model");
+      assert.equal(session.effort, "high");
       assert.equal(session.brief, briefPath ?? null);
       assert.equal(session.goal, scenario.expectedGoal);
       assert.equal(session.report, `docs/reports/${scenario.topic}.md`);
@@ -1844,6 +1855,10 @@ test("dispatch records canonical session metadata with fenced-heading, prose, in
       assert.equal(git(fixture.repo, ["status", "--porcelain=v1"]), "");
       assert.equal(fake.calls().filter((args) => args[0] === "agent" && args[1] === "prompt").length,
         scenario.prompt === undefined && scenario.brief === undefined ? 0 : 1);
+      const start = fake.calls().find((args) => args[0] === "agent" && args[1] === "start");
+      assert.deepEqual(start.slice(start.indexOf("--") + 1), [
+        "--model", "engineer-model", "-c", "model_reasoning_effort=high",
+      ]);
       negativeControl(`dispatch metadata ${scenario.topic}`);
     } finally {
       fixture.cleanup();

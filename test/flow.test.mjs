@@ -110,6 +110,31 @@ proposals:
   assert.equal(fromCopy.stdout.replaceAll(copy, dir), snap);
 });
 
+test('record start resolves a named route without copied harness metadata', () => {
+  const { dir, org, ok } = setup();
+  ok(['add', 'Implement routing', '--role', 'engineer']);
+  const routeConfig = path.join(path.dirname(dir), 'routes.json');
+  fs.writeFileSync(routeConfig, JSON.stringify({
+    dispatch: { kind: 'claude', model: 'default', effort: 'medium' },
+    routes: {
+      engineer: { kind: 'codex', model: 'gpt-route', effort: 'xhigh' },
+    },
+  }));
+
+  const started = ok(['start', 'ENG-1', '--route', 'engineer', '--route-config', routeConfig]);
+  assert.match(started, /\[codex · gpt-route · xhigh\]/);
+  const event = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8')
+    .trim().split('\n').map(JSON.parse).findLast((entry) => entry.type === 'run.started');
+  assert.deepEqual(
+    { route: event.meta.route, harness: event.meta.harness, model: event.meta.model, effort: event.meta.effort },
+    { route: 'engineer', harness: 'codex', model: 'gpt-route', effort: 'xhigh' },
+  );
+
+  const copied = org(['start', 'ENG-1', '--route', 'engineer', '--route-config', routeConfig, '--model', 'other']);
+  assert.equal(copied.code, 1);
+  assert.match(copied.err, /--route cannot be combined with --model/);
+});
+
 test('budgets are advisory: exceeding them is surfaced, never refused', () => {
   const { dir, ok } = setup();
   ok(['add', 'Explore caching', '--role', 'researcher', '--budget', 'max_children=1', '--budget', 'max_runs=1']);

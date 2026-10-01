@@ -9,5 +9,18 @@
       "Bash(git push)",
       "Bash(git push *)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/herdr/canary-env.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

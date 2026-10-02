@@ -92,6 +92,28 @@ test('publish auto policy cannot approve a release and agents cannot forge, clos
   assert.equal(f.attempt().result, 'approved');
 });
 
+for (const answer of ['yes', 'no']) test(`agents cannot start a run on an operator-reserved question answered ${answer}`, t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] });
+  const c = f.attempt().candidate;
+  const eventFile = path.join(f.repo, '.org/events.jsonl');
+  const refuseStart = () => {
+    const before = fs.readFileSync(eventFile);
+    const runs = fs.readdirSync(path.join(f.repo, '.org/runs'));
+    for (const flags of [[], ['--harness', 'opaque'], ['--if-current-run', 'R-1']]) {
+      const r = f.exec(process.execPath, [path.join(ROOT, 'bin/org.mjs'), 'start', c.question, ...flags]);
+      assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /reserved for the operator/);
+      assert.deepEqual(fs.readFileSync(eventFile), before, 'refusal appends no event');
+      assert.deepEqual(fs.readdirSync(path.join(f.repo, '.org/runs')), runs, 'refusal creates no run directory');
+    }
+  };
+  refuseStart();
+  f.org(['answer', c.question, answer], { ORG_ACTOR: 'human' });
+  refuseStart();
+  assert.equal(f.attempt().result, answer === 'yes' ? 'approved' : 'declined');
+  f.commit('next-batch');
+  assert.equal(f.attempt().result, 'awaiting-operator', 'the prior decision does not block the next batch');
+});
+
 test('low load, drained promotion queue, clean base and supervisor ownership are required', t => {
   const f = fixture(t), config = releaseSettings(f.repo).config;
   assert.match(quietPoint(f.project, config, { load: 2, cpus: 1 }), /load/);
@@ -210,6 +232,21 @@ test('preparation env is scoped and a signaled gate records interruption without
   const c = f.attempt().candidate;
   assert.equal(c.gate.result, 'interrupted'); assert.equal(c.gate.signal, 'SIGTERM'); assert.equal(c.question, null);
   assert.equal(f.attempt().candidate.id, c.id); assert.equal(f.record(['releases', '--json']).candidates.length, 1);
+});
+
+test('scratch preview runs preparation with inherited dependency-skip switches removed', t => {
+  const f = fixture(t, { prepare: ['node', 'build.cjs'], gate: ['node', 'gate.cjs'] });
+  fs.writeFileSync(path.join(f.repo, 'build.cjs'), "require('assert').equal(process.env.RELEASE_NO_NPM,undefined);require('fs').writeFileSync('built','real preparation');");
+  fs.writeFileSync(path.join(f.repo, 'gate.cjs'), "require('assert').equal(require('fs').readFileSync('built','utf8'),'real preparation');");
+  f.git(['add', '.']); f.git(['commit', '-qm', 'Prepare preview candidate']);
+  const r = f.exec(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--dry-run', '--max-load-per-cpu', '100'], f.repo, { RELEASE_NO_NPM: '1' });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const preview = JSON.parse(r.stdout);
+  t.after(() => fs.rmSync(preview.preview, { recursive: true, force: true }));
+  assert.equal(preview.result, 'awaiting-operator');
+  assert.equal(preview.source_commit, f.git(['rev-parse', 'HEAD']));
+  assert.equal(fs.readFileSync(path.join(preview.candidate.snapshot, 'built'), 'utf8'), 'real preparation');
+  assert.equal(f.git(['tag']), '', 'the source project gains no candidate tag');
 });
 
 test('a moved candidate tag cannot reuse its green evidence', t => {

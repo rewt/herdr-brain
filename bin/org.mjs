@@ -574,6 +574,7 @@ function start(argv) {
   const ctx = openOrg();
   const { result } = mutate(ctx, (s) => {
     const item = requireItem(s, id);
+    if (item.meta.operator_reserved && writer().actor !== 'human') throw new UserError('release questions are reserved for the operator');
     if (values['if-current-run'] !== undefined) {
       requireCurrentRun(s, id, values['if-current-run']);
       if (item.closed) throw new UserError(`${id} is closed; conditional start needs supervisor judgment`);

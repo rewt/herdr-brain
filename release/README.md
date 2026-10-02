@@ -48,11 +48,32 @@ project code and must use their own scratch directories when they need mutable
 fixtures. `parent` may name an existing record item for the operator question.
 `--repo`, `--org` and `--tag` select the project, record and tag explicitly.
 
-This repository declares acceptance/run.mjs against the built archive as its gate,
-herdr/install.sh with build-only mode as preparation, and herdr/release.sh build
-as the operator's ship step. Activation remains a separate operator action. The
-live harness belongs only to the canonical supervisor's release cycle, never a
-lane's validation.
+This repository declares `herdr/release-candidate.mjs` as its project wrapper.
+Preparation copies npm cache indexes and just the console/MCP lockfile tarballs
+into the candidate's private `.release-npm-cache`, then runs `herdr/install.sh`
+with real `npm ci` in offline, build-only mode. It never installs machine entry.
+The retained `.release-build.json` names the candidate commit, both lockfile
+hashes, installed package counts and build command before acceptance starts.
+The gate passes both `--npm-cache` (that private copy) and `--bch-cloak` to
+`acceptance/run.mjs`. `herdr/release.sh build` remains the operator's ship step;
+activation remains a separate operator action. The live harness belongs only
+to the canonical supervisor's release cycle, never a lane's validation.
+
+Set these machine inputs in the invoking supervisor environment:
+
+```sh
+export RELEASE_BCH_CLOAK=/absolute/path/to/existing/bch-cloak
+export RELEASE_NPM_CACHE=/absolute/path/to/npm-cache
+```
+
+`RELEASE_BCH_CLOAK` is required and the harness reads that project only to create
+its scratch compatibility copies. The cache defaults to `npm_config_cache`, then
+`~/.npm`; the shared source is never written by preparation or acceptance.
+Populate it with the pinned dependencies before the release cycle, for example
+by running `npm --prefix console ci --cache "$RELEASE_NPM_CACHE"` and
+`npm --prefix mcp ci --cache "$RELEASE_NPM_CACHE"` in a development checkout.
+Missing paths or pinned cache content fail preparation with setup instructions,
+instead of invoking an acceptance gate whose required inputs were omitted.
 
 The record stores candidate, gate-start and gate-result events through the record
 CLI. On a passing result it atomically creates one `publish` question, reserved for
@@ -84,8 +105,9 @@ node release/release.mjs --dry-run --skip-live
 
 This clones the selected checkout into an owned temporary Git project, commits
 the preview declaration there, builds its tagged archive and runs the same gate
-with `--skip-live`. Its record and tags stay in scratch, dependency installation
-is skipped, and it neither ships nor activates. The retained scratch path and
+with `--skip-live`. Its record, tags and installed dependencies stay in scratch;
+preparation uses the same real offline build and retains `.release-build.json`.
+It neither ships nor activates. The retained scratch path and
 source commit are returned. Preview results are distinct from production release
 evidence. The production CLI refuses `--skip-live` without `--dry-run`.
 `--max-load-per-cpu N` may change the tracked threshold in the scratch preview;
@@ -95,3 +117,6 @@ the returned evidence names it. It never overrides the production declaration.
 lane promotions into a batch, default and declared gates, once-only reuse, red
 and interrupted results, load/STOP/dirty/lock/queue/role deferral, operator-only
 decisions, record compatibility, discovery, supervisor and console integration.
+Its complete file list runs in three bounded phases to keep the copied-entry
+probes isolated and avoid one aggregate six-minute timeout. Fixture, file and
+suite watchdogs remain unchanged; failures stop validation immediately.

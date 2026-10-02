@@ -147,7 +147,8 @@ export function main(argv = process.argv.slice(2)) {
     fs.writeFileSync(path.join(repo, '.release.json'), JSON.stringify(settings, null, 2) + '\n');
     git(repo, ['add', '.release.json']);
     invoke('git', ['-C', repo, '-c', 'user.name=Release preview', '-c', 'user.email=preview@example.invalid', 'commit', '--allow-empty', '-qm', 'Declare isolated release preview']);
-    const env = { ...process.env, ORG_DIR: '', ORG_ACTOR: process.env.ORG_ACTOR || 'release-preview', RELEASE_NO_NPM: '1', HERDR_ENV: '' };
+    const env = { ...process.env, ORG_DIR: '', ORG_ACTOR: process.env.ORG_ACTOR || 'release-preview', HERDR_ENV: '' };
+    delete env.RELEASE_NO_NPM;
     for (const key of Object.keys(env)) if (/^(HERDR_MONITOR_|HERDR_(PANE|TAB|WORKSPACE|SOCKET)|ACCEPTANCE_|LANE_)/.test(key)) delete env[key];
     const result = releaseOnce({ cwd: repo, role: 'supervisor', tag: opt.tag, env });
     process.stdout.write(JSON.stringify({ ...result, preview: root, source_commit: commit, preview_max_load_per_cpu: settings.max_load_per_cpu }) + '\n');

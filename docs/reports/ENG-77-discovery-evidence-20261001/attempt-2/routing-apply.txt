@@ -1,9 +1,0 @@
-Completed and integrated the approved routes.
-
-- Policy: `/private/tmp/monitor-installed-e3LdRL/product/discovery/policy.mjs`
-- Branch: `lane/entry-5481286b92e0`
-- Record IDs: HUM-1, ARCH-1, ENG-2; run R-2
-- Config: `.lane.json`
-- Validation: project tests passed; route assertions passed
-- Promotion: fast-forwarded `1d329c0` → `95a7392`; no push performed
-- Status: ENG-2 done

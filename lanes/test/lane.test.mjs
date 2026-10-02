@@ -345,6 +345,11 @@ if (args[0] === "workspace" && args[1] === "list") {
   } });
 } else if (args[0] === "agent" && args[1] === "start") {
   if (process.env.FAKE_HERDR_START_FAIL === "1") process.exit(3);
+  if (process.env.FAKE_ENTRY_BIN) {
+    const binary = process.env.FAKE_ENTRY_BIN + '/' + args[args.indexOf('--kind') + 1];
+    const native = args.slice(args.indexOf('--') + 1);
+    execFileSync('/usr/bin/script', ['-q', '/dev/null', binary, ...native], { cwd: process.env.FAKE_HERDR_LANE_PATH, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  }
   state.agent = args[2];
   save();
   result("cli:agent:start", { type: "agent_start", name: state.agent, pane_id: "w-lane:p2" });
@@ -1205,12 +1210,21 @@ test("always_args sees the canonical model and effort that dispatch emits", () =
       ignoreLaneState(fixture);
       const path = openLane(fixture, "canonical-options");
       const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/canonical-options", initiallyOpened: true });
+      const native = join(fixture.root, 'native'), entryBin = join(fixture.root, 'entry-bin'), receipt = join(fixture.root, 'native-receipt.json');
+      writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),bypass:process.env.MONITOR_ENTRY_BYPASS,tty:process.stdin.isTTY}));`, { mode: 0o755 });
+      execFileSync(process.execPath, [resolve(HERE, '../../discovery/install.mjs'), '--bin', entryBin, '--codex', native, '--claude', native]);
+      fixture.env.FAKE_ENTRY_BIN = entryBin; fixture.env.NATIVE_RECEIPT = receipt;
       const run = lane(fixture, ["dispatch", "canonical-options", "--route", "engineer"]);
       assert.equal(run.status, 0, run.stderr);
       const started = fake.calls().find((args) => args[0] === "agent" && args[1] === "start");
       const args = started.slice(started.indexOf("--") + 1);
       assert.deepEqual(args, [...unrelatedConfig, "--extra", "retained", "--model", "route-model",
         ...(kind === "codex" ? ["-c", "model_reasoning_effort=high"] : ["--effort", "high"])]);
+      const got = JSON.parse(readFileSync(receipt, 'utf8'));
+      assert.equal(got.cwd, path); assert.equal(got.bypass, '1'); assert.equal(got.tty, true); assert.deepEqual(got.args, args);
+      const tab = fake.calls().find((argv) => argv[0] === 'tab' && argv[1] === 'create');
+      assert.ok(tab.includes('MONITOR_ENTRY_BYPASS=1'));
+      assert.equal(git(fixture.repo, ['worktree', 'list', '--porcelain']).split('worktree ').length - 1, 2);
     } finally {
       fixture.cleanup();
     }

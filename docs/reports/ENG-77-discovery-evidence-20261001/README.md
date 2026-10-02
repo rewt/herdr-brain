@@ -1,16 +1,11 @@
-# Discovery evidence for R-49
+# Discovery evidence summaries
 
-`attempt-4/summary.json` is the passing independent installed-product discovery probe.
-Attempts 1–3 retain the failed development probes; they are not release acceptance.
-`all-usage.json` includes all sixteen actual Luna sessions, including failed attempts.
-The tested product adapters are included per attempt so the observed behavior is reproducible.
-The final repository adds startup Git filter/root refusal, inherited-config isolation, and
-managed-requirement preservation after the successful live snapshot; the final offline
-native sandbox suite verifies those refinements.
+R-49's four independent probes are summarized here; attempt-4 passed all five
+checks, while attempts 1–3 retain their failed outcomes. All sixteen sessions
+are included in all-usage.json. These are historical results, not a claim that
+the R-51 runtime or ENG-74 release gate passed.
 
-The projects and installed product use separate scratch roots, outside repository trees.
-The final command audit has zero references to either herdr-brain source checkout.
-No authentication files are retained here.
-
-The full ENG-74 acceptance harness remains the release gate and was not changed or
-claimed green; R-50 is correcting its source-adjacency contamination.
+Raw transcripts, prompts, Git receipts, tested-product snapshots and test logs
+were moved to /private/tmp/eng77-r51-evidence-oFdxBU/R-49-raw. No raw attempt evidence is kept in the current
+repository tree. The R-49 live snapshot preceded its final refinements; R-51
+validation is reported separately. No authentication files are retained.

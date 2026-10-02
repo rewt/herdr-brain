@@ -8,16 +8,26 @@ import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
+import { freshInteractive } from '../launch.mjs';
 const separator = process.argv.indexOf('--');
 const adapterArgs = process.argv.slice(2, separator < 0 ? undefined : separator);
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const { values } = parseArgs({ args: adapterArgs, options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
   binary: { type: 'string', default: 'codex' }, 'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' },
-  'policy-only': { type: 'boolean' },
+  'policy-only': { type: 'boolean' }, 'auto-entry': { type: 'boolean' },
 } });
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
+function passthrough() {
+  const child = spawn(values.binary, native, { stdio: 'inherit' });
+  child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
+  child.on('close', (code) => { process.exitCode = code ?? 1; });
+}
+const automatic = values['auto-entry'];
+const enter = !automatic || freshInteractive({ kind: 'codex', args: native, cwd: values.repo });
+if (!enter) passthrough();
+else {
 try {
   entry = createEntry({ cwd: values.repo, role: values.role, runtimeDir: values['runtime-dir'] ?? process.env.MONITOR_RUNTIME_DIR,
     worktreeRoot: values['worktree-root'] ?? process.env.MONITOR_WORKTREE_ROOT, sandboxBinary: values.binary });
@@ -37,4 +47,9 @@ try {
     child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
     child.on('close', (code, s) => { clearInterval(timer); entry.close(); process.exitCode = code ?? (s ? 1 : 0); });
   }
-} catch (e) { if (entry) entry.close(); console.error(`monitor entry: ${e.message}`); process.exitCode = 1; }
+} catch (e) {
+  if (entry) entry.close();
+  console.error(`monitor entry: ${e.message}${automatic && !entry ? '; continuing with native Codex' : ''}`);
+  if (automatic && !entry) passthrough(); else process.exitCode = 1;
+}
+}

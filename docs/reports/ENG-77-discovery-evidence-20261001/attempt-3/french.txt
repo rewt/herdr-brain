@@ -1,9 +1,0 @@
-Completed and promoted.
-
-- Added `greetings.fr = 'Bonjour'` and a passing test.
-- Validation: 2/2 tests passed.
-- Commit: `5c74c8d`
-- Promoted to canonical `main` via fast-forward; no push performed.
-- Record IDs: `ENG-1`, run `R-1` (routing question `HUM-1` left unanswered).
-- Policy source: `/private/tmp/monitor-installed-uznrty/product/discovery/policy.mjs`
-- Lane: `lane/entry-9fd40efac160`

@@ -59,7 +59,7 @@ async function live(p, name, task) {
   const output = fs.openSync(path.join(evidence, `${name}.jsonl`), 'w');
   const errors = fs.openSync(path.join(evidence, `${name}.stderr`), 'w');
   return new Promise((resolve, reject) => {
-    const child = spawn(path.join(bin, 'codex'), ['exec', '--ephemeral', '--ignore-user-config', '--ignore-rules',
+    const child = spawn(path.join(bin, 'monitor-codex'), ['--', 'exec', '--ephemeral', '--ignore-user-config', '--ignore-rules',
       '--sandbox', 'workspace-write', '--json', '--model', opt.model, '-c', `model_reasoning_effort=${opt.effort}`,
       '-c', 'sandbox_workspace_write.exclude_slash_tmp=true', '-c', 'sandbox_workspace_write.exclude_tmpdir_env_var=true',
       '-c', 'features.shell_snapshot=false', '-c', 'web_search="disabled"', '-c', 'allow_login_shell=false',
@@ -87,6 +87,7 @@ try {
     const p = repo('cli-project'); record(p, ['status', '--json']); record(p, ['add', 'Actual CLI task']);
     assert.ok(fs.existsSync(path.join(p, '.org/events.jsonl')));
     assert.equal(JSON.parse(record(p, ['status', '--json'])).items.length, 1);
+    assert.equal(git(p, ['status', '--porcelain']), '');
   });
   await check('03 Suggested routes without project configuration', () => {
     const p = repo('routes-project');

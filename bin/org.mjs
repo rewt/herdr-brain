@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { gitProject } from '../lib/project.mjs';
+import { gitProject, ignoreRuntime } from '../lib/project.mjs';
+import { readPlainFile } from '../lib/files.mjs';
 import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
@@ -95,7 +96,7 @@ function cliString(dir) {
 function openOrg() {
   let dir = findOrgDir();
   if (!dir && !process.env.ORG_DIR) {
-    try { dir = path.join(gitProject().canonical, '.org'); }
+    try { const project = gitProject(); ignoreRuntime(project); dir = path.join(project.canonical, '.org'); }
     catch { /* Outside Git, explicit init remains necessary. */ }
     if (dir) initOrg(dir);
   }
@@ -537,7 +538,7 @@ function ingestFile(ctx, file, runHint) {
   const abs = path.resolve(file);
   let text;
   try {
-    text = fs.readFileSync(abs, 'utf8');
+    text = readPlainFile(abs);
   } catch (error) {
     throw new UserError(`cannot read ${abs}: ${error.code ?? error.message}`);
   }
@@ -657,7 +658,7 @@ function check(argv) {
   const abs = path.resolve(positionals[0]);
   let text;
   try {
-    text = fs.readFileSync(abs, 'utf8');
+    text = readPlainFile(abs);
   } catch (error) {
     throw new UserError(`cannot read ${abs}: ${error.code ?? error.message}`);
   }
@@ -701,7 +702,7 @@ function brief(argv) {
   const run = ctx.state.runs.get(positionals[0]);
   if (!run) throw new UserError(`unknown run ${positionals[0]}`);
   if (!fs.existsSync(run.brief_path)) writeFileAtomic(run.brief_path, renderBrief(ctx.state, run.id, view(ctx)));
-  out(fs.readFileSync(run.brief_path, 'utf8'));
+  out(readPlainFile(run.brief_path));
   return 0;
 }
 

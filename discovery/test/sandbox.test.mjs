@@ -63,10 +63,12 @@ test('real native sandbox validates both lanes and promotion; outside writes and
   const parent = JSON.parse(command(process.execPath, [record, 'show', e.context().routing.parent, '--json'], repo, { ORG_DIR: e.context().org }));
   assert.equal(parent.closed.as, 'done');
   const cwd = a.context().workspace;
+  const gitPointer = fs.readFileSync(path.join(cwd, '.git'), 'utf8');
   const probe = spawnSync(binary, ['sandbox', '--permission-profile', 'monitor-denial', '--include-managed-config', '-C', cwd,
     '-c', 'permissions.monitor-denial.filesystem={ ":root"="read", ":workspace_roots"={ "."="write", ".git"="read" } }',
     '-c', 'permissions.monitor-denial.network.enabled=false', '--', process.execPath, '-e',
-    `const fs=require('fs');for(const file of [${JSON.stringify(path.join(repo, '.git/escape'))},${JSON.stringify(path.join(scratch, 'outside'))}]){try{fs.writeFileSync(file,'bad');process.exit(3)}catch(e){if(!['EPERM','EACCES'].includes(e.code))throw e}}`], { cwd, encoding: 'utf8' });
+    `const fs=require('fs');for(const file of [${JSON.stringify(path.join(repo, '.git/escape'))},${JSON.stringify(path.join(scratch, 'outside'))},${JSON.stringify(path.join(cwd, '.git'))}]){try{fs.writeFileSync(file,'bad');process.exit(3)}catch(e){if(!['EPERM','EACCES'].includes(e.code))throw e}}`], { cwd, encoding: 'utf8' });
   assert.equal(probe.status, 0, probe.stderr);
   assert.ok(!fs.existsSync(path.join(repo, '.git/escape'))); assert.ok(!fs.existsSync(path.join(scratch, 'outside')));
+  assert.equal(fs.readFileSync(path.join(cwd, '.git'), 'utf8'), gitPointer);
 });

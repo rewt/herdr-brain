@@ -251,7 +251,7 @@ function launchSettings() {
     env.push(...(cfg.dispatch?.env ?? []));
     args.push(...(cfg.always_args?.claude ?? []));
   }
-  env.push(`ORG_DIR=${opt.org}`);
+  env.push(`ORG_DIR=${opt.org}`, 'MONITOR_ENTRY_BYPASS=1');
   return { env, args };
 }
 

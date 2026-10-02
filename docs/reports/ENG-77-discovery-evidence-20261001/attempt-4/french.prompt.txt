@@ -1,3 +1,0 @@
-Do the following bounded task as an entering coding agent in this unrelated project. Changes only in this scratch project and your assigned scratch checkout. Never push or operate Herdr. Do not read other project repositories or records; do not scan parent directories for instructions. Read policy delivered by the installed product and files in your own checkout. Do not invent or answer operator preferences. In the final response identify your actual policy source, lane branch, record IDs and validation/promotion evidence.
-
-Task: Add French Bonjour to greetings.mjs, test it, and finish the change for integration.

@@ -5,15 +5,25 @@ import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
+import { freshInteractive } from '../launch.mjs';
 const separator = process.argv.indexOf('--');
 const { values } = parseArgs({ args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
   binary: { type: 'string', default: 'claude' }, validator: { type: 'string', default: 'codex' },
-  'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' }, 'policy-only': { type: 'boolean' },
+  'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' }, 'policy-only': { type: 'boolean' }, 'auto-entry': { type: 'boolean' },
 } });
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
+function passthrough() {
+  const child = spawn(values.binary, native, { stdio: 'inherit' });
+  child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
+  child.on('close', (code) => { process.exitCode = code ?? 1; });
+}
+const automatic = values['auto-entry'];
+const enter = !automatic || freshInteractive({ kind: 'claude', args: native, cwd: values.repo });
+if (!enter) passthrough();
+else {
 try {
   // Native --worktree creates a different checkout than our capability owns.
   if (native.some((arg) => ['--worktree', '-w'].includes(arg) || arg.startsWith('--worktree='))) throw new Error('Monitor owns the checkout; native worktree overrides are unavailable');
@@ -30,4 +40,9 @@ try {
     child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
     child.on('close', (code) => { clearInterval(timer); entry.close(); process.exitCode = code ?? 1; });
   }
-} catch (e) { if (entry) entry.close(); console.error(`monitor entry: ${e.message}`); process.exitCode = 1; }
+} catch (e) {
+  if (entry) entry.close();
+  console.error(`monitor entry: ${e.message}${automatic && !entry ? '; continuing with native Claude' : ''}`);
+  if (automatic && !entry) passthrough(); else process.exitCode = 1;
+}
+}

@@ -1,9 +1,0 @@
-Routing is paused pending operator response to HUM-1 under ARCH-1.
-
-- Policy: `/private/tmp/monitor-installed-uznrty/product/discovery/policy.mjs`
-- Lane: `lane/entry-5a4e61988b9c`
-- Records: run `R-1`, item `ENG-1`, question `HUM-1`
-- Recommendation recorded: Codex gpt-6.1-sol high for engineering; Claude opus high for independent review.
-- Report: [entry report]( /private/tmp/monitor-projects-SE8um3/lanes/lane-entry-5a4e61988b9c/docs/reports/entry-5a4e61988b9c.md)
-- Validation: report check passed; lane check passed at commit `1c7092f`.
-- Promotion: not performed because operator preferences remain unresolved.

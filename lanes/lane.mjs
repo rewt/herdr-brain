@@ -21,6 +21,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { ROUTE_PRESET } from './preset.mjs';
+import { readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 
 import {
   markTopicSessionsDone,
@@ -257,7 +258,7 @@ function readConfig(file, { required = false } = {}) {
   if (!required && !existsSync(file)) return undefined;
   let text;
   try {
-    text = readFileSync(file, "utf8");
+    text = readPlainFile(file);
   } catch (error) {
     fail(`cannot read lane config ${file}: ${error.message}`);
   }
@@ -1096,6 +1097,7 @@ function dispatch(topic, promptText, options = {}) {
   }
   const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`];
   for (const pair of resolved.env) tabArgs.push("--env", pair);
+  tabArgs.push("--env", "MONITOR_ENTRY_BYPASS=1");
   const created = JSON.parse(execFileSync("herdr", tabArgs, {
     encoding: "utf8",
     ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
@@ -1153,6 +1155,7 @@ function dispatch(topic, promptText, options = {}) {
     if (attempt > 0) agentName = newAgentName(topic, liveAgentNames);
     const run = spawnSync("herdr", startArgsFor(agentName), {
       encoding: "utf8",
+      env: { ...process.env, MONITOR_ENTRY_BYPASS: '1' },
       ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
     });
     if (run.status === 0 && !`${run.stdout}${run.stderr}`.includes('"error"')) {
@@ -2155,10 +2158,7 @@ function check(args) {
   };
   const directory = join(REPO, ".lane");
   const path = join(directory, "gate.json");
-  const temporary = `${path}.${process.pid}.tmp`;
-  mkdirSync(directory, { recursive: true });
-  writeFileSync(temporary, `${JSON.stringify(gate, null, 2)}\n`);
-  renameSync(temporary, path);
+  writeFileAtomic(path, `${JSON.stringify(gate, null, 2)}\n`);
   process.stdout.write(`GATE ${head} exit=${exitCode} (${durationS.toFixed(3)}s)\n`);
   process.exit(exitCode);
 }

@@ -56,6 +56,7 @@ test('capability refuses arbitrary operations, fields, changed identity and miss
   fs.writeFileSync(gitFile, before);
   assert.throws(() => createEntry({ ...f.options, worktreeRoot: path.join(f.repo, '.lane/inside') }), /outside existing Git checkouts/u);
   command('git', ['config', 'filter.unsafe.smudge', 'must-not-execute'], f.repo);
+  fs.writeFileSync(path.join(f.repo, '.gitattributes'), 'README.md filter=unsafe\n');
   assert.throws(() => createEntry(f.options), /external Git filters/u);
 });
 test('concurrent automatic record bootstrap never truncates events or duplicates records', async (t) => {
@@ -69,6 +70,7 @@ test('concurrent automatic record bootstrap never truncates events or duplicates
   }));
   await Promise.all(processes);
   assert.equal(loadEvents(path.join(f.repo, '.org')).events.filter((e) => e.type === 'item.added').length, 6);
+  assert.equal(command('git', ['status', '--porcelain'], f.repo), '');
   const loaded = loadDiscoveredRoutes({ cwd: f.repo });
   assert.equal(loaded.suggested, true);
   assert.equal(resolveLaunchRoute(loaded.config).model, 'gpt-6.1-sol');
@@ -96,13 +98,13 @@ test('machine installer retains native flags, reaches Claude too and restores on
   const installer = path.join(root, 'discovery/install.mjs');
   command(process.execPath, [installer, '--bin', bin, '--codex', fake, '--claude', fake], f.repo);
   const extra = { TEST_NATIVE_RECEIPT: receipt, MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'lanes') };
-  command(path.join(bin, 'codex'), ['exec', '--model', 'literal-model', '-c', 'model_reasoning_effort=low', 'Literal task'], f.repo, extra);
+  command(path.join(bin, 'monitor-codex'), ['--', 'exec', '--model', 'literal-model', '-c', 'model_reasoning_effort=low', 'Literal task'], f.repo, extra);
   let got = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   assert.equal(got.args[got.args.indexOf('--model') + 1], 'literal-model');
   assert.ok(got.args.includes('model_reasoning_effort=low'));
   assert.ok(got.args.some((a) => a.startsWith('developer_instructions=')));
   assert.notEqual(got.cwd, f.repo);
-  command(path.join(bin, 'claude'), ['--model', 'literal-claude', '--effort', 'high', 'Literal task'], f.repo, extra);
+  command(path.join(bin, 'monitor-claude'), ['--', '--model', 'literal-claude', '--effort', 'high', 'Literal task'], f.repo, extra);
   got = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   assert.equal(got.args[got.args.indexOf('--model') + 1], 'literal-claude');
   assert.ok(got.args.includes('--append-system-prompt'));

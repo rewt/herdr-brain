@@ -17,12 +17,28 @@ node /path/to/installed-monitor/discovery/install.mjs \
 ```
 
 `--claude` is optional. Put that directory ahead of the native CLI directories on
-the machine's Herdr shell PATH. Ordinary `codex exec ...`, interactive `codex`,
-and `claude ...` then enter through Monitor. Model, effort, account and native
+the machine's Herdr shell PATH. Fresh interactive `codex` and `claude` launches
+then enter through Monitor. Model, effort, account and native
 permission settings pass through. Help, authentication, debugging, sandbox and
 other non-session commands pass directly to the native executable. The installer
 refuses unmanaged files, retains native executable receipts, supports upgrades,
 and removes only its unchanged managed files with `--bin ... --remove`.
+
+Batch/print, resume, utility and noninteractive invocations pass directly through.
+Every session inside an existing linked worktree also passes through. Lane
+dispatch, supervisor/open-session and contrib/settle-watch set
+`MONITOR_ENTRY_BYPASS=1` in the tab and launch environment, preserving their
+assigned checkout, role, report path and run. A raw `herdr agent start` is detected
+from the pane's live managed-start receipt before command injection; failure to
+read that receipt conservatively bypasses entry. An ordinary Herdr shell with
+no managed start can still enter interactively. These receipts only suppress
+automatic interception; they grant no worker or supervisor capability.
+Non-Git folders, empty repositories and a checkout on the wrong configured
+integration branch warn and continue with the native executable.
+
+Tools intentionally opting into entry use `monitor-codex -- exec ...` or
+`monitor-claude -- --print ...`. These explicit entry commands are also the
+transport used by the independent batch discovery probe.
 
 This checkout does **not** install or activate adapters on the operator's
 machine. The current Herdr plugin manifest declares build, panes and actions;
@@ -45,8 +61,10 @@ supervisor starts the project housekeeping schedule. A worker's policy never
 starts a loop, dispatches another agent, pushes, deletes a lane or acts on a live
 Herdr pane. Entry itself makes no Herdr calls.
 
-The canonical Git common-directory identity owns the record and lanes. Legacy
-ancestor records still work; an inherited `ORG_DIR` cannot silently redirect a
+The canonical Git common-directory identity owns the record and lanes. Lookup
+first walks from the original working directory to its checkout root, respecting
+nested subproject records; it then considers the canonical shared record and
+ancestors above it. An inherited `ORG_DIR` cannot silently redirect a
 new adapter session to another record. New projects get `.org/`. Initialization
 uses exclusive creation and the record lock, so concurrent first entries never
 truncate events or create divergent records. Runtime directories are ignored
@@ -78,8 +96,11 @@ The session parent exposes fixed operations only for its own worktree creation
 receipt, branch and verified Git identity. Requests cannot select a repository,
 cwd, shell command, validation command or arbitrary Git argv. There is no socket
 or persistent service. The request queue ends with the native session. Git hooks,
-fsmonitor and signing are disabled on broker Git calls; external clean/smudge/merge/diff
-drivers require a project-specific bounded adapter. Rebase conflicts remain in
+fsmonitor and signing are disabled on broker Git calls. Author and committer
+identity resolve through the operator's normal Git configuration before execution
+configuration is bounded. External clean/smudge/merge/diff drivers referenced by
+project attributes require a project-specific bounded adapter; unused global
+git-lfs registration does not prevent entry. Rebase conflicts remain in
 the lane; `monitor continue` stages the resolved files and continues only the
 rebase receipt for that assigned branch, and `monitor abort` restores it.
 
@@ -91,6 +112,17 @@ checkout, protected `.git`, and no network. The default check is the project's
 the real project command in `.lane.json`; it never substitutes a trivial check.
 The native Codex executable is currently the validation sandbox provider for
 both transports. Existing restrictive managed requirements remain authoritative.
+Canonical `validate` and `prepare` fields are authoritative independently; lane
+values are used only when the corresponding canonical field is absent. Both
+check and promote print the effective command and its configuration source.
+
+Trusted file writes use random temporary files opened with `O_NOFOLLOW` and
+`O_EXCL`. Directory components are opened without following symlinks and checked
+against the entered inode. Synchronous writes stay relative to that kernel-pinned
+directory, so an agent replacing an ancestor cannot redirect the write. Reads
+of requests, routing, validation configuration and reports use the same directory
+boundary and `O_NOFOLLOW`. Regression tests plant the old predictable symlink,
+replace a directory during a write, and exercise every existing launcher.
 
 Offline checks are part of `npm test`. A native sandbox check, still with no
 model call, can be run explicitly outside a nested sandbox:

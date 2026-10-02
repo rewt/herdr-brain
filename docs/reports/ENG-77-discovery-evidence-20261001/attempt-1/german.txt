@@ -1,9 +1,0 @@
-Added `de: 'Hallo'` to `greetings.mjs` with a passing test.
-
-- Policy: `/private/tmp/monitor-installed-4JTUOT/product/discovery/policy.mjs`
-- Branch: `lane/entry-bf0a004998bf`
-- Records: `ENG-1`, run `R-1`
-- Validation: `node --test` passed; `git diff --check` passed
-- Commit: `b06d4a9`
-- Promotion: blocked—installed sandbox check requires missing `--permission-profile`; recorded as `needs_human`
-- Report: `docs/reports/entry-bf0a004998bf.md` (commit `1ad760a`)

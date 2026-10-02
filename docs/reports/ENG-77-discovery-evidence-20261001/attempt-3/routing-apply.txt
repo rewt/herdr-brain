@@ -1,8 +1,0 @@
-Applied HUM-1’s approved routes in `.lane.json`.
-
-- Policy source: installed Herdr Monitor policy
-- Branch: `lane/entry-5ea15ff1592f`
-- Records: `HUM-1`, `ARCH-1`, run `R-2`, item `ENG-2`
-- Validation: record check and lane gate passed
-- Commits: `1b4d6d6`, `b48c042`
-- Promotion: blocked; `client.mjs promote` twice failed because the installed record CLI rejects internal `--as`. Reported as `needs_human`.

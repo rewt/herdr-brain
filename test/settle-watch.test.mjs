@@ -42,6 +42,7 @@ esac`);
   assert.ok(openTab, r.stdout);
   assert.match(openTab, /--env ORG_DIR=\S+/);
   assert.match(openTab, /--env ORG_ACTOR=exec-\d{4}\b/);
+  assert.match(openTab, /--env MONITOR_ENTRY_BYPASS=1\b/);
 
   const runtime = path.join(root, 'runtime');
   fs.mkdirSync(runtime);

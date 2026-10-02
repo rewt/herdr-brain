@@ -5,7 +5,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { gitProject } from '../lib/project.mjs';
+import { gitProject, ignoreRuntime } from '../lib/project.mjs';
+import { plainDirectory, readPlainFile } from '../lib/files.mjs';
 import { withLock, writeFileAtomic, findOrgDir } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig } from '../lanes/routes.mjs';
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
@@ -18,18 +19,6 @@ export function command(binary, args, cwd, env = {}) {
   if (r.error || r.status !== 0) throw new Error((`${r.stdout ?? ''}${r.stderr ?? ''}` || r.error?.message || `exit ${r.status}`).trim());
   return r.stdout.trim();
 }
-function plainDirectory(p) {
-  fs.mkdirSync(p, { recursive: true });
-  if (fs.lstatSync(p).isSymbolicLink()) throw new Error(`directory must not redirect through symlinks: ${p}`);
-  return fs.realpathSync(p);
-}
-function ignoreRuntime(project) {
-  const file = path.join(project.identity, 'info/exclude');
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  const additions = ['/.org/', '/.lane/'].filter((s) => !before.split('\n').includes(s));
-  if (additions.length) fs.appendFileSync(file, `\n${additions.join('\n')}\n`);
-}
 
 export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, worktreeRoot, sandboxBinary }) {
   if (!['worker', 'supervisor'].includes(role)) throw new Error('role must be worker or supervisor');
@@ -39,26 +28,48 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const topic = `entry-${id.slice(0, 12)}`;
   const env = { ORG_ACTOR: `entry-${id.slice(0, 12)}` };
   // Never inherit a different project's record into an unrelated session.
-  const org = findOrgDir({ cwd: project.canonical, env: {} }) ?? path.join(project.canonical, '.org');
+  const org = findOrgDir({ cwd, env: {} }) ?? path.join(project.canonical, '.org');
   env.ORG_DIR = org;
   const record = (args, location = project.canonical) => command(process.execPath, [local('../bin/org.mjs'), ...args], location, env);
   const gitEnv = { ...env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
-  for (const k of Object.keys(process.env)) if (/^GIT_/u.test(k) && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(k)) gitEnv[k] = '';
+  for (const k of Object.keys(process.env)) if (/^GIT_/u.test(k) && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(k)) gitEnv[k] = undefined;
+  // Resolve the operator's identity normally before bounding Git execution config.
+  for (const type of ['AUTHOR', 'COMMITTER']) {
+    const identity = command('git', ['-C', project.canonical, 'var', `GIT_${type}_IDENT`]).match(/^(.+) <([^>]+)> \d+ [+-]\d+$/u);
+    if (!identity) throw new Error('Git identity is unavailable');
+    gitEnv[`GIT_${type}_NAME`] = identity[1]; gitEnv[`GIT_${type}_EMAIL`] = identity[2];
+  }
   const git = (args, location = project.canonical) => command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-C', location, ...args], location, gitEnv);
   const externalGit = (location) => {
-    const r = spawnSync('git', ['-C', location, 'config', '--get-regexp', '^(filter\\..*\\.(clean|smudge|process)|merge\\..*\\.driver|diff\\.(external|.*\\.(command|textconv)))$'], { encoding: 'utf8' });
+    const inspect = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-C', location];
+    const r = spawnSync('git', [...inspect, 'config', '--get-regexp', '^(filter\\..*\\.(clean|smudge|process)|merge\\..*\\.driver|diff\\.(external|.*\\.(command|textconv)))$'], { encoding: 'utf8' });
     if (r.error || ![0, 1].includes(r.status)) throw new Error('could not inspect Git execution configuration');
-    if (r.status === 0 && r.stdout.trim()) throw new Error('external Git filters/drivers require a project-specific bounded adapter');
+    const keys = r.stdout.trim().split('\n').map((line) => line.split(/\s/u)[0]);
+    if (keys.includes('diff.external')) throw new Error('external Git filters/drivers require a project-specific bounded adapter');
+    const files = command('git', [...inspect, 'ls-files', '-z', '--cached', '--others', '--exclude-standard']);
+    const attributes = spawnSync('git', [...inspect, 'check-attr', '-z', '--stdin', 'filter', 'diff', 'merge'], { input: files, encoding: 'utf8' });
+    if (attributes.error || attributes.status !== 0) throw new Error('could not inspect Git attributes');
+    const fields = attributes.stdout.split('\0');
+    for (let i = 0; i + 2 < fields.length; i += 3) {
+      const [, attribute, driver] = fields.slice(i, i + 3);
+      if (['unspecified', 'unset', 'set'].includes(driver)) continue;
+      if (keys.some((key) => key.startsWith(`${attribute}.${driver}.`))) throw new Error(`external Git filters/drivers used by ${fields[i]} require a project-specific bounded adapter`);
+    }
   };
   externalGit(project.canonical);
+  const routes = loadDiscoveredRoutes({ cwd: project.canonical, env: {} });
+  const lifecycle = Object.assign({}, ...routes.files.map((file) => JSON.parse(readPlainFile(file))));
+  const branch = git(['branch', '--show-current']);
+  const main = lifecycle.main ?? branch;
+  if (!main || branch !== main) throw new Error('canonical checkout must be on the configured integration branch');
+  git(['rev-parse', '--verify', 'HEAD']);
   const coordination = path.join(project.canonical, '.lane/discovery');
   plainDirectory(coordination);
   const initial = withLock(coordination, () => {
     ignoreRuntime(project);
     record(['init', org]);
-    const routes = loadDiscoveredRoutes({ cwd: project.canonical, env: {} });
     const stateFile = path.join(coordination, 'routing.json');
-    let routing = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
+    let routing = fs.existsSync(stateFile) ? JSON.parse(readPlainFile(stateFile)) : null;
     if (routes.suggested && !routing) {
       const parent = record(['add', 'Choose model routing for this project', '--role', 'architect']).split('\n')[0];
       const question = record(['ask', 'Adopt the suggested model routes, or reply with your preferred routes?', '--parent', parent,
@@ -69,9 +80,6 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     }
     return { routing, routes };
   });
-  const branch = git(['branch', '--show-current']);
-  const main = initial.routes.config.main ?? branch;
-  if (!main || git(['branch', '--show-current']) !== main) throw new Error('canonical checkout must be on the configured integration branch');
   let workspace = project.canonical;
   if (role === 'worker') {
     const root = plainDirectory(path.resolve(worktreeRoot ?? path.join(os.homedir(), '.herdr/worktrees', createHash('sha256').update(project.identity).digest('hex').slice(0, 16))));
@@ -108,13 +116,13 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     }
     for (const name of ['runs', 'reports']) if (fs.realpathSync(path.join(org, name)) !== path.join(org, name)) throw new Error('record directory redirected');
     // Git clean filters can execute code outside the validation sandbox.
-    externalGit(workspace);
+    externalGit(workspace); externalGit(project.canonical);
   };
   const lane = (args, location) => {
     if (!sandboxBinary) throw new Error('a native validation sandbox is required for check and promote');
     const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace].map(quote).join(' ');
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
-      ...env, LANE_CONFIG: configFile, LANE_VALIDATE: validation,
+      ...gitEnv, LANE_CONFIG: configFile, LANE_VALIDATE: validation,
       MONITOR_PROJECT_CONFIG: path.join(project.canonical, '.lane.json'),
       GIT_CONFIG_COUNT: '3', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: '/dev/null',
       GIT_CONFIG_KEY_1: 'core.fsmonitor', GIT_CONFIG_VALUE_1: 'false', GIT_CONFIG_KEY_2: 'commit.gpgsign', GIT_CONFIG_VALUE_2: 'false',
@@ -156,7 +164,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       else if (q.meta.answer === 'no') throw new Error('operator declined; ask for their preferred routes');
       else selected = validateRoutesConfig(JSON.parse(q.meta.answer));
       const file = path.join(workspace, '.lane.json');
-      const existing = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+      const existing = fs.existsSync(file) ? JSON.parse(readPlainFile(file)) : {};
       writeFileAtomic(file, JSON.stringify({ ...existing, ...selected, authority: `Operator answer to ${initial.routing.question}` }, null, 2) + '\n');
       appliedRouting = true;
       return { applied: initial.routing.question, file };
@@ -186,7 +194,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     if (op === 'abort') return git(['rebase', '--abort'], workspace);
     if (op === 'check') return lane(['check'], workspace);
     if (op === 'promote') return withLock(coordination, () => {
-      const document = readReport(fs.readFileSync(report, 'utf8'));
+      const document = readReport(readPlainFile(report));
       if (document.errors.length || document.report?.run !== run || document.report?.outcome !== 'done') throw new Error('promotion requires a valid done report for this run; record check explains report errors');
       const output = lane(['promote', topic], project.canonical);
       record(['note', run, 'Promoted by lane after clean rebase and sandboxed green validation; local fast-forward, no push.']);
@@ -194,7 +202,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       return output;
     });
     if (op === 'finish') {
-      const data = readReport(fs.readFileSync(report, 'utf8'));
+      const data = readReport(readPlainFile(report));
       if (data.report?.run !== run) throw new Error('report must name this session run');
       if (data.report?.outcome === 'done') {
         const integrated = spawnSync('git', ['-C', workspace, 'merge-base', '--is-ancestor', 'HEAD', main]);
@@ -209,22 +217,21 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     if (processing) return;
     processing = true;
     try {
+      if (plainDirectory(requests, { create: false }) !== requests) throw new Error('request queue redirected');
       for (const name of fs.readdirSync(requests).filter((p) => /^[0-9a-f-]+\.request\.json$/u.test(p))) {
         const file = path.join(requests, name), reply = file.replace('.request.', '.reply.');
         if (fs.existsSync(reply)) continue;
         let response;
         try {
           if (!fs.lstatSync(file).isFile() || fs.lstatSync(file).isSymbolicLink() || fs.statSync(file).size > 8192) throw new Error('invalid request file');
-          const request = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const request = JSON.parse(readPlainFile(file));
           response = { result: dispatch(request) };
           audit.push({ op: request.op, success: true, at: new Date().toISOString() });
         } catch (e) { response = { error: e.message }; audit.push({ success: false, error: e.message }); }
         // Requests are agent-writable. Never follow an agent-created temporary
         // symlink from a privileged writer, and never accept a redirected queue.
         if (fs.realpathSync(requests) !== requests) throw new Error('request queue redirected');
-        const temporary = `${reply}.${randomUUID()}.tmp`;
-        fs.writeFileSync(temporary, JSON.stringify(response) + '\n', { flag: 'wx', mode: 0o600 });
-        fs.renameSync(temporary, reply);
+        writeFileAtomic(reply, JSON.stringify(response) + '\n', 0o600);
       }
     } finally { processing = false; }
   };

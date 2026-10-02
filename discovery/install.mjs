@@ -27,7 +27,7 @@ try {
     const otherMarker = path.join(path.dirname(native), '.monitor-entry.json');
     if (fs.existsSync(otherMarker)) native = JSON.parse(fs.readFileSync(otherMarker, 'utf8')).native;
     const adapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/codex.mjs`)} --binary ${quote(native)} --repo "$PWD"`;
-    const common = `#!/bin/sh\n# Herdr Monitor machine entry adapter\ncase "\${1:-}" in\n  --help|-h|--version|-V|help|login|logout|completion|sandbox|debug|doctor|features|mcp|plugin|update|app-server|exec-server|agents|archive|delete|queue|migrate-rollouts|unarchive|cloud) exec ${quote(native)} "$@" ;;\nesac\nexec ${adapter} -- "$@"\n`;
+    const common = `#!/bin/sh\n# Herdr Monitor: automatic fresh interactive entry only\nexec ${adapter} --auto-entry -- "$@"\n`;
     const files = { codex: common, 'monitor-codex': `#!/bin/sh\nexec ${adapter} "$@"\n` };
     let claudeNative;
     if (values.claude) {
@@ -37,7 +37,7 @@ try {
       if (fs.existsSync(claudeMarker)) claudeNative = JSON.parse(fs.readFileSync(claudeMarker, 'utf8')).claudeNative;
       if (!claudeNative) throw new Error('managed install has no native Claude receipt');
       const claudeAdapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/claude.mjs`)} --binary ${quote(claudeNative)} --validator ${quote(native)} --repo "$PWD"`;
-      files.claude = `#!/bin/sh\ncase "\${1:-}" in\n --help|-h|--version|-V|help|auth|update|install|doctor|mcp|plugin) exec ${quote(claudeNative)} "$@" ;;\nesac\nexec ${claudeAdapter} -- "$@"\n`;
+      files.claude = `#!/bin/sh\nexec ${claudeAdapter} --auto-entry -- "$@"\n`;
       files['monitor-claude'] = `#!/bin/sh\nexec ${claudeAdapter} "$@"\n`;
     } else if (prior?.claudeNative) throw new Error('retain --claude when updating a managed Claude install');
     fs.mkdirSync(directory, { recursive: true });

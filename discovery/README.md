@@ -60,11 +60,13 @@ monitor-codex --role supervisor -- [native codex options]
 monitor-claude --role supervisor -- [native claude options]
 ```
 
-A supervisor must enter from the canonical checkout. Its policy teaches the
-record, dispatch, watch, lane promotion and directs default housekeeping startup,
-without needing a project's AGENTS.md to carry the instruction. The plugin's
-explicit supervisor pane selects this same role. Only that canonical supervisor
-starts the project housekeeping schedule. A worker's policy never
+A supervisor must enter from the canonical checkout. Its policy includes the
+generic [supervisor protocol](../supervisor/PROTOCOL.md) and a fresh compact cold
+start generated from the record without a model. It teaches record, dispatch,
+watch notices, settle, the promotion queue and default housekeeping. Entry itself
+only reads supervisor context; the supervisor explicitly checkpoints decisions
+after reading them. The plugin's explicit supervisor pane selects this same role.
+Only that canonical supervisor starts the project housekeeping schedule. A worker's policy never
 starts a loop, dispatches another agent, pushes, deletes a lane or acts on a live
 Herdr pane. Entry itself makes no Herdr calls.
 

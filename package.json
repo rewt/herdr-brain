@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test --test-concurrency=4 test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs watch/test/*.test.mjs dispatch/test/*.test.mjs housekeeping/test/*.test.mjs discovery/test/*.test.mjs promote/test/*.test.mjs settle/test/*.test.mjs",
+    "test": "node --test --test-concurrency=4 test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs watch/test/*.test.mjs dispatch/test/*.test.mjs housekeeping/test/*.test.mjs discovery/test/*.test.mjs promote/test/*.test.mjs settle/test/*.test.mjs supervisor/test/*.test.mjs",
     "test:lanes": "node --test lanes/test/*.test.mjs"
   },
   "bin": {

@@ -9,7 +9,8 @@
   with argument arrays for every record operation and never appends to `events.jsonl` itself.
   Run `npm --prefix mcp ci` and `npm --prefix mcp test` when changing it; tests stay offline.
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
-  and never writes `events.jsonl`. `supervisor/` holds the tracked settle prompt and the scripts that run it.
+  and never writes `events.jsonl`. `supervisor/` supplies the read-only cold start and generic protocol,
+  foreground notice/queue glue, and legacy settle launchers. Workers never invoke its cycle mutations.
 - Run `npm test` before and after a change. Tests are offline and never call a model.
 - Only the project supervisor, from the canonical checkout, starts the default
   project-wide housekeeping schedule with

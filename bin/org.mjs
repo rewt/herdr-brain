@@ -11,7 +11,7 @@ import {
 } from '../lib/store.mjs';
 import {
   BUDGET_KEYS, attention, blockedBy, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
-  wouldCycleBlock, wouldCycleParent,
+  wouldCycleBlock, wouldCycleParent, releases,
 } from '../lib/state.mjs';
 import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
@@ -55,7 +55,7 @@ Questions for the operator
   record set <ID> key=value...            edit an item (title role capability priority parent
                                           budget.<key> meta.<key>) or record run metadata
                                           (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
-  record close <ID> [--dropped] [--note T]
+  record close <ID> [--dropped] [--note T] [--if-current-run R-n]
   record reopen <ID> [--note T] [--if-current-run R-n]
 
 Runs and reports
@@ -471,12 +471,21 @@ function set(argv) {
 }
 
 function close(argv) {
-  const { values, positionals } = args(argv, { dropped: { type: 'boolean' }, note: { type: 'string' } },
-    { min: 1, max: 1, usage: 'record close <ID> [--dropped] [--note TEXT]' });
+  const { values, positionals } = args(argv, { dropped: { type: 'boolean' }, note: { type: 'string' }, 'if-current-run': { type: 'string' } },
+    { min: 1, max: 1, usage: 'record close <ID> [--dropped] [--note TEXT] [--if-current-run R-n]' });
   const id = positionals[0];
   const as = values.dropped ? 'dropped' : 'done';
   const { added, result } = mutate(openOrg(), (s) => {
     const item = requireItem(s, id);
+    if (values['if-current-run'] !== undefined) {
+      const runId = values['if-current-run'];
+      requireCurrentRun(s, id, runId);
+      const run = s.runs.get(runId);
+      if (run.abandoned || run.report?.outcome !== 'done') throw new UserError('conditional close requires a recorded done report');
+      if (item.outcome && item.outcome.run !== runId) throw new UserError(`${id} outcome does not belong to ${runId}`);
+      const blocked = s.links.some((l) => l.blocked === id && !releases(s, l.blocker, itemStatus(s, l.blocker)));
+      if (openRuns(s, id).length || blocked || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(s, id))) throw new UserError('conditional close needs supervisor judgment: work, blockers or outcome changed');
+    }
     if (item.closed?.as === as) return { add: [], result: [] };
     return { add: [{ type: 'item.closed', id, as, note: values.note ?? null }], result: openRuns(s, id).map((r) => r.id) };
   });

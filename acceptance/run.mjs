@@ -20,6 +20,7 @@ import { createOwnedTempRoot } from './temp.mjs';
 import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 import { settleCase } from './settle.mjs';
+import { supervisorCase } from './supervisor.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -948,6 +949,12 @@ try {
   await test(cases.settle, async () => {
     requireCandidate('settle/settle.mjs');
     const result = await settleCase(candidate);
+    fs.appendFileSync(logFile, JSON.stringify(result) + '\n');
+    return result.detail;
+  });
+  await test(cases.supervisor, async () => {
+    requireCandidate('supervisor/supervisor.mjs');
+    const result = await supervisorCase(candidate);
     fs.appendFileSync(logFile, JSON.stringify(result) + '\n');
     return result.detail;
   });

@@ -33,7 +33,7 @@ look like one project.
 | `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
 | `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
 | `settle/` | Records a delivered report, validates and reviews its claims, dispatches a fix round or returns promotion readiness or an evidence handoff. |
-| `supervisor/` | The settle prompt, explicit settle/continue session launchers, watcher wrapper and tab housekeeping. |
+| `supervisor/` | [Cold start and generic supervisor protocol](supervisor/README.md), foreground notice/settle/queue glue, plus legacy launchers. |
 | `herdr/` | [Release and reversible machine installation](herdr/README.md), including native project entry and the explicit supervisor pane. |
 | `contrib/settle-watch.mjs` | Temporary compatibility entrypoint kept unchanged for bch-cloak's canonical-checkout caller; remove only after its release-gated switch. |
 | `.lane/` | Ignored runtime state, including session ledgers and the emergency `STOP` file. |

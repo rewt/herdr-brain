@@ -1,5 +1,11 @@
 # Settle protocol — herdr-org
 
+Legacy model-session checklist for `settle.sh` / `continue.sh`. The default
+discovery supervisor now follows [PROTOCOL.md](PROTOCOL.md) through the
+[supervisor module](README.md); use its notice handler for recorded as well as
+unrecorded reports. This checklist stays for compatibility with explicit old
+launchers, whose refusal/retry behavior remains unchanged.
+
 In plain words: a worker just stopped. Check its work for real, get an
 independent review, apply the authority recorded on its goal, and hand the
 operator a clear result. Then stop.

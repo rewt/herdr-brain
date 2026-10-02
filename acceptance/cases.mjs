@@ -29,6 +29,7 @@ export const cases = Object.freeze({
   routingQuestion: spec('discovery-routing', 'Real discovery: routing question waits and answer applies'),
   defaultCycle: spec('default-cycle', 'New project: default supervisor dispatch/watch/ingest cycle', ['herdr-fixture']),
   settle: spec('settle-cycle', 'New project: report/settle/fix/settle/promotable without config'),
+  supervisor: spec('supervisor-cycle', 'New project: fresh/history supervisor, notices, fix, promotion and record completion'),
   cleanup: spec('scope-cleanup', 'Cleanup and scope audit', [], { cleanup: true }),
 });
 export const cutoverChecks = Object.freeze({

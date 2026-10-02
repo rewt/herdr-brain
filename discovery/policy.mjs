@@ -1,6 +1,7 @@
 import { quote } from './runtime.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { supervisorPolicy } from '../supervisor/protocol.mjs';
 export function entryPolicy(context, root) {
   const monitor = `${quote(process.execPath)} ${quote(`${root}/discovery/client.mjs`)}`;
   const record = `ORG_DIR=${quote(context.org)} ${quote(process.execPath)} ${quote(`${root}/bin/org.mjs`)}`;
@@ -26,8 +27,7 @@ Use ${monitor} context to retrieve your binding. Git metadata is protected in th
 After work: write a report with run, outcome (done | blocked | needs_human | failed), summary, headline, blockers, proposals, learnings and artifacts front matter at the returned report path. Run ${record} check REPORT to validate it. ${completion}
 If work cannot finish, report blocked or needs_human and ${monitor} commit 'report subject'; ${monitor} finish, without promotion. Never report success without actual validation.` : `You coordinate through the record, dispatch, watch and lanes. Only a supervisor in this canonical checkout may start project housekeeping. At session entry, start the default project schedule from this canonical checkout: ${quote(process.execPath)} ${quote(`${root}/housekeeping/housekeeping.mjs`)} --start. No configuration is required; the project may override defaults in .housekeeping.json. Repeated starts reuse the existing schedule. Workers never start the project loop.
 Dispatch: ${quote(process.execPath)} ${quote(`${root}/dispatch/dispatch.mjs`)} ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE (discovers this record, arms watch before prompting).
-After watch delivers a final report: ${quote(process.execPath)} ${quote(`${root}/settle/settle.mjs`)} R-n. It records the report, validates, independently reviews its claims and returns promotable, a dispatched fix_round, or an evidence handoff for your judgment. Optional --brief FILE supplies a manual run's ask. Promotion still follows project authority.
-Watch validates and delivers reports; its entrypoint is ${root}/watch/watch.mjs. Queue promotion with ${quote(process.execPath)} ${quote(`${root}/promote/promote.mjs`)} TOPIC --to SUPERVISOR; one detached worker validates, fast-forwards, closes the lane and eligible finished tabs, and reports every result. No push or merge commits.`}
+${supervisorPolicy(context, root)}`}
 Record CLI: ${record}. Status, show and today recover durable context. No record event-log writes outside that CLI.
 Routing: ${context.suggestedRoutes ? 'The installed portable preset is suggested, not operator configuration.' : 'Existing project/parent route configuration is authoritative.'}
 ${context.routing ? `Question ${context.routing.question} in the record proposes Codex gpt-6.1-sol high for engineering and Claude opus high for independent review, with the full portable route preset. It is category other and must wait for the operator. Do not answer on their behalf and do not invent preferences. If the task is routing, inspect it with ${record} show ${context.routing.question}; leave the single question pending and report needs_human. After an actual operator answer, a worker uses ${monitor} apply-routes to write the approved config into the ${mainMode ? 'assigned integration checkout; commit, check and finish it' : 'worker lane; commit, check and promote it'}. A text answer must be complete route JSON; a no requires further human guidance.` : ''}

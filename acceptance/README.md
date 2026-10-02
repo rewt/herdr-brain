@@ -71,6 +71,13 @@ Herdr and model transport and the independent claim check are scripted. It does
 not establish live review quality, real PTY transport or the default supervisor
 cycle. Run this case alone offline with `node acceptance/settle.mjs [CANDIDATE_DIR]`.
 
+The `supervisor-cycle` case adds cold starts for fresh, populated and restarted
+supervisor entries, final watch notice routing, independent finding and fix,
+actual queued promotion/closure and guarded record completion. Promotion authority
+is the scripted supervisor's explicit judgment; mechanics need no executive model.
+Duplicate notices/enqueues reuse receipts. Run it alone offline with
+`node acceptance/supervisor.mjs [CANDIDATE_DIR]`.
+
 Two real sessions receive overlapping greeting changes in the same new project.
 A third receives a routing task in another new project. Their prompts provide
 tasks and scratch safety boundaries; they do not name lanes, record setup,

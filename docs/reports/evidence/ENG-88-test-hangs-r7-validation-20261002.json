@@ -1,0 +1,146 @@
+{
+  "run": "R-106",
+  "platform": "darwin",
+  "audit": {
+    "captured_suite_groups": [
+      938,
+      38276,
+      49564,
+      57213,
+      65423,
+      68640,
+      73742
+    ],
+    "survivors": []
+  },
+  "checks": {
+    "baseline": {
+      "log": "/tmp/R-106-baseline.log",
+      "summary": {
+        "tests": 614,
+        "pass": 604,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 10,
+        "duration_ms": 173877.258625
+      },
+      "failures": []
+    },
+    "targeted-final": {
+      "log": "/tmp/R-106-targeted-final.log",
+      "summary": {
+        "tests": 34,
+        "pass": 33,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1,
+        "duration_ms": 42445.236375
+      },
+      "failures": []
+    },
+    "negative": {
+      "log": "/tmp/R-106-negative.log",
+      "summary": {
+        "tests": 14,
+        "pass": 10,
+        "fail": 3,
+        "cancelled": 0,
+        "skipped": 1,
+        "duration_ms": 14192.760584
+      },
+      "failures": [
+        "not ok 3 - detached double-fork descendants are gone after completion; unrelated same-group processes survive",
+        "not ok 4 - detached double-fork descendants are gone after deadline; unrelated same-group processes survive",
+        "not ok 5 - descendants are cleaned after the JavaScript wrapper is killed"
+      ]
+    },
+    "cleanup-negative": {
+      "log": "/tmp/R-106-cleanup-negative.log",
+      "summary": {
+        "tests": 14,
+        "pass": 10,
+        "fail": 3,
+        "cancelled": 0,
+        "skipped": 1,
+        "duration_ms": 14300.343917
+      },
+      "failures": [
+        "not ok 3 - detached double-fork descendants are gone after completion; unrelated same-group processes survive",
+        "not ok 4 - detached double-fork descendants are gone after deadline; unrelated same-group processes survive",
+        "not ok 5 - descendants are cleaned after the JavaScript wrapper is killed"
+      ]
+    },
+    "full": {
+      "log": "/tmp/R-106-full.log",
+      "summary": {
+        "tests": 658,
+        "pass": 648,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 10,
+        "duration_ms": 236381.534125
+      },
+      "failures": []
+    },
+    "lanes": {
+      "log": "/tmp/R-106-lanes.log",
+      "summary": {
+        "tests": 148,
+        "pass": 148,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 383269.834459
+      },
+      "failures": []
+    },
+    "acceptance": {
+      "log": "/tmp/R-106-acceptance.log",
+      "summary": {
+        "tests": 59,
+        "pass": 59,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "duration_ms": 38179.576167
+      },
+      "failures": []
+    },
+    "parallel-1": {
+      "log": "/tmp/R-106-parallel-1.log",
+      "summary": {
+        "tests": 119,
+        "pass": 118,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1,
+        "duration_ms": 58159.848292
+      },
+      "failures": []
+    },
+    "parallel-2": {
+      "log": "/tmp/R-106-parallel-2.log",
+      "summary": {
+        "tests": 119,
+        "pass": 118,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1,
+        "duration_ms": 61394.482458
+      },
+      "failures": []
+    },
+    "parallel-3": {
+      "log": "/tmp/R-106-parallel-3.log",
+      "summary": {
+        "tests": 119,
+        "pass": 118,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1,
+        "duration_ms": 60751.023375
+      },
+      "failures": []
+    }
+  }
+}

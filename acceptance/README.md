@@ -5,6 +5,32 @@ Run from a Herdr pane, with Node 20+, Git, Bash, zsh, ripgrep (`rg`), Python 3
 Startup probes every required executable; missing tools produce a named PENDING
 result before executing candidate or copied code.
 
+The installed native entry canary is also runnable independently:
+
+```sh
+ORG_ACTOR=plugin-entry-canary node acceptance/plugin-entry.mjs \
+  --candidate /path/to/candidate-copy --native-codex /absolute/native/codex
+```
+
+It builds and activates a release in a scratch user home, opens a fresh Herdr
+shell in a pristine Git project, starts the actual native Codex UI with
+`herdr agent start`, and witnesses policy delivery at the native executable
+boundary. A second UI uses the installed supervisor pane script and witnesses
+the housekeeping start instruction. Both retain the release's exact policy
+path. The test sends no prompt, calls no model and starts no housekeeping loop;
+the native UIs run under macOS sandbox-exec with network denied and writes
+restricted to scratch and terminal devices. It uses a dummy API credential,
+never the operator's credentials. All calls and waits have time limits.
+
+It closes only its created workspaces and restores the scratch adapters and
+shell startup bytes, retaining command receipts, policies, screens and summary
+under the printed scratch evidence path. It excludes plugin registration,
+GitHub download/build staging, console npm installation and launchd. The
+manifest's actual build command and release upgrade/rollback/restore mechanics
+are covered offline in `test/plugin-install.test.mjs`. Absolute native paths,
+desktop/remote entry and other shells need their own entry transports; see
+[installation coverage](../herdr/README.md).
+
 ```sh
 node acceptance/run.mjs --candidate main \
   --bch-cloak /path/to/live/bch-cloak --npm-cache /path/to/npm-cache

@@ -19,6 +19,12 @@ title = "Herdr Monitor"
 placement = "split"
 command = ["sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/herdr/console.sh\""]
 
+[[panes]]
+id = "supervisor"
+title = "Herdr Monitor supervisor"
+placement = "tab"
+command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/herdr/supervisor.sh\""]
+
 [[actions]]
 id = "open"
 title = "Herdr Monitor: open the console"
@@ -26,7 +32,13 @@ contexts = ["pane", "workspace"]
 command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console"]
 
 [[actions]]
-id = "housekeeping"
-title = "Herdr Monitor: start project housekeeping"
+id = "supervisor"
+title = "Herdr Monitor: open project supervisor"
 contexts = ["pane", "workspace"]
-command = ["sh", "-c", "exec node \"$HERDR_PLUGIN_ROOT/housekeeping/housekeeping.mjs\" --start"]
+command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint supervisor"]
+
+[[actions]]
+id = "restore-entry"
+title = "Herdr Monitor: restore machine entry"
+contexts = ["pane", "workspace"]
+command = ["sh", "-c", "exec node \"$HERDR_PLUGIN_ROOT/herdr/entry-install.mjs\" --remove"]

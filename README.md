@@ -34,6 +34,7 @@ look like one project.
 | `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
 | `settle/` | Records a delivered report, validates and reviews its claims, dispatches a fix round or returns promotion readiness or an evidence handoff. |
 | `supervisor/` | The settle prompt, explicit settle/continue session launchers, watcher wrapper and tab housekeeping. |
+| `herdr/` | [Release and reversible machine installation](herdr/README.md), including native project entry and the explicit supervisor pane. |
 | `contrib/settle-watch.mjs` | Temporary compatibility entrypoint kept unchanged for bch-cloak's canonical-checkout caller; remove only after its release-gated switch. |
 | `.lane/` | Ignored runtime state, including session ledgers and the emergency `STOP` file. |
 | `~/.config/herdr-org/console.json` | The operator's local console project and Brain-path configuration. |

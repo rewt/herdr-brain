@@ -166,7 +166,7 @@ test('interactive no-identity launches warn and preserve the native session', { 
   }
 });
 
-test('Herdr managed starts bypass entry even without an explicit launcher marker', { skip: PTY_SKIP_REASON }, (t) => {
+test('fresh Herdr starts receive entry; explicitly assigned starts retain their bypass', { skip: PTY_SKIP_REASON, timeout: 30000 }, (t) => {
   const f = fixture(t), installed = install(f), herdr = path.join(installed.bin, 'herdr');
   const pending = path.join(f.scratch, 'pending-start');
   fs.writeFileSync(herdr, `#!${process.execPath}
@@ -178,14 +178,17 @@ if(args[0]==='agent'&&args[1]==='start'){
  fs.unlinkSync(pending);process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exit(result.status??1);
 }else console.log(JSON.stringify({result:{agents:fs.existsSync(pending)?[{name:'managed',pane_id:'owned-pane',launch_pending:true}]:[]}}));`, { mode: 0o755 });
   for (const kind of ['codex', 'claude']) {
-    command(herdr, ['agent', 'start', 'managed', '--kind', kind, '--pane', 'owned-pane', '--', '--model', 'managed-model'], f.repo, installed.env);
+    command(herdr, ['agent', 'start', 'managed', '--kind', kind, '--pane', 'owned-pane', '--', '--model', 'managed-model'], f.repo, { ...installed.env, ORG_ACTOR: 'eng80-assigned-start', MONITOR_ENTRY_BYPASS: '1' });
     const receipt = JSON.parse(fs.readFileSync(installed.receipt));
     assert.equal(receipt.cwd, f.repo); assert.deepEqual(receipt.args, ['--model', 'managed-model']);
     assert.ok(!fs.existsSync(path.join(f.repo, '.org')));
   }
-  interactive(path.join(installed.bin, 'claude'), ['--model', 'fresh-model'], f.repo, { ...installed.env, HERDR_ENV: '1', HERDR_PANE_ID: 'owned-pane' });
-  const fresh = JSON.parse(fs.readFileSync(installed.receipt));
-  assert.notEqual(fresh.cwd, f.repo); assert.ok(fresh.args.includes('--append-system-prompt'));
+  for (const kind of ['codex', 'claude']) {
+    command(herdr, ['agent', 'start', 'fresh', '--kind', kind, '--pane', 'owned-pane', '--', '--model', 'fresh-model'], f.repo, { ...installed.env, ORG_ACTOR: 'eng80-fresh-start' });
+    const fresh = JSON.parse(fs.readFileSync(installed.receipt));
+    assert.notEqual(fresh.cwd, f.repo);
+    assert.ok(fresh.args.some((arg) => arg.includes('Herdr Monitor installed project-entry policy')));
+  }
 });
 
 test('canonical preparation and validation remain authoritative in both check and promote', (t) => {

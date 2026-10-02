@@ -470,7 +470,10 @@ try {
     fs.symlinkSync(path.join(candidate, 'lanes/lane.mjs'), path.join(bin, 'lane'));
     write(path.join(home, 'before/org'), path.join(candidate, 'bin/org.mjs') + '\n');
     write(path.join(home, 'before/lane'), path.join(candidate, 'lanes/lane.mjs') + '\n');
-    const extra = { HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
+    const userHome = path.join(root, 'release-user-home'); fs.mkdirSync(userHome);
+    const native = run('which', ['true']).stdout.trim();
+    const extra = { HOME: userHome, ZDOTDIR: userHome, ORG_ACTOR: 'acceptance-release-install', HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: '-',
+      HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
       RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', RELEASE_NO_NPM: '1' };
     const release = (...a) => run('bash', [script, ...a], { extra });
     release('build', 'candidate'); release('build', 'second'); release('activate', 'candidate');
@@ -480,7 +483,11 @@ try {
     assert.equal(fs.readlinkSync(path.join(home, 'current')), path.join(home, 'releases/candidate'));
     release('restore'); assert.ok(!fs.existsSync(path.join(bin, 'record')));
     assert.equal(fs.readlinkSync(path.join(bin, 'org')), path.join(candidate, 'bin/org.mjs'));
-    return 'candidate code archived into immutable scratch releases; old-install launcher migration checked; npm/plugin/launchd excluded';
+    if (present('herdr/entry-install.mjs')) {
+      assert.ok(!fs.existsSync(path.join(home, 'entry/bin/codex')));
+      assert.ok(!fs.existsSync(path.join(userHome, '.zshenv')));
+    }
+    return 'candidate code archived into immutable scratch releases; launcher migration and reversible entry install checked in an isolated user home; npm/plugin/launchd excluded';
   });
   await test(cases.console, () => {
     requireCandidate('console/package-lock.json');

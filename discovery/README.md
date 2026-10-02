@@ -6,9 +6,13 @@ creates a separate worker checkout by default before the harness starts. Project
 not need a setup edit. Core record/Git identity code remains dependency-free and
 has no harness branches; Codex and Claude prompt transport lives in `adapters/`.
 
-Install once from an immutable product installation, into a dedicated machine
-bin directory. The supervisor/operator owns this step; lane development must
-only install into scratch destinations:
+Release activation and the Herdr plugin's build install entry automatically,
+including removable shell PATH snippets; see [machine installation](../herdr/README.md).
+The supervisor/operator owns that step. Lane development installs only into
+scratch homes. Fresh zsh/Bash shells need no user PATH edit or project setup.
+
+The lower-level installer remains available for an explicitly managed transport
+that already owns its shell PATH:
 
 ```sh
 node /path/to/installed-monitor/discovery/install.mjs \
@@ -28,11 +32,11 @@ Batch/print, resume, utility and noninteractive invocations pass directly throug
 Every session inside an existing linked worktree also passes through. Lane
 dispatch, supervisor/open-session and contrib/settle-watch set
 `MONITOR_ENTRY_BYPASS=1` in the tab and launch environment, preserving their
-assigned checkout, role, report path and run. A raw `herdr agent start` is detected
-from the pane's live managed-start receipt before command injection; failure to
-read that receipt conservatively bypasses entry. An ordinary Herdr shell with
-no managed start can still enter interactively. These receipts only suppress
-automatic interception; they grant no worker or supervisor capability.
+assigned checkout, role, report path and run. A fresh native `herdr agent start`
+receives worker entry just like a fresh interactive shell launch. A display-only
+managed-start receipt neither bypasses entry nor selects a supervisor role.
+Assigned Monitor launches retain their explicit bypass; receipts grant no worker
+or supervisor capability.
 Non-Git folders, empty repositories and a checkout on the wrong configured
 integration branch warn and continue with the native executable.
 
@@ -40,13 +44,14 @@ Tools intentionally opting into entry use `monitor-codex -- exec ...` or
 `monitor-claude -- --print ...`. These explicit entry commands are also the
 transport used by the independent batch discovery probe.
 
-This checkout does **not** install or activate adapters on the operator's
-machine. The current Herdr plugin manifest declares build, panes and actions;
-installing that manifest alone does not cause arbitrary native harness sessions
-to read a new policy. A machine launch adapter is the installation boundary, and
-must be carried in the eventual release installation. A native binary launched
-by absolute path bypasses a PATH adapter. Desktop/remote harness entry needs its
-own transport adapter; there is no claim of universal hook coverage.
+Development in this checkout does **not** install or activate adapters on the
+operator's machine. The release and manifest build carry the machine launch
+adapter; merely linking a manifest skips its build. A native binary launched
+by absolute path bypasses PATH. It needs a harness SessionStart/policy hook or
+an explicit launch adapter. Desktop sessions need their app's supported
+instruction/entry transport; remote sessions need the adapters installed on the
+remote host (or its own harness entry hook). Custom shells need their own PATH
+startup transport. Those entry paths are not covered by this release canary.
 
 Worker entry is the default. A supervisor chooses its role explicitly:
 
@@ -56,8 +61,10 @@ monitor-claude --role supervisor -- [native claude options]
 ```
 
 A supervisor must enter from the canonical checkout. Its policy teaches the
-record, dispatch, watch, lane promotion and default housekeeping. Only that
-supervisor starts the project housekeeping schedule. A worker's policy never
+record, dispatch, watch, lane promotion and directs default housekeeping startup,
+without needing a project's AGENTS.md to carry the instruction. The plugin's
+explicit supervisor pane selects this same role. Only that canonical supervisor
+starts the project housekeeping schedule. A worker's policy never
 starts a loop, dispatches another agent, pushes, deletes a lane or acts on a live
 Herdr pane. Entry itself makes no Herdr calls.
 

@@ -12,6 +12,12 @@ using that checkout's code or an installed plugin/release copy:
 node /path/to/herdr-monitor/housekeeping/housekeeping.mjs --start
 ```
 
+Release activation and the plugin build deliver this startup instruction through
+the [installed supervisor entry policy](../discovery/README.md), including the
+plugin's explicit supervisor pane. It needs no project AGENTS.md edit. Native
+fresh Herdr starts receive worker policy and never start a schedule. Installation
+itself starts no project loop; the canonical supervisor performs the start.
+
 The command discovers the canonical Git checkout, its checked-out base branch,
 and the nearest record using the record's existing discovery (`ORG_DIR`, then
 `.org/events.jsonl` above the entered checkout or canonical checkout). Outside Git,

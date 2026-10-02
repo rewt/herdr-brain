@@ -16,16 +16,8 @@ export function freshInteractive({ kind, args, cwd = process.cwd(), env = proces
     const branch = spawnSync('git', ['-C', cwd, 'branch', '--show-current'], { encoding: 'utf8' });
     if (branch.stdout?.trim().startsWith('lane/')) return false;
   } catch { /* The adapter warns and falls back when no project identity exists. */ }
-  // Herdr registers managed starts before injecting their command into the
-  // pane shell. Consult that live receipt, rather than guessing from HERDR_ENV
-  // (which fresh interactive shell launches inherit too).
-  if (env.HERDR_PANE_ID) {
-    const result = spawnSync('herdr', ['agent', 'list'], { env, encoding: 'utf8', timeout: 3000 });
-    try {
-      if (result.status !== 0) return false;
-      const agents = JSON.parse(result.stdout).result?.agents;
-      if (!Array.isArray(agents) || agents.some((agent) => agent.pane_id === env.HERDR_PANE_ID)) return false;
-    } catch { return false; }
-  }
+  // A fresh native `herdr agent start` is also project entry. Monitor's own
+  // dispatch/supervisor launchers set MONITOR_ENTRY_BYPASS in the pane and
+  // launch environment; a display-only managed-start receipt grants no role.
   return true;
 }

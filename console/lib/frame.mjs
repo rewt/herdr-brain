@@ -328,6 +328,12 @@ function listBody(view, width, G) {
     return out;
   }
   const L = layoutFor(width);
+  if (board.categoryFlags?.length) {
+    out.push({ spans: capLine(width, G, { name: 'CATEGORY REVIEW', count: board.categoryFlags.length, icon: G.question, countFg: 'waitFg' }) });
+    for (const flag of board.categoryFlags) for (const line of wrap(`${flag.id} · ${flag.text}`, width - 3)) {
+      out.push({ spans: [span(`   ${line}`, 'waitFg')] });
+    }
+  }
   if (board.direction) {
     const d = board.direction;
     out.push({ spans: [span(' '), span(`Your instruction to the project, ${hhmm(d.at)}: `, 'muted'), span(`“${d.text}”`, 'fg')] });

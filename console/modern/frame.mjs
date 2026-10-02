@@ -100,7 +100,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   put(5, rail, '─'.repeat(cols - rail), 'rule');
   if (s.view !== 'output') {
     let tx = x;
-    for (const [id, label] of [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['activity', 'Activity'], ['needs', `Needs you ${m.needs.length}`]]) {
+    for (const [id, label] of [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['activity', 'Activity'], ['needs', `Needs you ${m.needs.length + (m.categoryFlags?.length ?? 0)}`]]) {
       control(`view:${id}`, label, 4, tx, label.length + 2, id === 'needs' ? 'amber' : 'fg');
       if (s.view === id || (id === 'needs' && NEED_FOLDS.some(f => f.view === s.view))) put(5, tx, '━'.repeat(label.length), 'blue', 'bg', false, label.length);
       tx += label.length + 3;
@@ -178,9 +178,17 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
     if (!m.activity.length) paragraph(s.errors.events ? 'Activity is unavailable. Refresh to reconnect.' : p?.org ? 'No item activity was recorded in the last 36 hours.' : 'No record connected.');
   } else if (NEED_FOLDS.some(f => f.view === s.view)) {
+    if (s.view === 'needs' && m.categoryFlags?.length) {
+      section(`Category review · ${m.categoryFlags.length}`, 'amber');
+      for (const flag of m.categoryFlags) {
+        row(flag.id, { id: `item:${flag.id}`, fg: 'amber' });
+        paragraph(flag.text, 'amber');
+      }
+    }
     const fold = NEED_FOLDS.find(f => f.view === s.view), list = m[fold.list];
-    section(`${fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
-    list.forEach(needRow); if (!list.length) paragraph('Nothing here.');
+    const reviewing = s.view === 'needs' && m.categoryFlags?.length;
+    section(`${reviewing ? 'Questions' : fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
+    list.forEach(needRow); if (!list.length) paragraph(reviewing ? 'No unanswered questions.' : 'Nothing here.');
     row(); for (const f of NEED_FOLDS) if (f.view === 'needs' || m[f.list].length) row(`${f.view === s.view ? '▸ ' : '  '}${f.label} ${m[f.list].length}`, { id: `view:${f.view}`, fg: f.view === 'needs' ? 'amber' : 'muted' });
   } else if (s.view === 'item') {
     const i = m.itemsById.get(s.detail);

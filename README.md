@@ -163,10 +163,33 @@ category set to `auto` is answered with its recommendation as soon as it is aske
 the operator can still overrule it. Everything ships as `ask`. Relax a category only when its
 `answered_as_recommended` count in `record today --json` shows the agents decide it well.
 
+Choose the category by the action, using the ordered checklist in `record ask --help`
+and every generated report template. Handling keys or trust pins is security even
+when the work is called a tooling change; pushing a design is publish. If unsure,
+pause the dependent action and use `record ask ... --wait --blocks ID` with a
+recommendation and the reason for uncertainty. Include that question's id in the report.
+
+At `ask` and report ingest, a dependency-free lexical check flags auto-routed text
+mentioning keys/credentials, pins, push, publish/deploy/release, broadcast,
+vulnerabilities or deletion/removal. It scans question prose (including the memo's
+contents) and categorized `decisions`/`questions` in report front matter, including
+their rationale and consequences. It never scans the free-form report body or
+infers a category for uncategorized entries. A question explicitly using `--wait`
+already waits and needs no auto-routing flag. `record check` previews report flags.
+
+Flags are advisory `category.flagged` events: ingestion and automatic answers
+still succeed. `record status`/`today` show them in attention, the classic console
+shows Category review, and the modern console shows them on the project overview
+and Needs you page. They remain visible after completion as review evidence;
+there is no dismissal command yet. Matches are deliberately conservative (even
+negated mentions can flag), not proof of a wrong category or permission to act.
+Report decisions/questions retain the existing lenient envelope behavior; use
+`record ask` to create an operator question and its blocking links.
+
 | Category | Covers |
 |---|---|
-| design | Adopting or changing a design, spec, protocol, relation or cryptography |
-| security | Handling a vulnerability, exposure or disclosure |
+| design | Local implementation, architecture, design or spec after the higher-risk action checks |
+| security | Keys, credentials, trust pins, cryptography, security boundaries, vulnerabilities, exposure or disclosure |
 | funds-and-chain | Funding, signing, broadcasting, any chain contact beyond read-only |
 | prover | Running a prover or Setup |
 | publish | Publishing, pushing, releasing, making anything public |

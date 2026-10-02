@@ -31,6 +31,22 @@ function fixture(overrides = {}) {
 }
 const rendered = (s, cols = 100, rows = 32) => s.frame(cols, rows).lines.map(lineText).join('\n');
 
+test('completed work category flags stay visible on overview and Needs you and open the source item', async () => {
+  const flag = { id: 'ENG-2', kind: 'category', text: 'Category review: tooling is auto but R-2 decisions[0] mentions keys; check operator authority' };
+  let items;
+  const f = fixture({ orgStatus: async () => ({ items, runs: [], attention: [flag] }) });
+  items = f.items;
+  await f.session.refresh();
+  assert.match(rendered(f.session), /Category review/);
+  assert.match(rendered(f.session), /Needs you 1/);
+  await f.session.key('!');
+  const needs = rendered(f.session).replaceAll('\n', ' ');
+  assert.match(needs, /Category review · 1/); assert.match(needs, /mentions keys/);
+  await f.session.activate('item:ENG-2');
+  assert.match(rendered(f.session), /Completed work/);
+  f.session.stop();
+});
+
 test('project discovery uses Git identity, deduplicates worktrees, never repo basenames', () => {
   const { config, workspaces } = fixture();
   const list = catalog(config.projects.slice(0, 1), workspaces, identity);

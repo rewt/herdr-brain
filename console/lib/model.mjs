@@ -429,6 +429,7 @@ export function buildBoard({
     // session is costing time now, while an org question waits patiently.
     waiting: [...waiting, ...folded].map((r) => ({ ...tag(r), repoRoot: r.repoRoot ?? home })),
     waitingCount: waiting.length,
+    categoryFlags: (today?.attention ?? []).filter(a => a.kind === 'category'),
     otherWaiting,
     direction: latestDirection(today),
     groups: list.map((g) => ({ ...g, rows: g.rows.map(tag) })),

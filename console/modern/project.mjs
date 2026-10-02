@@ -75,6 +75,9 @@ export function projectRows({ model: m, state: s, project: p, width, height, now
     sx += digits.length + label.length + 4;
   }
   add('content', ...statCells);
+  for (const flag of m.categoryFlags ?? []) {
+    for (const text of wrap(`${flag.id} · ${flag.text}`, width - 1)) add('needs', cell(text, 1, width - 1, { id: `item:${flag.id}`, fg: 'amber', bold: true }));
+  }
   // Quiet: nothing working and nothing recorded for a while. A long run keeps the
   // record quiet with a session working; quiet with nothing working is a stall
   // nobody reports (a refused promotion, a lost watcher). Its own line, never cut.

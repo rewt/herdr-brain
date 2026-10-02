@@ -14,6 +14,7 @@ import {
   wouldCycleBlock, wouldCycleParent,
 } from '../lib/state.mjs';
 import { readReport } from '../lib/report.mjs';
+import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 import { blockJson, renderBlock } from '../lib/block.mjs';
@@ -72,6 +73,8 @@ Views (zero inference)
 The record is found from $ORG_DIR, the canonical Git project's .org/, or a legacy ancestor .org/.
 In a Git project with no record, record commands initialize the canonical .org/ automatically.
 The org command is a permanent alias; .org/, ORG_DIR and ORG_ACTOR remain supported.
+
+${CATEGORY_CHECKLIST}
 `;
 
 const out = (text) => process.stdout.write(text);
@@ -253,12 +256,11 @@ function note(argv) {
 }
 
 function categoryPolicy(config, category) {
-  const { categories, default: fallback } = config.approvals;
+  const { categories } = config.approvals;
   if (!Object.hasOwn(categories, category)) {
     throw new UserError(`unknown category "${category}" (known: ${Object.keys(categories).join(', ')})`);
   }
-  const policy = categories[category] ?? fallback;
-  return policy === 'auto' ? 'auto' : 'ask';
+  return approvalPolicy(config, category);
 }
 
 // A reply that starts with the word yes or no is that answer ("No." and "no, not yet"
@@ -270,6 +272,10 @@ function parseReply(text) {
 }
 
 function ask(argv) {
+  if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) {
+    out(`record ask "<question>" --parent ID --category C --recommend ANSWER --why TEXT [--wait]\n\n${CATEGORY_CHECKLIST}\n`);
+    return 0;
+  }
   const { values, positionals } = args(argv, {
     wait: { type: 'boolean' },
     parent: { type: 'string' },
@@ -304,6 +310,8 @@ function ask(argv) {
   const ctx = openOrg();
   const configuredPolicy = categoryPolicy(ctx.config, values.category);
   const policy = values.wait ? 'ask' : configuredPolicy;
+  const flag = categoryFlag(ctx.config, { category: values.category, wait: values.wait, title, why,
+    recommend, on_yes: values['on-yes'], on_no: values['on-no'], memo_text: memo ? fs.readFileSync(memo, 'utf8') : null }, 'question', { wait: values.wait });
   const { actor } = writer();
   const { result } = mutate(ctx, (s) => {
     requireItem(s, values.parent);
@@ -320,6 +328,7 @@ function ask(argv) {
       if (s.links.some((l) => l.blocker === id && l.blocked === blocked)) continue;
       events.push({ type: 'link.added', blocker: id, blocked });
     }
+    if (flag) events.push({ type: 'category.flagged', id, ...flag });
     if (policy === 'auto') {
       events.push(
         { type: 'note.added', id, text: `Answered ${recommend} automatically (${values.category} is auto)`, decision: true, kind: 'answer' },
@@ -330,6 +339,7 @@ function ask(argv) {
     return { add: events, result: id };
   });
   out(`${result}\n`);
+  if (flag) err(sanitizeTerminal(`warning: ${result} ${categoryFlagText(flag)}\n`));
   if (policy === 'auto') err(`${result} answered ${recommend} automatically (${values.category} is auto); overrule with: record answer ${result} <answer> --overrule\n`);
   else if (actor !== 'human') err(`${result} is waiting for the operator\n`);
   return 0;
@@ -564,6 +574,8 @@ function ingestFile(ctx, file, runHint) {
     writeFileAtomic(path.join(ctx.dir, stored), text, 0o444);
     const report = { ...parsed.report, run: runId };
     const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late: Boolean(run.abandoned), report }];
+    const categoryFlags = reportCategoryFlags(ctx.config, report);
+    for (const flag of categoryFlags) events.push({ type: 'category.flagged', id: run.item, run: runId, ...flag });
     const taken = new Set();
     const created = [];
     for (const p of report.proposals) {
@@ -580,7 +592,7 @@ function ingestFile(ctx, file, runHint) {
     return {
       add: events,
       actor: `run:${runId}`,
-      result: { runId, item: run.item, created, late: Boolean(run.abandoned), outcome: report.outcome, summary: report.summary },
+      result: { runId, item: run.item, created, categoryFlags, late: Boolean(run.abandoned), outcome: report.outcome, summary: report.summary },
     };
   });
   return { ok: true, file: abs, warnings: parsed.warnings, ...result };
@@ -610,6 +622,7 @@ function printIngest(res) {
     safeOut(`  + ${c.id} "${truncate(c.title, 60)}"${c.role ? ` (${c.role})` : ''}${c.blocking ? ` blocks ${res.item}` : ''}\n`);
   }
   for (const w of res.warnings) safeOut(`  warning: ${w}\n`);
+  for (const flag of res.categoryFlags ?? []) safeOut(`  warning: ${categoryFlagText({ ...flag, run: res.runId })}\n`);
   const after = openOrg();
   const status = itemStatus(after.state, res.item);
   safeOut(`${res.item} is now ${status}\n`);
@@ -667,6 +680,9 @@ function check(argv) {
   if (parsed.errors.length) return 1;
   const r = parsed.report;
   const dir = findOrgDir();
+  if (isOrgDir(dir)) for (const flag of reportCategoryFlags(readConfig(dir), r)) {
+    err(sanitizeTerminal(`warning: ${categoryFlagText(flag)}\n`));
+  }
   if (!r.run) {
     err('warning: no "run:" field; recording it will need --run\n');
   } else if (isOrgDir(dir)) {

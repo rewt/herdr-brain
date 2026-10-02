@@ -58,7 +58,7 @@ export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
     const cleanup = killChild(child);
     if (!cleanup.ok || cleanup.reason === 'changed') {
       // A refused lookup must neither authorize a signal nor leave teardown
-      // awaiting an unconfirmed process forever. Its journal remains available.
+      // awaiting an unconfirmed process forever. The suite reports the failure.
       child.stdout?.destroy(); child.stderr?.destroy(); child.unref();
       throw new Error(`${t.name}: child cleanup unconfirmed; no signal sent to ${child.pid}`);
     }

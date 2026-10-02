@@ -2,10 +2,41 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fixture } from './fixture.mjs';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 const journal = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
+test('fixture teardown waits for a concurrent child to finish writing before removing its directory', async (t) => {
+  let release;
+  t.after(() => fs.writeFileSync(release, 'teardown started'));
+  const f = fixture(t), proof = fs.mkdtempSync(path.join(os.tmpdir(), 'settle-cleanup-proof-'));
+  release = path.join(f.root, 'writer-release');
+  const completed = path.join(proof, 'completed'), ready = path.join(f.root, 'writer-ready');
+  const script = path.join(f.root, 'late-writer.mjs');
+  fs.writeFileSync(script, `import fs from 'node:fs';
+fs.writeFileSync(${JSON.stringify(ready)},'ready');
+const timer=setInterval(()=>{
+ if(!fs.existsSync(${JSON.stringify(release)}))return;
+ clearInterval(timer);
+ setTimeout(()=>{
+ fs.mkdirSync(${JSON.stringify(path.join(f.root, 'late-directory'))});
+ fs.writeFileSync(${JSON.stringify(path.join(f.root, 'late-directory/output'))},'finished');
+ fs.writeFileSync(${JSON.stringify(completed)},'child finished before directory removal');
+ },100);
+},10);`);
+  f.concurrent('teardown-proof', script);
+  const deadline = Date.now() + 5000;
+  while (!fs.existsSync(ready) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.ok(fs.existsSync(ready), 'writer did not start');
+  t.after(() => {
+    try {
+      assert.equal(fs.readFileSync(completed, 'utf8'), 'child finished before directory removal');
+      assert.equal(fs.existsSync(f.root), false, 'fixture directory remains after its children finished');
+    } finally { fs.rmSync(proof, { recursive: true, force: true }); }
+  });
+  // The body intentionally returns while its bounded child is still writing.
+});
 test('unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable', async (t) => {
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   assert.ok(!fs.existsSync(path.join(f.repo, '.lane.json')));

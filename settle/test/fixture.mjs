@@ -20,7 +20,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
   env.ORG_ACTOR = actor;
   delete env.NODE_TEST_CONTEXT;
   fs.mkdirSync(env.HOME); fs.mkdirSync(env.XDG_CONFIG_HOME);
-  const watchers = new Map(), observed = new Set(), tracker = createProcessTracker();
+  const watchers = new Map(), observed = new Set(), pending = [], tracker = createProcessTracker();
   const rememberWatchers = () => {
     const directory = path.join(repo, '.org/dispatch');
     if (!fs.existsSync(directory)) return;
@@ -66,11 +66,18 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
   const settle = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief, ...args]);
   const retry = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--retry', ...args]);
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
-  const concurrent = (id) => {
-    const child = spawnChild(t, process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief], { cwd: repo, env });
-    return { child, done: waitForExit(child).then(result => { rememberWatchers(); return result; }) };
+  const concurrent = (id, executable = path.join(source, 'settle/settle.mjs')) => {
+    const child = spawnChild(t, process.execPath, [executable, id, '--brief', brief], { cwd: repo, env });
+    const done = waitForExit(child).then(result => { rememberWatchers(); return result; });
+    done.catch(() => {});
+    pending.push(done);
+    return { child, done };
   };
   t.after(async () => {
+    // Child hooks were registered later than this fixture hook. Await their
+    // bounded completion here before stopping watchers and deleting any files.
+    // Failed/unconfirmed completion retains the directory for inspection.
+    await Promise.all(pending);
     for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
     const deadline = Date.now() + 2000;
     while (watchers.size && Date.now() < deadline) {

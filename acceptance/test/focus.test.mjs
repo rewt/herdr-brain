@@ -20,7 +20,7 @@ const server=net.createServer(socket=>{let buffer='';socket.setEncoding('utf8');
 socket.on('data',chunk=>{buffer+=chunk;while(buffer.includes('\\n')){const i=buffer.indexOf('\\n'),r=JSON.parse(buffer.slice(0,i));buffer=buffer.slice(i+1);
 if(r.method==='events.subscribe'){if(JSON.stringify(r.params.subscriptions)!==JSON.stringify([{type:'pane.focused'}]))throw Error('invalid native subscription shape');subscriptions.add(socket);socket.write(JSON.stringify({id:r.id,result:{type:'subscription_started'}})+'\\n');
 ${JSON.stringify(startupPanes)}.forEach((id,i)=>setTimeout(()=>{if(!socket.destroyed)socket.write(JSON.stringify(event(id))+'\\n');},100*(i+1)));}
-else if(r.method==='pane.list')socket.write(JSON.stringify({id:r.id,result:{panes:[{pane_id:pane,workspace_id:workspace(pane),focused:true}]}})+'\\n');
+else if(r.method==='pane.current'){if(JSON.stringify(r.params)!=='{}')throw Error('sampler must read global focus without caller context');socket.write(JSON.stringify({id:r.id,result:{type:'pane_current',pane:{pane_id:pane,workspace_id:workspace(pane),focused:true}}})+'\\n');}
 else if(r.method==='pane.get')socket.write(JSON.stringify({id:r.id,result:{pane:{pane_id:r.params.pane_id,workspace_id:workspace(r.params.pane_id)}}})+'\\n');
 else socket.write(JSON.stringify({id:r.id,error:{code:'forbidden',message:'monitor attempted a mutation'}})+'\\n');}});
 socket.on('close',()=>subscriptions.delete(socket));});

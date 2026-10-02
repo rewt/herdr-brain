@@ -170,10 +170,13 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   };
   const sample = async () => {
     try {
-      const result = await client.request('pane.list');
-      if (!Array.isArray(result.panes)) throw new Error('pane.list returned no panes');
-      for (const pane of result.panes) if (pane.workspace_id) paneWorkspaces.set(pane.pane_id, pane.workspace_id);
-      const panes = result.panes.filter((pane) => pane.focused).map((pane) => pane.pane_id);
+      // With no caller_pane_id, pane.current reads the UI's global focus.
+      // Avoid collecting every background pane's metadata on every sample.
+      const result = await client.request('pane.current', {});
+      const pane = result.pane;
+      if (!pane?.focused || typeof pane.pane_id !== 'string' || !pane.workspace_id) throw new Error('pane.current returned no focused pane identity');
+      paneWorkspaces.set(pane.pane_id, pane.workspace_id);
+      const panes = [pane.pane_id];
       if (!summary.baseline) {
         if (panes.length !== 1) throw new Error(`expected one focused operator pane, received ${JSON.stringify(panes)}`);
         summary.baseline = summary.currentBaseline = panes[0];

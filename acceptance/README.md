@@ -60,7 +60,8 @@ remain product failures; a scratch-looking path alone is insufficient.
 
 The `operator-focus` case watches the server's focused pane from before the
 candidate snapshot through owned-workspace cleanup. A separate read-only process
-samples every 200 ms, including while the runner blocks in child commands, and
+samples global focus through `pane.current` without a caller ID every 200 ms,
+including while the runner blocks in child commands, and
 subscribes to `pane.focused` and handles native `pane_focused` event envelopes
 so an owned or call-correlated change restored between samples also fails.
 Herdr 0.8.2 replays retained lifecycle events when subscribing. Before candidate

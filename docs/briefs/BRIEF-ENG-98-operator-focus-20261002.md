@@ -32,9 +32,14 @@ Commit on this lane; write the report at the path your prompt names, with `decis
 `questions` and `challenges` after `artifacts`; cite commits by subject; `record check` it,
 commit it, and run `lane check` last. Then stop.
 
-## Decision added during the work (supervisor, 2026-10-02)
+## Supervisor decisions during the work (2026-10-02)
 
-The operator is live and other projects (bch-cloak) run beside acceptance. The focus case therefore
-fails only when focus moves to a pane or workspace the harness created or owns, or when the move is
-correlated with a harness or candidate call. A move to any other pane is an external change: it is
-recorded in the trace and reported, the monitor re-baselines on it, and it does not fail the run.
+The operator is live and other projects run beside acceptance. External focus
+changes are recorded, reported and re-baselined; they do not fail the run. This
+supersedes the original requirement to fail on every global focus change.
+
+The supervisor clarified during R-115: a move fails only if its destination is a
+pane or workspace the harness created or owns, or the specific pane or workspace
+a concurrent harness or candidate call created or targeted. Mere time overlap
+with an unrelated call is not correlation. The operator continues normal work
+during acceptance; the test must not require the human to keep focus still.

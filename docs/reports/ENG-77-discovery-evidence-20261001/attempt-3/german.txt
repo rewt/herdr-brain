@@ -1,0 +1,8 @@
+Implemented `de: 'Hallo'` and added a passing test.
+
+- Policy: installed `discovery/policy.mjs`
+- Branch: `lane/entry-db10169b50e3`
+- Record: `ENG-2`, run `R-2`
+- Validation: `node --test` passed; diff check passed
+- Promotion: attempted but blocked by a protected Git index during rebase conflict resolution
+- Commits: `d3d05aa`, `aa3d6f7`

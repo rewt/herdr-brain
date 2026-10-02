@@ -1,0 +1,20 @@
+
+worktree /private/tmp/monitor-projects-SE8um3/routing-project
+HEAD 9b06fe9b82b25277ffd937ef1ac359c22e15a9fa
+branch refs/heads/main
+
+worktree /private/tmp/monitor-projects-SE8um3/lanes/lane-entry-5a4e61988b9c
+HEAD 1c7092f19bd9b7f2e8eee4ff49397efbed2fda44
+branch refs/heads/lane/entry-5a4e61988b9c
+
+worktree /private/tmp/monitor-projects-SE8um3/lanes/lane-entry-5ea15ff1592f
+HEAD b48c0429ff421eec778af594837751724ddd6f42
+branch refs/heads/lane/entry-5ea15ff1592f
+
+
+b48c042 Report promotion blocker for HUM-1 routes
+9b06fe9 Record HUM-1 route application
+1b4d6d6 Apply approved HUM-1 model routes
+1c7092f fix report proposal metadata
+7ef596e record pending model and effort routing question
+34c52fd Seed unrelated project

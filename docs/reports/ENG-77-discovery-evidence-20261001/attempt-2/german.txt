@@ -1,0 +1,7 @@
+Implemented German `Hallo` in `greetings.mjs` with passing tests (2/2) and committed as `ac5dec6`.
+
+- Policy: installed Herdr Monitor policy at `/private/tmp/monitor-installed-e3LdRL/product/discovery/policy.mjs`
+- Branch: `lane/entry-bec4382e9424`
+- Record IDs: run `R-1`, item `ENG-1`, question `HUM-1`
+- Validation: passed `node --test test/greetings.test.mjs` and `git diff --check`
+- Promotion: blocked because main added French greeting changes; resolving the rebase was prevented by the sandbox’s worktree index lock (`Operation not permitted`).

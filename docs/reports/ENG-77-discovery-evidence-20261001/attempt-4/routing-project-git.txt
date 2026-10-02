@@ -1,0 +1,17 @@
+
+worktree /private/tmp/monitor-projects-ZLb12E/routing-project
+HEAD a9a0a5c41b2cae9c903b51850d1c4bb6f8992580
+branch refs/heads/main
+
+worktree /private/tmp/monitor-projects-ZLb12E/lanes/lane-entry-4827acc4c282
+HEAD 608a096a8af45131bf3045f60e014394c7f22d15
+branch refs/heads/lane/entry-4827acc4c282
+
+worktree /private/tmp/monitor-projects-ZLb12E/lanes/lane-entry-da450eb4a3e2
+HEAD a9a0a5c41b2cae9c903b51850d1c4bb6f8992580
+branch refs/heads/lane/entry-da450eb4a3e2
+
+
+a9a0a5c Apply approved HUM-1 model routes
+608a096 Record pending operator routing decision
+a1147d0 Seed unrelated project

@@ -1,0 +1,18 @@
+
+worktree /private/tmp/monitor-projects-ZLb12E/concurrent-project
+HEAD 1f073fed7a711ab934a6ea2c9259970dfaf43469
+branch refs/heads/main
+
+worktree /private/tmp/monitor-projects-ZLb12E/lanes/lane-entry-870eaf76fbc9
+HEAD 1f073fed7a711ab934a6ea2c9259970dfaf43469
+branch refs/heads/lane/entry-870eaf76fbc9
+
+worktree /private/tmp/monitor-projects-ZLb12E/lanes/lane-entry-c31905b42b83
+HEAD 8495ece91f85f2b42f12b4db827cb53758df658e
+branch refs/heads/lane/entry-c31905b42b83
+
+
+1f073fe Resolve greeting rebase conflicts
+af9ddc3 Add German Hallo greeting and test
+8495ece Add French Bonjour greeting
+b3d9cac Seed unrelated project

@@ -1,0 +1,10 @@
+Routing preparation is paused for operator input.
+
+- Policy: `/private/tmp/monitor-installed-FwLugf/product/discovery/policy.mjs`
+- Branch: `lane/entry-4827acc4c282`
+- Records: `R-1`, `ENG-1`, parent `ARCH-1`, question `HUM-1`
+- Recommendation recorded: Codex gpt-6.1-sol high for engineering; Claude opus high for independent review; full portable preset.
+- Status: `needs_human`; HUM-1 remains pending.
+- Validation: report check passed; project gate passed.
+- Commit: `608a096`
+- Promotion: not performed because operator preferences are required.

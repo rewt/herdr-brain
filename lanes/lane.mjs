@@ -20,6 +20,7 @@ import { constants as osConstants, homedir, hostname, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { ROUTE_PRESET } from './preset.mjs';
 
 import {
   markTopicSessionsDone,
@@ -307,7 +308,7 @@ const CONFIG_LAYERS = (() => {
   return layers;
 })();
 const { config: CONFIG, sources: CONFIG_SOURCES, routeSources: ROUTE_SOURCES } = (() => {
-  const config = {};
+  const config = CONFIG_LAYERS.length ? {} : structuredClone(ROUTE_PRESET);
   const sources = new Map();
   const routeSources = new Map();
   for (const layer of CONFIG_LAYERS) {

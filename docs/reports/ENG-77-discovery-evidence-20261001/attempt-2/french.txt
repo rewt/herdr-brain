@@ -1,0 +1,11 @@
+Implemented and promoted successfully.
+
+- Added `fr: 'Bonjour'` to `greetings.mjs`
+- Added and passed French greeting test
+- Validation: 2/2 tests passed; diff clean
+- Policy source: installed Herdr Monitor policy at `/private/tmp/monitor-installed-e3LdRL/product/discovery/policy.mjs`
+- Record: run `R-2`, item `ENG-2`
+- Branch: `lane/entry-41ea1be11724`
+- Commit: `e904e62`
+- Promotion: fast-forwarded main from `d5c5f04` to `e904e62`
+- No push performed; run finished as done

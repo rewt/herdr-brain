@@ -1,0 +1,10 @@
+Routing is blocked pending operator input.
+
+- Policy source: installed Herdr Monitor policy at `/private/tmp/monitor-installed-4JTUOT/product/discovery/policy.mjs`
+- Branch: `lane/entry-33e2fdd459ed`
+- Record IDs: `ARCH-1`, `HUM-1`, run `R-1`, item `ENG-1`
+- Recommendation recorded: Codex `gpt-6.1-sol` high for engineering; Claude `opus` high for independent review, using the portable preset.
+- Report: `docs/reports/entry-33e2fdd459ed.md`
+- Commit: `0957d6c`
+- Validation: attempted, but sandbox validation lacked the required permission profile and exited 2.
+- Promotion: not attempted because HUM-1 remains pending and validation did not pass.

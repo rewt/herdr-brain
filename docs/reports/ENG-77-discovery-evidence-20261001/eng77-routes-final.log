@@ -1,0 +1,45 @@
+TAP version 13
+# Subtest: the bch-cloak route table loads without losing project fields
+ok 1 - the bch-cloak route table loads without losing project fields
+  ---
+  duration_ms: 1.160375
+  ...
+# Subtest: one resolution supplies launch plumbing and opaque run metadata
+ok 2 - one resolution supplies launch plumbing and opaque run metadata
+  ---
+  duration_ms: 2.218167
+  ...
+# Subtest: selection policy uses opaque pool names and only names configured routes
+ok 3 - selection policy uses opaque pool names and only names configured routes
+  ---
+  duration_ms: 0.395
+  ...
+# Subtest: legacy effort arguments remain readable while explicit effort is canonical
+ok 4 - legacy effort arguments remain readable while explicit effort is canonical
+  ---
+  duration_ms: 0.284292
+  ...
+# Subtest: always_args omits native aliases of emitted Codex model and effort options
+ok 5 - always_args omits native aliases of emitted Codex model and effort options
+  ---
+  duration_ms: 0.139875
+  ...
+# Subtest: Codex always_args preserves unrelated config keys alongside canonical effort
+ok 6 - Codex always_args preserves unrelated config keys alongside canonical effort
+  ---
+  duration_ms: 0.672542
+  ...
+# Subtest: Codex always_args deduplicates only the same config key across native aliases
+ok 7 - Codex always_args deduplicates only the same config key across native aliases
+  ---
+  duration_ms: 0.057
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 36.349375

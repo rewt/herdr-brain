@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 1 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 663.609209
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 2 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 326.955667
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 3 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 241.821542
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 4 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 261.015791
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 5 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 889.317125
+  ...
+# Subtest: real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied
+ok 6 - real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied
+  ---
+  duration_ms: 4216.178959
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4249.896167

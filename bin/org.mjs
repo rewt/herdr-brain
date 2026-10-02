@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { gitProject } from '../lib/project.mjs';
 import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
@@ -39,8 +40,8 @@ Work
 
 Questions for the operator
   record ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT
-          [--on-yes T] [--on-no T] [--memo PATH] [--blocks ID]... [--priority N]
-                                          a role=human item; auto categories answer at once
+          [--on-yes T] [--on-no T] [--memo PATH] [--blocks ID]... [--priority N] [--wait]
+                                          a role=human item; --wait always requires an operator answer
   record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
                                           a "no" keeps the work it blocks blocked
   record set <ID> key=value...            edit an item (title role capability priority parent
@@ -68,7 +69,8 @@ Views (zero inference)
                                           asked and were told, what is pending (--back 1: the one before)
   record console [--project NAME] [--modern] the Herdr Monitor console (needs: npm --prefix console ci)
 
-The record is found from $ORG_DIR or the nearest .org/ above the current directory.
+The record is found from $ORG_DIR, the canonical Git project's .org/, or a legacy ancestor .org/.
+In a Git project with no record, record commands initialize the canonical .org/ automatically.
 The org command is a permanent alias; .org/, ORG_DIR and ORG_ACTOR remain supported.
 `;
 
@@ -91,7 +93,12 @@ function cliString(dir) {
 }
 
 function openOrg() {
-  const dir = findOrgDir();
+  let dir = findOrgDir();
+  if (!dir && !process.env.ORG_DIR) {
+    try { dir = path.join(gitProject().canonical, '.org'); }
+    catch { /* Outside Git, explicit init remains necessary. */ }
+    if (dir) initOrg(dir);
+  }
   if (!isOrgDir(dir)) {
     throw new UserError(dir
       ? `${dir} is not an initialized record (run: record init ${dir})`
@@ -264,6 +271,7 @@ function parseReply(text) {
 
 function ask(argv) {
   const { values, positionals } = args(argv, {
+    wait: { type: 'boolean' },
     parent: { type: 'string' },
     category: { type: 'string' },
     recommend: { type: 'string' },
@@ -294,7 +302,8 @@ function ask(argv) {
     if (!fs.statSync(memo).isFile()) throw new UserError(`memo ${memo} is not a regular file`);
   }
   const ctx = openOrg();
-  const policy = categoryPolicy(ctx.config, values.category);
+  const configuredPolicy = categoryPolicy(ctx.config, values.category);
+  const policy = values.wait ? 'ask' : configuredPolicy;
   const { actor } = writer();
   const { result } = mutate(ctx, (s) => {
     requireItem(s, values.parent);

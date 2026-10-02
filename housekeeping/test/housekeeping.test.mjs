@@ -10,7 +10,7 @@ import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
 const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
 function installRuntime(root) {
-  for (const relative of ['housekeeping/housekeeping.mjs', 'supervisor/tidy-tabs.mjs', 'lib/store.mjs']) {
+  for (const relative of ['housekeeping/housekeeping.mjs', 'supervisor/tidy-tabs.mjs', 'lib/store.mjs', 'lib/project.mjs']) {
     const target = path.join(root, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(sourceRoot, relative), target);

@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
+import { findOrgDir } from '../lib/store.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -105,6 +106,11 @@ function lockJob() {
   ownsLock = true;
 }
 async function main() {
+  if (!positionals.length && !opt.retry && !opt.status) {
+    process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nUse discovery/adapters/codex.mjs for project entry; workers report, watch validates and ingests, then lane check/promote fast-forward without push. Only the canonical supervisor starts housekeeping.\n`);
+    return;
+  }
+  opt.org ??= findOrgDir({ cwd: opt.repo });
   if (!opt.org) throw new Error('--org DIR or ORG_DIR is required');
   if ((opt.adopt && opt.fresh) || (opt.resend && opt['accept-delivered'])) throw new Error('choose one launch recovery and one delivery recovery');
   if (opt.status) {

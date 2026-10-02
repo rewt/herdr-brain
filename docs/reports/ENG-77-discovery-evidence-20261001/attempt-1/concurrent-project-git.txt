@@ -1,0 +1,19 @@
+
+worktree /private/tmp/monitor-projects-DioaJg/concurrent-project
+HEAD f69512567993804d1a95462e718b4618bc31f1cb
+branch refs/heads/main
+
+worktree /private/tmp/monitor-projects-DioaJg/lanes/lane-entry-658074cf4f30
+HEAD 97149000915d44d0f235605a0f71ee771ff97935
+branch refs/heads/lane/entry-658074cf4f30
+
+worktree /private/tmp/monitor-projects-DioaJg/lanes/lane-entry-bf0a004998bf
+HEAD 1ad760afbd258fdd27594b3df9c282ee50000605
+branch refs/heads/lane/entry-bf0a004998bf
+
+
+9714900 Record promotion validation blocker
+1ad760a Report promotion harness blocker
+8beec13 Add French Bonjour greeting and test
+b06d4a9 Add German Hallo greeting
+f695125 Seed unrelated project

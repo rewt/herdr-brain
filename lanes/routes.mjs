@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { ROUTE_PRESET } from './preset.mjs';
 
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -313,7 +314,7 @@ function canonicalCheckout(cwd) {
 
 // Finds the same parent/repository .lane.json layers as lane. An explicit file
 // selects one layer, which is useful for projects that keep routing.json apart.
-export function loadDiscoveredRoutes({ cwd = process.cwd(), file = process.env.LANE_CONFIG } = {}) {
+export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, file = env.LANE_CONFIG } = {}) {
   if (file !== undefined) {
     const absolute = resolve(cwd, file);
     return { config: readRoutesConfig(absolute), files: [absolute] };
@@ -325,10 +326,10 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), file = process.env.L
     const directory = realpathSync(cwd);
     const local = join(directory, ".lane.json");
     const nearest = existsSync(local) ? local : nearestParentConfig(directory);
-    if (!nearest) throw new Error("no route config found; set LANE_CONFIG or pass --route-config");
+    if (!nearest) return { config: structuredClone(ROUTE_PRESET), files: [], suggested: true };
     return { config: readRoutesConfig(nearest), files: [nearest] };
   }
   const files = [nearestParentConfig(repository), join(repository, ".lane.json")].filter((candidate) => candidate && existsSync(candidate));
-  if (files.length === 0) throw new Error(`no route config found for ${repository}`);
+  if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
   return { config: mergeRoutesConfig(files.map(readRoutesConfig)), files };
 }

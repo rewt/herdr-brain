@@ -1,0 +1,18 @@
+
+worktree /private/tmp/monitor-projects-DioaJg/routing-project
+HEAD a79b773d30e6e14871b1732138ed0e716981a864
+branch refs/heads/main
+
+worktree /private/tmp/monitor-projects-DioaJg/lanes/lane-entry-33e2fdd459ed
+HEAD 0957d6c2fee66470f23b2efb2a051cc30b0cc472
+branch refs/heads/lane/entry-33e2fdd459ed
+
+worktree /private/tmp/monitor-projects-DioaJg/lanes/lane-entry-da8214fcc404
+HEAD b3954a9aba3d17362434b5a9a2006c591d300e11
+branch refs/heads/lane/entry-da8214fcc404
+
+
+b3954a9 Report validation environment blocker
+2950169 Apply operator-approved model routes
+0957d6c Record pending model routing decision
+a79b773 Seed unrelated project

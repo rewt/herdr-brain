@@ -1,0 +1,8 @@
+Implemented and integrated German `Hallo`.
+
+- Policy source: installed Herdr Monitor entry policy at `/private/tmp/monitor-installed-FwLugf/product/discovery/policy.mjs`
+- Branch: `lane/entry-870eaf76fbc9`
+- Records: `R-1`, `ENG-1`
+- Tests: 3 passed, including German greeting
+- Promotion: fast-forwarded main `8495ece → 1f073fe`
+- No push performed; run finished as done.

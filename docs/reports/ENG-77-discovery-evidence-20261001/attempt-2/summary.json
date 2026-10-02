@@ -1,0 +1,81 @@
+{
+  "results": [
+    {
+      "name": "02 Record bootstrap and canonical discovery",
+      "status": "PASS"
+    },
+    {
+      "name": "03 Suggested routes without project configuration",
+      "status": "PASS"
+    },
+    {
+      "name": "04 Installed entry teaches dispatch, watch, worker and supervisor defaults",
+      "status": "PASS"
+    },
+    {
+      "name": "20 Real concurrent own-lane work and sandboxed fast-forward promotion",
+      "status": "FAIL",
+      "error": "The input did not match the regular expression /Hallo/u. Input:\n\n\"export const greetings = {\\n  en: 'Hello',\\n  fr: 'Bonjour',\\n};\\n\"\n"
+    },
+    {
+      "name": "21 Real routing question waits and actual operator answer applies",
+      "status": "PASS"
+    }
+  ],
+  "usage": [
+    {
+      "name": "french",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 141885,
+      "cached_input_tokens": 120320,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2077,
+      "reasoning_output_tokens": 190
+    },
+    {
+      "name": "german",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 260703,
+      "cached_input_tokens": 223232,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3834,
+      "reasoning_output_tokens": 862
+    },
+    {
+      "name": "routing",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 69970,
+      "cached_input_tokens": 49920,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1552,
+      "reasoning_output_tokens": 178
+    },
+    {
+      "name": "routing-apply",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 199491,
+      "cached_input_tokens": 168960,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2329,
+      "reasoning_output_tokens": 201
+    }
+  ],
+  "install": "/private/tmp/monitor-installed-e3LdRL",
+  "scratch": "/private/tmp/monitor-projects-ARKggq"
+}

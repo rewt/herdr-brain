@@ -1,0 +1,17 @@
+
+worktree /private/tmp/monitor-projects-ARKggq/concurrent-project
+HEAD e904e62b0a1e488f33d779bed7f853281cee1835
+branch refs/heads/main
+
+worktree /private/tmp/monitor-projects-ARKggq/lanes/lane-entry-41ea1be11724
+HEAD e904e62b0a1e488f33d779bed7f853281cee1835
+branch refs/heads/lane/entry-41ea1be11724
+
+worktree /private/tmp/monitor-projects-ARKggq/lanes/lane-entry-bec4382e9424
+HEAD e904e62b0a1e488f33d779bed7f853281cee1835
+detached
+
+
+ac5dec6 Add German Hallo greeting
+e904e62 Add French Bonjour greeting
+d5c5f04 Seed unrelated project

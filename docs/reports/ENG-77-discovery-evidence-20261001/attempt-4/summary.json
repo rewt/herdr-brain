@@ -1,0 +1,80 @@
+{
+  "results": [
+    {
+      "name": "02 Record bootstrap and canonical discovery",
+      "status": "PASS"
+    },
+    {
+      "name": "03 Suggested routes without project configuration",
+      "status": "PASS"
+    },
+    {
+      "name": "04 Installed entry teaches dispatch, watch, worker and supervisor defaults",
+      "status": "PASS"
+    },
+    {
+      "name": "20 Real concurrent own-lane work and sandboxed fast-forward promotion",
+      "status": "PASS"
+    },
+    {
+      "name": "21 Real routing question waits and actual operator answer applies",
+      "status": "PASS"
+    }
+  ],
+  "usage": [
+    {
+      "name": "french",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 110750,
+      "cached_input_tokens": 97280,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1755,
+      "reasoning_output_tokens": 160
+    },
+    {
+      "name": "german",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 204170,
+      "cached_input_tokens": 178688,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3591,
+      "reasoning_output_tokens": 208
+    },
+    {
+      "name": "routing",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 66224,
+      "cached_input_tokens": 56064,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1749,
+      "reasoning_output_tokens": 213
+    },
+    {
+      "name": "routing-apply",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "code": 0,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 148578,
+      "cached_input_tokens": 131584,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1966,
+      "reasoning_output_tokens": 218
+    }
+  ],
+  "install": "/private/tmp/monitor-installed-FwLugf",
+  "scratch": "/private/tmp/monitor-projects-ZLb12E"
+}

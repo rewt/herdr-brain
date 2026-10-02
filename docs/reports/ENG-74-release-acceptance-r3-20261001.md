@@ -68,6 +68,16 @@ challenges:
     evidence: Real headless Codex sessions establish policy receipt and work/promotion here. Native interactive startup, idle/blocked detection and interactive prompt timing are not established by scripted PTY workers or these headless sessions.
 ---
 
+**Correction, round four (2026-10-01):** the subsequent round-three review
+found that this harness ran promoted model-written tests and Git helpers on the
+host and granted direct sessions writable Git config/hooks. The broad safety
+claim in this report does not hold for that version. Its case 04 was an
+entry-policy check, not an executed default supervisor cycle, and it mislabeled
+candidate safety refusals as harness limits. The [round-four report](ENG-74-release-acceptance-r4-20261001.md)
+supersedes those claims with sandboxed verification, narrowed Git permissions,
+product FAIL attribution, a dedicated untouched bootstrap fixture and a separate
+pending default-cycle gate. Counts below remain the original historical run.
+
 All six findings in the [round-two review](../reviews/release-acceptance/9655e45-r2.md)
 are addressed by **Make installed discovery acceptance passable and classify
 harness limits**. The independent positive control is essential: a candidate

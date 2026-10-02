@@ -1,0 +1,16 @@
+/bin/zsh -c "pwd; rg --files -g '"'!*node_modules*'"' -g '"'!*.lock'"' | head -200; find .. -maxdepth 3 -type f \\( -name 'AGENTS.md' -o -name 'README*' -o -name 'package.json' -o -name 'greetings.mjs' \\) -print"
+/bin/zsh -c "pwd; rg --files -g '"'!*node_modules*'"' -g '"'!*.lock'"' | head -200; find .. -maxdepth 3 -type f \\( -name 'AGENTS.md' -o -name 'README*' -o -name 'package.json' -o -name 'greetings.mjs' \\) -print"
+/bin/zsh -c "find . -maxdepth 3 -type f -print; if [ -f AGENTS.md ]; then sed -n '1,240p' AGENTS.md; fi; if [ -f .codex/AGENTS.md ]; then sed -n '1,240p' .codex/AGENTS.md; fi; sed -n '1,240p' README.md; printf '\\n--- greetings.mjs ---\\n'; sed -n '1,200p' greetings.mjs; printf '\\n--- test ---\\n'; sed -n '1,240p' test/greetings.test.mjs; printf '\\n--- git ---\\n'; git status --short --branch; git log -1 --oneline"
+/bin/zsh -c "find . -maxdepth 3 -type f -print; if [ -f AGENTS.md ]; then sed -n '1,240p' AGENTS.md; fi; if [ -f .codex/AGENTS.md ]; then sed -n '1,240p' .codex/AGENTS.md; fi; sed -n '1,240p' README.md; printf '\\n--- greetings.mjs ---\\n'; sed -n '1,200p' greetings.mjs; printf '\\n--- test ---\\n'; sed -n '1,240p' test/greetings.test.mjs; printf '\\n--- git ---\\n'; git status --short --branch; git log -1 --oneline"
+/bin/zsh -c "sed -n '1,80l' greetings.mjs; sed -n '1,120l' test/greetings.test.mjs; git status --short"
+/bin/zsh -c "sed -n '1,80l' greetings.mjs; sed -n '1,120l' test/greetings.test.mjs; git status --short"
+/bin/zsh -c 'node --test; git diff --check; git diff; git status --short --branch'
+/bin/zsh -c 'node --test; git diff --check; git diff; git status --short --branch'
+/bin/zsh -c 'git status --short --branch; git diff --check; git diff --stat; git diff -- greetings.mjs test/greetings.test.mjs; ls -la .git/index.lock 2>/dev/null || true'
+/bin/zsh -c 'git status --short --branch; git diff --check; git diff --stat; git diff -- greetings.mjs test/greetings.test.mjs; ls -la .git/index.lock 2>/dev/null || true'
+/bin/zsh -c "pwd; rg --files -g '"'!*node_modules*'"' -g '"'!*.lock'"' | head -80; find .. -maxdepth 3 -name 'AGENTS.md' -o -name 'CONTRIBUTING*' -o -name 'README*' -o -name 'package.json' -o -name 'greetings.mjs'"
+/bin/zsh -c "pwd; rg --files -g '"'!*node_modules*'"' -g '"'!*.lock'"' | head -80; find .. -maxdepth 3 -name 'AGENTS.md' -o -name 'CONTRIBUTING*' -o -name 'README*' -o -name 'package.json' -o -name 'greetings.mjs'"
+/bin/zsh -c "sed -n '1,240p' README.md; printf '\\n--- greetings.mjs ---\\n'; sed -n '1,200p' greetings.mjs; printf '\\n--- test ---\\n'; sed -n '1,240p' test/greetings.test.mjs; printf '\\n--- git ---\\n'; git status --short --branch; git log -1 --oneline"
+/bin/zsh -c "sed -n '1,240p' README.md; printf '\\n--- greetings.mjs ---\\n'; sed -n '1,200p' greetings.mjs; printf '\\n--- test ---\\n'; sed -n '1,240p' test/greetings.test.mjs; printf '\\n--- git ---\\n'; git status --short --branch; git log -1 --oneline"
+/bin/zsh -c 'node --test; git diff --check; git diff -- greetings.mjs test/greetings.test.mjs; git status --short --branch'
+/bin/zsh -c 'node --test; git diff --check; git diff -- greetings.mjs test/greetings.test.mjs; git status --short --branch'

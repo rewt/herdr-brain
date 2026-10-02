@@ -1,0 +1,3 @@
+{"command":"git","args":["-C","/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-release-acceptance","rev-parse","--verify","main^{commit}"],"cwd":"/private/tmp/herdr-acceptance-6DuwVe","status":0,"stdout":"a235a15726ae8cec1cd7f970daa44a79063d2127\n","stderr":""}
+{"command":"git","args":["-C","/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-release-acceptance","archive","a235a15726ae8cec1cd7f970daa44a79063d2127"],"cwd":"/private/tmp/herdr-acceptance-6DuwVe","status":0,"stdout":"(archive)","stderr":""}
+{"command":"tar","args":["-x","-C","/private/tmp/herdr-acceptance-6DuwVe/candidate"],"cwd":"/private/tmp/herdr-acceptance-6DuwVe","status":0,"stdout":"","stderr":""}

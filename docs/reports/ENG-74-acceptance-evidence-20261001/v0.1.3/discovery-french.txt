@@ -1,0 +1,8 @@
+Added French Bonjour support and test.
+
+- Checkout: `discovery-project`, branch `main`
+- Changed: `greetings.mjs`, `test/greetings.test.mjs`
+- Validation: `node --test` — 2 passed; `git diff --check` passed
+- Policy sources read: `README.md` only (“A new project.”)
+- No durable work/run/question IDs or promotion evidence were available
+- No project policy or integration entry point was discoverable; changes remain uncommitted for integration.

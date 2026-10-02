@@ -1,0 +1,167 @@
+{
+  "candidate": "main",
+  "candidateCommit": "a235a15726ae8cec1cd7f970daa44a79063d2127",
+  "elapsedSeconds": 54,
+  "counts": {
+    "PASS": 13,
+    "FAIL": 5,
+    "PENDING": 4
+  },
+  "evidence": "/private/tmp/herdr-acceptance-6DuwVe/evidence",
+  "results": [
+    {
+      "id": "01",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "detail": "main: a235a15726ae8cec1cd7f970daa44a79063d2127",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "name": "New project: record discovers and populates",
+      "status": "FAIL",
+      "detail": "record status requires setup: record: no record found: run record init, or set ORG_DIR\n\n1 !== 0\n",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "name": "New project: routes resolve without config",
+      "status": "FAIL",
+      "detail": "node /private/tmp/herdr-acceptance-6DuwVe/routes-probe.mjs: file:///private/tmp/herdr-acceptance-6DuwVe/candidate/lanes/routes.mjs:332\n  if (files.length === 0) throw new Error(`no route config found for ${repository}`);\n                                ^\n\nError: no route config found for /private/tmp/herdr-acceptance-6DuwVe/new-project\n    at loadDiscoveredRoutes (file:///private/tmp/herdr-acceptance-6DuwVe/candidate/lanes/routes.mjs:332:33)\n    at file:///private/tmp/herdr-acceptance-6DuwVe/routes-probe.mjs:2:47\n    at ModuleJob.run (node:internal/modules/esm/module_job:263:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.19.4",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "name": "New project: discover dispatch/watch/default cycle",
+      "status": "FAIL",
+      "detail": "entry requires hand setup: dispatch: --org DIR or ORG_DIR is required; watch: usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--start-grace SECONDS] [--idle-grace SECONDS] [--long-after SECONDS] [--dry-run]\n\n1 !== 0\n",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "05.jsonl"
+    },
+    {
+      "id": "06",
+      "name": "Configured cycle: dispatch/report/ingest/promote/close",
+      "status": "PASS",
+      "detail": "R-1: one notice, recorded report, green fast-forward, lane removed; red/dirty gates refused",
+      "evidence": "06.jsonl"
+    },
+    {
+      "id": "07",
+      "name": "Failure path: missing worker",
+      "status": "PASS",
+      "detail": "R-2: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "07.jsonl"
+    },
+    {
+      "id": "08",
+      "name": "Failure path: invalid worker",
+      "status": "PASS",
+      "detail": "R-3: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "08.jsonl"
+    },
+    {
+      "id": "09",
+      "name": "Failure path: blocked worker",
+      "status": "PASS",
+      "detail": "R-4: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "09.jsonl"
+    },
+    {
+      "id": "10",
+      "name": "Fix round: same worker, fresh durable run",
+      "status": "PASS",
+      "detail": "R-5 -> R-6: blocked report then done, same PTY, distinct run/report",
+      "evidence": "10.jsonl"
+    },
+    {
+      "id": "11",
+      "name": "Watch cutover: idle grace and exclusive watcher",
+      "status": "PASS",
+      "detail": "900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)",
+      "evidence": "11.jsonl"
+    },
+    {
+      "id": "12",
+      "name": "Housekeeping closes only eligible finished workers",
+      "status": "FAIL",
+      "detail": "node /private/tmp/herdr-acceptance-6DuwVe/candidate/housekeeping/housekeeping.mjs: housekeeping: herdr pane process-info: {\"error\":{\"code\":\"acceptance_boundary\",\"message\":\"unowned panes: w11F:p2\"}}",
+      "evidence": "12.jsonl"
+    },
+    {
+      "id": "13",
+      "name": "Scratch release build/activate/rollback/restore",
+      "status": "PASS",
+      "detail": "candidate code archived into immutable scratch releases; old-install launcher migration checked; npm/plugin/launchd excluded",
+      "evidence": "13.jsonl"
+    },
+    {
+      "id": "14",
+      "name": "Full console dependency build (offline)",
+      "status": "PASS",
+      "detail": "",
+      "evidence": "14.jsonl"
+    },
+    {
+      "id": "15",
+      "name": "Existing project: copy live calls and inventory drift",
+      "status": "PASS",
+      "detail": "live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)",
+      "evidence": "15.jsonl"
+    },
+    {
+      "id": "16",
+      "name": "Existing project: routing and both wrapper dry runs",
+      "status": "FAIL",
+      "detail": "continue: 19:17:03  session 1 of at most 100 today\n19:17:03  STOP: no Herdr workspace has /private/tmp/herdr-acceptance-6DuwVe/existing/bch-cloak as its canonical checkout\n19:17:03  [dry-run] notify: settle-watch executive: stopped — no Herdr workspace has /private/tmp/herdr-acceptance-6DuwVe/existing/bch-cloak as its canonical checkout\nsupervisor route executive: codex gpt-6.1-sol high\n\narm-watch: 19:17:03  watching R-1: worker accept-75976, report /private/tmp/herdr-acceptance-6DuwVe/legacy-report.md\n19:17:03  [dry-run] worker is done; report not written yet\n19:17:03  [dry-run] would block: herdr agent wait accept-75976 --until idle --until done --until blocked\n19:17:03  [dry-run] when it stops with a report, the watcher would do this:\n19:17:03  session 1 of at most 100 today\n19:17:03  STOP: no Herdr workspace has /private/tmp/herdr-acceptance-6DuwVe/existing/bch-cloak as its canonical checkout\n19:17:03  [dry-run] notify: settle-watch R-1: stopped — no Herdr workspace has /private/tmp/herdr-acceptance-6DuwVe/existing/bch-cloak as its canonical checkout\nsupervisor route settle: codex gpt-6.1-sol high\n\n\n2 !== 0\n",
+      "evidence": "16.jsonl"
+    },
+    {
+      "id": "17",
+      "name": "Existing project: org PATH consumers",
+      "status": "PASS",
+      "detail": "copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk",
+      "evidence": "17.jsonl"
+    },
+    {
+      "id": "18",
+      "name": "ENG-64: every file switch and rollback",
+      "status": "PENDING",
+      "detail": "ten file switches each enumerated; rollback bytes/modes pass; live cutover is unapplied, so wrapper/recovery/name/canary checks cannot pass",
+      "evidence": "18.jsonl"
+    },
+    {
+      "id": "19",
+      "name": "ENG-64: final contrib removal and restoration",
+      "status": "PENDING",
+      "detail": "compatibility blob restoration passes in scratch; existing launcher still calls contrib, so retirement is forbidden",
+      "evidence": "19.jsonl"
+    },
+    {
+      "id": "20",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "PENDING",
+      "detail": "real discovery explicitly skipped; release gate cannot pass",
+      "evidence": "20.jsonl"
+    },
+    {
+      "id": "21",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "PENDING",
+      "detail": "real discovery explicitly skipped; release gate cannot pass",
+      "evidence": "21.jsonl"
+    },
+    {
+      "id": "22",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "22.jsonl"
+    }
+  ]
+}

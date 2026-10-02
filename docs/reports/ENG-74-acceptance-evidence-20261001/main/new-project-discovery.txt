@@ -1,0 +1,36 @@
+# Herdr Monitor as a Herdr plugin. herdr/release.sh installs a release into
+# ~/.local/share/herdr-monitor/releases/<tag> and links the plugin to it, re-linking
+# whenever the active release changes (Herdr resolves links to a fixed directory).
+id = "rewt.herdr-monitor"
+name = "Herdr Monitor"
+version = "0.1.2"
+min_herdr_version = "0.8.0"
+platforms = ["macos", "linux"]
+description = "The record, lanes and console for autonomous agent work, beside the supervisor chat."
+
+# Runs on `herdr plugin install` (a GitHub install). `herdr plugin link` skips it, so
+# herdr/release.sh runs the same script when it builds a release.
+[[build]]
+command = ["bash", "herdr/install.sh"]
+
+[[panes]]
+id = "console"
+title = "Herdr Monitor"
+placement = "split"
+command = ["sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/herdr/console.sh\""]
+
+[[actions]]
+id = "open"
+title = "Herdr Monitor: open the console"
+contexts = ["pane", "workspace"]
+command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console"]
+
+[[actions]]
+id = "housekeeping"
+title = "Herdr Monitor: start project housekeeping"
+contexts = ["pane", "workspace"]
+command = ["sh", "-c", "exec node \"$HERDR_PLUGIN_ROOT/housekeeping/housekeeping.mjs\" --start"]
+
+dispatch: --org DIR or ORG_DIR is required
+
+usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--start-grace SECONDS] [--idle-grace SECONDS] [--long-after SECONDS] [--dry-run]

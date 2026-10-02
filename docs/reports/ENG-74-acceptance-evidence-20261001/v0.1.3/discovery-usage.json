@@ -1,0 +1,47 @@
+[
+  {
+    "name": "discovery-french",
+    "model": "gpt-5.6-luna",
+    "effort": "low",
+    "code": 0,
+    "signal": null,
+    "usage": {
+      "input_tokens": 53781,
+      "cached_input_tokens": 42752,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1065,
+      "reasoning_output_tokens": 228
+    },
+    "completeTurns": 1
+  },
+  {
+    "name": "discovery-german",
+    "model": "gpt-5.6-luna",
+    "effort": "low",
+    "code": 0,
+    "signal": null,
+    "usage": {
+      "input_tokens": 121899,
+      "cached_input_tokens": 100352,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2223,
+      "reasoning_output_tokens": 248
+    },
+    "completeTurns": 1
+  },
+  {
+    "name": "discovery-routing",
+    "model": "gpt-5.6-luna",
+    "effort": "low",
+    "code": 0,
+    "signal": null,
+    "usage": {
+      "input_tokens": 178257,
+      "cached_input_tokens": 143872,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1931,
+      "reasoning_output_tokens": 480
+    },
+    "completeTurns": 1
+  }
+]

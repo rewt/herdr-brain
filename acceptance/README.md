@@ -48,7 +48,9 @@ part of `npm test`.
 Every mutation uses opaque IDs returned by this run's creation calls. The adapter
 filters global workspace/agent lists to those receipts, rejects foreign targets,
 rejects paths and symlink escapes outside scratch, verifies the foreground cwd
-before starting scripts, and disallows service/plugin/focus commands. Ownership
+before starting scripts, and disallows service/plugin/focus commands. Worktree
+creation has no environment override; its initial shell/default layout remains a
+host-startup isolation limit, and an ungranted extra pane blocks housekeeping. Ownership
 updates are locked and atomic for concurrent creation. Explicit workspace/tab
 creation uses a scratch zsh startup and waits for its file receipt before sending
 a command; a background pane screen alone is not a reliable startup receipt.

@@ -1,0 +1,1 @@
+{"command":"npm","args":["--prefix","/private/tmp/herdr-acceptance-RRjqu2/candidate/console","ci","--offline","--no-audit","--no-fund"],"cwd":"/private/tmp/herdr-acceptance-RRjqu2","status":0,"stdout":"\nadded 40 packages in 477ms\n","stderr":""}

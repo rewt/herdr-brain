@@ -1,0 +1,1 @@
+{"command":"npm","args":["--prefix","/private/tmp/herdr-acceptance-6DuwVe/candidate/console","ci","--offline","--no-audit","--no-fund"],"cwd":"/private/tmp/herdr-acceptance-6DuwVe","status":0,"stdout":"\nadded 40 packages in 378ms\n","stderr":""}

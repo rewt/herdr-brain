@@ -1,0 +1,7 @@
+M greetings.mjs
+ M test/greetings.test.mjs
+worktree /private/tmp/herdr-acceptance-RRjqu2/discovery-project
+HEAD 1f98d01a598c817079c872149ea0185ae3b688c3
+branch refs/heads/main
+1f98d01 Seed overlapping discovery task
+341e83d Create scratch project

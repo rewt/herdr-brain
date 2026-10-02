@@ -1,0 +1,5 @@
+19:16:43  watching R-7 (ENG-6): worker lane-idle-grace-a2d669-c574af, report /private/tmp/herdr-acceptance-6DuwVe/record/idle-grace-1790900199880.md, supervisor accept-75976
+watch: another watcher (pid 38175) already owns R-7
+19:16:45  waiting up to 900s for lane-idle-grace-a2d669-c574af's report or resume before sending a no-report notice
+19:16:48  [org-report] run=R-7 item=ENG-6 outcome=done headline="The scripted round completed" check=pass report=/private/tmp/herdr-acceptance-6DuwVe/record/idle-grace-1790900199880.md
+19:16:48  validated by ok: done · 0 blockers · 0 proposals · 0 learnings · 0 artifacts

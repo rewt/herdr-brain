@@ -1,0 +1,12 @@
+{
+  "sequence": 1200,
+  "size": {
+    "characters": 5507,
+    "approximate_tokens": 1377
+  },
+  "running": 6,
+  "reports": 22,
+  "waiting": 1,
+  "decisions": 128,
+  "running_rows_verified_against_record": true
+}

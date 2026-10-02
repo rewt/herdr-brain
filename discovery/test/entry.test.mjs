@@ -8,6 +8,7 @@ import { createEntry, command } from '../runtime.mjs';
 import { findOrgDir, initOrg, loadEvents } from '../../lib/store.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../../lanes/routes.mjs';
 import { entryPolicy } from '../policy.mjs';
+import { assertSupervisorEntry } from '../../acceptance/entry.mjs';
 const root = new URL('../../', import.meta.url).pathname;
 const fixture = (t) => {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-entry-test-'));
@@ -21,6 +22,23 @@ const fixture = (t) => {
   return { scratch, repo, options: { cwd: repo, runtimeDir: path.join(scratch, 'runtime'), worktreeRoot: path.join(scratch, 'worktrees') } };
 };
 const rec = (repo, args) => command(process.execPath, [path.join(root, 'bin/org.mjs'), ...args], repo, { ORG_DIR: path.join(repo, '.org'), ORG_ACTOR: 'human' });
+test('installed supervisor entry in an untouched project satisfies the release cold-start and notice contract offline', { timeout: 15000 }, (t) => {
+  const f = fixture(t), receipt = path.join(f.scratch, 'native-called');
+  const native = path.join(f.scratch, 'fake-native');
+  fs.writeFileSync(native, `#!/usr/bin/env node\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, 'unexpected launch');\n`, { mode: 0o755 });
+  for (const name of ['.org', '.lane.json', 'AGENTS.md']) assert.ok(!fs.existsSync(path.join(f.repo, name)));
+  const entry = spawnSync(process.execPath, [path.join(root, 'discovery/adapters/codex.mjs'),
+    '--repo', f.repo, '--binary', native, '--role', 'supervisor', '--policy-only',
+    '--runtime-dir', f.options.runtimeDir, '--worktree-root', f.options.worktreeRoot],
+  { cwd: f.repo, env: { ...process.env, ORG_ACTOR: 'supervisor-entry-contract-test' }, encoding: 'utf8', timeout: 10000 });
+  assert.equal(entry.status, 0, entry.stderr || entry.error?.message);
+  assertSupervisorEntry(entry.stdout);
+  assert.ok(fs.existsSync(path.join(f.repo, '.org/events.jsonl')), 'entry bootstrapped its record');
+  assert.ok(!fs.existsSync(receipt), 'policy-only entry never launches a native model');
+  assert.throws(() => assertSupervisorEntry(entry.stdout.slice(0, entry.stdout.indexOf('Cold start (no model, no pane mutations):'))), /AssertionError/, 'protocol without generated context is insufficient');
+  assert.throws(() => assertSupervisorEntry(entry.stdout.replace("handle --notice 'THE COMPLETE NOTICE' --role supervisor", 'inspect report manually')), /AssertionError/, 'cold start without the final-notice handler is insufficient');
+});
+
 test('unrelated project has one canonical record, a real pending question and two separate lanes', (t) => {
   const f = fixture(t);
   const a = createEntry(f.options), b = createEntry(f.options);

@@ -21,6 +21,7 @@ import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './la
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
+import { assertSupervisorEntry } from './entry.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -272,7 +273,7 @@ try {
       const binary = fs.realpathSync(run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim());
       const policy = node(path.join(candidate, 'discovery/adapters/codex.mjs'), ['--repo', bootstrap, '--binary', binary, '--role', 'supervisor', '--policy-only'], { cwd: bootstrap }).stdout;
       write(path.join(evidence, 'new-project-discovery.txt'), policy);
-      assert.match(policy, /dispatch.*ITEM/); assert.match(policy, /watch\/watch.mjs/); assert.match(policy, /Only a supervisor/);
+      assertSupervisorEntry(policy);
       assert.ok(fs.existsSync(path.join(bootstrap, '.org/events.jsonl')), 'product entry must bootstrap its own project record');
       return 'actual supervisor entry executed in an untouched project and bootstrapped the record; this does not execute a dispatch/watch cycle';
     }

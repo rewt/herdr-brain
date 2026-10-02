@@ -94,6 +94,43 @@ test('bound promotion rechecks queued runs and record changes during validation 
   }
 });
 
+test('late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards', { timeout: 25000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-late-report-test' }), run = f.start(); f.commit('correct\n'); f.report(run);
+  const ready = result(invoke(f, ['handle', run, '--role', 'supervisor'])); assert.equal(ready.result, 'promotable');
+  const h = promotionHarness(f, run); result(h.promote());
+  const base = f.git(['rev-parse', 'HEAD']);
+  assert.equal(h.drain().outcome, 'promoted');
+  assert.ok(!fs.existsSync(f.workspace));
+  const notice = `[org-report] run=${run} item=${ready.item} outcome=done headline=The work is correct`;
+  const handle = () => invoke(f, ['handle', '--notice', notice, '--role', 'supervisor']);
+
+  // The report can arrive before the queue notice has completed the record.
+  assert.equal(f.show(ready.item).closed, null);
+  h.queue.transaction((q) => { q.results[0].expectedHead = base; });
+  assert.match(handle().stderr, /head or run binding differs/);
+  assert.equal(f.show(ready.item).closed, null);
+  h.queue.transaction((q) => { q.results[0].expectedHead = ready.head; });
+  f.git(['reset', '--hard', base]);
+  assert.match(handle().stderr, /not integrated/);
+  assert.equal(f.show(ready.item).closed, null);
+  f.git(['reset', '--hard', ready.head]);
+  const promoted = h.queue.load().results[0];
+  const closed = result(handle()); assert.equal(closed.result, 'recorded_promotion'); assert.equal(closed.promotion.id, promoted.id);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  const calls = f.calls();
+  assert.equal(result(handle()).result, 'recorded_promotion');
+  assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'recorded_promotion');
+  assert.equal(h.handle(promoted).result, 'recorded_promotion');
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events, 'duplicate completion writes no events');
+  assert.deepEqual(f.calls(), calls, 'duplicate completion calls no model or transport');
+  assert.equal(h.queue.load().results.length, 1, 'no gate or promotion replay');
+
+  f.start();
+  assert.match(handle().stderr, /superseded/);
+  assert.match(invoke(f, ['handle', '--notice', `[promote-queue] id=${promoted.id} lane=${promoted.topic}`, '--role', 'supervisor']).stderr, /superseded/);
+  assert.equal(f.show(ready.item).status, 'active');
+});
+
 test('refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt', { timeout: 20000 }, (t) => {
   const f = fixture(t, { actor: 'supervisor-retry-stale-test' }), run = f.start(); f.commit('correct\n'); f.report(run);
   assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');

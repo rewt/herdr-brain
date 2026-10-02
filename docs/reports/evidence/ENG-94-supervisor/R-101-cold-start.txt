@@ -1,0 +1,54 @@
+Supervisor cold start · /Users/rewt/development/rewt/herdr-brain
+Record /Users/rewt/development/rewt/.org · events through 1200; decisions after 0
+Operator priorities (0):
+  none
+Running (record; no live pane inference) (6):
+  R-70 ENG-84 Promote module: an ordered promotion queue that one detached work · engineer / codex / gpt-6.1-sol / high · lane promote · lane-promote-e44aa9-eafde5 @w19X:p3 · checkout missing; inspect record
+  R-71 ENG-85 Console control plane, first slice: Decided / Asked / Waiting on  · engineer / codex / gpt-6.1-sol / high · lane console-control · lane-console-contr-b7e303-cd3dbd @w19Y:p3 · checkout missing; inspect record
+  R-99 ENG-81 Prove Claude discovery and broaden validation sandbox adapters · engineer / codex / gpt-6.1-sol / high · lane claude-discovery · lane-claude-discov-57ab2c-061f0f @w1NF:p3
+  R-100 ENG-80 Carry the entry adapters in machine plugin installation and prove · engineer-xhigh / codex / gpt-6.1-sol / xhigh · lane plugin-install · lane-plugin-instal-85dc92-6bf142 @w1NE:p9 · file awaits final watch notice
+  R-101 ENG-94 Supervisor module: a fresh supervisor session in any project pick · engineer-xhigh / codex / gpt-6.1-sol / xhigh · lane supervisor-module · lane-supervisor-mo-81215f-6c4093 @w1VB:p7
+  R-102 ENG-88 Watch tests can hang forever: a spawned fixture watcher (e.g. R-1 · engineer / codex / gpt-6.1-sol / high · lane test-hangs · lane-test-hangs-d42e8f-bbed4c @w1JE:p8
+Reports and settlement (22):
+  R-100 ENG-80 · file; stop unconfirmed · awaits final watch notice · Carry the entry adapters in machine plugin installation and prove native Herdr launch interception
+  R-92 ENG-83 · done · no settle receipt · checkout missing; inspect disposition · Settlement keeps review routes and project configuration consistent
+  R-91 ENG-90 · done · no settle receipt · checkout missing; inspect disposition · Both review findings are fixed and the offline candidate comparisons match.
+  R-88 ARCH-14 · done · no settle receipt · checkout missing; inspect disposition · Ready work calls now succeed when clients omit arguments
+  R-87 ENG-75 · done · no settle receipt · checkout missing; inspect disposition · Housekeeping controls now work without a record and closure failures show their actual errors.
+  R-77 ENG-78 · done · no settle receipt · checkout missing; inspect disposition · Acceptance now proves readable callers and one prompted retry session
+  +16 more; use brief --json for the full list.
+Waiting on operator (1):
+  HUM-19 May the Claude discovery tests use a scratch Claude profile signed in with your existing Claude cred · security · recommend no
+Held work (1):
+  ARCH-10 Phase 5: adoption (init for a new project, pilot on herdr-brain itself, docs, marketplace  · blocked
+Decisions since checkpoint (128):
+  #1158 ENG-81 supervisor-herdr: Linux sandbox provider off by default until proven on Linux.
+  #1145 ENG-83 supervisor-herdr: settle module proven live.
+  #1123 ENG-83 supervisor-herdr: settle promoted to main.
+  #1113 ENG-88 supervisor-herdr: ENG-88 round 4: simplify rather than add machinery.
+  #1094 ENG-90 supervisor-herdr: release-snapshot promoted to main.
+  #1085 ENG-88 supervisor-herdr: lifecycle-flake promoted to main.
+  +122 more; use brief --json for the full list.
+Current goals (retrieve authority with record show) (2):
+  G-1 Herdr Brain console: the operator sees and approves what agents decide, in one Herdr pane
+  G-3 Herdr platform roadmap: standardize bch-cloak's agent cycle (dispatch, routing, watch, settle, promo
+Next (34):
+  inspect_open_run_missing_checkout R-70 · /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-promote
+  inspect_open_run_missing_checkout R-71 · /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-console-control
+  inspect_legacy_disposition R-26 · /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-items-observe/docs/reports/ARCH-11-item-layer-20261001.md
+  inspect_legacy_disposition R-32 · /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-record-name/docs/reports/ENG-65-record-name-r3-20261001.md
+  inspect_legacy_disposition R-34 · /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch/docs/reports/ENG-67-watch-r4-20261001.md
+  inspect_legacy_disposition R-35 · /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-console-fold/docs/reports/ENG-66-console-fold-r2-20261001.md
+  +28 more; use brief --json for the full list.
+Recovery evidence (0):
+  none
+Advisory signals (never work refusals) (20):
+  ENG-84 category: Category review: design is auto but R-64 decisions[1] mentions deletion; check operator authority
+  ENG-78 category: Category review: design is auto but R-68 decisions[0] mentions deletion; check operator authority
+  ENG-80 category: Category review: design is auto but R-97 decisions[0] mentions publish; check operator authority
+  ENG-80 category: Category review: tooling is auto but R-97 decisions[1] mentions publish; check operator authority
+  ENG-88 category: Category review: design is auto but R-94 decisions[1] mentions deletion; check operator authority
+  ENG-88 category: Category review: design is auto but R-94 decisions[4] mentions deletion; check operator authority
+  +14 more; use brief --json for the full list.
+Retrieve depth: record show ID; brief --json. Record plans/authority with record note ID --decision; operator alone ranks priorities.
+After reading ALL new decisions (use --json when truncated): checkpoint --through 1200. Reading a brief never advances the checkpoint.

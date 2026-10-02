@@ -54,6 +54,12 @@ through. `--retry` and `--review-again` are explicit recovery choices after read
 settle's retained evidence. Intermediate watch notices return inspection advice
 without launching settle. Report/notice strings never become commands or file
 selection: the record supplies the run binding.
+After promotion removes the lane, a late final report notice (or explicit run ID)
+uses the acknowledged supervisor request and completed queue receipt instead of
+opening the deleted checkout. It verifies the bound run/head and integrated tip,
+then uses the same guarded record close as a queue notice. This can finish a
+missed queue-notice handoff; duplicates write no new record events. Newer work or
+blockers still require judgment.
 
 Automatic settlement includes independent review judgment on the project review
 route and settle's permitted fix dispatch. Non-done outcomes, blockers, incomplete
@@ -107,7 +113,7 @@ call a model or touch real panes. The release harness adds `supervisor-cycle`;
 run it alone with `node acceptance/supervisor.mjs [CANDIDATE_DIRECTORY]`. It proves
 fresh/history/restarted entry, a real watch notice, review finding, watched fix,
 PASS, explicit supervisor promotion judgment, real queue gate/fast-forward/lane
-close, guarded record completion and duplicate handling. Only Herdr/model
+close, guarded record completion and duplicate final reports after lane closure. Only Herdr/model
 transport and reviewer work are scripted. This is mechanical acceptance; live
 fresh-chat continuity remains a canary observation.
 

@@ -77,6 +77,8 @@ export async function supervisorCase(candidate) {
     assert.equal(closed.result, 'recorded_promotion');
     assert.equal(f.show(settled.item).status, 'done'); receipts.push(closed);
     assert.equal(command(['handle', '--notice', finalNotice, '--role', 'supervisor']).result, 'recorded_promotion');
+    assert.equal(command(['handle', '--notice', watchNotice(handled.fix.run), '--role', 'supervisor']).result, 'recorded_promotion', 'late final report reuses completed promotion after lane closure');
+    assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3]?.includes('Private record file:')).length, reviews, 'late final report launches no review');
     assert.deepEqual(command(['promote', handled.fix.run, '--role', 'supervisor', '--why', 'Duplicate notice']).queue, promoted.queue);
     assert.equal(queue().results.length, 1, 'duplicate promotion never repeats the gate');
     const restarted = entry();

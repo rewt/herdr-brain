@@ -58,6 +58,18 @@ export function main(argv = process.argv.slice(2)) {
     if (queue.identity !== project.identity) throw new Error('promotion queue identity changed');
     return queue;
   };
+  const handlePromotion = (receipt, result) => {
+    const saved = receipt && jobAttempt(receipt, result.id);
+    if (!saved || saved.identity !== project.identity || saved.org !== project.org || saved.phase !== 'acknowledged' || saved.lane !== result.topic) throw new Error('promotion outcome is not bound to an acknowledged supervisor request; inspect evidence');
+    if (result.run !== saved.run || result.expectedHead !== saved.head || result.org !== saved.org) throw new Error('promotion queue head or run binding differs from supervisor request; inspect evidence');
+    if (result.outcome !== 'promoted') return { result: 'judge_promotion', run: saved.run, promotion: result };
+    if (result.tip !== saved.head) throw new Error('promoted tip differs from authorized head; inspect evidence');
+    const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', result.tip, 'HEAD'], { cwd: project.canonical, encoding: 'utf8' });
+    if (ancestry.error || ancestry.status !== 0) throw new Error('promoted tip is not integrated in the canonical checkout; inspect evidence');
+    const run = JSON.parse(call(local('../bin/org.mjs'), ['show', saved.run, '--json']));
+    call(local('../bin/org.mjs'), ['close', run.item, '--if-current-run', saved.run, '--note', `Promoted locally at ${result.tip}; queue ${result.id}; reviewed ${saved.reviewed_commit}. Authority: ${saved.why}`]);
+    return { result: 'recorded_promotion', run: saved.run, item: run.item, promotion: result };
+  };
   if (action === 'checkpoint') {
     const through = Number(opt.through);
     if (opt.through === undefined || !Number.isInteger(through) || through < 0 || through > project.through) throw new Error('--through must name a sequence from the brief');
@@ -80,16 +92,7 @@ export function main(argv = process.argv.slice(2)) {
       if (!result) throw new Error('promotion notice has no completed queue receipt; inspect queue evidence');
       const receipts = fs.existsSync(directory) ? fs.readdirSync(directory).filter((name) => /^R-\d+\.json$/.test(name)).map((name) => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'))) : [];
       const receipt = receipts.find((r) => jobAttempt(r, result.id));
-      const saved = receipt && jobAttempt(receipt, result.id);
-      if (!saved || saved.identity !== project.identity || saved.org !== project.org || saved.phase !== 'acknowledged' || saved.lane !== result.topic) throw new Error('promotion outcome is not bound to an acknowledged supervisor request; inspect evidence');
-      if (result.run !== saved.run || result.expectedHead !== saved.head || result.org !== saved.org) throw new Error('promotion queue head or run binding differs from supervisor request; inspect evidence');
-      if (result.outcome !== 'promoted') { print({ result: 'judge_promotion', run: saved.run, promotion: result }); return; }
-      if (result.tip !== saved.head) throw new Error('promoted tip differs from authorized head; inspect evidence');
-      const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', result.tip, 'HEAD'], { cwd: project.canonical, encoding: 'utf8' });
-      if (ancestry.error || ancestry.status !== 0) throw new Error('promoted tip is not integrated in the canonical checkout; inspect evidence');
-      const run = JSON.parse(call(local('../bin/org.mjs'), ['show', saved.run, '--json']));
-      call(local('../bin/org.mjs'), ['close', run.item, '--if-current-run', saved.run, '--note', `Promoted locally at ${result.tip}; queue ${result.id}; reviewed ${saved.reviewed_commit}. Authority: ${saved.why}`]);
-      print({ result: 'recorded_promotion', run: saved.run, item: run.item, promotion: result }); return;
+      print(handlePromotion(receipt, result)); return;
     }
     const fromNotice = noticeRun(opt.notice);
     if (!fromNotice) { print({ result: 'inspect_notice', reason: 'intermediate watch or promotion notice; no settlement launched', notice: opt.notice }); return; }
@@ -100,6 +103,17 @@ export function main(argv = process.argv.slice(2)) {
   const settle = opt['settle-cli'] ? path.resolve(opt['settle-cli']) : local('../settle/settle.mjs');
   const settleArgs = [id, '--repo', project.canonical, '--org', project.org];
   if (action === 'handle') {
+    // Promotion may have removed the checkout before a delayed report notice.
+    // Recover from both receipts, using the same guards as the queue notice.
+    const file = path.join(directory, `${id}.json`);
+    if (fs.existsSync(file)) {
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
+      if (saved.phase === 'acknowledged' && saved.queue?.jobs?.length === 1) {
+        const promotion = completedJob(loadQueue(), saved.queue.jobs[0].id);
+        if (promotion?.outcome === 'promoted') { print(handlePromotion(saved, promotion)); return; }
+      }
+    }
     for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
     for (const name of ['retry', 'review-again']) if (opt[name]) settleArgs.push(`--${name}`);
     const result = JSON.parse(call(settle, settleArgs));

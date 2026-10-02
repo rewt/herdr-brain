@@ -56,7 +56,9 @@ instead of being overwritten. Failed promotions receive a judgment handoff.
 Intermediate watch notices (blocked, invalid, no-report, unavailable, long-running)
 require inspection or continued observation; they never authorize settle. A
 promotion notice is an outcome, never a new report or another promotion request.
-Duplicate final notices reuse settle receipts. Duplicate promotion commands reuse
+Duplicate final notices reuse settle receipts, or completed promotion receipts
+after lane closure, with the same integrated-head and current-run checks as queue
+notices. Duplicate promotion commands reuse
 their queue receipt even after the lane is closed. Uncertain enqueue acknowledges
 nothing and requires inspection; it never blindly enqueues again.
 

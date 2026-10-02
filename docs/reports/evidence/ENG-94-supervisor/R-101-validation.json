@@ -1,0 +1,40 @@
+{
+  "run": "R-101",
+  "review": "2f6cfd5-r1",
+  "baseline": {
+    "command": "npm test",
+    "tests": 528,
+    "pass": 523,
+    "fail": 0,
+    "skipped": 5
+  },
+  "focused": {
+    "command": "node --test --test-concurrency=2 discovery/test/entry.test.mjs supervisor/test/supervisor.test.mjs",
+    "tests": 18,
+    "pass": 18,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "final": {
+    "command": "npm test",
+    "tests": 530,
+    "pass": 525,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 5
+  },
+  "regression_before_fix": "Late final report reproduced settle ENOENT after the promoted lane was removed.",
+  "verified": [
+    "Completed promotion recovery before and after queue-notice record close",
+    "Duplicate final notices and explicit run IDs write no new events or call any model/transport",
+    "Altered queue binding and missing integrated head refuse completion",
+    "Superseding run remains active for report and queue notices",
+    "Actual installed policy-only entry bootstraps an untouched record without launching its native binary",
+    "Release entry and offline adapter test share the cold-start and final-notice assertions",
+    "Complete scripted unconfigured supervisor watch/settle/fix/promotion/closure cycle"
+  ],
+  "limits": [
+    "Model/reviewer transport is scripted; no claim of live chat clearing or full release/bch-cloak cutover validation."
+  ]
+}

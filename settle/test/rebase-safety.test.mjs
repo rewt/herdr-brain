@@ -48,7 +48,10 @@ test('a lost lane-head update response resumes only the saved proved commit with
   mainCommit(f, 'main-only.txt', 'upstream\n');
   const realGit = f.exec('which', ['git']).stdout.trim();
   const marker = path.join(f.root, 'update-response-lost');
-  fs.writeFileSync(path.join(f.root, 'bin/git'), `#!/usr/bin/env node
+  const proxy = path.join(f.root, 'git-update-proxy.mjs');
+  // Only the ref transaction needs fault injection. A Node hop for every Git
+  // read made this recovery test exceed the fixture's bounded 15-second call.
+  fs.writeFileSync(proxy, `
 import fs from 'node:fs';import {spawnSync} from 'node:child_process';
 const args=process.argv.slice(2),r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});
 if(r.status===0&&args[0]==='update-ref'&&args.includes('--stdin')){
@@ -56,8 +59,9 @@ if(r.status===0&&args[0]==='update-ref'&&args.includes('--stdin')){
  fs.writeFileSync(${JSON.stringify(marker)},'lost response');console.error('injected lost head-update response');process.exit(1);
 }
 process.exit(r.status??1);
-`, { mode: 0o755 });
-  const interrupted = f.settle(run); assert.equal(interrupted.status, 1);
+`);
+  fs.writeFileSync(path.join(f.root, 'bin/git'), `#!/bin/sh\nif [ "$1" = update-ref ]; then exec '${process.execPath}' '${proxy}' "$@"; fi\nexec '${realGit}' "$@"\n`, { mode: 0o755 });
+  const interrupted = f.settle(run); assert.equal(interrupted.status, 1, interrupted.stderr || interrupted.error?.message);
   assert.match(interrupted.stderr, /injected lost head-update response/);
   const file = path.join(f.org, 'settle', `${run}.json`), saved = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.equal(saved.stage, 'rebase'); assert.equal(saved.rebase.state, 'prepared');

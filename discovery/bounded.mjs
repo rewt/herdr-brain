@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { prepareOwner } from './owner.mjs';
 import { lifetimeScope, closeScope } from './lifetime.mjs';
+import { FAST_VALIDATION_TIMEOUT, MAX_ENTRY_TIMEOUT } from './deadlines.mjs';
 let helper;
 function supervisor() {
   if (helper) return helper;
@@ -14,14 +15,14 @@ function supervisor() {
   process.once('exit', cleanup);
   return helper;
 }
-export function runBounded(binary, args, { timeoutMs = 120_000, scope = null, command = null } = {}) {
+export function runBounded(binary, args, { timeoutMs = FAST_VALIDATION_TIMEOUT, scope = null, command = null } = {}) {
   const ownedScope = process.platform === 'darwin' && !scope ? lifetimeScope() : null;
   scope ??= ownedScope;
   const suppliedScope = !ownedScope;
   return new Promise((resolve) => {
     let executable, ownerArgs;
     try {
-      if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error('invalid validation deadline');
+      if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_ENTRY_TIMEOUT) throw new Error('invalid validation deadline');
       executable = supervisor();
       if (process.platform === 'darwin') {
         if (!suppliedScope) {
@@ -47,10 +48,12 @@ export function runBounded(binary, args, { timeoutMs = 120_000, scope = null, co
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
+  let timeoutMs = FAST_VALIDATION_TIMEOUT;
+  if (args[0] === '--timeout-ms') { timeoutMs = Number(args[1]); args.splice(0, 2); }
   let scope = null, command = null;
   if (args[0] === '--scope') { scope = JSON.parse(args[1]); args.splice(0, 2); }
   const split = args.indexOf('--command');
   if (split >= 0) command = args.splice(split).slice(1);
   const [binary, ...rest] = args;
-  process.exitCode = await runBounded(binary, rest, { scope, command });
+  process.exitCode = await runBounded(binary, rest, { scope, command, timeoutMs });
 }

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
-import { environmentFingerprint, resolveValidation, validateValidation } from '../validation.mjs';
+import { environmentFingerprint, resolveValidation, validateValidation, validationEnvironment } from '../validation.mjs';
 
 const cli = fileURLToPath(new URL('../lane.mjs', import.meta.url));
 function fixture(t, declaration = {}) {
@@ -61,6 +61,22 @@ test('a worker check, promotion check and promotion reuse their exact commands; 
   assert.match(result, /REUSE/); assert.deepEqual(f.count(), ['fast', 'promotion']);
   assert.equal(f.git(['rev-parse', 'main']), f.gate().head);
   assert.equal(f.gate().tier, 'promotion');
+});
+
+test('pane identities are absent from preparation, validation and fingerprints', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs same' });
+  const identities = { HERDR_PANE_ID: 'worker-pane', HERDR_TAB_ID: 'worker-tab', HERDR_WORKSPACE_ID: 'worker-workspace' };
+  assert.deepEqual(validationEnvironment({ ...identities, PROJECT_INPUT: 'kept' }), { PROJECT_INPUT: 'kept' });
+  assert.equal(environmentFingerprint({ env: identities }), environmentFingerprint({ env: {} }));
+  assert.notEqual(environmentFingerprint({ env: { PROJECT_INPUT: 'changed' } }), environmentFingerprint({ env: {} }));
+  const probe = "for(const key of ['HERDR_PANE_ID','HERDR_TAB_ID','HERDR_WORKSPACE_ID'])require('assert').equal(process.env[key],undefined);";
+  fs.appendFileSync(path.join(f.workspace, 'check.cjs'), probe);
+  fs.writeFileSync(path.join(f.root, 'config.json'), JSON.stringify({ prepare: [{ run: `${process.execPath} -e ${JSON.stringify(probe)}` }] }));
+  f.git(['add', 'check.cjs'], f.workspace); f.git(['commit', '-qm', 'Assert normalized validation environment'], f.workspace);
+  f.good(f.lane(['check'], f.workspace, identities));
+  assert.match(f.good(f.lane(['check'], f.workspace, { ...identities, HERDR_PANE_ID: 'supervisor-pane' })), /REUSE/);
+  assert.match(f.good(f.lane(['check'], f.workspace, { HERDR_PANE_ID: undefined, HERDR_TAB_ID: undefined, HERDR_WORKSPACE_ID: undefined })), /REUSE/);
+  assert.deepEqual(f.count(), ['same']);
 });
 
 test('same tree after empty commits and a clean rebase reuses validation across tiers', { timeout: 20000 }, t => {

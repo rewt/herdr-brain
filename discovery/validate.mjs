@@ -7,9 +7,12 @@ import { spawnSync } from 'node:child_process';
 import { validationTemporary } from './paths.mjs';
 import { lifetimeScope, closeScope, boundedArgs } from './lifetime.mjs';
 import { sandboxCommand } from './confinement.mjs';
+import { validationTimeout, VALIDATION_WRAPPER_GRACE } from './deadlines.mjs';
 const [binary, cwd, sharedPathsJSON, declaredCommand] = process.argv.slice(2);
 try {
   const sharedPaths = JSON.parse(sharedPathsJSON);
+  const tier = process.env.MONITOR_VALIDATION_TIER ?? 'fast';
+  const deadline = validationTimeout(tier);
   const file = process.env.MONITOR_PROJECT_CONFIG;
   const config = file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
   const localFile = path.join(cwd, '.lane.json');
@@ -27,8 +30,8 @@ try {
   if (prepare != null && !Array.isArray(prepare)) throw new Error('invalid preparation commands');
   if (has('validate') && (typeof config.validate !== 'string' || !config.validate.trim())) throw new Error('invalid canonical validation command');
   console.log(`prepare source: ${source('prepare')}; commands: ${JSON.stringify(prepare ?? [])}`);
-  const steps = [...(prepare ?? []).filter((s) => !s.unless || !fs.existsSync(path.join(cwd, s.unless))).map((s) => ({ command: s.run, source: source('prepare') })), { command: validate, source: validationSource }];
-  for (const { command: step, source: commandSource } of steps) {
+  const steps = [...(prepare ?? []).filter((s) => !s.unless || !fs.existsSync(path.join(cwd, s.unless))).map((s) => ({ command: s.run, source: source('prepare'), timeoutMs: validationTimeout('fast') })), { command: validate, source: validationSource, timeoutMs: deadline }];
+  for (const { command: step, source: commandSource, timeoutMs } of steps) {
     if (typeof step !== 'string' || !step.trim()) throw new Error('invalid validation command');
     console.log(`sandboxed command (${commandSource}): ${step}`);
     const temporary = validationTemporary(cwd, { create: true });
@@ -37,8 +40,8 @@ try {
     try {
       const sandbox = sandboxCommand(binary, cwd, { sharedPaths, writablePaths: [temporary], lifetime: scope });
       r = spawnSync(process.execPath, [new URL('./bounded.mjs', import.meta.url).pathname,
-        ...boundedArgs(scope, sandbox.binary, sandbox.args, ['/bin/sh', '-c', step])], { cwd, stdio: 'inherit', timeout: 145_000, killSignal: 'SIGKILL',
-        env: { ...process.env, TMPDIR: temporary, LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '' } });
+        '--timeout-ms', String(timeoutMs), ...boundedArgs(scope, sandbox.binary, sandbox.args, ['/bin/sh', '-c', step])], { cwd, stdio: 'inherit', timeout: timeoutMs + VALIDATION_WRAPPER_GRACE, killSignal: 'SIGKILL',
+        env: { ...process.env, TMPDIR: temporary, LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '', MONITOR_VALIDATION_TIER: undefined } });
     } finally { closeScope(scope); }
     if (r.error || r.status !== 0) throw new Error(r.error?.message ?? `sandboxed validation exited ${r.status}`);
   }

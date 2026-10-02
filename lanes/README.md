@@ -54,7 +54,7 @@ checkout (or `validation` in `.lane.json`):
 ```
 
 Every field is optional. Undeclared tiers use the legacy `validate` command,
-otherwise `npm test` (`node --test` for a project with `test/` and no package.json).
+otherwise `npm test` (`node --test` for a project with `test/` and no declared npm test script).
 The tracked file overrides individual tiers from lane config. `LANE_VALIDATE`
 overrides commands for CLI adapters; `check --cmd` wins for that invocation.
 Workers run `lane check` (fast), settle uses `lane check --tier promotion`, and
@@ -152,6 +152,11 @@ The fingerprint hashes Node/Git/OS identity, process environment and preparation
 definitions without saving environment values. Coordination variables (`ORG_ACTOR`,
 `ORG_DIR`, `LANE_CONFIG`, `LANE_VALIDATE`, `LANE_WORKTREE_ROOT`) and shell cwd
 bookkeeping do not invalidate proof; checks must not use them as test inputs.
+`HERDR_PANE_ID`, `HERDR_TAB_ID` and `HERDR_WORKSPACE_ID` are removed from both
+preparation and validation environments, so separate worker, settle and queue
+panes share evidence. Native entry's private tier deadline selector also does
+not change the key or reach project commands; identical tier commands can reuse
+a pass obtained within the shorter deadline.
 Keep validation inputs tracked and dependencies reproducible; update `environment`
 when ignored dependencies, external tools or a container image changes. Preparation
 still runs before lookup and must leave tracked and untracked files clean.

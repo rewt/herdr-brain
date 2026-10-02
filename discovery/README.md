@@ -326,7 +326,16 @@ Filters that need network or writes outside the checkout, such as a Git LFS
 fetch/cache under `.git/lfs`, fail within this boundary; there is no permissive
 Git LFS exception.
 
-Preparation, validation and each filter process have a 120-second deadline.
+Preparation, fast validation and each filter process have a 120-second deadline.
+Promotion validation has a bounded 30-minute deadline, including for a project's
+declared promotion command. The trusted parent selects the tier; worker requests
+cannot supply commands or deadlines. Each validation wrapper reserves another
+25 seconds for compilation and confirmed descendant cleanup. The entry command
+also reserves preparation time and 35 seconds for Git preflight/integration,
+with a one-hour overall cap. The request client waits up to that cap plus five
+seconds for check, promote and finish replies; other operations keep their
+three-minute deadline. The filesystem/network boundary, lifetime markers and
+descendant cleanup are the same for both tiers.
 A foreground native owner stops and kills every owned descendant before returning,
 including detached children and double forks. On Linux it adopts orphans as a
 subreaper. On macOS two private read probes identify the inherited kernel policy;

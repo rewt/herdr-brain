@@ -24,7 +24,7 @@ import { acquireLock } from "./promotion-lock.mjs";
 import { withPromotionGuard } from '../promote/guard.mjs';
 import { ROUTE_PRESET } from './preset.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
-import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree } from './validation.mjs';
+import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
 
 import {
   markTopicSessionsDone,
@@ -2132,7 +2132,7 @@ function prepareWorktree(path, { quiet = false } = {}) {
   for (const step of CONFIG.prepare ?? []) {
     if (step.unless !== undefined && existsSync(join(path, step.unless))) continue;
     say(`preparing ${path}: ${step.run}\n`);
-    const run = spawnSync(step.run, { cwd: path, shell: true, stdio: "inherit" });
+    const run = spawnSync(step.run, { cwd: path, env: validationEnvironment(), shell: true, stdio: "inherit" });
     if (run.status !== 0) fail(`prepare step failed (${step.run}); cannot validate this worktree`);
   }
 }

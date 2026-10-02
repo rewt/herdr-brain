@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { requestTimeout } from './deadlines.mjs';
 const [op, ...words] = process.argv.slice(2);
 try {
   if (!op || ['--help', '-h', 'help'].includes(op)) {
@@ -17,7 +18,7 @@ try {
   const request = path.join(root, `${id}.request.json`), reply = path.join(root, `${id}.reply.json`);
   fs.writeFileSync(`${request}.tmp`, JSON.stringify({ op, ...(words.length ? { text: words.join(' ') } : {}) }), { mode: 0o600 });
   fs.renameSync(`${request}.tmp`, request);
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + requestTimeout(op);
   while (!fs.existsSync(reply)) {
     if (Date.now() >= deadline) throw new Error('session adapter timed out; inspect before retrying a mutation');
     await new Promise((resolve) => setTimeout(resolve, 50));

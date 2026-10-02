@@ -199,7 +199,7 @@ clean worktree and records the result against its exact tree and current commit.
 The worker default is fast; settle and promote use promotion. The canonical
 checkout's tracked `.lane.validation.json` overrides individual commands from
 `.lane.json` `validation`. Undeclared tiers use legacy `validate`, otherwise
-`npm test` (or `node --test` with `test/` and no package.json).
+`npm test` (or `node --test` with `test/` and no declared npm test script).
 `LANE_VALIDATE` overrides every tier. `--cmd` overrides the command for that run and
 is recorded verbatim. Before validation, `check` runs the configured `prepare`
 steps in the current worktree just as `promote` does.

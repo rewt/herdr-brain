@@ -16,11 +16,12 @@ import { projectEntrySettings } from './settings.mjs';
 import { sandboxCommand, selectSandbox } from './confinement.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
 import { createHash } from 'node:crypto';
+import { DEFAULT_REQUEST_TIMEOUT, entryValidationTimeout } from './deadlines.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
-export function command(binary, args, cwd, env = {}) {
-  const r = spawnSync(binary, args, { cwd, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 180_000, killSignal: 'SIGKILL' });
+export function command(binary, args, cwd, env = {}, timeout = DEFAULT_REQUEST_TIMEOUT) {
+  const r = spawnSync(binary, args, { cwd, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout, killSignal: 'SIGKILL' });
   if (r.error || r.status !== 0) throw new Error((`${r.stdout ?? ''}${r.stderr ?? ''}` || r.error?.message || `exit ${r.status}`).trim());
   return r.stdout.trim();
 }
@@ -203,8 +204,11 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
       ...boundedGitEnv(), LANE_CONFIG: configFile, LANE_VALIDATE: validation,
       MONITOR_PROJECT_CONFIG: path.join(project.canonical, '.lane.json'),
+      // This only selects a lifetime bound. Keep it out of the evidence key so
+      // identical fast/promotion commands can still share a passing result.
+      MONITOR_VALIDATION_TIER: tier,
       MONITOR_VALIDATION_FINGERPRINT: createHash('sha256').update(JSON.stringify([current.prepare ?? [], settings.environment])).digest('hex'),
-    });
+    }, entryValidationTimeout(tier, current.prepare?.length ?? 0));
   };
   const context = () => ({ role, canonical: project.canonical, identity: project.identity, workspace,
     branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,

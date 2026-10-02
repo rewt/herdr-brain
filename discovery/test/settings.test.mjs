@@ -10,6 +10,9 @@ import { loadDiscoveredRoutes, resolveLaunchRoute } from '../../lanes/routes.mjs
 
 const product = new URL('../../', import.meta.url).pathname;
 function fixture(t, config = {}) {
+  const previousActor = process.env.ORG_ACTOR;
+  process.env.ORG_ACTOR = 'entry-settings-test';
+  t.after(() => { if (previousActor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = previousActor; });
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-settings-test-'));
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
@@ -214,6 +217,23 @@ test('entry advertises tracked tiers and its sandbox runs only the requested wor
   entry.dispatch({ op: 'check' }); assert.match(entry.dispatch({ op: 'check' }), /REUSE/);
   entry.dispatch({ op: 'promote' });
   assert.equal(fs.readFileSync(log, 'utf8'), 'fast-check\npromotion-check\n');
+});
+test('undeclared entry with package metadata and a Node test directory checks and promotes without an npm script', { timeout: 20000 }, t => {
+  const f = fixture(t, { main: 'trunk' });
+  fs.writeFileSync(path.join(f.repo, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
+  fs.mkdirSync(path.join(f.repo, 'test'));
+  fs.writeFileSync(path.join(f.repo, 'test/green.test.mjs'), "import test from 'node:test';test('undeclared project check',()=>{});\n");
+  command('git', ['add', 'package.json', 'test'], f.repo); command('git', ['commit', '-qm', 'Seed undeclared Node tests'], f.repo);
+  const sandbox = path.join(f.scratch, 'sandbox'), log = path.join(f.scratch, 'checks');
+  fs.writeFileSync(sandbox, `#!${process.execPath}\ndelete process.env.NODE_TEST_CONTEXT;require('fs').appendFileSync(${JSON.stringify(log)},process.argv.at(-1)+'\\n');process.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2)));`, { mode: 0o755 });
+  const entry = f.open({ sandboxBinary: sandbox }), current = entry.dispatch({ op: 'start', text: 'Validate the undeclared Node project' });
+  for (const tier of Object.values(entry.context().validation.tiers)) assert.equal(tier.command, 'node --test');
+  fs.mkdirSync(path.dirname(current.report), { recursive: true });
+  fs.writeFileSync(current.report, `---\nrun: ${current.run}\noutcome: done\nsummary: Checked the undeclared project.\nblockers: []\nproposals: []\nartifacts: []\n---\n`);
+  entry.dispatch({ op: 'commit', text: 'Commit undeclared project report' });
+  assert.match(entry.dispatch({ op: 'check' }), /undeclared project check/);
+  assert.match(entry.dispatch({ op: 'promote' }), /REUSE/);
+  assert.equal(fs.readFileSync(log, 'utf8'), 'node --test\n');
 });
 test('entry settings use canonical Git identity and do not inherit parent or worker config', (t) => {
   const f = fixture(t, { entry: { mode: 'worker', policy: 'Canonical project policy.' } });

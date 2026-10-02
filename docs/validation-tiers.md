@@ -53,3 +53,21 @@ binary, ignored dependency or service behind an unchanged path. Projects can
 change `validation.environment` to name that external revision. Logs and receipts
 remain under the canonical Git common directory, outside worker-writable gate
 files; altered/missing logs and nonpassing receipts are not reused.
+
+Worker, settle and queue pane identities are normalized before preparation and
+validation, and before hashing the environment. Changing a pane, tab or workspace
+therefore does not invalidate evidence or provide a validation input. An
+undeclared project with package metadata, `test/` and no npm test script retains
+the `node --test` fallback through native entry, including promotion.
+
+Native entry keeps a two-minute owner deadline for fast checks, preparation and
+Git filters, and allows promotion checks up to 30 minutes. Wrapper and broker
+bounds reserve compilation/cleanup and preparation/Git time; the broker has a
+one-hour cap and the request client reserves five more seconds for its reply.
+These are trusted execution bounds, not agent-configurable request fields. An
+identical command that passes fast validation still supplies reusable promotion
+evidence. The offline regression copies this policy with shorter numeric bounds
+and runs the real entry, request client and native descendant owner, proving a
+longer declared command succeeds only with the promotion lifetime while late
+descendant writes remain impossible. Sandbox transport is scripted in that test;
+existing host-provider confinement tests retain their explicit applicability.

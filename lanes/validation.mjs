@@ -33,7 +33,11 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
     for (const key of Object.keys(tracked)) declarationSources[key] = file;
   }
   let fallback = config.validate ?? 'npm test';
-  if (config.validate === undefined && !fs.existsSync(path.join(root, 'package.json')) && fs.existsSync(path.join(root, 'test'))) fallback = 'node --test';
+  if (config.validate === undefined) {
+    const packageFile = path.join(root, 'package.json');
+    const testScript = fs.existsSync(packageFile) ? JSON.parse(fs.readFileSync(packageFile, 'utf8')).scripts?.test : undefined;
+    if (!testScript && fs.existsSync(path.join(root, 'test'))) fallback = 'node --test';
+  }
   const tiers = {};
   for (const tier of VALIDATION_TIERS) {
     // Legacy overrides remain available to CLI/queue adapters for all tiers.
@@ -48,12 +52,16 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
 // command inputs except transport/cwd bookkeeping. Unlisted variables invalidate
 // reuse conservatively. Projects can salt ignored dependencies/container images
 // with validation.environment; lockfiles and scripts already belong to the tree.
-const bookkeeping = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'ORG_ACTOR', 'ORG_DIR', 'LANE_CONFIG', 'LANE_VALIDATE', 'LANE_WORKTREE_ROOT']);
+const bookkeeping = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'ORG_ACTOR', 'ORG_DIR', 'LANE_CONFIG', 'LANE_VALIDATE', 'LANE_WORKTREE_ROOT', 'MONITOR_VALIDATION_TIER']);
+const paneIdentity = new Set(['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID']);
+// Session identity cannot be a validation input. Remove it from both execution
+// and hashing, matching the promotion queue's detached environment.
+export const validationEnvironment = (env = process.env) => Object.fromEntries(Object.entries(env).filter(([key]) => !paneIdentity.has(key)));
 export function environmentFingerprint({ env = process.env, prepare = [], environment = '' } = {}) {
   return digest({ version: 1, platform: process.platform, arch: process.arch, release: os.release(),
     node: [process.execPath, process.version], shell: '/bin/sh',
     git: execFileSync('git', ['--version'], { encoding: 'utf8' }).trim(), prepare, environment,
-    env: Object.entries(env).filter(([key, value]) => !bookkeeping.has(key) && value !== undefined).sort(([a], [b]) => a.localeCompare(b)) });
+    env: Object.entries(validationEnvironment(env)).filter(([key, value]) => !bookkeeping.has(key) && value !== undefined).sort(([a], [b]) => a.localeCompare(b)) });
 }
 
 function captured(cwd, label = 'validated worktree') {
@@ -69,6 +77,7 @@ function unchanged(cwd, before, label) {
 }
 
 export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label }) {
+  env = validationEnvironment(env);
   const before = captured(cwd, label);
   const fingerprint = environmentFingerprint({ env, prepare, environment });
   // Identical commands across tiers prove the same thing. Tier names describe

@@ -17,3 +17,13 @@ export function classifyFailure(error, { cleanup = false } = {}) {
   if (error instanceof HarnessLimit || cleanup) return { status: 'PENDING', origin: 'harness', detail: error.message };
   return { status: error instanceof Pending ? 'PENDING' : 'FAIL', origin: 'product', detail: error.message };
 }
+
+// Dependent cases retain the cause and classification of their prerequisites.
+export function requirePrerequisite(results, id) {
+  const result = results.find((v) => v.id === id);
+  if (result?.status === 'PASS') return;
+  const reason = result ? `prerequisite ${id} (${result.name}): ${result.detail}` : `prerequisite ${id} has no result`;
+  if (!result || result.origin === 'harness') throw new HarnessLimit(reason);
+  if (result.status === 'PENDING') throw new Pending(reason);
+  throw commandFailure(reason);
+}

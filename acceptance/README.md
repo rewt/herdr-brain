@@ -154,7 +154,7 @@ actual `npm ci --offline` runs separately using copies of the supplied cache's
 indexes and lockfile tarballs. Missing cache content fails; omitting
 `--npm-cache` leaves the full dependency build pending.
 
-The ten ENG-64 switches are applied to the audited live-script copies and executed,
+The eleven ENG-64 switches (including the reviewed cleanup correction) are applied to the audited live-script copies and executed,
 then rolled back byte-for-byte with their original executable modes. Raw live
 bytes/checksums remain in a separate backup; executed baselines are relocated.
 Legacy temporary files and worktree constants all resolve inside scratch. Fixed
@@ -164,7 +164,8 @@ socket endpoint is pinned in the ownership ledger before changing HOME.
 
 Case 18 executes naming/restart and missing-target refusal, routed launcher tests,
 executive dry run, real busy-session refusal and same-request retry, real copied
-dispatch through the new arm wrapper, watch-log recovery through tidy, released
+dispatch through the new arm wrapper, watch-log recovery through tidy across multiple run logs, one mutating copied
+tidy/close-finished-agents cycle with recorded done, blocked and needs-human workers (all idle), released
 notice constructors, zero-caller notify retirement, exact rollback, legacy wrapper
 tests and a real restored notify-watch canary. The normal application's build is
 outside this watcher switch: its trusted empty lane is prebuilt before legacy
@@ -220,3 +221,19 @@ Offline checks of the test boundary, also separate from `npm test`:
 ```sh
 node --test acceptance/test/*.test.mjs
 ```
+
+The scratch cutover plan also changes `close-finished-agents.sh`: only a latest
+recorded done or unreported abandoned run permits closing an idle worker tab.
+Blocked, needs-human, open, unknown, unrecorded workers and mixed protected tabs
+remain; the old agentless sweep and tidy label/branch-based workspace sweep are
+removed so they cannot bypass the outcome guard. Case 18 executes the copied installed
+cleanup through tidy with real mutations, independently of case 12 housekeeping.
+Recovery retains a labelled bounded tail from every run, so a late notice in an
+older run cannot be hidden by a long newer log. Dependent cases retain prerequisite
+causes: omitted optional copies and failed Herdr fixtures remain pending rather
+than becoming product failures; missing candidate modules still fail explicitly.
+
+The copier archives timestamped script backups outside the executable caller tree
+only after proving they have no reference from any active source, including
+transitive references through other backups. The retirement scanner itself has no
+backup/notify-file exemption; these source and archive receipts stay in evidence.

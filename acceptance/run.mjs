@@ -9,12 +9,12 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
 import { auditCopies, relocate, within, copiedSandbox, workspaceIdentityCutover } from './security.mjs';
-import { HarnessLimit, Pending, commandFailure, classifyFailure } from './limits.mjs';
+import { HarnessLimit, Pending, commandFailure, classifyFailure, requirePrerequisite } from './limits.mjs';
 import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
 import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine } from './results.mjs';
 import { liveSocket } from './probe.mjs';
-import { switches, switchedFiles, capture, restore, callers, retireContrib } from './cutover.mjs';
+import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -117,7 +117,7 @@ function auditSnapshot(directory) {
   }
 }
 async function dispatch(mode, topic, { reuse, item } = {}) {
-  if (!fixture || !supervisor) pending('configured fixture unavailable');
+  requirePrerequisite(results, '05');
   requireCandidate('dispatch/dispatch.mjs');
   write(path.join(root, 'mode'), mode);
   if (!item) item = record(['add', `Acceptance ${topic}`, '--role', 'engineer']).match(/^(\S+)/)[1];
@@ -504,6 +504,7 @@ try {
   const inventory = [];
   await test('Existing project: copy live calls and inventory drift', () => {
     if (!live) pending('pass --bch-cloak LIVE_REPO to check the existing installation');
+    requirePrerequisite(results, '05');
     for (const rel of tracked) {
       const src = path.join(live, rel); const st = fs.lstatSync(src); assert.ok(st.isFile(), 'copy regular script files only');
       const bytes = fs.readFileSync(src);
@@ -514,12 +515,16 @@ try {
     }
     write(path.join(evidence, 'live-copy-manifest.json'), JSON.stringify(inventory, null, 2));
     // Read other scripts only into scratch, then scan the copy for omitted calls.
-    for (const dir of ['scripts/lane', '.lane/supervisor']) {
-      for (const entry of fs.readdirSync(path.join(live, dir), { withFileTypes: true })) {
-        if (!entry.isFile() || !/\.(mjs|sh|py)$/.test(entry.name)) continue;
-        const rel = path.join(dir, entry.name); if (tracked.includes(rel)) continue;
-        write(path.join(copy, rel), fs.readFileSync(path.join(live, rel)));
-      }
+    const sourceInventory = callerInventory(live);
+    write(path.join(evidence, 'historical-callers.json'), JSON.stringify(sourceInventory.historical.map((file) => ({
+      file: path.relative(live, file), sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+      mode: fs.statSync(file).mode & 0o777, reason: 'timestamped script backup; no active source reference',
+    })), null, 2));
+    for (const src of sourceInventory.historical) write(path.join(backup, 'historical-callers', path.relative(live, src)), fs.readFileSync(src));
+    for (const src of sourceInventory.active) {
+      const rel = path.relative(live, src); if (tracked.includes(rel)) continue;
+      write(path.join(copy, rel), fs.readFileSync(src));
+      fs.chmodSync(path.join(copy, rel), fs.statSync(src).mode & 0o777);
     }
     const scan = run('rg', ['-n', 'org |herdr-monitor|herdr-brain|lane.mjs|notify-watch|settle-watch', copy], { ok: false });
     write(path.join(evidence, 'existing-call-inventory.txt'), scan.stdout);
@@ -536,7 +541,7 @@ try {
     transform(copy); auditCopies(copy, { live, home: process.env.HOME }); liveCopyReady = true;
     return 'live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)';
   });
-  const existingReady = () => { if (!liveCopyReady) pending('live existing-project copy not safely relocated/audited'); if (!fixture || !supervisor) pending('scratch record/supervisor unavailable'); };
+  const existingReady = () => { requirePrerequisite(results, '15'); requirePrerequisite(results, '05'); };
   await test('Existing project: routing and both wrapper dry runs', async () => {
     existingReady(); requireCandidate('contrib/settle-watch.mjs');
     initRepo(copy);
@@ -710,18 +715,18 @@ try {
       catch (error) { throw commandFailure(`busy refusal passed; same-request retry failed: ${error.message}`); }
       return 'actual wrapper refused busy owned session without opening a tab; retained request retried after a real wait';
     });
-    async function legacyCanary(stage) {
+    async function legacyCanary(stage, mode = stage === 'switched' ? 'held' : 'done') {
       const topic = `cutover-${stage}`;
       const wt = path.join(scratchHome, '.herdr/worktrees/bch-cloak', `lane-${topic}`);
       fs.mkdirSync(path.dirname(wt), { recursive: true });
       // The ordinary app build is outside the watcher switch. Prebuild the trusted
       // empty fixture lane, then execute the unchanged legacy lane dispatch.
-      git(copy, ['add', '-A']); git(copy, ['commit', '-qm', 'Scratch cutover files']);
+      git(copy, ['add', '-A']); git(copy, ['commit', '--allow-empty', '-qm', 'Scratch cutover files']);
       h('worktree', 'create', '--cwd', copy, '--branch', `lane/${topic}`, '--base', 'main', '--path', wt, '--no-focus');
       const item = rec(['add', 'Cutover scripted canary', '--role', 'engineer']).match(/^(\S+)/)[1];
       const report = path.join(root, `cutover-${stage}.md`), ask = path.join(root, `cutover-${stage}-ask.md`);
       write(ask, `You are run R-RUN. Write the report to ${report}; commit a scratch file.\n`);
-      write(path.join(root, 'mode'), stage === 'switched' ? 'held' : 'done');
+      write(path.join(root, 'mode'), mode);
       const dispatched = execute('.lane/supervisor/dispatch.sh', [item, topic, 'engineer', 'codex', 'scripted', 'low', ask, report], { timeout: 90_000 });
       const runId = dispatched.stdout.match(/(R-\d+) .*agent=/)?.[1]; assert.ok(runId, 'legacy dispatch receipt missing');
       const watchReceipt = dispatched.stdout.split('\n').find((line) => line.startsWith('{'));
@@ -741,7 +746,7 @@ try {
       const log = path.join(copy, '.lane/supervisor/watch-logs', `${runId}.log`);
       await until(() => fs.existsSync(log) && read(log).includes('[org-report]'), 'canary delivery log');
       assert.match(read(log), /\[org-report\]/);
-      if (stage === 'switched') assert.ok(!read(log).includes('verdict='));
+      if (stage !== 'legacy') assert.ok(!read(log).includes('verdict='));
       else assert.match(read(log), /delivered by notify-watch/);
       rec(['check', report]); rec(['ingest', report, '--run', runId]);
       fs.copyFileSync(log, path.join(evidence, `cutover-${stage}-watch.log`));
@@ -751,12 +756,66 @@ try {
       cutoverCanary = await legacyCanary('switched');
       return `${cutoverCanary.run}: actual copied dispatch -> arm -> released watch -> real PTY notice -> record ingest`;
     });
-    await check('tidy recovery', () => {
+    await check('tidy recovery across multiple run logs', () => {
       assert.ok(cutoverCanary, 'dispatch canary did not deliver');
-      const output = execute('.lane/supervisor/tidy-tabs.sh', ['--dry-run', '--workspace', supervisor.workspace, '--log-lines', '50']).stdout;
-      assert.ok(output.includes(`[org-report] run=${cutoverCanary.run} `), 'canary absent from actual tidy recovery output');
-      write(path.join(evidence, 'cutover-tidy.txt'), output);
-      return 'actual merged watch-log output retains the delivered report';
+      const logs = path.join(copy, '.lane/supervisor/watch-logs');
+      const older = path.join(logs, 'R-900.log'), newer = path.join(logs, 'R-901.log');
+      write(older, 'old log\n[org-report] run=R-900 late-notice-from-older-run\n');
+      write(newer, ('stale-notice-from-newer-run\n').repeat(200));
+      try {
+        const output = execute('.lane/supervisor/tidy-tabs.sh', ['--dry-run', '--workspace', supervisor.workspace, '--log-lines', '8']).stdout;
+        assert.ok(output.includes(`[org-report] run=${cutoverCanary.run} `), 'canary absent from actual tidy recovery output');
+        assert.ok(output.includes('late-notice-from-older-run'), 'late notice in older log was lost behind another log');
+        assert.ok(output.includes('stale-notice-from-newer-run'), 'newer log tail absent');
+        assert.ok(output.split('stale-notice-from-newer-run').length - 1 <= 8, 'tail must be bounded per run');
+        write(path.join(evidence, 'cutover-tidy.txt'), output);
+      } finally { fs.unlinkSync(older); fs.unlinkSync(newer); }
+      return 'actual tidy retains a bounded tail from every run, including a late older-run notice';
+    });
+    await check('copied cleanup: close done, preserve blocked and needs_human', async () => {
+      assert.ok(cutoverCanary, 'dispatch canary did not deliver');
+      const jobs = [cutoverCanary];
+      // Additional real idle PTY workers consume pre-recorded fixture reports.
+      // Dispatch/watch delivery is independently witnessed by the done canary;
+      // this cycle tests cleanup's recorded-outcome decision, not another watch.
+      for (const outcome of ['blocked', 'needs_human']) {
+        const topic = `cutover-cleanup-${outcome.replace('_', '-')}`;
+        const wt = path.join(scratchHome, '.herdr/worktrees/bch-cloak', `lane-${topic}`);
+        const ws = h('worktree', 'create', '--cwd', copy, '--branch', `lane/${topic}`, '--base', 'main', '--path', wt, '--no-focus');
+        const agent = `cleanup-${outcome.replace('_', '-')}-${process.pid}`;
+        const item = rec(['add', `Cleanup ${outcome} fixture`, '--role', 'engineer']).match(/^(\S+)/)[1];
+        const report = path.join(root, `cleanup-${outcome}.md`);
+        const runId = rec(['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', wt, '--report', report]).match(/^(R-\d+)/)[1];
+        rec(['set', runId, `agent=${agent}`, `pane=${ws.root_pane.pane_id}`]);
+        write(report, `---\nrun: ${runId}\noutcome: ${outcome}\nsummary: Trusted cleanup fixture.\nheadline: The worker needs a decision\nblockers: ["Acceptance decision fixture"]\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
+        rec(['check', report]); rec(['ingest', report, '--run', runId]);
+        h('agent', 'start', agent, '--kind', 'codex', '--pane', ws.root_pane.pane_id);
+        jobs.push({ run: runId, info: json(rec(['show', runId, '--json'])) });
+      }
+      const before = jobs.map((job) => ({ run: job.run, outcome: json(rec(['show', job.run, '--json'])).report.outcome,
+        pane: h('agent', 'get', job.info.meta.agent).agent.pane_id,
+        tab: h('agent', 'get', job.info.meta.agent).agent.tab_id,
+        workspace: h('agent', 'get', job.info.meta.agent).agent.workspace_id,
+        status: h('agent', 'get', job.info.meta.agent).agent.agent_status }));
+      assert.deepEqual(before.map((v) => v.outcome), ['done', 'blocked', 'needs_human']);
+      assert.ok(before.every((v) => ['idle', 'done'].includes(v.status)), 'all report workers must be idle to exercise the outcome guard');
+      // Execute the installed tidy -> close-finished-agents path with mutations,
+      // not the released housekeeping module or a dry run.
+      const output = execute('.lane/supervisor/tidy-tabs.sh', ['--workspace', supervisor.workspace]).stdout;
+      write(path.join(evidence, 'cutover-cleanup.txt'), output);
+      const workspaces = h('workspace', 'list').workspaces;
+      // Successful topology lists prove absence/preservation; a native read
+      // error must remain a harness limit rather than look like a closed tab.
+      const after = before.map((v) => {
+        const alive = workspaces.some((w) => w.workspace_id === v.workspace);
+        return { ...v, tabPresent: alive && h('tab', 'list', '--workspace', v.workspace).tabs.some((tab) => tab.tab_id === v.tab),
+          panePresent: alive && h('pane', 'list', '--workspace', v.workspace).panes.some((pane) => pane.pane_id === v.pane) };
+      });
+      write(path.join(evidence, 'cutover-cleanup.json'), JSON.stringify({ before, after }, null, 2));
+      assert.deepEqual(after.map((v) => v.tabPresent), [false, true, true], 'copied cleanup must close only the done worker tab');
+      assert.deepEqual(after.map((v) => v.panePresent), [false, true, true], 'blocked/needs_human workers must remain available');
+      assert.ok(output.includes(`closed ${before[0].tab}`), 'copied cleanup closure receipt absent');
+      return 'actual installed tidy/cleanup cycle closed recorded done; idle blocked and needs_human report workers retained';
     });
     await check('SETTLE and WORK-PATTERN consumer contract', () => {
       const protocol = read(path.join(copy, '.lane/supervisor/SETTLE.md'));
@@ -778,12 +837,12 @@ try {
     // Rollback restores every exact relocated byte and mode before invoking
     // restored legacy consumers; raw live bytes remain separately in backup.
     restore(copy, originals);
-    await check('rollback: all ten bytes/modes and restored legacy routes/wrappers', () => {
+    await check('rollback: all eleven bytes/modes and restored legacy routes/wrappers', () => {
       assert.ok(callers(copy, 'contrib/settle-watch.mjs').length);
       runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
       execute('.lane/supervisor/continue.sh', isolation);
       if (cutoverCanary) execute('.lane/supervisor/arm-watch.sh', [cutoverCanary.run, ...isolation]);
-      return 'all ten exact scratch baselines restored; actual legacy suite and both wrappers executed';
+      return 'all eleven exact scratch baselines restored; actual legacy suite and both wrappers executed';
     });
     await check('rollback: real restored notify canary', async () => {
       const legacy = await legacyCanary('legacy');
@@ -801,13 +860,14 @@ try {
     return `${switches.length} switches applied, executed and restored; detailed receipts in cutover-switches.json`;
   });
   await test('ENG-64: final contrib removal and restoration', () => {
-    assert.ok(cutover, 'scratch switches did not apply');
+    requirePrerequisite(results, '18');
+    assert.ok(cutover, 'passed switch case has no fixture receipt');
     const compat = path.join(candidate, 'contrib/settle-watch.mjs');
     assert.ok(fs.existsSync(compat), 'candidate compatibility entry missing before retirement');
     const saved = fs.readFileSync(compat), mode = fs.statSync(compat).mode & 0o777;
     // Prove a live copied caller prevents removal, including an omitted caller.
-    const trap = path.join(copy, '.lane/supervisor/retirement-probe.sh');
-    write(trap, `node ${quote(compat)} --open\n`);
+    const trap = path.join(copy, '.lane/supervisor/nested/retirement-probe.py');
+    write(trap, `#!/usr/bin/env python3\nimport subprocess\nsubprocess.run(['node', ${JSON.stringify(compat)}, '--open'])\n`); fs.chmodSync(trap, 0o755);
     assert.throws(() => retireContrib(copy, compat), /retirement refused/);
     assert.deepEqual(fs.readFileSync(compat), saved); fs.unlinkSync(trap);
     assert.ok(cutoverCanary, 'final retirement requires a delivered switched canary');
@@ -822,7 +882,7 @@ try {
   await discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
   await test('New project: default supervisor dispatch/watch/ingest cycle', async () => {
     for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs', 'discovery/adapters/codex.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);
-    assert.ok(supervisor, 'scratch supervisor unavailable');
+    requirePrerequisite(results, '05');
     const repo = path.join(root, 'default-cycle'); initRepo(repo);
     // Ordinary project validation, never workflow configuration.
     write(path.join(repo, 'package.json'), JSON.stringify({ private: true, scripts: { test: 'node --test' } }));

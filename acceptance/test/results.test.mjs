@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { commandFailure, classifyFailure, HarnessLimit } from '../limits.mjs';
+import { commandFailure, classifyFailure, HarnessLimit, Pending, ProductBoundary, requirePrerequisite } from '../limits.mjs';
 import { retainedRoots, resultLine } from '../results.mjs';
 
 test('fake product entry passing a bypass flag is refused before launch and its case reports product FAIL', (t) => {
@@ -53,4 +53,22 @@ test('ordinary product entry and source-attribution gaps fail without a safety o
     assert.equal(result.status, 'FAIL'); assert.equal(result.origin, 'product');
     assert.doesNotMatch(resultLine(result), /SAFETY|HARNESS/);
   }
+});
+
+test('dependent cutover/default-cycle cases preserve prerequisite causes and origins', () => {
+  const scenarios=[
+    {id:'18',name:'Scratch switches',...classifyFailure(new Pending('pass --bch-cloak LIVE_REPO'))},
+    {id:'18',name:'Scratch switches',...classifyFailure(new HarnessLimit('stand-in acknowledgement unavailable'))},
+    {id:'05',name:'Supervisor fixture',...classifyFailure(new HarnessLimit('native socket unavailable'))},
+    {id:'18',name:'Scratch switches',...classifyFailure(new Error('cutover candidate lacks supervisor/open-session.mjs'))},
+    {id:'18',name:'Scratch switches',...classifyFailure(new ProductBoundary('acceptance_product_boundary: foreign target'))},
+  ];
+  for (const prerequisite of scenarios) {
+    let error;try{requirePrerequisite([prerequisite],prerequisite.id);}catch(e){error=e;}
+    const result=classifyFailure(error);
+    assert.equal(result.status,prerequisite.status);assert.equal(result.origin,prerequisite.origin);
+    assert.ok(result.detail.includes(prerequisite.detail));
+  }
+  assert.doesNotThrow(()=>requirePrerequisite([{id:'18',status:'PASS'}],'18'));
+  assert.throws(()=>requirePrerequisite([],'05'),HarnessLimit);
 });

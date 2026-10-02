@@ -80,6 +80,10 @@ stops. It also refuses a settle launch after the run already has a recorded repo
 
 This is a plan only. Nothing under bch-cloak or its record was changed.
 
+Plan amended after the acceptance review in run R-68: cleanup is an eleventh required
+file edit, and recovery keeps a bounded tail from every run log. The original cleanup
+script treats any recorded report as finished, so it cannot be carried over unchanged.
+
 ### Files in scope
 
 The paths below are the live counterparts of the copies in `kit/bch-cloak-20261001/`:
@@ -108,9 +112,17 @@ The paths below are the live counterparts of the copies in `kit/bch-cloak-202610
 - `.lane/supervisor/notify-watch.sh`: remove every caller and mark it retired; retain its exact
   pre-cutover copy in the backup until the canary and rollback window finish, then archive or
   delete it at a later quiet point.
-- `.lane/supervisor/tidy-tabs.sh`: replace its `notify-log.tsv` recovery tail with a merged tail of
-  the per-run `watch-logs/R-n.log` files, where `watch/watch.mjs` writes every notice before
+- `.lane/supervisor/tidy-tabs.sh`: replace its `notify-log.tsv` recovery tail with a labelled, bounded tail from
+  every per-run `watch-logs/R-n.log` file, where `watch/watch.mjs` writes every notice before
   delivery. Keep the instruction to settle any final report the supervisor did not see.
+  Remove the broad label/branch-based watcher-tab and workspace sweeps: the standalone
+  watcher is detached, and branch absence cannot authorize deleting a protected worker.
+  Worker closures go only through the recorded-outcome helper below.
+- `.lane/supervisor/close-finished-agents.sh`: select the latest recorded run for each agent;
+  close its done/idle tab only for `outcome: done` or an abandoned run without a report.
+  Preserve blocked, needs-human, open, unknown and unrecorded workers, including a report
+  file that has not been ingested. Preserve any tab containing a protected agent. Remove
+  the agentless sweep because unknown panes provide no recorded completion evidence.
 - `.lane/supervisor/WORK-PATTERN.md`: document the new notice prefixes and fields, the 900-second
   idle grace, the stable-name delivery contract, and that the janitor rather than the watcher now
   closes finished worker tabs.
@@ -133,8 +145,8 @@ arms after recording the worker.
 
 | Existing watcher / launcher behavior | Cutover disposition |
 |---|---|
-| Appends every attempted notice to `notify-log.tsv`, allowing recovery when a supervisor dialog swallows a prompt. | `watch/watch.mjs` already writes each notice to its redirected `watch-logs/R-n.log` before prompting. Change `tidy-tabs.sh` to merge and tail those logs, then prove a delivered canary line appears in its recovery output. |
-| Closes a finished worker tab after delivering an `outcome: done` report. | Do not put cleanup in the generic watcher. Update `WORK-PATTERN.md` to give this job to the existing janitor/`close-finished-agents.sh`; verify an outcome-done tab closes within one janitor cycle while blocked and needs-human tabs remain. |
+| Appends every attempted notice to `notify-log.tsv`, allowing recovery when a supervisor dialog swallows a prompt. | `watch/watch.mjs` already writes each notice to its redirected `watch-logs/R-n.log` before prompting. Change `tidy-tabs.sh` to retain a bounded tail from every run log, then prove recovery includes the canary and a late notice from an older run alongside a long newer log. |
+| Closes a finished worker tab after delivering an `outcome: done` report. | Do not put cleanup in the generic watcher. Change `close-finished-agents.sh` to use recorded outcomes and update `WORK-PATTERN.md` to give it this job. Execute the actual copied tidy/cleanup path for one cycle: a recorded outcome-done tab closes while idle workers with recorded blocked and needs-human reports remain. A separate housekeeping implementation or dry run cannot establish this. |
 | Waits 900 seconds through a worker's transient idle-without-report state. | Pass the new `--idle-grace 900` option from bch-cloak's `arm-watch.sh`. The grace applies only after the watcher has seen the worker working; it still wakes immediately for a report, resumed worker or blocked worker. |
 | `continue.sh` waits for a working settle or exec session before launching. | Repointing the launcher to `open-session.mjs` deliberately changes waiting to immediate refusal, keeping the supervisor available. Carry the retry rule into the planned `SETTLE.md` edit: wait for the named busy session and retry the original continuation if it is still needed. A refused `settle.sh` also retains its original report notice until a retry opens the fresh session or confirms an already-recorded report. |
 | Finds the pane in the tab labelled `supervisor`, renames it and falls back to `supervisor-opus`. | Deliberately narrow to one stable delivery name. `session-start.sh` owns that name and `dispatch.sh` already refuses before starting a run when it is absent. Make rename failure visible and update `WORK-PATTERN.md`; verify both the preflight refusal and successful canary delivery after a supervisor restart. |
@@ -147,10 +159,11 @@ arms after recording the worker.
 2. Build and have the operator activate a Herdr Monitor release containing these commits. Confirm
    `current/watch/watch.mjs` and `current/supervisor/open-session.mjs` exist. Do not edit the
    LaunchAgent or restart Brain for this cutover.
-3. Copy the ten bch-cloak files above to a dated backup directory outside `.lane/supervisor/`, record their
+3. Copy the eleven bch-cloak files above to a dated backup directory outside `.lane/supervisor/`, record their
    checksums, and stop if the live copies differ unexpectedly from the inventory kit.
 4. Repoint `scripts/lane/launch-supervisor.mjs`, then update `continue.sh`, `arm-watch.sh`,
-   `SETTLE.md`, `WORK-PATTERN.md`, `session-start.sh`, `tidy-tabs.sh` and `routing.test.mjs`. Run
+   `SETTLE.md`, `WORK-PATTERN.md`, `session-start.sh`, `tidy-tabs.sh`,
+   `close-finished-agents.sh` and `routing.test.mjs`. Run
    the routing tests, the notice fixtures, the tidy recovery dry run and both supervisor wrappers.
 5. Change `dispatch.sh` last so every new run uses the new arm wrapper. Leave `notify-watch.sh`
    present but with zero callers during the canary; do not run both watchers for one run.
@@ -164,12 +177,17 @@ arms after recording the worker.
 ### Checks
 
 - Before the compatibility file is removed, `rg` over bch-cloak's `.lane/supervisor` and
-  `scripts/lane` finds no live invocation of `notify-watch.sh` or the canonical-checkout
+  `scripts/lane`, recursively including Python and other executable sources, finds no live invocation of `notify-watch.sh` or the canonical-checkout
   `contrib/settle-watch.mjs`; historical comments or the isolated backup do not count as callers.
+  Timestamped old script backups qualify as historical only after a recursive source scan
+  proves no active source references them, including references through other backups.
+  Retain their raw bytes outside the executed caller trees; the retirement scan itself
+  has no file-name exclusion for `notify-watch.sh` or copied backups.
 - The canary's `watch-logs/R-n.log` names `watch/watch.mjs`, the worker and report path, and there
   is exactly one watcher process for that run.
 - `tidy-tabs.sh --dry-run` includes the canary's final notice from `watch-logs/R-n.log`, proving a
-  prompt swallowed by an open dialog remains recoverable without `notify-log.tsv`.
+  prompt swallowed by an open dialog remains recoverable without `notify-log.tsv`. Include
+  multiple logs, a late notice from an older run and a longer newer log; bound each tail independently.
 - A blocked, missing or invalid report produces the matching `watch-*` notice and remains watched;
   it does not open a settle session.
 - With `--idle-grace 900`, an observed-working canary that becomes idle without a report emits no
@@ -181,8 +199,9 @@ arms after recording the worker.
   does not read a `verdict=` field.
 - After restarting the supervisor, `session-start.sh` visibly establishes `supervisor-opus` and
   the dispatch preflight succeeds; with the target absent, dispatch refuses before `org start`.
-- After an outcome-done delivery, the janitor closes the worker tab within one cycle. A blocked or
-  needs-human worker tab remains available, confirming cleanup moved rather than disappeared.
+- After ingesting the done canary and fixture reports for blocked and needs-human workers, execute the installed copied
+  `tidy-tabs.sh` → `close-finished-agents.sh` path with mutations for one cycle. Assert the done
+  worker tab closes and both blocked and needs-human worker tabs remain available.
 - Brain independently adds the stopped session to the operator queue. That second observation is
   expected; it does not prompt the supervisor or validate the report.
 - `continue.sh --dry-run`, the routing tests and the normal bch-cloak dispatch/settle path still
@@ -197,7 +216,7 @@ arms after recording the worker.
 ### Rollback
 
 Rollback only at a quiet point; never add `notify-watch.sh` beside an existing standalone watcher
-for the same run. Restore the ten backed-up files and their executable modes, reactivate the
+for the same run. Restore the eleven backed-up files and their executable modes, reactivate the
 preceding Herdr Monitor release, rerun the routing tests and both wrapper dry runs, then dispatch
 one canary and confirm its log says `notify-watch.sh`. If the failed canary's standalone watcher is
 still alive, let it finish or stop that exact recorded process before restoring dispatch. The

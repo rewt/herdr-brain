@@ -74,7 +74,7 @@ test('model-controlled tests and Git filters execute only sandboxed; fsmonitor/h
 
 test('record verification and scripted answer are kernel-confined even if model output redirects .org', { skip }, (t) => {
   const { root, repo, spec, run, discoveryRoots, scratchRoots } = fixture(t);
-  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'housekeeping', 'settle'], { cwd: path.resolve('.'), encoding: undefined });
+  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'housekeeping', 'settle', 'promote', 'release', 'supervisor', 'discovery', 'dispatch', 'watch'], { cwd: path.resolve('.'), encoding: undefined, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(archive.status, 0, String(archive.stderr));
   const unpack = spawnSync('tar', ['-x', '-C', spec.installation], { input: archive.stdout }); assert.equal(unpack.status, 0, String(unpack.stderr));
   run(process.execPath, [path.join(spec.installation, 'bin/org.mjs'), 'init', path.join(repo, '.org')]);

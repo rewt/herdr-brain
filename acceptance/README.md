@@ -12,22 +12,26 @@ ORG_ACTOR=plugin-entry-canary node acceptance/plugin-entry.mjs \
   --candidate /path/to/candidate-copy --native-codex /absolute/native/codex
 ```
 
-It builds and activates a release in a scratch user home, opens a fresh Herdr
-shell in a pristine Git project, starts the actual native Codex UI with
+It starts an isolated named Herdr server with a scratch user home and installs
+the plugin through Herdr's actual temporary-checkout build and move. Git fetch
+uses a local scratch repository in place of GitHub network transport. It opens
+a fresh Herdr shell in an unrelated pristine Git project and starts the actual native Codex UI with
 `herdr agent start`, and witnesses policy delivery at the native executable
-boundary. A second UI uses the installed supervisor pane script and witnesses
-the housekeeping start instruction. Both retain the release's exact policy
-path. The test sends no prompt, calls no model and starts no housekeeping loop;
+boundary. A second UI opens the manifest supervisor pane without a cwd override
+and witnesses canonical project selection and the housekeeping start instruction.
+Both retain the installed stable runtime's exact policy path after relocation.
+The test sends no prompt, calls no model and starts no housekeeping loop;
 the native UIs run under macOS sandbox-exec with network denied and writes
 restricted to scratch and terminal devices. It uses a dummy API credential,
 never the operator's credentials. All calls and waits have time limits.
 
-It closes only its created workspaces and restores the scratch adapters and
-shell startup bytes, retaining command receipts, policies, screens and summary
-under the printed scratch evidence path. It excludes plugin registration,
-GitHub download/build staging, console npm installation and launchd. The
-manifest's actual build command and release upgrade/rollback/restore mechanics
-are covered offline in `test/plugin-install.test.mjs`. Absolute native paths,
+It closes only its created workspaces, restores the scratch adapters and shell
+startup bytes, uninstalls its plugin and stops its own named server, retaining
+command receipts, policies, screens and summary under the printed evidence path.
+It excludes GitHub network access, npm downloads and launchd. Offline tests in
+`test/plugin-install.test.mjs` cover pinned console/MCP build arguments, real
+v0.1.3/v0.1.4 scratch releases, namespaced rollback, read-only shell files and
+durable recovery after failed/terminated writes. Absolute native paths,
 desktop/remote entry and other shells need their own entry transports; see
 [installation coverage](../herdr/README.md).
 

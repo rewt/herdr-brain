@@ -1,7 +1,7 @@
 # Machine installation and releases
 
 The release is independent of development: `release.sh build TAG` archives a Git
-tag, installs console dependencies in the archive, renames it to its final path
+tag, installs console and MCP dependencies in the archive, renames it to its final path
 and makes it read-only. Building never installs entry adapters from `.partial`.
 `release.sh activate TAG` installs entry from the final release, manages the
 record/org/lane launchers, switches `current`, reloads an existing Brain service
@@ -19,7 +19,14 @@ own scratch `HOME`, `ZDOTDIR`, release home and bin; they skip plugin registrati
 and launchd. `RELEASE_NO_NPM=1` skips dependency installation only. It does not
 skip entry. `MONITOR_INSTALL_BUILD_ONLY=1` is the archive build's internal
 dependency-only step. The manifest's normal `herdr/install.sh` build installs
-both dependencies and entry.
+console/MCP dependencies and entry. Both use their pinned lockfile via
+`npm ci --no-audit --no-fund --prefer-offline`.
+
+Herdr installs GitHub plugins through a temporary checkout that it moves after
+the build. That build copies entry's dependency-free runtime into a stable,
+content-addressed directory under `$HERDR_MONITOR_HOME/entry/runtimes` before
+installing adapters. The runtime remains usable when Herdr relocates or removes
+the checkout. Release activation instead pins the final immutable release.
 
 Native Codex must already be available; Claude is optional and uses Codex for
 worker validation. The installer resolves native executables from PATH and
@@ -52,6 +59,17 @@ unchanged snippet. An edited snippet/adapter or file symlink refuses preflight
 before the release pointer or removal changes. Original native CLIs stay intact.
 Immutable release copies and durable project records remain available.
 
+Entry plans all changes before writing them. It runs the selected discovery
+installer into a scratch bin with the original installer flags, so older
+releases such as v0.1.4 do not need `--check`. It validates existing managed
+bytes and write access, then syncs `.monitor-recovery.json` before copying a new
+runtime or changing any adapter, shell snippet or installation receipt. The
+journal contains each file's prior bytes and mode; a failed write rolls back
+completed changes. After a terminated install, `node herdr/entry-install.mjs
+--recover` (or the next install/remove) restores the previous state. A live
+transaction or edits to files needing recovery refuse without overwriting them.
+Stable runtimes remain after successful removal, alongside retained releases.
+
 For a Herdr GitHub installation, use the manifest's **restore-entry** action,
 or `node /installed/plugin/herdr/entry-install.mjs --remove`, before uninstalling
 the plugin. Monitor's restore command is separate from Herdr's
@@ -60,7 +78,10 @@ the plugin. Monitor's restore command is separate from Herdr's
 unregister operation alone cannot reverse shell changes. Local `plugin link`
 skips builds, so use release activation or run `herdr/install.sh` explicitly.
 
-The explicit **supervisor** pane launches entry in the canonical checkout.
+The explicit **supervisor** pane resolves the selected Herdr workspace through
+the invocation context and verifies its canonical Git checkout before entry.
+The pane's default working directory can be the plugin checkout; it never
+selects that directory as the project when plugin context is present.
 Its installed policy directs that supervisor to start default housekeeping;
 ordinary fresh native Herdr starts are workers, whose policy forbids the loop.
 Installation and shell startup never start a project scheduler. Running sessions

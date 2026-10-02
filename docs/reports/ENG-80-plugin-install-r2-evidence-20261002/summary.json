@@ -1,0 +1,18 @@
+{
+  "outcome": "passed",
+  "root": "/private/tmp/e80-native-swVhPG",
+  "candidate": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-plugin-install",
+  "binary": "/Users/rewt/.codex/packages/standalone/releases/0.160.0-aarch64-apple-darwin/bin/codex",
+  "runtime": "/private/tmp/e80-native-swVhPG/home/monitor/entry/runtimes/383cbbdbb7308febb870f96599fb06524f86ba72b372242aacdbb87a64d71e3e",
+  "pluginRoot": "/private/tmp/e80-native-swVhPG/home/.config/herdr/plugins/github/rewt.herdr-monitor-ea6132269c33",
+  "session": "eng80-r89-92943",
+  "cleanup": [],
+  "coverage": "real Herdr temporary plugin install/build/move, native worker start, manifest supervisor pane from unrelated project, restore and uninstall; no inference or housekeeping loop",
+  "excluded": [
+    "GitHub network clone (local transport)",
+    "absolute native binary paths",
+    "desktop/remote entry",
+    "npm dependency downloads",
+    "launchd"
+  ]
+}

@@ -153,6 +153,7 @@ unlink_plugin() {
 
 activate() {
   local tag=$1 dir="$HOME_DIR/releases/$1"
+  git check-ref-format "refs/tags/$tag" >/dev/null || die "invalid release identifier: $tag"
   [ -d "$dir" ] || die "no release $tag; run: release.sh build $tag"
   # Check every launcher/entry destination before switching current. Older
   # releases without discovery remove the new transport when rolled back.
@@ -177,7 +178,10 @@ activate() {
 rollback() {
   [ -L "$HOME_DIR/previous" ] || die "no previous release to roll back to (restore returns to the dev checkout)"
   local prev; prev=$(readlink "$HOME_DIR/previous")
-  activate "$(basename "$prev")"
+  case "$prev" in
+    "$HOME_DIR/releases/"*) activate "${prev#"$HOME_DIR/releases/"}" ;;
+    *) die "previous is outside the releases directory: $prev" ;;
+  esac
 }
 
 entry() {

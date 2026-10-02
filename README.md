@@ -10,7 +10,7 @@ inference tokens, and a completely fresh session of any harness can continue fro
 - Durability replaces conversational context; it does not add bureaucracy around it.
 - Reasoning costs tokens. Coordination mostly should not.
 
-Node ≥ 20, no dependencies (the optional `console/` has its own). `npm link` installs
+Node ≥ 20, no core dependencies (the optional `console/` and `mcp/` have their own). `npm link` installs
 `record` and its permanent `org` alias. Without npm, symlink `bin/org.mjs` onto your PATH as
 `record`; do not copy it away from its sibling `lib/` directory.
 
@@ -28,6 +28,7 @@ look like one project.
 | `lib/` | The dependency-free core: event storage, state folding, reports and views. |
 | `brain/` | Captures stopped session screens for the operator queue and provides commands that start or answer sessions. |
 | `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
+| `mcp/` | [Foreground stdio MCP adapter](mcp/README.md) over the record CLI for agents without a shell wrapper. |
 | `promote/` | [Ordered promotion queue](promote/README.md), detached drain, scoped cleanup and supervisor outcomes. |
 | `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
 | `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
@@ -299,7 +300,7 @@ record console --modern [--project NAME]
 node console/app.mjs --modern --print 140x40 [--keys 'a']   # one frame as text, no terminal needed
 ```
 
-The core stays dependency-free: only `console/` has dependencies, and root `npm test` passes
+The core stays dependency-free: optional `console/` and `mcp/` have their own dependencies, and root `npm test` passes
 without them. `npm --prefix console test` runs the console tests alone.
 
 ### Legacy compatibility console

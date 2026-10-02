@@ -5,6 +5,9 @@
 - `console/` may depend on Ink, React and a markdown renderer. The core stays dependency-free. The console
   writes only through the `org` CLI (child process, argument arrays) and never appends to `events.jsonl`
   itself.
+- `mcp/` is an optional foreground stdio adapter with its own dependencies. It calls the record CLI
+  with argument arrays for every record operation and never appends to `events.jsonl` itself.
+  Run `npm --prefix mcp ci` and `npm --prefix mcp test` when changing it; tests stay offline.
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
   and never writes `events.jsonl`. `supervisor/` holds the tracked settle prompt and the scripts that run it.
 - Run `npm test` before and after a change. Tests are offline and never call a model.

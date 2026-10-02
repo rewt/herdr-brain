@@ -21,7 +21,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { ROUTE_PRESET } from './preset.mjs';
-import { readPlainFile, writeFileAtomic } from '../lib/files.mjs';
+import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 
 import {
   markTopicSessionsDone,
@@ -258,7 +258,7 @@ function readConfig(file, { required = false } = {}) {
   if (!required && !existsSync(file)) return undefined;
   let text;
   try {
-    text = readPlainFile(file);
+    text = readFileSync(file, "utf8");
   } catch (error) {
     fail(`cannot read lane config ${file}: ${error.message}`);
   }
@@ -2158,7 +2158,7 @@ function check(args) {
   };
   const directory = join(REPO, ".lane");
   const path = join(directory, "gate.json");
-  writeFileAtomic(path, `${JSON.stringify(gate, null, 2)}\n`);
+  writeAgentFileAtomic(path, `${JSON.stringify(gate, null, 2)}\n`);
   process.stdout.write(`GATE ${head} exit=${exitCode} (${durationS.toFixed(3)}s)\n`);
   process.exit(exitCode);
 }

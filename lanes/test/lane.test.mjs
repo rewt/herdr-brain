@@ -19,6 +19,7 @@ import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
 const HERDR_CLIENT = resolve(HERE, "..", "board", "herdr-client.mjs");
@@ -348,7 +349,7 @@ if (args[0] === "workspace" && args[1] === "list") {
   if (process.env.FAKE_ENTRY_BIN) {
     const binary = process.env.FAKE_ENTRY_BIN + '/' + args[args.indexOf('--kind') + 1];
     const native = args.slice(args.indexOf('--') + 1);
-    execFileSync('/usr/bin/script', ['-q', '/dev/null', binary, ...native], { cwd: process.env.FAKE_HERDR_LANE_PATH, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    execFileSync(process.execPath, [${JSON.stringify(resolve(HERE, '../../test/helpers/pty.mjs'))}, '--run', binary, ...native], { cwd: process.env.FAKE_HERDR_LANE_PATH, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
   }
   state.agent = args[2];
   save();
@@ -1197,7 +1198,7 @@ test("named dispatch refuses copied metadata and reserved CLI arguments before a
   }
 });
 
-test("always_args sees the canonical model and effort that dispatch emits", () => {
+test("always_args sees the canonical model and effort that dispatch emits", { skip: PTY_SKIP_REASON }, () => {
   for (const kind of ["codex", "claude"]) {
     const effortArgs = kind === "codex" ? ["-c", "model_reasoning_effort=low"] : ["--effort", "low"];
     const unrelatedConfig = kind === "codex" ? ["-c", "sandbox_workspace_write.network_access=true"] : [];
@@ -1214,6 +1215,7 @@ test("always_args sees the canonical model and effort that dispatch emits", () =
       writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),bypass:process.env.MONITOR_ENTRY_BYPASS,tty:process.stdin.isTTY}));`, { mode: 0o755 });
       execFileSync(process.execPath, [resolve(HERE, '../../discovery/install.mjs'), '--bin', entryBin, '--codex', native, '--claude', native]);
       fixture.env.FAKE_ENTRY_BIN = entryBin; fixture.env.NATIVE_RECEIPT = receipt;
+      fixture.env.TEST_PTY_SCRIPT = SCRIPT;
       const run = lane(fixture, ["dispatch", "canonical-options", "--route", "engineer"]);
       assert.equal(run.status, 0, run.stderr);
       const started = fake.calls().find((args) => args[0] === "agent" && args[1] === "start");

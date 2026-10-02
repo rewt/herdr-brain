@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
-import { readPlainFile } from '../lib/files.mjs';
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ROUTE_PRESET } from './preset.mjs';
@@ -270,7 +269,7 @@ export function selectRoute(config, taskClass, pool) {
 export function readRoutesConfig(file) {
   let parsed;
   try {
-    parsed = JSON.parse(readPlainFile(file));
+    parsed = JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
     throw new Error(`cannot read route config ${file}: ${error.message}`);
   }

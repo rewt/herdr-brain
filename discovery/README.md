@@ -89,8 +89,13 @@ brief, exact report path and run ID. They commit, check, promote and finish thro
 `discovery/client.mjs`. Reports are checked before promotion, then ingested by
 the record CLI. A done report cannot be ingested before its commit is integrated;
 a second different report for a run is refused by the record. Blocked work can
-be reported without promotion. Worktrees/commits survive an interrupted adapter;
-the existing lane CLI close/archive protections still apply.
+be reported without promotion. Worktrees/commits with work survive an interrupted
+adapter; the existing lane CLI close/archive protections still apply. Closing a
+session that never started a run removes its entry worktree and branch only when
+the assigned Git identity and branch still match, the worktree is clean, and the
+branch has no commits beyond integration. Cleanup runs under the coordination
+lock and never forces deletion. Setup failure after creating an untouched lane
+uses the same cleanup. Dirty, committed or started work is retained.
 
 The session parent exposes fixed operations only for its own worktree creation
 receipt, branch and verified Git identity. Requests cannot select a repository,
@@ -116,13 +121,20 @@ Canonical `validate` and `prepare` fields are authoritative independently; lane
 values are used only when the corresponding canonical field is absent. Both
 check and promote print the effective command and its configuration source.
 
-Trusted file writes use random temporary files opened with `O_NOFOLLOW` and
-`O_EXCL`. Directory components are opened without following symlinks and checked
+Privileged writes into agent-writable locations use random temporary files opened
+with `O_NOFOLLOW` and `O_EXCL`. Directory components are opened without following symlinks and checked
 against the entered inode. Synchronous writes stay relative to that kernel-pinned
-directory, so an agent replacing an ancestor cannot redirect the write. Reads
-of requests, routing, validation configuration and reports use the same directory
-boundary and `O_NOFOLLOW`. Regression tests plant the old predictable symlink,
+directory, so an agent replacing an ancestor cannot redirect the write. This
+boundary is local to entry capabilities; ordinary record, report and operator
+configuration IO retains normal symlink semantics, including `ORG_DIR`, `--org`,
+`LANE_CONFIG`, route-config and a linked `.lane.json`. Entry resolves selected
+record paths once before launching the child and verifies those receipts later.
+Regression tests plant the old predictable symlink,
 replace a directory during a write, and exercise every existing launcher.
+
+Offline scratch directories use the system temporary directory's real path.
+All PTY tests share a transport that selects BSD script arguments on Darwin and
+util-linux script arguments on Linux; unavailable transports skip explicitly.
 
 Offline checks are part of `npm test`. A native sandbox check, still with no
 model call, can be run explicitly outside a nested sandbox:

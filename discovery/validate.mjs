@@ -4,20 +4,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { plainDirectory, readPlainFile } from '../lib/files.mjs';
+import { plainDirectory } from '../lib/files.mjs';
 const [binary, cwd] = process.argv.slice(2);
 try {
   const file = process.env.MONITOR_PROJECT_CONFIG;
-  const config = file && fs.existsSync(file) ? JSON.parse(readPlainFile(file)) : {};
+  const config = file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
   const localFile = path.join(cwd, '.lane.json');
-  const localConfig = fs.existsSync(localFile) ? JSON.parse(readPlainFile(localFile)) : {};
+  const localConfig = fs.existsSync(localFile) ? JSON.parse(fs.readFileSync(localFile, 'utf8')) : {};
   const has = (key) => Object.hasOwn(config, key);
   const source = (key) => has(key) ? `canonical ${file}` : `lane ${localFile}`;
   const prepare = has('prepare') ? config.prepare : localConfig.prepare;
   let validate = has('validate') ? config.validate : localConfig.validate;
   let validationSource = source('validate');
   if (!validate && fs.existsSync(path.join(cwd, 'package.json'))) {
-    if (JSON.parse(readPlainFile(path.join(cwd, 'package.json'))).scripts?.test) { validate = 'npm test'; validationSource = `project ${path.join(cwd, 'package.json')}`; }
+    if (JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).scripts?.test) { validate = 'npm test'; validationSource = `project ${path.join(cwd, 'package.json')}`; }
   }
   if (!validate && fs.existsSync(path.join(cwd, 'test'))) { validate = 'node --test'; validationSource = `project ${path.join(cwd, 'test')}`; }
   if (!validate) throw new Error('project validation is unknown; set validate in .lane.json to the real project check');

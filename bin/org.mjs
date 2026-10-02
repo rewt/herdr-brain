@@ -6,7 +6,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
-import { readPlainFile } from '../lib/files.mjs';
 import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
@@ -538,7 +537,7 @@ function ingestFile(ctx, file, runHint) {
   const abs = path.resolve(file);
   let text;
   try {
-    text = readPlainFile(abs);
+    text = fs.readFileSync(abs, 'utf8');
   } catch (error) {
     throw new UserError(`cannot read ${abs}: ${error.code ?? error.message}`);
   }
@@ -658,7 +657,7 @@ function check(argv) {
   const abs = path.resolve(positionals[0]);
   let text;
   try {
-    text = readPlainFile(abs);
+    text = fs.readFileSync(abs, 'utf8');
   } catch (error) {
     throw new UserError(`cannot read ${abs}: ${error.code ?? error.message}`);
   }
@@ -702,7 +701,7 @@ function brief(argv) {
   const run = ctx.state.runs.get(positionals[0]);
   if (!run) throw new UserError(`unknown run ${positionals[0]}`);
   if (!fs.existsSync(run.brief_path)) writeFileAtomic(run.brief_path, renderBrief(ctx.state, run.id, view(ctx)));
-  out(readPlainFile(run.brief_path));
+  out(fs.readFileSync(run.brief_path, 'utf8'));
   return 0;
 }
 

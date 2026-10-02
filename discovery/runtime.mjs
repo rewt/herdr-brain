@@ -6,8 +6,8 @@ import os from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
-import { plainDirectory, readPlainFile } from '../lib/files.mjs';
-import { withLock, writeFileAtomic, findOrgDir } from '../lib/store.mjs';
+import { plainDirectory, readPlainFile, writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
+import { withLock, findOrgDir } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig } from '../lanes/routes.mjs';
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { readReport } from '../lib/report.mjs';
@@ -28,7 +28,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const topic = `entry-${id.slice(0, 12)}`;
   const env = { ORG_ACTOR: `entry-${id.slice(0, 12)}` };
   // Never inherit a different project's record into an unrelated session.
-  const org = findOrgDir({ cwd, env: {} }) ?? path.join(project.canonical, '.org');
+  let org = findOrgDir({ cwd, env: {} }) ?? path.join(project.canonical, '.org');
   env.ORG_DIR = org;
   const record = (args, location = project.canonical) => command(process.execPath, [local('../bin/org.mjs'), ...args], location, env);
   const gitEnv = { ...env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
@@ -58,7 +58,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   };
   externalGit(project.canonical);
   const routes = loadDiscoveredRoutes({ cwd: project.canonical, env: {} });
-  const lifecycle = Object.assign({}, ...routes.files.map((file) => JSON.parse(readPlainFile(file))));
+  const lifecycle = Object.assign({}, ...routes.files.map((file) => JSON.parse(fs.readFileSync(file, 'utf8'))));
   const branch = git(['branch', '--show-current']);
   const main = lifecycle.main ?? branch;
   if (!main || branch !== main) throw new Error('canonical checkout must be on the configured integration branch');
@@ -68,6 +68,8 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const initial = withLock(coordination, () => {
     ignoreRuntime(project);
     record(['init', org]);
+    // Resolve operator-selected record links once, before the child can act.
+    org = fs.realpathSync(org); env.ORG_DIR = org; gitEnv.ORG_DIR = org;
     const stateFile = path.join(coordination, 'routing.json');
     let routing = fs.existsSync(stateFile) ? JSON.parse(readPlainFile(stateFile)) : null;
     if (routes.suggested && !routing) {
@@ -76,10 +78,11 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
         '--category', 'other', '--wait', '--recommend', 'yes', '--why',
         'Engineering uses Codex gpt-6.1-sol high; independent review uses Claude opus high (Codex gpt-6-astra xhigh is an alternative). The portable preset also includes chore, monitor, planning, settle and executive routes. Reply yes to adopt it, or give a complete route configuration; no personal paths or accounts are copied.']).split('\n')[0];
       routing = { parent, question, preset: structuredClone(ROUTE_PRESET) };
-      writeFileAtomic(stateFile, JSON.stringify(routing, null, 2) + '\n');
+      writeAgentFileAtomic(stateFile, JSON.stringify(routing, null, 2) + '\n');
     }
     return { routing, routes };
   });
+  const recordPaths = Object.fromEntries(['events.jsonl', 'config.json', 'runs', 'reports'].map((name) => [name, fs.realpathSync(path.join(org, name))]));
   let workspace = project.canonical;
   if (role === 'worker') {
     const root = plainDirectory(path.resolve(worktreeRoot ?? path.join(os.homedir(), '.herdr/worktrees', createHash('sha256').update(project.identity).digest('hex').slice(0, 16))));
@@ -89,14 +92,35 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     workspace = path.join(root, `lane-${topic}`);
     withLock(coordination, () => git(['worktree', 'add', '-b', `lane/${topic}`, workspace, main]));
   }
-  const runtime = plainDirectory(path.resolve(runtimeDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-entry-'))));
-  const requests = path.join(runtime, id);
-  plainDirectory(requests);
-  const metadata = plainDirectory(path.join(git(['rev-parse', '--path-format=absolute', '--git-dir'], workspace), 'monitor-entry', id));
-  const configFile = path.join(metadata, 'lane-config.json');
-  // Keep all project commands in the validation sandbox. The outer lane process
-  // only runs trusted module code and fixed Git operations; prepare runs there too.
-  writeFileAtomic(configFile, JSON.stringify({ main, prepare: [], worktree_root: path.dirname(workspace) }));
+  const cleanupUntouched = () => {
+    if (role !== 'worker') return;
+    withLock(coordination, () => {
+      if (!fs.existsSync(workspace)) return;
+      const now = gitProject(workspace);
+      if (now.identity !== project.identity || now.canonical !== project.canonical || now.checkout !== workspace) return;
+      if (git(['branch', '--show-current'], workspace) !== `lane/${topic}` || git(['branch', '--show-current']) !== main) return;
+      if (git(['status', '--porcelain', '--untracked-files=all'], workspace)) return;
+      if (git(['rev-list', `${main}..lane/${topic}`])) return;
+      // Never force removal. Git refuses if work appears after the clean check.
+      git(['worktree', 'remove', workspace]);
+      git(['branch', '-d', `lane/${topic}`]);
+    });
+  };
+  let requests, metadata, configFile;
+  try {
+    const runtime = plainDirectory(path.resolve(runtimeDir ?? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-entry-'))));
+    requests = plainDirectory(path.join(runtime, id));
+    metadata = plainDirectory(path.join(git(['rev-parse', '--path-format=absolute', '--git-dir'], workspace), 'monitor-entry', id));
+    configFile = path.join(metadata, 'lane-config.json');
+    // Keep all project commands in the validation sandbox. The outer lane
+    // process only runs trusted code and fixed Git operations.
+    writeAgentFileAtomic(configFile, JSON.stringify({ main, prepare: [], worktree_root: path.dirname(workspace) }));
+  } catch (error) {
+    if (requests) fs.rmSync(requests, { recursive: true, force: true });
+    if (metadata) fs.rmSync(metadata, { recursive: true, force: true });
+    try { cleanupUntouched(); } catch (cleanup) { console.error(`monitor entry cleanup: ${cleanup.message}`); }
+    throw error;
+  }
   let run, item, report, appliedRouting = false;
   const audit = [];
   const verify = (op) => {
@@ -111,10 +135,9 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       if (!receipt || !['context', 'continue', 'abort'].includes(op)) throw new Error('assigned branch changed; if resolving this lane rebase, use continue or abort');
     }
     if (fs.realpathSync(org) !== org || fs.realpathSync(requests) !== requests || fs.realpathSync(metadata) !== metadata) throw new Error('runtime or record path redirected');
-    for (const name of ['events.jsonl', 'config.json']) {
-      if (fs.lstatSync(path.join(org, name)).isSymbolicLink()) throw new Error('record file redirected');
+    for (const [name, target] of Object.entries(recordPaths)) {
+      if (fs.realpathSync(path.join(org, name)) !== target) throw new Error('record path redirected');
     }
-    for (const name of ['runs', 'reports']) if (fs.realpathSync(path.join(org, name)) !== path.join(org, name)) throw new Error('record directory redirected');
     // Git clean filters can execute code outside the validation sandbox.
     externalGit(workspace); externalGit(project.canonical);
   };
@@ -165,7 +188,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       else selected = validateRoutesConfig(JSON.parse(q.meta.answer));
       const file = path.join(workspace, '.lane.json');
       const existing = fs.existsSync(file) ? JSON.parse(readPlainFile(file)) : {};
-      writeFileAtomic(file, JSON.stringify({ ...existing, ...selected, authority: `Operator answer to ${initial.routing.question}` }, null, 2) + '\n');
+      writeAgentFileAtomic(file, JSON.stringify({ ...existing, ...selected, authority: `Operator answer to ${initial.routing.question}` }, null, 2) + '\n');
       appliedRouting = true;
       return { applied: initial.routing.question, file };
     }
@@ -231,15 +254,22 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
         // Requests are agent-writable. Never follow an agent-created temporary
         // symlink from a privileged writer, and never accept a redirected queue.
         if (fs.realpathSync(requests) !== requests) throw new Error('request queue redirected');
-        writeFileAtomic(reply, JSON.stringify(response) + '\n', 0o600);
+        writeAgentFileAtomic(reply, JSON.stringify(response) + '\n', 0o600);
       }
     } finally { processing = false; }
   };
+  let closed = false;
   const close = () => {
-    writeFileAtomic(path.join(project.canonical, '.lane/discovery', `${topic}.audit.json`), JSON.stringify(audit, null, 2) + '\n');
-    fs.rmSync(requests, { recursive: true, force: true });
-    fs.rmSync(metadata, { recursive: true, force: true });
-    // Worktrees and records survive exit, failure and interrupted agents.
+    if (closed) return;
+    closed = true;
+    try {
+      writeAgentFileAtomic(path.join(project.canonical, '.lane/discovery', `${topic}.audit.json`), JSON.stringify(audit, null, 2) + '\n');
+    } finally {
+      fs.rmSync(requests, { recursive: true, force: true });
+      fs.rmSync(metadata, { recursive: true, force: true });
+      // Keep every started run, dirty checkout or branch containing new work.
+      if (!run) try { cleanupUntouched(); } catch (error) { console.error(`monitor entry cleanup: ${error.message}`); }
+    }
   };
   return { context, dispatch, poll, close };
 }

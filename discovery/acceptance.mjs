@@ -12,8 +12,8 @@ const source = fileURLToPath(new URL('../', import.meta.url));
 const { values: opt } = parseArgs({ options: { binary: { type: 'string' }, model: { type: 'string', default: 'gpt-5.6-luna' },
   effort: { type: 'string', default: 'low' }, 'skip-live': { type: 'boolean' }, keep: { type: 'boolean' } } });
 const binary = opt.binary ?? spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout.trim();
-const install = fs.mkdtempSync('/private/tmp/monitor-installed-');
-const scratch = fs.mkdtempSync('/private/tmp/monitor-projects-');
+const install = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-installed-'));
+const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-projects-'));
 const evidence = path.join(scratch, 'evidence'); fs.mkdirSync(evidence);
 const results = [], usage = [];
 const cleanEnv = { ...process.env };

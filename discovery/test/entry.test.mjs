@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { createEntry, command } from '../runtime.mjs';
 import { findOrgDir, initOrg, loadEvents } from '../../lib/store.mjs';
@@ -9,7 +10,7 @@ import { loadDiscoveredRoutes, resolveLaunchRoute } from '../../lanes/routes.mjs
 import { entryPolicy } from '../policy.mjs';
 const root = new URL('../../', import.meta.url).pathname;
 const fixture = (t) => {
-  const scratch = fs.mkdtempSync('/private/tmp/monitor-entry-test-');
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-entry-test-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'unrelated'); fs.mkdirSync(repo);
   command('git', ['init', '-q', '-b', 'main'], repo);

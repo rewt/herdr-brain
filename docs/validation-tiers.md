@@ -38,6 +38,8 @@ uses the existing runner's supported nine-minute maximum; per-file and fixture
 command bounds and owned-process cleanup remain. The single aggregate exceeded
 both six and nine minutes under observed load, so batching avoids losing completed
 coverage to that aggregate deadline.
+After rebasing onto main's interim timeout adjustment, both batches retain its
+eight-minute file bound; ordinary fixture calls keep their 15-second limit.
 
 Evidence is keyed by the entire Git tree, exact command and hashed environment.
 No test category or path is excluded from tree identity. A public review record

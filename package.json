@@ -8,8 +8,8 @@
     "test:fast": "node test/helpers/run.mjs test/report.test.mjs test/discernment.test.mjs test/sanitization.test.mjs brain/test/capture.test.mjs console/test/model.test.mjs console/test/modern.test.mjs console/test/frame.test.mjs console/test/paint.test.mjs console/test/names.test.mjs console/test/waiting.test.mjs console/proto/prototype.test.mjs lanes/test/routes.test.mjs lanes/test/validation.test.mjs",
     "test:promotion": "npm test && npm run test:lanes && npm run test:acceptance",
     "test": "npm run test:core && npm run test:cycle",
-    "test:core": "node test/helpers/run.mjs --suite-timeout=540000 test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs watch/test/*.test.mjs dispatch/test/*.test.mjs housekeeping/test/*.test.mjs discovery/test/*.test.mjs promote/test/*.test.mjs",
-    "test:cycle": "node test/helpers/run.mjs --suite-timeout=540000 settle/test/*.test.mjs supervisor/test/*.test.mjs",
+    "test:core": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs watch/test/*.test.mjs dispatch/test/*.test.mjs housekeeping/test/*.test.mjs discovery/test/*.test.mjs promote/test/*.test.mjs",
+    "test:cycle": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 settle/test/*.test.mjs supervisor/test/*.test.mjs",
     "test:lanes": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 lanes/test/*.test.mjs",
     "test:acceptance": "node test/helpers/run.mjs acceptance/test/*.test.mjs"
   },

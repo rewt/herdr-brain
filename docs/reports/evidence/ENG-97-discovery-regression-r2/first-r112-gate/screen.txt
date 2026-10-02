@@ -1,0 +1,28 @@
+Release acceptance: lane/discovery-regression (160s) — 24 pass / 2 fail / 0 pending — NOT READY
+PASS    01 Candidate snapshot
+PASS    02 New project: record discovers and populates
+PASS    03 New project: routes resolve without config
+PASS    04 New project: installed supervisor entry and record bootstrap
+PASS    05 Real Herdr boundary and configured fixture
+PASS    06 Configured cycle: dispatch/report/ingest/promote/close
+PASS    07 Unconfigured promotion queue: FIFO, notices and refusal
+PASS    08 Failure path: missing worker
+PASS    09 Failure path: invalid worker
+PASS    10 Failure path: blocked worker
+PASS    11 Fix round: same worker, fresh durable run
+PASS    12 Watch cutover: idle grace and exclusive watcher
+PASS    13 Housekeeping closes only eligible finished workers
+PASS    14 Scratch release build/activate/rollback/restore
+PASS    15 Full console dependency build (offline)
+PASS    16 Existing project: copy live calls and inventory drift
+PASS    17 Existing project: routing and both wrapper dry runs
+PASS    18 Existing project: org PATH consumers
+PASS    19 ENG-64: every file switch and rollback
+PASS    20 ENG-64: final contrib removal and restoration
+FAIL    21 Real discovery: concurrent lanes and promotion
+FAIL    22 Real discovery: routing question waits and answer applies
+PASS    23 New project: default supervisor dispatch/watch/ingest cycle
+PASS    24 New project: report/settle/fix/settle/promotable without config
+PASS    25 New project: fresh/history supervisor, notices, fix, promotion and record completion
+PASS    26 Cleanup and scope audit
+Evidence: /private/tmp/herdr-acceptance-FTsF0x/evidence (NN.jsonl; summary.json has reasons)

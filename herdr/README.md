@@ -15,6 +15,10 @@ bash herdr/release.sh restore
 ```
 
 Only the operator/supervisor performs machine installation. Lane tests set their
+own refusal/fake Herdr CLI before any lane or entry operation. The bounded test
+runner also clears inherited Herdr IDs and pins an absent scratch socket; neither
+`npm test` nor `npm run test:lanes` contacts the operator's server. Tests run with
+their own actor and bounded fixture commands. They set their
 own scratch `HOME`, `ZDOTDIR`, release home and bin; they skip plugin registration
 and launchd. `RELEASE_NO_NPM=1` skips dependency installation only. It does not
 skip entry. `MONITOR_INSTALL_BUILD_ONLY=1` is the archive build's internal

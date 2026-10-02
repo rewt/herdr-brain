@@ -25,13 +25,15 @@ function fixture(t) {
   for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'supervisor']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
   fs.copyFileSync(path.join(source, 'herdr-plugin.toml'), path.join(repo, 'herdr-plugin.toml'));
   const native = path.join(nativeBin, 'codex'), receipt = path.join(root, 'native.json');
+  // Install before any lane open or entry launch, including direct node --test.
+  fs.writeFileSync(path.join(nativeBin, 'herdr'), '#!/bin/sh\necho "plugin fixture: Herdr is offline" >&2\nexit 1\n', { mode: 0o755 });
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));\n`, { mode: 0o755 });
   fs.symlinkSync(native, path.join(nativeBin, 'claude'));
   const env = releaseEnvironment(process.env, { HOME: home, ZDOTDIR: home, ORG_ACTOR: `eng80-r97-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
     PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: path.join(nativeBin, 'claude'), HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
     RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', MONITOR_INSTALL_BUILD_ONLY: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
-    HERDR_INTEGRATION_ID: '', HERDR_PANE_ID: '', HERDR_PLUGIN_ROOT: '', HERDR_PLUGIN_CONTEXT_JSON: '', MONITOR_RUNTIME_DIR: path.join(root, 'queue'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'), ENTRY_TEST_RECEIPT: receipt,
+    HERDR_ENV: '', HERDR_SOCKET_PATH: path.join(root, 'absent.sock'), HERDR_WORKSPACE_ID: '', HERDR_TAB_ID: '', HERDR_INTEGRATION_ID: '', HERDR_PANE_ID: '', HERDR_PLUGIN_ROOT: '', HERDR_PLUGIN_CONTEXT_JSON: '', MONITOR_RUNTIME_DIR: path.join(root, 'queue'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'), ENTRY_TEST_RECEIPT: receipt,
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   const run = (file, args, cwd = repo, extra = {}) => spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 20000 });
   const ok = (file, args, cwd, extra) => { const r = run(file, args, cwd, extra); assert.equal(r.status, 0, r.error?.message ?? r.stdout + r.stderr); return r.stdout; };

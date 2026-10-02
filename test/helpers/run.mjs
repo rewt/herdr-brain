@@ -5,6 +5,9 @@ import { tap } from 'node:test/reporters';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { registerProcess, killProcess, auditGroup } from './processes.mjs';
+import { offlineHerdr } from './offline-herdr.mjs';
+
+const cleanupHerdr = offlineHerdr();
 
 const script = fileURLToPath(import.meta.url);
 const policy = fileURLToPath(new URL('./fixture-policy.mjs', import.meta.url));
@@ -76,6 +79,7 @@ if (worker) {
     if (!result.ok || !result.signaled) code = 1;
     if (child.connected) child.disconnect();
     const exit = () => {
+      cleanupHerdr();
       child.stdout.destroy(); child.stderr.destroy(); child.unref();
       process.exit(code);
     };

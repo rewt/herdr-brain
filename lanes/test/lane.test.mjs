@@ -25,7 +25,6 @@ const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
 const HERDR_CLIENT = resolve(HERE, "..", "board", "herdr-client.mjs");
 const GIT = execFileSync("/bin/sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
 const HEAD = execFileSync("/bin/sh", ["-c", "command -v head"], { encoding: "utf8" }).trim();
-const HAS_HERDR = spawnSync("/bin/sh", ["-c", "command -v herdr"], { stdio: "ignore" }).status === 0;
 const NEGATIVE_CONTROL = process.env.LANE_TEST_NEGATIVE_CONTROL === "1";
 const parseVerdict = (text) => text.match(/^\*\*(PASS|NEEDS-WORK|FAIL)\*\*/u)?.[1];
 const HERMETIC_GIT_ENV = "HERDR_LANES_TEST_HERMETIC_GIT_ENV";
@@ -4443,14 +4442,13 @@ test("status exits quietly when a downstream reader closes stdout", () => {
   }
 });
 
-test("verify-agent mismatch control is optional when herdr is absent", {
-  skip: HAS_HERDR ? false : "herdr is absent; herdr-dependent tests are skipped",
-}, () => {
+test("verify-agent mismatch control uses a fake Herdr", () => {
   const fixture = makeFixture();
   try {
+    writeFakeHerdr(fixture);
     const run = spawnSync(process.execPath, [LANE, "verify-agent", "missing-agent", "/wrong/path"], {
       cwd: fixture.repo,
-      env: { ...fixture.env, PATH: process.env.PATH },
+      env: fixture.env,
       encoding: "utf8",
     });
     assert.equal(run.status, 1);

@@ -3,6 +3,9 @@ import nodeTest from 'node:test';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { offlineHerdr } from './offline-herdr.mjs';
+
+offlineHerdr();
 
 export const TEST_TIMEOUT = 60_000;
 export const COMMAND_TIMEOUT = 15_000;

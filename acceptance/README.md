@@ -335,6 +335,19 @@ remove credentials before shutting down owned workspaces, remove them again
 afterward, and emit an interrupted summary with cleanup errors and credential
 residue. Forced SIGKILL cannot run a handler. `ACCEPTANCE_TMPDIR` can select another scratch parent.
 If cleanup fails, the summary identifies the failure and scratch ownership ledger.
+Creation replies (including linked worktree open/create replies) are appended and
+synced to `creations.jsonl` before topology or shell-startup probes. Cleanup replays
+that journal even when ownership folding failed, attempts each receipt-owned
+workspace independently, and audits the raw native workspace list. A failed
+workspace get never counts as proof of closure. `cleanup-residue.json` retains
+the before/after inventories and names every remaining owned or scratch workspace
+by ID and label; an unreceipted scratch workspace is reported, never granted
+closure authority. Interruption blocks further candidate commands before cleanup.
+Herdr can implicitly open the main checkout during `worktree create/open --cwd`.
+Before those calls the adapter syncs a creation intent containing the raw baseline
+IDs and confined checkout paths. New native IDs at those exact paths are retained
+as creation receipts, including when cleanup must recover a lost creation reply;
+existing IDs and unrelated paths never gain ownership through an intent.
 Every discovery/verification root that still exists is listed in the summary and
 on the cleanup screen line regardless of keep; a failed non-keep cleanup never
 hides retained paths.

@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { saveCreation, creationTargets, saveCreationIntent, implicitParents } from './receipts.mjs';
 
 const root = fs.realpathSync(process.env.ACCEPTANCE_ROOT);
 const ledger = path.join(root, 'ownership.json');
@@ -26,9 +27,14 @@ const owned = (id, collection) => { if (!state[collection].includes(id)) throw n
 class ReceiptLimit extends Error {}
 async function updateOwnership(change) {
   const lock = path.join(root, 'ownership.lock');
+  const deadline = Date.now() + 10_000;
   for (;;) {
     try { fs.mkdirSync(lock); break; }
-    catch (error) { if (error.code !== 'EEXIST') throw error; await new Promise((resolve) => setTimeout(resolve, 25)); }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if (Date.now() >= deadline) throw new ReceiptLimit('ownership lock timed out; creation receipts retained');
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
   }
   try {
     const latest = JSON.parse(fs.readFileSync(ledger, 'utf8'));
@@ -43,9 +49,13 @@ function safePath(p) {
   while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
   if (!inside(ancestor)) throw new CapabilityRefusal(`path outside scratch: ${p}`);
 }
-let child;
+let child, interrupted = false;
 const agentPanes = new Map();
-for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child?.kill(signal); process.exit(1); });
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
+  interrupted = true;
+  // Let the close handler persist any creation reply already in the pipe.
+  child?.kill(signal);
+});
 async function real(args) {
   const mutating = !['list', 'get', 'read', 'wait', 'process-info'].includes(args[1]);
   const id = `${process.pid}:${Date.now()}:${Math.random()}`;
@@ -68,13 +78,15 @@ async function real(args) {
     child.on('close', (code) => {
       clearTimeout(timer);
       let created;
-      if (code === 0 && ['workspace', 'worktree', 'tab'].includes(args[0]) && ['create', 'open'].includes(args[1])) {
-        try {
-          const result = JSON.parse(stdout).result;
-          const workspace = result.workspace ?? result.open_result?.workspace;
-          const pane = result.root_pane ?? result.open_result?.root_pane;
-          created = { panes: pane?.pane_id ? [pane.pane_id] : [], workspaces: workspace?.workspace_id ? [workspace.workspace_id] : [] };
-        } catch { /* malformed native receipts still fail at the caller boundary */ }
+      if (['workspace', 'worktree', 'tab'].includes(args[0]) && ['create', 'open'].includes(args[1])) {
+        let result;
+        try { result = JSON.parse(stdout).result; } catch { /* caller reports malformed reply */ }
+        if (result) {
+          try {
+            const targets = saveCreation(root, args, result);
+            created = { panes: targets.panes, workspaces: targets.workspaces };
+          } catch (error) { reject(new ReceiptLimit(`creation receipt persistence failed: ${error.message}`)); return; }
+        }
       }
       traceCall('end', created ? { created } : {});
       fs.appendFileSync(path.join(root, 'herdr.jsonl'), JSON.stringify({ args, code, stdout, stderr }) + '\n');
@@ -201,7 +213,22 @@ try {
       args.push('--env', `ZDOTDIR=${shell}`, '--env', `HISTFILE=${path.join(shell, 'history')}`);
     }
   }
+  let intent;
+  if (group === 'worktree' && ['create', 'open'].includes(verb) && argv.includes('--cwd')) {
+    const before = body(await real(['workspace', 'list'])).workspaces;
+    if (!Array.isArray(before)) throw new ReceiptLimit('pre-creation workspace inventory unavailable');
+    intent = saveCreationIntent(root, args, before, fs.realpathSync(option('--cwd')));
+  }
   const result = await real(args);
+  if (intent && !interrupted) {
+    const after = body(await real(['workspace', 'list'])).workspaces;
+    if (!Array.isArray(after)) throw new ReceiptLimit('post-creation workspace inventory unavailable');
+    for (const workspace of implicitParents(intent, after)) {
+      saveCreation(root, args, { workspace });
+      await updateOwnership(latest => { latest.workspaces = [...new Set([...latest.workspaces, workspace.workspace_id])]; });
+    }
+  }
+  if (interrupted) throw new ReceiptLimit('adapter interrupted; creation receipts retained for cleanup');
   if (result.code === 0) {
     if (verb === 'read' && !result.stdout.trim().startsWith('{')) {
       process.stdout.write(result.stdout); process.exit(0);
@@ -212,6 +239,13 @@ try {
       const workspace = r.workspace ?? r.open_result?.workspace;
       const pane = r.root_pane ?? r.open_result?.root_pane;
       const tab = r.tab ?? r.open_result?.tab;
+      // Grant root receipts before optional topology/startup probes can fail.
+      await updateOwnership((latest) => {
+        const targets = creationTargets(r);
+        for (const collection of ['workspaces', 'panes', 'tabs']) {
+          latest[collection] = [...new Set([...latest[collection], ...targets[collection]])];
+        }
+      });
       // A new workspace can contain an extra initial shell tab not named in
       // worktree.create's root receipt. Its topology belongs to this scratch
       // workspace too; collect opaque child receipts, never infer their IDs.
@@ -228,9 +262,6 @@ try {
         }
       }
       await updateOwnership((latest) => {
-        if (workspace?.workspace_id) latest.workspaces.push(workspace.workspace_id);
-        if (pane?.pane_id) latest.panes.push(pane.pane_id);
-        if (tab?.tab_id) latest.tabs.push(tab.tab_id);
         for (const collection of ['panes', 'tabs']) latest[collection] = [...new Set([...latest[collection], ...children[collection]])];
       });
       if (pane?.pane_id && ['workspace', 'tab'].includes(group)) {

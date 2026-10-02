@@ -23,6 +23,7 @@ import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
 import { assertSupervisorEntry } from './entry.mjs';
 import { startFocusMonitor, assertFocus } from './focus.mjs';
+import { cleanupWorkspaces } from './cleanup.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -43,6 +44,7 @@ const started = Date.now();
 const results = [];
 let logFile, candidateCommit, fixture, supervisor, defaultOrg;
 let focusMonitor, focusError;
+let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
 const discoveryRoots = [];
 const env = { ...process.env };
@@ -54,7 +56,8 @@ const read = (file) => fs.readFileSync(file, 'utf8');
 const json = (text) => { const v = JSON.parse(text); return v.result ?? v; };
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const pending = (reason) => { throw new Pending(reason); };
-function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv } = {}) {
+function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv, duringCleanup = false } = {}) {
+  if (stopping && !duringCleanup) throw new Pending('run interrupted; no further candidate commands allowed');
   const r = spawnSync(command, args, { cwd, env: isolatedEnv ?? { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
     input, maxBuffer: 32 * 1024 * 1024, timeout });
   if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd, status: r.status, error: r.error?.message,
@@ -90,6 +93,7 @@ const candidate = path.join(root, 'candidate');
 const present = (file) => fs.existsSync(path.join(candidate, file));
 const requireCandidate = (file) => { if (!present(file)) pending(`candidate lacks ${file}`); return path.join(candidate, file); };
 async function test(definition, fn) {
+  if (stopping && ![cases.cleanup.key, cases.focus.key].includes(definition.key)) throw new Pending('run interrupted');
   const id = String(results.length + 1).padStart(2, '0');
   logFile = path.join(evidence, `${id}.jsonl`);
   write(logFile, '');
@@ -164,7 +168,10 @@ async function stopWatcher(job) {
   lane(['close', job.lane]);
 }
 
-async function cleanupScope() {
+function cleanupScope() {
+  return cleanupPromise ??= closeScope();
+}
+async function closeScope() {
   const errors = [];
   try {
     // PIDs originate only in successful candidate detach receipts or in this
@@ -173,8 +180,10 @@ async function cleanupScope() {
       if (!fs.existsSync(path.join(org, 'dispatch'))) continue;
       for (const file of fs.readdirSync(path.join(org, 'dispatch'))) {
         if (!file.endsWith('.json') || file.endsWith('.routes.json')) continue;
-        const job = JSON.parse(read(path.join(org, 'dispatch', file)));
-        if (job.watcher?.pid) pids.add(job.watcher.pid);
+        try {
+          const job = JSON.parse(read(path.join(org, 'dispatch', file)));
+          if (job.watcher?.pid) pids.add(job.watcher.pid);
+        } catch (error) { errors.push(`watcher journal ${file}: ${error.message}`); }
       }
     }
     if (fs.existsSync(path.join(root, 'legacy-watcher-pids'))) {
@@ -184,20 +193,13 @@ async function cleanupScope() {
     }
     for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') errors.push(e.message); } }
     if (fs.existsSync(path.join(root, 'ownership.json'))) {
-      const owned = JSON.parse(read(path.join(root, 'ownership.json')));
-      for (const id of [...new Set(owned.workspaces)].reverse()) {
-        try {
-          const r = node(path.join(root, 'herdr.mjs'), ['workspace', 'get', id], { ok: false });
-          if (r.status === 0) h('workspace', 'close', id);
-        } catch (error) { errors.push(`workspace ${id}: ${error.message}`); }
-      }
-      const remaining = h('workspace', 'list').workspaces;
-      write(path.join(evidence, 'ownership.json'), JSON.stringify(owned, null, 2));
-      write(path.join(evidence, 'cleanup-residue.json'), JSON.stringify({ workspaces: remaining, errors }, null, 2));
-      for (const file of ['herdr.jsonl', 'denied.jsonl', 'supervisor-input.jsonl', 'worker-input.jsonl', 'notifications.jsonl']) {
+      const state = JSON.parse(read(path.join(root, 'ownership.json')));
+      const cleaned = await cleanupWorkspaces({ root, evidence, native: (args) =>
+        json(run(state.binary, args, { extra: { HERDR_SOCKET_PATH: state.socketPath }, duringCleanup: true }).stdout) });
+      errors.push(...cleaned.errors);
+      for (const file of ['creation-intents.jsonl', 'creations.jsonl', 'herdr.jsonl', 'denied.jsonl', 'supervisor-input.jsonl', 'worker-input.jsonl', 'notifications.jsonl']) {
         if (fs.existsSync(path.join(root, file))) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
       }
-      if (remaining.length) errors.push(`${remaining.length} owned workspace(s) left`);
     }
     // Authentication copies are never evidence, even with --keep or a failed
     // session. Remove them after the owned panes/processes have stopped.
@@ -206,7 +208,7 @@ async function cleanupScope() {
     if (!opt.keep) for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true });
     // Preserve only evidence unless requested. chmod is limited to this mkdtemp.
     if (!opt.keep) {
-      run('chmod', ['-R', 'u+w', root]);
+      run('chmod', ['-R', 'u+w', root], { duringCleanup: true });
       for (const entry of fs.readdirSync(root)) if (entry !== 'evidence') fs.rmSync(path.join(root, entry), { recursive: true, force: true });
     }
     return opt.keep ? `scratch retained: ${root}; all created workspaces closed` : 'all created workspaces closed; only evidence retained';
@@ -226,7 +228,10 @@ function emitSummary(interruption = {}) {
   process.exitCode = counts.FAIL || counts.PENDING ? 1 : 0;
 }
 
-async function finishFocus() {
+function finishFocus() {
+  return focusPromise ??= closeFocus();
+}
+async function closeFocus() {
   await test(cases.focus, async () => {
     let summary, error = focusError;
     if (focusMonitor) {
@@ -238,7 +243,7 @@ async function finishFocus() {
     return assertFocus(summary, { evidence, error });
   });
 }
-installSignalCleanup({ root, cleanup: async () => {
+installSignalCleanup({ root, onSignal: () => { stopping = true; }, cleanup: async () => {
   try { return await cleanupScope(); } finally { await finishFocus(); }
 }, summarize: (interruption) => {
   results.push({ id: 'interrupt', key: 'interrupted-run', name: 'Interrupted run', status: 'PENDING', origin: 'harness', detail: interruption.signal, evidence: 'summary.json' });
@@ -307,7 +312,7 @@ try {
     if (focusError) throw focusError;
     const binary = run('which', ['herdr']).stdout.trim();
     write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
-    for (const file of ['herdr.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
+    for (const file of ['herdr.mjs', 'receipts.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     write(path.join(bin, 'herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'herdr.mjs'))} "$@"\n`); fs.chmodSync(path.join(bin, 'herdr'), 0o755);
     for (const name of ['codex', 'claude', 'ai', 'cmem-domain', 'launchctl']) {

@@ -7,11 +7,12 @@ export function removeCredentials(root) {
   return fs.existsSync(directory) ? [directory] : [];
 }
 
-export function installSignalCleanup({ root, cleanup, summarize }) {
+export function installSignalCleanup({ root, cleanup, summarize, onSignal = () => {} }) {
   let stopping = false;
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {
     if (stopping) return;
     stopping = true;
+    onSignal(signal);
     const errors = [];
     // Delete credentials first, before a slow or failed pane/process shutdown.
     try { removeCredentials(root); } catch (error) { errors.push(error.message); }

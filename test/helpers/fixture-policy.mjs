@@ -23,6 +23,13 @@ function containedEnv(env = process.env, command, args) {
     delete result.NODE_OPTIONS;
     return result;
   }
+  // Minimal fixture environments must not fall back to the native default
+  // socket. Explicit fixture sockets remain available for fake server tests.
+  if (process.env.HERDR_TEST_OFFLINE_ROOT) {
+    result.HERDR_TEST_OFFLINE_ROOT ??= process.env.HERDR_TEST_OFFLINE_ROOT;
+    result.HERDR_SOCKET_PATH ??= process.env.HERDR_SOCKET_PATH;
+    result.ORG_ACTOR ??= process.env.ORG_ACTOR;
+  }
   if (!result.NODE_OPTIONS?.includes(policy)) result.NODE_OPTIONS = `${result.NODE_OPTIONS ?? ''} --import=${JSON.stringify(policy)}`;
   return result;
 }

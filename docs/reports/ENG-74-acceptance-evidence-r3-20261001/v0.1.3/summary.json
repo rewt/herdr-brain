@@ -1,0 +1,191 @@
+{
+  "candidate": "v0.1.3",
+  "candidateCommit": "6b353db6bcda5f5f4b37e0b35192fead7770f7ad",
+  "elapsedSeconds": 102,
+  "counts": {
+    "PASS": 7,
+    "FAIL": 4,
+    "PENDING": 11
+  },
+  "evidence": "/private/tmp/herdr-acceptance-mYNJu7/evidence",
+  "results": [
+    {
+      "id": "01",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "v0.1.3: 6b353db6bcda5f5f4b37e0b35192fead7770f7ad",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "name": "New project: record discovers and populates",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "record status requires setup: record: no record found: run record init, or set ORG_DIR\n\n1 !== 0\n",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "name": "New project: routes resolve without config",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks lanes/routes.mjs",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "name": "New project: discover dispatch/watch/default cycle",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "05.jsonl"
+    },
+    {
+      "id": "06",
+      "name": "Configured cycle: dispatch/report/ingest/promote/close",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "06.jsonl"
+    },
+    {
+      "id": "07",
+      "name": "Failure path: missing worker",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "07.jsonl"
+    },
+    {
+      "id": "08",
+      "name": "Failure path: invalid worker",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "08.jsonl"
+    },
+    {
+      "id": "09",
+      "name": "Failure path: blocked worker",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "09.jsonl"
+    },
+    {
+      "id": "10",
+      "name": "Fix round: same worker, fresh durable run",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "10.jsonl"
+    },
+    {
+      "id": "11",
+      "name": "Watch cutover: idle grace and exclusive watcher",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "11.jsonl"
+    },
+    {
+      "id": "12",
+      "name": "Housekeeping closes only eligible finished workers",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks housekeeping/housekeeping.mjs",
+      "evidence": "12.jsonl"
+    },
+    {
+      "id": "13",
+      "name": "Scratch release build/activate/rollback/restore",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "candidate code archived into immutable scratch releases; old-install launcher migration checked; npm/plugin/launchd excluded",
+      "evidence": "13.jsonl"
+    },
+    {
+      "id": "14",
+      "name": "Full console dependency build (offline)",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "14.jsonl"
+    },
+    {
+      "id": "15",
+      "name": "Existing project: copy live calls and inventory drift",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)",
+      "evidence": "15.jsonl"
+    },
+    {
+      "id": "16",
+      "name": "Existing project: routing and both wrapper dry runs",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "timeout: canonical workspace metadata before wrapper execution",
+      "evidence": "16.jsonl"
+    },
+    {
+      "id": "17",
+      "name": "Existing project: org PATH consumers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk",
+      "evidence": "17.jsonl"
+    },
+    {
+      "id": "18",
+      "name": "ENG-64: every file switch and rollback",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "ten file switches each enumerated; rollback bytes/modes pass; live cutover is unapplied, so wrapper/recovery/name/canary checks cannot pass",
+      "evidence": "18.jsonl"
+    },
+    {
+      "id": "19",
+      "name": "ENG-64: final contrib removal and restoration",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "compatibility blob restoration passes in scratch; existing launcher still calls contrib, so retirement is forbidden",
+      "evidence": "19.jsonl"
+    },
+    {
+      "id": "20",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "no product-provided policy source was read; source attribution is required",
+      "evidence": "20.jsonl"
+    },
+    {
+      "id": "21",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "no product-provided policy source was read; source attribution is required",
+      "evidence": "21.jsonl"
+    },
+    {
+      "id": "22",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "22.jsonl"
+    }
+  ],
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

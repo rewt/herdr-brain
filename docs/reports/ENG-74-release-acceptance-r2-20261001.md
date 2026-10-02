@@ -6,7 +6,7 @@ summary: |
 headline: The gate safety fixes are complete, but fresh projects still do not discover the workflow
 blockers:
   - "Fresh-project record and routing require hand setup; the default dispatch/watch cycle is unproved. Both real discovery cases have no product source witness, no separate lanes or recorded work, and no recorded human routing decision. Existing follow-up: ENG-77."
-  - "Canonical background workspace metadata did not appear within the 15-second poll on either candidate, so wrapper execution was refused. This establishes a bounded cold-start failure, not indefinite absence; the proposed asynchronous race was not reproduced. Existing follow-up: ENG-79."
+  - "Canonical background workspace metadata did not appear within the 15-second poll on either candidate, so wrapper execution was refused. Round-three correction: after the shell cwd is ready, identity is still absent for the idle background copy while the active main fixture has it; this is a bounded background/activity publication gap, not the initial cwd race. Existing follow-up: ENG-79."
   - "Housekeeping encounters an automatically added pane outside creation receipts; the boundary refuses it. Complete closure and the ten cutover behavioral canaries/rollback remain unproved. Existing follow-up: ENG-78."
 proposals: []
 learnings:
@@ -64,6 +64,25 @@ challenges:
     evidence: They establish configured mechanics. Six final real Luna sessions completed measured turns but provided no product policy witness, separate lanes or record IDs; routing produced only Markdown, so scripted approval and real configuration application were not reached.
 ---
 
+Round-three correction (R-52): the round-two discovery verdict was not a
+usable judgment of an installed discovery candidate. Its native profile denied
+Git metadata writes, and housekeeping refused a late default-layout pane; these
+were harness limits, not missing product behavior. A rerun alone could not settle
+ENG-77 until the gate allowed scratch Git capabilities and used the actual
+installed entry adapter and bounded Git parent. The corrected gate captures the
+product adapter's delivered policy instead of treating model paraphrases as the
+source of truth. The historical screens below remain the original results.
+
+The corrected case-16 reproduction waits for the shell cwd to equal the copied
+project before its 15-second metadata poll. Main still exposes no identity for
+that idle background workspace, while the active configured fixture carries
+canonical worktree metadata during the same poll. ENG-79 is therefore a real,
+bounded idle/background workspace identity gap, not the transient initial cwd
+race. The finding does not establish indefinite absence or wrapper failure; the
+wrappers are refused before execution. Investigate activity/focus-dependent
+publication without synthesizing identity or focusing an operator pane. The
+round-three report contains the new samples and the narrowed handoff.
+
 All six findings in the [independent review](../reviews/release-acceptance/c7397cf-r1.md)
 are addressed by **Close release acceptance safety and discovery review gaps**.
 The code fix is delivered; release acceptance remains blocked by the existing
@@ -76,8 +95,9 @@ runs therefore establish failure on those snapshots, not a verdict on unpromoted
 ENG-77 work. The gate now uses the actual candidate installer when present and
 accepts a captured installed policy delivered as developer instructions. That
 conditional installation branch was not exercised by these two candidates; its
-source-attribution rules have offline regression coverage. Re-run these same
-real cases against the candidate containing the discovery delivery.
+source-attribution rules have offline regression coverage. Round-three review found that this rerun first requires correcting the native
+Git permission boundary and actually exercising the machine entry adapter; see
+the correction above and the round-three report.
 
 Final commands, outside npm test:
 

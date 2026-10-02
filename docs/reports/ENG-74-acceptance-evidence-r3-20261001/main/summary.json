@@ -1,0 +1,191 @@
+{
+  "candidate": "main",
+  "candidateCommit": "f6d6eef4dc7bc9175261745d3b600e035a1e2a41",
+  "elapsedSeconds": 175,
+  "counts": {
+    "PASS": 14,
+    "FAIL": 6,
+    "PENDING": 2
+  },
+  "evidence": "/private/tmp/herdr-acceptance-U2srxh/evidence",
+  "results": [
+    {
+      "id": "01",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "main: f6d6eef4dc7bc9175261745d3b600e035a1e2a41",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "name": "New project: record discovers and populates",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "record status requires setup: record: no record found: run record init, or set ORG_DIR\n\n1 !== 0\n",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "name": "New project: routes resolve without config",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "node /private/tmp/herdr-acceptance-U2srxh/routes-probe.mjs: file:///private/tmp/herdr-acceptance-U2srxh/candidate/lanes/routes.mjs:332\n  if (files.length === 0) throw new Error(`no route config found for ${repository}`);\n                                ^\n\nError: no route config found for /private/tmp/herdr-acceptance-U2srxh/new-project\n    at loadDiscoveredRoutes (file:///private/tmp/herdr-acceptance-U2srxh/candidate/lanes/routes.mjs:332:33)\n    at file:///private/tmp/herdr-acceptance-U2srxh/routes-probe.mjs:2:47\n    at ModuleJob.run (node:internal/modules/esm/module_job:263:25)\n    at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v20.19.4",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "name": "New project: discover dispatch/watch/default cycle",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "entry requires hand setup: dispatch: --org DIR or ORG_DIR is required; watch: usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--start-grace SECONDS] [--idle-grace SECONDS] [--long-after SECONDS] [--dry-run]\n\n1 !== 0\n",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "05.jsonl"
+    },
+    {
+      "id": "06",
+      "name": "Configured cycle: dispatch/report/ingest/promote/close",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1: one notice, recorded report, green fast-forward, lane removed; red/dirty gates refused",
+      "evidence": "06.jsonl"
+    },
+    {
+      "id": "07",
+      "name": "Failure path: missing worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-2: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "07.jsonl"
+    },
+    {
+      "id": "08",
+      "name": "Failure path: invalid worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-3: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "08.jsonl"
+    },
+    {
+      "id": "09",
+      "name": "Failure path: blocked worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-4: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "09.jsonl"
+    },
+    {
+      "id": "10",
+      "name": "Fix round: same worker, fresh durable run",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-5 -> R-6: blocked report then done, same PTY, distinct run/report",
+      "evidence": "10.jsonl"
+    },
+    {
+      "id": "11",
+      "name": "Watch cutover: idle grace and exclusive watcher",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)",
+      "evidence": "11.jsonl"
+    },
+    {
+      "id": "12",
+      "name": "Housekeeping closes only eligible finished workers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved",
+      "evidence": "12.jsonl"
+    },
+    {
+      "id": "13",
+      "name": "Scratch release build/activate/rollback/restore",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "candidate code archived into immutable scratch releases; old-install launcher migration checked; npm/plugin/launchd excluded",
+      "evidence": "13.jsonl"
+    },
+    {
+      "id": "14",
+      "name": "Full console dependency build (offline)",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "14.jsonl"
+    },
+    {
+      "id": "15",
+      "name": "Existing project: copy live calls and inventory drift",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)",
+      "evidence": "15.jsonl"
+    },
+    {
+      "id": "16",
+      "name": "Existing project: routing and both wrapper dry runs",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "timeout: canonical workspace metadata before wrapper execution",
+      "evidence": "16.jsonl"
+    },
+    {
+      "id": "17",
+      "name": "Existing project: org PATH consumers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk",
+      "evidence": "17.jsonl"
+    },
+    {
+      "id": "18",
+      "name": "ENG-64: every file switch and rollback",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "ten file switches each enumerated; rollback bytes/modes pass; live cutover is unapplied, so wrapper/recovery/name/canary checks cannot pass",
+      "evidence": "18.jsonl"
+    },
+    {
+      "id": "19",
+      "name": "ENG-64: final contrib removal and restoration",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "compatibility blob restoration passes in scratch; existing launcher still calls contrib, so retirement is forbidden",
+      "evidence": "19.jsonl"
+    },
+    {
+      "id": "20",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "no product-provided policy source was read; source attribution is required",
+      "evidence": "20.jsonl"
+    },
+    {
+      "id": "21",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "no product-provided policy source was read; source attribution is required",
+      "evidence": "21.jsonl"
+    },
+    {
+      "id": "22",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "22.jsonl"
+    }
+  ],
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

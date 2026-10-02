@@ -34,7 +34,7 @@ export function main(argv = process.argv.slice(2)) {
   const [action = 'brief', requested] = positionals;
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
   if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
-  if (positionals.length > 2 || !['brief', 'checkpoint', 'handle', 'promote'].includes(action)) throw new Error('usage: supervisor.mjs brief [--json] | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT; mutations require --role supervisor');
+  if (positionals.length > 2 || !['brief', 'checkpoint', 'handle', 'promote', 'release'].includes(action)) throw new Error('usage: supervisor.mjs brief [--json] | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT | release; mutations require --role supervisor');
   const doc = coldStart({ cwd: opt.repo, org: opt.org, sinceSeq: opt['since-seq'] === undefined ? undefined : Number(opt['since-seq']) });
   const project = doc.project;
   const print = (value) => process.stdout.write(JSON.stringify(value) + '\n');
@@ -56,6 +56,11 @@ export function main(argv = process.argv.slice(2)) {
     }
     return r.stdout;
   };
+  if (action === 'release') {
+    if (requested) throw new Error('release takes no run ID');
+    print(JSON.parse(call(local('../release/release.mjs'), ['--once', '--repo', project.canonical, '--org', project.org, '--role', 'supervisor'])));
+    return;
+  }
   const loadQueue = () => {
     const queue = JSON.parse(fs.readFileSync(doc.promotion_queue, 'utf8'));
     if (queue.identity !== project.identity) throw new Error('promotion queue identity changed');

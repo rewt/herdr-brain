@@ -1,11 +1,13 @@
 import { quote } from './runtime.mjs';
 import fs from 'node:fs';
+import { releaseSettings } from '../release/config.mjs';
 import path from 'node:path';
 import { supervisorPolicy } from '../supervisor/protocol.mjs';
 export function entryPolicy(context, root) {
   const monitor = `${quote(process.execPath)} ${quote(`${root}/discovery/client.mjs`)}`;
   const record = `ORG_DIR=${quote(context.org)} ${quote(process.execPath)} ${quote(`${root}/bin/org.mjs`)}`;
   const mainMode = context.entry?.mode === 'main';
+  const release = releaseSettings(context.canonical);
   const instructions = ['AGENTS.md', 'CLAUDE.md'].flatMap((name) => {
     const file = path.join(context.workspace, name);
     return fs.existsSync(file) ? [`Project instructions from ${file}:\n${fs.readFileSync(file, 'utf8')}`] : [];
@@ -20,6 +22,7 @@ Project identity: ${context.identity}; canonical checkout: ${context.canonical};
 You are a ${context.role}. Your checkout is ${context.workspace}, branch ${context.branch}.
 Entry mode: ${context.entry?.mode ?? 'worker'}; integration branch: ${context.main ?? 'the configured integration branch'}; entry settings: ${context.entry?.source ?? 'installed defaults'}.
 ${context.validation ? `Validation tiers: worker fast check = ${context.validation.tiers.fast.command}; settle/promotion check = ${context.validation.tiers.promotion.command}; release gate = ${context.validation.tiers.release.command}. Workers never run the release gate. Exact clean trees reuse passing checks with identical commands and environment fingerprints.` : ''}
+Release gate (${release.source}): ${JSON.stringify(release.config.gate)}. Only the canonical project supervisor runs the release gate once per candidate; workers use the project's fast validation and never run the release gate. Ship/activation is operator reserved.
 Read this checkout's existing agent instructions and project files. Work on the actual user task.
 ${context.role === 'worker' ? `Before edits, run: ${monitor} start 'one-sentence actual task'. Read the returned brief; it gives your run ID and exact report path.
 For a continuation of recorded work, inspect the record and use ${monitor} resume ITEM instead of adding another item. This creates a fresh run in your assigned checkout.

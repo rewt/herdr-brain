@@ -9,6 +9,9 @@ node /path/to/herdr-monitor/promote/promote.mjs first-lane second-lane
 ```
 
 The command durably enqueues the topics, acknowledges a detached worker and exits.
+Promoted commits accumulate on the integration branch. At a quiet point the
+canonical supervisor uses the [release module](../release/README.md) to tag and
+gate a batch once, then request the operator's ship or activation decision.
 The worker drains FIFO, then exits when empty. Repeated enqueues of a current or
 pending topic reuse its request. Independent enqueues serialize their writes;
 exactly one worker owns the drain. A project is its canonical Git common directory,

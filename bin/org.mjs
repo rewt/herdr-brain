@@ -22,6 +22,7 @@ import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { desksCommand } from '../settle/desks-command.mjs';
 import { routesCommand } from '../lanes/routes-command.mjs';
 import { housekeepingCommand } from '../housekeeping/command.mjs';
+import { releaseRecordCommand } from '../lib/release-record.mjs';
 import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
@@ -79,6 +80,9 @@ Views (zero inference)
                                           asked and were told, what is pending (--back 1: the one before)
   record console [--project NAME] [--modern] the Herdr Monitor console (needs: npm --prefix console ci)
   record housekeeping [--json]            schedule status, last scan and recent activity
+  record releases [--json] [--identity DIR] candidates, gate evidence and operator decisions
+  record release cut --file JSON | start RC-n | result RC-n --file JSON
+                                          release-module receipts (never executes a gate or ship)
   record housekeeping pause [--expect REV] save enabled=false for the next tick
   record housekeeping set --resume false [--unset KEY] [--expect REV]
                                           validate project .housekeeping.json overrides
@@ -389,6 +393,7 @@ function answer(argv) {
     const item = requireItem(s, id);
     if (item.role !== 'human') throw new UserError(`${id} is not a question (only role=human items are answered)`);
     if (item.meta.category === 'priorities' && actor !== 'human') throw new UserError('priority questions wait for the operator');
+    if (item.meta.operator_reserved && actor !== 'human') throw new UserError('release questions are reserved for the operator');
     const answered = item.closed && item.meta.answer != null;
     if (values.overrule && !answered) throw new UserError(`${id} has not been answered; nothing to overrule (drop --overrule)`);
     if (!values.overrule && answered) {
@@ -442,7 +447,8 @@ function set(argv) {
       validateServes(s, meta.serves);
       return { add: [{ type: 'run.updated', id, meta }] };
     }
-    requireItem(s, id);
+    const target = requireItem(s, id);
+    if (target.meta.operator_reserved && Object.keys(parsed).some(key => ['role', 'meta.operator_reserved', 'meta.category', 'meta.release', 'meta.answer', 'meta.answered_by'].includes(key))) throw new UserError('release decision fields are immutable; use record answer as the operator');
     const fields = {};
     for (const [key, value] of Object.entries(parsed)) {
       if (key.startsWith('budget.')) {
@@ -482,6 +488,7 @@ function close(argv) {
   const as = values.dropped ? 'dropped' : 'done';
   const { added, result } = mutate(openOrg(), (s, events) => {
     const item = requireItem(s, id);
+    if (item.meta.operator_reserved && writer().actor !== 'human') throw new UserError('release questions are reserved for the operator');
     if (values['if-current-run'] !== undefined) {
       const runId = values['if-current-run'];
       requireCurrentRun(s, id, runId);
@@ -514,6 +521,7 @@ function reopen(argv) {
   const id = positionals[0];
   const { added } = mutate(openOrg(), (s) => {
     const item = requireItem(s, id);
+    if (item.meta.operator_reserved && writer().actor !== 'human') throw new UserError('release questions are reserved for the operator');
     if (values['if-current-run'] !== undefined) {
       requireCurrentRun(s, id, values['if-current-run']);
       if (item.closed) throw new UserError(`${id} is closed; conditional reopen needs supervisor judgment`);
@@ -926,6 +934,8 @@ function priorities(argv) {
 }
 
 const COMMANDS = {
+  release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
+  releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
 };

@@ -295,6 +295,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     row('u Routes / models / primary pool ›', { id: 'view:routes', fg: 'blue' });
     row('S Settle / review desks ›', { id: 'view:desks', fg: 'blue' });
     row('H Housekeeping / pause / overrides ›', { id: 'view:housekeeping', fg: 'blue' }); row();
+    row(`L Release candidates / gate / operator decision · ${m.candidates?.length ?? 0} ›`, { id: 'view:releases', fg: 'blue' }); row();
     section(`Waiting on you · ${m.needs.length}`, 'amber');
     if (m.categoryFlags?.length) row(`Category flags · ${m.categoryFlags.length} · ! review ›`, { id: 'view:needs', fg: 'amber' });
     m.needs.slice(0, 3).forEach(needRow); if (!m.needs.length) paragraph(s.errors.today || s.errors.brain ? 'Waiting sources unavailable · r retry' : 'Nothing waiting on you.');
@@ -305,6 +306,20 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     row('f All questions ›', { id: 'view:asked', fg: 'blue' }); row();
     section('Routes in effect', 'blue'); routesRows(2);
     row('u All routes / edit ›', { id: 'view:routes', fg: 'blue' });
+  } else if (s.view === 'releases') {
+    section(`Release candidates · ${m.candidates?.length ?? 0}`, 'blue');
+    paragraph('Promotions are batched from main at a quiet point. The supervisor runs each declared gate once. Shipping and activation wait for you.');
+    if (!m.candidates?.length) paragraph(s.errors.status ? 'Record unavailable · r retry' : 'No candidates recorded.');
+    for (const c of (m.candidates ?? []).slice().reverse()) {
+      row(`${c.id} · ${c.tag}`, { fg: 'blue', bold: true });
+      paragraph(`Commit ${c.commit} · ${c.commits?.length ?? 0} commits in this batch`);
+      paragraph(`Gate: ${c.gate?.result ?? (c.started ? 'started; inspect interrupted result' : 'pending')} · ${c.status}`, c.gate?.result === 'passed' ? 'teal' : 'amber');
+      if (c.gate?.detail) paragraph(c.gate.detail);
+      if (c.gate?.log) paragraph(`Evidence: ${c.gate.log}`);
+      paragraph(c.ship ? `Ship: ${JSON.stringify(c.ship)}` : 'Choose the project ship or activation step.');
+      if (c.question) row(`${c.question} · ${c.decision ?? 'Waiting on you'} ›`, { id: `item:${c.question}`, fg: 'amber' });
+      row();
+    }
   } else if (s.view === 'desks') {
     section('Settle and review desks', 'blue'); deskSummary();
     const doc = m.desks;
@@ -576,7 +591,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes · P Priorities · H Housekeeping · S Desks', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, desks, housekeeping overrides, and session input. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes · P Priorities · H Housekeeping · S Desks · L Releases', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, desks, housekeeping overrides, and session input. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {

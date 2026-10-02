@@ -9,6 +9,8 @@ import { fold, itemStatus, openRuns, isResolved, attention } from '../lib/state.
 import { prioritiesJson, itemServes } from '../lib/priorities.mjs';
 import { describeEvent, approxTokens } from '../lib/render.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
+import { candidateRows } from '../lib/release-record.mjs';
+import { releaseSettings } from '../release/config.mjs';
 
 export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', createHash('sha256').update(identity).digest('hex').slice(0, 20));
 const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
@@ -115,7 +117,11 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const goals = items.filter((i) => i.kind === 'goal' && !isResolved(itemStatus(state, i.id)))
     .map((i) => ({ id: i.id, title: i.title, decisions: i.notes.filter((n) => n.decision) }));
   const stopped = fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'));
+  const candidates = candidateRows(state, project.identity);
+  const release = releaseSettings(project.canonical);
   const next = [];
+  for (const c of candidates.filter(c => ['awaiting-operator', 'inspect-interrupted', 'pending-gate'].includes(c.status))) next.push({ action: c.status === 'awaiting-operator' ? 'await_release_operator' : 'inspect_release', item: c.question ?? c.id, evidence: c.gate?.log ?? c.snapshot });
+  if (!candidates.some(c => ['awaiting-operator', 'inspect-interrupted', 'pending-gate'].includes(c.status))) next.push({ action: 'consider_release_at_quiet_point' });
   for (const r of running.filter((r) => r.checkout_missing)) next.push({ action: 'inspect_open_run_missing_checkout', run: r.run, evidence: r.workspace });
   for (const r of reports) {
     if (r.promotion) next.push({ action: 'handle_promotion_outcome', run: r.run, evidence: queueFile });
@@ -132,7 +138,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
     priorities, goals, running, reports, waiting, held, ready, decisions, next, recovery,
-    approvals: config.approvals, advisory, promotion_queue: queueFile };
+    approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release };
 }
 
 export function renderColdStart(doc, { limit = 6 } = {}) {
@@ -151,6 +157,8 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
   section('Running (record; no live pane inference)', doc.running, (r) => `${r.run} ${r.item} ${line(r.title, 65)} · ${r.route ?? '?'} / ${r.harness ?? '?'} / ${r.model ?? '?'} / ${r.effort ?? '?'} · lane ${r.lane ?? '?'} · ${r.agent ?? '?'}${r.pane ? ` @${r.pane}` : ''}${r.checkout_missing ? ' · checkout missing; inspect record' : r.report_file_present ? ' · file awaits final watch notice' : ''}${r.repository_binding === 'unknown' ? ' · repository binding unknown' : ''}`);
   section('Reports and settlement', doc.reports.slice().reverse(), (r) => `${r.run} ${r.item} · ${r.outcome ?? 'file; stop unconfirmed'} · ${r.promotion ? `promotion ${r.promotion.phase}` : r.settlement?.result ?? (r.recorded ? 'no settle receipt' : 'awaits final watch notice')}${r.checkout_missing ? ' · checkout missing; inspect disposition' : ''} · ${line(r.headline ?? r.settlement?.reason ?? r.title, 100)}${r.settlement?.handoff ? ` · ${r.settlement.handoff}` : ''}`);
   section('Waiting on operator', doc.waiting, (q) => `${q.id} ${line(q.title, 100)} · ${q.category ?? '?'} · recommend ${q.recommend ?? '?'}`);
+  section('Release candidates', doc.candidates ?? [], c => `${c.id} ${c.tag} · gate ${c.gate?.result ?? 'pending'} · ${c.status}${c.question ? ` · ${c.question}` : ''}`);
+  if (doc.release) out.push(`Release gate (${doc.release.source}): ${JSON.stringify(doc.release.config.gate)}; workers never run it. Ship: ${JSON.stringify(doc.release.config.ship)}; operator reserved.`);
   section('Held work', doc.held, (i) => `${i.id} ${line(i.title, 90)} · ${i.status}`);
   section('Decisions since checkpoint', doc.decisions.slice().reverse(), (d) => `#${d.seq} ${d.id ?? ''}${d.item ? ` ${d.item}` : ''} ${d.by}: ${line(d.summary ?? d.text, 200)}`);
   section('Current goals (retrieve authority with record show)', doc.goals, (g) => `${g.id} ${line(g.title, 100)}`);

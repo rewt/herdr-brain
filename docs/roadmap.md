@@ -32,6 +32,7 @@ and has no plugin-to-plugin dependencies, so modules share one install and one v
 | watch | Wait for the worker, validate the report, deliver it | `notify-watch.sh` |
 | settle | Settle and review desks, hand-off to review, fix rounds | `settle.sh`, `apply-settle.sh`, `review-desk.sh` |
 | promote | Promotion queue | `promote-queue.sh`, `promote.sh` |
+| release | Batch promotions, tag a candidate, gate once, ask the operator to ship | Release acceptance and operator ship/activation |
 | housekeeping | Housekeeping | `janitor.sh` and the scripts it runs |
 | supervisor | Supervisor session setup and protocol | `session-start.sh`, `SETTLE.md`, `WORK-PATTERN.md` |
 | console | The console, as a pane; edits the configuration | `lane/console-autonomy` |

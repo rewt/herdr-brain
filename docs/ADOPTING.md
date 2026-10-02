@@ -269,6 +269,15 @@ decisions after reading their full content, and coordinates this sequence:
 5. **Complete:** the supervisor handles the queue's final notice. Receipt and
    integrated tip checks guard `record close --if-current-run RUN`. Duplicate or
    stale notices do not authorize another integration or overwrite newer work.
+6. **Release:** after promotions accumulate, the canonical supervisor runs
+   `node /path/to/release/supervisor/supervisor.mjs release --role supervisor`
+   at a quiet point. A clean tagged candidate gets the declared gate once, then
+   a passing result asks the operator to ship or activate. Workers never run the
+   release gate. The default gate is `npm test`; tracked `.release.json` declares
+   a project gate, optional build preparation and an operator ship command.
+   `record releases` and Control → Releases (`L`) show the gate and decision.
+   Publish auto-category settings cannot approve it. See [Release](../release/README.md)
+   for configuration and recovery; approval executes no shipping command.
 
 Lane tab/workspace/pane creation uses `--no-focus`. Explicit operator navigation
 in the console can focus a selected session. Session metadata is display-only.

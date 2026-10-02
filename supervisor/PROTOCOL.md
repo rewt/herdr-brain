@@ -90,6 +90,21 @@ STOP appearing during review prevents correction dispatch and returns a resumabl
 and correction evidence are retained. Pending or uncertain promotions still need
 inspection rather than a retry.
 
+Promotions batch into releases. At a quiet point (low load, no current/pending
+promotion), run `release --role supervisor`. The release module reads the tracked
+project declaration or defaults, pins a clean integration commit with a candidate
+tag, builds a snapshot and runs the declared release gate once. Workers run fast
+lane validation and never the release gate. A deferred result leaves the cycle
+for a quieter point; a failed or interrupted gate needs evidence inspection.
+Repeated release requests reuse candidate results and never replay a started gate.
+`brief --json`, `record releases` and the console's Releases view retain candidates,
+gate results and the pending decision. A passing gate creates a publish question
+that always waits for the operator, regardless of auto-category policy. Never
+answer it for them or automatically execute its ship command. The operator ships
+or activates; approval itself executes nothing. See release/README.md for project
+overrides, preview and crash recovery. Gates run once per candidate after accumulated
+promotions; they are not per-item acceptance checks.
+
 Before clearing the chat, record anything needed next. Durable decisions replace
 conversation history; don't copy transcripts into the record. Leave watched runs
 in flight and answer the operator with the result or the judgment needed.

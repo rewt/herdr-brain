@@ -689,7 +689,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     }
     if (s.view === 'output' && (input === 'l' || input === 'v')) return activate(input === 'l' ? 'transcript' : 'mirror');
     if (s.view === 'output' && input === 'i') return activate('interact');
-    const shortcut = { S: 'view:desks', H: 'view:housekeeping', P: 'view:priorities', c: 'view:control', u: 'view:routes', d: 'view:decided', f: 'view:asked', p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
+    const shortcut = { L: 'view:releases', S: 'view:desks', H: 'view:housekeeping', P: 'view:priorities', c: 'view:control', u: 'view:routes', d: 'view:decided', f: 'view:asked', p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
     if (shortcut) return activate(shortcut);
     return false;
   }

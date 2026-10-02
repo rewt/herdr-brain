@@ -1,0 +1,6 @@
+{
+  "gate": ["node", "acceptance/run.mjs", "--candidate", "{candidate}"],
+  "prepare": ["bash", "herdr/install.sh"],
+  "prepare_env": { "MONITOR_INSTALL_BUILD_ONLY": "1" },
+  "ship": ["bash", "herdr/release.sh", "build", "{tag}"]
+}

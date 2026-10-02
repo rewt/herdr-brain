@@ -1,0 +1,40 @@
+  Priority evidence ▾         ‹  Project / Priorities                                    r Refresh
+
+  Priority evidence                                                                  Enter re-rank
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                       w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Priorities · 2 operator outcomes
+  The operator owns this order. Enter a priority to re-rank with a reason.
+  + Add priority
+
+  1. P-2 Make adoption easy
+  Rank set by human · The operator wants a usable example first
+    ENG-1 · active · Build a fresh-project example
+  R-1 · active · Build a fresh-project example
+  Previously rank 2 · human · Anyone should be able to use the platform
+
+  2. P-1 Keep context durable
+  Rank set by human · The operator wants a usable example first
+  No open work serving this priority.
+  Previously rank 1 · human · Fresh sessions should continue useful work
+
+  Unaligned · 1 open work
+  No operator priority named. Alignment is advisory; work may proceed.
+  ENG-2 · ready · Explore a side path
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ P Priorities · Enter re-rank · choose Add for a new outcome · Esc back       Live · 0s ago

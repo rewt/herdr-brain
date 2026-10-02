@@ -1,0 +1,40 @@
+  Priority evidence ▾         ‹  Project / Priorities                                    r Refresh
+
+  Priority evidence                                                                  Enter re-rank
+
+  Overview   Goals   Tasks   Activity   Waiting 0   Control                       w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Priorities · 0 operator outcomes
+  The operator owns this order. Enter a priority to re-rank with a reason.
+  No priorities yet. Add the outcomes you want agents to serve.
+  + Add priority
+  Initialize this project record to set priorities: record init
+
+  Unaligned · 0 open work
+  No operator priority named. Alignment is advisory; work may proceed.
+  No unaligned open work.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ P Priorities · Enter re-rank · choose Add for a new outcome · Esc back       Live · 0s ago

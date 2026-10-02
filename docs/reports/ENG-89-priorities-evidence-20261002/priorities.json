@@ -1,0 +1,97 @@
+{
+  "revision": 9,
+  "priorities": [
+    {
+      "id": "P-2",
+      "title": "Make adoption easy",
+      "created": {
+        "at": "2026-10-02T14:00:00.000Z",
+        "by": "human",
+        "why": "Anyone should be able to use the platform",
+        "seq": 2
+      },
+      "rank": 1,
+      "history": [
+        {
+          "rank": 2,
+          "previous": null,
+          "at": "2026-10-02T14:00:00.000Z",
+          "by": "human",
+          "why": "Anyone should be able to use the platform",
+          "seq": 2
+        },
+        {
+          "rank": 1,
+          "previous": 2,
+          "at": "2026-10-02T14:00:00.000Z",
+          "by": "human",
+          "why": "The operator wants a usable example first",
+          "seq": 9
+        }
+      ],
+      "work": [
+        {
+          "id": "ENG-1",
+          "title": "Build a fresh-project example",
+          "status": "active",
+          "serves": [
+            "P-2"
+          ]
+        }
+      ],
+      "runs": [
+        {
+          "id": "R-1",
+          "item": "ENG-1",
+          "title": "Build a fresh-project example",
+          "serves": "P-2",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "id": "P-1",
+      "title": "Keep context durable",
+      "created": {
+        "at": "2026-10-02T14:00:00.000Z",
+        "by": "human",
+        "why": "Fresh sessions should continue useful work",
+        "seq": 1
+      },
+      "rank": 2,
+      "history": [
+        {
+          "rank": 1,
+          "previous": null,
+          "at": "2026-10-02T14:00:00.000Z",
+          "by": "human",
+          "why": "Fresh sessions should continue useful work",
+          "seq": 1
+        },
+        {
+          "rank": 2,
+          "previous": 1,
+          "at": "2026-10-02T14:00:00.000Z",
+          "by": "human",
+          "why": "The operator wants a usable example first",
+          "seq": 9
+        }
+      ],
+      "work": [],
+      "runs": []
+    }
+  ],
+  "unaligned": {
+    "work": [
+      {
+        "id": "ENG-2",
+        "title": "Explore a side path",
+        "status": "ready",
+        "serves": [
+          null
+        ]
+      }
+    ],
+    "runs": []
+  }
+}

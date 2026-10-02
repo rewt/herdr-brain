@@ -7,6 +7,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { commandFailure, classifyFailure, HarnessLimit } from '../limits.mjs';
 import { resultLine } from '../results.mjs';
+import { assertFocus } from '../focus.mjs';
+import { cases, runCase } from '../cases.mjs';
 const guard = path.resolve(import.meta.dirname, '../herdr.mjs');
 
 test('native adapter pins the original socket despite an isolated HOME or caller override', () => {
@@ -68,6 +70,42 @@ test('parent-focusing worktree removal is refused before any native mutation', (
     assert.deepEqual(f.calls(), []);
   } finally { f.close(); }
 });
+test('the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git', async () => {
+  const f = fixture();
+  try {
+    const repo = path.join(f.root, 'repo'), worktree = path.join(f.root, 'lane');
+    const git = (...args) => {
+      const reply = spawnSync('git', args, { encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+      assert.equal(reply.status, 0, reply.stderr);
+    };
+    git('init', '-q', '-b', 'main', repo);
+    git('-C', repo, '-c', 'user.name=Acceptance', '-c', 'user.email=acceptance@example.invalid', 'commit', '--allow-empty', '-qm', 'Initial scratch project');
+    git('-C', repo, 'worktree', 'add', '-qb', 'lane/control', worktree);
+    // Reproduce the old lane-close fallback: capture and ignore the native
+    // refusal, successfully remove through Git, and return success to the gate.
+    const caller = spawnSync(process.execPath, ['-e', `
+      const {spawnSync}=require('node:child_process');
+      spawnSync(process.execPath, [${JSON.stringify(guard)}, 'worktree', 'remove', '--workspace', 'own'], {encoding:'utf8'});
+      const removed=spawnSync('git', ['-C', ${JSON.stringify(repo)}, 'worktree', 'remove', ${JSON.stringify(worktree)}], {encoding:'utf8'});
+      process.exit(removed.status);
+    `], { encoding: 'utf8', env: { ...process.env, ACCEPTANCE_ROOT: f.root } });
+    assert.equal(caller.status, 0, caller.stderr);
+    assert.ok(!fs.existsSync(worktree));
+    assert.deepEqual(f.calls(), [], 'forbidden native mutation never executes');
+    const receipts = fs.readFileSync(path.join(f.root, 'evidence/focus-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(receipts[0].type, 'forbidden-focus');
+    assert.deepEqual(receipts[0].requested, ['worktree', 'remove', '--workspace', 'own']);
+    const unchanged = { baseline: 'operator:p7', samples: 20, changes: [], errors: [] };
+    const results = [];
+    await runCase(results, cases.focus, () => assertFocus(unchanged, { evidence: path.join(f.root, 'evidence') }));
+    assert.equal(results[0].status, 'FAIL');
+    assert.equal(results[0].origin, 'product');
+    assert.match(results[0].detail, /forbidden focus attempt.*worktree remove --workspace own/);
+    assert.match(resultLine(results[0]), /SAFETY/);
+    // A broken monitor must not downgrade a witnessed product refusal.
+    assert.throws(() => assertFocus(undefined, { evidence: path.join(f.root, 'evidence'), error: new HarnessLimit('broken monitor') }), /forbidden focus attempt/);
+  } finally { f.close(); }
+});
 test('creation receipts grant the only new targets and force no-focus', () => {
   const f = fixture();
   try {
@@ -80,6 +118,21 @@ test('creation receipts grant the only new targets and force no-focus', () => {
     assert.ok(f.calls().find((a) => a[0] === 'workspace').includes('--no-focus'));
     assert.equal(f.call('workspace', 'close', 'new').status, 0);
     assert.notEqual(f.call('workspace', 'close', 'newer').status, 0);
+  } finally { f.close(); }
+});
+
+test('explicit focus, attach, zoom and creation focus flags leave typed refusal receipts', () => {
+  const f = fixture();
+  try {
+    const requests = [
+      ['agent', 'focus', 'own:p1'], ['agent', 'attach', 'own:p1'],
+      ['pane', 'zoom', 'own:p1'], ['workspace', 'create', '--cwd', f.root, '--focus'],
+    ];
+    for (const args of requests) assert.notEqual(f.call(...args).status, 0);
+    assert.deepEqual(f.calls(), []);
+    const receipts = fs.readFileSync(path.join(f.root, 'evidence/focus-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.ok(receipts.every((row) => row.type === 'forbidden-focus'));
+    assert.deepEqual(receipts.map((row) => row.requested), requests);
   } finally { f.close(); }
 });
 test('agent send-keys requires an owned target and checks its live cwd', () => {

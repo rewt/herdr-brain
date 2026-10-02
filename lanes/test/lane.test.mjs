@@ -853,6 +853,36 @@ test("close refuses a dirty worktree", () => {
   }
 });
 
+test("close preserves a locked worktree and its workspace when Git removal refuses", () => {
+  const fixture = makeFixture();
+  try {
+    const path = openLane(fixture, "locked-close");
+    commitFile(path, "lane.txt", "recoverable\n", "locked lane work");
+    const head = git(fixture.repo, ["rev-parse", "lane/locked-close"]);
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/locked-close", initiallyOpened: true });
+    git(fixture.repo, ["worktree", "lock", "--reason", "offline lifecycle regression", path]);
+
+    const refused = lane(fixture, ["close", "locked-close"]);
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /locked/u);
+    assert.ok(existsSync(path));
+    assert.equal(git(fixture.repo, ["rev-parse", "lane/locked-close"]), head);
+    assert.ok(!refExists(fixture.repo, "refs/tags/archive/lane/locked-close"));
+    assert.ok(!fake.calls().some((args) => args[0] === "workspace" && args[1] === "close"));
+    assert.ok(!fake.calls().some((args) => args[0] === "worktree" && args[1] === "remove"));
+
+    git(fixture.repo, ["worktree", "unlock", path]);
+    const closed = lane(fixture, ["close", "locked-close"]);
+    assert.equal(closed.status, 0, closed.stderr);
+    assert.ok(!existsSync(path));
+    assert.equal(git(fixture.repo, ["rev-parse", "archive/lane/locked-close"]), head);
+    assert.equal(fake.calls().filter((args) => args[0] === "workspace" && args[1] === "close").length, 1);
+    negativeControl("locked close refusal preserves workspace");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("rebase-check exits zero when clean and one with files on conflict", () => {
   const fixture = makeFixture();
   try {

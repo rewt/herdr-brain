@@ -6,10 +6,19 @@ import path from 'node:path';
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { HerdrClient } from '../lanes/board/herdr-client.mjs';
-import { HarnessLimit } from './limits.mjs';
+import { HarnessLimit, ProductBoundary } from './limits.mjs';
 
 const FILE = fileURLToPath(import.meta.url);
-export function assertFocus(summary) {
+function readCalls(evidence) {
+  const file = path.join(evidence, 'focus-calls.jsonl');
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
+}
+export function assertFocus(summary, { evidence, error } = {}) {
+  const attempts = evidence ? readCalls(evidence).filter((row) => row.type === 'forbidden-focus') : summary?.forbiddenAttempts ?? [];
+  if (attempts.length) {
+    const first = attempts[0];
+    throw new ProductBoundary(`acceptance_product_boundary: forbidden focus attempt at ${first.at}: ${first.requested.join(' ')}; ${first.error}; ${attempts.length} attempt(s)`);
+  }
   if (summary?.changes?.length) {
     const first = summary.changes[0];
     const calls = first.calls.length ? first.calls.map((call) =>
@@ -17,6 +26,7 @@ export function assertFocus(summary) {
       : 'outside a recorded harness call (external client or plugin hook)';
     throw new Error(`operator focus changed from ${summary.baseline} to ${first.panes.join(', ') || '(none)'} at ${first.at}; ${first.phase?.key ?? 'setup'}; ${calls}`);
   }
+  if (error) throw error;
   if (!summary?.baseline || summary.samples < 2 || summary.errors.length) {
     throw new HarnessLimit(`operator focus trace incomplete: ${summary?.errors?.join('; ') || 'missing baseline or samples'}`);
   }
@@ -67,16 +77,19 @@ async function monitor({ socketPath, evidence, intervalMs }) {
   const context = () => {
     const phaseFile = path.join(evidence, 'focus-phase.json');
     const phase = fs.existsSync(phaseFile) ? JSON.parse(fs.readFileSync(phaseFile)) : { key: 'setup' };
-    const callsFile = path.join(evidence, 'focus-calls.jsonl');
-    const rows = fs.existsSync(callsFile) ? fs.readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
-    const active = new Map(); let last;
+    const rows = readCalls(evidence);
+    const active = new Map(); let completed;
     for (const row of rows) {
-      if (row.type === 'start') { active.set(row.id, row); last = row; }
-      else active.delete(row.id);
+      if (row.type === 'start') active.set(row.id, row);
+      else if (row.type === 'end') {
+        const call = active.get(row.id);
+        active.delete(row.id);
+        if (call && (!completed || row.at >= completed.completedAt)) completed = { ...call, completedAt: row.at };
+      }
     }
     // A focus event may arrive just after the completion receipt. Keep that
     // call as a correlation, without claiming causality for outside clients.
-    return { phase, calls: active.size ? [...active.values()] : last && Date.now() - last.at < 1000 ? [last] : [] };
+    return { phase, calls: active.size ? [...active.values()] : completed && Date.now() - completed.completedAt < 1000 ? [completed] : [] };
   };
   const error = (value) => {
     summary.errors.push(value.message ?? String(value));
@@ -115,6 +128,7 @@ async function monitor({ socketPath, evidence, intervalMs }) {
     stopping = true; clearTimeout(timer);
     await inFlight; await sample();
     client.close();
+    summary.forbiddenAttempts = readCalls(evidence).filter((row) => row.type === 'forbidden-focus');
     summary.finishedAt = Date.now(); summary.elapsedMs = summary.finishedAt - summary.startedAt;
     fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n');
     process.send?.({ kind: 'finished', summary });

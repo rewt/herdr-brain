@@ -74,8 +74,41 @@ test('changes outside harness calls remain failures and incomplete monitoring ne
   assert.throws(() => assertFocus({ ...summary, errors: [], samples: 1 }), HarnessLimit);
 });
 
+test('a focus event after a slow completed call names that call using its completion time', async (t) => {
+  const { root, monitor } = await fixture(t);
+  const calls = path.join(root, 'focus-calls.jsonl');
+  const call = { type: 'start', id: 'slow-call', at: Date.now(),
+    args: ['pane', 'run', 'scratch:p2', 'worker'], requested: ['agent', 'start', 'worker', '--pane', 'scratch:p2'] };
+  fs.writeFileSync(calls, JSON.stringify(call) + '\n');
+  // A later-started overlapping call finishes first. Attribution must follow
+  // the most recent completion, rather than the most recent start.
+  fs.appendFileSync(calls, JSON.stringify({ ...call, id: 'quick-call', at: Date.now(), args: ['tab', 'create'], requested: ['tab', 'create'] }) + '\n');
+  fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: 'quick-call', at: Date.now() }) + '\n');
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1100)']);
+  const completedAt = Date.now();
+  fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: call.id, at: completedAt }) + '\n');
+  fs.writeFileSync(path.join(root, 'change'), '');
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.ok(completedAt - call.at > 1000);
+  assert.equal(summary.changes[0].calls[0].id, call.id);
+  assert.equal(summary.changes[0].calls[0].completedAt, completedAt);
+  assert.throws(() => assertFocus(summary), /pane run scratch:p2 worker \(requested agent start worker/);
+});
+
 test('an unreachable read-only focus socket is an explicit harness limitation', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-focus-missing-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   await assert.rejects(startFocusMonitor({ socketPath: path.join(root, 'absent.sock'), evidence: root }), HarnessLimit);
+});
+
+test('the monitor retains forbidden attempts even when every sample remains unchanged', async (t) => {
+  const { root, monitor } = await fixture(t);
+  const receipt = { type: 'forbidden-focus', at: Date.now(), requested: ['worktree', 'remove', '--workspace', 'scratch'], error: 'changes focus' };
+  fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify(receipt) + '\n');
+  const summary = await monitor.stop();
+  assert.equal(summary.changes.length, 0);
+  assert.equal(summary.errors.length, 0);
+  assert.deepEqual(summary.forbiddenAttempts, [receipt]);
+  assert.throws(() => assertFocus(summary), /forbidden focus attempt.*worktree remove/);
 });

@@ -19,6 +19,7 @@ const inside = (p) => {
 // Only explicit capability checks identify candidate safety violations. Native
 // failures, malformed receipts, script timeouts and adapter I/O are harness errors.
 class CapabilityRefusal extends Error {}
+class FocusRefusal extends CapabilityRefusal {}
 const option = (key) => argv[argv.indexOf(key) + 1];
 const requireOption = (key) => { if (!argv.includes(key)) throw new CapabilityRefusal(`explicit ${key} required`); return option(key); };
 const owned = (id, collection) => { if (!state[collection].includes(id)) throw new CapabilityRefusal(`unowned ${collection}: ${id}`); };
@@ -90,6 +91,8 @@ async function ownedPane(id) {
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 try {
   const [group, verb, target] = argv;
+  if (['focus', 'attach', 'zoom'].includes(verb)) throw new FocusRefusal(`focus changes forbidden: ${group} ${verb}`);
+  if (group === 'worktree' && verb === 'remove') throw new FocusRefusal('Herdr worktree remove changes focus; remove the checkout through Git before closing the owned workspace');
   if (group === 'notification' && verb === 'show') {
     // Notification UI is excluded; retain the candidate's attempt in scratch.
     fs.appendFileSync(path.join(root, 'notifications.jsonl'), JSON.stringify(argv) + '\n');
@@ -102,7 +105,6 @@ try {
     if (argv.includes('--workspace')) owned(option('--workspace'), 'workspaces');
     else safePath(requireOption('--cwd'));
     if (['create', 'open'].includes(verb)) safePath(requireOption('--path'));
-    if (verb === 'remove') throw new CapabilityRefusal('Herdr worktree remove changes focus; close the owned workspace and remove the checkout through Git');
   } else if (group === 'tab' && ['list', 'create'].includes(verb)) {
     owned(requireOption('--workspace'), 'workspaces');
     if (argv.includes('--cwd')) safePath(option('--cwd'));
@@ -172,7 +174,7 @@ try {
   }
   const args = [...argv];
   if (['workspace', 'worktree', 'tab'].includes(group) && ['create', 'open'].includes(verb)) {
-    if (args.includes('--focus')) throw new CapabilityRefusal('focus changes forbidden');
+    if (args.includes('--focus')) throw new FocusRefusal('focus changes forbidden');
     if (!args.includes('--no-focus')) args.push('--no-focus');
     if (['workspace', 'tab'].includes(group)) {
       const shell = path.join(root, 'shell');
@@ -227,6 +229,16 @@ try {
     process.stdout.write(JSON.stringify(value) + '\n');
   } else body(result);
 } catch (error) {
+  if (error instanceof FocusRefusal) {
+    // A caller may suppress the non-zero reply and succeed via a fallback.
+    // Keep an independent typed receipt for the final full-run focus verdict.
+    const evidence = path.join(root, 'evidence');
+    fs.mkdirSync(evidence, { recursive: true });
+    fs.appendFileSync(path.join(evidence, 'focus-calls.jsonl'), JSON.stringify({
+      type: 'forbidden-focus', id: `${process.pid}:${Date.now()}`, at: Date.now(),
+      args: argv, requested: argv, error: error.message,
+    }) + '\n');
+  }
   fs.appendFileSync(path.join(root, 'denied.jsonl'), JSON.stringify({ argv, error: error.message }) + '\n');
   process.stderr.write(JSON.stringify({ error: { code: error instanceof CapabilityRefusal ? 'acceptance_product_boundary' : 'acceptance_harness_limit', message: error.message } }) + '\n');
   process.exitCode = 1;

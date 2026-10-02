@@ -228,9 +228,14 @@ function emitSummary(interruption = {}) {
 
 async function finishFocus() {
   await test(cases.focus, async () => {
-    if (focusError) throw focusError;
-    if (!focusMonitor) throw new HarnessLimit('focus monitor never started; no full-run focus proof');
-    return assertFocus(await focusMonitor.stop());
+    let summary, error = focusError;
+    if (focusMonitor) {
+      try { summary = await focusMonitor.stop(); }
+      catch (value) { error = value; }
+    }
+    // Read forbidden attempts even if the monitor failed or a candidate caller
+    // swallowed its refusal. A missing focus change cannot green such a call.
+    return assertFocus(summary, { evidence, error });
   });
 }
 installSignalCleanup({ root, cleanup: async () => {

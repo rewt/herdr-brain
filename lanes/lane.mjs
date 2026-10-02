@@ -2275,23 +2275,24 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
   if (path !== undefined) {
     requireClean(path, "lane worktree");
     // Herdr 0.8.2 worktree.remove always focuses the parent workspace, even
-    // when removing a background lane. Close its workspace separately, then
-    // let Git remove the clean checkout; workspace.close preserves other focus.
-    let mismatchedMetadata = false;
+    // when removing a background lane. Retain the verified workspace identity
+    // before Git removes its metadata, but close it only after removal succeeds.
+    // Git refusals (including locked worktrees) must preserve the running panes.
+    let mismatchedMetadata = false, workspaceId;
     try {
-      const workspaceId = gitOnly ? undefined : openWorkspaceIdFor(path, {
+      workspaceId = gitOnly ? undefined : openWorkspaceIdFor(path, {
         refuseStale: false,
         onMismatch: () => { mismatchedMetadata = true; },
       });
-      if (workspaceId !== undefined) {
-        spawnSync("herdr", ["workspace", "close", workspaceId], {
-          encoding: "utf8",
-        });
-      }
     } catch {
       // herdr unavailable; fall back to git below
     }
     git(["worktree", "remove", path]);
+    if (workspaceId !== undefined) {
+      spawnSync("herdr", ["workspace", "close", workspaceId], {
+        encoding: "utf8",
+      });
+    }
     if (mismatchedMetadata) {
       process.stderr.write(`lane: note: Herdr metadata for ${path} does not match this repository; removed the worktree with git only\n`);
     }

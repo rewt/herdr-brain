@@ -68,12 +68,17 @@ the active or immediately preceding call; changes without a correlated harness
 call are labelled external client/plugin activity and still fail. Missing samples
 or a broken subscription are PENDING, never proof of unchanged focus. Do not
 switch the operator's pane during the run. The monitor never restores focus.
+Forbidden focus attempts also produce typed receipts and fail the case even if
+the caller suppresses the refusal and exits successfully. Late observations
+correlate against the most recent completion for one second after that call ends.
 
 On Herdr 0.8.2, `--no-focus` covers workspace/worktree/tab creation, worktree open,
 pane split/move and plugin pane open; it is not an option for agent start, pane run
 or terminal input. Those input operations preserve focus. `worktree remove`
-unconditionally focuses its parent, so lane closure instead closes the background
-workspace and removes the checkout through Git. Explicit focus/attach and zoom
+unconditionally focuses its parent, so lane closure instead retains the verified
+background workspace ID, removes the checkout through Git, then closes that
+workspace only after successful removal. A Git refusal preserves its panes.
+Explicit focus/attach and zoom
 are reserved for operator navigation, never background dispatch or acceptance.
 
 The primary cases enter new Git projects without `.org`, `.lane.json`, routes or

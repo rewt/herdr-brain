@@ -8,10 +8,15 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
+import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 
 const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
 const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const quietFake = `
+if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));process.exit(0);}
+if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
+`;
 async function until(fn) {
   const end = Date.now() + 30000;
   while (Date.now() < end) { if (fn()) return; await delay(30); }
@@ -25,6 +30,10 @@ function fixture(t) {
   delete env.NODE_TEST_CONTEXT;
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(?:DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];
   env.ORG_ACTOR = 'promote-test-agent';
+  env.SUPERVISOR_INPUT_CONFIRM_SECONDS = '0.02';
+  env.SUPERVISOR_INPUT_POLL_SECONDS = '0.02';
+  env.SUPERVISOR_INPUT_WAIT_SECONDS = '2';
+  env.PROMOTE_TEST_COMPOSER = path.join(root, 'composer');
   const git = (args, cwd = repo) => {
     const r = spawnSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
@@ -35,7 +44,7 @@ function fixture(t) {
   fs.writeFileSync(path.join(repo, 'shared'), 'base\n'); git(['add', '.']); git(['commit', '-qm', 'base']);
   const herdr = path.join(root, 'herdr');
   const notices = path.join(root, 'notices.jsonl');
-  fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';\nconst args = process.argv.slice(2);\nif (args[0] === 'agent' && args[1] === 'prompt') {\nfs.appendFileSync(${JSON.stringify(notices)}, JSON.stringify(args) + '\\n');\nif (fs.existsSync(${JSON.stringify(path.join(root, 'delivery-fail'))})) process.exit(1);\n}\nprocess.stdout.write(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
+  fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';\nconst args = process.argv.slice(2);\n${quietFake}\nif (args[0] === 'agent' && args[1] === 'prompt') {\nfs.appendFileSync(${JSON.stringify(notices)}, JSON.stringify(args) + '\\n');\nif (fs.existsSync(${JSON.stringify(path.join(root, 'delivery-fail'))})) process.exit(1);\n}\nprocess.stdout.write(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
   fs.chmodSync(herdr, 0o755);
   const queue = queueFor(repo);
   const lane = (topic, content = topic) => {
@@ -89,6 +98,19 @@ test('unconfigured project: detached worker promotes two lanes in FIFO order usi
   assert.match(fs.readFileSync(f.results()[1].log, 'utf8'), /rebased lane\/second/);
   assert.equal(f.git(['status', '--porcelain']), '');
   assert.equal(fs.existsSync(path.join(f.repo, '.promote.json')), false);
+});
+
+test('promotion notice queues during typing and delivers after clearing without repeating promotion', async (t) => {
+  const f = fixture(t); f.lane('first');
+  const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
+  fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
+  f.launch(['first']);
+  await until(() => fs.existsSync(inbox) && readInbox(inbox).length === 1);
+  assert.deepEqual(f.messages(), []); assert.equal(f.queue.load().current.phase, 'completed');
+  fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
+  await until(() => f.results().length === 1);
+  assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
+  assert.equal(f.messages().length, 1); assert.equal(readInbox(inbox)[0].state, 'sent');
 });
 
 test('queue refuses a lane changed while pending behind another job before validation or integration', { timeout: 20000 }, (t) => {
@@ -218,11 +240,11 @@ test('replay conflict after clean merge-tree preflight names the file in the not
   assert.equal(fs.readFileSync(path.join(bad, 'shared'), 'utf8'), 'base\n');
 });
 
-test('delivery failure is durable with notification fallback; draining continues', async (t) => {
+test('uncertain delivery is durable and holds later notices while promotion continues', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second'); fs.writeFileSync(path.join(f.root, 'delivery-fail'), '1');
   f.launch(['first', 'second']); await until(() => f.results().length === 2);
   assert.ok(f.results().every((r) => r.outcome === 'promoted' && r.delivered === false && r.delivery_error));
-  assert.equal(f.messages().length, 4);
+  assert.equal(f.messages().length, 1, 'lost acknowledgements never replay prompts or overtake the first notice');
 });
 
 test('project override selects supervisor and duplicate pending lanes do not repeat', async (t) => {
@@ -346,6 +368,7 @@ function blockCleanup(f) {
   const marker = path.join(f.root, 'cleanup-pid');
   const release = path.join(f.root, 'cleanup-release');
   fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const args=process.argv.slice(2);
+${quietFake}
 if (args[0]==='workspace' && args[1]==='list') {
   fs.writeFileSync(${JSON.stringify(marker)}, String(process.pid));
   while (!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);

@@ -18,6 +18,9 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|MONITOR_)/.test(key) || (key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(key))) delete env[key];
   env.ORG_ACTOR = actor;
+  env.SUPERVISOR_INPUT_CONFIRM_SECONDS = '0.02';
+  env.SUPERVISOR_INPUT_POLL_SECONDS = '0.02';
+  env.SUPERVISOR_INPUT_WAIT_SECONDS = '2';
   delete env.NODE_TEST_CONTEXT;
   fs.mkdirSync(env.HOME); fs.mkdirSync(env.XDG_CONFIG_HOME);
   const watchers = new Map(), observed = new Set(), pending = [], tracker = createProcessTracker();
@@ -108,9 +111,10 @@ if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w
 else if(args[0]==='worktree'&&args[1]==='list') out({source:{repo_key:path.join(repo,'.git'),repo_root:repo,source_checkout_path:repo},worktrees:[{path:cwd,branch:'lane/topic',open_workspace_id:'w-lane'},{path:repo,branch:'main',open_workspace_id:'w-parent'}]});
 else if(args[0]==='tab'&&args[1]==='create') {const n=Object.keys(agents).length+1;out({root_pane:{pane_id:'w-lane:p'+n},tab:{tab_id:'w-lane:t'+n}});}
 else if(args[0]==='pane'&&args[1]==='get') out({pane:{pane_id:args[2],foreground_cwd:cwd}});
+else if(args[0]==='pane'&&args[1]==='read') console.log(fs.existsSync(path.join(root,'supervisor-composer'))?fs.readFileSync(path.join(root,'supervisor-composer'),'utf8'):'────────────────────\\n❯ \\n────────────────────');
 else if(args[0]==='agent'&&args[1]==='start') {const n=args[2],pane=args[args.indexOf('--pane')+1]; agents[n]={name:n,pane_id:pane,workspace_id:'w-lane',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle'};save();out({name:n,pane_id:pane});}
 else if(args[0]==='agent'&&args[1]==='list') out({agents:Object.values(agents)});
-else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent_status:'idle',cwd,pane_id:'original:p',workspace_id:'w-lane'}});
+else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',workspace_id:'w-lane'}});
 else if(args[0]==='agent'&&args[1]==='read') console.log('');
 else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,100));out({});}
 else if(args[0]==='agent'&&args[1]==='prompt') {

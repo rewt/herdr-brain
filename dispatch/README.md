@@ -62,6 +62,11 @@ without a work prompt; the prompt is sent only after its record is complete and
 The watcher uses a log under `.org/dispatch/` and inherits no supervisor pane,
 tab or workspace ID. `--to` selects the supervisor; the default is
 `supervisor-herdr`. The core stays foreground and never calls a model.
+Correction and completion notices go through watch's
+[shared supervisor input gate](../supervisor/README.md), which journals notices
+and waits for two empty-composer reads while the supervisor is idle. Dispatch's
+work prompt still targets its own worker; it does not type notices into the
+supervisor directly.
 
 ## Recovery
 

@@ -29,6 +29,10 @@ recover their original ask from that request. With neither, the item's title,
 acceptance and durable history supply the ask. `--repo DIR` selects a project,
 `--org DIR` selects a record, and `--to AGENT` names the supervisor watched by a
 correction run (default `supervisor-herdr`).
+That correction's watch delivers through the
+[shared supervisor inbox/input gate](../supervisor/README.md), so a fix report
+waits durably while the operator composes a message. Settle has no separate
+supervisor prompt path.
 
 Mechanical checks pin the report bytes, Git common-directory ownership,
 registered lane, clean tree, HEAD, base branch and validation. The reviewer gets

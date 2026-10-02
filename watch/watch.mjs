@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { readReport } from '../lib/report.mjs';
+import { promptSupervisor } from '../supervisor/prompt-supervisor.mjs';
 import {
   blockedNotice,
   invalidReportNotice,
@@ -37,6 +38,7 @@ const { values: opt, positionals } = parseArgs({
     'long-after': { type: 'string', default: '3600' },
     'retry-after': { type: 'string', default: '10' },
     'delivery-attempts': { type: 'string', default: '5' },
+    inbox: { type: 'string' },
     'org-cli': { type: 'string' },
     herdr: { type: 'string', default: 'herdr' },
     spawn: { type: 'boolean', default: false },
@@ -110,7 +112,7 @@ function agentStatus(agent) {
     if (body.error?.code === 'agent_not_found') return { state: null };
     if (body.error) return { state: 'unavailable', error: `${body.error.code}: ${body.error.message}` };
     const state = (body.result ?? body).agent?.agent_status;
-    return state ? { state } : { state: 'unavailable', error: 'Herdr returned no agent state' };
+    return state ? { state, sequence: (body.result ?? body).agent.state_change_seq } : { state: 'unavailable', error: 'Herdr returned no agent state' };
   } catch (error) {
     const detail = (result.stderr || result.stdout).trim();
     return { state: 'unavailable', error: detail || `invalid Herdr response (${error.message})` };
@@ -207,18 +209,15 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
   });
 }
 
-async function deliver(message, sound = 'request') {
+async function deliver(message, sound = 'request', id) {
   log(message);
   if (dry) return true;
-  let error = '';
-  for (let attempt = 1; attempt <= deliveryAttempts; attempt += 1) {
-    const sent = run(opt.herdr, ['agent', 'prompt', opt.to, message]);
-    if (!sent.error && sent.status === 0) return true;
-    error = (sent.stderr || sent.stdout || sent.error?.message || `exit ${sent.status}`).trim();
-    if (attempt < deliveryAttempts) await delay(retryAfterMs);
-  }
-  run(opt.herdr, ['notification', 'show', `${runId} watch could not deliver`, '--body', message, '--sound', sound]);
-  throw new Error(`could not deliver to ${opt.to} after ${deliveryAttempts} attempts: ${error}`);
+  const result = await promptSupervisor(opt.to, message, {
+    org: opt.org, inbox: opt.inbox, herdr: opt.herdr, attempts: deliveryAttempts,
+    retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log,
+  });
+  if (result.delivered) return true;
+  throw new Error(`could not deliver to ${opt.to}: ${result.delivery_error}; inbox=${result.inbox}`);
 }
 
 function shellQuote(value) {
@@ -338,12 +337,15 @@ async function watch() {
   let idleGraceUntil;
   let observedWorking = false;
   let startupWaitingLogged = false;
+  let noticeSequence = 0;
+  let previousState;
   const armedAt = Date.now();
   const startedAt = Date.parse(current.started?.at ?? '') || Date.now();
   const sendOnce = async (message, sound, { fatal = false } = {}) => {
     if (message === lastNotice) return true;
     try {
-      await deliver(message, sound);
+      const digest = crypto.createHash('sha256').update(message).digest('hex');
+      await deliver(message, sound, `watch:${runId}:${noticeSequence}:${digest}`);
       lastNotice = message;
       return true;
     } catch (error) {
@@ -371,6 +373,9 @@ async function watch() {
     let report = reportState(reportPath);
     const status = agentStatus(agent);
     const state = status.state;
+    if (status.sequence !== undefined) noticeSequence = status.sequence;
+    else if (state === 'working' && previousState !== 'working') noticeSequence++;
+    previousState = state;
 
     const workerStillRunning = state === 'working' || state === 'unknown';
     const workerFinished = state === 'idle' || state === 'done' || state === null;
@@ -383,7 +388,7 @@ async function watch() {
       await deliver(reportNotice({
         run: runId, item, outcome: report.report.outcome, headline,
         report: reportPath, check: 'pass',
-      }), 'done');
+      }), 'done', `watch:${runId}:final`);
       log(`validated by ${report.check}`);
       return;
     }

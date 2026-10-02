@@ -1,5 +1,61 @@
 # Supervisor
 
+All automatic supervisor notices use `prompt-supervisor.mjs`, including watch's
+intermediate/final notices, promotion outcomes, and settle/dispatch's correction
+watchers. The helper aligns with bch-cloak's `prompt-supervisor.sh` and
+`box-empty.py`: append the notice to `inbox.log` first, read the input box twice
+three seconds apart, then call `herdr agent prompt`. Both reads also require an
+idle/done agent and the same live occupant. Busy or unreadable input raises a
+non-focusing `herdr notification show` and waits. Nothing focuses or creates a
+pane. Ordinary worker work prompts and operator-directed console input are
+separate from automatic supervisor notices.
+
+`SUPERVISOR_INPUT_WAIT_SECONDS` retains bch-cloak's name and default of 7200.
+At the cap the notice stays queued. `SUPERVISOR_INPUT_CONFIRM_SECONDS` defaults
+to 3; offline fakes shorten it while one test exercises the actual default.
+`SUPERVISOR_INPUT_POLL_SECONDS` defaults to 10, matching bch-cloak's busy-input
+poll interval; offline fakes shorten this independently of prompt refusal retries.
+Harness parsing lives in [composer.mjs](composer.mjs), outside the record core.
+Claude uses the last two horizontal rules of its footer, ignoring the prompt
+glyph and dim/neutral grey placeholder text. Codex uses its `›` composer rows
+above the model/cwd status bar, including wrapped input. Unknown harnesses,
+missing footers, failed reads, blocked and working agents all keep notices queued.
+
+The inbox is an append-only, fsynced JSONL transport journal at
+`ORG/supervisor/inbox.log`, or `GIT_COMMON_DIR/supervisor/inbox.log` without a
+record. Watch and promotion discover the same record; linked checkouts share
+the journal. `--inbox FILE` selects another journal explicitly. This adds no
+record events or stored item status. Enqueue and drain locks serialize writers
+and prompts in FIFO order. Stable watch/promotion IDs adopt existing notices
+on retries, including final watch notices after a process restart. A later sender
+drains older queued notices first. Retained notices can also be drained explicitly:
+
+```sh
+node supervisor/prompt-supervisor.mjs supervisor-herdr 'NOTICE' --org /record --id stable-notice-id
+node supervisor/prompt-supervisor.mjs --org /record --drain
+```
+
+The helper exits 0 for delivery, 3 when still queued, and 1 for an uncertain
+prompt or journal failure. It logs delivery that waited in the journal and
+caller output. Only documented pre-input refusals (`agent_blocked` and
+`agent_not_found`) retry automatically. A lost prompt acknowledgement could
+mean text already arrived; its `sending` entry holds later notices for inspection.
+Herdr currently offers no atomic empty-composer prompt or idempotent notice key,
+so exactly-once delivery across that external-effect crash window cannot be
+claimed. After inspecting the target, resolve the retained ID explicitly:
+
+```sh
+node supervisor/prompt-supervisor.mjs --org /record --resolve ID --sent
+# Only if inspection proves the notice was never delivered:
+node supervisor/prompt-supervisor.mjs --org /record --resolve ID --resend
+node supervisor/prompt-supervisor.mjs --org /record --drain
+```
+
+Crash locks fail closed. Inspect their `owner.json` and surviving sender before
+removing a stale lock. A torn journal tail remains intact for inspection. Do not
+reuse bch-cloak's existing plain-text inbox as this JSONL journal; select a new
+file when switching and retain the old inbox as evidence.
+
 Discovery's explicit supervisor entry injects [PROTOCOL.md](PROTOCOL.md) and a
 fresh cold start before the native harness launches. It works in unconfigured
 projects and populated records, without a model or a background supervisor.

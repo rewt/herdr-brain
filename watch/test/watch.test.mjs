@@ -15,11 +15,22 @@ import {
   reportNotice,
   unavailableNotice,
 } from '../notice.mjs';
+import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 
-const TEST_ENV = { ...process.env, ORG_ACTOR: 'watch-test-agent' };
+const TEST_ENV = { ...process.env, ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
 
 function executable(file, body) {
+  if (path.basename(file) === 'herdr') body = `
+if [ "$1 $2 $3" = 'agent get supervisor-test' ]; then
+  printf '%s\\n' '{"result":{"agent":{"agent_status":"idle","agent":"claude","pane_id":"fake:supervisor"}}}'
+  exit 0
+fi
+if [ "$1 $2" = 'pane read' ]; then
+  printf '%s\\n' '────────────────────' '❯ ' '────────────────────'
+  exit 0
+fi
+${body}`;
   fs.writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
 }
 
@@ -146,6 +157,31 @@ esac`);
   const sent = fs.readFileSync(calls, 'utf8');
   assert.match(sent, /agent prompt supervisor-test \[org-report\] run=R-7 item=ENG-3 outcome=done/);
   assert.match(sent, /headline="The work landed" check=pass/);
+});
+
+test('final watch notice waits for fake operator typing, then sends once across watcher restart', async (t) => {
+  const f = watcherFixture('R-125');
+  t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const screen = path.join(f.root, 'composer');
+  const inbox = path.join(f.root, '.org/supervisor/inbox.log');
+  fs.writeFileSync(f.report, reportText('R-125'));
+  fs.writeFileSync(screen, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
+  // This fake bypasses executable()'s default empty supervisor fixture.
+  fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const a=process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));
+else if(a[0]==='pane'&&a[1]==='read') process.stdout.write(fs.readFileSync(${JSON.stringify(screen)},'utf8'));
+else console.log('{}');\n`, { mode: 0o755 });
+  const child = startWatcher(t, f.args);
+  await waitForText(f.calls, /notification/);
+  assert.equal(readInbox(inbox)[0].state, 'pending');
+  assert.doesNotMatch(fs.readFileSync(f.calls, 'utf8'), /"prompt"/);
+  fs.writeFileSync(screen, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
+  assert.equal((await waitForExit(child)).code, 0);
+  assert.equal((await waitForExit(startWatcher(t, f.args))).code, 0);
+  const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse).filter((args) => args[1] === 'prompt');
+  assert.equal(prompts.length, 1); assert.match(prompts[0][3], /^\[org-report\] run=R-125 /);
+  assert.equal(readInbox(inbox).length, 1);
 });
 
 test('a report landing wakes the watcher without polling Herdr', async (t) => {
@@ -344,9 +380,9 @@ test('idle, working, idle without a report delivers both stop notices', async (t
   const fixture = watcherFixture('R-12');
   const counter = path.join(fixture.root, 'gets');
   executable(fixture.herdr, `case "$1 $2" in
-  "agent get") n=$(($(cat "${counter}" 2>/dev/null || echo 0)+1)); printf '%s' "$n" > "${counter}"; case "$n" in 2|4) state=idle ;; *) state=working ;; esac; printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$state" ;;
+  "agent get") n=$(($(cat "${counter}" 2>/dev/null || echo 0)+1)); printf '%s' "$n" > "${counter}"; case "$n" in 1|3) state=working ;; *) state=idle ;; esac; printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$state" ;;
   "agent wait") exit 0 ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-no-report*) n=$(grep -c watch-no-report "${fixture.calls}"); [ "$n" -eq 2 ] && "${fixture.writer}" ;; esac ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-no-report*) n=$(grep -c watch-no-report "${fixture.calls}"); [ "$n" -eq 2 ] && "${fixture.writer}"; : ;; esac ;;
   *) exit 2 ;;
 esac`);
   const result = await waitForExit(startWatcher(t, fixture.args));
@@ -393,14 +429,15 @@ esac`);
   assert.match(calls, /\[org-report\] run=R-18.*headline="Finished after unblocking"/);
 });
 
-test('a failed intermediate delivery notifies the operator and keeps watching for the final report', async (t) => {
+test('a refused intermediate delivery stays first in the inbox and recovers before the final report', async (t) => {
   const fixture = watcherFixture('R-16');
   const state = path.join(fixture.root, 'worker-state');
   fs.writeFileSync(state, 'blocked');
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
   "agent wait") sleep 10 ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*) exit 1 ;; esac ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*)
+    if [ ! -f '${fixture.root}/refused' ]; then printf yes > '${fixture.root}/refused'; printf '%s\\n' '{"error":{"code":"agent_blocked"}}' >&2; exit 1; fi ;; esac ;;
   "notification show") printf '%s\\n' "$*" >> "${fixture.calls}"; "${fixture.writer}"; printf '%s' idle > '${state}' ;;
   *) exit 2 ;;
 esac`);

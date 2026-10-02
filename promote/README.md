@@ -67,11 +67,16 @@ its paused rebase for the implementer to resolve or abort before retrying. Its
 branch is retained and neither validation nor fast-forward runs for that request.
 
 After **every** attempt, including unknown lanes, refusals and interrupted attempts,
-`herdr agent prompt` sends a compact `[promote-queue]` message to `supervisor-herdr`.
-The queue records delivery separately from promotion. Delivery retries default to
-five attempts, ten seconds apart; exhaustion uses a Herdr notification and retains
-the undelivered message/error. It never turns an undelivered success into a new
-promotion. Gates have no invented time budget.
+[the shared supervisor input gate](../supervisor/README.md) journals a compact
+`[promote-queue]` message before attempting `herdr agent prompt`. The pane must be
+idle/done with an empty composer on two ANSI reads three seconds apart. Typing or
+unavailable input queues the message and raises a non-focusing Herdr notification.
+`SUPERVISOR_INPUT_WAIT_SECONDS` defaults to 7200; capped messages stay in the inbox
+and drain before newer notices when input clears. The queue records delivery and
+its inbox/notice ID separately from promotion. Definite pre-input refusals retry
+with the configured attempts and delay; uncertain prompt outcomes require
+inspection and hold later notices. It never turns an undelivered success into a
+new promotion. Gates have no invented time budget.
 
 Optional overrides:
 

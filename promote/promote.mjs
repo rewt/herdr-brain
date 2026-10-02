@@ -10,10 +10,10 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
+import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const singleLine = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
 
 export function queueFor(cwd) {
@@ -135,16 +135,13 @@ export function notice(job, result) {
 }
 async function deliver(job, result, queue) {
   const message = notice(job, result);
-  let error;
-  for (let attempt = 1; attempt <= job.attempts; attempt++) {
-    try {
-      invoke(job.herdr, ['agent', 'prompt', job.to, message], { cwd: queue.project.canonical, timeout: 10000 });
-      return { delivered: true, message };
-    } catch (e) { error = e.message; }
-    if (attempt < job.attempts) await delay(job.retry * 1000);
-  }
-  try { invoke(job.herdr, ['notification', 'show', 'Promotion notice undelivered', '--body', message], { timeout: 10000 }); } catch {}
-  return { delivered: false, message, delivery_error: error };
+  const { id: deliveryId, ...delivery } = await promptSupervisor(job.to, message, {
+    inbox: inboxPath({ org: job.org, cwd: queue.project.canonical }),
+    herdr: job.herdr, attempts: job.attempts, retrySeconds: job.retry,
+    id: `promote:${job.id}`, title: 'Promotion notice undelivered',
+    log: (line) => process.stdout.write(line + '\n'),
+  });
+  return { ...delivery, delivery_id: deliveryId };
 }
 
 export async function drain(queue) {

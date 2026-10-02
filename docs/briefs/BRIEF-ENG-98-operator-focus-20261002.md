@@ -31,3 +31,10 @@ sessions on the cheapest route are approved for acceptance runs. No push or publ
 Commit on this lane; write the report at the path your prompt names, with `decisions`,
 `questions` and `challenges` after `artifacts`; cite commits by subject; `record check` it,
 commit it, and run `lane check` last. Then stop.
+
+## Decision added during the work (supervisor, 2026-10-02)
+
+The operator is live and other projects (bch-cloak) run beside acceptance. The focus case therefore
+fails only when focus moves to a pane or workspace the harness created or owns, or when the move is
+correlated with a harness or candidate call. A move to any other pane is an external change: it is
+recorded in the trace and reported, the monitor re-baselines on it, and it does not fail the run.

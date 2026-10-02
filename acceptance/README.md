@@ -112,8 +112,11 @@ with the gate profile, rather than replacing its lifetime identity. On macOS it
 grants read access to one verified private inert probe, retains the second probe's
 denial, and forwards the owner's readiness descriptor. Probe directories remain
 unreadable, session paths outside the validation checkout remain read-only, and
-Git metadata and network restrictions remain in force. Offline native transport
-regressions run in `npm run test:acceptance` without authentication or model calls.
+Git metadata and network restrictions remain in force. Verified product write
+exceptions inside the checkout, including its validation TMPDIR, stay writable;
+redirected paths and grants covering protected state or Git metadata refuse.
+Offline native transport regressions run in `npm run test:acceptance` without
+authentication or model calls.
 
 The real sessions extend Codex's native workspace permission profile with only
 their own project checkout and per-session temp directory writable, ephemeral

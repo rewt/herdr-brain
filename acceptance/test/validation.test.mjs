@@ -32,11 +32,15 @@ function fixture(t) {
 test('validation composition keeps product denials and refuses foreign writes and unsupported profiles', (t) => {
   const { repo, temp, spec } = fixture(t);
   const shared = path.join(repo, '.org'); fs.mkdirSync(shared);
-  const sandbox = sandboxCommand('/native/codex', repo, { sharedPaths: [shared] });
+  const coordination = path.join(repo, '.lane'), temporary = path.join(coordination, 'validation-tmp');
+  fs.mkdirSync(temporary, { recursive: true });
+  const sandbox = sandboxCommand('/native/codex', repo, { sharedPaths: [shared, coordination], writablePaths: [temporary] });
   const args = ['sandbox', ...sandbox.args.slice(1), process.execPath, '-e', ''];
   // sandbox.args already starts with "sandbox" and ends at the separator.
   const composed = validationTransport(spec, args, repo).args.join(' ');
   assert.ok(composed.includes(`${JSON.stringify(shared)}="read"`));
+  assert.ok(composed.includes(`${JSON.stringify(coordination)}="read"`));
+  assert.ok(composed.includes(`${JSON.stringify(temporary)}="write"`));
   assert.ok(composed.includes('":tmpdir"="read"'));
   assert.ok(composed.includes(`${JSON.stringify(spec.worktreeRoot)}="read"`));
   assert.ok(composed.includes(`${JSON.stringify(spec.gitCommon)}="read"`));
@@ -46,6 +50,21 @@ test('validation composition keeps product denials and refuses foreign writes an
   assert.throws(() => validationTransport(spec, changed, repo), /external writes/);
   changed[option] = args[option] + 'garbage';
   assert.throws(() => validationTransport(spec, changed, repo), /trailing validation profile/);
+});
+
+test('validation write exceptions reject redirected directories and protected Git or shared-state targets', (t) => {
+  const { repo, spec } = fixture(t);
+  const temporary = path.join(repo, '.lane/validation-tmp'); fs.mkdirSync(temporary, { recursive: true });
+  const shared = path.join(temporary, 'selected-record'); fs.mkdirSync(shared);
+  const sandbox = sandboxCommand('/native/codex', repo, { sharedPaths: [shared] });
+  const args = [...sandbox.args, '/bin/true'];
+  const option = args.findIndex((arg) => arg.startsWith('permissions.monitor-validation.filesystem='));
+  const grant = (file) => args.map((arg, i) => i === option
+    ? arg.replace('":root"="read"', `":root"="read",${JSON.stringify(file)}="write"`) : arg);
+  for (const file of [temporary, path.join(repo, '.git/objects')])
+    assert.throws(() => validationTransport(spec, grant(file), repo), /overlaps protected state/);
+  const alias = path.join(repo, 'redirected-temp'); fs.symlinkSync(temporary, alias);
+  assert.throws(() => validationTransport(spec, grant(alias), repo), /writable path redirected/);
 });
 
 test('only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse', { skip: process.platform !== 'darwin' }, (t) => {
@@ -93,11 +112,17 @@ test('actual native transport validates and promotes work and approved routes of
           { ORG_DIR: entry.context().org, ORG_ACTOR: 'human' });
         entry.dispatch({ op: 'apply-routes' });
       }
-      fs.writeFileSync(path.join(task.workspace, 'test/confinement.test.mjs'), `import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import net from 'node:net';
+      fs.writeFileSync(path.join(task.workspace, 'test/confinement.test.mjs'), `import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import net from 'node:net';import path from 'node:path';
         test('gate and product boundaries',async()=>{
+          assert.equal(fs.realpathSync(process.env.TMPDIR),path.join(process.cwd(),'.lane/validation-tmp'));
+          const temporary=fs.mkdtempSync(path.join(process.env.TMPDIR,'gate-proof-'));
+          try {
+            const file=path.join(temporary,'probe');fs.writeFileSync(file,'temporary data',{flag:'wx'});
+            assert.equal(fs.readFileSync(file,'utf8'),'temporary data');fs.unlinkSync(file);assert.ok(!fs.existsSync(file));
+          } finally {fs.rmSync(temporary,{recursive:true,force:true});}
           assert.throws(()=>fs.readFileSync(${JSON.stringify(outside)}),e=>['EPERM','EACCES'].includes(e.code));
-          for(const file of ${JSON.stringify([path.join(repo, '.org/events.jsonl'), path.join(repo, '.lane/escape'), path.join(repo, '.git/config'), path.join(temp, 'escape')])})
-            assert.throws(()=>fs.writeFileSync(file,'escape'),e=>['EPERM','EACCES'].includes(e.code));
+          for(const file of ${JSON.stringify([path.join(repo, '.org/events.jsonl'), path.join(repo, '.lane/escape'), path.join(repo, '.git/config'), path.join(task.workspace, '.git'), path.join(temp, 'escape')])})
+            assert.throws(()=>fs.writeFileSync(file,'escape'),e=>['EPERM','EACCES'].includes(e.code),file);
           await new Promise((resolve,reject)=>{const socket=net.createConnection({host:'127.0.0.1',port:9});socket.once('connect',()=>{socket.destroy();reject(Error('network allowed'))});socket.once('error',e=>['EPERM','EACCES'].includes(e.code)?resolve():reject(e));});
         });\n`);
       fs.mkdirSync(path.dirname(task.report), { recursive: true });

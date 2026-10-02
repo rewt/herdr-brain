@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { permissionFilesystem, permissionArgs, within } from './security.mjs';
+import { checkedDirectory } from '../discovery/paths.mjs';
 
 // The product emits inline TOML tables containing only quoted strings/tables.
 // Parse that small wire format without evaluating code or accepting other TOML.
@@ -60,6 +61,8 @@ export function validationTransport(spec, args, cwd = process.cwd()) {
   const filesystem = permissionFilesystem(spec, { gitWrites: false, validation: true });
   assert.ok(within(spec.repo, cwd) || within(spec.temp, cwd), 'acceptance_product_boundary: validation checkout escaped its project/session');
   filesystem[cwd] = 'write';
+  const gitPaths = [path.join(cwd, '.git'), spec.gitCommon, spec.probeGit].filter(Boolean);
+  const protectedPaths = Object.entries(product).filter(([file, access]) => !file.startsWith(':') && ['read', 'none'].includes(access)).map(([file]) => file);
   for (const [file, access] of Object.entries(product)) {
     if (file.startsWith(':')) { assert.ok([':root', ':workspace_roots'].includes(file), 'acceptance_product_boundary: unknown validation permission'); continue; }
     assert.ok(path.isAbsolute(file) && ['read', 'none', 'write'].includes(access), 'acceptance_product_boundary: unsupported validation permission');
@@ -67,7 +70,16 @@ export function validationTransport(spec, args, cwd = process.cwd()) {
     else if (access === 'read') {
       // Do not turn a product's root-readable profile into a foreign read grant.
       if (withinExisting(spec.repo, file) || withinExisting(spec.temp, file)) filesystem[file] = 'read';
-    } else assert.ok(withinExisting(cwd, file), 'acceptance_product_boundary: validation added external writes');
+    } else {
+      assert.ok(withinExisting(cwd, file), 'acceptance_product_boundary: validation added external writes');
+      const directory = checkedDirectory(file);
+      assert.ok(!gitPaths.some((git) => withinExisting(directory, git) || (fs.existsSync(git) && within(git, directory)))
+        && !protectedPaths.some((protectedPath) => withinExisting(directory, protectedPath)),
+      'acceptance_product_boundary: validation write exception overlaps protected state');
+      // Preserve the parent's in-checkout temp grant beneath read-only .lane,
+      // while refusing redirected grants or grants covering protected state.
+      filesystem[directory] = 'write';
+    }
   }
   const command = args.slice(separator + 1);
   const lifetime = command[1] === '--enter';

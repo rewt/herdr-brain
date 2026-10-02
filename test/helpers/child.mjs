@@ -19,6 +19,17 @@ export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
   // A nested suite has its own leader, file watchdog and cancellation cleanup.
   // Its aggregate duration can exceed one command's fifteen-second bound.
   const maximum = command === process.execPath && args[0] === suiteRunner ? 55_000 : 15_000;
+  return trackedChild(t, command, args, options, timeoutMs, maximum);
+}
+
+// Explicit compound fixture scenarios perform many separately bounded product
+// operations. Keep them below the enclosing 60s test deadline and retain exactly
+// the same ownership, cancellation and teardown as ordinary fixture commands.
+export function spawnScenarioChild(t, command, args, options = {}, timeoutMs = 35_000) {
+  return trackedChild(t, command, args, options, timeoutMs, 55_000);
+}
+
+function trackedChild(t, command, args, options, timeoutMs, maximum) {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > maximum) throw new Error(`child timeout must be 1..${maximum}ms`);
   const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options, detached: false });
   let rollback = false;

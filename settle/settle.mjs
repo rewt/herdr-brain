@@ -440,8 +440,11 @@ function main() {
         if (stale) return escalate(stale);
         unchanged(); cleanCanonical();
         if (activeWork().length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed; inspect current work and blockers');
-        if (!validate('readiness-validation')) return escalate('Promotion validation no longer passes; inspect the current command and environment');
+        if (!validate('final-validation')) return escalate('Promotion validation no longer passes; inspect the current command and environment');
         unchanged(); cleanCanonical();
+        const after = recordState(), invalidAfter = recordedReportProblem(after), staleAfter = superseded(after);
+        if (invalidAfter || staleAfter) return escalate(invalidAfter ?? staleAfter);
+        if (activeWork([], after).length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed during validation; inspect current work and blockers');
         job.result.validation = job.validation; save();
       }
       if (!opt['fix-findings']) { print(); return; }

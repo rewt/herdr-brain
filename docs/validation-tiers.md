@@ -31,9 +31,13 @@ and follows project instructions requiring additional checks.
 
 In this lane the initial fast run passed 139 tests in 10.1 seconds. This is an
 observed run under current conditions, not a promised latency or a like-for-like
-comparison with the supervisor's earlier full-suite profile. Promotion's full
-suite uses the existing runner's supported nine-minute maximum rather than its
-six-minute default; both per-file and suite bounds and fixture cleanup remain.
+comparison with the supervisor's earlier full-suite profile. `npm test` keeps
+every existing test in two sequential bounded batches: `test:core` covers the
+record/UI/entry/module tests and `test:cycle` covers settle and supervisor. Each
+uses the existing runner's supported nine-minute maximum; per-file and fixture
+command bounds and owned-process cleanup remain. The single aggregate exceeded
+both six and nine minutes under observed load, so batching avoids losing completed
+coverage to that aggregate deadline.
 
 Evidence is keyed by the entire Git tree, exact command and hashed environment.
 No test category or path is excluded from tree identity. A public review record

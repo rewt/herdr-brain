@@ -5,9 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 const source = fileURLToPath(new URL('../../', import.meta.url));
 
-for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product validates, guards and promotes worker and routing changes offline`, { timeout: 60000 }, (t) => {
+for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product validates, guards and promotes worker and routing changes offline`, { timeout: 60000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-probe-worker-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const env = { ...process.env };
@@ -56,10 +57,11 @@ for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
         { ORG_DIR: path.join(repo, '.org'), ORG_ACTOR: 'human' }));
     }
     const receipt = path.join(root, `${task}.json`);
-    success(invoke(path.join(bin, `monitor-${harness}`), ['--', 'Scripted offline task'], repo, {
+    const workerProcess = spawnScenarioChild(t, path.join(bin, `monitor-${harness}`), ['--', 'Scripted offline task'], { cwd: repo, env: { ...env,
       PROBE_PRODUCT: product, PROBE_TASK: task, PROBE_WORKER_RECEIPT: receipt,
       MONITOR_RUNTIME_DIR: path.join(root, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'),
-    }));
+    } }, 35000);
+    success(await waitForExit(workerProcess));
     const worker = JSON.parse(fs.readFileSync(receipt, 'utf8'));
     assert.equal(git('rev-parse', 'main'), worker.head);
     assert.equal(git('status', '--porcelain'), '');

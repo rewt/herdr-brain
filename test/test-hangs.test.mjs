@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnChild, waitForExit } from './helpers/child.mjs';
+import { spawnChild, spawnScenarioChild, waitForExit } from './helpers/child.mjs';
 import { killProcess, registerProcess, createProcessTracker } from './helpers/processes.mjs';
 import { spawnDetachedFixture, waitForDetachedCleanup } from './helpers/detached.mjs';
 
@@ -87,6 +87,14 @@ async function assertGone(pid) {
   }
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `fixture process ${pid} survived cleanup`);
 }
+
+test('compound fixture scenarios have an explicit aggregate bound and owned cleanup', async t => {
+  assert.throws(() => spawnScenarioChild(t, process.execPath, ['-e', 'while(true){}'], {}, 55001), /child timeout must be 1\.\.55000ms/);
+  const child = spawnScenarioChild(t, process.execPath, ['-e', "setTimeout(()=>console.log('scenario completed'),50)"],
+    { env: { ...process.env, ORG_ACTOR: 'compound-scenario-test' } }, 35000);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stderr); assert.match(result.stdout, /scenario completed/);
+});
 
 test('a nested bounded suite may exceed one command deadline while ordinary commands retain their bound', async t => {
   assert.throws(() => spawnChild(t, process.execPath, ['-e', 'while(true){}'], {}, 35000), /child timeout must be 1\.\.15000ms/);

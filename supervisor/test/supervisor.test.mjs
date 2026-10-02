@@ -113,10 +113,14 @@ test('bound promotion rechecks queued runs and record changes during validation 
     if (mode.startsWith('gate-')) {
       const gate = path.join(f.root, 'gate.mjs');
       const args = mode === 'gate-run' ? ['start', f.show(run).item, '--workspace', f.workspace] : ['ask', 'Block during validation?', '--parent', f.show(run).item, '--category', 'design', '--recommend', 'yes', '--why', 'Changed readiness', '--blocks', f.show(run).item, '--wait'];
-      fs.writeFileSync(gate, `import {execFileSync} from 'node:child_process'; execFileSync(process.execPath,${JSON.stringify([path.join(root, 'bin/org.mjs'), ...args])},{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});\n`);
+      fs.writeFileSync(gate, `import {execFileSync} from 'node:child_process'; if(process.env.VALIDATION_PHASE!=='promotion')process.exit(0); execFileSync(process.execPath,${JSON.stringify([path.join(root, 'bin/org.mjs'), ...args])},{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});\n`);
       f.env.LANE_VALIDATE = `${process.execPath} ${gate}`;
     }
     const h = promotionHarness(f, run); result(h.promote()); const base = f.git(['rev-parse', 'main']);
+    // Settlement also checks changed validation commands. Change the declared
+    // test environment at dequeue so this witness runs during the queue gate,
+    // rather than reusing the earlier harmless readiness execution.
+    if (mode.startsWith('gate-')) f.env.VALIDATION_PHASE = 'promotion';
     if (mode === 'queued-run') f.start();
     const refused = h.drain(); assert.equal(refused.outcome, 'refused');
     assert.match(refused.reason, mode.endsWith('run') ? /superseded/ : /record readiness changed/);

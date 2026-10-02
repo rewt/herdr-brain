@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { isShellOnly, planTidy, reviewedAgentsFromRecords, reviewVerdict, sessionOrderFromLedgers } from '../supervisor/tidy-tabs.mjs';
 

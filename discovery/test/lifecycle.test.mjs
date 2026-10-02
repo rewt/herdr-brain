@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createEntry, command } from '../runtime.mjs';
 
 const product = fileURLToPath(new URL('../../', import.meta.url));
@@ -28,14 +28,8 @@ async function waitUntil(predicate, description) {
   }
 }
 function childProcess(t, binary, args, options) {
-  const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options });
-  let stderr = '';
-  child.stderr.on('data', (part) => { stderr += part; });
-  child.stdout.resume();
-  const ended = new Promise((resolve, reject) => {
-    child.on('error', reject); child.on('close', (code, signal) => resolve({ code, signal, stderr }));
-  });
-  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
+  const child = spawnChild(t, binary, args, options);
+  const ended = waitForExit(child);
   return { child, ended };
 }
 function startOwner(t, f, reason = 'empty', nativePid) {
@@ -79,7 +73,8 @@ for (const kind of ['codex', 'claude']) test(`${kind} entry forwards terminal ha
   const f = fixture(t), native = path.join(f.scratch, 'native'), receipt = path.join(f.scratch, 'native.json'), hup = path.join(f.scratch, 'hangup');
   fs.writeFileSync(native, `#!${process.execPath}\nconst fs=require('fs');
 process.on('SIGHUP',()=>{fs.writeFileSync(process.env.TEST_HUP,'forwarded');process.exit(0)});
-fs.writeFileSync(process.env.TEST_RECEIPT,JSON.stringify({cwd:process.cwd(),requests:process.env.MONITOR_REQUEST_DIR,pid:process.pid}));
+fs.writeFileSync(process.env.TEST_RECEIPT+'.tmp',JSON.stringify({cwd:process.cwd(),requests:process.env.MONITOR_REQUEST_DIR,pid:process.pid}));
+fs.renameSync(process.env.TEST_RECEIPT+'.tmp',process.env.TEST_RECEIPT);
 setInterval(()=>{},1000);`, { mode: 0o755 });
   const { child, ended } = childProcess(t, process.execPath, [path.join(product, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--binary', native, '--'], {
     cwd: f.repo, env: { ...process.env, ORG_ACTOR: 'lifecycle-test-agent', TEST_HUP: hup, TEST_RECEIPT: receipt, MONITOR_RUNTIME_DIR: f.options.runtimeDir, MONITOR_WORKTREE_ROOT: f.options.worktreeRoot },
@@ -143,7 +138,8 @@ test('a parent killed during ownership handoff cannot launch an unregistered nat
 import {createEntry} from ${JSON.stringify(path.join(product, 'discovery/runtime.mjs'))};
 import {spawnNative} from ${JSON.stringify(path.join(product, 'discovery/session.mjs'))};
 const entry=createEntry(${JSON.stringify(f.options)}),context=entry.context();
-fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify(context));
+fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify(context));
+fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
 spawnNative({...entry,attachChild(){process.kill(process.pid,'SIGKILL')}},process.execPath,
  ['-e',${JSON.stringify(`require('fs').writeFileSync(${JSON.stringify(escaped)},'unregistered child started')`)}],{cwd:context.workspace});`;
   const owner = childProcess(t, process.execPath, ['--input-type=module', '-e', source], { cwd: f.repo });

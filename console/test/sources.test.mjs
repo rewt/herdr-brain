@@ -1,6 +1,6 @@
 // What the 0.0.2 screen reads besides org: Herdr's agents and tabs, and transcripts
 // found by their session id. Fixtures only; nothing here runs Herdr.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
 import os from 'node:os';

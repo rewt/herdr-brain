@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { initialState, key, click, mouse, rowDetail } from './controller.mjs';
 import { frame, plain } from './frame.mjs';

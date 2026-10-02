@@ -1,5 +1,5 @@
 // Separate from npm test: verifies the acceptance capability boundary offline.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

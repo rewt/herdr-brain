@@ -2,7 +2,7 @@
 // org CLI, show up in today's history, and a declined question keeps its work blocked.
 // Herdr and the external viewer are stubbed (or a fake herdr on PATH); nothing here
 // needs Ink or a terminal.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';

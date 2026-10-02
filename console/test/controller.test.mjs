@@ -1,5 +1,5 @@
 // Keys and clicks to state and effects: pure, no Ink.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { initialState, menuItems, overruleAnswer, promptParts, promptText, reduce, reduceMouse } from '../lib/controller.mjs';
 import { boardRows, scopeItems } from '../lib/model.mjs';

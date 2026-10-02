@@ -1,9 +1,10 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createEntry, command } from '../runtime.mjs';
 import { findOrgDir, initOrg, loadEvents } from '../../lib/store.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../../lanes/routes.mjs';
@@ -80,13 +81,12 @@ test('capability refuses arbitrary operations, fields, changed identity and miss
 });
 test('concurrent automatic record bootstrap never truncates events or duplicates records', async (t) => {
   const f = fixture(t);
-  const processes = Array.from({ length: 6 }, (_, i) => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', `Task ${i}`], {
+  const processes = Array.from({ length: 6 }, (_, i) => {
+    const child = spawnChild(t, process.execPath, [path.join(root, 'bin/org.mjs'), 'add', `Task ${i}`], {
       cwd: f.repo, env: { ...process.env, ORG_DIR: '', ORG_ACTOR: `test-${i}` }, stdio: ['ignore', 'ignore', 'pipe'],
     });
-    let errors = ''; child.stderr.on('data', (v) => { errors += v; });
-    child.on('close', (code) => code === 0 ? resolve() : reject(new Error(errors)));
-  }));
+    return waitForExit(child).then(({ code, stderr }) => assert.equal(code, 0, stderr));
+  });
   await Promise.all(processes);
   assert.equal(loadEvents(path.join(f.repo, '.org')).events.filter((e) => e.type === 'item.added').length, 6);
   assert.equal(command('git', ['status', '--porcelain'], f.repo), '');

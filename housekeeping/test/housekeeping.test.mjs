@@ -1,9 +1,11 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync, spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from '../housekeeping.mjs';
 
@@ -231,18 +233,14 @@ test('one-shot logs actions, disabled config stops, invalid config refuses, and 
 
 test('the loop rereads opt-in and shuts down with its lock removed', async (t) => {
   const f = cliFixture(t);
-  const child = spawn(process.execPath, [...f.args, '--loop'], { env: TEST_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
-  t.after(() => child.kill());
+  const child = spawnChild(t, process.execPath, [...f.args, '--loop'], { env: TEST_ENV });
   let output = '', errors = '';
   child.stdout.on('data', (chunk) => {
     output += chunk;
     if (output.includes('scan')) fs.writeFileSync(f.config, '{"enabled":false}');
   });
   child.stderr.on('data', (chunk) => { errors += chunk; });
-  const code = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { child.kill(); reject(new Error(`loop did not exit: ${output} ${errors}`)); }, 5000);
-    child.on('exit', (code) => { clearTimeout(timer); resolve(code); });
-  });
+  const { code } = await waitForExit(child);
   assert.equal(code, 0, errors); assert.match(output, /disabled/);
   assert.equal(fs.existsSync(path.join(f.state, 'lock')), false);
 });
@@ -274,14 +272,21 @@ for (const runtimeKind of ['canonical checkout', 'installed copy']) {
 test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) => {
   const f = cliFixture(t);
   if (runtimeKind === 'installed copy') { f.runtime = installRuntime(path.join(f.root, 'plugin')); f.args[0] = f.runtime; }
-  const start = () => spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 10000 });
+  const start = () => {
+    const result = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 10000 });
+    const ownerFile = path.join(f.state, 'lock/owner.json');
+    if (fs.existsSync(ownerFile)) {
+      const entry = registerProcess(JSON.parse(fs.readFileSync(ownerFile, 'utf8')).pid);
+      t.after(() => killProcess(entry));
+    }
+    return result;
+  };
   const first = start(); assert.equal(first.status, 0, first.stderr); assert.match(first.stdout, /started/);
   const lock = path.join(f.state, 'lock');
   const pid = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8')).pid;
   const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
   assert.equal(owner.script, f.runtime);
   assert.deepEqual(owner.record_cli, [f.fake]);
-  t.after(() => { try { process.kill(pid, 'SIGTERM'); } catch {} });
   f.git(['worktree', 'remove', f.lane]);
   assert.equal(fs.existsSync(owner.script), true);
   assert.equal(owner.record_cli.every((file) => fs.existsSync(file)), true);

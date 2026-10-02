@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const read = (relative) => fs.readFileSync(new URL(relative, import.meta.url), 'utf8');

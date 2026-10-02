@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import test from "node:test";
+import test from '../../test/helpers/bounded-test.mjs';
 import { fileURLToPath } from "node:url";
 
 import { readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";

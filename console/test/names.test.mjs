@@ -1,5 +1,5 @@
 // Names, time and glyph helpers of the 0.0.2 screen: pure, no Ink.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { MODEL_NAMES, doingText, modelWords, tenWords, toolWord, upText, whoFor } from '../lib/names.mjs';
 import { MOUSE_OFF, MOUSE_ON, parseMouse } from '../lib/mouse.mjs';

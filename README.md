@@ -305,6 +305,26 @@ node console/app.mjs --modern --print 140x40 [--keys 'a']   # one frame as text,
 The core stays dependency-free: optional `console/` and `mcp/` have their own dependencies, and root `npm test` passes
 without them. `npm --prefix console test` runs the console tests alone.
 
+Root `npm test`, `npm run test:lanes`, and `npm run test:acceptance` use the
+dependency-free bounded runner in `test/helpers/run.mjs`. Each test has a
+60-second ceiling, synchronous commands and fixture children have 15 seconds,
+each test file has five minutes, and an independent watchdog stops the whole
+suite after six minutes. The larger lane file, which runs many review/schema
+variants sequentially, gets eight minutes and a nine-minute suite watchdog.
+Smaller explicit test/command deadlines still apply.
+The file bound also handles blocked JavaScript event loops, which cannot run a
+test's own timer. Failures name the test or stalled file; the suite watchdog
+prints the selected files.
+
+New tests should import `test/helpers/bounded-test.mjs` instead of `node:test`.
+Use `spawnChild(t, ...)` and `waitForExit(child)` from `test/helpers/child.mjs`
+for fixture processes: output and completion are captured immediately, teardown
+kills the fixture process group on success or failure, and returning with a live
+child fails the named test. Register intentionally detached fixture PIDs with
+`test/helpers/processes.mjs` before assertions, so the outer watchdog can also
+clean them up when a blocked test cannot run teardown. The runner executes four
+test files at a time; all tests remain offline and make no model calls.
+
 ### Legacy compatibility console
 
 Plain `record console [--project NAME]` still opens the older console for compatibility. The

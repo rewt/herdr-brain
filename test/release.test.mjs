@@ -1,7 +1,7 @@
 // herdr/release.sh: releases are immutable copies of tags, switched by one link, and the
 // launchers and Brain service can always go back to the dev checkout. Offline: a scratch
 // repository, no Herdr, no npm, and launchctl replaced by `true`.
-import test from 'node:test';
+import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

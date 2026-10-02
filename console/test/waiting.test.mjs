@@ -1,7 +1,7 @@
 // Waiting on you as a work queue: what a stopped session left behind carries its
 // choices and verbs, answering goes through the brain CLI, later and parked items
 // fold into one line, and the peek follows a session once its row is answered.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { brainArgs, choicesOf, loopWords, workUpArgs, workUpBrief } from '../lib/brain.mjs';
 import { initialState, promptText, reduce, reduceMouse } from '../lib/controller.mjs';

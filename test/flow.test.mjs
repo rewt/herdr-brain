@@ -1,6 +1,7 @@
-import test from 'node:test';
+import test from './helpers/bounded-test.mjs';
+import { spawnChild, waitForExit } from './helpers/child.mjs';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -307,16 +308,14 @@ test('an interrupted write is ignored on read and repaired on the next write', (
   assert.deepEqual(events.map((e) => e.seq), [1, 2]);
 });
 
-test('concurrent writers never collide', async () => {
+test('concurrent writers never collide', async (t) => {
   const { dir } = setup();
-  const results = await Promise.all(Array.from({ length: 12 }, (_, i) => new Promise((resolve) => {
-    const child = spawn(process.execPath, [BIN, 'add', `Parallel ${i}`, '--role', 'engineer'], {
+  const results = await Promise.all(Array.from({ length: 12 }, (_, i) => {
+    const child = spawnChild(t, process.execPath, [BIN, 'add', `Parallel ${i}`, '--role', 'engineer'], {
       env: { ...process.env, ORG_ACTOR: '', ORG_DIR: dir, TZ: 'UTC' },
     });
-    let stdout = '';
-    child.stdout.on('data', (d) => { stdout += d; });
-    child.on('close', (code) => resolve({ code, id: stdout.trim() }));
-  })));
+    return waitForExit(child).then(({ code, stdout }) => ({ code, id: stdout.trim() }));
+  }));
   assert.ok(results.every((r) => r.code === 0));
   assert.equal(new Set(results.map((r) => r.id)).size, 12);
   const events = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));

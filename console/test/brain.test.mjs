@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import { asQuestions, categoryOf, readQueue, titleFor } from '../lib/brain.mjs';
 import { buildBoard, contextPairs } from '../lib/model.mjs';
 import { lineText, renderFrame } from '../lib/frame.mjs';

@@ -1,6 +1,6 @@
 // The 0.0.2 screen at 80, 100, 140 and 180 columns: what is shown, where, and on
 // what background. Pure; no Ink.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { initialState, promptParts, reduce } from '../lib/controller.mjs';
 import { hitAt, layoutFor, lineText, renderFrame, scrollWindow } from '../lib/frame.mjs';

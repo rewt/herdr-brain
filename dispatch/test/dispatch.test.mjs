@@ -1,14 +1,17 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
 const fake = `#!/usr/bin/env node
+import { registerProcess } from ${JSON.stringify(fileURLToPath(new URL('../../test/helpers/processes.mjs', import.meta.url)))};
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -37,7 +40,7 @@ if(type==='lane') {
  if(a[0]==='verify-agent') { if(!workers[a[1]] || fs.realpathSync(workers[a[1]].cwd)!==fs.realpathSync(a[2])) process.exit(1); }
 } else if(type==='watch') {
  if(fail==='watch') { console.error('injected watch');process.exit(1); }
- const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'}); child.unref();
+ const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'}); registerProcess(child.pid); child.unref();
  fs.appendFileSync(path.join(root,'pids'),child.pid+'\\n');
  result({run:a[0],pid:child.pid,log:path.join(root,a[0]+'.log')});
 } else {
@@ -63,7 +66,25 @@ function fixture(t, { realWatch = false } = {}) {
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
   for(const key of Object.keys(env)) if(key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
-  const exec=(cmd,args,cwd=repo,overrides={})=>spawnSync(cmd,args,{cwd,env:{...env,...overrides},encoding:'utf8'});
+  const fixtureProcesses = new Map();
+  const rememberProcesses = () => {
+    const pids=fs.existsSync(path.join(root,'pids'))?fs.readFileSync(path.join(root,'pids'),'utf8').trim().split('\n').filter(Boolean).map(Number):[];
+    for(const file of fs.existsSync(path.join(org,'dispatch'))?fs.readdirSync(path.join(org,'dispatch')).filter(x=>x.endsWith('.json')&&!x.endsWith('.routes.json')).map(x=>path.join(org,'dispatch',x)):[]) {
+      const job=JSON.parse(fs.readFileSync(file)); if(job.watcher?.pid) pids.push(job.watcher.pid);
+    }
+    for(const pid of pids) if(!fixtureProcesses.has(pid)) fixtureProcesses.set(pid,registerProcess(pid));
+  };
+  // Install cleanup before setup or any assertion can fail.
+  t.after(()=>{
+    rememberProcesses();
+    for(const entry of fixtureProcesses.values()) killProcess(entry);
+    fs.rmSync(root,{recursive:true,force:true});
+  });
+  const exec=(cmd,args,cwd=repo,overrides={})=>{
+    const result=spawnSync(cmd,args,{cwd,env:{...env,...overrides},encoding:'utf8'});
+    rememberProcesses();
+    return result;
+  };
   const git=(args,cwd)=>{const r=exec('git',args,cwd);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   git(['init','-b','main']);git(['config','user.name','Dispatch Tests']);git(['config','user.email','dispatch@example.invalid']);
   fs.writeFileSync(path.join(repo,'seed'),'seed');git(['add','.']);git(['commit','-m','seed']);
@@ -79,17 +100,9 @@ function fixture(t, { realWatch = false } = {}) {
   const jobs=()=>fs.readdirSync(path.join(org,'dispatch')).filter(x=>x.endsWith('.json')&&!x.endsWith('.routes.json')).map(x=>path.join(org,'dispatch',x));
   const fail=(stage)=>fs.writeFileSync(path.join(root,'fail'),stage);
   const show=(run)=>JSON.parse(rec(['show',run,'--json']));
-  t.after(()=>{
-    const pids=fs.existsSync(path.join(root,'pids'))?fs.readFileSync(path.join(root,'pids'),'utf8').trim().split('\n').map(Number):[];
-    for(const file of fs.existsSync(path.join(org,'dispatch'))?jobs():[]) { const j=JSON.parse(fs.readFileSync(file));if(j.watcher?.pid)pids.push(j.watcher.pid); }
-    for(const pid of new Set(pids)) try {process.kill(pid,'SIGTERM');} catch {}
-    fs.rmSync(root,{recursive:true,force:true});
-  });
   const concurrent=(args,extraEnv={})=>{
-    const child=spawn(process.execPath,[DISPATCH,...common,...args],{cwd:repo,env:{...env,...extraEnv},stdio:['ignore','pipe','pipe']});
-    let stdout='',stderr='';child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);
-    const done=new Promise(resolve=>child.on('close',status=>resolve({status,stdout,stderr})));
-    t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});
+    const child=spawnChild(t,process.execPath,[DISPATCH,...common,...args],{cwd:repo,env:{...env,...extraEnv},stdio:['ignore','pipe','pipe']});
+    const done=waitForExit(child);
     return {child,done};
   };
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};

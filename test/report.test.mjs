@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { parseYamlSubset, readReport, reportTemplate } from '../lib/report.mjs';
 

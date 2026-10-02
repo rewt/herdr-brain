@@ -1,4 +1,6 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -41,7 +43,16 @@ function fixture(t) {
     fs.writeFileSync(path.join(wt, `${topic}.txt`), content); git(['add', '.'], wt); git(['commit', '-qm', topic], wt);
     return wt;
   };
-  const cli = (args, cwd = repo) => spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: 10000 });
+  const processes = new Map();
+  const cli = (args, cwd = repo) => {
+    const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: 10000 });
+    const owner = path.join(queue.directory, 'worker.lock/owner.json');
+    if (fs.existsSync(owner)) {
+      const pid = JSON.parse(fs.readFileSync(owner, 'utf8')).pid;
+      if (!processes.has(pid)) processes.set(pid, registerProcess(pid));
+    }
+    return result;
+  };
   const launch = (args) => {
     const r = cli([...args, '--herdr', herdr, '--delivery-attempts', '2', '--retry-seconds', '0']);
     assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout);
@@ -50,9 +61,13 @@ function fixture(t) {
   const messages = () => fs.existsSync(notices) ? fs.readFileSync(notices, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
   let cleanupProcesses = async () => {};
   t.after(async () => {
-    await cleanupProcesses();
-    await until(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')));
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      await cleanupProcesses();
+      await until(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')));
+    } finally {
+      for (const entry of processes.values()) killProcess(entry);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
   return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
@@ -395,10 +410,10 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
   });
   await until(() => fs.existsSync(blocked.marker));
   const tip = f.git(['rev-parse', 'lane/first']);
-  direct = spawn(process.execPath, [LANE, 'promote', 'first'], { cwd: f.repo,
+  direct = spawnChild(t, process.execPath, [LANE, 'promote', 'first'], { cwd: f.repo,
     env: { ...f.env, LANE_VALIDATE: `${process.execPath} ${script}` }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; direct.stdout.on('data', (v) => { output += v; }); direct.stderr.on('data', (v) => { output += v; });
-  const exited = new Promise((resolve, reject) => { direct.once('error', reject); direct.once('close', resolve); });
+  const exited = waitForExit(direct);
   await until(() => fs.existsSync(ready));
   fs.writeFileSync(blocked.release, 'release');
   await until(() => f.results().length === 1);
@@ -410,7 +425,7 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
   // All close callers must respect a live gate, even outside queue orchestration.
   const close = spawnSync(process.execPath, [LANE, 'close', 'first', '--git-only'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.notEqual(close.status, 0); assert.match(close.stderr, /lane-promote.lock/);
-  fs.writeFileSync(release, 'release'); assert.equal(await exited, 0, output);
+  fs.writeFileSync(release, 'release'); assert.equal((await exited).code, 0, output);
   await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
   f.onCleanup(async () => {});
 });

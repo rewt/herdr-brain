@@ -1,6 +1,6 @@
 // Console model tests: plain wording, code stripping, transcripts, markdown and
 // terminal safety. Pure modules only, no Ink. Run by `npm test` at the root too.
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
 import os from 'node:os';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseScreen } from '../lib/capture.mjs';
 import { bucketOf } from '../lib/queue.mjs';

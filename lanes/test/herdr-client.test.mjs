@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
-import test from "node:test";
+import test from '../../test/helpers/bounded-test.mjs';
 
 import { HerdrClient } from "../board/herdr-client.mjs";
 

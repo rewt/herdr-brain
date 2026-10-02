@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { once } from "node:events";
 import {
   appendFileSync,
   chmodSync,
@@ -18,7 +17,8 @@ import {
 import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
@@ -167,7 +167,7 @@ function lane(fixture, args, options = {}) {
 }
 
 function laneProcess(fixture, args, options = {}) {
-  const child = spawn(process.execPath, [options.executable ?? LANE, ...args], {
+  const child = spawnChild(currentTest(), process.execPath, [options.executable ?? LANE, ...args], {
     cwd: options.cwd ?? fixture.repo,
     env: hermeticGitEnvironment(options.env ?? fixture.env),
     stdio: ["ignore", "pipe", "pipe"],
@@ -182,7 +182,7 @@ function laneProcess(fixture, args, options = {}) {
     child,
     stdout: () => stdout,
     stderr: () => stderr,
-    completed: once(child, "close").then(([status, signal]) => ({ status, signal, stdout, stderr })),
+    completed: waitForExit(child),
   };
 }
 
@@ -579,7 +579,7 @@ async function registryApi() {
 
 function runRegistryChild(source, args, env = process.env) {
   return new Promise((resolveChild, rejectChild) => {
-    const child = spawn(process.execPath, ["--input-type=module", "--eval", source, ...args], {
+    const child = spawnChild(currentTest(), process.execPath, ["--input-type=module", "--eval", source, ...args], {
       env: hermeticGitEnvironment(env),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -587,8 +587,7 @@ function runRegistryChild(source, args, env = process.env) {
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.on("error", rejectChild);
-    child.on("close", (status) => resolveChild({ status, stdout, stderr }));
+    waitForExit(child).then(resolveChild, rejectChild);
   });
 }
 
@@ -3985,7 +3984,8 @@ test("review late-publication mutation exits 2 and retains both evidence files",
         writeFileSync(join(review.path, "late-mutation.txt"), "late\n");
       }
     }, 1);
-    const child = spawn(process.execPath, [
+    currentTest().after(() => clearInterval(mutator));
+    const child = spawnChild(currentTest(), process.execPath, [
       LANE, "review", "review-late-public", "--round", "1", "--brief", review.brief,
     ], {
       cwd: review.fixture.repo,
@@ -3996,7 +3996,7 @@ test("review late-publication mutation exits 2 and retains both evidence files",
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    const result = await new Promise((resolvePromise) => child.once("close", (code) => resolvePromise(code)));
+    const { code: result } = await waitForExit(child);
     clearInterval(mutator);
     assert.equal(result, 2, stderr);
     assert.equal(stdout, "");
@@ -4237,7 +4237,8 @@ test("review unexpected failure after publication warns about retained public ev
         renameSync(join(review.path, ".git"), join(review.path, ".git-injected-failure"));
       }
     }, 1);
-    const child = spawn(process.execPath, [
+    currentTest().after(() => clearInterval(mutator));
+    const child = spawnChild(currentTest(), process.execPath, [
       LANE, "review", "review-post-public-error", "--round", "1", "--brief", review.brief,
     ], {
       cwd: review.fixture.repo,
@@ -4248,7 +4249,7 @@ test("review unexpected failure after publication warns about retained public ev
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    const result = await new Promise((resolvePromise) => child.once("close", (code) => resolvePromise(code)));
+    const { code: result } = await waitForExit(child);
     clearInterval(mutator);
     assert.equal(result, 2, stderr);
     assert.equal(stdout, "");
@@ -4267,7 +4268,7 @@ test("review unexpected failure after publication warns about retained public ev
 test("review interruption exits 2 without a verdict or follow-up lifecycle action", async () => {
   const review = makeReviewFixture("review-interrupt");
   try {
-    const child = spawn(process.execPath, [
+    const child = spawnChild(currentTest(), process.execPath, [
       LANE, "review", "review-interrupt", "--round", "1", "--brief", review.brief,
     ], {
       cwd: review.fixture.repo,
@@ -4283,7 +4284,7 @@ test("review interruption exits 2 without a verdict or follow-up lifecycle actio
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
     }
     child.kill("SIGTERM");
-    const result = await new Promise((resolvePromise) => child.once("close", (code, signal) => resolvePromise({ code, signal })));
+    const result = await waitForExit(child);
     assert.equal(result.code, 2, `signal=${result.signal}\n${stderr}`);
     assert.equal(stdout, "");
     assert.match(stderr, /review interrupted; reviewer agent '[a-z0-9_-]+' in tab w-lane:t2 may still write late evidence/);

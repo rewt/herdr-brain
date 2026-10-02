@@ -496,6 +496,93 @@ esac`);
   assert.ok(calls.indexOf('[watch-long-running]') < calls.indexOf('[org-report]'), calls);
 });
 
+test('a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts', async (t) => {
+  const f = watcherFixture('R-135');
+  const inbox = path.join(f.root, '.org/supervisor/inbox.log');
+  const screen = path.join(f.root, 'composer'), state = path.join(f.root, 'worker-state');
+  const offset = path.join(f.root, 'clock-offset'), wake = path.join(f.root, 'wake');
+  const abandoned = path.join(f.root, 'abandoned'), clock = path.join(f.root, 'clock.mjs');
+  const empty = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url));
+  const children = [];
+  const until = async (predicate) => {
+    const deadline = Date.now() + 10_000;
+    while (!predicate()) {
+      if (Date.now() >= deadline) throw new Error('timed out waiting for watcher fixture');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  };
+  const waits = () => fs.readdirSync(f.root).filter((name) => name.startsWith('wait-'));
+  t.after(async () => {
+    fs.writeFileSync(abandoned, 'yes'); fs.writeFileSync(state, 'idle'); fs.writeFileSync(screen, empty);
+    await Promise.all(children.map(waitForExit));
+    await until(() => waits().length === 0);
+    await waitForInboxIdle(inbox);
+    fs.rmSync(f.root, { recursive: true, force: true });
+  });
+  fs.writeFileSync(state, 'working'); fs.writeFileSync(offset, '120000');
+  fs.writeFileSync(screen, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
+  fs.writeFileSync(clock, `import fs from 'node:fs'; const now=Date.now;
+Date.now=()=>now()+Number(fs.readFileSync(${JSON.stringify(offset)},'utf8'));\n`);
+  const started = new Date().toISOString();
+  fs.writeFileSync(f.org, `#!${process.execPath}\nimport fs from 'node:fs';
+console.log(JSON.stringify({id:'R-135',item:'ENG-9',meta:{agent:'lane-nine'},report_path:${JSON.stringify(f.report)},
+started:{at:${JSON.stringify(started)}},abandoned:fs.existsSync(${JSON.stringify(abandoned)})}));\n`);
+  fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const a=process.argv.slice(2);
+const state=${JSON.stringify(state)},wake=${JSON.stringify(wake)},marker=${JSON.stringify(f.root + '/wait-')}+process.pid;
+if(a[0]==='agent'&&a[1]==='wait') {
+  fs.writeFileSync(marker,'waiting');
+  process.once('SIGTERM',()=>{fs.rmSync(marker,{force:true});process.exit(0);});
+}
+fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:a[2]==='supervisor-test'
+  ? {agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'} : {agent_status:fs.readFileSync(state,'utf8')}}}));
+else if(a[0]==='pane'&&a[1]==='read') process.stdout.write(fs.readFileSync(${JSON.stringify(screen)},'utf8'));
+else if(a[0]==='agent'&&a[1]==='wait') {
+  while(fs.readFileSync(state,'utf8')==='working'&&!fs.existsSync(wake)) await new Promise(r=>setTimeout(r,20));
+  fs.rmSync(wake,{force:true});fs.rmSync(marker,{force:true});console.log('{}');
+} else console.log('{}');\n`, { mode: 0o755 });
+  const calls = () => fs.existsSync(f.calls) ? fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse) : [];
+  const waitCount = () => calls().filter((a) => a[1] === 'wait').length;
+  const prompts = () => calls().filter((a) => a[1] === 'prompt');
+  const start = () => {
+    const child = spawnChild(t, process.execPath, ['--import', clock, ...f.args, '--long-after', '0', '--retry-after', '0.05'],
+      { env: { ...TEST_ENV, SUPERVISOR_INPUT_WAIT_SECONDS: '0' } });
+    children.push(child); return child;
+  };
+  const first = start();
+  await until(() => waitCount() >= 1);
+  const original = readInbox(inbox)[0];
+  assert.equal(original.state, 'pending'); assert.ok(original.owner_pid > 0);
+  assert.equal(original.id, 'watch:R-135:long-running');
+  assert.match(original.message, /still-running=2m$/); assert.equal(prompts().length, 0);
+  const count = waitCount();
+  fs.writeFileSync(offset, '240000'); fs.writeFileSync(wake, 'yes');
+  await until(() => waitCount() > count);
+  assert.equal(readInbox(inbox).length, 1, 'owned handoff must disarm long-notice retries');
+  first.kill('SIGTERM');
+  const stopped = await waitForExit(first);
+  assert.equal(stopped.signal, 'SIGTERM');
+  assert.equal(stopped.stdout.match(/\[watch-long-running\]/g)?.length, 1);
+  assert.doesNotMatch(stopped.stdout, /could not deliver/);
+  fs.writeFileSync(state, 'idle'); await until(() => waits().length === 0); fs.writeFileSync(state, 'working');
+  const restartCount = waitCount();
+  const second = start(); await until(() => waitCount() > restartCount);
+  assert.equal(readInbox(inbox).length, 1, 'restart must adopt the journaled long-running notice');
+  assert.equal(readInbox(inbox)[0].id, original.id); assert.equal(readInbox(inbox)[0].message, original.message);
+  assert.equal(prompts().length, 0);
+  fs.writeFileSync(screen, empty); await waitForText(inbox, /"type":"sent"/);
+  assert.equal(prompts().length, 1); assert.equal(prompts()[0][3], `${original.message} notice-id=${original.id}`);
+  const deliveredCount = waitCount();
+  fs.writeFileSync(offset, '360000'); fs.writeFileSync(wake, 'yes');
+  await until(() => waitCount() > deliveredCount);
+  assert.equal(readInbox(inbox).length, 1); assert.equal(prompts().length, 1);
+  fs.writeFileSync(abandoned, 'yes'); fs.writeFileSync(wake, 'yes');
+  const finished = await waitForExit(second);
+  assert.equal(finished.code, 0, finished.stdout + finished.stderr);
+  assert.equal(finished.stdout.match(/\[watch-long-running\]/g)?.length, 1);
+  assert.doesNotMatch(finished.stdout, /could not deliver/);
+});
+
 test('a Herdr outage is delivered after Herdr recovers, never reported as gone', async (t) => {
   const fixture = watcherFixture('R-15');
   const counter = path.join(fixture.root, 'gets');

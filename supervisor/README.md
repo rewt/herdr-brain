@@ -26,6 +26,13 @@ box and its blank padding above the model/cwd status bar. Its first input row
 contains the prompt; every continuation row counts, including rows starting with
 `›`. Truncated boxes and unknown layouts stay busy.
 
+Claude's rule-based parser shares a known limit with bch-cloak's reference: a
+draft continuation row beginning with four `─` box-drawing characters can be
+mistaken for a footer boundary. If the remaining draft is only `❯`, it is
+stripped as the prompt glyph and the populated composer can be classified as
+empty. The supervisor accepts this boundary-impersonation limit; the parser
+retains the reference's last-two-rules behaviour.
+
 The inbox is an append-only, fsynced JSONL transport journal at
 `ORG/supervisor/inbox.log`, or `GIT_COMMON_DIR/supervisor/inbox.log` without a
 record. Watch and promotion discover the same record; linked checkouts share

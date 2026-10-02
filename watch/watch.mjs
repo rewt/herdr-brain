@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { readReport } from '../lib/report.mjs';
-import { promptSupervisor } from '../supervisor/prompt-supervisor.mjs';
+import { inboxPath, promptSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
 import {
   blockedNotice,
   invalidReportNotice,
@@ -209,7 +209,7 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp) {
   });
 }
 
-async function deliver(message, sound = 'request', id) {
+async function deliver(message, sound = 'request', id, { allowQueued = false } = {}) {
   log(message);
   if (dry) return true;
   const result = await promptSupervisor(opt.to, message, {
@@ -217,6 +217,7 @@ async function deliver(message, sound = 'request', id) {
     retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log,
   });
   if (result.delivered) return true;
+  if (allowQueued && result.queued && Number.isInteger(result.owner_pid) && result.owner_pid > 0) return true;
   throw new Error(`could not deliver to ${opt.to}: ${result.delivery_error}; inbox=${result.inbox}`);
 }
 
@@ -333,6 +334,8 @@ async function watch() {
   let lastUnavailableLog;
   let pendingUnavailable;
   let longNotified = false;
+  let longNotice;
+  let longNoticeId;
   let longNextAt;
   let idleGraceUntil;
   let observedWorking = false;
@@ -341,11 +344,11 @@ async function watch() {
   let previousState;
   const armedAt = Date.now();
   const startedAt = Date.parse(current.started?.at ?? '') || Date.now();
-  const sendOnce = async (message, sound, { fatal = false } = {}) => {
+  const sendOnce = async (message, sound, { fatal = false, id } = {}) => {
     if (message === lastNotice) return true;
     try {
       const digest = crypto.createHash('sha256').update(message).digest('hex');
-      await deliver(message, sound, `watch:${runId}:${noticeSequence}:${digest}`);
+      await deliver(message, sound, id ?? `watch:${runId}:${noticeSequence}:${digest}`, { allowQueued: !fatal });
       lastNotice = message;
       return true;
     } catch (error) {
@@ -457,9 +460,17 @@ async function watch() {
     const elapsed = Date.now() - startedAt;
     longNextAt ??= startedAt + longAfterMs;
     if (!longNotified && Date.now() >= longNextAt && workerStillRunning) {
-      longNotified = await sendOnce(longRunningNotice({
-        run: runId, item, agent, minutes: Math.max(1, Math.floor(elapsed / 60_000)),
-      }));
+      if (!longNotice) {
+        // One logical event per run. Adopt even legacy IDs and retain the
+        // journaled elapsed-minute payload when a watcher is restarted.
+        const prior = readInbox(path.resolve(opt.inbox ?? inboxPath({ org: opt.org })))
+          .find((entry) => entry.message.startsWith(`[watch-long-running] run=${runId} `));
+        longNoticeId = prior?.id ?? `watch:${runId}:long-running`;
+        longNotice = prior?.message ?? longRunningNotice({
+          run: runId, item, agent, minutes: Math.max(1, Math.floor(elapsed / 60_000)),
+        });
+      }
+      longNotified = await sendOnce(longNotice, undefined, { id: longNoticeId });
       if (!longNotified) longNextAt = Date.now() + retryAfterMs;
     }
 

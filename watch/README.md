@@ -36,8 +36,12 @@ status and an empty composer on two ANSI reads three seconds apart. Typing,
 working, unknown layouts and failed reads queue the notice without touching input
 or focus. `SUPERVISOR_INPUT_WAIT_SECONDS` caps waiting (default 7200);
 `--inbox FILE` overrides the shared `ORG/supervisor/inbox.log` journal. Re-arming a
-completed run adopts its final notice. Lost acknowledgements can replay the same
-visible `notice-id`; acknowledged notices are not repeated.
+completed run adopts its final notice. An intermediate notice durably queued
+with an acknowledged owner counts as notified. The long-running event retains
+one ID and its original elapsed-minute payload across retries and watcher
+restarts, so a busy-composer cap does not schedule another notice. Lost
+acknowledgements can replay the same visible `notice-id`; acknowledged notices
+are not repeated.
 
 For a detached watcher with a log, use `--detach --log /path/to/R-29.watch.log`
 instead of `--spawn`. This returns JSON with run, PID and log only after the child

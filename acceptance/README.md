@@ -15,6 +15,14 @@ selects the Git repository for tags/refs. The runner snapshots the candidate;
 it never modifies that source or an activated release. `main` means the commit
 resolved at startup, not a moving branch during the test.
 
+After auditing the snapshot, the runner adds owner read/write permission to its
+files and owner read/write/traverse permission to its directories, preserving
+executable bits. This applies to both Git archives and immutable release copies
+inside scratch; source modes and bytes remain untouched. Environment I/O errors
+(including permission and disk-space errors) naming this run's scratch paths
+are PENDING with `[HARNESS]`, including errors from child commands. Explicit
+product safety refusals retain precedence and remain FAIL with `[SAFETY]`.
+
 The primary cases enter new Git projects without `.org`, `.lane.json`, routes or
 agent instructions. Missing product capabilities fail. Genuine environment limitations remain pending. `supervisor-entry` executes installed supervisor entry and record bootstrap in a
 dedicated untouched project; it does not claim a dispatch/watch cycle. `default-cycle` executes the default supervisor dispatch/watch/ingest cycle in another untouched project: the scripted supervisor in a real PTY executes entry and record bootstrap, dispatches on the suggested engineer route, consumes watch's single final notice, and runs the record CLI to check and ingest it. Default lane validation and fast-forward promotion also execute. Only an ordinary package test script and a scratch HOME are provided, with no workflow config. The delivery target is an owned scratch stand-in rather than a live supervisor name. The configured mechanics

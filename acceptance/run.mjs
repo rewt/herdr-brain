@@ -15,6 +15,7 @@ import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine } from './results.mjs';
 import { liveSocket } from './probe.mjs';
 import { cases, cutoverChecks, runCase } from './cases.mjs';
+import { makeSnapshotWritable } from './snapshot.mjs';
 import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 
@@ -53,7 +54,7 @@ function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_00
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
   if (ok && (r.error || r.status !== 0)) {
     const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? (String(r.stdout ?? '') + String(r.stderr ?? '')).trim()}`;
-    throw commandFailure(message);
+    throw commandFailure(message, { scratchRoot: root, error: r.error });
   }
   return r;
 }
@@ -86,7 +87,7 @@ async function test(definition, fn) {
   logFile = path.join(evidence, `${id}.jsonl`);
   write(logFile, '');
   try {
-    const result = await runCase(results, definition, fn);
+    const result = await runCase(results, definition, fn, { scratchRoot: root });
     result.evidence = `${id}.jsonl`;
     return result;
   } finally { logFile = undefined; }
@@ -239,6 +240,7 @@ try {
       run('tar', ['-x', '-C', candidate], { input: archive });
     }
     auditSnapshot(candidate);
+    makeSnapshotWritable(candidate, root);
     assert.ok(present('bin/org.mjs')); return `${opt.candidate}: ${candidateCommit}`;
   });
   if (results.find((v) => v.key === cases.snapshot.key).status !== 'PASS') throw new Error('unsafe or unavailable candidate snapshot; no candidate commands executed');
@@ -675,7 +677,7 @@ try {
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
     auditCopies(copy, { live, home: process.env.HOME });
     const checks = [];
-    const check = (definition, fn) => runCase(checks, definition, fn);
+    const check = (definition, fn) => runCase(checks, definition, fn, { scratchRoot: root });
     const execute = (rel, args = [], options = {}) => runCopy(rel.endsWith('.mjs') ? process.execPath : '/bin/zsh',
       [...(rel.endsWith('.mjs') ? [] : ['-f']), path.join(copy, rel), ...args], { cwd: copy, extra: { ORG_DIR: org, HERDR_PANE_ID: pane }, ...options });
     const persona = path.join(root, 'cutover-persona');

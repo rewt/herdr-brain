@@ -68,9 +68,12 @@ async function requireFileWatch(t, directory) {
   // its independent Herdr wake-up path without exercising filesystem events.
   const probe = path.join(directory, 'watch-probe');
   return new Promise((resolve, reject) => {
-    let watcher, timer;
+    let watcher, timer, writer, settled = false;
     const finish = (error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      clearInterval(writer);
       watcher?.close();
       if (error && !['EMFILE', 'ENOSPC', 'EPERM', 'EACCES'].includes(error.code)) return reject(error);
       if (error) t.skip(`filesystem notifications unavailable: ${error.code}`);
@@ -79,8 +82,11 @@ async function requireFileWatch(t, directory) {
     try {
       watcher = fs.watch(directory, () => finish());
       watcher.once('error', finish);
-      timer = setTimeout(() => finish(new Error('filesystem notification probe timed out')), 2000);
+      timer = setTimeout(() => finish(new Error('filesystem notification probe timed out')), 10_000);
       fs.writeFileSync(probe, 'probe');
+      // FSEvents registration can lag fs.watch returning under load. Keep
+      // exercising the probe until the backend delivers an event or errors.
+      writer = setInterval(() => fs.writeFileSync(probe, String(Date.now())), 100);
     } catch (error) { finish(error); }
   });
 }

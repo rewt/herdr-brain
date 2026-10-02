@@ -35,6 +35,15 @@ function childProcess(t, binary, args, options) {
 function startOwner(t, f, reason = 'empty', nativePid) {
   const receipt = path.join(f.scratch, `${reason}.json`);
   const source = `import fs from 'node:fs'; import {createEntry,command} from ${JSON.stringify(path.join(product, 'discovery/runtime.mjs'))};
+${f.pauseReceipt ? `const write=fs.writeFileSync;
+fs.writeFileSync=(file,data,...options)=>{
+ if(file===${JSON.stringify(receipt)}||file===${JSON.stringify(receipt + '.tmp')}){
+  write(file,data.slice(0,Math.floor(data.length/2)),...options);
+  write(${JSON.stringify(path.join(f.scratch, 'partial-receipt'))},'ready');
+  while(!fs.existsSync(${JSON.stringify(path.join(f.scratch, 'release-receipt'))})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
+ }
+ return write(file,data,...options);
+};` : ''}
 const entry=createEntry(${JSON.stringify(f.options)}),context=entry.context(),reason=${JSON.stringify(reason)};
 if(reason==='child')entry.attachChild(${JSON.stringify(nativePid)});
 if(reason==='ignored')fs.writeFileSync(context.workspace+'/.env','retain ignored configuration');
@@ -53,6 +62,22 @@ fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify({...context,
 setInterval(()=>{},1000);`;
   return { ...childProcess(t, process.execPath, ['--input-type=module', '-e', source], { cwd: f.repo }), receipt };
 }
+
+test('receipt publication hides a deliberately paused partial JSON write from the sweep reader', async (t) => {
+  const f = fixture(t);
+  f.pauseReceipt = true;
+  const owner = startOwner(t, f);
+  await waitUntil(() => fs.existsSync(path.join(f.scratch, 'partial-receipt')), 'partial receipt write');
+  assert.equal(fs.existsSync(owner.receipt), false, 'the reader must not see the truncated receipt');
+  fs.writeFileSync(path.join(f.scratch, 'release-receipt'), 'release');
+  await waitUntil(() => fs.existsSync(owner.receipt), 'complete receipt publication');
+  const context = JSON.parse(fs.readFileSync(owner.receipt, 'utf8'));
+  assert.ok(fs.existsSync(context.workspace));
+  owner.child.kill('SIGKILL');
+  await owner.ended;
+  const next = createEntry(f.options); next.close();
+  assert.equal(fs.existsSync(context.workspace), false, 'the sweep consumes the complete receipt and removes the untouched owner');
+});
 
 test('close preserves ignored .env and .lane files and explains retention', (t) => {
   const f = fixture(t);

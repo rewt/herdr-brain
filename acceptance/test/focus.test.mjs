@@ -25,7 +25,7 @@ socket.on('close',()=>subscriptions.delete(socket));});
 server.listen(${JSON.stringify(socketPath)},()=>console.log('ready'));
 setInterval(()=>{const file=${JSON.stringify(path.join(root, 'change'))};if(!fs.existsSync(file))return;const content=fs.readFileSync(file,'utf8');fs.unlinkSync(file);
 const change=content?JSON.parse(content):{panes:['scratch:p2','operator:p7']};
-for(const next of change.panes){pane=next;if(change.events!==false)for(const socket of subscriptions)socket.write(JSON.stringify({event:'pane.focused',data:{pane_id:pane}})+'\\n');}},10);
+for(const next of change.panes){pane=next;if(change.events!==false)for(const socket of subscriptions)socket.write(JSON.stringify({event:'pane_focused',data:{type:'pane_focused',pane_id:pane,workspace_id:workspace(pane)}})+'\\n');}},10);
 `);
   let monitor, server;
   t.after(async () => {
@@ -55,7 +55,7 @@ test('focus sampling continues while the acceptance parent blocks and spans clea
   assert.equal(rows.at(-1).phase.key, 'scope-cleanup');
 });
 
-test('a transient focus change fails even between samples and names the actual and requested calls', async (t) => {
+test('native pane_focused events catch a transient change between unchanged samples and name both calls', async (t) => {
   const { root, monitor } = await fixture(t);
   fs.writeFileSync(path.join(root, 'focus-phase.json'), JSON.stringify({ key: 'configured-cycle' }));
   fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'call-1', at: Date.now(),
@@ -63,8 +63,15 @@ test('a transient focus change fails even between samples and names the actual a
   fs.writeFileSync(path.join(root, 'change'), '');
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
   const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.externalChanges.length, 0);
+  assert.equal(summary.baseline, 'operator:p7');
+  assert.equal(summary.currentBaseline, 'operator:p7');
+  const rows = fs.readFileSync(path.join(root, 'focus-trace.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(rows.filter((row) => row.type === 'sample').every((row) => row.panes.length === 1 && row.panes[0] === 'operator:p7'));
+  assert.equal(summary.events, 2);
+  assert.equal(summary.changes.length, 1);
   assert.equal(summary.changes[0].type, 'event');
-  assert.ok(summary.events >= 2);
   assert.throws(() => assertFocus(summary), /configured-cycle; pane run scratch:p2 worker \(requested agent start worker/);
   assert.equal(summary.changes[0].panes[0], 'scratch:p2');
 });

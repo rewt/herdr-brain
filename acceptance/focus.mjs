@@ -30,7 +30,7 @@ export function assertFocus(summary, { evidence, error } = {}) {
   if (!summary?.baseline || summary.samples < 2 || summary.errors.length) {
     throw new HarnessLimit(`operator focus trace incomplete: ${summary?.errors?.join('; ') || 'missing baseline or samples'}`);
   }
-  return `${summary.samples} samples plus pane.focused events over ${summary.elapsedMs}ms; zero harness focus changes; ${summary.externalChanges?.length ?? 0} external changes recorded and re-baselined; ${summary.baseline} -> ${summary.currentBaseline ?? summary.baseline}`;
+  return `${summary.samples} samples plus pane_focused events over ${summary.elapsedMs}ms; zero harness focus changes; ${summary.externalChanges?.length ?? 0} external changes recorded and re-baselined; ${summary.baseline} -> ${summary.currentBaseline ?? summary.baseline}`;
 }
 
 export async function startFocusMonitor({ socketPath, evidence, ownership = path.join(path.dirname(evidence), 'ownership.json'), intervalMs = 200 }) {
@@ -145,9 +145,11 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
     } catch (value) { error(value); }
   };
   client.on('event', (event) => {
-    if (event.event !== 'pane.focused') return;
+    // Protocol 20 uses pane.focused for the subscription filter, but
+    // pane_focused for event envelopes. HerdrClient forwards them unchanged.
+    if (event.event !== 'pane_focused') return;
     summary.events++;
-    if (typeof event.data?.pane_id !== 'string') { error(new Error('malformed pane.focused event')); return; }
+    if (typeof event.data?.pane_id !== 'string') { error(new Error('malformed pane_focused event')); return; }
     if (event.data.workspace_id) paneWorkspaces.set(event.data.pane_id, event.data.workspace_id);
     void observe([event.data.pane_id], 'event');
   });

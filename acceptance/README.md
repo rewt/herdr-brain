@@ -62,12 +62,15 @@ The `operator-focus` case watches the server's focused pane from before the
 candidate snapshot through owned-workspace cleanup. A separate read-only process
 samples every 200 ms, including while the runner blocks in child commands, and
 subscribes to `pane.focused` so a change restored between samples also fails.
-`focus-trace.jsonl`, `focus-calls.jsonl` and `focus-summary.json` retain the baseline,
-case, timestamps, samples, events and actual/requested Herdr calls. A change names
-the active or immediately preceding call; changes without a correlated harness
-call are labelled external client/plugin activity and still fail. Missing samples
-or a broken subscription are PENDING, never proof of unchanged focus. Do not
-switch the operator's pane during the run. The monitor never restores focus.
+`focus-trace.jsonl`, `focus-calls.jsonl` and `focus-summary.json` retain the initial
+and current baselines, case, timestamps, samples, events and actual/requested
+Herdr calls. A move into a harness-owned pane or workspace fails, including late
+panes absent from the pane ledger. A change correlated with an active or recently
+completed harness/candidate call also fails and names that call. Other changes
+are recorded as external activity and re-baseline the monitor, so the operator
+and unrelated projects can navigate during a run. Ownership receipts are retained
+through cleanup. Missing samples, unresolved destinations or a broken subscription
+are PENDING, never proof of preserved focus. The monitor never restores focus.
 Forbidden focus attempts also produce typed receipts and fail the case even if
 the caller suppresses the refusal and exits successfully. Late observations
 correlate against the most recent completion for one second after that call ends.

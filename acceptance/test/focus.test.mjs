@@ -8,21 +8,24 @@ import { spawnChild, waitForExit, killChild } from '../../test/helpers/child.mjs
 import { startFocusMonitor, assertFocus } from '../focus.mjs';
 import { HarnessLimit } from '../limits.mjs';
 
-async function fixture(t) {
+async function fixture(t, { panes = [], workspaces = [] } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-focus-'));
   const socketPath = path.join(root, 'server.sock');
   const serverFile = path.join(root, 'server.mjs');
   fs.writeFileSync(serverFile, `import net from 'node:net';import fs from 'node:fs';
 const subscriptions=new Set();let pane='operator:p7';
+const workspace=id=>id==='unlisted:p3'?'scratch':id.split(':')[0];
 const server=net.createServer(socket=>{let buffer='';socket.setEncoding('utf8');socket.on('error',()=>{});
 socket.on('data',chunk=>{buffer+=chunk;while(buffer.includes('\\n')){const i=buffer.indexOf('\\n'),r=JSON.parse(buffer.slice(0,i));buffer=buffer.slice(i+1);
 if(r.method==='events.subscribe'){if(JSON.stringify(r.params.subscriptions)!==JSON.stringify([{type:'pane.focused'}]))throw Error('invalid native subscription shape');subscriptions.add(socket);socket.write(JSON.stringify({id:r.id,result:{type:'subscription_started'}})+'\\n');}
-else if(r.method==='pane.list')socket.write(JSON.stringify({id:r.id,result:{panes:[{pane_id:pane,focused:true}]}})+'\\n');
+else if(r.method==='pane.list')socket.write(JSON.stringify({id:r.id,result:{panes:[{pane_id:pane,workspace_id:workspace(pane),focused:true}]}})+'\\n');
+else if(r.method==='pane.get')socket.write(JSON.stringify({id:r.id,result:{pane:{pane_id:r.params.pane_id,workspace_id:workspace(r.params.pane_id)}}})+'\\n');
 else socket.write(JSON.stringify({id:r.id,error:{code:'forbidden',message:'monitor attempted a mutation'}})+'\\n');}});
 socket.on('close',()=>subscriptions.delete(socket));});
 server.listen(${JSON.stringify(socketPath)},()=>console.log('ready'));
-setInterval(()=>{const file=${JSON.stringify(path.join(root, 'change'))};if(!fs.existsSync(file))return;fs.unlinkSync(file);
-for(const next of ['scratch:p2','operator:p7']){pane=next;for(const socket of subscriptions)socket.write(JSON.stringify({event:'pane.focused',data:{pane_id:pane}})+'\\n');}},10);
+setInterval(()=>{const file=${JSON.stringify(path.join(root, 'change'))};if(!fs.existsSync(file))return;const content=fs.readFileSync(file,'utf8');fs.unlinkSync(file);
+const change=content?JSON.parse(content):{panes:['scratch:p2','operator:p7']};
+for(const next of change.panes){pane=next;if(change.events!==false)for(const socket of subscriptions)socket.write(JSON.stringify({event:'pane.focused',data:{pane_id:pane}})+'\\n');}},10);
 `);
   let monitor, server;
   t.after(async () => {
@@ -32,8 +35,10 @@ for(const next of ['scratch:p2','operator:p7']){pane=next;for(const socket of su
   });
   server = spawnChild(t, process.execPath, [serverFile]);
   await new Promise((resolve, reject) => { server.stdout.once('data', resolve); server.once('error', reject); });
-  monitor = await startFocusMonitor({ socketPath, evidence: root, intervalMs: 25 });
-  return { root, monitor };
+  const ownership = path.join(root, 'ownership.json');
+  fs.writeFileSync(ownership, JSON.stringify({ panes, workspaces }));
+  monitor = await startFocusMonitor({ socketPath, evidence: root, ownership, intervalMs: 25 });
+  return { root, monitor, ownership, change: (panes, events = true) => fs.writeFileSync(path.join(root, 'change'), JSON.stringify({ panes, events })) };
 }
 
 test('focus sampling continues while the acceptance parent blocks and spans cleanup', async (t) => {
@@ -44,7 +49,7 @@ test('focus sampling continues while the acceptance parent blocks and spans clea
   assert.equal(summary.baseline, 'operator:p7');
   assert.ok(summary.samples >= 5, `${summary.samples} samples during blocked parent`);
   assert.equal(summary.changes.length, 0);
-  assert.match(assertFocus(summary), /zero focus changes/);
+  assert.match(assertFocus(summary), /zero harness focus changes/);
   const rows = fs.readFileSync(path.join(root, 'focus-trace.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(rows.some((row) => row.phase?.key === 'scope-cleanup'));
   assert.equal(rows.at(-1).phase.key, 'scope-cleanup');
@@ -64,14 +69,65 @@ test('a transient focus change fails even between samples and names the actual a
   assert.equal(summary.changes[0].panes[0], 'scratch:p2');
 });
 
-test('changes outside harness calls remain failures and incomplete monitoring never passes', () => {
-  const summary = { baseline: 'operator:p7', samples: 20, errors: [], changes: [{ at: 1, panes: ['external:p1'], calls: [] }] };
-  assert.throws(() => assertFocus(summary), /outside a recorded harness call/);
+test('owned changes need no correlated call and incomplete monitoring never passes', () => {
+  const summary = { baseline: 'operator:p7', samples: 20, errors: [], changes: [{ at: 1, panes: ['scratch:p1'], workspaces: ['scratch'], calls: [] }] };
+  assert.throws(() => assertFocus(summary), /harness-owned destination \(scratch\)/);
   summary.errors = ['subscription disconnected'];
   assert.throws(() => assertFocus(summary), /operator focus changed/);
   summary.changes = [];
   assert.throws(() => assertFocus(summary), HarnessLimit);
   assert.throws(() => assertFocus({ ...summary, errors: [], samples: 1 }), HarnessLimit);
+});
+
+test('external sampled and transient event moves are recorded and re-baseline without failing', async (t) => {
+  const { root, monitor, change } = await fixture(t);
+  change(['external:p1'], false);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  change(['external:p2', 'external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.baseline, 'operator:p7');
+  assert.equal(summary.currentBaseline, 'external:p1');
+  assert.equal(summary.changes.length, 0);
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.externalChanges.length, 3);
+  assert.deepEqual(summary.externalChanges.map((r) => r.from), ['operator:p7', 'external:p1', 'external:p2']);
+  assert.ok(summary.externalChanges.every((r) => r.classification === 'external' && r.rebaseline === r.panes[0]));
+  assert.match(assertFocus(summary), /zero harness focus changes; 3 external changes recorded/);
+  const rows = fs.readFileSync(path.join(root, 'focus-trace.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows.filter((r) => r.classification === 'external').length, 3);
+});
+
+test('an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup', async (t) => {
+  const { monitor, change, ownership } = await fixture(t, { workspaces: ['scratch'] });
+  change(['external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  // Cleanup removes the ledger. The lifetime creation receipts still count.
+  fs.unlinkSync(ownership);
+  change(['unlisted:p3', 'external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.externalChanges.length, 1);
+  assert.equal(summary.changes[0].from, 'external:p1');
+  assert.equal(summary.changes[0].owned, true);
+  assert.deepEqual(summary.changes[0].workspaces, ['scratch']);
+  assert.equal(summary.changes[0].calls.length, 0);
+  assert.throws(() => assertFocus(summary), /from external:p1 to unlisted:p3.*harness-owned destination/);
+});
+
+test('a call-correlated move to a foreign pane still fails after an external re-baseline', async (t) => {
+  const { root, monitor, change } = await fixture(t);
+  change(['external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'call', at: Date.now(),
+    args: ['workspace', 'close', 'scratch'], requested: ['workspace', 'close', 'scratch'] }) + '\n');
+  change(['foreign:p9']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.externalChanges.length, 1);
+  assert.equal(summary.changes[0].owned, false);
+  assert.throws(() => assertFocus(summary), /from external:p1 to foreign:p9.*workspace close scratch/);
 });
 
 test('a focus event after a slow completed call names that call using its completion time', async (t) => {

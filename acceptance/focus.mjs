@@ -1,6 +1,6 @@
 // A separate process keeps observing while the runner blocks in spawnSync.
-// All Herdr operations here are read-only. Never restore focus: a transient
-// change is a failure even when another client subsequently restores it.
+// All Herdr operations here are read-only. Never restore focus: owned or
+// correlated changes fail; unrelated operator/client activity re-baselines.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fork } from 'node:child_process';
@@ -23,18 +23,18 @@ export function assertFocus(summary, { evidence, error } = {}) {
     const first = summary.changes[0];
     const calls = first.calls.length ? first.calls.map((call) =>
       `${call.args.join(' ')} (requested ${call.requested.join(' ')})`).join('; ')
-      : 'outside a recorded harness call (external client or plugin hook)';
-    throw new Error(`operator focus changed from ${summary.baseline} to ${first.panes.join(', ') || '(none)'} at ${first.at}; ${first.phase?.key ?? 'setup'}; ${calls}`);
+      : `harness-owned destination (${first.workspaces?.join(', ') || first.panes.join(', ')})`;
+    throw new Error(`operator focus changed from ${first.from ?? summary.baseline} to ${first.panes.join(', ') || '(none)'} at ${first.at}; ${first.phase?.key ?? 'setup'}; ${calls}`);
   }
   if (error) throw error;
   if (!summary?.baseline || summary.samples < 2 || summary.errors.length) {
     throw new HarnessLimit(`operator focus trace incomplete: ${summary?.errors?.join('; ') || 'missing baseline or samples'}`);
   }
-  return `${summary.samples} samples plus pane.focused events over ${summary.elapsedMs}ms; ${summary.baseline} unchanged; zero focus changes`;
+  return `${summary.samples} samples plus pane.focused events over ${summary.elapsedMs}ms; zero harness focus changes; ${summary.externalChanges?.length ?? 0} external changes recorded and re-baselined; ${summary.baseline} -> ${summary.currentBaseline ?? summary.baseline}`;
 }
 
-export async function startFocusMonitor({ socketPath, evidence, intervalMs = 200 }) {
-  const child = fork(FILE, ['--monitor', JSON.stringify({ socketPath, evidence, intervalMs })], {
+export async function startFocusMonitor({ socketPath, evidence, ownership = path.join(path.dirname(evidence), 'ownership.json'), intervalMs = 200 }) {
+  const child = fork(FILE, ['--monitor', JSON.stringify({ socketPath, evidence, ownership, intervalMs })], {
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
   });
   let stderr = '', exited = false;
@@ -67,14 +67,15 @@ export async function startFocusMonitor({ socketPath, evidence, intervalMs = 200
   } };
 }
 
-async function monitor({ socketPath, evidence, intervalMs }) {
+async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   const client = new HerdrClient({ socketPath });
   const trace = path.join(evidence, 'focus-trace.jsonl');
   const summaryPath = path.join(evidence, 'focus-summary.json');
-  const summary = { baseline: null, samples: 0, events: 0, changes: [], errors: [], startedAt: Date.now() };
-  let stopping = false, timer, inFlight;
+  const summary = { baseline: null, currentBaseline: null, samples: 0, events: 0, changes: [], externalChanges: [], errors: [], startedAt: Date.now() };
+  let stopping = false, timer, inFlight, observations = Promise.resolve();
+  const ownedPanes = new Set(), ownedWorkspaces = new Set(), paneWorkspaces = new Map();
   const append = (row) => fs.appendFileSync(trace, JSON.stringify(row) + '\n');
-  const context = () => {
+  const context = (at) => {
     const phaseFile = path.join(evidence, 'focus-phase.json');
     const phase = fs.existsSync(phaseFile) ? JSON.parse(fs.readFileSync(phaseFile)) : { key: 'setup' };
     const rows = readCalls(evidence);
@@ -89,44 +90,73 @@ async function monitor({ socketPath, evidence, intervalMs }) {
     }
     // A focus event may arrive just after the completion receipt. Keep that
     // call as a correlation, without claiming causality for outside clients.
-    return { phase, calls: active.size ? [...active.values()] : completed && Date.now() - completed.completedAt < 1000 ? [completed] : [] };
+    return { phase, calls: active.size ? [...active.values()] : completed && at - completed.completedAt < 1000 ? [completed] : [] };
   };
   const error = (value) => {
     summary.errors.push(value.message ?? String(value));
     append({ type: 'error', at: Date.now(), error: summary.errors.at(-1) });
   };
   const observe = (panes, type) => {
-    const row = { type, at: Date.now(), panes, ...context() };
-    if (summary.baseline && (panes.length !== 1 || panes[0] !== summary.baseline)) {
-      summary.changes.push(row);
-    }
-    append(row);
+    // Capture receipts at arrival, then serialize resolution so transient
+    // events cannot overtake each other while checking their workspace IDs.
+    const at = Date.now(), row = { type, at, panes, ...context(at) };
+    observations = observations.then(async () => {
+      if (fs.existsSync(ownership)) {
+        const ledger = JSON.parse(fs.readFileSync(ownership));
+        for (const id of ledger.panes ?? []) ownedPanes.add(id);
+        for (const id of ledger.workspaces ?? []) ownedWorkspaces.add(id);
+      }
+      row.from = summary.currentBaseline;
+      if (panes.length !== 1) throw new Error(`expected one focused pane, received ${JSON.stringify(panes)}`);
+      if (panes[0] !== summary.currentBaseline) {
+        let workspace = paneWorkspaces.get(panes[0]);
+        if (!workspace && !ownedPanes.has(panes[0]) && !row.calls.length) {
+          const result = await client.request('pane.get', { pane_id: panes[0] });
+          workspace = result.pane?.workspace_id;
+          if (!workspace) throw new Error(`focus destination workspace unavailable: ${panes[0]}`);
+          paneWorkspaces.set(panes[0], workspace);
+        }
+        row.workspaces = workspace ? [workspace] : [];
+        row.owned = ownedPanes.has(panes[0]) || ownedWorkspaces.has(workspace);
+        row.classification = row.owned || row.calls.length ? 'harness' : 'external';
+        if (row.classification === 'harness') summary.changes.push(row);
+        else {
+          summary.externalChanges.push(row);
+          summary.currentBaseline = panes[0];
+          row.rebaseline = panes[0];
+        }
+      }
+      append(row);
+    }).catch(error);
+    return observations;
   };
   const sample = async () => {
     try {
       const result = await client.request('pane.list');
       if (!Array.isArray(result.panes)) throw new Error('pane.list returned no panes');
+      for (const pane of result.panes) if (pane.workspace_id) paneWorkspaces.set(pane.pane_id, pane.workspace_id);
       const panes = result.panes.filter((pane) => pane.focused).map((pane) => pane.pane_id);
       if (!summary.baseline) {
         if (panes.length !== 1) throw new Error(`expected one focused operator pane, received ${JSON.stringify(panes)}`);
-        summary.baseline = panes[0];
+        summary.baseline = summary.currentBaseline = panes[0];
       }
       summary.samples++;
-      observe(panes, 'sample');
+      await observe(panes, 'sample');
     } catch (value) { error(value); }
   };
   client.on('event', (event) => {
     if (event.event !== 'pane.focused') return;
     summary.events++;
     if (typeof event.data?.pane_id !== 'string') { error(new Error('malformed pane.focused event')); return; }
-    observe([event.data.pane_id], 'event');
+    if (event.data.workspace_id) paneWorkspaces.set(event.data.pane_id, event.data.workspace_id);
+    void observe([event.data.pane_id], 'event');
   });
   client.on('connectionError', error);
   client.on('disconnected', () => { if (!stopping) error(new Error('focus event subscription disconnected')); });
   const finish = async () => {
     if (stopping) return;
     stopping = true; clearTimeout(timer);
-    await inFlight; await sample();
+    await inFlight; await sample(); await observations;
     client.close();
     summary.forbiddenAttempts = readCalls(evidence).filter((row) => row.type === 'forbidden-focus');
     summary.finishedAt = Date.now(); summary.elapsedMs = summary.finishedAt - summary.startedAt;

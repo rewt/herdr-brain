@@ -6,10 +6,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { quote } from './runtime.mjs';
+import { selectSandbox } from './confinement.mjs';
 const { values } = parseArgs({ options: { bin: { type: 'string' }, codex: { type: 'string' }, claude: { type: 'string' }, validator: { type: 'string' }, remove: { type: 'boolean' } } });
 const product = fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/u, '');
 try {
-  if (!values.bin) throw new Error('usage: node discovery/install.mjs --bin MACHINE_BIN [--codex ABSOLUTE_NATIVE_CODEX] [--claude ABSOLUTE_NATIVE_CLAUDE] [--validator auto|ABSOLUTE_PROVIDER] [--remove]');
+  if (!values.bin) throw new Error('usage: node discovery/install.mjs --bin MACHINE_BIN [--codex ABSOLUTE_NATIVE_CODEX] [--claude ABSOLUTE_NATIVE_CLAUDE] [--validator auto|ABSOLUTE_PROVIDER|experimental-bubblewrap:ABSOLUTE_BWRAP] [--remove]');
   const directory = path.resolve(values.bin), marker = path.join(directory, '.monitor-entry.json');
   const prior = fs.existsSync(marker) ? JSON.parse(fs.readFileSync(marker, 'utf8')) : null;
   if (values.remove) {
@@ -22,6 +23,7 @@ try {
     fs.unlinkSync(marker);
     console.log(`removed Monitor entry adapters from ${directory}`);
   } else {
+    if (values.validator && values.validator !== 'auto') selectSandbox(values.validator);
     if (!values.codex && !values.claude) throw new Error('select --codex and/or --claude by absolute path');
     if (values.codex && !path.isAbsolute(values.codex)) throw new Error('--codex must name the native executable by absolute path');
     if (!values.codex && prior?.native) throw new Error('retain --codex when updating a managed Codex install');

@@ -59,7 +59,7 @@ for (const location of ['temporary', 'ancestor', 'dangling']) caseTest(`all prov
   const temporary = path.join(f.repo, '.lane/validation-tmp');
   if (location === 'ancestor') { fs.mkdirSync(path.join(record, 'validation-tmp')); fs.symlinkSync(record, path.join(f.repo, '.lane')); }
   else { fs.mkdirSync(path.dirname(temporary)); fs.symlinkSync(location === 'dangling' ? path.join(f.scratch, 'missing') : record, temporary); }
-  for (const provider of [f.sandbox, '/usr/bin/sandbox-exec', '/usr/bin/bwrap'])
+  for (const provider of [f.sandbox, '/usr/bin/sandbox-exec', 'experimental-bubblewrap:/usr/bin/bwrap'])
     assert.throws(() => sandboxCommand(provider, f.repo, { sharedPaths: [record], writablePaths: [temporary] }), /writable path redirected/u);
   assert.throws(() => validationTemporary(f.repo), /writable path redirected/u);
   assert.throws(() => validationTemporary(f.repo, { create: true }));
@@ -67,7 +67,7 @@ for (const location of ['temporary', 'ancestor', 'dangling']) caseTest(`all prov
 caseTest('sandbox grants reject redirected workspaces, queues and external runtime paths', (t) => {
   const f = fixture(t), record = path.join(f.scratch, 'record'); fs.mkdirSync(record);
   const alias = path.join(f.scratch, 'alias'); fs.symlinkSync(record, alias);
-  for (const provider of [f.sandbox, '/usr/bin/sandbox-exec', '/usr/bin/bwrap']) {
+  for (const provider of [f.sandbox, '/usr/bin/sandbox-exec', 'experimental-bubblewrap:/usr/bin/bwrap']) {
     assert.throws(() => sandboxCommand(provider, alias, { sharedPaths: [record] }), /writable path redirected/u);
     assert.throws(() => sandboxCommand(provider, f.repo, { sharedPaths: [record], writablePaths: [alias], native: true }), /writable path redirected/u);
     assert.throws(() => sandboxCommand(provider, f.repo, { sharedPaths: [record], runtimePaths: [alias], network: true }), /writable path redirected/u);
@@ -80,7 +80,7 @@ caseTest('sandbox exceptions cannot override a protected record, Git tree or nes
   const f = fixture(t), record = path.join(f.repo, '.org'); fs.mkdirSync(record);
   const temporary = path.join(f.repo, '.lane/validation-tmp'); fs.mkdirSync(temporary, { recursive: true });
   const nestedRecord = path.join(temporary, 'selected-record'); fs.mkdirSync(nestedRecord);
-  for (const provider of [f.sandbox, '/usr/bin/sandbox-exec', '/usr/bin/bwrap']) {
+  for (const provider of [f.sandbox, '/usr/bin/sandbox-exec', 'experimental-bubblewrap:/usr/bin/bwrap']) {
     for (const file of [record, path.join(f.repo, '.git/objects')])
       assert.throws(() => sandboxCommand(provider, f.repo, { sharedPaths: [record], writablePaths: [file] }), /overlaps protected state/u);
     assert.throws(() => sandboxCommand(provider, f.repo, { sharedPaths: [nestedRecord], writablePaths: [temporary] }), /overlaps protected state/u);

@@ -29,9 +29,11 @@ export function socketFilter(arch = process.arch) {
   return bytes;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [binary, ...args] = process.argv.slice(2);
+  const [optIn, binary, ...args] = process.argv.slice(2);
   let fd;
   try {
+    if (optIn !== '--experimental-bubblewrap' || !path.isAbsolute(binary ?? ''))
+      throw new Error('bubblewrap is experimental and disabled by default; explicit --experimental-bubblewrap ABSOLUTE_BWRAP is required (ENG-92)');
     const bytes = socketFilter();
     const directory = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-seccomp-'));
     const file = path.join(directory, 'sockets.bpf');

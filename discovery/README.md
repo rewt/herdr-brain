@@ -249,20 +249,42 @@ This probe complements the ENG-74 release gate; it does not replace it.
 
 A Claude-only machine can install just `--claude /absolute/native/claude`.
 There is no Codex launcher or dependency in that install. Its validator defaults
-to `auto`: macOS selects `/usr/bin/sandbox-exec`, Linux selects an executable
-`bwrap` from the operator's PATH. An install with Codex retains the native Codex
-provider by default. `--validator auto` or `--validator /absolute/provider` on the
-installer or either entry adapter selects a different provider explicitly.
+to `auto`: macOS selects `/usr/bin/sandbox-exec`. On Linux, `auto` refuses clearly;
+it never discovers bubblewrap from PATH. An install with Codex retains the native
+Codex provider by default on either platform. Select `--validator /absolute/native/codex`
+to use that existing provider explicitly. `--validator auto` or
+`--validator /absolute/provider` on the installer or either entry adapter selects
+the supported provider; ordinary bubblewrap paths are refused.
 An unavailable provider or failed kernel setup fails the check; execution never
 falls back to an ordinary shell. The Codex provider still includes managed
 configuration. Host alternatives enforce their own fixed filesystem and network
 boundary independently of any harness configuration.
 
-All validation providers allow runtime reads, deny network, permit writes only
+The Linux bubblewrap adapter is **experimental and disabled by default** until
+ENG-92 proves it on a Linux host. Its reviewed writable-mount path race and
+nonempty file-copy failures remain unresolved on that item. macOS and native
+Codex validation retain their existing providers. To opt in explicitly for
+experimental Linux testing, supply an absolute executable in the validator value:
+
+```sh
+node discovery/install.mjs --bin /scratch/machine-bin --claude /absolute/native/claude \
+  --validator experimental-bubblewrap:/absolute/path/to/bwrap
+# The same --validator value is accepted by monitor-claude and monitor-codex.
+```
+
+This selector is preserved in installed launchers and bounded Git filter commands.
+Passing a bare bwrap executable, including a renamed symlink to it, does not opt
+in. There is no environment toggle and no automatic bubblewrap selection, even
+after opting in elsewhere. The opt-in selects the unfinished adapter; it does
+not establish a safe Linux boundary or resolve its known findings. The internal
+`bubblewrap.mjs` launcher also requires an explicit `--experimental-bubblewrap`
+argument before it launches anything. Keep experimental runs in scratch projects.
+
+The supported validation providers allow runtime reads, deny network, permit writes only
 to the assigned checkout and its validation temporary directory, and protect
 Git metadata, the selected record's aliases and resolved targets, and canonical
 coordination state. Main-mode guards retain native account/runtime writes and
-network settings while excluding shared state. Bubblewrap uses read-only mounts
+network settings while excluding shared state. The experimental bubblewrap design uses read-only mounts
 and separate PID/network namespaces for validation. Its x64/arm64 seccomp filter
 allows only the synchronous file/process/runtime syscalls in `syscalls.mjs` and
 denies everything else, including sockets, all three io_uring entry points, BPF
@@ -307,7 +329,18 @@ actual host boundary explicitly outside a nested sandbox:
 ```sh
 ORG_ACTOR=alternative-test MONITOR_TEST_ALTERNATIVE=/usr/bin/sandbox-exec \
   node --test discovery/test/alternatives.test.mjs discovery/test/review-r3.test.mjs
-# Linux: substitute /absolute/path/to/bwrap.
+# Experimental Linux only: use
+# MONITOR_TEST_ALTERNATIVE=experimental-bubblewrap:/absolute/path/to/bwrap
+```
+
+Round-four host applicability checks exercise nonempty Node file copies and
+replacement of a validated temporary directory with an external symlink after
+profile construction. Run them with the real macOS and/or Codex provider:
+
+```sh
+ORG_ACTOR=validation-host-test MONITOR_TEST_ALTERNATIVE=/usr/bin/sandbox-exec \
+  MONITOR_TEST_SANDBOX=/absolute/native/codex \
+  node --test discovery/test/review-r4.test.mjs
 ```
 
 The Linux regression makes an asynchronous AF_UNIX connection to a host socket

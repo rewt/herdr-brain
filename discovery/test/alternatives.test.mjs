@@ -22,10 +22,10 @@ function fixture(t) {
   command('git', ['add', '.'], repo); command('git', ['commit', '-qm', 'Seed'], repo);
   return { scratch, repo, entries };
 }
-test('provider selection refuses unsupported hosts and discovers bubblewrap without Codex', { timeout: 5000 }, (t) => {
+test('provider selection refuses automatic Linux bubblewrap and retains explicit providers', { timeout: 5000 }, (t) => {
   const f = fixture(t), bin = path.join(f.scratch, 'bin'); fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, 'bwrap'), '#!/bin/sh\n', { mode: 0o755 });
-  assert.equal(selectSandbox('auto', { platform: 'linux', searchPath: bin }), path.join(bin, 'bwrap'));
+  assert.throws(() => selectSandbox('auto', { platform: 'linux', searchPath: bin }), /disabled by default/u);
   assert.throws(() => selectSandbox('auto', { platform: 'unknown' }), /no native validation sandbox/u);
   assert.equal(selectSandbox('/explicit/provider'), '/explicit/provider');
 });
@@ -36,12 +36,12 @@ test('alternative profiles protect resolved Git and shared state, omit network a
   const mac = sandboxCommand('/usr/bin/sandbox-exec', f.repo, { sharedPaths: [alias], writablePaths: [temp] });
   assert.match(mac.args[1], /deny network\*/u); assert.ok(mac.args[1].includes(shared));
   assert.ok(mac.args[1].includes(path.join(f.repo, '.git'))); assert.match(mac.args[1], /require-not/u);
-  const linux = sandboxCommand('/usr/bin/bwrap', f.repo, { sharedPaths: [shared], writablePaths: [temp] });
+  const linux = sandboxCommand('experimental-bubblewrap:/usr/bin/bwrap', f.repo, { sharedPaths: [shared], writablePaths: [temp] });
   assert.ok(linux.args.includes('--unshare-net')); assert.ok(linux.args.includes('--unshare-pid'));
   assert.deepEqual(linux.args.slice(linux.args.indexOf('--ro-bind'), linux.args.indexOf('--ro-bind') + 3), ['--ro-bind', '/', '/']);
   assert.ok(linux.args.includes(shared)); assert.ok(!linux.args.includes('--share-net'));
-  const native = sandboxCommand('/usr/bin/bwrap', f.repo, { sharedPaths: [shared], native: true });
-  assert.throws(() => sandboxCommand('/usr/bin/bwrap', f.repo, { sharedPaths: [alias], native: true }), /shared-state symlink/u);
+  const native = sandboxCommand('experimental-bubblewrap:/usr/bin/bwrap', f.repo, { sharedPaths: [shared], native: true });
+  assert.throws(() => sandboxCommand('experimental-bubblewrap:/usr/bin/bwrap', f.repo, { sharedPaths: [alias], native: true }), /shared-state symlink/u);
   assert.ok(!native.args.includes('--unshare-net')); assert.ok(native.args.includes(shared));
 });
 test('Claude-only scratch installation does not require or install Codex', { timeout: 10000 }, (t) => {
@@ -156,7 +156,7 @@ test('Linux network guard refuses unsupported ABIs and sends seccomp over an inh
     assert.equal(evaluate(filter, socket, 0), 0x80000000);
   }
   const f = fixture(t), shared = path.join(f.repo, '.org'); fs.mkdirSync(shared);
-  const command = sandboxCommand('/usr/bin/bwrap', f.repo, { sharedPaths: [shared] });
+  const command = sandboxCommand('experimental-bubblewrap:/usr/bin/bwrap', f.repo, { sharedPaths: [shared] });
   assert.equal(command.binary, process.execPath);
   assert.match(command.args[0], /bubblewrap.mjs$/u);
 });

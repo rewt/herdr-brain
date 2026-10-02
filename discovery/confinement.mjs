@@ -6,16 +6,25 @@ import { fileURLToPath } from 'node:url';
 import { socketFilter } from './bubblewrap.mjs';
 import { checkedDirectory, within } from './paths.mjs';
 
-export function selectSandbox(binary = 'auto', { platform = process.platform, searchPath = process.env.PATH ?? '' } = {}) {
-  if (binary !== 'auto') return binary;
-  // Never fall back to an unsandboxed shell. Explicit Codex providers retain
-  // their managed profile; auto uses the host kernel without a model harness.
-  if (platform === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) return '/usr/bin/sandbox-exec';
-  if (platform === 'linux') for (const directory of searchPath.split(path.delimiter)) {
-    const file = path.join(directory, 'bwrap');
-    try { fs.accessSync(file, fs.constants.X_OK); return fs.realpathSync(file); } catch {}
+export const EXPERIMENTAL_BUBBLEWRAP = 'experimental-bubblewrap:';
+const experimentalRefusal = 'bubblewrap is experimental and disabled by default pending ENG-92; explicitly select --validator experimental-bubblewrap:/absolute/path/to/bwrap for experimental use';
+export function selectSandbox(binary = 'auto', { platform = process.platform } = {}) {
+  if (binary.startsWith(EXPERIMENTAL_BUBBLEWRAP)) {
+    const executable = binary.slice(EXPERIMENTAL_BUBBLEWRAP.length);
+    if (!path.isAbsolute(executable) || executable.includes('\0')) throw new Error('experimental bubblewrap requires an absolute executable path');
+    // Keep the explicit selection intact through entry and Git filter transport.
+    return binary;
   }
-  throw new Error('no native validation sandbox available; install bubblewrap or select a Codex validator');
+  if (binary !== 'auto') {
+    let target = binary;
+    try { target = fs.realpathSync(binary); } catch {}
+    if ([binary, target].some((file) => path.basename(file) === 'bwrap')) throw new Error(experimentalRefusal);
+    return binary;
+  }
+  // Never discover bubblewrap automatically, even when it is on PATH. Existing
+  // Codex installs already select their native provider explicitly by default.
+  if (platform === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) return '/usr/bin/sandbox-exec';
+  throw new Error(`no native validation sandbox available; select --validator /absolute/native/codex; ${experimentalRefusal}`);
 }
 
 const resolved = (file) => {
@@ -39,6 +48,8 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], r
     throw new Error('sandbox requires absolute shared-state paths from the session parent');
   }
   binary = selectSandbox(binary);
+  const experimentalBubblewrap = binary.startsWith(EXPERIMENTAL_BUBBLEWRAP);
+  if (experimentalBubblewrap) binary = binary.slice(EXPERIMENTAL_BUBBLEWRAP.length);
   cwd = checkedDirectory(cwd);
   if (lifetime) {
     const root = checkedDirectory(path.dirname(lifetime.allowed));
@@ -78,7 +89,7 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], r
       + `(allow file-write* (literal "/dev/null") (require-all ${allowed} ${excluded})${exceptions.length ? ` ${exceptions.join(' ')}` : ''})\n`;
     return { binary, args: ['-p', profile + (lifetime ? `(deny file-read* (literal ${JSON.stringify(lifetime.denied)}))\n` : '')] };
   }
-  if (path.basename(binary) === 'bwrap') {
+  if (experimentalBubblewrap) {
     for (const file of protectedInput) {
       const relative = path.relative(cwd, file);
       const inside = relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..');
@@ -97,7 +108,7 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], r
     args.push('--proc', '/proc', '--dev', '/dev', '--chdir', cwd, '--');
     if (!network) {
       socketFilter(); // Refuse unsupported ABIs before creating a child.
-      return { binary: process.execPath, args: [fileURLToPath(new URL('./bubblewrap.mjs', import.meta.url)), binary, ...args] };
+      return { binary: process.execPath, args: [fileURLToPath(new URL('./bubblewrap.mjs', import.meta.url)), '--experimental-bubblewrap', binary, ...args] };
     }
     return { binary, args };
   }

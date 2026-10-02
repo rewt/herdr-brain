@@ -26,14 +26,21 @@ function fixture(t, config = {}) {
   return { scratch, repo, options, open };
 }
 function install(f) {
-  const bin = path.join(f.scratch, 'bin'), native = path.join(f.scratch, 'native'), receipt = path.join(f.scratch, 'native.json');
-  fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),org:process.env.ORG_DIR,requests:process.env.MONITOR_REQUEST_DIR}));`, { mode: 0o755 });
+  const bin = path.join(f.scratch, 'bin'), native = path.join(f.scratch, 'native'), receipt = path.join(f.scratch, 'native.json'), guard = path.join(f.scratch, 'guard.json');
+  fs.writeFileSync(native, `#!${process.execPath}
+const fs=require('fs'),args=process.argv.slice(2);
+if(args[0]==='sandbox'){
+  fs.writeFileSync(process.env.NATIVE_GUARD_RECEIPT,JSON.stringify(args));
+  const split=args.indexOf('--'),child=require('child_process').spawnSync(args[split+1],args.slice(split+2),{stdio:'inherit'});
+  process.exit(child.status??1);
+}
+fs.writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args,cwd:process.cwd(),org:process.env.ORG_DIR,requests:process.env.MONITOR_REQUEST_DIR}));`, { mode: 0o755 });
   command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--codex', native, '--claude', native], f.repo);
-  const env = { PATH: `${bin}${path.delimiter}${process.env.PATH}`, NATIVE_RECEIPT: receipt,
+  const env = { PATH: `${bin}${path.delimiter}${process.env.PATH}`, NATIVE_RECEIPT: receipt, NATIVE_GUARD_RECEIPT: guard,
     ORG_DIR: path.join(f.scratch, 'foreign-record'), MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
     HERDR_ENV: '', HERDR_PANE_ID: '', HERDR_INTEGRATION_ID: '',
     MONITOR_RUNTIME_DIR: f.options.runtimeDir, MONITOR_WORKTREE_ROOT: f.options.worktreeRoot };
-  return { bin, receipt, env };
+  return { bin, receipt, guard, env };
 }
 function tree(directory) {
   return fs.readdirSync(directory).sort().flatMap((name) => {
@@ -104,6 +111,14 @@ test('main-checkout mode reaches both native harnesses without becoming a superv
     assert.match(delivered, /Never start project housekeeping/u);
     assert.ok(!fs.existsSync(f.options.worktreeRoot));
     assert.ok(!fs.existsSync(got.requests));
+    const guard = JSON.parse(fs.readFileSync(installed.guard));
+    assert.ok(guard.includes('monitor-main-worker'));
+    const filesystem = guard.find((arg) => arg.startsWith('permissions.monitor-main-worker.filesystem='));
+    assert.ok(filesystem.includes(`${JSON.stringify(path.join(f.repo, '.org'))}="read"`));
+    assert.ok(filesystem.includes(`${JSON.stringify(path.join(f.repo, '.lane/discovery'))}="read"`));
+    assert.ok(filesystem.includes(`${JSON.stringify(got.requests)}="write"`));
+    assert.ok(guard.includes('--include-managed-config'));
+    assert.equal(got.args[got.args.indexOf('--model') + 1], 'literal');
   }
   assert.equal(command('git', ['branch', '--list', 'lane/*'], f.repo), '');
   assert.equal(command('git', ['status', '--porcelain'], f.repo), '');
@@ -170,6 +185,9 @@ test('main-mode done reports require clean committed work and successful sandbox
   assert.equal(JSON.parse(rec(['show', current.run, '--json'])).report.outcome, 'done');
   const args = JSON.parse(fs.readFileSync(receipt));
   assert.ok(args.includes('monitor-validation')); assert.equal(args.at(-1), 'node --test');
+  const filesystem = args.find((arg) => arg.startsWith('permissions.monitor-validation.filesystem='));
+  assert.ok(filesystem.includes(`${JSON.stringify(path.join(f.repo, '.org'))}="read"`));
+  assert.ok(filesystem.includes(`${JSON.stringify(path.join(f.repo, '.lane/discovery'))}="read"`));
 });
 test('entry-only configuration preserves the portable route suggestion and pending operator question', (t) => {
   const f = fixture(t, { main: 'trunk', entry: { mode: 'main' } });

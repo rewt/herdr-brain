@@ -13,6 +13,7 @@ import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { readReport } from '../lib/report.mjs';
 import { entryLifecycle, worktreeDirectory } from './lifecycle.mjs';
 import { projectEntrySettings } from './settings.mjs';
+import { sandboxCommand } from './confinement.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -35,6 +36,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const env = { ORG_ACTOR: `entry-${id.slice(0, 12)}` };
   // Never inherit a different project's record into an unrelated session.
   let org = findOrgDir({ cwd, env: {} }) ?? path.join(project.canonical, '.org');
+  const recordAlias = org;
   env.ORG_DIR = org;
   const record = (args, location = project.canonical) => command(process.execPath, [local('../bin/org.mjs'), ...args], location, env);
   const gitEnv = { ...env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
@@ -89,6 +91,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     return { routing, routes };
   });
   const recordPaths = Object.fromEntries(['events.jsonl', 'config.json', 'runs', 'reports'].map((name) => [name, fs.realpathSync(path.join(org, name))]));
+  const sharedPaths = [...new Set([recordAlias, org, ...Object.values(recordPaths), path.dirname(coordination), coordination])];
   const lifecycleOwner = entryLifecycle({ project, coordination, git, externalGit });
   let workspace = project.canonical;
   if (workerLane) {
@@ -144,7 +147,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   };
   const lane = (args, location) => {
     if (!sandboxBinary) throw new Error('a native validation sandbox is required for check and promote');
-    const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace].map(quote).join(' ');
+    const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace, JSON.stringify(sharedPaths)].map(quote).join(' ');
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
       ...gitEnv, LANE_CONFIG: configFile, LANE_VALIDATE: validation,
       MONITOR_PROJECT_CONFIG: path.join(project.canonical, '.lane.json'),
@@ -283,5 +286,11 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       } else try { lifecycleOwner.close(); } catch (error) { console.error(`monitor entry cleanup: ${error.message}`); }
     }
   };
-  return { context, dispatch, poll, close, attachChild: lifecycleOwner.attachChild };
+  const nativeLaunch = (binary, args) => {
+    if (role !== 'worker' || workerLane) return { binary, args };
+    verify('context');
+    const guarded = sandboxCommand(sandboxBinary, workspace, { sharedPaths, writablePaths: [requests], native: true });
+    return { binary: guarded.binary, args: [...guarded.args, binary, ...args] };
+  };
+  return { context, dispatch, poll, close, nativeLaunch, attachChild: lifecycleOwner.attachChild };
 }

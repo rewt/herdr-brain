@@ -91,6 +91,13 @@ record the task, commit, check and finish in that checkout; there is no lane to
 rebase or promote. A done report requires a clean committed checkout and a green
 sandboxed check before ingestion. Main-mode sessions share that checkout, so a
 project choosing this mode also chooses to coordinate concurrent edits there.
+Both Codex and Claude main-mode workers run inside an additional native filesystem
+guard that keeps the selected record, its resolved files, and entry coordination
+state read-only. The guard leaves harness runtime/account writes and the harness's
+own tool sandbox, network and approval settings in place. Only this session's
+request queue is writable under protected state; bounded parent commands perform
+record and Git mutations. Opt-out and explicit supervisor sessions retain their
+existing launch behavior.
 An explicit `--role supervisor` always uses the canonical checkout and its existing
 supervisor workflow, unless the project opts out.
 
@@ -188,7 +195,11 @@ rebase receipt for that assigned branch, and `monitor abort` restores it.
 Promotion calls the existing lane CLI with its clean/rebase/green/fast-forward
 checks intact. Preparation and validation execute in a native Codex permission
 profile: read access for runtime dependencies, write access only in the assigned
-checkout, protected `.git`, and no network. The default check is the project's
+checkout, protected `.git`, and no network. The session parent also supplies
+read-only exclusions for the selected record (including resolved symlink targets)
+and the canonical `.lane` state, so preparation or validation cannot overwrite
+ignored shared state from the main checkout. Its dedicated validation temporary
+directory remains writable. The default check is the project's
 `npm test`, or `node --test` for a Node test directory. Unknown validation asks for
 the real project command in `.lane.json`; it never substitutes a trivial check.
 The native Codex executable is currently the validation sandbox provider for
@@ -216,7 +227,7 @@ Offline checks are part of `npm test`. A native sandbox check, still with no
 model call, can be run explicitly outside a nested sandbox:
 
 ```sh
-MONITOR_TEST_SANDBOX=/absolute/path/to/codex node --test discovery/test/sandbox.test.mjs
+MONITOR_TEST_SANDBOX=/absolute/path/to/codex node --test discovery/test/sandbox.test.mjs discovery/test/confinement.test.mjs
 ```
 
 The independent real discovery probe is outside `npm test`:

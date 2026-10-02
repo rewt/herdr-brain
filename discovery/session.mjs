@@ -3,7 +3,8 @@
 import { spawn } from 'node:child_process';
 const gate = 'IFS= read -r monitor_gate <&3 && [ "$monitor_gate" = launch ] || exit 1\nexec 3<&-\nexec "$@"';
 export function spawnNative(entry, binary, args, options) {
-  const child = spawn('/bin/sh', ['-c', gate, 'monitor-native', binary, ...args], {
+  const launch = entry.nativeLaunch ? entry.nativeLaunch(binary, args) : { binary, args };
+  const child = spawn('/bin/sh', ['-c', gate, 'monitor-native', launch.binary, ...launch.args], {
     ...options, stdio: ['inherit', 'inherit', 'inherit', 'pipe'],
   });
   child.stdio[3].on('error', () => {}); // Native exit is reported by child.close.

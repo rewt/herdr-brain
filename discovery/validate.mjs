@@ -5,8 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { plainDirectory } from '../lib/files.mjs';
-const [binary, cwd] = process.argv.slice(2);
+import { sandboxCommand } from './confinement.mjs';
+const [binary, cwd, sharedPathsJSON] = process.argv.slice(2);
 try {
+  const sharedPaths = JSON.parse(sharedPathsJSON);
   const file = process.env.MONITOR_PROJECT_CONFIG;
   const config = file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
   const localFile = path.join(cwd, '.lane.json');
@@ -30,9 +32,8 @@ try {
     console.log(`sandboxed command (${commandSource}): ${step}`);
     const temporary = path.join(cwd, '.lane/validation-tmp');
     plainDirectory(temporary);
-    const r = spawnSync(binary, ['sandbox', '--permission-profile', 'monitor-validation', '--include-managed-config', '-C', cwd,
-      '-c', 'permissions.monitor-validation.filesystem={ ":root"="read", ":workspace_roots"={ "."="write", ".git"="read" } }',
-      '-c', 'permissions.monitor-validation.network.enabled=false', '--', 'sh', '-c', step], { cwd, stdio: 'inherit',
+    const sandbox = sandboxCommand(binary, cwd, { sharedPaths, writablePaths: [temporary] });
+    const r = spawnSync(sandbox.binary, [...sandbox.args, 'sh', '-c', step], { cwd, stdio: 'inherit',
       env: { ...process.env, TMPDIR: temporary, LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '' } });
     if (r.error || r.status !== 0) throw new Error(r.error?.message ?? `sandboxed validation exited ${r.status}`);
   }

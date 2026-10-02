@@ -312,6 +312,10 @@ each test file has five minutes, and an independent watchdog stops the whole
 suite after six minutes. The larger lane file, which runs many review/schema
 variants sequentially, gets eight minutes and a nine-minute suite watchdog.
 Smaller explicit test/command deadlines still apply.
+An asynchronous child running the fixed suite entrypoint may have up to
+fifty-five seconds for its aggregate work. The plugin's nested release suite
+uses a forty-five-second file bound and fifty-second suite watchdog; ordinary
+fixture commands retain their fifteen-second limit.
 The file bound also handles blocked JavaScript event loops, which cannot run a
 test's own timer. Failures name the test or stalled file; the suite watchdog
 prints the selected files.
@@ -328,8 +332,9 @@ group and performed ordinary group teardown. Surviving members are reported by
 PID and command and fail the suite, even when their fixture parent has exited
 and redirected their output. The audit never signals individual descendants.
 File and suite deadlines end the same group. Killing the coordinator closes
-IPC; the responsive leader tears down its own group. No suspension, descendant
-hunting, registration journals, ancestor chains or replacement reapers remain.
+IPC; the responsive leader tears down its own group. Ordinary suite teardown
+needs no suspension, descendant hunting, registration journals, ancestor chains
+or replacement reapers.
 
 Discovery's real-detachment regressions use the fixed
 `test/helpers/detached-fixture.mjs` entrypoint through `spawnDetachedFixture`.
@@ -340,7 +345,18 @@ late writes before this fallback deadline. Cleanup waits for live producers and
 descendants to disappear before removing the fixture directory; its process
 enumeration only reports, and never authorizes signals.
 
-Every helper signal requires a fresh successful lookup matching both the owned
+Interactive fixtures use `runPTY`, which compiles a native owner inside the
+session created by `script`. That owner keeps the session identity alive. The
+command inherits the original terminal group, and the owner cleans every
+remaining session member on exit,
+command deadline, or transport death. Cleanup freezes producers, then signals
+freshly confirmed session members through macOS audit tokens or Linux pidfds.
+The command deadline is at most fifteen seconds and cleanup at most three more;
+both remain active if the suite is killed or JavaScript blocks. Node descendants
+retain the containment preload, so they cannot create another session. Native
+commands that deliberately create new sessions require their own lifetime owner.
+
+Every JavaScript fixture helper signal requires a fresh successful lookup matching both the owned
 start time and full command. Group signals additionally require the same live
 group leader. Failed, timed-out or incomplete lookups never authorize a signal;
 they are reported and fail cleanup. A dead

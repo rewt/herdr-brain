@@ -1,4 +1,6 @@
 // Test-only containment. Product daemon launchers also stay in the suite group.
+// Native script creates a PTY session independently of Node spawn options;
+// runPTY gives that session its own native owner and cancellation deadline.
 import childProcess, { ChildProcess } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';

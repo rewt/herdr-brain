@@ -1,6 +1,7 @@
 // Dependency-free test transport for BSD script (Darwin) and util-linux script.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -16,17 +17,30 @@ export const PTY_SKIP_REASON = !['darwin', 'linux'].includes(process.platform)
   ? 'PTY tests require Darwin BSD script or Linux util-linux script'
   : !SCRIPT ? 'PTY tests require an installed script executable' : false;
 const quote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
-export function ptyCommand(binary, args, { platform = process.platform, executable = SCRIPT } = {}) {
+export function ptyCommand(binary, args, { platform = process.platform, executable = SCRIPT, exec = false } = {}) {
   if (!executable) throw new Error('PTY tests require an installed script executable');
   if (platform === 'darwin') return { file: executable, args: ['-q', '/dev/null', binary, ...args] };
-  if (platform === 'linux') return { file: executable, args: ['-q', '-e', '-c', [binary, ...args].map(quote).join(' '), '/dev/null'] };
+  if (platform === 'linux') return { file: executable, args: ['-q', '-e', '-c', `${exec ? 'exec ' : ''}${[binary, ...args].map(quote).join(' ')}`, '/dev/null'] };
   throw new Error(`unsupported PTY test platform: ${platform}`);
 }
 export function runPTY(binary, args, options = {}) {
-  const transport = ptyCommand(binary, args);
-  return spawnSync(transport.file, transport.args, {
-    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 15000, ...options,
-  });
+  const timeout = Math.min(options.timeout || 15000, 15000);
+  if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('invalid PTY timeout');
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-pty-owner-'));
+  try {
+    const owner = path.join(scratch, 'owner');
+    const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', owner,
+      fileURLToPath(new URL('./pty-owner.c', import.meta.url))], {
+      encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: scratch },
+    });
+    if (built.error || built.status) throw Error(`PTY owner unavailable: ${built.error?.message ?? built.stderr}`);
+    const transport = ptyCommand(owner, [String(timeout), binary, ...args], { exec: true });
+    // script's timeout may kill its transport first. The native owner lives in
+    // the independent PTY session and still completes bounded descendant cleanup.
+    return spawnSync(transport.file, transport.args, {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options, timeout, killSignal: 'SIGKILL',
+    });
+  } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv[2] === '--run') {
   const result = runPTY(process.argv[3], process.argv.slice(4));

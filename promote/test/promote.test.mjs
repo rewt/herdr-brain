@@ -49,10 +49,11 @@ function fixture(t) {
     const owner = path.join(queue.directory, 'worker.lock/owner.json');
     if (result.status === 0 && fs.existsSync(owner)) {
       const pid = JSON.parse(fs.readFileSync(owner, 'utf8')).pid;
-      if (!processes.has(pid)) registerProcess(pid, true, undefined, (entry) => {
+      if (!processes.has(pid)) {
+        const entry = registerProcess(pid);
         assert.ok(entry.command.includes(CLI) && entry.command.includes(repo), 'acknowledged worker command belongs to this fixture');
         processes.set(pid, entry);
-      });
+      }
     }
     return result;
   };

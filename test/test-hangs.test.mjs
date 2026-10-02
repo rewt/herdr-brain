@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
-import { killProcesses, registerProcess } from './helpers/processes.mjs';
+import { killProcess, registerProcess } from './helpers/processes.mjs';
 
 const helper = new URL('./helpers/bounded-test.mjs', import.meta.url).href;
 const childHelper = new URL('./helpers/child.mjs', import.meta.url).href;
@@ -35,6 +35,23 @@ test('a late waiter receives a child result and output after close', async (t) =
   assert.equal(result.stdout, 'already closed\n');
 });
 
+test('a completed fixture never looks up or signals its historical PID during teardown', async (t) => {
+  const f = fixture(t, () => `import cp from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+test('already completed fixture',async(t)=>{
+const child=spawnChild(t,process.execPath,['-e','console.log("complete")']);
+await waitForExit(child);
+let queries=0;const original=cp.spawnSync;
+cp.spawnSync=(command,...args)=>{if(command==='ps'){queries++;throw Error('historical PID lookup must not happen');}return original(command,...args);};
+syncBuiltinESMExports();
+if(child.kill('SIGKILL'))throw Error('already completed child was signalled');
+t.after(()=>{cp.spawnSync=original;syncBuiltinESMExports();if(queries)throw Error('teardown queried a completed fixture');});
+});`);
+  const child = spawnChild(t, process.execPath, [runner, f.file]);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+});
+
 for (const kind of ['leak', 'assertion', 'test timeout', 'child timeout']) {
   test(`${kind} names the failed test and reaps its fixture child and grandchild`, async (t) => {
     const name = `deliberately ${kind} fixture watcher`;
@@ -57,7 +74,7 @@ ${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" :
 }
 
 for (const kind of ['file', 'suite']) {
-  test(`${kind} watchdog bounds a blocked event loop and reaps registered children`, async (t) => {
+  test(`${kind} watchdog bounds a blocked event loop and clears the fixture group`, async (t) => {
     const f = fixture(t, (root) => `test('blocked event loop culprit',async(t)=>{
 const child=spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)']);
 fs.writeFileSync(${JSON.stringify(path.join(root, 'pid'))},String(child.pid));
@@ -76,7 +93,7 @@ for (const signal of ['SIGTERM', 'SIGKILL']) {
   test(`${signal} of an outer runner reaps every nested worker and blocked fixture descendant`, async (t) => {
     const owned = [];
     // If this regression fails, its reproducer must still leave no live fixtures.
-    t.after(() => killProcesses(owned));
+    t.after(() => { for (const entry of owned.toReversed()) killProcess(entry); });
     const f = fixture(t, (root) => {
       const receipt = path.join(root, 'inner.json');
       const shell = `echo $$ > '${root}/shell'; sleep 60 & echo $! > '${root}/sleep'; wait`;
@@ -87,14 +104,14 @@ import fs from 'node:fs';
 test('nested blocked loop',async(t)=>{
 const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(shell)}]);
 while(!fs.existsSync(${JSON.stringify(path.join(root, 'sleep'))}) || !fs.readFileSync(${JSON.stringify(path.join(root, 'sleep'))},'utf8').trim()) await new Promise(r=>setTimeout(r,10));
-fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,guardian:Number(process.env.TEST_GUARDIAN_PID),shell:child.pid,sleep:Number(fs.readFileSync(${JSON.stringify(path.join(root, 'sleep'))},'utf8'))}));
+fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,shell:child.pid,sleep:Number(fs.readFileSync(${JSON.stringify(path.join(root, 'sleep'))},'utf8'))}));
 fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
 while(true) {}
 });`);
       const outer = path.join(root, 'outer.json');
       return `test('enclosing nested runner',async(t)=>{
 const child=spawnChild(t,process.execPath,[${JSON.stringify(runner)},${JSON.stringify(nested)}]);
-fs.writeFileSync(${JSON.stringify(outer + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,guardian:Number(process.env.TEST_GUARDIAN_PID),runner:child.pid}));
+fs.writeFileSync(${JSON.stringify(outer + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,runner:child.pid}));
 fs.renameSync(${JSON.stringify(outer + '.tmp')},${JSON.stringify(outer)});
 await waitForExit(child);
 });`;
@@ -107,8 +124,8 @@ await waitForExit(child);
     const first = JSON.parse(fs.readFileSync(path.join(f.root, 'outer.json'), 'utf8'));
     const second = JSON.parse(fs.readFileSync(path.join(f.root, 'inner.json'), 'utf8'));
     for (const [pid, group] of [
-      [outer.pid, true], [first.guardian, true], [first.worker, true], [first.file, false], [first.runner, true],
-      [second.guardian, true], [second.worker, true], [second.file, false], [second.shell, true], [second.sleep, false],
+      [outer.pid, false], [first.worker, true], [first.file, false], [first.runner, false],
+      [second.worker, true], [second.file, false], [second.shell, false], [second.sleep, false],
     ]) owned.push(registerProcess(pid, group));
     outer.kill(signal);
     const alive = () => owned.filter(({ pid }) => {
@@ -125,70 +142,82 @@ await waitForExit(child);
   });
 }
 
-for (const target of ['outer', 'guardian', 'file watchdog', 'suite watchdog']) {
-  test(`cancelling the ${target} during detached spawn stops producers before the final registry snapshot`, async (t) => {
-    const owned = [];
-    t.after(() => killProcesses(owned));
-    const f = fixture(t, (root) => `test('registration deliberately blocked after spawn',(t)=>{
-const append=fs.appendFileSync;
-fs.appendFileSync=(file,data,...args)=>{
- const entry=JSON.parse(data);
- if(entry.command.includes('r85-unregistered-fixture')){
-  fs.writeFileSync(${JSON.stringify(path.join(root, 'spawning.tmp'))},JSON.stringify({entry,file:process.pid,worker:process.ppid,guardian:Number(process.env.TEST_GUARDIAN_PID),registry:process.env.TEST_PROCESS_REGISTRY}));
-  fs.renameSync(${JSON.stringify(path.join(root, 'spawning.tmp'))},${JSON.stringify(path.join(root, 'spawning.json'))});
-  while(true) {} // Frozen between detached spawn and the very first ledger append.
- }
- return append(file,data,...args);
-};
-spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000); // r85-unregistered-fixture']);
+test('a leader exiting before its redirected background child fails the suite and leaves no survivor', async (t) => {
+  const name = 'leader exits before background fixture';
+  const f = fixture(t, root => `test(${JSON.stringify(name)},async(t)=>{
+const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(`sleep 60 >/dev/null 2>&1 & echo $! > '${root}/background'; exit 0`)}]);
+await waitForExit(child);
 });`);
-    const bound = target.includes('watchdog') ? [`--${target.split(' ')[0]}-timeout=2500`] : [];
-    const outer = spawnChild(t, process.execPath, [runner, ...bound, f.file]);
-    const receipt = path.join(f.root, 'spawning.json');
-    const deadline = Date.now() + 10_000;
-    while (!fs.existsSync(receipt) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.ok(fs.existsSync(receipt), 'fixture never entered the registration critical section');
-    const state = JSON.parse(fs.readFileSync(receipt, 'utf8'));
-    assert.ok(!fs.readFileSync(state.registry, 'utf8').includes('r85-unregistered-fixture'), 'the child must not yet be in the ledger');
-    for (const [pid, group] of [[outer.pid, true], [state.guardian, true], [state.worker, true], [state.file, false]]) owned.push(registerProcess(pid, group));
-    owned.push(state.entry); // Birth tuple supplied BEFORE the deliberately blocked append.
-    if (target === 'outer') outer.kill('SIGKILL');
-    else if (target === 'guardian') killProcesses([owned.find(({ pid }) => pid === state.guardian)]);
-    const stoppedDeadline = Date.now() + 8000;
-    const alive = () => owned.filter(({ pid }) => { try { process.kill(pid, 0); return true; } catch (error) { if (error.code !== 'ESRCH') throw error; return false; } });
-    while (alive().length && Date.now() < stoppedDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.deepEqual(alive(), [], 'cancellation left a producer or unregistered detached fixture alive');
-    const result = await waitForExit(outer); // Includes the reaper closing its inherited output pipe.
-    assert.equal(fs.existsSync(state.registry), false, `the stopped registry is removed only after cleanup\n${result.stderr}`);
-  });
-}
-
-test('a throwing registry append rolls back the spawned fixture before the test finishes', async (t) => {
-  const f = fixture(t, (root) => `test('registration rollback',async(t)=>{
-const append=fs.appendFileSync;
-let entry;
-fs.appendFileSync=(file,data,...args)=>{
- const candidate=JSON.parse(data);
- if(candidate.command.includes('r85-write-error-fixture')){entry=candidate;throw Error('injected registry write error');}
- return append(file,data,...args);
-};
-let caught;
-try {spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000); // r85-write-error-fixture']);}
-catch(error){caught=error;}
-fs.appendFileSync=append;
-if(!caught?.message.includes('injected registry write error'))throw Error('registration did not fail');
-const deadline=Date.now()+2000;
-let live=true;
-while(live&&Date.now()<deadline){try{process.kill(entry.pid,0);await new Promise(r=>setTimeout(r,10));}catch(error){if(error.code!=='ESRCH')throw error;live=false;}}
-if(live)throw Error('spawn survived registration failure before teardown');
-fs.writeFileSync(${JSON.stringify(path.join(root, 'rolled-back'))},String(entry.pid));
-});`);
-  // No nested guardian can rescue rollback in this standalone fixture process.
-  const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
-  const child = spawnChild(t, process.execPath, [f.file], { env });
+  const child = spawnChild(t, process.execPath, [runner, f.file]);
   const result = await waitForExit(child);
-  assert.equal(result.code, 0, result.stdout + result.stderr);
-  assertGone(Number(fs.readFileSync(path.join(f.root, 'rolled-back'), 'utf8')));
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.ok(result.stdout.includes(name), result.stdout);
+  assert.match(result.stderr, /Surviving fixture: PID \d+, command sleep 60/);
+  assertGone(Number(fs.readFileSync(path.join(f.root, 'background'), 'utf8')));
+});
+
+test('a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures', async (t) => {
+  const f = fixture(t, root => `test('audit lookup failure',async(t)=>{
+const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(`sleep 60 >/dev/null 2>&1 & echo $! > '${root}/fixture'; exit 0`)}]);
+fs.writeFileSync(${JSON.stringify(path.join(root, 'worker'))},String(process.ppid));
+await waitForExit(child);
+});`);
+  const fault = path.join(f.root, 'audit-failure.mjs');
+  fs.writeFileSync(fault, `import cp from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+const original=cp.spawnSync;
+cp.spawnSync=(command,args,options)=>command==='ps'&&args.includes('-A')?{status:null,stdout:'',stderr:'',error:Error('injected audit timeout')}:original(command,args,options);
+syncBuiltinESMExports();`);
+  const child = spawnChild(t, process.execPath, [runner, f.file], { env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(fault)}` } });
+  const result = await waitForExit(child);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /process snapshot failed: injected audit timeout/);
+  for (const file of ['worker', 'fixture']) assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
+});
+
+test('suite cancellation clears a detached spawn frozen before its ownership lookup', async (t) => {
+  const f = fixture(t, root => `import cp from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+test('spawn before ownership lookup',(t)=>{
+const original=cp.spawnSync;
+cp.spawnSync=(command,args,options)=>{
+ if(command==='ps'&&args.includes('-p')){
+  fs.writeFileSync(${JSON.stringify(path.join(root, 'spawning'))},JSON.stringify({child:Number(args.at(-1)),file:process.pid,worker:process.ppid}));
+  while(true) {}
+ }
+ return original(command,args,options);
+};
+syncBuiltinESMExports();
+spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true});
+});`);
+  const child = spawnChild(t, process.execPath, [runner, '--suite-timeout=2500', f.file]);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /Test suite exceeded 2500ms/);
+  const state = JSON.parse(fs.readFileSync(path.join(f.root, 'spawning'), 'utf8'));
+  for (const pid of Object.values(state)) assertGone(pid);
+});
+
+test('fixture environment overrides cannot detach a grandchild from the suite group', async (t) => {
+  const f = fixture(t, root => {
+    const receipt = path.join(root, 'leaf.json');
+    const middle = `const {spawn}=require('node:child_process');const fs=require('node:fs');
+const leaf=spawn(process.execPath,['-e','setInterval(()=>{},1000); // r94-policy-leaf'],{detached:true,stdio:'ignore',env:{NODE_OPTIONS:'--no-warnings',PATH:process.env.PATH}});
+leaf.unref();fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify({leaf:leaf.pid}));fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});`;
+    const launcher = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,stdio:'ignore',env:{NODE_OPTIONS:'--no-warnings',PATH:process.env.PATH}}).unref();`;
+    return `test('no escaped grandchild',async(t)=>{
+const child=spawnChild(t,process.execPath,['-e',${JSON.stringify(launcher)}],{env:{NODE_OPTIONS:'--no-warnings',PATH:process.env.PATH}});
+await waitForExit(child);
+const deadline=Date.now()+5000;
+while(!fs.existsSync(${JSON.stringify(receipt)})&&Date.now()<deadline) await new Promise(r=>setTimeout(r,10));
+if(!fs.existsSync(${JSON.stringify(receipt)}))throw Error('grandchild receipt missing');
+});`;
+  });
+  const child = spawnChild(t, process.execPath, [runner, f.file]);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /Surviving fixture:.*r94-policy-leaf/);
+  assertGone(JSON.parse(fs.readFileSync(path.join(f.root, 'leaf.json'), 'utf8')).leaf);
 });
 
 test('a fresh signal confirms the same owned birth tuple across caller timezone changes', async (t) => {

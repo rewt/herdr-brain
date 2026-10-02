@@ -6,7 +6,7 @@
   "private": true,
   "main": "app.mjs",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node ../test/helpers/run.mjs test/*.test.mjs"
   },
   "engines": {
     "node": ">=20"

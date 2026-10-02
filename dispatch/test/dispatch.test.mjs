@@ -40,7 +40,7 @@ if(type==='lane') {
  if(a[0]==='verify-agent') { if(!workers[a[1]] || fs.realpathSync(workers[a[1]].cwd)!==fs.realpathSync(a[2])) process.exit(1); }
 } else if(type==='watch') {
  if(fail==='watch') { console.error('injected watch');process.exit(1); }
- const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'}); registerProcess(child.pid); child.unref();
+ const child=spawn(process.execPath,['-e','setTimeout(()=>{},10000)'],{stdio:'ignore'}); child.unref();
  fs.appendFileSync(path.join(root,'pids'),child.pid+'\\n');
  result({run:a[0],pid:child.pid,log:path.join(root,a[0]+'.log')});
 } else {

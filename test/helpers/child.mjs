@@ -6,30 +6,39 @@ const processes = new WeakMap();
 
 export const childProcessEntry = (child) => processes.get(child);
 
-// A separate group lets cleanup reap fixture shells and their sleeps while its
-// exact leader is confirmed alive. A vanished leader never licenses a signal.
+// Fixture descendants inherit the suite group. Individual teardown never
+// licenses a signal to a vanished leader's historical process group.
 export function killChild(child, signal = 'SIGKILL') {
-  if (!child.pid) return { ok: true, signaled: false };
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return { ok: true, signaled: false };
   return killProcess(processes.get(child), signal);
 }
 
 export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15_000) throw new Error('child timeout must be 1..15000ms');
-  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options, detached: process.platform !== 'win32' });
+  const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options, detached: false });
   let rollback = false;
   child.kill = (signal = 'SIGTERM') => {
+    if (child.exitCode !== null || child.signalCode !== null) return false;
     const sent = killProcess({ ...processes.get(child), group: false }, signal).signaled ?? false;
     if (sent) child.killed = true;
     return sent;
   };
-  let stdout = '', stderr = '', timer;
+  let stdout = '', stderr = '', timer, drainTimer;
   const result = new Promise((resolve, reject) => {
     child.stdout?.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
     child.stderr?.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (code, signal) => {
-      clearTimeout(timer);
+      clearTimeout(timer); clearTimeout(drainTimer);
       resolve({ code, status: code, signal, stdout, stderr });
+    });
+    child.once('exit', (code, signal) => {
+      // A background grandchild can retain these pipes after its parent exits.
+      // Do not let that prevent the report-only suite audit from running.
+      drainTimer = setTimeout(() => {
+        child.stdout?.destroy(); child.stderr?.destroy(); clearTimeout(timer);
+        resolve({ code, status: code, signal, stdout, stderr });
+      }, 500);
     });
     timer = setTimeout(() => {
       killChild(child);
@@ -57,7 +66,7 @@ export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
     if (live && !rollback) throw new Error(`${t.name}: left child running: ${command} ${args.join(' ')}`);
   });
   try {
-    if (child.pid) registerProcess(child.pid, process.platform !== 'win32', undefined, (entry) => processes.set(child, entry));
+    if (child.pid) processes.set(child, registerProcess(child.pid));
   } catch (error) {
     rollback = true;
     killChild(child);

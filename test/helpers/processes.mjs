@@ -1,10 +1,8 @@
 // Only a fresh, successful start-time AND command match authorizes a signal.
-import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const fields = ['pid=', 'ppid=', 'pgid=', 'stat=', 'lstart=', 'command='].join(',');
 const same = (entry, current) => current && entry.identity === current.identity && entry.command === current.command;
-const stopped = (row) => /^[TZ]/.test(row.state);
 const complete = (row) => row && Number.isInteger(row.pid) && row.pid > 0 && Number.isInteger(row.ppid) && Number.isInteger(row.pgid) && typeof row.state === 'string' && !!row.state && typeof row.identity === 'string' && !!row.identity && typeof row.command === 'string' && !!row.command;
 
 export function parseProcessLookup(result, pid) {
@@ -36,18 +34,12 @@ function lookup(pid) {
   return parseProcessLookup(result, pid);
 }
 
-export function processRegistries(env = process.env) {
-  return [...new Set([env.TEST_PROCESS_REGISTRY, ...JSON.parse(env.TEST_PROCESS_ANCESTOR_REGISTRIES ?? '[]')].filter(Boolean))];
-}
-
 export function createProcessTracker({
   readIdentity = (pid) => lookup(pid),
   readIdentities = () => lookup(),
   sendSignal = (pid, signal) => process.kill(pid, signal),
-  append = (file, entry) => fs.appendFileSync(file, JSON.stringify(entry) + '\n'),
   report = (message) => console.error(`Fixture cleanup: ${message}`),
 } = {}) {
-  const registered = new Map();
   const fail = (message) => { report(`${message}; no signal sent`); return { ok: false, error: message }; };
   const entryFor = (row, group = false) => ({ pid: row.pid, group, identity: row.identity, command: row.command });
   const snapshot = () => {
@@ -63,8 +55,8 @@ export function createProcessTracker({
     if (!result?.ok) return fail(`PID ${entry.pid} lookup failed: ${result?.error ?? 'incomplete result'}`);
     if (result.value === null) return { ok: true, signaled: false, reason: 'absent' }; // Never a group-kill license.
     if (!complete(result.value) || result.value.pid !== entry.pid) return fail(`PID ${entry.pid} lookup returned an incomplete identity`);
-    if (!same(entry, result.value)) { report(`PID ${entry.pid} start time or command changed; ${name} skipped`); return { ok: true, signaled: false, reason: 'changed' }; }
     if (/^Z/.test(result.value.state)) return { ok: true, signaled: false, reason: 'absent' };
+    if (!same(entry, result.value)) { report(`PID ${entry.pid} start time or command changed; ${name} skipped`); return { ok: true, signaled: false, reason: 'changed' }; }
     if (entry.group && result.value.pgid !== entry.pid) return fail(`PID ${entry.pid} is no longer its owned group leader`);
     // No await, cached snapshot or fallback between this confirmation and kill.
     try { sendSignal(entry.group && process.platform !== 'win32' ? -entry.pid : entry.pid, name); }
@@ -73,70 +65,24 @@ export function createProcessTracker({
   };
   return {
     snapshot,
-    registerProcess(pid, group = true, registries = processRegistries(), identified = () => {}) {
+    registerProcess(pid, group = false) {
       if (!Number.isInteger(pid) || pid <= 1) throw new Error(`invalid fixture pid: ${pid}`);
       const result = readIdentity(pid);
       if (!result?.ok || !complete(result.value) || result.value.pid !== pid) {
         const error = `cannot establish ownership of PID ${pid}: ${result?.error ?? 'absent or incomplete identity'}`;
         fail(error); throw new Error(error);
       }
-      let registration = registered.get(pid);
-      if (!registration || !same(registration.entry, result.value) || registration.entry.group !== group) {
-        registration = { entry: entryFor(result.value, group), written: new Set() };
-        registered.set(pid, registration);
-      }
-      // The caller installs rollback and receives identity BEFORE append can throw.
-      identified(registration.entry);
-      for (const file of registries) if (!registration.written.has(file)) {
-        append(file, registration.entry); registration.written.add(file);
-      }
-      return registration.entry;
+      return entryFor(result.value, group);
     },
     killProcess: signal,
-    killProcesses(entries, deadline = Date.now() + 15_000) {
+    auditGroup(entry) {
       const current = snapshot();
       if (!current.ok) return current;
-      let ok = true;
-      for (const entry of [...entries].reverse()) {
-        if (Date.now() >= deadline) return fail('cleanup deadline exhausted; remaining identities not queried');
-        if (same(entry, current.value.get(entry.pid))) ok = signal(entry).ok && ok;
-      }
-      return { ok };
-    },
-    async stopProcesses(entries, deadline = Date.now() + 10_000) {
-      // This runs outside the worker's group. Stop producers before the final
-      // ledger read; discover unregistered children through the stopped tree.
-      const owned = new Map(entries.filter((entry) => entry && entry.pid !== process.pid).map((entry) => [entry.pid, entry]));
-      for (const entry of owned.values()) {
-        if (Date.now() >= deadline) return fail('producer-stop deadline exhausted; registry retained');
-        if (!signal(entry, 'SIGSTOP').ok) return { ok: false };
-      }
-      for (;;) {
-        if (Date.now() >= deadline) return fail('producer-stop deadline exhausted; registry retained');
-        const current = snapshot();
-        if (!current.ok) return current;
-        const live = new Map([...owned].filter(([pid, entry]) => same(entry, current.value.get(pid))));
-        const groups = new Set([...live].filter(([pid, entry]) => entry.group && current.value.get(pid).pgid === pid).map(([pid]) => pid));
-        let added;
-        do {
-          added = false;
-          for (const row of current.value.values()) if (row.pid !== process.pid && !live.has(row.pid) && (live.has(row.ppid) || groups.has(row.pgid))) {
-            // Current ancestry/group membership ties this new child to an owned
-            // producer. Each later signal still freshly checks its exact tuple.
-            const entry = entryFor(row);
-            owned.set(row.pid, entry); live.set(row.pid, entry); added = true;
-          }
-        } while (added);
-        const running = [...live].filter(([pid]) => !stopped(current.value.get(pid)));
-        if (!running.length) return { ok: true, entries: [...owned.values()] };
-        for (const [, entry] of running) {
-          if (Date.now() >= deadline) return fail('producer-stop deadline exhausted; registry retained');
-          if (!signal(entry, 'SIGSTOP').ok) return { ok: false };
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
+      const leader = current.value.get(entry.pid);
+      if (!same(entry, leader) || leader.pgid !== entry.pid) return fail('suite group leader identity changed or disappeared');
+      return { ok: true, survivors: [...current.value.values()].filter(row => row.pgid === entry.pid && row.pid !== entry.pid && !/^Z/.test(row.state)) };
     },
   };
 }
 
-export const { registerProcess, killProcess, killProcesses, stopProcesses } = createProcessTracker();
+export const { registerProcess, killProcess, auditGroup } = createProcessTracker();

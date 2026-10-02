@@ -493,7 +493,7 @@ if (args[0] === "workspace" && args[1] === "list") {
         "import { writeFileSync } from 'node:fs'; setTimeout(() => writeFileSync(process.argv[1], process.argv[2]), 500);",
         privatePath,
         rewritten,
-      ], { detached: true, stdio: "ignore" }).unref();
+      ], { stdio: "ignore" }).unref();
     }
     if (process.env.FAKE_REVIEW_MODE === "dirty-public") {
       mkdirSync(dirname(publicPath), { recursive: true });

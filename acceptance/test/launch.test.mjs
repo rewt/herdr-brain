@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from '../launch.mjs';
 import { cutoverChecks, runCase } from '../cases.mjs';

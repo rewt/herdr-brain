@@ -55,17 +55,28 @@ function settings(project, opt) {
   const validate = opt.validate ?? process.env.LANE_VALIDATE ?? config.validate ?? null;
   if (validate !== null && (typeof validate !== 'string' || !validate.trim())) throw new Error('validation override must be a nonempty command');
   const laneCLI = path.resolve(opt['lane-cli'] ?? LANE);
+  const expectedHead = opt['expected-head'];
+  const run = opt['if-current-run'];
+  if (expectedHead !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(expectedHead)) throw new Error('--expected-head requires a full commit hash');
+  if (run !== undefined && (!/^R-\d+$/.test(run) || expectedHead === undefined)) throw new Error('--if-current-run requires a run ID and --expected-head');
+  const org = opt.org ? fs.realpathSync(path.resolve(opt.org)) : findOrgDir({ cwd: project.canonical });
+  if (run !== undefined && !org) throw new Error('--if-current-run requires a record');
   return { to, attempts, retry, herdr: opt.herdr ?? 'herdr', laneCLI,
-    org: opt.org ? path.resolve(opt.org) : findOrgDir({ cwd: project.canonical }),
+    org, expectedHead, run,
     validate,
     laneConfig: process.env.LANE_CONFIG ? path.resolve(process.env.LANE_CONFIG) : null };
 }
 
 export function enqueue(queue, topics, options) {
+  if (options.expectedHead !== undefined && (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.expectedHead) || topics.length !== 1)) throw new Error('expected head requires one lane and a full commit hash');
+  if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
   return queue.transaction((data) => topics.map((topic) => {
-    const existing = [data.current, ...data.pending].find((job) => job?.topic === topic);
-    if (existing) return { id: existing.id, topic, duplicate: true };
+    const existing = [data.current, ...data.pending].find((job) => job?.topic === topic && !(job.phase === 'completed' && job.result?.outcome === 'refused'));
+    if (existing) {
+      if (existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
+      return { id: existing.id, topic, duplicate: true };
+    }
     const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options };
     data.pending.push(job);
     return { id: job.id, topic, duplicate: false };
@@ -95,12 +106,15 @@ function perform(job, queue) {
     ?.split('\n').find((line) => line.startsWith('worktree '))?.slice(9);
   const output = fs.openSync(log, 'a');
   let r;
-  try { r = spawnSync(process.execPath, [job.laneCLI, 'promote', job.topic], { cwd, env, stdio: ['ignore', output, output] }); }
+  const args = [job.laneCLI, 'promote', job.topic,
+    ...(job.expectedHead !== undefined ? ['--expected-head', job.expectedHead] : []),
+    ...(job.run !== undefined ? ['--if-current-run', job.run, '--org', job.org] : [])];
+  try { r = spawnSync(process.execPath, args, { cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
   const reason = () => fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).findLast((line) => /^lane:/.test(line)) ?? r.error?.message ?? `lane promote exited ${r.status}`;
   if (r.error || r.status !== 0) return { outcome: 'refused', reason: singleLine(reason()), log };
   try {
-    const tip = git(cwd, ['rev-parse', `refs/heads/lane/${job.topic}`]);
+    const tip = job.expectedHead ?? git(cwd, ['rev-parse', 'HEAD']);
     // Persist success before cleanup: a crash must not cause a second gate/FF.
     queue.transaction((data) => { data.current = { ...job, phase: 'promoted', tip, log }; });
     const warnings = workspace ? cleanup(job, queue, workspace) : ['lane worktree no longer present'];
@@ -215,6 +229,7 @@ async function main() {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, to: { type: 'string' },
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
+    'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
     drain: { type: 'boolean' }, status: { type: 'boolean' },
   } });
   const queue = queueFor(opt.repo);

@@ -18,6 +18,9 @@ export function noticeRun(notice) {
   if (!match) throw new Error('malformed final report notice');
   return match[1];
 }
+const attempts = (receipt) => [receipt, ...(receipt.prior_attempts ?? [])];
+const completedJob = (queue, id) => queue.results.find((r) => r.id === id) ?? (queue.current?.id === id && queue.current.phase === 'completed' ? { ...queue.current, ...queue.current.result } : null);
+const jobAttempt = (receipt, id) => attempts(receipt).find((a) => a.queue?.jobs?.some((j) => j.id === id));
 export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
@@ -50,6 +53,11 @@ export function main(argv = process.argv.slice(2)) {
     }
     return r.stdout;
   };
+  const loadQueue = () => {
+    const queue = JSON.parse(fs.readFileSync(doc.promotion_queue, 'utf8'));
+    if (queue.identity !== project.identity) throw new Error('promotion queue identity changed');
+    return queue;
+  };
   if (action === 'checkpoint') {
     const through = Number(opt.through);
     if (opt.through === undefined || !Number.isInteger(through) || through < 0 || through > project.through) throw new Error('--through must name a sequence from the brief');
@@ -67,14 +75,16 @@ export function main(argv = process.argv.slice(2)) {
   if (action === 'handle' && opt.notice !== undefined) {
     const promotionNotice = /^\[promote-queue\] id=([a-zA-Z0-9-]+) lane=/.exec(opt.notice);
     if (promotionNotice) {
-      const queue = JSON.parse(fs.readFileSync(doc.promotion_queue, 'utf8'));
-      if (queue.identity !== project.identity) throw new Error('promotion queue identity changed');
-      const result = queue.results.find((r) => r.id === promotionNotice[1]) ?? (queue.current?.id === promotionNotice[1] && queue.current.phase === 'completed' ? { ...queue.current, ...queue.current.result } : null);
+      const queue = loadQueue();
+      const result = completedJob(queue, promotionNotice[1]);
       if (!result) throw new Error('promotion notice has no completed queue receipt; inspect queue evidence');
       const receipts = fs.existsSync(directory) ? fs.readdirSync(directory).filter((name) => /^R-\d+\.json$/.test(name)).map((name) => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'))) : [];
-      const saved = receipts.find((r) => r.queue?.jobs?.some((j) => j.id === result.id));
+      const receipt = receipts.find((r) => jobAttempt(r, result.id));
+      const saved = receipt && jobAttempt(receipt, result.id);
       if (!saved || saved.identity !== project.identity || saved.org !== project.org || saved.phase !== 'acknowledged' || saved.lane !== result.topic) throw new Error('promotion outcome is not bound to an acknowledged supervisor request; inspect evidence');
+      if (result.run !== saved.run || result.expectedHead !== saved.head || result.org !== saved.org) throw new Error('promotion queue head or run binding differs from supervisor request; inspect evidence');
       if (result.outcome !== 'promoted') { print({ result: 'judge_promotion', run: saved.run, promotion: result }); return; }
+      if (result.tip !== saved.head) throw new Error('promoted tip differs from authorized head; inspect evidence');
       const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', result.tip, 'HEAD'], { cwd: project.canonical, encoding: 'utf8' });
       if (ancestry.error || ancestry.status !== 0) throw new Error('promoted tip is not integrated in the canonical checkout; inspect evidence');
       const run = JSON.parse(call(local('../bin/org.mjs'), ['show', saved.run, '--json']));
@@ -93,19 +103,29 @@ export function main(argv = process.argv.slice(2)) {
     for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
     for (const name of ['retry', 'review-again']) if (opt[name]) settleArgs.push(`--${name}`);
     const result = JSON.parse(call(settle, settleArgs));
-    print({ ...result, next: result.result === 'promotable' ? 'judge project authority, then supervisor promote RUN --why REASON' : result.result === 'fix_round' ? 'leave watched correction in flight' : 'judge compact handoff' });
+    print({ ...result, next: result.result === 'promotable' ? 'judge project authority, then supervisor promote RUN --why REASON' : result.result === 'fix_round' ? 'leave watched correction in flight' : result.result === 'stopped' ? 'inspect retained handoff; after STOP is cleared, handle RUN --retry' : 'judge compact handoff' });
     return;
   }
   if (!opt.why?.trim()) throw new Error('promotion requires --why naming current authority and readiness evidence');
   const release = acquireLock(path.join(directory, `${id}.lock`));
   const file = path.join(directory, `${id}.json`);
   try {
+    let prior;
     if (fs.existsSync(file)) {
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (saved.identity !== project.identity || saved.org !== project.org || saved.run !== id) throw new Error('promotion receipt identity changed');
       if (saved.phase !== 'acknowledged') throw new Error(`promotion enqueue is uncertain; inspect ${file} and ${doc.promotion_queue}; do not blindly enqueue again`);
-      print(saved); return;
+      if (!opt.retry) { print(saved); return; }
+      const jobs = saved.queue?.jobs;
+      if (jobs?.length !== 1) throw new Error('retry requires one acknowledged queue job; inspect evidence');
+      const outcome = completedJob(loadQueue(), jobs[0].id);
+      if (!outcome) throw new Error('retry requires a confirmed refused queue job; pending or uncertain attempts need inspection');
+      if (outcome.outcome === 'promoted') { print(saved); return; }
+      if (outcome.outcome !== 'refused' || outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw new Error('retry requires a confirmed refused queue job with the same binding; inspect evidence');
+      const { prior_attempts, ...attempt } = saved;
+      prior = [...(prior_attempts ?? []), { ...attempt, result: outcome }];
     }
+    else if (opt.retry) throw new Error('no acknowledged promotion attempt to retry');
     // Settle rechecks report hash, record, exact heads, clean trees and readiness.
     const settledFile = path.join(project.org, 'settle', `${id}.json`);
     const settled = fs.existsSync(settledFile) ? JSON.parse(fs.readFileSync(settledFile, 'utf8')) : null;
@@ -114,11 +134,12 @@ export function main(argv = process.argv.slice(2)) {
     if (result.result !== 'promotable' || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
     const saved = { identity: project.identity, org: project.org, run: id, lane: result.lane,
-      reviewed_commit: result.reviewed_commit, head: result.head, why: opt.why.trim(), phase: 'enqueuing' };
+      reviewed_commit: result.reviewed_commit, head: result.head, why: opt.why.trim(), phase: 'enqueuing', ...(prior ? { prior_attempts: prior } : {}) };
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
     call(local('../bin/org.mjs'), ['note', id, `Queue promotion of ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}`, '--decision', '--summary', `Promotion authorized: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
-    saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org, ...(opt.to ? ['--to', opt.to] : [])]));
+    saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
+      '--expected-head', result.head, '--if-current-run', id, ...(opt.to ? ['--to', opt.to] : [])]));
     saved.phase = 'acknowledged';
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'); print(saved);
   } finally { release(); }

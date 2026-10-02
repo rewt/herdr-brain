@@ -1,0 +1,64 @@
+{
+  "run": "R-98",
+  "review": "eff49e7-r1",
+  "validation": {
+    "baseline": {
+      "command": "npm test",
+      "pass": 515,
+      "skip": 5,
+      "fail": 0
+    },
+    "final": {
+      "command": "npm test",
+      "pass": 523,
+      "skip": 5,
+      "fail": 0
+    },
+    "lane_lifecycle": {
+      "command": "node --test --test-name-pattern='promote|close|fast-forward' lanes/test/lane.test.mjs",
+      "pass": 18,
+      "skip": 112,
+      "fail": 0
+    },
+    "receipt_idempotency": {
+      "command": "node --test --test-name-pattern='lost successful correction start' settle/test/receipts.test.mjs",
+      "pass": 1,
+      "skip": 3,
+      "fail": 0
+    }
+  },
+  "cold_start": {
+    "through": 1166,
+    "characters": 5261,
+    "approximate_tokens": 1316,
+    "running": [
+      "R-70",
+      "R-71",
+      "R-94",
+      "R-97",
+      "R-98",
+      "R-99"
+    ],
+    "reports": 23,
+    "waiting": [
+      "HUM-19"
+    ],
+    "decisions": 128
+  },
+  "supervisor_cycle": {
+    "command": "node acceptance/supervisor.mjs",
+    "detail": "R-1 -> R-2: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicates reuse receipts; no config or model",
+    "expected_head": "7335a23f8882b13579f372bfdadb2c97b251d991",
+    "reviewed_commit": "14852b8981c058156bd4379c9b40a131723ac52f",
+    "authorized_run": "R-2",
+    "promoted_head": "7335a23f8882b13579f372bfdadb2c97b251d991",
+    "queue_bound_run": "R-2",
+    "queue_expected_head": "7335a23f8882b13579f372bfdadb2c97b251d991",
+    "completion": "recorded_promotion"
+  },
+  "limits": [
+    "An intermediate full suite hit the pre-existing watcher total-call-count race; the assertion now checks launches and correction prompts; the final full suite passed.",
+    "Optional full lane suite was interrupted after 66 completed cases while its inherited registry concurrency case remained pending; affected lifecycle cases passed separately.",
+    "Scripted transport; no live model, pane or operator chat-clear claims."
+  ]
+}

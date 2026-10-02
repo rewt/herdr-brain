@@ -43,6 +43,12 @@ project configuration; pool and task-class names are opaque to Herdr.
 
 ## Lifecycle
 
+`lane promote TOPIC --expected-head FULL_COMMIT_HASH` checks an authorized head
+under the promotion lock and refuses tip changes or a required rebase. Queue
+callers use the same check. Add `--if-current-run R-n --org /record` to recheck
+record readiness before integration; the record lock spans that final check and
+fast-forward. See [Promote](../promote/README.md) for the request and retry contract.
+
 Start Herdr in the canonical checkout, then open and dispatch one worktree per task:
 
 ```sh

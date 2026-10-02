@@ -87,6 +87,12 @@ in the result and remain advisory. There is no automatic send-back cap or loop;
 each command handles one landed report. The correction's watcher delivers the
 next report for the next settle invocation.
 
+The canonical `.lane/supervisor/STOP` is checked immediately before correction
+dispatch and incomplete-dispatch retry, even if it appeared during review. A stop
+returns `stopped` with a compact handoff and keeps the fix/dispatching stage,
+review and correction brief resumable. After clearing STOP, use `--retry`; no
+review is repeated and a completed dispatch may be adopted without another launch.
+
 Flags `--review-route ROUTE`, `--fix-route ROUTE`, `--timeout SECONDS` override
 defaults. Projects may put `settle` settings in their tracked `.lane.json`:
 

@@ -63,13 +63,25 @@ is no automatic loop, resident executive model or invented revision cap.
 `promote RUN --why REASON` is the supervisor's explicit authority judgment. It
 requires an existing promotable settle receipt, rechecks readiness without a new
 review, writes a record decision through argument arrays,
-enqueues the lane through the existing promote CLI and returns. The finite queue
-worker retains all lane clean/rebase/green/fast-forward safety checks. Its result
+enqueues the exact settled head and authorized run through the promote CLI and
+returns. The expected head includes the review-record commit; the receipt also
+keeps the earlier reviewed source commit. The queue enforces both bindings under
+the promotion lock, rechecks record readiness after validation while holding the
+record lock across integration, and refuses a changed tip or required rebase.
+The finite queue worker retains the lane clean/green/fast-forward checks. Its result
 notice returns through `handle`: that command verifies the queue receipt and
 integrated tip, then closes the item with `record close --if-current-run RUN`.
 The record checks that precondition under its lock, including current done report,
 newer runs, unresolved/declined blockers, open work and changed outcomes. A failed
 promotion stays an evidence handoff. No push, publication or release follows.
+
+After a confirmed `refused` queue result and resolution of its cause, use
+`promote RUN --retry --why REASON --role supervisor`. It rechecks saved settlement
+and current readiness, binds a new queue job, and keeps all prior attempts and
+refusal receipts. Late notices for prior attempts remain recognizable. Pending,
+interrupted or uncertain attempts require inspection; they cannot be retried this
+way. Repeating a successful promotion, including with `--retry`, returns the saved
+acknowledgement even after lane closure.
 
 Supervisor promotion receipts describe enqueue intent and acknowledgement, never
 stored item status. Repeated commands return the same acknowledged request after
@@ -84,6 +96,11 @@ this is an invocation boundary, not a credential system. Workers are instructed
 never to invoke them. STOP and a torn event-log tail refuse cycle mutations.
 Only the canonical project supervisor starts default housekeeping, separately
 with `housekeeping/housekeeping.mjs --start`. Cold entry never starts it.
+Settle independently rechecks the canonical STOP immediately before correction
+dispatch or incomplete-dispatch retry, including after a blocking review. It
+returns `stopped` with a handoff and retains its resumable stage and review/fix
+evidence. After STOP is cleared, `handle RUN --retry --role supervisor` resumes
+without repeating review or an acknowledged correction launch.
 
 Offline cases in `npm test` set their own actors, bound subprocesses and never
 call a model or touch real panes. The release harness adds `supervisor-cycle`;

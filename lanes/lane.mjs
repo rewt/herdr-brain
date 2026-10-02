@@ -21,6 +21,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { acquireLock } from "./promotion-lock.mjs";
+import { withPromotionGuard } from '../promote/guard.mjs';
 import { ROUTE_PRESET } from './preset.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 
@@ -2179,16 +2180,21 @@ function withPromotionLock(operation) {
   finally { process.off("exit", release); release(); }
 }
 
-function promote(topic) {
+function promote(topic, options = {}) {
   const root = repositoryRoot({ requiredBy: "promote" });
-  return withPromotionLock(() => promoteLocked(topic, root));
+  return withPromotionLock(() => promoteLocked(topic, root, options));
 }
 
-function promoteLocked(topic, root) {
+function promoteLocked(topic, root, options) {
   const branch = laneBranch(topic);
   if (!branchExists(branch)) fail(`no such lane branch: ${branch}`);
   const path = worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open one before promoting`);
+  const guard = (operation) => {
+    try { return withPromotionGuard({ canonical: root, identity: REPO_IDENTITY, workspace: path, topic, ...options }, operation); }
+    catch (error) { fail(error.message); }
+  };
+  guard();
   requireClean(path, "lane worktree");
   requireClean(root, `canonical ${MAIN} checkout`);
   if (tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root }) !== MAIN) {
@@ -2199,6 +2205,7 @@ function promoteLocked(topic, root) {
   }
   let mainHead = git(["rev-parse", MAIN]);
   if (git(["merge-base", MAIN, branch]) !== mainHead) {
+    if (options.expectedHead !== undefined) fail(`expected head requires a rebase onto ${MAIN}; rebase, settle and authorize it again; nothing merged`);
     // The net-tree preflight cannot prove that every intermediate commit will
     // replay cleanly. A replay refusal must also reach the supervisor with its
     // file list, leaving the paused rebase available to the implementer.
@@ -2223,6 +2230,7 @@ function promoteLocked(topic, root) {
     mainHead = git(["rev-parse", MAIN]);
   }
   prepareWorktree(path);
+  guard();
   const validate = process.env.LANE_VALIDATE ?? DEFAULT_VALIDATE;
   process.stdout.write(`validating in ${path}: ${validate}\n`);
   const validatedHead = git(["rev-parse", branch]);
@@ -2238,7 +2246,7 @@ function promoteLocked(topic, root) {
       tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root }) !== MAIN) {
     fail("worktree branch or lane tip changed during validation; re-run promote");
   }
-  git(["merge", "--ff-only", branch], { cwd: root });
+  guard(() => git(["merge", "--ff-only", validatedHead], { cwd: root }));
   process.stdout.write(
     `promoted ${branch}: ${MAIN} ${mainHead.slice(0, 7)} -> ${git(["rev-parse", "--short", MAIN])} (fast-forward)\n`,
   );
@@ -2426,10 +2434,21 @@ switch (command) {
     process.stdout.write(`lane ready: ${path}\n`);
     break;
   }
-  case "promote":
-    if (topic === undefined) fail("usage: lane.mjs promote <topic>");
-    promote(topic);
+  case "promote": {
+    const usage = 'usage: lane promote <topic> [--expected-head COMMIT] [--if-current-run R-n --org DIR]';
+    if (topic === undefined) fail(usage);
+    const options = {};
+    for (let index = 0; index < rest.length; index++) {
+      const key = { '--expected-head': 'expectedHead', '--if-current-run': 'run', '--org': 'org' }[rest[index]];
+      if (!key || options[key] !== undefined || rest[index + 1] === undefined) fail(usage);
+      options[key] = rest[++index];
+    }
+    if (options.expectedHead !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(options.expectedHead)) fail(usage);
+    if (options.run !== undefined && (!/^R-\d+$/u.test(options.run) || options.expectedHead === undefined || !options.org)) fail(usage);
+    if (options.org !== undefined) options.org = realpathSync(resolve(options.org));
+    promote(topic, options);
     break;
+  }
   case "close": {
     const usage = "usage: lane close <topic> [--git-only] [--expected-tip COMMIT]";
     if (topic === undefined) fail(usage);

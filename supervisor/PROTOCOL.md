@@ -41,12 +41,17 @@ Every final `[org-report]` notice takes one path:
    reviewed head, review-record commit and evidence. If authorized, run
    `promote RUN --why 'authority and why the evidence meets it' --to YOUR-SUPERVISOR
    --role supervisor`. It rechecks settle readiness, records the decision, enqueues
-   the lane and returns. The finite promote worker gates, fast-forwards, closes
+   the exact settled head and authorized run and returns. The queue refuses a
+   changed tip, required rebase or changed record readiness before integrating.
+   The finite promote worker gates, fast-forwards, closes
    the merged lane and delivers `[promote-queue]`. It never pushes. Pass that
    notice to `handle --notice TEXT --role supervisor`: it reads the actual queue
    receipt and integrated tip, then closes the item through the record CLI with
    a current-run guard. A newer run, blocker or changed outcome receives inspection
-   instead of being overwritten. Failed promotions receive a judgment handoff.
+instead of being overwritten. Failed promotions receive a judgment handoff.
+   After a confirmed refusal, resolve the cause and explicitly use
+   `promote RUN --retry --why REASON --role supervisor` to recheck readiness and
+   bind a new attempt while retaining the previous receipt.
 
 Intermediate watch notices (blocked, invalid, no-report, unavailable, long-running)
 require inspection or continued observation; they never authorize settle. A
@@ -61,6 +66,10 @@ cycle or start the default housekeeping schedule with housekeeping/housekeeping.
 own bounded policy and never supervisor actions. The canonical
 `.lane/supervisor/STOP` prevents cycle mutations. Lanes, models, accounts, desks
 and validation come from their modules/configuration, never this protocol.
+STOP appearing during review prevents correction dispatch and returns a resumable
+`stopped` handoff. After clearing STOP, resume with `handle RUN --retry`; review
+and correction evidence are retained. Pending or uncertain promotions still need
+inspection rather than a retry.
 
 Before clearing the chat, record anything needed next. Durable decisions replace
 conversation history; don't copy transcripts into the record. Leave watched runs

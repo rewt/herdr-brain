@@ -7,10 +7,106 @@ import { fixture } from '../../settle/test/fixture.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { entryPolicy } from '../../discovery/policy.mjs';
 import { supervisorCase } from '../../acceptance/supervisor.mjs';
+import { queueFor } from '../../promote/promote.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 process.env.ORG_ACTOR = 'supervisor-test-reader';
 const invoke = (f, args, cwd = f.repo) => f.exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), ...args], cwd, { ORG_DIR: f.org });
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
+
+// Only defer drain to make the queued mutation deterministic. Enqueue and all
+// execution checks still run the real queue, lane CLI, Git and record.
+function promotionHarness(f, run) {
+  const cli = path.join(f.root, 'deferred-promote.mjs');
+  fs.writeFileSync(cli, `import {parseArgs} from 'node:util'; import {queueFor,enqueue} from ${JSON.stringify(path.join(root, 'promote/promote.mjs'))};
+const {values:o,positionals:p}=parseArgs({allowPositionals:true,options:Object.fromEntries(['repo','org','to','expected-head','if-current-run'].map(k=>[k,{type:'string'}]))});
+const q=queueFor(o.repo);const jobs=enqueue(q,p,{org:o.org,expectedHead:o['expected-head'],run:o['if-current-run'],to:o.to??'supervisor',attempts:1,retry:0,herdr:'herdr',laneCLI:${JSON.stringify(path.join(root, 'lanes/lane.mjs'))},validate:process.env.LANE_VALIDATE??null});console.log(JSON.stringify({jobs,queue:q.file}));\n`);
+  const queue = queueFor(f.repo);
+  const promote = (extra = []) => invoke(f, ['promote', run, '--role', 'supervisor', '--why', 'Reviewed work under test authority', '--promote-cli', cli, ...extra]);
+  const drain = () => result(f.exec(process.execPath, [path.join(root, 'promote/promote.mjs'), '--repo', f.repo, '--drain']));
+  const handle = (job) => result(invoke(f, ['handle', '--notice', `[promote-queue] id=${job.id} lane=${job.topic}`, '--role', 'supervisor']));
+  return { queue, promote, drain, handle };
+}
+
+test('STOP arriving during review retains a resumable correction without launching another worker', { timeout: 25000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-review-stop-test' }), run = f.start(); f.commit('wrong\n'); f.report(run);
+  fs.writeFileSync(path.join(f.root, 'review-stop'), '');
+  const stopped = result(invoke(f, ['handle', run, '--role', 'supervisor']));
+  assert.equal(stopped.result, 'stopped'); assert.match(stopped.next, /--retry/);
+  assert.match(fs.readFileSync(stopped.handoff, 'utf8'), /no new worker launched/);
+  const job = JSON.parse(fs.readFileSync(stopped.journal, 'utf8'));
+  assert.equal(job.stage, 'fix'); assert.equal(job.review.verdict, 'NEEDS-WORK'); assert.ok(fs.existsSync(job.fixBrief));
+  assert.equal(f.show(f.show(run).item).runs.length, 1);
+  assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the reviewer launched');
+  assert.equal(invoke(f, ['handle', run, '--retry', '--role', 'supervisor']).status, 1);
+  fs.unlinkSync(path.join(f.repo, '.lane/supervisor/STOP'));
+  const resumed = result(invoke(f, ['handle', run, '--retry', '--role', 'supervisor']));
+  assert.equal(resumed.result, 'fix_round'); assert.equal(f.calls().filter((a) => a[1] === 'start').length, 2);
+  assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).fix.run, resumed.fix.run);
+  assert.equal(f.calls().filter((a) => a[1] === 'start').length, 2, 'no review or correction replay');
+});
+
+test('supervisor binds head and run into the queue and retries confirmed refusals with history', { timeout: 25000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-promotion-retry-test' }), run = f.start(); f.commit('correct\n'); f.report(run);
+  const ready = result(invoke(f, ['handle', run, '--role', 'supervisor'])); assert.equal(ready.result, 'promotable');
+  const h = promotionHarness(f, run), first = result(h.promote());
+  const queued = h.queue.load().pending[0];
+  assert.equal(queued.expectedHead, ready.head); assert.equal(queued.run, run); assert.equal(queued.org, f.org);
+  assert.equal(result(h.promote()).queue.jobs[0].id, first.queue.jobs[0].id);
+  assert.match(h.promote(['--retry']).stderr, /confirmed refused/);
+  fs.writeFileSync(path.join(f.repo, 'dirty'), 'Operator edit');
+  assert.equal(h.drain().outcome, 'refused'); const refused = h.queue.load().results[0];
+  assert.equal(h.handle(refused).result, 'judge_promotion');
+  assert.equal(f.show(f.show(run).item).closed, null);
+  assert.equal(result(h.promote()).queue.jobs[0].id, first.queue.jobs[0].id);
+  assert.notEqual(h.promote(['--retry']).status, 0, 'readiness still refuses the dirty checkout');
+  fs.unlinkSync(path.join(f.repo, 'dirty'));
+  const retried = result(h.promote(['--retry']));
+  assert.notEqual(retried.queue.jobs[0].id, first.queue.jobs[0].id);
+  assert.equal(retried.prior_attempts.length, 1); assert.equal(retried.prior_attempts[0].result.id, refused.id);
+  assert.equal(h.handle(refused).result, 'judge_promotion', 'late prior refusal remains bound');
+  assert.equal(h.drain().outcome, 'promoted'); const promoted = h.queue.load().results[1];
+  assert.equal(h.handle(promoted).result, 'recorded_promotion');
+  assert.equal(f.show(f.show(run).item).status, 'done');
+  assert.equal(result(h.promote(['--retry'])).queue.jobs[0].id, promoted.id, 'success is never retried after lane closure');
+  assert.equal(h.handle(promoted).result, 'recorded_promotion');
+});
+
+test('bound promotion rechecks queued runs and record changes during validation before integration', { timeout: 40000 }, (t) => {
+  for (const mode of ['queued-run', 'gate-blocker', 'gate-run']) {
+    const f = fixture(t, { actor: `supervisor-promotion-${mode}-test` }), run = f.start(); f.commit('correct\n'); f.report(run);
+    assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');
+    if (mode.startsWith('gate-')) {
+      const gate = path.join(f.root, 'gate.mjs');
+      const args = mode === 'gate-run' ? ['start', f.show(run).item, '--workspace', f.workspace] : ['ask', 'Block during validation?', '--parent', f.show(run).item, '--category', 'design', '--recommend', 'yes', '--why', 'Changed readiness', '--blocks', f.show(run).item, '--wait'];
+      fs.writeFileSync(gate, `import {execFileSync} from 'node:child_process'; execFileSync(process.execPath,${JSON.stringify([path.join(root, 'bin/org.mjs'), ...args])},{env:{...process.env,ORG_DIR:${JSON.stringify(f.org)}}});\n`);
+      f.env.LANE_VALIDATE = `${process.execPath} ${gate}`;
+    }
+    const h = promotionHarness(f, run); result(h.promote()); const base = f.git(['rev-parse', 'main']);
+    if (mode === 'queued-run') f.start();
+    const refused = h.drain(); assert.equal(refused.outcome, 'refused');
+    assert.match(refused.reason, mode.endsWith('run') ? /superseded/ : /record readiness changed/);
+    assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(f.workspace));
+    const log = fs.readFileSync(refused.log, 'utf8');
+    if (mode === 'queued-run') assert.doesNotMatch(log, /validating in/);
+    else assert.match(log, /validating in/);
+    assert.equal(h.handle(h.queue.load().results[0]).result, 'judge_promotion');
+    assert.equal(f.show(f.show(run).item).closed, null);
+  }
+});
+
+test('refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt', { timeout: 20000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-retry-stale-test' }), run = f.start(); f.commit('correct\n'); f.report(run);
+  assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');
+  const h = promotionHarness(f, run); const saved = result(h.promote());
+  f.commit('Unreviewed new work\n');
+  assert.equal(h.drain().outcome, 'refused');
+  assert.match(h.promote(['--retry']).stderr, /HEAD or branch moved/);
+  assert.equal(h.queue.load().pending.length, 0);
+  assert.equal(result(h.promote()).queue.jobs[0].id, saved.queue.jobs[0].id);
+  h.queue.transaction((q) => { q.results[0].outcome = 'interrupted'; });
+  assert.match(h.promote(['--retry']).stderr, /confirmed refused/);
+  assert.equal(h.queue.load().pending.length, 0);
+});
 
 test('supervisor entry and final notices carry the unconfigured cycle through actual promotion', { timeout: 90000 }, async () => {
   const proof = await supervisorCase(root);
@@ -75,6 +171,8 @@ test('non-done reports hand off substance without review; saved enqueue uncertai
   fs.writeFileSync(file, JSON.stringify({ identity: path.join(f.repo, '.git'), org: f.org, run, phase: 'enqueuing' }));
   const uncertain = invoke(f, ['promote', run, '--role', 'supervisor', '--why', 'Inspect prior attempt']);
   assert.equal(uncertain.status, 1); assert.match(uncertain.stderr, /enqueue is uncertain/);
+  const uncertainRetry = invoke(f, ['promote', run, '--retry', '--role', 'supervisor', '--why', 'Inspect prior attempt']);
+  assert.equal(uncertainRetry.status, 1); assert.match(uncertainRetry.stderr, /enqueue is uncertain/);
   assert.equal(f.calls().length, 0);
   assert.ok(coldStart({ cwd: f.repo, org: f.org }).reports[0].promotion);
 });

@@ -138,6 +138,15 @@ function dispatchArgs() {
     '--brief', job.fixBrief, '--to', job.to, '--from-run', id, ...(job.reuse ? ['--reuse', id] : []),
     ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])];
 }
+function correctionStopped() {
+  const stop = path.join(job.repo, '.lane/supervisor/STOP');
+  if (!fs.existsSync(stop)) return false;
+  const reason = 'Supervisor STOP appeared before correction dispatch; no new worker launched';
+  const handoff = evidence('handoff.md', `# Settle stopped at ${job.stage}\n\n${reason}\n\nReview and correction evidence remain in ${journal}. Inspect the stop and any dispatch journal; after STOP is cleared, resume settle with --retry. Completed dispatch receipts may be adopted without a launch.\n`);
+  // Keep fix/dispatching resumable; a complete escalation would strand it.
+  job.result = { result: 'stopped', run: id, item: job.item, lane: job.lane, reason, journal, handoff };
+  save(); print(); return true;
+}
 function fix() {
   let recovery;
   if (job.stage === 'dispatching') {
@@ -176,10 +185,15 @@ function fix() {
       const d = recovery.value;
       output = JSON.stringify({ run: d.run, item: d.item, lane: d.lane, agent: d.worker.agentName,
         pane: d.worker.pane, watcher: d.watcher, journal: recovery.file });
-    } else output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), ['--retry', recovery.file, '--repo', job.repo, '--org', opt.org, '--from-run', id,
-      ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])]);
+    } else {
+      if (correctionStopped()) return;
+      output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), ['--retry', recovery.file, '--repo', job.repo, '--org', opt.org, '--from-run', id,
+        ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])]);
+    }
   } else {
+    if (correctionStopped()) return;
     job.stage = 'dispatching'; save();
+    if (correctionStopped()) { job.stage = 'fix'; save(); return; }
     output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), dispatchArgs());
   }
   const receipt = JSON.parse(output);

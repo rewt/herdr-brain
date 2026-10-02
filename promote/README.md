@@ -23,6 +23,30 @@ closures share a Git-common-directory lock. Direct contention refuses with the
 lock path rather than racing a gate. Validation rechecks clean trees, branches, lane tip and base
 before the fast-forward. There are no pushes or merge commits.
 
+For reviewed work, bind the request to one exact commit and, when applicable,
+its authorized record run:
+
+```sh
+node promote/promote.mjs topic --expected-head FULL_COMMIT_HASH --if-current-run R-123 --org /record
+```
+
+`--expected-head` accepts one lane and a full commit hash. The queue persists it
+and passes it to `lane promote`, which checks it under the shared promotion lock
+before preparation and again before integration. A changed tip emits a clear
+`refused` notice with both hashes and preserves the lane. A bound head that needs
+rebasing is also refused: rebase, settle and authorize the resulting head again.
+Preparation cannot replace the expected commit. The final fast-forward names the
+validated commit directly, so moving the branch cannot redirect integration.
+Without this option the existing multi-lane automatic-rebase workflow remains.
+Pending requests with different head/run bindings cannot deduplicate each other.
+
+`--if-current-run` requires `--expected-head` and a record. Before promotion and
+again after validation, the lane checks that this run has a recorded done report,
+belongs to this Git lane, is not superseded and has no changed outcome, closure,
+unresolved/declined blocker or overlapping work. The final check holds the record
+lock across the fast-forward, inside the promotion lock. It never writes events
+or trusts session metadata. Canonical supervisor STOP also refuses integration.
+
 On success the worker runs one cleanup pass limited to the promoted lane, with
 resume disabled. It discovers the record and uses housekeeping's existing live
 occupant, record, Git and topology checks to close eligible finished worker tabs.
@@ -88,6 +112,10 @@ cleanup already happened. Freshness is local to the dequeue operation; no saved
 flag authorizes replay, including an older worker's leaked `fresh` flag. Inspect
 Git/logs before explicitly enqueuing it again.
 A recorded completed outcome awaiting delivery is delivered without redoing Git.
+A confirmed refused job may be explicitly enqueued again; the prior result stays
+in the queue history. A completed refusal awaiting delivery does not prevent a
+new pending attempt. Supervisor requests use its guarded `promote RUN --retry`
+command to preserve the run's acknowledgement history and recheck readiness.
 A crash in the message acknowledgement window can cause a duplicate notice with
 the same request ID; receivers can deduplicate it. For an exhausted delivery,
 the saved `message`, `to` and `delivery_error` are the retry evidence; the supervisor

@@ -72,6 +72,70 @@ test('unconfigured project: detached worker promotes two lanes in FIFO order usi
   assert.equal(fs.existsSync(path.join(f.repo, '.promote.json')), false);
 });
 
+test('queue refuses a lane changed while pending behind another job before validation or integration', { timeout: 20000 }, (t) => {
+  const f = fixture(t); f.lane('first'); const wt = f.lane('second');
+  const opts = { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null };
+  enqueue(f.queue, ['first'], opts);
+  const expected = f.git(['rev-parse', 'lane/second']);
+  enqueue(f.queue, ['second'], { ...opts, expectedHead: expected });
+  fs.writeFileSync(path.join(wt, 'second.txt'), 'unreviewed work'); f.git(['add', '.'], wt); f.git(['commit', '-qm', 'New work while queued'], wt);
+  const actual = f.git(['rev-parse', 'lane/second']);
+  const r = f.cli(['--drain']); assert.equal(r.status, 0, r.stderr);
+  const [first, second] = f.results();
+  assert.equal(first.outcome, 'promoted'); assert.equal(second.outcome, 'refused');
+  assert.equal(second.expectedHead, expected);
+  assert.match(second.reason, new RegExp(`expected ${expected}, found ${actual}`));
+  assert.match(f.messages()[1][3], /outcome=refused .*lane tip differs from expected head/);
+  assert.doesNotMatch(fs.readFileSync(second.log, 'utf8'), /validating in/);
+  assert.equal(f.git(['rev-parse', 'main']), first.tip);
+  assert.equal(f.git(['rev-parse', 'lane/second']), actual); assert.ok(fs.existsSync(wt));
+});
+
+test('expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job', { timeout: 20000 }, async (t) => {
+  const f = fixture(t); f.lane('first'); const expected = f.git(['rev-parse', 'lane/first']);
+  const opts = { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null, expectedHead: expected };
+  const [job] = enqueue(f.queue, ['first'], opts);
+  assert.equal(enqueue(f.queue, ['first'], opts)[0].id, job.id);
+  assert.throws(() => enqueue(f.queue, ['first'], { ...opts, expectedHead: '0'.repeat(40) }), /different head or run binding/);
+  assert.throws(() => enqueue(f.queue, ['first'], { ...opts, expectedHead: undefined }), /different head or run binding/);
+  assert.throws(() => enqueue(f.queue, ['first', 'second'], opts), /requires one lane/);
+  assert.equal(f.cli(['first', '--expected-head', 'HEAD']).status, 1);
+  const request = f.launch(['first', '--expected-head', expected]); assert.equal(request.jobs[0].id, job.id);
+  await until(() => f.results().length === 1);
+  assert.equal(f.results()[0].expectedHead, expected); assert.equal(f.results()[0].tip, expected);
+  assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.git(['rev-parse', 'main']), expected);
+});
+
+test('expected head refuses an automatic rebase and post-preparation tip changes', { timeout: 20000 }, (t) => {
+  for (const mode of ['rebase', 'prepare']) {
+    const f = fixture(t); const wt = f.lane('first'), expected = f.git(['rev-parse', 'lane/first']);
+    if (mode === 'rebase') {
+      fs.writeFileSync(path.join(f.repo, 'new-base'), 'new base'); f.git(['add', '.']); f.git(['commit', '-qm', 'Advance main']);
+    } else {
+      const file = path.join(f.root, 'prepare.mjs');
+      fs.writeFileSync(file, `import fs from 'node:fs'; import {execFileSync} from 'node:child_process'; fs.writeFileSync('new-work','unreviewed'); execFileSync('git',['add','.']);execFileSync('git',['commit','-qm','Preparation changed head']);\n`);
+      const config = path.join(f.root, 'lane.json'); fs.writeFileSync(config, JSON.stringify({ prepare: [{ run: `${process.execPath} ${file}` }] }));
+      f.env.LANE_CONFIG = config;
+    }
+    const base = f.git(['rev-parse', 'main']);
+    const r = spawnSync(process.execPath, [LANE, 'promote', 'first', '--expected-head', expected], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 10000 });
+    assert.equal(r.status, 1, r.stdout); assert.match(r.stderr, mode === 'rebase' ? /requires a rebase/ : /tip differs from expected head/);
+    assert.doesNotMatch(r.stdout, /validating in/);
+    assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(wt));
+  }
+});
+
+test('a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job', { timeout: 15000 }, (t) => {
+  const f = fixture(t); f.lane('first');
+  const opts = { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null, expectedHead: f.git(['rev-parse', 'lane/first']) };
+  const [old] = enqueue(f.queue, ['first'], opts);
+  f.queue.transaction((q) => { q.current = { ...q.pending.shift(), phase: 'completed', result: { outcome: 'refused', reason: 'Saved lock contention' } }; });
+  const [retry] = enqueue(f.queue, ['first'], opts); assert.notEqual(retry.id, old.id);
+  assert.equal(f.cli(['--drain']).status, 0);
+  assert.deepEqual(f.results().map((r) => [r.id, r.outcome]), [[old.id, 'refused'], [retry.id, 'promoted']]);
+  assert.equal(f.git(['rev-parse', 'main']), opts.expectedHead); assert.equal(f.messages().length, 2);
+});
+
 for (const mode of ['dirty', 'red', 'conflict']) test(`${mode} refusal is delivered; lane kept; next queued lane still promotes`, async (t) => {
   const f = fixture(t); const bad = f.lane('bad'), good = f.lane('good');
   if (mode === 'dirty') fs.writeFileSync(path.join(bad, 'dirty'), 'work');

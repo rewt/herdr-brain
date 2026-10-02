@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { canonicalWorkspaceId } from './workspace.mjs';
 
 const { values: opt, positionals } = parseArgs({
   allowPositionals: true,
@@ -123,12 +124,8 @@ const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 
 // The workspace whose canonical checkout is --cwd. Ids can change across Herdr
 // restarts, so resolve at use time rather than configuring one.
 function workspaceId() {
-  const r = herdr(['workspace', 'list']);
-  if (!r.ok) die(`herdr workspace list failed: ${r.error}`);
-  const want = path.resolve(opt.cwd);
-  const ws = r.result.workspaces.find((w) => w.worktree && !w.worktree.is_linked_worktree && path.resolve(w.worktree.checkout_path) === want);
-  if (!ws) die(`no Herdr workspace has ${want} as its canonical checkout`);
-  return ws.workspace_id;
+  try { return canonicalWorkspaceId(opt.cwd, herdr); }
+  catch (error) { die(error.message); }
 }
 
 function newTab(label, env) {

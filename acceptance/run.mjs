@@ -8,11 +8,12 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
-import { auditCopies, relocate, within, copiedSandbox } from './security.mjs';
+import { auditCopies, relocate, within, copiedSandbox, workspaceIdentityCutover } from './security.mjs';
 import { HarnessLimit, Pending, commandFailure, classifyFailure } from './limits.mjs';
 import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
 import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine } from './results.mjs';
+import { liveSocket } from './probe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -265,7 +266,7 @@ try {
   await test('Real Herdr boundary and configured fixture', async () => {
     if (process.env.HERDR_ENV !== '1') throw new HarnessLimit('run inside Herdr (HERDR_ENV=1); no session inspected');
     const binary = run('which', ['herdr']).stdout.trim();
-    write(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: [], tabs: [], panes: [] }));
+    write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
     for (const file of ['herdr.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     write(path.join(bin, 'herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'herdr.mjs'))} "$@"\n`); fs.chmodSync(path.join(bin, 'herdr'), 0o755);
@@ -495,17 +496,21 @@ try {
       }, 'existing-project shell cwd before metadata lookup');
     } catch (error) { throw new HarnessLimit(error.message); }
     finally { write(path.join(evidence, 'existing-shell-cwd-probe.json'), JSON.stringify(cwdProbes, null, 2)); }
-    // Retain the canonical resolver receipt separately. Do not synthesize
-    // metadata if workspace list has not exposed it to the real wrappers.
+    // Retain native resolver and UI metadata separately. The caller's native
+    // lookup must work even if UI metadata never appears in the bounded poll.
     h('worktree', 'list', '--workspace', existingWs.workspace.workspace_id);
     const probes = [], metadataStart = Date.now();
+    let metadataReady = false;
     try {
       await until(() => {
         const workspace = h('workspace', 'list').workspaces.find((w) => w.workspace_id === existingWs.workspace.workspace_id);
         const configured = h('workspace', 'list').workspaces.find((w) => w.workspace_id === supervisor.workspace);
         probes.push({ elapsedMs: Date.now() - metadataStart, workspace, configured });
-        return workspace?.worktree?.checkout_path === copy && workspace.worktree.repo_root === copy;
+        metadataReady = workspace?.worktree?.checkout_path === copy && workspace.worktree.repo_root === copy;
+        return metadataReady;
       }, 'canonical workspace metadata before wrapper execution', 15_000);
+    } catch (error) {
+      if (error.message !== 'timeout: canonical workspace metadata before wrapper execution') throw error;
     } finally { write(path.join(evidence, 'workspace-metadata-probe.json'), JSON.stringify(probes, null, 2)); }
     const persona = path.join(root, 'persona-env');
     write(persona, `#!/bin/sh\nprintf 'CLAUDE_CONFIG_DIR=%s\\n' ${quote(path.join(root, 'persona'))}\n`); fs.chmodSync(persona, 0o755);
@@ -518,12 +523,50 @@ try {
     const executive = runCopy('/bin/sh', [path.join(copy, '.lane/supervisor/continue.sh'), ...isolation], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
     const settle = runCopy('/bin/sh', [path.join(copy, '.lane/supervisor/arm-watch.sh'), id, ...isolation], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
     const routing = runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
-    const errors = [];
-    for (const [name, r] of [['continue', executive], ['arm-watch', settle], ['routing tests', routing]]) {
-      if (r.status !== 0) errors.push(`${name}: ${(r.stdout + r.stderr).slice(-1800)}`);
+    for (const r of [executive, settle, routing]) {
+      if (r.status !== 0 && /acceptance_(?:harness_limit|product_boundary)/.test(r.stdout + r.stderr)) {
+        throw commandFailure(r.stdout + r.stderr);
+      }
     }
-    assert.equal(errors.length, 0, errors.join('\n'));
-    return 'live wrapper invocations accepted --model/--effort with candidate contrib; all live routing tests passed';
+    if (!metadataReady) {
+      for (const r of [executive, settle]) {
+        assert.notEqual(r.status, 0, 'frozen contrib caller must expose the background identity gap');
+        assert.match(r.stdout, /no Herdr workspace has .* as its canonical checkout/);
+      }
+    } else {
+      for (const r of [executive, settle]) assert.equal(r.status, 0, r.stdout + r.stderr);
+    }
+    assert.equal(routing.status, 0, routing.stdout + routing.stderr);
+    requireCandidate('supervisor/open-session.mjs');
+    const launcher = path.join(copy, 'scripts/lane/launch-supervisor.mjs');
+    const before = fs.readFileSync(launcher), mode = fs.statSync(launcher).mode & 0o777;
+    const switched = workspaceIdentityCutover(before.toString(), candidate);
+    const checks = { metadataReady, legacy: { executive: executive.status, settle: settle.status },
+      beforeSha256: crypto.createHash('sha256').update(before).digest('hex'),
+      switchedSha256: crypto.createHash('sha256').update(switched).digest('hex'),
+      switch: 'only supervisor entry target: contrib/settle-watch.mjs -> supervisor/open-session.mjs' };
+    try {
+      write(launcher, switched); fs.chmodSync(launcher, mode);
+      // Rebuild route invocations after the real target switch. Flags and route
+      // declarations remain the copied live bytes, and every call is audited.
+      runCopy(process.execPath, [probe], { extra: { ORG_DIR: org } });
+      for (const [name, args] of [['continue', [path.join(copy, '.lane/supervisor/continue.sh'), ...isolation]],
+        ['arm-watch', [path.join(copy, '.lane/supervisor/arm-watch.sh'), id, ...isolation]]]) {
+        const r = runCopy('/bin/sh', args, { cwd: copy, extra: { ORG_DIR: org }, ok: false });
+        checks[name] = r.status;
+        if (r.status !== 0) throw commandFailure(`${name}: ${r.stdout + r.stderr}`);
+        assert.ok(r.stdout.includes(`--workspace ${existingWs.workspace.workspace_id} --cwd ${copy}`), 'native lookup selected the created background workspace');
+      }
+      const switchedRouting = runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
+      checks.routing = switchedRouting.status;
+      if (switchedRouting.status !== 0) throw commandFailure(switchedRouting.stdout + switchedRouting.stderr);
+    } finally {
+      fs.writeFileSync(launcher, before); fs.chmodSync(launcher, mode);
+      assert.deepEqual(fs.readFileSync(launcher), before); assert.equal(fs.statSync(launcher).mode & 0o777, mode);
+      checks.restored = true;
+      write(path.join(evidence, 'workspace-identity-cutover.json'), JSON.stringify(checks, null, 2));
+    }
+    return 'background identity resolved by native Git lookup; both copied wrappers and routing tests pass after the scratch-only supervisor entry switch; original bytes/mode restored';
   });
   await test('Existing project: org PATH consumers', () => {
     existingReady();

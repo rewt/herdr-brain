@@ -18,12 +18,14 @@ test('open-session tells org which session is acting (dry run, fake Herdr)', () 
   const cwd = path.join(root, 'checkout');
   const supervisor = path.join(root, 'supervisor');
   for (const d of [bin, cwd, supervisor]) fs.mkdirSync(d);
+  assert.equal(spawnSync('git', ['init', '-q', cwd]).status, 0);
   const checklist = path.join(supervisor, 'SETTLE.md');
   const laneConfig = path.join(root, 'lane.json');
   fs.writeFileSync(checklist, '# checklist\n');
   fs.writeFileSync(laneConfig, '{}');
   script(path.join(bin, 'herdr'), `case "$1 $2" in
-  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1","worktree":{"is_linked_worktree":false,"checkout_path":"${cwd}"}}]}}' ;;
+  "worktree list") echo '{"result":{"source":{"repo_key":"${fs.realpathSync(cwd)}/.git","repo_root":"${fs.realpathSync(cwd)}","source_checkout_path":"${fs.realpathSync(cwd)}"},"worktrees":[{"path":"${fs.realpathSync(cwd)}","is_linked_worktree":false,"open_workspace_id":"w1"}]}}' ;;
+  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1","worktree":{"is_linked_worktree":false,"checkout_path":"${cwd}","repo_root":"${cwd}","repo_key":"${cwd}/.git"}}]}}' ;;
   "tab list") echo '{"result":{"tabs":[]}}' ;;
   "pane list") echo '{"result":{"panes":[]}}' ;;
   "agent list") echo '{"result":{"agents":[]}}' ;;
@@ -80,13 +82,14 @@ esac`);
   assert.equal(prepared.status, 1, prepared.stdout + prepared.stderr);
   assert.equal(prepared.error, undefined);
   assert.equal(fs.statSync(missingRuntime).isDirectory(), true);
-  assert.match(prepared.stdout, /no Herdr workspace has .*not-the-checkout/);
+  assert.match(prepared.stdout, /not-the-checkout|cannot change to/);
 });
 
 test('a codex route starts a codex session with its model, effort, route args and always_args (dry run)', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'open-session-codex-'));
   const bin = path.join(root, 'bin'), cwd = path.join(root, 'checkout'), supervisor = path.join(root, 'supervisor');
   for (const d of [bin, cwd, supervisor]) fs.mkdirSync(d);
+  assert.equal(spawnSync('git', ['init', '-q', cwd]).status, 0);
   const checklist = path.join(supervisor, 'SETTLE.md'), laneConfig = path.join(root, 'lane.json');
   fs.writeFileSync(checklist, '# checklist\n');
   fs.writeFileSync(laneConfig, JSON.stringify({
@@ -94,7 +97,8 @@ test('a codex route starts a codex session with its model, effort, route args an
     always_args: { codex: ['-p', 'prof', '-c', 'model_reasoning_effort=low'] },
   }));
   script(path.join(bin, 'herdr'), `case "$1 $2" in
-  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1","worktree":{"is_linked_worktree":false,"checkout_path":"${cwd}"}}]}}' ;;
+  "worktree list") echo '{"result":{"source":{"repo_key":"${fs.realpathSync(cwd)}/.git","repo_root":"${fs.realpathSync(cwd)}","source_checkout_path":"${fs.realpathSync(cwd)}"},"worktrees":[{"path":"${fs.realpathSync(cwd)}","is_linked_worktree":false,"open_workspace_id":"w1"}]}}' ;;
+  "workspace list") echo '{"result":{"workspaces":[{"workspace_id":"w1"}]}}' ;;
   *) echo '{"result":{"tabs":[],"panes":[],"agents":[]}}' ;;
 esac`);
   script(path.join(root, 'launcher'), `echo CLAUDE_CONFIG_DIR=${root}/claude`);

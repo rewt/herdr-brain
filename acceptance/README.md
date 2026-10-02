@@ -133,7 +133,15 @@ section before any review desk dispatch. The full settle/review handoff remains
 unproven. A background workspace omitted from `workspace list` metadata is a
 failure only after a bounded 15-second metadata poll. The shell cwd must first equal the copied project, just as in the configured
 fixture; each metadata sample includes the fixture comparison. Every sample is
-raw evidence; wrappers execute only after canonical checkout metadata appears.
+raw evidence. Case 16 executes the frozen contrib wrappers to retain their
+identity refusal when metadata is absent, then changes only the audited scratch
+launcher's entry target to `supervisor/open-session.mjs` (the ENG-64 switch).
+Both wrapper dry runs and routing tests must pass through the candidate's native
+`worktree list --cwd` identity lookup and select the created background workspace.
+The launcher bytes and mode are restored before later cases, and the switch,
+legacy results and restoration receipt are retained in
+`workspace-identity-cutover.json`. This proves the supervisor entry switch's
+background lookup; the remaining ENG-64 switch canaries stay independently gated.
 
 Release mechanics build immutable copies with the candidate release script in a
 scratch repository/home/bin, then activate, reactivate, roll back and restore.

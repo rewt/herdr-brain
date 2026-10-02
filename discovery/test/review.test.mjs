@@ -94,7 +94,10 @@ for (const launcher of ['supervisor/open-session.mjs', 'contrib/settle-watch.mjs
     const f = fixture(t), installed = install(f), config = path.join(f.scratch, 'routes.json'), checklist = path.join(f.scratch, 'checklist.md');
     fs.writeFileSync(config, '{}'); fs.writeFileSync(checklist, '# Settle\n');
     const fakeHerdr = path.join(installed.bin, 'herdr');
-    fs.writeFileSync(fakeHerdr, `#!${process.execPath}\nconsole.log(JSON.stringify({result:process.argv[2]==='workspace'?{workspaces:[{workspace_id:'owned',worktree:{is_linked_worktree:false,checkout_path:${JSON.stringify(f.repo)}}}]}:{tabs:[],panes:[],agents:[]}}));`, { mode: 0o755 });
+    const metadata = { repo_key: path.join(f.repo, '.git'), repo_root: f.repo, checkout_path: f.repo, is_linked_worktree: false };
+    const nativeWorktrees = { source: { repo_key: metadata.repo_key, repo_root: f.repo, source_checkout_path: f.repo },
+      worktrees: [{ path: f.repo, is_linked_worktree: false, open_workspace_id: 'owned' }] };
+    fs.writeFileSync(fakeHerdr, `#!${process.execPath}\nconsole.log(JSON.stringify({result:process.argv[2]==='workspace'?{workspaces:[{workspace_id:'owned',worktree:${JSON.stringify(metadata)}}]}:process.argv[2]==='worktree'?${JSON.stringify(nativeWorktrees)}:{tabs:[],panes:[],agents:[]}}));`, { mode: 0o755 });
     const persona = path.join(f.scratch, 'persona'), memory = path.join(f.scratch, 'memory');
     fs.writeFileSync(persona, `#!/bin/sh\necho CLAUDE_CONFIG_DIR=${f.scratch}/claude\n`, { mode: 0o755 });
     fs.writeFileSync(memory, '#!/bin/sh\nexit 1\n', { mode: 0o755 });

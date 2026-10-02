@@ -8,6 +8,20 @@ import { spawnSync } from 'node:child_process';
 import { commandFailure, classifyFailure, HarnessLimit } from '../limits.mjs';
 import { resultLine } from '../results.mjs';
 const guard = path.resolve(import.meta.dirname, '../herdr.mjs');
+
+test('native adapter pins the original socket despite an isolated HOME or caller override', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-socket-')));
+  try {
+    const binary = path.join(root, 'herdr');
+    fs.writeFileSync(binary, `#!${process.execPath}\nconsole.log(JSON.stringify({result:{workspaces:[],socket:process.env.HERDR_SOCKET_PATH}}));\n`, { mode: 0o755 });
+    const socketPath = path.join(root, 'original.sock');
+    fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath, workspaces: [], panes: [], tabs: [] }));
+    const r = spawnSync(process.execPath, [guard, 'workspace', 'list'], { encoding: 'utf8',
+      env: { ...process.env, ACCEPTANCE_ROOT: root, HOME: path.join(root, 'isolated-home'), HERDR_SOCKET_PATH: '/wrong/caller.sock' } });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(JSON.parse(r.stdout).result.socket, socketPath);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-boundary-')));
   const binary = path.join(root, 'fake-herdr');

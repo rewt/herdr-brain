@@ -46,7 +46,8 @@ let child;
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child?.kill(signal); process.exit(1); });
 async function real(args) {
   return await new Promise((resolve, reject) => {
-    child = spawn(state.binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(state.binary, args, { stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...(state.socketPath ? { HERDR_SOCKET_PATH: state.socketPath } : {}) } });
     let stdout = '', stderr = '';
     child.stdout.on('data', (v) => { stdout += v; });
     child.stderr.on('data', (v) => { stderr += v; });

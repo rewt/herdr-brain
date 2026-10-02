@@ -4,7 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { auditCopies, relocate, sessionEnv, permissionArgs, policyWitness, copiedSandbox } from '../security.mjs';
+import { auditCopies, relocate, sessionEnv, permissionArgs, policyWitness, copiedSandbox, workspaceIdentityCutover } from '../security.mjs';
+
+test('workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets', () => {
+  const candidate = '/scratch/candidate';
+  const target = JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs'));
+  const source = `const TARGET = ${target};\nconst args = ['--model', selected.model, '--effort', selected.effort];\n`;
+  const switched = workspaceIdentityCutover(source, candidate);
+  assert.equal(switched, source.replace(target, JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs'))));
+  assert.throws(() => workspaceIdentityCutover('unknown launcher', candidate), /did not match exactly once/);
+  assert.throws(() => workspaceIdentityCutover(source + source, candidate), /did not match exactly once/);
+});
 
 test('relocation requires the expected launcher and audits every transitive copied file before use', () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-relocation-')));

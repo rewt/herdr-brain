@@ -2793,6 +2793,33 @@ test("review dispatches once and publishes all canonical verdicts after private 
   }
 });
 
+test("review accepts a routing snapshot without replacing project lifecycle configuration", () => {
+  const review = makeReviewFixture("review-route-config", { verdict: "PASS" });
+  review.fixture.env.ORG_ACTOR = "lane-review-route-config-test";
+  try {
+    writeFileSync(join(review.fixture.root, "review-routes.json"), JSON.stringify({
+      main: "not-the-project-base",
+      validate: "false",
+      worktree_root: "not-the-project-worktrees",
+      routes: { pinned: { kind: "codex", model: "pinned-review-model" } },
+    }));
+    const run = lane(review.fixture, [
+      "review", "review-route-config", "--round", "1", "--brief", review.brief,
+      "--route", "pinned", "--route-config", "../review-routes.json", "--timeout", "12",
+    ]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, "PASS\n");
+    const starts = review.fake.calls().filter((args) => args[0] === "agent" && args[1] === "start");
+    assert.equal(starts.length, 1);
+    assert.equal(starts[0][starts[0].indexOf("--model") + 1], "pinned-review-model");
+    const head = git(review.path, ["rev-parse", "HEAD"]);
+    const record = readFileSync(join(review.path, "docs", "reviews", "review-route-config", `${head.slice(0, 7)}-r1.md`), "utf8");
+    assert.match(record, /^Base branch: main$/m);
+  } finally {
+    review.fixture.cleanup();
+  }
+});
+
 test("review settles a completed private record before validating its final bytes", () => {
   const review = makeReviewFixture("review-settle", { verdict: "PASS", mode: "rewrite-complete" });
   try {

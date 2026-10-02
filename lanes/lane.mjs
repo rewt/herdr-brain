@@ -1290,8 +1290,8 @@ function parseReviewOptions(args) {
   const seen = new Set();
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
-    if (!["--round", "--brief", "--change", "--route", "--timeout"].includes(flag)) {
-      fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--timeout <seconds>] (unknown operand: ${flag})`);
+    if (!["--round", "--brief", "--change", "--route", "--route-config", "--timeout"].includes(flag)) {
+      fail(`usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>] (unknown operand: ${flag})`);
     }
     if (seen.has(flag)) fail(`duplicate review option: ${flag}`);
     seen.add(flag);
@@ -1299,6 +1299,7 @@ function parseReviewOptions(args) {
     if (value === undefined || value === "" || value.startsWith("--")) fail(`missing value for ${flag}`);
     if (flag === "--round") options.round = Number(value);
     else if (flag === "--timeout") options.timeout = Number(value);
+    else if (flag === "--route-config") options.routeConfig = resolve(CALLER_CWD, value);
     else options[flag.slice(2)] = value;
   }
   if (!Number.isSafeInteger(options.round) || options.round < 1) fail("--round must be a positive safe integer");
@@ -2006,7 +2007,7 @@ async function waitForPrivateReview(path, deadline, interrupted, session) {
 
 async function review(topic, args) {
   repositoryRoot({ requiredBy: "review" });
-  if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--timeout <seconds>]");
+  if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>]");
   const options = parseReviewOptions(args);
   const branch = laneBranch(topic);
   const path = worktreeFor(branch);
@@ -2057,7 +2058,7 @@ async function review(topic, args) {
   let session;
   try {
     try {
-      session = dispatch(topic, prompt, { route: options.route, silent: true, deadline });
+      session = dispatch(topic, prompt, { route: options.route, routeConfig: options.routeConfig, silent: true, deadline });
     } catch (error) {
       fail(`review dispatch failed: ${error.code === "ETIMEDOUT" ? "timeout" : "Herdr command error"}`);
     }
@@ -2456,7 +2457,7 @@ switch (command) {
         "                   lane's workspace and record display metadata; defaults\n" +
         "                   in .lane.json routes/dispatch\n" +
         "  review <topic> --round N [--brief <path>] [--change <name>]\n" +
-        "                   [--route <name>] [--timeout <seconds>]\n" +
+        "                   [--route <name>] [--route-config <path>] [--timeout <seconds>]\n" +
         "                   run one foreground independent review; route defaults to\n" +
         "                   review and timeout defaults to 1800 seconds\n" +
         "  prepare <topic>  run .lane.json prepare steps in the lane worktree; a\n" +

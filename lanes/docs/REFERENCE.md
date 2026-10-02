@@ -330,7 +330,7 @@ prompt again or close the working agent.
 
 ```sh
 lane review <topic> --round N [--change <name>] [--brief <path>] \
-  [--route <name>] [--timeout <seconds>]
+  [--route <name>] [--route-config <path>] [--timeout <seconds>]
 ```
 
 `--round` is required and accepts positive safe integers. Supply `--change` for an
@@ -338,12 +338,19 @@ OpenSpec-origin lane even when the change name differs from the topic; it loads 
 change's proposal, design, tasks, every delta spec, and any corresponding current
 spec. `--brief` names a literal supplemental or standalone source and resolves from
 the invoking directory. At least one source is required and both may be used. The
-route defaults to `review`; configure that named route before use until built-in
-defaults ship. `--timeout` is an end-to-end foreground deadline in whole seconds,
+route defaults to `review` and must exist in the selected routing configuration.
+`--timeout` is an end-to-end foreground deadline in whole seconds,
 defaults to 1800, and accepts 3 through 7200. The three-second minimum leaves one
 polling interval beyond the mandatory two-second record-settle window; smaller
 values refuse before dispatch. Duplicate, missing, empty, unknown, or invalid
 options refuse before dispatch.
+
+`--route-config` supplies a routing snapshot for the selected review route and
+resolves from the invoking directory, just as for dispatch. It affects launch
+routing only; base branch, worktree paths, registry and validation continue to use
+the project's lifecycle configuration and its original source-file provenance.
+Settle uses this to share its discovered portable defaults with review when a
+project config contains only lifecycle or settle preferences.
 
 Review locates `lane/<topic>` through Git worktree metadata from any checkout of the
 same repository and verifies its branch and canonical common-directory identity. It

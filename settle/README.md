@@ -102,10 +102,18 @@ defaults. Projects may put `settle` settings in their tracked `.lane.json`:
 }
 ```
 
-These settings accompany normal lifecycle/routes configuration. Discovery uses
+These settings can stand alone; a project with only settle or lifecycle settings
+uses the portable route preset for review. Settle captures the effective routing
+fields at intake and passes that snapshot to `lane review --route-config`, keeping
+lifecycle settings and their relative path provenance in the original config files.
+Discovery uses
 the nearest parent config followed by the canonical repository config; repository
 `main` and the whole `settle` object replace parent values when present.
 `LANE_CONFIG` selects exactly one file, and command flags override its settings.
+At intake its path resolves from the invoking directory to an absolute path. All
+children and retries use that saved selection, regardless of their working directory
+or a changed ambient `LANE_CONFIG`. When absent, the receipt retains discovery even
+if a later invocation sets `LANE_CONFIG`.
 The integration branch defaults to `main`. Partial project route configurations
 must declare the routes they select. Named routes retain
 all model/effort plumbing in the routes and lane modules.

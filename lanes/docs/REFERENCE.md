@@ -385,8 +385,15 @@ lane-review/v1`, the captured full SHA/topic/round/review ID/base, and the uniqu
 ordered sections Findings, Re-executed, Non-claims, Unverified, Private identifiers,
 and Analysis. Findings are `None` or `[Major]`, `[Moderate]`, or `[Minor]` bullets
 with a repository-relative positive `file:line`, the structural ASCII ` - ` separator,
-and `Fix:`. Findings, Non-claims, and Unverified entries each occupy consecutive lines
-with no blank line between them. Non-claims and Unverified are `None` or bullets.
+and the literal `; Fix: ` separator. The shared prompt requires this shape for every
+route and verdict. Projection preserves malformed finding lines as literal prose
+prefixed with `[Unparsed finding]`, with the same path/alias sanitizer, escaping,
+and idempotence checks as other public prose. Blank lines in Findings are ignored;
+an empty section yields a marked notice that no finding text was supplied. It never
+copies Private identifiers or Analysis into Findings, and malformed or ambiguous
+section boundaries still refuse publication. Parsed finding locations retain their
+structural safety checks. Non-claims and Unverified are `None` or consecutive bullets
+with no blank line between them.
 Private identifiers is a JSON array of nonempty strings; Analysis is private and may
 be empty.
 

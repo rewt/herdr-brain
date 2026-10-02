@@ -2697,6 +2697,7 @@ function makeReviewFixture(topic, options = {}) {
     validate: "true",
     routes: {
       review: { kind: "codex", model: "review-model", use: "Independent review" },
+      "review-codex": { kind: "codex", model: "review-model" },
       alternate: { kind: "claude", model: "alternate-review-model" },
     },
   });
@@ -2878,7 +2879,7 @@ test("review completion admits representative validator-accepted record boundari
   }
 });
 
-test("review requires consecutive finding entries across the blank-line matrix", () => {
+test("review preserves finding entries across the blank-line matrix", () => {
   const fixtures = [];
   const outcomes = [];
   try {
@@ -2894,6 +2895,12 @@ test("review requires consecutive finding entries across the blank-line matrix",
       const run = lane(review.fixture, [
         "review", topic, "--round", "1", "--brief", review.brief,
       ]);
+      const head = git(review.path, ["rev-parse", "HEAD"]);
+      const publicRecord = readFileSync(join(
+        review.path, "docs", "reviews", topic, `${head.slice(0, 7)}-r1.md`,
+      ), "utf8");
+      assert.match(publicRecord, /first\.txt:1 - first issue/);
+      assert.match(publicRecord, /second\.txt:2 - second issue/);
       outcomes.push({
         blankLines,
         status: run.status,
@@ -2904,10 +2911,61 @@ test("review requires consecutive finding entries across the blank-line matrix",
     }
     assert.deepEqual(outcomes, [
       { blankLines: 0, status: 1, emptyStdout: false, spacingDiagnostic: false, findingDiagnostic: false },
-      { blankLines: 1, status: 2, emptyStdout: true, spacingDiagnostic: true, findingDiagnostic: false },
-      { blankLines: 2, status: 2, emptyStdout: true, spacingDiagnostic: true, findingDiagnostic: false },
+      { blankLines: 1, status: 1, emptyStdout: false, spacingDiagnostic: false, findingDiagnostic: false },
+      { blankLines: 2, status: 1, emptyStdout: false, spacingDiagnostic: false, findingDiagnostic: false },
     ]);
-    negativeControl("consecutive finding entry spacing");
+    negativeControl("finding entry spacing preserves public revisions");
+  } finally {
+    for (const fixture of fixtures) fixture.cleanup();
+  }
+});
+
+test("review keeps malformed findings public on Codex and alternate routes without private sections", () => {
+  const fixtures = [];
+  try {
+    for (const route of ["review-codex", "alternate"]) {
+      for (const verdict of ["NEEDS-WORK", "FAIL", "PASS"]) {
+        const topic = `review-unparsed-${route}-${verdict.toLowerCase()}`;
+        const findings = [
+          "- [Major] promote/promote.mjs:105 - Saving freshness repeats promotion. Fix: keep freshness local.",
+          "- [Moderate] console/lib/cli.mjs:62 - The project may have no cwd. Fix: require a resolved directory.",
+          "- [Moderate] acceptance/run.mjs:711 - Cleanup misses blocked workers. Fix: exercise copied cleanup.",
+          "- [Unknown] shared.txt:1 - unrecognized severity; Fix: preserve this revision",
+          "1. Missing location and fix remain readable",
+          "  Continued prose with `quoted_command` and <markup> from ReviewerSecret at /opt/private/review.txt",
+          "- [Minor] shared.txt:1 - canonical finding; Fix: preserve its structure",
+        ].join("\n");
+        const review = makeReviewFixture(topic, {
+          verdict, payload: {
+            findings, identifiers: ["ReviewerSecret"],
+            analysis: "PRIVATE_ANALYSIS_SENTINEL must never be public.",
+          },
+        });
+        fixtures.push(review.fixture);
+        const run = lane(review.fixture, [
+          "review", topic, "--round", "1", "--brief", review.brief, "--route", route,
+        ]);
+        assert.equal(run.status, verdict === "PASS" ? 0 : 1, run.stderr);
+        assert.equal(run.stdout, `${verdict}\n`);
+        const head = git(review.path, ["rev-parse", "HEAD"]);
+        const publicRecord = readFileSync(join(
+          review.path, "docs", "reviews", topic, `${head.slice(0, 7)}-r1.md`,
+        ), "utf8");
+        assert.equal((publicRecord.match(/\[Unparsed finding\]/gu) ?? []).length, 6);
+        for (const revision of ["keep freshness local", "require a resolved directory", "exercise copied cleanup",
+          "preserve this revision", "Missing location and fix remain readable", "Continued prose"]) {
+          assert.ok(publicRecord.includes(revision), revision);
+        }
+        assert.match(publicRecord, /from \[PRIVATE\] at \[ABS_PATH\]/);
+        assert.ok(publicRecord.includes("\\`quoted\\_command\\` and \\<markup\\>"));
+        assert.match(publicRecord, /- \[Minor\] shared\.txt:1 - canonical finding; Fix: preserve its structure/);
+        assert.doesNotMatch(publicRecord, /ReviewerSecret|\/opt\/private|PRIVATE_ANALYSIS_SENTINEL|## Analysis|## Private identifiers/);
+        const prompt = review.fake.calls().find((args) => args[0] === "agent" && args[1] === "prompt")?.[3];
+        assert.ok(prompt.includes("`; Fix: ` separator is mandatory"));
+        assert.ok(prompt.includes("check every finding"));
+      }
+    }
+    negativeControl("malformed public findings and private section exclusion");
   } finally {
     for (const fixture of fixtures) fixture.cleanup();
   }
@@ -4042,7 +4100,6 @@ test("review refuses malformed private evidence, incomplete output, timeout, and
     ["sha-mismatch", "PASS", 2],
     ["review-id-mismatch", "PASS", 2],
     ["bad-witness", "PASS", 2],
-    ["bad-finding", "PASS", 2],
     ["incomplete", "PASS", 2],
     ["oversized", "PASS", 2],
     ["dirty-public", "PASS", 2],

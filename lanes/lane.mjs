@@ -1532,20 +1532,9 @@ function validateReviewRecord(record, expected) {
     return [name, normalizeReviewNewlineBoundaries(lines.slice(index + 1, end).join("\n"))];
   }));
 
-  const findings = sections.get("Findings");
-  if (findings !== "None") {
-    const findingLines = findings.split("\n");
-    if (findingLines.length === 0) fail("Findings must be None or tagged entries");
-    if (findingLines.some((finding) => finding === "")) {
-      fail("Findings spacing must not contain blank lines between entries");
-    }
-    for (const finding of findingLines) {
-      const match = finding.match(/^- \[(Major|Moderate|Minor)\] (.+):([1-9][0-9]*) - (.+); Fix: (.+)$/u);
-      if (match === null || isAbsolute(match[2]) || /^[A-Za-z]:[\\/]/u.test(match[2]) || match[2].split(/[\\/]/u).includes("..")) {
-        fail("each finding must have an allowed tag, repository-relative file:line, and concrete Fix");
-      }
-    }
-  }
+  // Finding shape is advisory for projection. Validate the section boundary
+  // above, then keep unparsed text within that section rather than hiding the
+  // review from the worker who needs to act on it.
 
   const executions = parseJsonFence(sections.get("Re-executed"), "Re-executed");
   if (!Array.isArray(executions)) fail("Re-executed JSON must be an array");
@@ -1583,7 +1572,7 @@ function validateReviewRecord(record, expected) {
   if (!Array.isArray(identifiers) || identifiers.some((value) => typeof value !== "string" || value === "")) {
     fail("Private identifiers must be an array of nonempty strings");
   }
-  const prose = [findings, sections.get("Non-claims"), sections.get("Unverified")].join("\n");
+  const prose = [sections.get("Findings"), sections.get("Non-claims"), sections.get("Unverified")].join("\n");
   for (const line of prose.split("\n")) {
     for (const match of line.matchAll(/\btests? pass(?:ed|ing)?\b/giu)) {
       const before = line.slice(0, match.index);
@@ -1832,10 +1821,23 @@ function sanitizeReviewProjection(parsed, expected) {
   const sanitize = (value) => sanitizePublicString(value, context);
   const declaredAliases = aliases.filter((alias) => !alias.automatic);
   const findingPayloads = [];
-  const findingLines = parsed.sections.get("Findings") === "None"
+  const findings = parsed.sections.get("Findings");
+  const sourceFindingLines = findings.split("\n").filter((line) => line.trim() !== "");
+  if (sourceFindingLines.length === 0) sourceFindingLines.push("No finding text supplied.");
+  const findingLines = findings === "None"
     ? ["None"]
-    : parsed.sections.get("Findings").split("\n").map((line) => {
+    : sourceFindingLines.map((line) => {
       const match = line.match(/^- \[(Major|Moderate|Minor)\] (.+):([1-9][0-9]*) - (.+); Fix: (.+)$/u);
+      if (match === null) {
+        // This is prose, never structural metadata. Use the same sanitizer,
+        // idempotence check and literal renderer as other public payloads.
+        const text = sanitize(line);
+        findingPayloads.push(text);
+        return `- [Unparsed finding] ${escapeReviewProse(text)}`;
+      }
+      if (isAbsolute(match[2]) || /^[A-Za-z]:[\\/]/u.test(match[2]) || match[2].split(/[\\/]/u).includes("..")) {
+        fail("finding location must be repository-relative");
+      }
       const location = `${match[2]}:${match[3]}`;
       assertProtectedPublicValue(location, aliases, "finding location", { payload: true });
       if (containsAlias(match[4].normalize("NFC"), declaredAliases)) {

@@ -87,7 +87,19 @@ the first nonempty line, and finish with the marker. Leading and trailing blank-
 runs around the whole record and each section are accepted. Findings, Non-claims, and
 Unverified entries each occupy consecutive lines with no blank line between them. Use
 `None` when Findings, Non-claims, or Unverified is empty. Every finding needs a
-repository-relative file, positive line, and concrete fix. Private identifiers is a
+repository-relative file, positive line, and concrete fix. For every route and
+verdict, write each finding in exactly this form on one line:
+`- [Major|Moderate|Minor] path/to/file.js:10 - description; Fix: concrete change`
+Choose one tag (do not write the pipe-separated alternatives). The literal
+`; Fix: ` separator is mandatory: `description. Fix: change` is not the required
+shape. Do not use numbered lists, separate Fix paragraphs, or Markdown in the
+file-and-line value. Before completing the record, check every finding against
+the example, including its semicolon. A NEEDS-WORK or FAIL verdict must leave
+actionable revisions in Findings, not only in the private Analysis section.
+The public projection marks malformed finding lines as `[Unparsed finding]`,
+sanitizes and preserves them as literal prose; blank lines are ignored. This
+fallback does not bypass privacy checks or admit private-only sections.
+Private identifiers is a
 JSON array of nonempty names/tokens appearing in projected fields; an empty array is
 valid. A finding description containing a declared private identifier is refused;
 remove that identifier rather than relying on display escaping. Never include

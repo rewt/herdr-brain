@@ -81,6 +81,9 @@ The review command uses [the packaged protocol](docs/REVIEW_TEMPLATE.md), valida
 the reviewer's private record, verifies that the lane did not move, and publishes a
 sanitized review under `docs/reviews/<topic>/`. It prints only `PASS`,
 `NEEDS-WORK`, or `FAIL` after publication succeeds.
+Malformed finding lines are preserved as sanitized literal prose marked
+`[Unparsed finding]`, so workers can read the requested revisions. Private-only
+sections are never projected; privacy and captured-target checks still apply.
 
 Before handoff, validate the exact clean commit:
 

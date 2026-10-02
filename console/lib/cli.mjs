@@ -84,6 +84,13 @@ export async function orgRouteSet(project, { name, kind, model, effort, revision
   return r.ok ? { ok: true, routes: JSON.parse(r.stdout) } : { ok: false, error: firstLine(r.stderr) || 'record routes set failed' };
 }
 
+export async function orgPriorityChange(project, { id, title, rank, why, revision }) {
+  if (!project.org) return { ok: false, error: 'Initialize this project record before setting priorities.' };
+  const args = id ? ['rank', id, `--rank=${rank}`] : ['add', title];
+  const r = await run(process.execPath, [ORG_BIN, 'priorities', ...args, `--why=${why}`, `--expect=${revision}`], { env: orgEnv(project) });
+  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || 'record priorities failed' };
+}
+
 // The live trial reads topology separately so an unavailable source never looks
 // like an empty project. Keep opaque IDs and Git identity supplied by Herdr.
 export async function herdrList(resource) {

@@ -14,8 +14,8 @@ bch-cloak runs today is `docs/reports/INVENTORY-bch-cloak-workflow-2026-10-01.md
 ## Operating model (operator, 2026-10-01)
 
 Agents decide, the record captures, the console shows, the human steers. Most question categories
-are answered automatically and tracked; agents rank priorities in the record, where they survive
-context clears; questions and decisions come from structured report fields, never from reading an
+are answered automatically and tracked; the operator ranks priorities in the record, where they survive
+context clears; agents serve them or propose changes as waiting questions; questions and decisions come from structured report fields, never from reading an
 agent's narrative.
 
 ## Shape

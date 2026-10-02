@@ -94,7 +94,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
   const title = s.view === 'projects' ? 'Your projects' : s.view === 'folder' ? 'Open a folder' : s.view === 'ideas' ? 'Start with an idea' : s.view === 'output' ? space?.label ?? 'Session output' : p?.name ?? 'Start where you are';
-  const action = s.routeEdit ? 'Enter reviews / confirms' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
+  const action = s.priorityEdit ? 'Enter reviews / confirms' : s.view === 'priorities' ? 'Enter re-rank' : s.routeEdit ? 'Enter reviews / confirms' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
   put(2, x, title, 'bright', 'bg', true, width - action.length - 2);
   put(2, cols - action.length - 2, action, 'muted', 'bg', false, action.length);
   const errors = Object.entries(s.errors);
@@ -183,7 +183,25 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       if (!r.editable) paragraph('Open a Git project to save a route change.', 'amber');
     }
   };
-  if (s.routeEdit) {
+  if (s.priorityEdit) {
+    const e = s.priorityEdit;
+    section(`${e.confirm ? 'Review' : 'Edit'} operator ${e.id ? 'rank' : 'priority'}`, 'blue');
+    if (e.id) paragraph(`${e.id} · ${e.title}`, 'bright');
+    if (e.confirm) {
+      const order = e.order.filter(p => p.id !== e.id);
+      if (e.id) order.splice(Number(e.values[0]) - 1, 0, { id: e.id, title: e.title });
+      else order.push({ id: 'new', title: e.values[0].trim() });
+      paragraph(`Save for ${e.project.name} · by the operator`, 'fg');
+      order.forEach((p, i) => paragraph(`${i + 1}. ${p.title}`, 'fg'));
+      paragraph(`Why: ${e.values[1].trim()}`, 'fg');
+      row(e.busy ? 'Saving…' : 'Enter  Save priorities', { id: 'priority-save', fg: 'teal' });
+    } else {
+      [e.id ? 'Rank' : 'Outcome', 'Why'].forEach((label, i) => row(`${label}: ${clip(e.values[i], Math.max(1, width - label.length - 5))}${e.field === i ? '▏' : ''}`, { id: `priority-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i }));
+      paragraph('Tab changes field · Ctrl+U clears · Enter reviews');
+      row('Enter  Review priorities', { id: 'priority-save', fg: 'blue' });
+    }
+    row('Cancel', { id: 'priority-cancel', fg: 'muted' });
+  } else if (s.routeEdit) {
     const e = s.routeEdit, review = routeReview(e);
     section(`${e.confirm ? 'Review route change' : 'Edit route'} · ${e.name}`);
     if (e.confirm) {
@@ -216,6 +234,29 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     row('f All questions ›', { id: 'view:asked', fg: 'blue' }); row();
     section('Routes in effect', 'blue'); routesRows(2);
     row('u All routes / edit ›', { id: 'view:routes', fg: 'blue' });
+    row('P Operator priorities ›', { id: 'view:priorities', fg: 'blue' });
+  } else if (s.view === 'priorities') {
+    const doc = m.priorities ?? { priorities: [], unaligned: { work: [], runs: [] } };
+    section(`Priorities · ${doc.priorities.length} operator outcomes`, 'blue');
+    paragraph('The operator owns this order. Enter a priority to re-rank with a reason.');
+    if (s.errors.status) paragraph('Record unavailable. Refresh before editing priorities.', 'amber');
+    if (!doc.priorities.length) paragraph('No priorities yet. Add the outcomes you want agents to serve.', 'fg');
+    row('+ Add priority', { id: 'priority-add', fg: 'blue' });
+    if (!p?.org) paragraph('Initialize this project record to set priorities: record init', 'amber');
+    for (const priority of doc.priorities) {
+      row(); row(`${priority.rank}. ${priority.id} ${priority.title}`, { id: `priority:${priority.id}`, fg: 'blue', bold: true });
+      const last = priority.history.at(-1);
+      paragraph(`Rank set by ${last?.by ?? 'unknown'} · ${last?.why ?? 'reason not recorded'}`);
+      for (const i of priority.work) row(`  ${i.id} · ${i.status} · ${i.title}`, { id: `item:${i.id}` });
+      if (!priority.work.length) paragraph('No open work serving this priority.');
+      for (const r of priority.runs) paragraph(`  ${r.id} · ${r.status} · ${r.title}`);
+      for (const change of priority.history.slice(0, -1).reverse()) paragraph(`Previously rank ${change.rank} · ${change.by} · ${change.why}`);
+    }
+    row(); section(`Unaligned · ${doc.unaligned.work.length} open work`, 'amber');
+    paragraph('No operator priority named. Alignment is advisory; work may proceed.');
+    for (const i of doc.unaligned.work) row(`${i.id} · ${i.status} · ${i.title}`, { id: `item:${i.id}` });
+    for (const r of doc.unaligned.runs) paragraph(`${r.id} · ${r.status} · ${r.title}`);
+    if (!doc.unaligned.work.length) paragraph('No unaligned open work.');
   } else if (s.view === 'decided') {
     section(`Decided · ${m.decided.length} recorded decisions`, 'teal'); decisionRows(Infinity);
   } else if (s.view === 'asked') {
@@ -427,7 +468,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, and session input. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes · P Priorities', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, and session input. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
@@ -468,7 +509,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.priorityEdit ? ' Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : s.view === 'priorities' ? ' P Priorities · Enter re-rank · choose Add for a new outcome · Esc back' : s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

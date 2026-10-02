@@ -20,9 +20,10 @@ import { renderToday, todayJson } from '../lib/today.mjs';
 import { blockJson, renderBlock } from '../lib/block.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { routesCommand } from '../lanes/routes-command.mjs';
+import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
-  renderSnapshot, renderStatus, statusJson, truncate,
+  renderSnapshot, renderStatus, statusJson, truncate, renderPriorities,
 } from '../lib/render.mjs';
 
 const BIN = fileURLToPath(import.meta.url);
@@ -46,6 +47,10 @@ Questions for the operator
                                           a role=human item; --wait always requires an operator answer
   record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
                                           a "no" keeps the work it blocks blocked
+  record priorities [--json]             operator outcomes, ranks, work and who/why
+  record priorities add TITLE --why TEXT  operator adds an outcome at the end
+  record priorities rank P-n --rank N --why TEXT [--expect REV]
+  record priorities propose QUESTION --parent ID --recommend yes --why TEXT
   record set <ID> key=value...            edit an item (title role capability priority parent
                                           budget.<key> meta.<key>) or record run metadata
                                           (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
@@ -76,6 +81,9 @@ Views (zero inference)
 
 The record is found from $ORG_DIR, the canonical Git project's .org/, or a legacy ancestor .org/.
 In a Git project with no record, record commands initialize the canonical .org/ automatically.
+Runs name alignment with start --serves P-n (or --meta serves=P-n). Item meta.serves
+inherits through parents; --serves= starts explicitly unaligned. Alignment is advisory.
+Priority changes require ORG_ACTOR=human; named agents propose waiting questions.
 The org command is a permanent alias; .org/, ORG_DIR and ORG_ACTOR remain supported.
 
 ${CATEGORY_CHECKLIST}
@@ -199,6 +207,7 @@ function add(argv) {
   if (values.priority != null && !Number.isFinite(priority)) throw new UserError('--priority must be a number');
   const kind = values.goal ? 'goal' : 'work';
   const { result } = mutate(openOrg(), (s) => {
+    validateServes(s, parsePairs(values.meta, '--meta').serves);
     if (values.parent) requireItem(s, values.parent);
     const blockers = [...new Set(values['blocked-by'] ?? [])];
     blockers.forEach((b) => requireItem(s, b));
@@ -313,7 +322,7 @@ function ask(argv) {
   }
   const ctx = openOrg();
   const configuredPolicy = categoryPolicy(ctx.config, values.category);
-  const policy = values.wait ? 'ask' : configuredPolicy;
+  const policy = values.wait || values.category === 'priorities' ? 'ask' : configuredPolicy;
   const flag = categoryFlag(ctx.config, { category: values.category, wait: values.wait, title, why,
     recommend, on_yes: values['on-yes'], on_no: values['on-no'], memo_text: memo ? fs.readFileSync(memo, 'utf8') : null }, 'question', { wait: values.wait });
   const { actor } = writer();
@@ -360,6 +369,7 @@ function answer(argv) {
   const { result } = mutate(openOrg(), (s) => {
     const item = requireItem(s, id);
     if (item.role !== 'human') throw new UserError(`${id} is not a question (only role=human items are answered)`);
+    if (item.meta.category === 'priorities' && actor !== 'human') throw new UserError('priority questions wait for the operator');
     const answered = item.closed && item.meta.answer != null;
     if (values.overrule && !answered) throw new UserError(`${id} has not been answered; nothing to overrule (drop --overrule)`);
     if (!values.overrule && answered) {
@@ -410,6 +420,7 @@ function set(argv) {
     const parsed = parsePairs(pairs, 'record set');
     if (s.runs.has(id)) {
       const meta = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k.replace(/^meta\./, ''), v]));
+      validateServes(s, meta.serves);
       return { add: [{ type: 'run.updated', id, meta }] };
     }
     requireItem(s, id);
@@ -419,6 +430,7 @@ function set(argv) {
         checkBudget(key.slice(7), value);
         fields.budget = { ...fields.budget, [key.slice(7)]: value };
       } else if (key.startsWith('meta.')) {
+        if (key === 'meta.serves') validateServes(s, value);
         fields.meta = { ...fields.meta, [key.slice(5)]: value };
       } else if (key === 'parent') {
         if (value !== null) {
@@ -485,10 +497,12 @@ function start(argv) {
     workspace: { type: 'string' },
     report: { type: 'string' },
     escalation: { type: 'boolean' },
+    serves: { type: 'string' },
     meta: { type: 'string', multiple: true },
   }, { min: 1, max: 1, usage: 'record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [options]' });
   const id = positionals[0];
   const meta = parsePairs(values.meta, '--meta');
+  if (values.serves !== undefined) meta.serves = values.serves || null;
   if (values['route-config'] !== undefined && values.route === undefined) {
     throw new UserError('--route-config requires --route');
   }
@@ -512,6 +526,11 @@ function start(argv) {
   const ctx = openOrg();
   const { result } = mutate(ctx, (s) => {
     const item = requireItem(s, id);
+    if (!Object.hasOwn(meta, 'serves')) {
+      const inherited = itemServes(s, id);
+      if (inherited != null) meta.serves = inherited;
+    }
+    validateServes(s, meta.serves);
     const runId = nextRunId(s);
     const runDir = path.join(ctx.dir, 'runs', runId);
     const events = [];
@@ -540,6 +559,7 @@ function start(argv) {
   safeOut(`  brief   ${run.brief_path}  (${brief.length} chars ≈ ${approxTokens(brief)} tokens)\n`);
   safeOut(`  report  ${run.report_path}\n`);
   safeOut(`  prompt  Read ${run.brief_path} and follow it.\n`);
+  safeOut(meta.serves ? `  serves  ${meta.serves}\n` : '  alignment: Unaligned · no operator priority named (advisory)\n');
   if (result.parallel.length) safeOut(`note: ${id} already has open runs: ${result.parallel.join(', ')}\n`);
   for (const a of attention(after.state, after.config, after.now).filter((a) => a.id === id && a.kind === 'budget')) {
     safeOut(`note: ${id} ${a.text}\n`);
@@ -817,9 +837,45 @@ function log(argv) {
   return 0;
 }
 
+function priorities(argv) {
+  const [command, ...rest] = argv;
+  if (command === 'propose') return ask([...rest, '--category=priorities', '--wait']);
+  if (!command || command === '--json') {
+    args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'record priorities [--json]' });
+    const doc = prioritiesJson(openOrg().state);
+    out(command === '--json' ? JSON.stringify(doc, null, 2) + '\n' : renderPriorities(doc));
+    return 0;
+  }
+  if (!['add', 'rank'].includes(command)) throw new UserError('usage: record priorities [--json] | add TITLE --why TEXT | rank P-n --rank N --why TEXT [--expect REV] | propose QUESTION --parent ID --recommend yes --why TEXT');
+  if (writer().actor !== 'human') throw new UserError('only the operator changes priorities; propose with record priorities propose QUESTION --parent ID --recommend yes --why TEXT');
+  const { values, positionals } = args(rest, { why: { type: 'string' }, rank: { type: 'string' }, expect: { type: 'string' } },
+    { min: 1, ...(command === 'rank' ? { max: 1 } : {}), usage: `record priorities ${command} ${command === 'rank' ? 'P-n --rank N' : 'TITLE'} --why TEXT [--expect REV]` });
+  const why = values.why?.trim();
+  if (!why) throw new UserError('--why is required to change priorities');
+  const { result } = mutate(openOrg(), s => {
+    if (values.expect !== undefined && String(s.priorityRevision) !== values.expect) throw new UserError('priorities changed since you opened the editor; refresh and review again');
+    if (command === 'add') {
+      const title = positionals.join(' ').trim();
+      if (!title) throw new UserError('a priority title is required');
+      const number = Math.max(0, ...[...s.priorities.keys()].map(id => Number(id.slice(2)))) + 1;
+      const id = `P-${number}`;
+      return { add: [{ type: 'priority.added', id, title, why }], result: id };
+    }
+    const id = positionals[0], rank = Number(values.rank);
+    if (!s.priorities.has(id)) throw new UserError(`unknown priority ${id}`);
+    if (!Number.isInteger(rank) || rank < 1 || rank > s.priorityOrder.length) throw new UserError(`--rank must be from 1 to ${s.priorityOrder.length}`);
+    if (s.priorityOrder.indexOf(id) === rank - 1) return { add: [], result: `${id} already ranks ${rank}; nothing written` };
+    const order = s.priorityOrder.filter(p => p !== id);
+    order.splice(rank - 1, 0, id);
+    return { add: [{ type: 'priorities.ranked', order, previous: s.priorityOrder, why }], result: `${id} ranks ${rank}` };
+  });
+  out(result + '\n');
+  return 0;
+}
+
 const COMMANDS = {
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, console: consoleApp, routes: routesCommand,
+  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, routes: routesCommand,
 };
 
 function main(argv) {

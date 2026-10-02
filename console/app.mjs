@@ -45,10 +45,10 @@ usage: record console [--project NAME] [--modern]
        record console --modern --folder PATH
        node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
 
---modern opens the project console. Answers and routes use validating record commands.
---print is read only, including confirmed answers and route edits.
+--modern opens the project console. Answers, routes and priorities use validating record commands.
+--print is read only, including confirmed answers, route edits and priority changes.
 --keys sends characters in order: literal \\n means Enter and \\e means Escape.
-Modern keys: p scope dropdown, h overview, c control, d decided, f asked, u routes,
+Modern keys: p scope dropdown, h overview, c control, d decided, f asked, u routes, P priorities,
 g goals, t tasks, a activity, s sessions, ! waiting.
 Tab changes section; Up/Down select rows; Left/Right change views; Enter opens; Esc goes back.
 w toggles checkouts. In output: l transcript, v live screen, Shift+arrows pan, o native terminal.
@@ -107,6 +107,7 @@ if (opt.print) {
     herdrRename: async () => ({ ok: false, error: '--print does not rename sessions' }),
     orgAnswer: async () => ({ ok: false, error: '--print does not record answers' }),
     orgRouteSet: async () => ({ ok: false, error: '--print does not change routes' }),
+    orgPriorityChange: async () => ({ ok: false, error: '--print does not change priorities' }),
     brainAct: async () => ({ ok: false, error: '--print does not act on the queue' }) } : {};
   const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps });
   await session.refresh({ reorder: true });
@@ -114,8 +115,8 @@ if (opt.print) {
   session.frame(cols, rows);
   for (let i = 0; i < Number(opt.select ?? 0); i++) await session.key('j', {});
   // --keys: characters sent one by one; "\n" is Enter and "\e" is Escape.
-  for (const k of (opt.keys ?? '').replace(/\\n/g, '\n').replace(/\\e/g, '\x1b')) {
-    await session.key(k === '\n' || k === '\x1b' ? '' : k, { return: k === '\n', escape: k === '\x1b' });
+  for (const k of (opt.keys ?? '').replace(/\\n/g, '\n').replace(/\\e/g, '\x1b').replace(/\\t/g, '\t')) {
+    await session.key(['\n', '\x1b', '\t'].includes(k) ? '' : k, { return: k === '\n', escape: k === '\x1b', tab: k === '\t' });
     session.frame(cols, rows);
   }
   await session.waitForOutput?.();

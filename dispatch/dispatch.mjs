@@ -13,6 +13,7 @@ const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
+  serves: { type: 'string' },
   to: { type: 'string', default: 'supervisor-herdr' }, base: { type: 'string' }, extra: { type: 'string' },
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
@@ -107,7 +108,7 @@ function lockJob() {
 }
 async function main() {
   if (!positionals.length && !opt.retry && !opt.status) {
-    process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nUse discovery/adapters/codex.mjs for project entry; workers report, watch validates and ingests, then lane check/promote fast-forward without push. Only the canonical supervisor starts housekeeping.\n`);
+    process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR] [--serves P-n]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nUse discovery/adapters/codex.mjs for project entry; workers report, watch validates and ingests, then lane check/promote fast-forward without push. Only the canonical supervisor starts housekeeping.\n`);
     return;
   }
   opt.org ??= findOrgDir({ cwd: opt.repo });
@@ -119,7 +120,7 @@ async function main() {
     return;
   }
   if (opt.retry) {
-    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra'].some((key) => opt[key] !== undefined)) {
+    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'serves'].some((key) => opt[key] !== undefined)) {
       throw new Error('--retry uses the saved request; do not supply new work flags');
     }
     journal = locate(opt.retry);
@@ -138,6 +139,10 @@ async function main() {
     // Validate item, target and launch route before opening a lane or starting a run.
     const item = json(record(['show', positionals[0], '--json']));
     if (Object.hasOwn(item, 'item') || !Array.isArray(item.runs)) throw new Error('dispatch ITEM must be an item, not a run');
+    if (opt.serves) {
+      const priorities = json(record(['priorities', '--json']));
+      if (!priorities.priorities.some(p => p.id === opt.serves)) throw new Error(`unknown priority ${opt.serves}`);
+    }
     if (opt.reuse) {
       const prior = json(record(['show', opt.reuse, '--json']));
       if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
@@ -152,7 +157,7 @@ async function main() {
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
     job = { token, repo, org, common, item: positionals[0], lane: opt.lane, route: opt.route,
-      brief, report: opt.report ?? null, to: opt.to,
+      brief, report: opt.report ?? null, to: opt.to, serves: opt.serves,
       base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null,
       declared: { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null },
       stage: 'open', run: null };
@@ -198,6 +203,7 @@ async function main() {
     let output;
     try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
+      ...(job.serves !== undefined ? [`--serves=${job.serves}`] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
     catch (error) { job.startRefused = error.recordRefusal === true; save(); throw error; }
     job.run = output.match(/^(R-\d+) started/m)?.[1];
@@ -209,6 +215,7 @@ async function main() {
   if (run.abandoned || run.report) throw new Error('run is already abandoned or reported; start a new run');
   if (run.item !== job.item || run.meta?.dispatch_journal !== journal || fs.realpathSync(run.workspace) !== job.workspace) throw new Error('run no longer matches dispatch request');
   if (run.meta?.route !== job.route || Object.entries(job.declared).some(([key, value]) => (run.meta?.[key] ?? null) !== value)) throw new Error('run routing metadata changed; inspect before recovery');
+  if (job.serves !== undefined && (run.meta?.serves ?? null) !== (job.serves || null)) throw new Error('run priority alignment changed; inspect before recovery');
   // start may have committed the run before failing to materialize its brief.
   // The existing record command recreates a missing brief from durable context.
   if (!fs.existsSync(run.brief_path)) record(['brief', job.run]);
@@ -285,7 +292,7 @@ async function main() {
     }
   }
   delete job.error; save();
-  process.stdout.write(`${JSON.stringify({ run: job.run, item: job.item, lane: job.lane, route: job.route, ...job.declared,
+  process.stdout.write(`${JSON.stringify({ run: job.run, item: job.item, lane: job.lane, route: job.route, serves: run.meta?.serves ?? null, ...job.declared,
     agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal })}\n`);
 }
 try { await main(); }

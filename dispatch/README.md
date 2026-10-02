@@ -23,6 +23,14 @@ freezes that request's route configuration for both `record start --route` and
 `lane dispatch --route`; retries keep it even if project config changes. Lifecycle
 configuration retains its original sources and path resolution.
 
+`--serves P-n` names the operator priority this dispatch serves. The record validates
+it, keeps it in run metadata and includes the outcome and current rank in the run
+brief. Retry preserves the saved selection. Without the flag, `record start`
+inherits `meta.serves` from the item or its nearest parent; `--serves=` explicitly
+names none. Unaligned work remains visible in Priorities and can still dispatch.
+Only the operator adds or re-ranks outcomes (`record priorities`); agents propose
+changes with `record priorities propose QUESTION --parent ID --recommend yes --why TEXT`.
+
 `--base REF` opens from that ref and fast-forwards a reused lane only when clean.
 It never rebases, pushes, or makes merge commits. `lane prepare` runs for both new
 and reused lanes. Git common-directory identity owns the request; no registry

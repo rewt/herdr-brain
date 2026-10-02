@@ -37,6 +37,65 @@ function fixture(t, deps = {}) {
 }
 const render = (s, cols = 100, rows = 40) => s.frame(cols, rows).lines.map(lineText).join('\n');
 
+test('Priorities invites the operator, groups work, reviews CLI ranks and retains stale or cancelled drafts', async t => {
+  const { session: s, org, cwd } = fixture(t);
+  await s.refresh(); await s.key('P');
+  assert.match(render(s), /No priorities yet/);
+  await s.activate('priority-add'); await s.key('Continuity');
+  await s.key('', { tab: true }); await s.key('Context clears cost nothing');
+  await s.key('', { return: true });
+  assert.match(render(s), /Review operator priority/);
+  assert.equal(JSON.parse(org(['priorities', '--json'])).priorities.length, 0);
+  await s.key('', { return: true });
+  assert.equal(s.model.priorities.priorities[0].created.by, 'human');
+  org(['priorities', 'add', 'Adoption', '--why=Useful to people'], { ORG_ACTOR: 'human' });
+  const task = org(['add', 'Ship an example', '--role=engineer', '--meta=serves=P-2']);
+  org(['start', task, '--serves=P-2']);
+  org(['add', 'Explore unrelated work', '--role=engineer']);
+  await s.refresh();
+  for (const width of [80, 100, 140]) {
+    const text = render(s, width, 48);
+    assert.match(text, /1\. P-1 Continuity/); assert.match(text, /2\. P-2 Adoption/);
+    assert.match(text, /Ship an example/); assert.match(text, /Unaligned · 1 open work/);
+    assert.match(text, /Explore unrelated work/);
+  }
+  await s.activate('priority:P-2'); await s.key('u', { ctrl: true }); await s.key('1');
+  await s.key('', { tab: true }); await s.key('People can adopt it now');
+  await s.key('', { return: true });
+  assert.match(render(s), /1\. Adoption/);
+  assert.equal(JSON.parse(org(['priorities', '--json'])).priorities[0].id, 'P-1');
+  await s.key('', { return: true });
+  assert.equal(s.model.priorities.priorities[0].id, 'P-2');
+  assert.equal(s.model.priorities.priorities[0].history.at(-1).why, 'People can adopt it now');
+  await s.activate('priority:P-1');
+  await s.activate('view:goals'); await s.key('p'); await s.key('q');
+  assert.equal(s.ui.view, 'priorities'); assert.equal(s.ui.priorityEdit.values[0], '2pq', 'editor owns shortcut typing');
+  await s.activate('priority-cancel'); assert.equal(s.ui.priorityEdit, null);
+  await s.activate('priority:P-1'); await s.key('u', { ctrl: true }); await s.key('1');
+  await s.key('', { tab: true }); await s.key('Restore continuity'); await s.key('', { return: true });
+  org(['priorities', 'add', 'Quality', '--why=Dependable tools'], { ORG_ACTOR: 'human' });
+  const file = path.join(cwd, '.org', 'events.jsonl'), bytes = fs.readFileSync(file, 'utf8');
+  await s.key('', { return: true });
+  assert.match(s.ui.message, /changed since you opened/); assert.ok(s.ui.priorityEdit);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  await s.key('', { escape: true }); assert.equal(s.ui.priorityEdit, null);
+});
+
+test('Priorities --print confirmation remains read only for both additions and ranks', t => {
+  const { org, cwd, scratch } = fixture(t);
+  org(['priorities', 'add', 'Adoption', '--why=People first'], { ORG_ACTOR: 'human' });
+  const config = path.join(scratch, 'console.json');
+  fs.writeFileSync(config, JSON.stringify({ projects: [{ name: 'Priorities fixture', cwd }] }));
+  const file = path.join(cwd, '.org', 'events.jsonl'), bytes = fs.readFileSync(file, 'utf8');
+  const app = fileURLToPath(new URL('../app.mjs', import.meta.url));
+  for (const keys of ['P\\n\\tBecause people need it\\n\\n', 'Pk\\nNew outcome\\tFor the next milestone\\n\\n']) {
+    const output = execFileSync(process.execPath, [app, '--modern', '--config', config, '--print', '100x40', '--keys', keys],
+      { cwd, encoding: 'utf8', env: { ...process.env, HERDR_BIN_PATH: '/usr/bin/false', HERDR_ENV: '1', NO_COLOR: '1' } });
+    assert.match(output, /--print does not change priorities/);
+    assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  }
+});
+
 test('a project with no console config discovers its record, answers and edits routes through the actual CLI', async t => {
   const f = fixture(t), { session: s } = f;
   await s.refresh();

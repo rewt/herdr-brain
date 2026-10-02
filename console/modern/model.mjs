@@ -171,7 +171,7 @@ export function projectView(project, data, identity, now = Date.now()) {
   };
   const waiting = settle(board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i))), itemsById,
     { live: new Set(data.agents.map(a => a.pane)), now });
-  return { ...empty, ...controlEntries(data.status), items, itemsById, board, sessions, spaces, tabs, lastAt: lastRecorded(data.status), activity: activityEntries(data.status, data.events),
+  return { ...empty, ...controlEntries(data.status), priorities: data.status?.priorities ?? { revision: 0, priorities: [], unaligned: { work: [], runs: [] } }, items, itemsById, board, sessions, spaces, tabs, lastAt: lastRecorded(data.status), activity: activityEntries(data.status, data.events),
     categoryFlags: (data.status?.attention ?? today?.attention ?? []).filter(a => a.kind === 'category'),
     goals: items.filter(i => i.kind === 'goal' && !i.closed),
     tasks: items.filter(i => i.kind !== 'goal' && i.role !== 'human' && !['done', 'dropped'].includes(i.status)).map(i => ({ ...i, goal: goalOf(i) })),

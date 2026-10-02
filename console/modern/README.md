@@ -4,7 +4,7 @@ This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes
 are the project screen's prompt (a new chat, or a task under the work block),
 what the operator types into a session, session names, Waiting on you answers,
-and project route overrides through validating record commands.
+project route overrides, and operator priority changes through validating record commands.
 It runs in Ink through `console/app.mjs`; it is not the browser design preview or
 `console/proto` fixture application. Opt in per launch; the existing console
 remains the default and retains all of its operational actions.
@@ -58,6 +58,14 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   Enter opens their evidence; an unanswered record question opens the existing
   answer page. A report question with an existing record ID appears once. A
   report-only question is labeled as evidence and does not invent a waiting item.
+- `P` opens Priorities: operator outcomes in rank order, open work and runs serving
+  each, rank history with who/why, and advisory Unaligned work. Enter a priority
+  to edit its rank and reason, then review the resulting order and Enter to save
+  through `record priorities rank`. Add priority uses the same review and CLI
+  validation. Esc or Cancel discards a draft; a stale review cannot overwrite a
+  newer rank. A project without priorities invites the operator to add one.
+  Named agents use `record priorities propose` to leave a waiting question, even
+  if category policy says auto. `--print` never changes priorities.
 - `u` opens the effective project routes, configuration sources, dispatch
   defaults, primary pool, selection policy and always arguments. Enter on a
   route edits kind, model and effort; Tab changes fields, Ctrl+U clears, Enter
@@ -158,7 +166,7 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | `p` | Scope dropdown; type to filter, Up/Down choose, Enter selects, Esc dismisses |
 | `h` | Project overview |
 | `g` / `t` / `a` / `s` / `!` | Goals / Tasks / Activity / Sessions / Waiting on you |
-| `c` / `d` / `f` / `u` | Control / Decided / Asked / Routes |
+| `c` / `d` / `f` / `u` / `P` | Control / Decided / Asked / Routes / Priorities |
 | `Tab` / `Shift+Tab` | Change section, remembering selection within it |
 | `j` / `k`, Up / Down | Select within the current section |
 | Left / Right | Change central view, or the selected checkout's horizontal tab |

@@ -24,7 +24,7 @@ async function gitSummary(cwd) {
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
     herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, herdrRename: cli.herdrRename, orgAnswer: cli.orgAnswer,
-    orgRoutes: cli.orgRoutes, orgRouteSet: cli.orgRouteSet,
+    orgRoutes: cli.orgRoutes, orgRouteSet: cli.orgRouteSet, orgPriorityChange: cli.orgPriorityChange,
     brainAct: args => brainAct(config.brain_bin, args), gitSummary, folderPath,
     observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
@@ -33,7 +33,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'scope', scroll: 0, outputScroll: 0,
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark',
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
-    picker: null, routeEdit: null, regionFocus: {}, outputX: 0, screenScroll: 0,
+    picker: null, routeEdit: null, priorityEdit: null, regionFocus: {}, outputX: 0, screenScroll: 0,
     outputMode: 'mirror', interactive: false, terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },
     history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, checkoutGit: {}, compose: null, rename: null, act: null, digits: '', digitTimer: null, chatKinds: config.chat_kinds ?? ['claude', 'codex'], message: '',
     frame: null, stopped: false, timer: null, outputTimer: null, pending: null, generation: 0, reading: false, loading: true };
@@ -101,7 +101,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     const before = route(), after = { ...before, ...next };
     if (routeKey(before) === routeKey(after)) return;
     s.history.push(before); s.future = [];
-    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, rename: null, act: null, routeEdit: null, focus: next.focus ?? 'back' });
+    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, rename: null, act: null, routeEdit: null, priorityEdit: null, focus: next.focus ?? 'back' });
     s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
     stopObserver(); s.terminalFrame = null; s.screenViewport = null; s.outputMode = 'mirror'; observerRetryAt = 0;
     changed();
@@ -200,6 +200,13 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   }
   async function activate(id) {
     // Editors own input and navigation, including mouse header clicks.
+    if (s.priorityEdit) {
+      if (s.priorityEdit.busy) return;
+      if (id === 'priority-cancel') { s.priorityEdit = null; changed(); }
+      else if (id === 'priority-save') return priorityEditKey('', { return: true });
+      else if (id.startsWith('priority-field:') && !s.priorityEdit.confirm) { s.priorityEdit.field = Number(id.slice(15)); changed(); }
+      return;
+    }
     if (s.routeEdit) {
       if (s.routeEdit.busy) return;
       if (id === 'route-cancel') { s.routeEdit = null; changed(); }
@@ -208,6 +215,15 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       return;
     }
     const m = model();
+    if (id === 'priority-add' || id.startsWith('priority:')) {
+      if (!project()?.org || s.errors.status) { s.message = 'Open a project record and refresh before setting priorities.'; changed(); return; }
+      const doc = m.priorities, p = doc.priorities.find(p => p.id === id.slice(9));
+      if (id !== 'priority-add' && !p) return;
+      s.priorityEdit = { id: p?.id, title: p?.title, project: { ...project() }, revision: doc.revision,
+        order: doc.priorities.map(p => ({ id: p.id, title: p.title })),
+        values: [p ? String(p.rank) : '', ''], field: 0, confirm: false, busy: false };
+      s.message = ''; changed(); return;
+    }
     if (id === 'home') return activate('view:overview');
     if (id === 'checkouts') { s.showCheckouts = !s.showCheckouts; s.focus = s.showCheckouts ? `space:${m.spaces[0]?.workspace_id}` : 'checkouts'; changed(); return; }
     if (id === 'scope') {
@@ -244,7 +260,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (next === s.projectId) { changed(); return; }
       navigate({ projectId: next, view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'view:overview' }); adoptProject(); return refresh();
     }
-    if (id.startsWith('view:')) { const view = id.slice(5); const first = { control: m.needs[0] && `need:${m.needs[0].key}`, decided: m.decided[0] && `decision:${m.decided[0].key}`, asked: m.asked[0] && `asked:${m.asked[0].id}`, routes: Object.keys(m.routes?.config.routes ?? {}).sort()[0] && `route:${Object.keys(m.routes.config.routes).sort()[0]}`, goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, activity: m.activity[0] && `activity:${m.activity[0].seq}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
+    if (id.startsWith('view:')) { const view = id.slice(5); const first = { priorities: m.priorities?.priorities[0] ? `priority:${m.priorities.priorities[0].id}` : 'priority-add', control: m.needs[0] && `need:${m.needs[0].key}`, decided: m.decided[0] && `decision:${m.decided[0].key}`, asked: m.asked[0] && `asked:${m.asked[0].id}`, routes: Object.keys(m.routes?.config.routes ?? {}).sort()[0] && `route:${Object.keys(m.routes.config.routes).sort()[0]}`, goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, activity: m.activity[0] && `activity:${m.activity[0].seq}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
     if (id.startsWith('decision:')) {
       if (m.decided.some(n => n.key === id.slice(9))) navigate({ view: 'decision', detail: id.slice(9) });
       return;
@@ -450,6 +466,29 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     return s.frame;
   }
   function move(amount) { moveWithin(s, amount); changed(); }
+  async function priorityEditKey(input, k) {
+    const e = s.priorityEdit;
+    if (e.busy) return false;
+    if (k.escape) { s.priorityEdit = null; changed(); return false; }
+    if (k.return) {
+      if (!e.values[0].trim() || !e.values[1].trim()) { s.message = 'An outcome or rank and a reason are required.'; changed(); return false; }
+      const rank = Number(e.values[0]);
+      if (e.id && (!Number.isInteger(rank) || rank < 1 || rank > e.order.length)) { s.message = `Rank must be from 1 to ${e.order.length}.`; changed(); return false; }
+      if (!e.confirm) { e.confirm = true; s.message = ''; changed(); return false; }
+      e.busy = true; changed();
+      let result;
+      try { result = await d.orgPriorityChange(e.project, { id: e.id, title: e.values[0].trim(), rank, why: e.values[1].trim(), revision: e.revision }); }
+      catch (error) { result = { ok: false, error: error.message }; }
+      if (!result.ok) { e.busy = false; e.confirm = false; s.message = `Priority not saved: ${result.error}`; changed(); return false; }
+      s.priorityEdit = null; await refresh(); s.message = 'Operator priorities saved with your reason.'; changed(); return false;
+    }
+    if (e.confirm) { if (k.backspace) e.confirm = false; changed(); return false; }
+    if (k.tab || k.downArrow || k.upArrow) e.field = (e.field + 1) % 2;
+    else if (k.ctrl && input === 'u') e.values[e.field] = '';
+    else if (k.backspace || k.delete) e.values[e.field] = [...e.values[e.field]].slice(0, -1).join('');
+    else if (!k.ctrl && !k.meta) e.values[e.field] += input.replace(/[\x00-\x1f\x7f]/g, '');
+    changed(); return false;
+  }
   async function routeEditKey(input, k) {
     const edit = s.routeEdit;
     if (edit.busy) return false;
@@ -483,6 +522,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     changed(); return false;
   }
   async function key(input, k = {}) {
+    if (s.priorityEdit) return priorityEditKey(input, k);
     if (s.routeEdit) return routeEditKey(input, k);
     if (s.picker) {
       const entries = pickerEntries(s);
@@ -545,7 +585,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     }
     if (s.view === 'output' && (input === 'l' || input === 'v')) return activate(input === 'l' ? 'transcript' : 'mirror');
     if (s.view === 'output' && input === 'i') return activate('interact');
-    const shortcut = { c: 'view:control', u: 'view:routes', d: 'view:decided', f: 'view:asked', p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
+    const shortcut = { P: 'view:priorities', c: 'view:control', u: 'view:routes', d: 'view:decided', f: 'view:asked', p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
     if (shortcut) return activate(shortcut);
     return false;
   }

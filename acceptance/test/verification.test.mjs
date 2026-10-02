@@ -11,6 +11,9 @@ import { createVerification, safeGitArgs } from '../verify.mjs';
 const discovered = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout?.trim();
 const skip = process.platform !== 'darwin' || !discovered;
 function fixture(t) {
+  const previousActor = process.env.ORG_ACTOR;
+  process.env.ORG_ACTOR = `acceptance-verification-${t.name}`;
+  t.after(() => previousActor === undefined ? delete process.env.ORG_ACTOR : process.env.ORG_ACTOR = previousActor);
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-native-')));
   const repo = path.join(root, 'project'), temp = path.join(root, 'session');
   for (const directory of [repo, temp, path.join(root, 'installed'), path.join(root, 'runtime')]) fs.mkdirSync(directory);

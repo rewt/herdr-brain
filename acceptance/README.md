@@ -45,6 +45,20 @@ selects the Git repository for tags/refs. The runner snapshots the candidate;
 it never modifies that source or an activated release. `main` means the commit
 resolved at startup, not a moving branch during the test.
 
+The gate records machine load in `evidence/load.jsonl`: all three load averages,
+CPU capacity and the heavy-load threshold, with timestamps. It samples every
+second while the event loop is free, on every wait poll, and before/after each
+blocking child command. `summary.json` retains the run peak and each case's load
+window. Heavy load means the one-minute average is at least the available CPU
+count (with a floor of four). A report-wait or child-command timeout with heavy
+load measured during that operation is harness PENDING with the load named;
+the gate remains NOT READY until it passes on a usable machine. A candidate
+that never reports at normal load remains product FAIL. Earlier contention in
+an unrelated case cannot excuse a later timeout. Focus-monitor timeouts retain
+their existing harness classification and name the run's measured contention.
+Safety refusals and incorrect product behaviour remain FAIL at any load. Waits
+and child commands keep their fixed bounds; load never creates unlimited retries.
+
 After auditing the snapshot, the runner adds owner read/write permission to its
 files and owner read/write/traverse permission to its directories, preserving
 executable bits. This applies to both Git archives and immutable release copies

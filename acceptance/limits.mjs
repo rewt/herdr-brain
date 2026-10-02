@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { LoadTimeout, isTimeout, loadReason } from './load.mjs';
 
 export class HarnessLimit extends Error {
   constructor(message) { super(message); this.name = 'HarnessLimit'; }
@@ -42,13 +43,18 @@ function scratchEnvironmentError(error, scratchRoots) {
   return paths.length > 0 && paths.every((file) => typeof file === 'string'
     && scratchRoots.some((root) => scratchPath(file, root)));
 }
-export function commandFailure(message, { scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [], error } = {}) {
+export function commandFailure(message, { scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [], error, load } = {}) {
   if (isProductBoundary(message)) return new ProductBoundary(message);
-  return isHarnessBoundary(message) || scratchEnvironmentError({ ...error, message }, scratchRoots)
-    ? new HarnessLimit(message) : new Error(message);
+  if (isHarnessBoundary(message) || scratchEnvironmentError({ ...error, message }, scratchRoots)) return new HarnessLimit(message);
+  return load && (error?.code === 'ETIMEDOUT' || isTimeout(message))
+    ? new LoadTimeout(message, load) : new Error(message);
 }
-export function classifyFailure(error, { cleanup = false, scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [] } = {}) {
+export function classifyFailure(error, { cleanup = false, scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [], load } = {}) {
   if (error instanceof ProductBoundary || isProductBoundary(error.message)) return { status: 'FAIL', origin: 'product', detail: error.message };
+  const measured = error instanceof LoadTimeout ? error.load : load;
+  if ((error instanceof LoadTimeout || (error instanceof HarnessLimit && isTimeout(error.message))) && measured?.heavy) {
+    return { status: 'PENDING', origin: 'harness', detail: `${loadReason(measured)}; ${error.message}` };
+  }
   if (error instanceof HarnessLimit || cleanup || scratchEnvironmentError(error, scratchRoots)) return { status: 'PENDING', origin: 'harness', detail: error.message };
   return { status: error instanceof Pending ? 'PENDING' : 'FAIL', origin: 'product', detail: error.message };
 }

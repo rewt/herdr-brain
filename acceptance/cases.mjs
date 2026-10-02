@@ -46,7 +46,7 @@ export const cutoverChecks = Object.freeze({
   legacy: spec('legacy-canary', 'rollback: real restored notify canary'),
 });
 
-export async function runCase(results, definition, fn, { scratchRoot, scratchRoots } = {}) {
+export async function runCase(results, definition, fn, { scratchRoot, scratchRoots, load } = {}) {
   assert.ok(definition?.key && definition?.name, 'case requires a stable key and name');
   assert.ok(!results.some((result) => result.key === definition.key), `duplicate case key: ${definition.key}`);
   const result = { id: String(results.length + 1).padStart(2, '0'), key: definition.key, name: definition.name,
@@ -54,7 +54,7 @@ export async function runCase(results, definition, fn, { scratchRoot, scratchRoo
   try {
     for (const key of definition.prerequisites) requirePrerequisite(results, key);
     result.detail = await fn() ?? '';
-  } catch (error) { Object.assign(result, classifyFailure(error, { cleanup: definition.cleanup, scratchRoot, scratchRoots })); }
+  } catch (error) { Object.assign(result, classifyFailure(error, { cleanup: definition.cleanup, scratchRoot, scratchRoots, load: load?.() })); }
   results.push(result);
   return result;
 }

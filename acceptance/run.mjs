@@ -25,6 +25,7 @@ import { supervisorCase } from './supervisor.mjs';
 import { assertSupervisorEntry } from './entry.mjs';
 import { startFocusMonitor, assertFocus } from './focus.mjs';
 import { cleanupWorkspaces } from './cleanup.mjs';
+import { createLoadMonitor, waitUntil } from './load.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -42,6 +43,7 @@ const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tm
 const evidence = path.join(root, 'evidence');
 fs.mkdirSync(evidence);
 const started = Date.now();
+const load = createLoadMonitor({ record: (sample) => fs.appendFileSync(path.join(evidence, 'load.jsonl'), JSON.stringify(sample) + '\n') });
 const results = [];
 let logFile, candidateCommit, fixture, supervisor, defaultOrg;
 let focusMonitor, focusError;
@@ -59,13 +61,15 @@ const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const pending = (reason) => { throw new Pending(reason); };
 function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv, duringCleanup = false } = {}) {
   if (stopping && !duringCleanup) throw new Pending('run interrupted; no further candidate commands allowed');
+  const window = load.begin();
   const r = spawnSync(command, args, { cwd, env: isolatedEnv ?? { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
     input, maxBuffer: 32 * 1024 * 1024, timeout });
+  const measuredLoad = load.snapshot(window);
   if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd, status: r.status, error: r.error?.message,
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
-  if (ok && (r.error || r.status !== 0)) {
+  if (r.error?.code === 'ETIMEDOUT' || (ok && (r.error || r.status !== 0))) {
     const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? (String(r.stdout ?? '') + String(r.stderr ?? '')).trim()}`;
-    throw commandFailure(message, { scratchRoots, error: r.error });
+    throw commandFailure(message, { scratchRoots, error: r.error, load: measuredLoad });
   }
   return r;
 }
@@ -95,6 +99,7 @@ const present = (file) => fs.existsSync(path.join(candidate, file));
 const requireCandidate = (file) => { if (!present(file)) pending(`candidate lacks ${file}`); return path.join(candidate, file); };
 async function test(definition, fn) {
   if (stopping && ![cases.cleanup.key, cases.focus.key].includes(definition.key)) throw new Pending('run interrupted');
+  const window = load.begin();
   const id = String(results.length + 1).padStart(2, '0');
   logFile = path.join(evidence, `${id}.jsonl`);
   write(logFile, '');
@@ -102,19 +107,18 @@ async function test(definition, fn) {
   write(`${phaseFile}.tmp`, JSON.stringify({ key: definition.key, id }));
   fs.renameSync(`${phaseFile}.tmp`, phaseFile);
   try {
-    const result = await runCase(results, definition, fn, { scratchRoots });
+    const result = await runCase(results, definition, fn, { scratchRoots,
+      load: () => load.snapshot(definition === cases.focus ? 0 : window) });
+    result.load = load.snapshot(window);
     result.evidence = `${id}.jsonl`;
     return result;
   } finally { logFile = undefined; }
 }
 async function until(fn, label, ms = 25_000) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
+  return waitUntil(() => {
     if (stopping) throw new Pending('run interrupted');
-    if (fn()) return;
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  throw new Error(`timeout: ${label}`);
+    return fn();
+  }, label, ms, { load });
 }
 const h = (...args) => json(node(path.join(root, 'herdr.mjs'), args).stdout);
 const record = (args, options = {}) => node(path.join(candidate, 'bin/org.mjs'), args, { cwd: fixture.repo, extra: { ORG_DIR: fixture.org }, ...options }).stdout;
@@ -231,10 +235,11 @@ async function closeScope() {
 }
 
 function emitSummary(interruption = {}) {
+  const measuredLoad = load.snapshot(); load.stop();
   const elapsedSeconds = Math.round((Date.now() - started) / 1000);
   const counts = Object.fromEntries(['PASS', 'FAIL', 'PENDING'].map((status) => [status, results.filter((v) => v.status === status).length]));
   const authDirectory = path.join(root, 'codex-runtime');
-  const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, evidence, results,
+  const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, evidence, results, load: measuredLoad,
     credentialResidue: fs.existsSync(authDirectory) ? [authDirectory] : [], retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
   write(path.join(evidence, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
   const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending — ${counts.FAIL || counts.PENDING ? 'NOT READY' : 'READY'}`,

@@ -3,14 +3,45 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { registerProducer, assertProducing, producersStopping } from './producers.mjs';
 const [root, role, name] = process.argv.slice(2);
+const producer = registerProducer(root, `script-${role}`);
+let activeChild, workerStopping = false;
+// Keep the worker alive to finish its journal after an active command returns.
+// No subsequent command may start after stop, including on a direct PTY signal.
+const stopTimer = setInterval(() => {
+  if ((workerStopping || producersStopping(root)) && !activeChild) process.exit(0);
+}, 25);
+process.once('exit', () => clearInterval(stopTimer));
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { workerStopping = true; });
 const pane = process.env.HERDR_PANE_ID;
 const env = { ...process.env, ACCEPTANCE_ROOT: root };
-const call = (...args) => execFileSync(process.execPath, [path.join(root, 'herdr.mjs'), ...args], { env, stdio: 'pipe' });
+async function command(binary, args, options = {}, timeout = 90_000) {
+  if (workerStopping) throw new Error('scripted worker stopped; no further commands allowed');
+  assertProducing(root);
+  return await new Promise((resolve, reject) => {
+    const child = activeChild = spawn(binary, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    producer.child(child.pid);
+    let stdout = '', stderr = '', killTimer, spawnError;
+    child.stdout.on('data', value => { stdout += value; });
+    child.stderr.on('data', value => { stderr += value; });
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM'); killTimer = setTimeout(() => child.kill('SIGKILL'), 1000);
+    }, timeout);
+    child.on('error', error => { spawnError = error; });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer); clearTimeout(killTimer);
+      producer.child(child.pid, false); activeChild = undefined;
+      if (spawnError || code !== 0) reject(spawnError ?? new Error(`${binary}: ${signal ?? code}: ${stderr}`));
+      else resolve(stdout);
+    });
+  });
+}
+const call = (...args) => command(process.execPath, [path.join(root, 'herdr.mjs'), ...args], { env });
 let seq = 0;
 const state = (value) => call('pane', 'report-agent', pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', value, '--seq', String(++seq));
-state('idle');
+await state('idle');
 fs.mkdirSync(path.join(root, 'script-panes'), { recursive: true });
 fs.writeFileSync(path.join(root, 'script-panes', pane), role);
 console.log(`Scripted ${role} ready (${name})`);
@@ -21,25 +52,25 @@ function defaultCycle() {
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(scoped)) if (/^(ORG_|LANE_|MONITOR_|HERDR_)/.test(key)) delete scoped[key];
   scoped.ORG_ACTOR = name;
-  const node = (file, args, extra = {}) => execFileSync(process.execPath, [path.join(root, 'candidate', file), ...args], {
-    cwd: spec.repo, env: { ...scoped, ...extra }, encoding: 'utf8', timeout: 90_000,
+  const node = (file, args, extra = {}) => command(process.execPath, [path.join(root, 'candidate', file), ...args], {
+    cwd: spec.repo, env: { ...scoped, ...extra },
   });
   const record = (args) => node('bin/org.mjs', args, { ORG_DIR: path.join(spec.repo, '.org') });
   return { spec, node, record };
 }
-function dispatchDefault() {
+async function dispatchDefault() {
   const file = path.join(root, 'default-supervisor-job.json');
   try {
     const { spec, node, record } = defaultCycle();
-    const policy = node('discovery/adapters/codex.mjs', ['--repo', spec.repo, '--binary', spec.binary, '--role', 'supervisor', '--policy-only']);
+    const policy = await node('discovery/adapters/codex.mjs', ['--repo', spec.repo, '--binary', spec.binary, '--role', 'supervisor', '--policy-only']);
     fs.writeFileSync(path.join(root, 'default-supervisor-policy.txt'), policy);
-    const item = record(['add', 'Default cycle canary', '--role', 'engineer']).match(/^(\S+)/)[1];
-    const job = JSON.parse(node('dispatch/dispatch.mjs', [item, '--lane', 'default-cycle', '--route', 'engineer', '--brief', spec.ask, '--to', name]));
-    const info = JSON.parse(record(['show', job.run, '--json']));
+    const item = (await record(['add', 'Default cycle canary', '--role', 'engineer'])).match(/^(\S+)/)[1];
+    const job = JSON.parse(await node('dispatch/dispatch.mjs', [item, '--lane', 'default-cycle', '--route', 'engineer', '--brief', spec.ask, '--to', name]));
+    const info = JSON.parse(await record(['show', job.run, '--json']));
     fs.writeFileSync(file, JSON.stringify({ job, info }));
   } catch (error) { fs.writeFileSync(file, JSON.stringify({ error: error.message })); }
 }
-function ingestDefault(line) {
+async function ingestDefault(line) {
   const file = path.join(root, 'default-supervisor-job.json');
   if (!fs.existsSync(file)) return;
   const saved = JSON.parse(fs.readFileSync(file));
@@ -47,13 +78,14 @@ function ingestDefault(line) {
   const receipt = path.join(root, 'default-supervisor-ingest.json');
   try {
     const { record } = defaultCycle();
-    record(['check', saved.info.report_path]); record(['ingest', saved.info.report_path, '--run', saved.job.run]);
-    fs.writeFileSync(receipt, record(['show', saved.job.run, '--json']));
+    await record(['check', saved.info.report_path]); await record(['ingest', saved.info.report_path, '--run', saved.job.run]);
+    fs.writeFileSync(receipt, await record(['show', saved.job.run, '--json']));
   } catch (error) { fs.writeFileSync(receipt, JSON.stringify({ error: error.message })); }
 }
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const input = readline.createInterface({ input: process.stdin });
 for await (const raw of input) {
+  assertProducing(root);
   const line = raw.replace(/\x1b\[200~|\x1b\[201~/g, '').trim();
   if (!line) continue;
   const requested = line.match(/^acceptance-state (working|idle)$/)?.[1];
@@ -64,29 +96,32 @@ for await (const raw of input) {
     fs.appendFileSync(path.join(root, `${role}-input.jsonl`), JSON.stringify({ pane, name, line }) + '\n');
     continue;
   }
-  state('working');
+  await state('working');
   fs.appendFileSync(path.join(root, `${role}-input.jsonl`), JSON.stringify({ pane, name, line }) + '\n');
-  if (requested) { state(requested); continue; }
+  if (requested) { await state(requested); continue; }
   if (role === 'supervisor') {
     console.log(line);
-    if (line === 'acceptance-default-cycle') dispatchDefault();
-    else ingestDefault(line);
-    await delay(1000); state('idle'); continue;
+    if (line === 'acceptance-default-cycle') await dispatchDefault();
+    else await ingestDefault(line);
+    await delay(1000); await state('idle'); continue;
   }
-  if (!match) { await delay(4000); state('idle'); continue; }
+  if (!match) { await delay(4000); await state('idle'); continue; }
   const [, run, report] = match;
   const mode = fs.readFileSync(path.join(root, 'mode'), 'utf8').trim();
   fs.writeFileSync(path.join(root, 'worker-started'), run);
   // Let the watcher observe working before a deliberately incomplete stop.
   await delay(1500);
-  if (mode === 'blocked') { state('blocked'); continue; }
-  if (mode === 'missing') { state('idle'); continue; }
+  assertProducing(root);
+  if (mode === 'blocked') { await state('blocked'); continue; }
+  if (mode === 'missing') { await state('idle'); continue; }
   fs.mkdirSync(path.dirname(report), { recursive: true });
-  if (mode === 'invalid') { fs.writeFileSync(report, `---\nrun: ${run}\noutcome: banana\n---\n`); state('idle'); continue; }
+  if (mode === 'invalid') { fs.writeFileSync(report, `---\nrun: ${run}\noutcome: banana\n---\n`); await state('idle'); continue; }
   const outcome = mode === 'needs-human' ? 'needs_human' : mode === 'blocked-report' ? 'blocked' : 'done';
   fs.writeFileSync(path.join(process.cwd(), `work-${run}.txt`), `${mode}\n`);
-  execFileSync('git', ['add', `work-${run}.txt`], { stdio: 'pipe' });
-  execFileSync('git', ['commit', '-qm', `Scripted acceptance ${mode} ${run}`], { stdio: 'pipe' });
+  await command('git', ['add', `work-${run}.txt`], { env }, 15_000);
+  await command('git', ['commit', '-qm', `Scripted acceptance ${mode} ${run}`], { env }, 15_000);
+  assertProducing(root);
   fs.writeFileSync(report, `---\nrun: ${run}\noutcome: ${outcome}\nsummary: Scripted worker completed its acceptance round.\nheadline: The scripted round completed\nblockers: ${outcome === 'done' ? '[]' : '["Acceptance stand-in needs a decision"]'}\nproposals: []\nlearnings: []\nartifacts: []\n---\n\nScripted evidence, no model.\n`);
-  console.log(`Report ${report}`); if (mode !== 'held') state('idle');
+  console.log(`Report ${report}`); if (mode !== 'held') await state('idle');
 }
+clearInterval(stopTimer); producer.release();

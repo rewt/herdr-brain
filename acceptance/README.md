@@ -342,12 +342,26 @@ workspace independently, and audits the raw native workspace list. A failed
 workspace get never counts as proof of closure. `cleanup-residue.json` retains
 the before/after inventories and names every remaining owned or scratch workspace
 by ID and label; an unreceipted scratch workspace is reported, never granted
-closure authority. Interruption blocks further candidate commands before cleanup.
+closure authority. Before any cleanup snapshot, a durable stop marker refuses
+new adapter and worker commands. Cleanup awaits every registered PTY worker and
+adapter (including native calls already in flight), then collects and stops
+recorded watchers and awaits their exit. A producer drain timeout refuses the
+snapshot and retains scratch for recovery. Workers stop after any bounded active
+candidate command completes; the live worker terminates and awaits its owned
+model child. `producers-drained.json` records this barrier completion.
 Herdr can implicitly open the main checkout during `worktree create/open --cwd`.
-Before those calls the adapter syncs a creation intent containing the raw baseline
-IDs and confined checkout paths. New native IDs at those exact paths are retained
-as creation receipts, including when cleanup must recover a lost creation reply;
-existing IDs and unrelated paths never gain ownership through an intent.
+Before **every** `workspace create` and `worktree create/open` call, with either
+`--cwd` or `--workspace`, the adapter syncs a creation intent containing baseline
+IDs, canonical confined destination paths and the requested label. When no label
+was supplied, it adds a unique recovery label. Recovery accepts only new native
+IDs at those exact paths, or that unique label when path metadata is absent.
+Caller-supplied labels alone never grant ownership: missing workspace metadata
+requires native pane identity and exact cwd proof. Contradictory foreign paths
+and baseline IDs never gain ownership. Cleanup replays receipts and reconciles
+intents after draining, closes owned workspaces, then reconciles again and closes
+newly visible creations before the final raw inventory audit. These paths have
+offline lost-reply SIGINT/SIGTERM coverage while creation is active, including a
+supervisor in default-cycle dispatch; release-only live validation remains required.
 Every discovery/verification root that still exists is listed in the summary and
 on the cleanup screen line regardless of keep; a failed non-keep cleanup never
 hides retained paths.

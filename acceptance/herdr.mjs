@@ -5,7 +5,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { saveCreation, creationTargets, saveCreationIntent, implicitParents } from './receipts.mjs';
+import { randomUUID } from 'node:crypto';
+import { saveCreation, creationTargets, saveCreationIntent, recoverCreations } from './receipts.mjs';
+import { registerProducer, assertProducing } from './producers.mjs';
 
 const root = fs.realpathSync(process.env.ACCEPTANCE_ROOT);
 const ledger = path.join(root, 'ownership.json');
@@ -49,7 +51,7 @@ function safePath(p) {
   while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
   if (!inside(ancestor)) throw new CapabilityRefusal(`path outside scratch: ${p}`);
 }
-let child, interrupted = false;
+let child, producer, interrupted = false;
 const agentPanes = new Map();
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   interrupted = true;
@@ -57,6 +59,8 @@ for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   child?.kill(signal);
 });
 async function real(args) {
+  assertProducing(root);
+  if (interrupted) throw new ReceiptLimit('adapter interrupted; no further native commands allowed');
   const mutating = !['list', 'get', 'read', 'wait', 'process-info'].includes(args[1]);
   const id = `${process.pid}:${Date.now()}:${Math.random()}`;
   const focusCalls = path.join(root, 'evidence', 'focus-calls.jsonl');
@@ -70,13 +74,18 @@ async function real(args) {
   return await new Promise((resolve, reject) => {
     child = spawn(state.binary, args, { stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...(state.socketPath ? { HERDR_SOCKET_PATH: state.socketPath } : {}) } });
+    producer.child(child.pid);
     let stdout = '', stderr = '';
     child.stdout.on('data', (v) => { stdout += v; });
     child.stderr.on('data', (v) => { stderr += v; });
-    const timer = setTimeout(() => child.kill('SIGTERM'), 35_000);
-    child.on('error', reject);
+    const active = child;
+    let killTimer;
+    const timer = setTimeout(() => {
+      active.kill('SIGTERM'); killTimer = setTimeout(() => active.kill('SIGKILL'), 1000);
+    }, 35_000);
+    child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', (code) => {
-      clearTimeout(timer);
+      clearTimeout(timer); clearTimeout(killTimer); producer.child(active.pid, false);
       let created;
       if (['workspace', 'worktree', 'tab'].includes(args[0]) && ['create', 'open'].includes(args[1])) {
         let result;
@@ -119,6 +128,7 @@ async function ownedPane(id) {
 }
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 try {
+  producer = registerProducer(root, 'adapter');
   const [group, verb, target] = argv;
   if (['focus', 'attach', 'zoom'].includes(verb)) throw new FocusRefusal(`focus changes forbidden: ${group} ${verb}`);
   if (group === 'worktree' && verb === 'remove') throw new FocusRefusal('Herdr worktree remove changes focus; remove the checkout through Git before closing the owned workspace');
@@ -214,16 +224,18 @@ try {
     }
   }
   let intent;
-  if (group === 'worktree' && ['create', 'open'].includes(verb) && argv.includes('--cwd')) {
+  if ((group === 'workspace' && verb === 'create') || (group === 'worktree' && ['create', 'open'].includes(verb))) {
+    const recoveryLabel = !args.includes('--label');
+    if (recoveryLabel) args.push('--label', `acceptance-recovery-${randomUUID()}`);
     const before = body(await real(['workspace', 'list'])).workspaces;
     if (!Array.isArray(before)) throw new ReceiptLimit('pre-creation workspace inventory unavailable');
-    intent = saveCreationIntent(root, args, before, fs.realpathSync(option('--cwd')));
+    intent = saveCreationIntent(root, args, before, argv.includes('--cwd') ? fs.realpathSync(option('--cwd')) : undefined, recoveryLabel);
   }
   const result = await real(args);
   if (intent && !interrupted) {
     const after = body(await real(['workspace', 'list'])).workspaces;
     if (!Array.isArray(after)) throw new ReceiptLimit('post-creation workspace inventory unavailable');
-    for (const workspace of implicitParents(intent, after)) {
+    for (const workspace of await recoverCreations(intent, after, async args => body(await real(args)))) {
       saveCreation(root, args, { workspace });
       await updateOwnership(latest => { latest.workspaces = [...new Set([...latest.workspaces, workspace.workspace_id])]; });
     }
@@ -291,4 +303,4 @@ try {
   fs.appendFileSync(path.join(root, 'denied.jsonl'), JSON.stringify({ argv, error: error.message }) + '\n');
   process.stderr.write(JSON.stringify({ error: { code: error instanceof CapabilityRefusal ? 'acceptance_product_boundary' : 'acceptance_harness_limit', message: error.message } }) + '\n');
   process.exitCode = 1;
-}
+} finally { producer?.release(); }

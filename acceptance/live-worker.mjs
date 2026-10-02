@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { permissionArgs, sessionEnv } from './security.mjs';
+import { registerProducer, producersStopping } from './producers.mjs';
 const [root, name] = process.argv.slice(2);
+const producer = registerProducer(root, 'live-worker');
 const spec = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs', `${name}.json`), 'utf8'));
 const log = path.join(root, 'evidence', `${name}.jsonl`);
 const errors = path.join(root, 'evidence', `${name}.stderr`);
@@ -23,13 +25,24 @@ const child = spawn(spec.entryBinary ?? spec.binary, [...(spec.entryBinary ? ['-
   } : {}) },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
+producer.child(child.pid);
 child.stdout.on('data', (v) => { fs.writeSync(out, v); process.stdout.write(v); });
 child.stderr.on('data', (v) => { fs.writeSync(err, v); process.stderr.write(v); });
 const timer = setTimeout(() => child.kill('SIGTERM'), 180_000);
+let killTimer;
+const stopTimer = setInterval(() => {
+  if (!producersStopping(root)) return;
+  clearInterval(stopTimer);
+  child.kill('SIGTERM');
+  killTimer = setTimeout(() => child.kill('SIGKILL'), 1000);
+}, 25);
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child.kill(signal); });
 child.on('error', (e) => { fs.writeSync(err, e.message); });
 child.on('close', (code, signal) => {
-  clearTimeout(timer); fs.closeSync(out); fs.closeSync(err);
+  clearTimeout(timer); clearInterval(stopTimer); clearTimeout(killTimer);
+  producer.child(child.pid, false);
+  fs.closeSync(out); fs.closeSync(err);
   fs.rmSync(spec.runtimeHome, { recursive: true, force: true });
   fs.writeFileSync(path.join(root, 'live-jobs', `${name}.done`), JSON.stringify({ code, signal }));
+  producer.release();
 });

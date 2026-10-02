@@ -11,6 +11,7 @@ import { discovery } from './live.mjs';
 import { auditCopies, relocate, within, copiedSandbox, workspaceIdentityCutover } from './security.mjs';
 import { HarnessLimit, Pending, commandFailure, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
 import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
+import { stopProducers, awaitProducers } from './producers.mjs';
 import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine } from './results.mjs';
 import { liveSocket } from './probe.mjs';
@@ -108,7 +109,11 @@ async function test(definition, fn) {
 }
 async function until(fn, label, ms = 25_000) {
   const end = Date.now() + ms;
-  while (Date.now() < end) { if (fn()) return; await new Promise((r) => setTimeout(r, 150)); }
+  while (Date.now() < end) {
+    if (stopping) throw new Pending('run interrupted');
+    if (fn()) return;
+    await new Promise((r) => setTimeout(r, 150));
+  }
   throw new Error(`timeout: ${label}`);
 }
 const h = (...args) => json(node(path.join(root, 'herdr.mjs'), args).stdout);
@@ -174,6 +179,10 @@ function cleanupScope() {
 async function closeScope() {
   const errors = [];
   try {
+    // Stop PTY workers and adapter admissions before reading dispatch journals:
+    // an active default-cycle dispatch may publish another watcher receipt.
+    stopProducers(root);
+    await awaitProducers(root);
     // PIDs originate only in successful candidate detach receipts or in this
     // scratch record’s dispatch journals (including partially failed dispatch).
     for (const org of [fixture?.org, defaultOrg].filter(Boolean)) {
@@ -192,6 +201,12 @@ async function closeScope() {
       }
     }
     for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') errors.push(e.message); } }
+    const deadline = Date.now() + 15_000;
+    const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { if (e.code === 'ESRCH') return false; throw e; } };
+    while ([...pids].some(alive)) {
+      if (Date.now() >= deadline) throw new HarnessLimit('owned watchers did not stop; cleanup snapshots refused');
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
     if (fs.existsSync(path.join(root, 'ownership.json'))) {
       const state = JSON.parse(read(path.join(root, 'ownership.json')));
       const cleaned = await cleanupWorkspaces({ root, evidence, native: (args) =>
@@ -312,7 +327,7 @@ try {
     if (focusError) throw focusError;
     const binary = run('which', ['herdr']).stdout.trim();
     write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
-    for (const file of ['herdr.mjs', 'receipts.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
+    for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     write(path.join(bin, 'herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'herdr.mjs'))} "$@"\n`); fs.chmodSync(path.join(bin, 'herdr'), 0o755);
     for (const name of ['codex', 'claude', 'ai', 'cmem-domain', 'launchctl']) {

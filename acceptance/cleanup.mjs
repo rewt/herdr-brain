@@ -1,41 +1,66 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { receiptOwnership, implicitParents, saveCreation } from './receipts.mjs';
+import { receiptOwnership, recoverCreations, saveCreation } from './receipts.mjs';
+import { stopAndAwaitProducers } from './producers.mjs';
 
-export async function cleanupWorkspaces({ root, evidence, native }) {
+export async function cleanupWorkspaces({ root, evidence, native, producerTimeoutMs }) {
+  fs.mkdirSync(evidence, { recursive: true });
+  // No inventory, ledger or receipt snapshot is valid while a producer can
+  // still create or finish journaling a native call. Refuse cleanup on timeout.
+  try { await stopAndAwaitProducers(root, { timeoutMs: producerTimeoutMs }); }
+  catch (error) {
+    const result = { remaining: [], errors: [`producer drain: ${error.message}`] };
+    fs.writeFileSync(path.join(evidence, 'cleanup-residue.json'), JSON.stringify(result, null, 2));
+    return result;
+  }
+  fs.writeFileSync(path.join(evidence, 'producers-drained.json'), JSON.stringify({ at: Date.now() }));
   const state = JSON.parse(fs.readFileSync(path.join(root, 'ownership.json'), 'utf8'));
   const owned = { ...state, ...receiptOwnership(root, state) };
-  const errors = [...owned.receiptErrors];
-  let before, after;
+  const errors = [...owned.receiptErrors], intents = [], attempted = new Set();
+  let before, reconciled, after;
   const inventory = async () => {
     const rows = (await native(['workspace', 'list'])).workspaces;
     if (!Array.isArray(rows)) throw new Error('native workspace list omitted its inventory');
     return rows;
   };
-  try { before = await inventory(); }
-  catch (error) { errors.push(`workspace inventory: ${error.message}`); }
-  const intents = path.join(root, 'creation-intents.jsonl');
-  if (before && fs.existsSync(intents)) for (const [index, line] of fs.readFileSync(intents, 'utf8').trim().split('\n').entries()) {
+  const file = path.join(root, 'creation-intents.jsonl');
+  if (fs.existsSync(file)) for (const [index, line] of fs.readFileSync(file, 'utf8').trim().split('\n').entries()) {
     if (!line) continue;
-    try {
-      const intent = JSON.parse(line);
-      for (const workspace of implicitParents(intent, before)) {
-        if (owned.workspaces.includes(workspace.workspace_id)) continue;
-        saveCreation(root, intent.args, { workspace });
-        owned.workspaces.push(workspace.workspace_id);
-      }
-    } catch (error) { errors.push(`creation intent line ${index + 1}: ${error.message}`); }
+    try { intents.push(JSON.parse(line)); }
+    catch (error) { errors.push(`creation intent line ${index + 1}: ${error.message}`); }
   }
-  // A failed get is never evidence that a workspace has disappeared. Use the
-  // raw native inventory, and still attempt every receipt if listing failed.
-  for (const id of [...owned.workspaces].reverse()) {
-    if (before && !before.some((row) => row.workspace_id === id)) continue;
-    try { await native(['workspace', 'close', id]); }
-    catch (error) { errors.push(`workspace ${id}: ${error.message}`); }
-  }
-  try { after = await inventory(); }
-  catch (error) { errors.push(`workspace audit: ${error.message}`); }
-  const inside = (value) => {
+  const reconcile = async rows => {
+    // Replay again after closing, including any receipt completed during drain.
+    const latest = receiptOwnership(root, JSON.parse(fs.readFileSync(path.join(root, 'ownership.json'), 'utf8')));
+    for (const key of ['workspaces', 'panes', 'tabs']) owned[key] = [...new Set([...owned[key], ...latest[key]])];
+    errors.push(...latest.receiptErrors);
+    if (!rows) return;
+    for (const intent of intents) {
+      try {
+        for (const workspace of await recoverCreations(intent, rows, native)) {
+          if (owned.workspaces.includes(workspace.workspace_id)) continue;
+          saveCreation(root, intent.args, { workspace });
+          owned.workspaces.push(workspace.workspace_id);
+        }
+      } catch (error) { errors.push(`creation recovery: ${error.message}`); }
+    }
+  };
+  const close = async rows => {
+    // A failed get/list never proves disappearance. If listing failed, still
+    // attempt every receipt, and keep failures visible in the final audit.
+    for (const id of [...owned.workspaces].reverse()) {
+      if (attempted.has(id) || (rows && !rows.some(row => row.workspace_id === id))) continue;
+      attempted.add(id);
+      try { await native(['workspace', 'close', id]); }
+      catch (error) { errors.push(`workspace ${id}: ${error.message}`); }
+    }
+  };
+  try { before = await inventory(); } catch (error) { errors.push(`workspace inventory: ${error.message}`); }
+  await reconcile(before); await close(before);
+  try { reconciled = await inventory(); } catch (error) { errors.push(`workspace reconciliation: ${error.message}`); }
+  await reconcile(reconciled); await close(reconciled);
+  try { after = await inventory(); } catch (error) { errors.push(`workspace audit: ${error.message}`); }
+  const inside = value => {
     if (!value) return false;
     return [root, ...(state.creationRoots ?? [])].some(base => {
       const relative = path.relative(base, path.resolve(value));
@@ -43,10 +68,12 @@ export async function cleanupWorkspaces({ root, evidence, native }) {
     });
   };
   const remaining = (after ?? []).filter(row => owned.workspaces.includes(row.workspace_id) ||
-    inside(row.worktree?.checkout_path ?? row.cwd));
+    inside(row.worktree?.checkout_path ?? row.cwd) ||
+    (!row.worktree?.checkout_path && !row.cwd && intents.some(intent =>
+      intent.label && row.label === intent.label && !intent.before.includes(row.workspace_id))));
   for (const row of remaining) errors.push(`workspace left: ${row.workspace_id} (${row.label ?? 'unlabelled'})`);
-  fs.mkdirSync(evidence, { recursive: true });
+  const uniqueErrors = [...new Set(errors)];
   fs.writeFileSync(path.join(evidence, 'ownership.json'), JSON.stringify(owned, null, 2));
-  fs.writeFileSync(path.join(evidence, 'cleanup-residue.json'), JSON.stringify({ workspaces: remaining, errors, before, after }, null, 2));
-  return { owned, remaining, errors };
+  fs.writeFileSync(path.join(evidence, 'cleanup-residue.json'), JSON.stringify({ workspaces: remaining, errors: uniqueErrors, before, reconciled, after }, null, 2));
+  return { owned, remaining, errors: uniqueErrors };
 }

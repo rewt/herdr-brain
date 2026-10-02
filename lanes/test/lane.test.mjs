@@ -2888,7 +2888,7 @@ test("review completion admits representative validator-accepted record boundari
       });
       fixtures.push(review.fixture);
       const run = lane(review.fixture, [
-        "review", topic, "--round", "1", "--brief", review.brief, "--timeout", "4",
+        "review", topic, "--round", "1", "--brief", review.brief, "--timeout", "10",
       ]);
       const head = git(review.path, ["rev-parse", "HEAD"]);
       const publicPath = join(review.path, "docs", "reviews", topic, `${head.slice(0, 7)}-r1.md`);

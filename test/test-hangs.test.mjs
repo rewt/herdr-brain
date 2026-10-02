@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
+import { killProcesses, registerProcess } from './helpers/processes.mjs';
 
 const helper = new URL('./helpers/bounded-test.mjs', import.meta.url).href;
 const childHelper = new URL('./helpers/child.mjs', import.meta.url).href;
@@ -68,5 +69,58 @@ while(true) {}
     assert.ok((result.stdout + result.stderr).includes(f.file), result.stdout + result.stderr);
     assert.match(result.stdout + result.stderr, kind === 'file' ? /testTimeoutFailure/ : /Test suite exceeded 1000ms/);
     assertGone(Number(fs.readFileSync(path.join(f.root, 'pid'), 'utf8')));
+  });
+}
+
+for (const signal of ['SIGTERM', 'SIGKILL']) {
+  test(`${signal} of an outer runner reaps every nested worker and blocked fixture descendant`, async (t) => {
+    const owned = [];
+    // If this regression fails, its reproducer must still leave no live fixtures.
+    t.after(() => killProcesses(owned));
+    const f = fixture(t, (root) => {
+      const receipt = path.join(root, 'inner.json');
+      const shell = `echo $$ > '${root}/shell'; sleep 60 & echo $! > '${root}/sleep'; wait`;
+      const nested = path.join(root, 'nested.test.mjs');
+      fs.writeFileSync(nested, `import test from ${JSON.stringify(helper)};
+import {spawnChild} from ${JSON.stringify(childHelper)};
+import fs from 'node:fs';
+test('nested blocked loop',async(t)=>{
+const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(shell)}]);
+while(!fs.existsSync(${JSON.stringify(path.join(root, 'sleep'))}) || !fs.readFileSync(${JSON.stringify(path.join(root, 'sleep'))},'utf8').trim()) await new Promise(r=>setTimeout(r,10));
+fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,shell:child.pid,sleep:Number(fs.readFileSync(${JSON.stringify(path.join(root, 'sleep'))},'utf8'))}));
+fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
+while(true) {}
+});`);
+      const outer = path.join(root, 'outer.json');
+      return `test('enclosing nested runner',async(t)=>{
+const child=spawnChild(t,process.execPath,[${JSON.stringify(runner)},${JSON.stringify(nested)}]);
+fs.writeFileSync(${JSON.stringify(outer + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,runner:child.pid}));
+fs.renameSync(${JSON.stringify(outer + '.tmp')},${JSON.stringify(outer)});
+await waitForExit(child);
+});`;
+    });
+    const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
+    const outer = spawnChild(t, process.execPath, [runner, f.file]);
+    const deadline = Date.now() + 10_000;
+    while (!fs.existsSync(path.join(f.root, 'inner.json')) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(fs.existsSync(path.join(f.root, 'inner.json')), 'nested fixture never reached its blocked loop');
+    const first = JSON.parse(fs.readFileSync(path.join(f.root, 'outer.json'), 'utf8'));
+    const second = JSON.parse(fs.readFileSync(path.join(f.root, 'inner.json'), 'utf8'));
+    for (const [pid, group] of [
+      [outer.pid, true], [first.worker, true], [first.file, false], [first.runner, true],
+      [second.worker, true], [second.file, false], [second.shell, true], [second.sleep, false],
+    ]) owned.push(registerProcess(pid, group));
+    outer.kill(signal);
+    const alive = () => owned.filter(({ pid }) => {
+      try { process.kill(pid, 0); return true; } catch (error) { if (error.code !== 'ESRCH') throw error; return false; }
+    });
+    const cleanupDeadline = Date.now() + 5000;
+    while (alive().length && Date.now() < cleanupDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual(alive(), [], 'an outer cancellation left a nested descendant alive');
+    const result = await waitForExit(outer);
+    assert.equal(signal === 'SIGKILL' ? result.signal : result.code, signal === 'SIGKILL' ? 'SIGKILL' : 1, result.stdout + result.stderr);
+    assert.doesNotThrow(() => process.kill(sentinel.pid, 0), 'cleanup killed an unrelated fixture');
+    sentinel.kill('SIGKILL');
+    await waitForExit(sentinel);
   });
 }

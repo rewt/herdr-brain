@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { killProcesses } from './processes.mjs';
+import { killProcesses, processRegistries, registerProcess } from './processes.mjs';
 
 const argv = process.argv.slice(2);
 const worker = argv[0] === '--worker';
@@ -23,6 +23,18 @@ const suiteTimeout = bound('suite-timeout', 360_000, 540_000);
 if (!files.length) throw new Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] TEST_FILES...');
 
 if (worker) {
+  // A worker must not start fixtures before its parent registers its group.
+  // IPC loss also covers SIGKILL, for which the parent's hooks cannot run.
+  const lostParent = () => {
+    const registry = process.env.TEST_PROCESS_REGISTRY;
+    const entries = fs.readFileSync(registry, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    fs.rmSync(path.dirname(registry), { recursive: true, force: true });
+    killProcesses(entries);
+    process.exit(1);
+  };
+  process.once('disconnect', lostParent);
+  await new Promise((resolve) => process.once('message', resolve));
+  process.channel.unref();
   const stream = run({ files, concurrency: 4, timeout: fileTimeout });
   stream.on('test:fail', () => { process.exitCode = 1; });
   stream.compose(tap).pipe(process.stdout);
@@ -30,12 +42,22 @@ if (worker) {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'bounded-tests-'));
   const registry = path.join(scratch, 'processes.jsonl');
   fs.writeFileSync(registry, '');
-  const env = { ...process.env, TEST_PROCESS_REGISTRY: registry };
+  const ancestors = processRegistries();
+  const registries = [registry, ...ancestors];
+  const env = {
+    ...process.env,
+    TEST_PROCESS_REGISTRY: registry,
+    TEST_PROCESS_ANCESTOR_REGISTRIES: JSON.stringify(ancestors),
+  };
   delete env.NODE_TEST_CONTEXT; // A test may launch an independent regression suite.
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--worker', ...argv], {
-    detached: process.platform !== 'win32', stdio: ['ignore', 'inherit', 'inherit'],
+    detached: process.platform !== 'win32', stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     env,
   });
+  if (child.pid) {
+    registerProcess(child.pid, process.platform !== 'win32', registries);
+    child.send('start');
+  }
   let cleaned = false;
   const kill = () => {
     if (cleaned) return;

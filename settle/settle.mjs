@@ -54,6 +54,14 @@ function recordState() {
   const snapshot = JSON.parse(record(['status', '--json']));
   return { items: new Map(snapshot.items.map((i) => [i.id, i])), runs: new Map(snapshot.runs.map((r) => [r.id, r])) };
 }
+function recordedReportProblem(state) {
+  const run = state.runs.get(id);
+  if (!run || run.item !== job.item) return `The requested run ${id} no longer belongs to this item`;
+  if (run.abandoned) return `${id} was abandoned; its report cannot authorize settlement`;
+  if (!run.report) return `The requested report for ${id} is not recorded; settle cannot act on it`;
+  if (run.report.sha256 !== job.reportHash) return `The recorded report hash for ${id} does not match the captured report; inspect the evidence`;
+  return null;
+}
 function superseded(state, except = []) {
   const item = state.items.get(job.item);
   const later = laterRuns(state, id).filter((r) => !except.includes(r.id));
@@ -82,8 +90,8 @@ function unchanged({ reviewOnly = false } = {}) {
 function cleanCanonical() {
   if (git(['status', '--porcelain=v1', '--untracked-files=all'], job.repo)) throw new Error('canonical checkout is dirty; promotion requires clean worktrees');
 }
-function correctionBlocker(except = []) {
-  const state = recordState(), item = state.items.get(job.item);
+function correctionBlocker(except = [], state = recordState()) {
+  const item = state.items.get(job.item);
   const stale = superseded(state, except);
   if (stale) return stale;
   const blockers = item.blocked_by.filter((id) => !releases(state, id, state.items.get(id).status));
@@ -143,7 +151,16 @@ function fix() {
   // A reviewer can finish after the operator has stopped or blocked this item.
   // Recheck immediately before launching/retrying, but allow receipt adoption.
   if (recovery?.value.stage !== 'complete') {
-    const reason = correctionBlocker(recovery ? [recovery.value.run] : []);
+    const state = recordState();
+    let correction = recovery?.value.run;
+    if (recovery?.value.stage === 'starting' && !correction) {
+      // Record start can commit before its response is lost. Identify only the
+      // unique run linked to this request; dispatch adopts it under its own lock.
+      const matches = [...state.runs.values()].filter((r) => r.item === job.item && r.meta?.dispatch_journal === recovery.file);
+      if (matches.length > 1) return escalate(`Fix record start has multiple matching runs (${matches.map((r) => r.id).join(', ')}); inspect the dispatch journal before resuming`);
+      correction = matches[0]?.id;
+    }
+    const reason = correctionBlocker(correction ? [correction] : [], state);
     if (reason) return escalate(reason);
   }
   if (job.stage === 'dispatching') {
@@ -191,7 +208,10 @@ function main() {
     if (job.common !== identity || job.workspace !== workspace || job.org !== opt.org) throw new Error('settle receipt belongs to a different project or record');
     if (job.stage === 'complete') {
       if (job.result.result === 'promotable') {
-        const stale = superseded(recordState());
+        const state = recordState();
+        const invalid = recordedReportProblem(state);
+        if (invalid) return escalate(invalid);
+        const stale = superseded(state);
         if (stale) return escalate(stale);
         unchanged(); cleanCanonical();
         if (activeWork().length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed; inspect current work and blockers');
@@ -241,19 +261,29 @@ function main() {
     job.report = evidence('report.md', reportText); save();
   }
   if (!job.report) { job.report = evidence('report.md', job.reportText); save(); }
+  const state = recordState();
+  if (job.stage !== 'record') {
+    const invalid = recordedReportProblem(state);
+    if (invalid) return escalate(invalid);
+  }
   // Completed newer runs remain authoritative even though they are no longer
   // active. Dispatch recovery separately exempts only its own correction run.
   if (job.stage !== 'dispatching') {
-    const stale = superseded(recordState());
+    const stale = superseded(state);
     if (stale) return escalate(stale);
   }
   if (job.stage === 'record') {
     record(['check', job.report]);
     try { record(['ingest', job.report, '--run', id, '--if-current-run', id]); }
     catch (error) { return escalate(`Conditional report ingestion refused: ${error.message}`); }
+    // Exit zero can mean intake skipped an abandoned run. The record's immutable
+    // receipt, rather than CLI success text, proves which report was ingested.
+    const recorded = recordState();
+    const invalid = recordedReportProblem(recorded);
+    if (invalid) return escalate(invalid);
     // Keep worker-done visible as reported while review is pending.
     if (show(job.item).closed?.as === 'dropped') return escalate('The item was dropped; the supervisor must decide whether this late report changes the plan');
-    const stale = superseded(recordState());
+    const stale = superseded(recorded);
     if (stale) return escalate(stale);
     if (job.outcome === 'done') {
       // Ownership and latest-run checks are atomic with this record mutation.

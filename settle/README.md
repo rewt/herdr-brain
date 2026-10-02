@@ -31,7 +31,13 @@ registered lane, clean tree, HEAD, base branch and validation. The reviewer gets
 the actual report, original ask, acceptance, diff pointer and validation log and
 checks material claims against code. A `done` report never substitutes for this
 judgment. Already ingested reports use the record's immutable copy; subsequent
-edits to the source cannot silently replace it. Report-provided commands are
+edits to the source cannot silently replace it. After intake, settle confirms
+from the record that the requested run is not abandoned and that its recorded
+report hash matches the captured report. A successful CLI exit alone is not a
+receipt: abandoned intake can skip the report with exit zero. Missing or different
+receipts receive a handoff before reopening, validation, review or correction.
+Resuming a pending settlement and returning saved readiness repeat this check.
+Report-provided commands are
 never executed. Blocked, failed and needs-human reports are recorded and handed
 to the supervisor with their substance and recorded outcomes intact, without
 guessing a scope decision. Settle acts only on the requested run. A later run or
@@ -66,7 +72,11 @@ NEEDS-WORK, FAIL or red validation produce a correction brief and call dispatch
 for a new run on the same item/lane. Immediately before a new launch or incomplete
 dispatch retry, settle checks current item closure, blockers and concurrent runs;
 an operator drop or new blocker receives a handoff. Recovery exempts only its
-recorded correction run from supersession and overlap checks. It checks unresolved
+recorded correction run from supersession and overlap checks. If record start
+committed but its response was lost, settle identifies the unique run linked to
+the matching dispatch journal before these checks. Dispatch then adopts that run
+under its own journal lock; settle neither starts a replacement nor edits dispatch's
+journal. Multiple linked runs remain uncertain and require inspection. It checks unresolved
 blocker links and waiting report outcomes independently of derived active status;
 a declined question still blocks, while resolved blockers permit recovery.
 A completed dispatch receipt

@@ -7,7 +7,7 @@ import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const rootTool = fileURLToPath(new URL('../../', import.meta.url));
-export function fixture(t, { source = rootTool } = {}) {
+export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-test-')));
   const repo = path.join(root, 'project'), workspace = path.join(root, 'lane'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo); fs.mkdirSync(bin);
@@ -15,6 +15,7 @@ export function fixture(t, { source = rootTool } = {}) {
     HOME: path.join(root, 'home'), XDG_CONFIG_HOME: path.join(root, 'xdg'),
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|MONITOR_)/.test(key) || (key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(key))) delete env[key];
+  env.ORG_ACTOR = actor;
   delete env.NODE_TEST_CONTEXT;
   fs.mkdirSync(env.HOME); fs.mkdirSync(env.XDG_CONFIG_HOME);
   const exec = (file, args, cwd = repo, extra = {}) => spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 45_000 });

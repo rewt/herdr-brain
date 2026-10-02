@@ -10,7 +10,7 @@ import { createProcessTracker, killProcess } from '../../test/helpers/processes.
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const rootTool = fileURLToPath(new URL('../../', import.meta.url));
-export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = {}) {
+export function fixture(t, { source = rootTool, actor = 'settle-test-agent', execute = spawnSync } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-test-')));
   const repo = path.join(root, 'project'), workspace = path.join(root, 'lane'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo); fs.mkdirSync(bin);
@@ -43,10 +43,38 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
       watchers.set(file, { pid: row.pid, identity: row.identity, command: row.command, group: false });
     }
   };
+  // Register ownership cleanup before any setup command can time out.
+  let cleaned = false;
+  const cleanup = async () => {
+    if (cleaned) return;
+    // Child hooks were registered later than this fixture hook. Await their
+    // bounded completion here before stopping watchers and deleting any files.
+    // Failed/unconfirmed completion retains the directory for inspection.
+    await Promise.all(pending);
+    for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
+    const deadline = Date.now() + 2000;
+    while (watchers.size && Date.now() < deadline) {
+      const current = tracker.snapshot();
+      if (!current.ok) throw Error('Cannot confirm watcher shutdown');
+      for (const [file, entry] of watchers) {
+        const row = current.value.get(entry.pid);
+        if (!row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command) watchers.delete(file);
+      }
+      if (watchers.size) await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.equal(watchers.size, 0, 'fixture watchers did not shut down');
+    await stopFixtureInbox(path.join(repo, '.org/supervisor/inbox.log'), {
+      script: path.join(source, 'supervisor/prompt-supervisor.mjs'), tracker,
+    });
+    // A just-terminated watcher can still finish a scratch log write. Retry
+    // transient removal races briefly; cleanup remains bounded and owned here.
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    cleaned = true;
+  };
+  t.after(cleanup);
   const exec = (file, args, cwd = repo, extra = {}) => {
-    const result = spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 15_000 });
-    rememberWatchers();
-    return result;
+    try { return execute(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 15_000 }); }
+    finally { rememberWatchers(); }
   };
   const checked = (file, args, cwd, extra) => { const r = exec(file, args, cwd, extra); assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim(); };
   const git = (args, cwd = repo) => checked('git', args, cwd);
@@ -77,34 +105,6 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
     pending.push(done);
     return { child, done };
   };
-  let cleaned = false;
-  const cleanup = async () => {
-    if (cleaned) return;
-    // Child hooks were registered later than this fixture hook. Await their
-    // bounded completion here before stopping watchers and deleting any files.
-    // Failed/unconfirmed completion retains the directory for inspection.
-    await Promise.all(pending);
-    for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
-    const deadline = Date.now() + 2000;
-    while (watchers.size && Date.now() < deadline) {
-      const current = tracker.snapshot();
-      if (!current.ok) throw Error('Cannot confirm watcher shutdown');
-      for (const [file, entry] of watchers) {
-        const row = current.value.get(entry.pid);
-        if (!row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command) watchers.delete(file);
-      }
-      if (watchers.size) await new Promise(resolve => setTimeout(resolve, 20));
-    }
-    assert.equal(watchers.size, 0, 'fixture watchers did not shut down');
-    await stopFixtureInbox(path.join(org, 'supervisor/inbox.log'), {
-      script: path.join(source, 'supervisor/prompt-supervisor.mjs'), tracker,
-    });
-    // A just-terminated watcher can still finish a scratch log write. Retry
-    // transient removal races briefly; cleanup remains bounded and owned here.
-    fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-    cleaned = true;
-  };
-  t.after(cleanup);
   return { root, repo, workspace, org, env, exec, record, start, show, report, commit, git, settle, retry, calls, concurrent, source, cleanup };
 }
 const fake = `#!/usr/bin/env node

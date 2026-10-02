@@ -9,7 +9,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
 import { auditCopies, relocate, within, copiedSandbox, workspaceIdentityCutover } from './security.mjs';
-import { HarnessLimit, Pending, commandFailure, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
+import { HarnessLimit, Pending, commandFailure, withCommandContext, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
 import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
 import { stopProducers, awaitProducers } from './producers.mjs';
 import { safeGitArgs } from './verify.mjs';
@@ -68,7 +68,9 @@ function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_00
   if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd, status: r.status, error: r.error?.message,
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
   if (r.error?.code === 'ETIMEDOUT' || (ok && (r.error || r.status !== 0))) {
-    const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? (String(r.stdout ?? '') + String(r.stderr ?? '')).trim()}`;
+    const diagnostic = [r.error?.message, ((binary ? '' : String(r.stdout ?? '')) + String(r.stderr ?? '')).trim()]
+      .filter(Boolean).join('\n');
+    const message = `${path.basename(command)} ${args[0]}: ${diagnostic}`;
     throw commandFailure(message, { scratchRoots, error: r.error, load: measuredLoad });
   }
   return r;
@@ -795,8 +797,8 @@ try {
         h('agent', 'wait', busy, '--until', 'idle', '--until', 'done', '--timeout', '10000');
         h('agent', 'rename', pane, target);
         receipt.beforeRetry = snapshot();
-        try { receipt.retried = execute('.lane/supervisor/continue.sh', options, { timeout: 90_000 }); }
-        catch (error) { throw commandFailure(`busy refusal passed; same-request retry failed: ${error.message}`); }
+        receipt.retried = withCommandContext('busy refusal passed; same-request retry failed',
+          () => execute('.lane/supervisor/continue.sh', options, { timeout: 90_000 }));
         receipt.afterRetry = snapshot();
         receipt.session = assertLaunchPrompted(receipt.beforeRetry, receipt.afterRetry);
       } finally { write(path.join(evidence, 'cutover-busy-retry.json'), JSON.stringify(receipt, null, 2)); }
@@ -1000,13 +1002,13 @@ try {
   });
   await test(cases.settle, async () => {
     requireCandidate('settle/settle.mjs');
-    const result = await settleCase(candidate);
+    const result = await settleCase(candidate, { load, until });
     fs.appendFileSync(logFile, JSON.stringify(result) + '\n');
     return result.detail;
   });
   await test(cases.supervisor, async () => {
     requireCandidate('supervisor/supervisor.mjs');
-    const result = await supervisorCase(candidate);
+    const result = await supervisorCase(candidate, { load, until });
     fs.appendFileSync(logFile, JSON.stringify(result) + '\n');
     return result.detail;
   });

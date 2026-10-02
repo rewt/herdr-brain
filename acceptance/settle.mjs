@@ -4,22 +4,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { fixture } from '../settle/test/fixture.mjs';
+import { loadAwareCommand } from './commands.mjs';
+import { waitUntil } from './load.mjs';
 
-export async function settleCase(candidate) {
+export async function settleCase(candidate, { load, execute = spawnSync,
+  until = (fn, label, ms) => waitUntil(fn, label, ms, { load }) } = {}) {
   const cleanup = [], receipts = [];
-  const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate });
   try {
+    const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate,
+      actor: 'settle-acceptance-worker', execute: loadAwareCommand(execute, load) });
     const run = f.start(); f.commit('wrong\n'); f.report(run);
     const first = f.settle(run); assert.equal(first.status, 0, first.stderr);
     const fix = JSON.parse(first.stdout); receipts.push(fix);
     assert.equal(fix.result, 'fix_round');
     assert.notEqual(fix.fix.run, run); assert.equal(f.show(fix.fix.run).item, f.show(run).item);
     assert.equal(f.show(fix.fix.run).workspace, f.workspace);
-    const deadline = Date.now() + 8000;
-    while (!f.calls().some((a) => a[3]?.includes(`[org-report] run=${fix.fix.run} `)) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
-    assert.ok(f.calls().some((a) => a[3]?.includes(`[org-report] run=${fix.fix.run} `)), 'watch delivered the fix report');
+    await until(() => f.calls().some((a) => a[3]?.includes(`[org-report] run=${fix.fix.run} `)),
+      'watch delivered the fix report', 8000);
     const final = f.settle(fix.fix.run); assert.equal(final.status, 0, final.stderr);
     const settled = JSON.parse(final.stdout); receipts.push(settled);
     assert.equal(settled.result, 'promotable'); assert.equal(settled.validation.exit_code, 0);
@@ -29,7 +33,7 @@ export async function settleCase(candidate) {
       .filter((name) => fs.statSync(path.join(f.org, 'settle', name)).isFile())
       .map((name) => [name, fs.readFileSync(path.join(f.org, 'settle', name), 'utf8')]));
     return { receipts, calls: f.calls(), artifacts, detail: `${run} -> ${fix.fix.run}: actual record/review/check/dispatch/watch, no project config, scripted transport and claim check, no model` };
-  } finally { cleanup.forEach((fn) => fn()); }
+  } finally { for (const fn of cleanup) await fn(); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const candidate = path.resolve(process.argv[2] ?? fileURLToPath(new URL('../', import.meta.url)));

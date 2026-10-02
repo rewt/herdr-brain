@@ -3,28 +3,28 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { fixture } from '../settle/test/fixture.mjs';
+import { loadAwareCommand } from './commands.mjs';
+import { waitUntil } from './load.mjs';
 
-export async function supervisorCase(candidate) {
+export async function supervisorCase(candidate, { load, execute = spawnSync,
+  until = (fn, label, ms) => waitUntil(fn, label, ms, { load }) } = {}) {
   const cleanup = [], receipts = [];
-  const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate, actor: 'supervisor-acceptance-worker' });
-  const { createEntry } = await import(pathToFileURL(path.join(candidate, 'discovery/runtime.mjs')));
-  const { entryPolicy } = await import(pathToFileURL(path.join(candidate, 'discovery/policy.mjs')));
   const previousActor = process.env.ORG_ACTOR;
   process.env.ORG_ACTOR = 'supervisor-acceptance-entry';
-  const command = (args) => {
-    const r = f.exec(process.execPath, [path.join(candidate, 'supervisor/supervisor.mjs'), ...args]);
-    assert.equal(r.status, 0, r.stderr || r.stdout); return JSON.parse(r.stdout);
-  };
-  const entry = () => createEntry({ cwd: f.repo, role: 'supervisor', runtimeDir: path.join(f.root, 'entry'), worktreeRoot: path.join(f.root, 'workers') });
-  const until = async (fn, label) => {
-    const end = Date.now() + 10000;
-    while (!fn() && Date.now() < end) await new Promise((r) => setTimeout(r, 40));
-    assert.ok(fn(), label);
-  };
-  const watchNotice = (run) => f.calls().findLast((a) => a[0] === 'agent' && a[1] === 'prompt' && a[3]?.startsWith(`[org-report] run=${run} `))?.[3];
   try {
+    const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate,
+      actor: 'supervisor-acceptance-worker', execute: loadAwareCommand(execute, load) });
+    const { createEntry } = await import(pathToFileURL(path.join(candidate, 'discovery/runtime.mjs')));
+    const { entryPolicy } = await import(pathToFileURL(path.join(candidate, 'discovery/policy.mjs')));
+    const command = (args) => {
+      const r = f.exec(process.execPath, [path.join(candidate, 'supervisor/supervisor.mjs'), ...args]);
+      assert.equal(r.status, 0, r.stderr || r.stdout); return JSON.parse(r.stdout);
+    };
+    const entry = () => createEntry({ cwd: f.repo, role: 'supervisor', runtimeDir: path.join(f.root, 'entry'), worktreeRoot: path.join(f.root, 'workers') });
+    const watchNotice = (run) => f.calls().findLast((a) => a[0] === 'agent' && a[1] === 'prompt' && a[3]?.startsWith(`[org-report] run=${run} `))?.[3];
     // The shared fixture seeds a record for settle tests. Remove only this
     // owned scratch record so supervisor entry itself must bootstrap it.
     fs.rmSync(f.org, { recursive: true, force: true });
@@ -54,7 +54,7 @@ export async function supervisorCase(candidate) {
     assert.ok(watchNotice(run), 'actual watch delivered the original final notice');
     const handled = command(['handle', '--notice', watchNotice(run), '--role', 'supervisor', '--brief', path.join(f.root, 'ask with spaces.md'), '--to', 'supervisor-test']);
     assert.equal(handled.result, 'fix_round'); receipts.push(handled);
-    await until(() => watchNotice(handled.fix.run), 'actual watch delivered correction notice');
+    await until(() => watchNotice(handled.fix.run), 'actual watch delivered correction notice', 10000);
     const settled = command(['handle', '--notice', watchNotice(handled.fix.run), '--role', 'supervisor']);
     assert.equal(settled.result, 'promotable'); receipts.push(settled);
     const reviews = f.calls().filter((a) => a[1] === 'prompt' && a[3]?.includes('Private record file:')).length;
@@ -67,7 +67,7 @@ export async function supervisorCase(candidate) {
     receipts.push(promoted);
     const queueFile = path.join(f.repo, '.git/promote/queue.json');
     const queue = () => JSON.parse(fs.readFileSync(queueFile, 'utf8'));
-    await until(() => queue().results.length === 1, 'finite queue completed');
+    await until(() => queue().results.length === 1, 'finite queue completed', 10000);
     assert.equal(queue().results[0].outcome, 'promoted', JSON.stringify(queue().results));
     assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
     assert.ok(!fs.existsSync(f.workspace), 'promoted lane closed');
@@ -114,7 +114,7 @@ export async function supervisorCase(candidate) {
       detail: `${run} -> ${handled.fix.run}: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicate original reports return supersession, correction reports reuse receipts; queue and final-report replays preserve explicit reopening; no config or model` };
   } finally {
     if (previousActor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = previousActor;
-    cleanup.forEach((fn) => fn());
+    for (const fn of cleanup) await fn();
   }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

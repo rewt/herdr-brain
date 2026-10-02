@@ -43,14 +43,38 @@ function scratchEnvironmentError(error, scratchRoots) {
   return paths.length > 0 && paths.every((file) => typeof file === 'string'
     && scratchRoots.some((root) => scratchPath(file, root)));
 }
+function independentAssertionFailure(message) {
+  // Read diagnostics belonging to a failed TAP result, never success names or
+  // arbitrary mentions in combined output. A process can fail an assertion and
+  // subsequently hit its teardown deadline; the assertion retains precedence.
+  return message.split(/(?=^[ \t]*(?:not )?ok \d+[ \t-])/m).some((block) =>
+    /^[ \t]*not ok \d+[ \t-]/.test(block)
+    && /^[ \t]*(?:code:[ \t]*['"]?ERR_ASSERTION\b|name:[ \t]*['"]?AssertionError\b)/m.test(block));
+}
 export function commandFailure(message, { scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [], error, load } = {}) {
   if (isProductBoundary(message)) return new ProductBoundary(message);
+  if (independentAssertionFailure(message)) {
+    const failure = new Error(message); failure.code = 'ERR_ASSERTION'; return failure;
+  }
   if (isHarnessBoundary(message) || scratchEnvironmentError({ ...error, message }, scratchRoots)) return new HarnessLimit(message);
-  return load && (error?.code === 'ETIMEDOUT' || isTimeout(message))
+  // Successful test names and unrelated diagnostics can mention timeouts.
+  // Only the process API's typed timeout establishes a child deadline here.
+  return error?.code === 'ETIMEDOUT'
     ? new LoadTimeout(message, load) : new Error(message);
+}
+
+export function withCommandContext(context, command) {
+  try { return command(); }
+  catch (error) {
+    // Retain the original type, operation samples, code and stack. Rebuilding
+    // from its message would discard evidence that this deadline was measured.
+    error.message = `${context}: ${error.message}`;
+    throw error;
+  }
 }
 export function classifyFailure(error, { cleanup = false, scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [], load } = {}) {
   if (error instanceof ProductBoundary || isProductBoundary(error.message)) return { status: 'FAIL', origin: 'product', detail: error.message };
+  if (error.code === 'ERR_ASSERTION') return { status: 'FAIL', origin: 'product', detail: error.message };
   const measured = error instanceof LoadTimeout ? error.load : load;
   if ((error instanceof LoadTimeout || (error instanceof HarnessLimit && isTimeout(error.message))) && measured?.heavy) {
     return { status: 'PENDING', origin: 'harness', detail: `${loadReason(measured)}; ${error.message}` };

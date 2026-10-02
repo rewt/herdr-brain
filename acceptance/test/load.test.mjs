@@ -59,12 +59,14 @@ test('a wait retains measured contention even if load falls before its deadline'
 
 test('bounded child command and native focus timeouts name measured heavy load', (t) => {
   const f = fixture(t), measured = f.load.snapshot();
-  for (const [message, error] of [['spawnSync ETIMEDOUT', { code: 'ETIMEDOUT' }], ['Herdr request timed out: pane.current', undefined]]) {
+  for (const [message, error] of [['spawnSync ETIMEDOUT', { code: 'ETIMEDOUT' }]]) {
     const failure = commandFailure(message, { error, load: measured });
     assert.ok(failure instanceof LoadTimeout);
     assert.equal(classifyFailure(failure).status, 'PENDING');
     assert.equal(classifyFailure(commandFailure(message, { error, load: { ...measured, heavy: false } })).status, 'FAIL');
   }
+  assert.equal(classifyFailure(commandFailure('Herdr request timed out: pane.current', { load: measured })).status, 'FAIL',
+    'untyped ordinary child output cannot prove which operation failed');
   const result = classifyFailure(new HarnessLimit('operator focus trace incomplete: Herdr request timed out: pane.current'), { load: measured });
   assert.equal(result.status, 'PENDING'); assert.match(result.detail, /measured heavy load/);
 });

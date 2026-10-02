@@ -58,6 +58,14 @@ an unrelated case cannot excuse a later timeout. Focus-monitor timeouts retain
 their existing harness classification and name the run's measured contention.
 Safety refusals and incorrect product behaviour remain FAIL at any load. Waits
 and child commands keep their fixed bounds; load never creates unlimited retries.
+Retry context preserves the original timeout type and operation samples. The
+delegated settle and supervisor cases use the same load-aware waits for report
+and queue receipts, and measure each bounded fixture command. Ordinary child
+output cannot establish a process timeout: timeout words in successful test names
+or diagnostics never downgrade an independent failed assertion. A child deadline
+requires the process API's typed `ETIMEDOUT`; native harness limits retain their
+existing classification. Fixture cleanup is registered before setup commands and
+awaited before either delegated case returns.
 
 After auditing the snapshot, the runner adds owner read/write permission to its
 files and owner read/write/traverse permission to its directories, preserving

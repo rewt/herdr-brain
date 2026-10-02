@@ -1,0 +1,129 @@
+{
+  "run": "R-109",
+  "platform": "darwin",
+  "validation": {
+    "baseline": {
+      "log": "/tmp/R-109-baseline.log",
+      "tests": 658,
+      "pass": 647,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 10,
+      "duration_seconds": 233.768
+    },
+    "pty_integration": {
+      "log": "/tmp/R-109-focused-final.log",
+      "tests": 72,
+      "pass": 72,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 62.045
+    },
+    "plugin_and_hang_guards": {
+      "log": "/tmp/R-109-plugin-final.log",
+      "tests": 59,
+      "pass": 59,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 59.292
+    },
+    "full_before_rebase": {
+      "log": "/tmp/R-109-full-complete.log",
+      "tests": 665,
+      "pass": 655,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 10,
+      "duration_seconds": 236.225
+    },
+    "full_after_rebase": {
+      "log": "/tmp/R-109-rebased-full.log",
+      "tests": 686,
+      "pass": 676,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 10,
+      "duration_seconds": 232.258
+    },
+    "lanes_after_rebase": {
+      "log": "/tmp/R-109-rebased-lanes.log",
+      "tests": 148,
+      "pass": 148,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 365.274
+    },
+    "acceptance_after_rebase": {
+      "log": "/tmp/R-109-rebased-acceptance.log",
+      "tests": 59,
+      "pass": 59,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 36.338
+    },
+    "shell_job_regression": {
+      "log": "/tmp/R-109-shell-job.log",
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 8.003
+    },
+    "parallel_1": {
+      "log": "/tmp/R-109-parallel-complete-1.log",
+      "tests": 45,
+      "pass": 45,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 63.297
+    },
+    "parallel_2": {
+      "log": "/tmp/R-109-parallel-complete-2.log",
+      "tests": 45,
+      "pass": 45,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 63.728
+    },
+    "parallel_3": {
+      "log": "/tmp/R-109-parallel-complete-3.log",
+      "tests": 45,
+      "pass": 45,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_seconds": 62.105
+    }
+  },
+  "pty_stress": {
+    "iterations": 100,
+    "failures": 0,
+    "log": "/tmp/R-109-pty-stress-final.log"
+  },
+  "process_audit": {
+    "capturedGroups": 17,
+    "reusedGroups": [],
+    "survivors": [],
+    "remainingLaneTests": [],
+    "separateFixtures": []
+  },
+  "process_audit_file": "/tmp/R-109-survivors.json",
+  "suite_groups_file": "/tmp/R-109-suite-groups.json",
+  "final_gate": {
+    "command": "node lanes/lane.mjs check",
+    "log": "/tmp/R-109-gate.log",
+    "artifact": ".lane/gate.json",
+    "runs_after_report_commit": true
+  },
+  "limitations": [
+    "Linux pidfd cleanup was inspected but not executed on this macOS host.",
+    "PTY descendants that deliberately create native sessions require their own lifetime owner."
+  ]
+}

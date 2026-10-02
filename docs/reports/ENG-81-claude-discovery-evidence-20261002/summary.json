@@ -1,0 +1,82 @@
+{
+  "harness": "claude",
+  "results": [
+    {
+      "name": "02 Record bootstrap and canonical discovery",
+      "status": "PASS"
+    },
+    {
+      "name": "03 Suggested routes without project configuration",
+      "status": "PASS"
+    },
+    {
+      "name": "04 Installed entry teaches dispatch, watch, worker and supervisor defaults",
+      "status": "PASS"
+    },
+    {
+      "name": "20 Real concurrent own-lane work and sandboxed fast-forward promotion",
+      "status": "FAIL",
+      "error": "session french exited 1/null: \nsession german exited 1/null: ",
+      "cause": "Native Claude result: Not logged in \u00b7 Please run /login (is_error=true)."
+    },
+    {
+      "name": "21 Real routing question waits and actual operator answer applies",
+      "status": "FAIL",
+      "error": "session routing exited 1/null: ",
+      "cause": "Native Claude result: Not logged in \u00b7 Please run /login (is_error=true)."
+    }
+  ],
+  "usage": [
+    {
+      "name": "german",
+      "harness": "claude",
+      "cost_usd": 0,
+      "modelUsage": {},
+      "model": "haiku",
+      "effort": "low",
+      "code": 1,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 0
+    },
+    {
+      "name": "french",
+      "harness": "claude",
+      "cost_usd": 0,
+      "modelUsage": {},
+      "model": "haiku",
+      "effort": "low",
+      "code": 1,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 0
+    },
+    {
+      "name": "routing",
+      "harness": "claude",
+      "cost_usd": 0,
+      "modelUsage": {},
+      "model": "haiku",
+      "effort": "low",
+      "code": 1,
+      "signal": null,
+      "turns": 1,
+      "input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 0
+    }
+  ],
+  "install": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-7VrdY9",
+  "scratch": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-projects-u5goB0",
+  "interrupted": false,
+  "credential_status": "Scratch profiles returned Not logged in; permission to extract existing Keychain credentials was not granted.",
+  "raw_evidence": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-projects-u5goB0/evidence",
+  "scope": "No real Claude model turn completed. Zero input/cache/output tokens and zero reported cost."
+}

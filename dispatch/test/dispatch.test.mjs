@@ -59,17 +59,17 @@ function fixture(t, { realWatch = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo);fs.mkdirSync(bin);
-  const env = { ...process.env, ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
+  const env = { ...process.env, ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
   for(const key of Object.keys(env)) if(key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
-  const exec=(cmd,args,cwd=repo)=>spawnSync(cmd,args,{cwd,env,encoding:'utf8'});
+  const exec=(cmd,args,cwd=repo,overrides={})=>spawnSync(cmd,args,{cwd,env:{...env,...overrides},encoding:'utf8'});
   const git=(args,cwd)=>{const r=exec('git',args,cwd);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   git(['init','-b','main']);git(['config','user.name','Dispatch Tests']);git(['config','user.email','dispatch@example.invalid']);
   fs.writeFileSync(path.join(repo,'seed'),'seed');git(['add','.']);git(['commit','-m','seed']);
   fs.writeFileSync(path.join(repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'model-a',effort:'high'}}}));
   for(const name of ['herdr','lane','watch']) fs.writeFileSync(path.join(bin,name),fake,{mode:0o755});
-  const rec=(args)=>{const r=exec(process.execPath,[RECORD,...args]);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  const rec=(args,overrides={})=>{const r=exec(process.execPath,[RECORD,...args],repo,overrides);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   rec(['init']);const item=rec(['add','Do the work','--role','engineer']).split('\n')[0].match(/ENG-\d+/)[0];
   const brief=path.join(root,'brief with spaces.md');fs.writeFileSync(brief,'# Do the work');
   const common=['--org',org,'--repo',repo,'--lane-cli',path.join(bin,'lane'), ...(realWatch?[]:['--watch-cli',path.join(bin,'watch')])];
@@ -97,13 +97,15 @@ function fixture(t, { realWatch = false } = {}) {
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
 test('dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work', t => {
   const f = fixture(t);
-  f.rec(['priorities', 'add', 'Adoption', '--why=Useful to people']);
+  f.rec(['priorities', 'add', 'Adoption', '--why=Useful to people'], { ORG_ACTOR: 'human' });
   let r = f.start(['--serves=P-404']);
   assert.equal(r.status, 1); assert.match(r.stderr, /unknown priority/);
   assert.equal(f.git(['worktree', 'list', '--porcelain']).includes('lane/topic'), false);
   f.fail('watch'); r = f.start(['--serves=P-1']); assert.equal(r.status, 1);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0], 'utf8'));
   assert.equal(job.serves, 'P-1'); assert.equal(f.show(job.run).meta.serves, 'P-1');
+  assert.equal(f.show(job.run).started.by, 'dispatch-test-agent');
+  assert.equal(JSON.parse(f.rec(['priorities', '--json'])).priorities[0].created.by, 'human');
   assert.match(fs.readFileSync(f.show(job.run).brief_path, 'utf8'), /P-1\*\* Adoption/);
   fs.unlinkSync(path.join(f.root, 'fail'));
   r = f.dispatch(['--retry', job.run, '--serves=P-1']); assert.equal(r.status, 1);
@@ -180,7 +182,7 @@ test('a real detached watcher acknowledges initialization and sheds supervisor p
   while(!f.calls().some(x=>x.type==='herdr'&&x.a[2]===result.agent&&x.pane===null)&&Date.now()<until) await new Promise(resolve=>setTimeout(resolve,20));
   assert.ok(f.calls().some(x=>x.type==='herdr'&&x.a[2]===result.agent&&x.pane===null));
   assert.match(fs.readFileSync(result.watcher.log,'utf8'),/watching R-/);
-  const duplicate=spawnSync(process.execPath,[WATCH,result.run,'--org',f.org,'--detach','--log',path.join(f.root,'duplicate.log')],{cwd:f.repo,env:{...process.env,PATH:`${path.join(f.root,'bin')}:${process.env.PATH}`,FAKE_ROOT:f.root},encoding:'utf8'});
+  const duplicate=spawnSync(process.execPath,[WATCH,result.run,'--org',f.org,'--detach','--log',path.join(f.root,'duplicate.log')],{cwd:f.repo,env:{...process.env,ORG_ACTOR:'dispatch-test-agent',PATH:`${path.join(f.root,'bin')}:${process.env.PATH}`,FAKE_ROOT:f.root},encoding:'utf8'});
   assert.equal(duplicate.status,1);assert.match(fs.readFileSync(path.join(f.root,'duplicate.log'),'utf8'),/another watcher/);
 });
 

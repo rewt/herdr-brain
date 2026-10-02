@@ -82,7 +82,7 @@ process.on('SIGHUP',()=>{fs.writeFileSync(process.env.TEST_HUP,'forwarded');proc
 fs.writeFileSync(process.env.TEST_RECEIPT,JSON.stringify({cwd:process.cwd(),requests:process.env.MONITOR_REQUEST_DIR,pid:process.pid}));
 setInterval(()=>{},1000);`, { mode: 0o755 });
   const { child, ended } = childProcess(t, process.execPath, [path.join(product, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--binary', native, '--'], {
-    cwd: f.repo, env: { ...process.env, TEST_HUP: hup, TEST_RECEIPT: receipt, MONITOR_RUNTIME_DIR: f.options.runtimeDir, MONITOR_WORKTREE_ROOT: f.options.worktreeRoot },
+    cwd: f.repo, env: { ...process.env, ORG_ACTOR: 'lifecycle-test-agent', TEST_HUP: hup, TEST_RECEIPT: receipt, MONITOR_RUNTIME_DIR: f.options.runtimeDir, MONITOR_WORKTREE_ROOT: f.options.worktreeRoot },
   });
   await waitUntil(() => fs.existsSync(receipt), `${kind} native launch`);
   const context = JSON.parse(fs.readFileSync(receipt));

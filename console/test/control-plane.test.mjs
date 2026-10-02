@@ -37,6 +37,39 @@ function fixture(t, deps = {}) {
 }
 const render = (s, cols = 100, rows = 40) => s.frame(cols, rows).lines.map(lineText).join('\n');
 
+test('an overflowing priority confirmation supports keyboard review at 80x20 without saving', async t => {
+  const { session: s, org, cwd } = fixture(t);
+  for (let i = 1; i <= 12; i++) org(['priorities', 'add', `Outcome ${i}: ${'A long outcome with enough context to wrap. '.repeat(3)}`, '--why=Operator choice'], { ORG_ACTOR: 'human' });
+  await s.refresh(); await s.key('P'); render(s, 80, 20);
+  await s.key('', { return: true }); await s.key('u', { ctrl: true }); await s.key('2');
+  await s.key('', { tab: true }); await s.key('Inspect the entire proposed order before saving');
+  await s.key('', { return: true });
+  const file = path.join(cwd, '.org', 'events.jsonl'), bytes = fs.readFileSync(file, 'utf8');
+  const values = [...s.ui.priorityEdit.values];
+  const initial = render(s, 80, 20);
+  assert.ok(s.ui.frame.maxScroll > s.ui.frame.bodyHeight);
+  assert.doesNotMatch(initial, /12\. Outcome 12/);
+  await s.key('', { downArrow: true }); render(s, 80, 20);
+  assert.equal(s.ui.scroll, 1);
+  await s.key('', { upArrow: true }); render(s, 80, 20);
+  assert.equal(s.ui.scroll, 0);
+  const seen = [];
+  while (s.ui.scroll < s.ui.frame.maxScroll) {
+    await s.key('', { pageDown: true }); seen.push(render(s, 80, 20));
+  }
+  assert.match(seen.join('\n'), /12\. Outcome 12/);
+  assert.match(seen.at(-1), /Inspect the entire proposed order/);
+  assert.match(seen.at(-1), /Save priorities/);
+  await s.key('', { pageUp: true }); render(s, 80, 20);
+  assert.ok(s.ui.scroll < s.ui.frame.maxScroll);
+  assert.equal(s.ui.priorityEdit.confirm, true);
+  assert.deepEqual(s.ui.priorityEdit.values, values);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  await s.key('', { escape: true });
+  assert.equal(s.ui.priorityEdit, null);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+});
+
 test('Priorities invites the operator, groups work, reviews CLI ranks and retains stale or cancelled drafts', async t => {
   const { session: s, org, cwd } = fixture(t);
   await s.refresh(); await s.key('P');
@@ -90,7 +123,7 @@ test('Priorities --print confirmation remains read only for both additions and r
   const app = fileURLToPath(new URL('../app.mjs', import.meta.url));
   for (const keys of ['P\\n\\tBecause people need it\\n\\n', 'Pk\\nNew outcome\\tFor the next milestone\\n\\n']) {
     const output = execFileSync(process.execPath, [app, '--modern', '--config', config, '--print', '100x40', '--keys', keys],
-      { cwd, encoding: 'utf8', env: { ...process.env, HERDR_BIN_PATH: '/usr/bin/false', HERDR_ENV: '1', NO_COLOR: '1' } });
+      { cwd, encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'console-test-agent', HERDR_BIN_PATH: '/usr/bin/false', HERDR_ENV: '1', NO_COLOR: '1' } });
     assert.match(output, /--print does not change priorities/);
     assert.equal(fs.readFileSync(file, 'utf8'), bytes);
   }
@@ -176,7 +209,7 @@ test('route CLI uses the canonical Git project, ignores launch override paths, a
   git(['worktree', 'add', '-b', 'lane/test', linked]);
   const marker = path.join(scratch, 'must-not-exist'), model = `opaque; $(touch ${marker})`;
   const r = spawnSync(process.execPath, [bin, 'routes', 'set', 'engineer', `--model=${model}`, '--json'],
-    { cwd: linked, encoding: 'utf8', env: { ...process.env, LANE_CONFIG: path.join(scratch, 'external.json') } });
+    { cwd: linked, encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'console-test-agent', LANE_CONFIG: path.join(scratch, 'external.json') } });
   assert.equal(r.status, 0, r.stderr); assert.equal(JSON.parse(r.stdout).config.routes.engineer.model, model);
   assert.equal(fs.existsSync(marker), false); assert.equal(fs.existsSync(path.join(linked, '.lane.json')), false);
   assert.equal(fs.existsSync(path.join(cwd, '.lane.json')), true); assert.equal(fs.existsSync(path.join(scratch, 'external.json')), false);
@@ -200,7 +233,7 @@ test('--print stays read only even when keys confirm an answer or a route change
   const log = path.join(cwd, '.org/events.jsonl'), before = fs.readFileSync(log, 'utf8');
   for (const keys of ['c\\ny\\n', 'u\\n\\n\\n']) {
     const r = spawnSync(process.execPath, [fileURLToPath(new URL('../app.mjs', import.meta.url)), '--modern', '--config', config, '--print', '100x40', '--keys', keys],
-      { cwd, env: { ...process.env, HERDR_BIN_PATH: herdr }, encoding: 'utf8' });
+      { cwd, env: { ...process.env, ORG_ACTOR: 'console-test-agent', HERDR_BIN_PATH: herdr }, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /--print does not/);
     assert.equal(fs.readFileSync(log, 'utf8'), before, question);
     assert.equal(fs.existsSync(path.join(cwd, '.lane.json')), false);
@@ -228,7 +261,7 @@ test('structured ingested report fields appear in Decided and Asked without inve
 test('an org-only selection launched in another repository cannot read or edit that repository routes', t => {
   const { scratch, cwd } = fixture(t), selected = path.join(scratch, 'selected'); fs.mkdirSync(selected);
   const org = path.join(selected, '.org');
-  execFileSync(process.execPath, [bin, 'init'], { cwd: selected, env: { ...process.env, ORG_DIR: org }, stdio: 'pipe' });
+  execFileSync(process.execPath, [bin, 'init'], { cwd: selected, env: { ...process.env, ORG_ACTOR: 'console-test-agent', ORG_DIR: org }, stdio: 'pipe' });
   const target = path.join(cwd, '.lane.json'), bytes = JSON.stringify({ routes: { engineer: { kind: 'foreign-harness', model: 'foreign-model' } } });
   fs.writeFileSync(target, bytes);
   const sessionModule = new URL('../modern/session.mjs', import.meta.url).href, cliModule = new URL('../lib/cli.mjs', import.meta.url).href;
@@ -246,7 +279,7 @@ test('an org-only selection launched in another repository cannot read or edit t
     const write = await orgRouteSet(project, { name: 'engineer', model: 'wrong-project', revision: ${JSON.stringify(routesSnapshot(cwd).revision)} });
     console.log(JSON.stringify({ routes: session.model.routes, edit: session.ui.routeEdit, screen, readError, write })); session.stop();
   `;
-  const result = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd, encoding: 'utf8' }));
+  const result = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd, encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'console-test-agent' } }));
   assert.equal(result.routes, null); assert.equal(result.edit, null);
   assert.match(result.readError, /Project directory unknown/); assert.equal(result.write.ok, false); assert.match(result.write.error, /Project directory unknown/);
   assert.match(result.screen, /Read only/); assert.match(result.screen, /Open its folder/); assert.doesNotMatch(result.screen, /foreign-model|Enter edit/);

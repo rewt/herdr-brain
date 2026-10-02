@@ -35,7 +35,7 @@ esac`);
   const r = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const openTab = r.stdout.split('\n').find((l) => l.includes('[dry-run] open tab:'));
@@ -51,7 +51,7 @@ esac`);
     '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', runtime,
     '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(stopped.status, 1, stopped.stdout + stopped.stderr);
   assert.match(stopped.stdout, new RegExp(`${runtime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/STOP exists`));
@@ -62,7 +62,7 @@ esac`);
     '--lane-config', laneConfig, '--checklist', checklist,
     '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(defaultStopped.status, 1, defaultStopped.stdout + defaultStopped.stderr);
   assert.match(defaultStopped.stdout, new RegExp(`${defaultStop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} exists`));
@@ -74,7 +74,7 @@ esac`);
     '--cwd', path.join(root, 'not-the-checkout'), '--lane-config', laneConfig, '--checklist', checklist,
     '--ledger-dir', missingRuntime, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
     timeout: 2_000,
   });
   assert.equal(prepared.status, 1, prepared.stdout + prepared.stderr);
@@ -101,7 +101,7 @@ esac`);
   script(path.join(root, 'cmem'), 'exit 1');
   const r = spawnSync(process.execPath, [WATCH, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
-    encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const start = r.stdout.split('\n').find((l) => l.includes('[dry-run] start agent:'));

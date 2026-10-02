@@ -22,6 +22,7 @@ function fixture(t) {
     npm_config_cache: path.join(root, 'cache'), npm_config_update_notifier: 'false' };
   delete env.NODE_TEST_CONTEXT;
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(?:DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];
+  env.ORG_ACTOR = 'promote-test-agent';
   const git = (args, cwd = repo) => {
     const r = spawnSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr); return r.stdout.trim();

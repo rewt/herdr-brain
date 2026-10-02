@@ -35,7 +35,7 @@ esac`);
     BRAIN_STATE: path.join(root, 'state'),
     BRAIN_TEST_LOG: log,
   };
-  delete env.ORG_ACTOR;
+  env.ORG_ACTOR = ''; // This fixture deliberately starts without an actor.
   const r = spawnSync(process.execPath, [BRAIN, 'start', '--cwd', cwd, '--name', 'brain-test-agent', '--', 'Do the work.'], {
     encoding: 'utf8', env, timeout: 10_000,
   });

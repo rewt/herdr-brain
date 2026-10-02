@@ -40,11 +40,11 @@ function scratch() {
   // fails the way launchd does when the old service is still unloading.
   const launchctl = path.join(root, 'launchctl'), calls = path.join(root, 'launchctl.calls');
   fs.writeFileSync(launchctl, `#!/bin/sh\necho "$*" >> ${calls}\n[ "$1" = print ] && exit 1\nif [ "$1" = bootstrap ] && [ ! -e ${root}/loaded-once ]; then touch ${root}/loaded-once; echo "Bootstrap failed: 5: Input/output error" >&2; exit 5; fi\nexit 0\n`, { mode: 0o755 });
-  const env = { ...process.env, HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist,
+  const env = { ...process.env, ORG_ACTOR: 'release-test-agent', HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist,
     RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: launchctl };
   const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env, encoding: 'utf8' });
-  const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8' }).trim();
-  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8' }).trim();
+  const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8', env }).trim();
+  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8', env }).trim();
   const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); };
   const launchctlCalls = () => fs.readFileSync(calls, 'utf8').trim().split('\n');
   return { root, home, bin, plist, run, org, record, cleanup, launchctlCalls };
@@ -175,7 +175,7 @@ case "$2" in
   unlink) : > ${state} ;;
 esac
 `, { mode: 0o755 });
-    const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...process.env, HERDR_MONITOR_REPO: path.join(s.root, 'repo'), HERDR_MONITOR_HOME: s.home,
+    const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...process.env, ORG_ACTOR: 'release-test-agent', HERDR_MONITOR_REPO: path.join(s.root, 'repo'), HERDR_MONITOR_HOME: s.home,
       HERDR_MONITOR_BIN: s.bin, HERDR_MONITOR_PLIST: s.plist, RELEASE_NO_NPM: '1', RELEASE_NO_LAUNCHD: '1', HERDR_BIN_PATH: fake }, encoding: 'utf8' });
     const root = () => fs.readFileSync(state, 'utf8').trim();
     const real = t => fs.realpathSync(path.join(s.home, 'releases', t));

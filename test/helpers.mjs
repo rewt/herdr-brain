@@ -13,8 +13,8 @@ export function setupOrg({ tz = 'UTC' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'herdr-org-'));
   const dir = path.join(root, '.org');
   const org = (argv, { now = T0, env = {} } = {}) => {
-    const base = { ...process.env };
-    delete base.ORG_ACTOR;
+    // Explicitly simulate an unnamed writer unless this test supplies an actor.
+    const base = { ...process.env, ORG_ACTOR: '' };
     const r = spawnSync(process.execPath, [BIN, ...argv], {
       cwd: root,
       encoding: 'utf8',

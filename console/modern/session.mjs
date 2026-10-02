@@ -474,7 +474,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (!e.values[0].trim() || !e.values[1].trim()) { s.message = 'An outcome or rank and a reason are required.'; changed(); return false; }
       const rank = Number(e.values[0]);
       if (e.id && (!Number.isInteger(rank) || rank < 1 || rank > e.order.length)) { s.message = `Rank must be from 1 to ${e.order.length}.`; changed(); return false; }
-      if (!e.confirm) { e.confirm = true; s.message = ''; changed(); return false; }
+      if (!e.confirm) { e.confirm = true; s.scroll = 0; s.message = ''; changed(); return false; }
       e.busy = true; changed();
       let result;
       try { result = await d.orgPriorityChange(e.project, { id: e.id, title: e.values[0].trim(), rank, why: e.values[1].trim(), revision: e.revision }); }
@@ -482,7 +482,14 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (!result.ok) { e.busy = false; e.confirm = false; s.message = `Priority not saved: ${result.error}`; changed(); return false; }
       s.priorityEdit = null; await refresh(); s.message = 'Operator priorities saved with your reason.'; changed(); return false;
     }
-    if (e.confirm) { if (k.backspace) e.confirm = false; changed(); return false; }
+    if (e.confirm) {
+      const direction = k.pageDown || k.downArrow ? 1 : k.pageUp || k.upArrow ? -1 : 0;
+      if (direction) {
+        const step = k.pageDown || k.pageUp ? s.frame?.bodyHeight ?? 1 : 1;
+        s.scroll = Math.max(0, Math.min(s.frame?.maxScroll ?? 0, s.scroll + direction * step));
+      } else if (k.backspace) { e.confirm = false; s.scroll = 0; }
+      changed(); return false;
+    }
     if (k.tab || k.downArrow || k.upArrow) e.field = (e.field + 1) % 2;
     else if (k.ctrl && input === 'u') e.values[e.field] = '';
     else if (k.backspace || k.delete) e.values[e.field] = [...e.values[e.field]].slice(0, -1).join('');

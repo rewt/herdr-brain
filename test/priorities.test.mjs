@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { setupOrg } from './helpers.mjs';
+import { setupOrg, report } from './helpers.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as olderFold, itemStatus as olderStatus } from './fixtures/state-v0.mjs';
 
@@ -11,6 +11,38 @@ const agent = { env: { ORG_ACTOR: 'worker' } };
 function fixture(t) {
   const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive: true, force: true })); return f;
 }
+
+test('ingested proposals validate valid and explicitly unaligned priority links before creating work', t => {
+  for (const serves of ['P-1', null]) {
+    const f = fixture(t);
+    f.ok(['priorities', 'add', 'Adoption', '--why=Useful to people'], human);
+    f.ok(['add', 'Build', '--role=engineer', '--meta=serves=P-1'], agent);
+    f.ok(['start', 'ENG-1'], agent);
+    const file = path.join(f.root, 'report.md');
+    fs.writeFileSync(file, report(`run: R-1\noutcome: done\nsummary: Ready for follow-up.\nproposals:\n  - role: engineer\n    title: Follow up\n    serves: ${serves ?? 'null'}`));
+    f.ok(['ingest', file], agent);
+    assert.equal(f.json(['show', 'ENG-2', '--json']).meta.serves, serves);
+    f.ok(['start', 'ENG-2'], agent);
+    assert.equal(f.json(['show', 'R-2', '--json']).meta.serves ?? null, serves);
+    const alignment = f.json(['priorities', '--json']);
+    assert.equal(serves ? alignment.priorities[0].work[0].id : alignment.unaligned.work[0].id, 'ENG-2');
+  }
+});
+
+test('unknown proposal alignment refuses ingestion without saving the report or appending any events', t => {
+  const f = fixture(t);
+  f.ok(['priorities', 'add', 'Adoption', '--why=Useful to people'], human);
+  f.ok(['add', 'Build', '--role=engineer'], agent);
+  f.ok(['start', 'ENG-1'], agent);
+  const file = path.join(f.root, 'report.md');
+  fs.writeFileSync(file, report('run: R-1\noutcome: done\nsummary: Follow-ups.\nproposals:\n  - role: engineer\n    title: Valid first\n    serves: P-1\n  - role: engineer\n    title: Invalid second\n    serves: P-404'));
+  const log = path.join(f.dir, 'events.jsonl'), bytes = fs.readFileSync(log, 'utf8');
+  assert.match(f.fail(['ingest', file], agent), /unknown priority P-404/);
+  assert.equal(fs.readFileSync(log, 'utf8'), bytes);
+  assert.equal(fs.existsSync(path.join(f.dir, 'reports', 'R-1.md')), false);
+  assert.equal(f.json(['show', 'R-1', '--json']).report, null);
+  assert.deepEqual(f.json(['status', '--json']).items.map(i => i.id), ['ENG-1']);
+});
 
 test('operator ranks are separate from item hints and every affected rank retains who and why', t => {
   const f = fixture(t);

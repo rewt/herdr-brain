@@ -35,7 +35,7 @@ test('queue JSON, queue text and show name the project on every result', (t) => 
     { type: 'result', id: 'three', session: 'lane-elsewhere', state: 'done', where: '/tmp/no-project', headline: 'Other work finished.', at },
   ];
   fs.writeFileSync(path.join(dir, 'queue.jsonl'), `${entries.map(JSON.stringify).join('\n')}\n`);
-  const env = { ...process.env, BRAIN_STATE: dir, HERDR_ORG_CONSOLE_CONFIG: config };
+  const env = { ...process.env, ORG_ACTOR: 'brain-projects-test-agent', BRAIN_STATE: dir, HERDR_ORG_CONSOLE_CONFIG: config };
   const run = (...args) => execFileSync(process.execPath, [BIN, ...args], { env, encoding: 'utf8' });
 
   assert.deepEqual(

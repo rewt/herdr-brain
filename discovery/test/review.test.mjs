@@ -271,7 +271,7 @@ test('findOrgDir stops at the filesystem root outside GIT_WORK_TREE', (t) => {
   const org = path.join(f.repo, '.org'); initOrg(org);
   const code = `import {findOrgDir} from ${JSON.stringify(path.join(product, 'lib/store.mjs'))}; console.log(JSON.stringify(findOrgDir({env:{}})));`;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
-    cwd: outside, env: { ...process.env, ORG_DIR: '', GIT_DIR: path.join(f.repo, '.git'), GIT_WORK_TREE: f.repo }, encoding: 'utf8', timeout: 2000,
+    cwd: outside, env: { ...process.env, ORG_ACTOR: 'review-test-agent', ORG_DIR: '', GIT_DIR: path.join(f.repo, '.git'), GIT_WORK_TREE: f.repo }, encoding: 'utf8', timeout: 2000,
   });
   assert.equal(result.error, undefined, 'record discovery must terminate rather than spin at root');
   assert.equal(result.status, 0, result.stderr);

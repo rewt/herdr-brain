@@ -16,7 +16,7 @@ function setup() {
     const r = spawnSync(process.execPath, [BIN, ...argv], {
       cwd,
       encoding: 'utf8',
-      env: { ...process.env, ORG_DIR: dir, ORG_NOW: now, TZ: 'UTC', ...env },
+      env: { ...process.env, ORG_ACTOR: '', ORG_DIR: dir, ORG_NOW: now, TZ: 'UTC', ...env },
     });
     return { code: r.status, out: r.stdout, err: r.stderr };
   };
@@ -105,7 +105,7 @@ proposals:
   fs.cpSync(dir, copy, { recursive: true });
   const fromCopy = spawnSync(process.execPath, [BIN, 'snapshot'], {
     encoding: 'utf8',
-    env: { ...process.env, ORG_DIR: copy, ORG_NOW: '2026-09-15T12:05:00Z', TZ: 'UTC' },
+    env: { ...process.env, ORG_ACTOR: '', ORG_DIR: copy, ORG_NOW: '2026-09-15T12:05:00Z', TZ: 'UTC' },
   });
   assert.equal(fromCopy.stdout.replaceAll(copy, dir), snap);
 });
@@ -156,7 +156,7 @@ test('record start discovers canonical parent and repository routes from a linke
   const linked = path.join(root, 'elsewhere', 'linked');
   const git = (args) => {
     const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', env: {
-      ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      ...process.env, ORG_ACTOR: '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
       GIT_AUTHOR_NAME: 'Route Tests', GIT_AUTHOR_EMAIL: 'routes@example.invalid',
       GIT_COMMITTER_NAME: 'Route Tests', GIT_COMMITTER_EMAIL: 'routes@example.invalid',
     } });
@@ -311,7 +311,7 @@ test('concurrent writers never collide', async () => {
   const { dir } = setup();
   const results = await Promise.all(Array.from({ length: 12 }, (_, i) => new Promise((resolve) => {
     const child = spawn(process.execPath, [BIN, 'add', `Parallel ${i}`, '--role', 'engineer'], {
-      env: { ...process.env, ORG_DIR: dir, TZ: 'UTC' },
+      env: { ...process.env, ORG_ACTOR: '', ORG_DIR: dir, TZ: 'UTC' },
     });
     let stdout = '';
     child.stdout.on('data', (d) => { stdout += d; });

@@ -594,6 +594,9 @@ function ingestFile(ctx, file, runHint) {
     if (run.abandoned) {
       return { add: [], result: { skipped: true, runId, item: run.item } };
     }
+    // Validate the complete proposal batch under the lock before writing its
+    // immutable report copy or appending any of the report's events.
+    for (const proposal of parsed.report.proposals) validateServes(s, proposal.extra?.serves);
     const stored = path.join('reports', `${runId}.md`);
     writeFileAtomic(path.join(ctx.dir, stored), text, 0o444);
     const report = { ...parsed.report, run: runId };

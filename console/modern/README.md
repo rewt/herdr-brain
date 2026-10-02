@@ -63,7 +63,9 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   to edit its rank and reason, then review the resulting order and Enter to save
   through `record priorities rank`. Add priority uses the same review and CLI
   validation. Esc or Cancel discards a draft; a stale review cannot overwrite a
-  newer rank. A project without priorities invites the operator to add one.
+  newer rank. During review, Up/Down scroll a line and PageUp/PageDown scroll
+  a page, so long orders remain inspectable by keyboard. Backspace returns to
+  editing. A project without priorities invites the operator to add one.
   Named agents use `record priorities propose` to leave a waiting question, even
   if category policy says auto. `--print` never changes priorities.
 - `u` opens the effective project routes, configuration sources, dispatch

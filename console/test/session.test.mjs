@@ -17,8 +17,7 @@ function tempOrg() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'console-session-'));
   const dir = path.join(root, '.org');
   const org = (...argv) => {
-    const env = { ...process.env, ORG_DIR: dir };
-    delete env.ORG_ACTOR;
+    const env = { ...process.env, ORG_ACTOR: '', ORG_DIR: dir };
     const r = spawnSync(process.execPath, [ORG_BIN, ...argv], { encoding: 'utf8', env });
     assert.equal(r.status, 0, r.stderr);
     return r.stdout.trim();

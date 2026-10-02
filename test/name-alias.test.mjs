@@ -17,7 +17,7 @@ function run(bin, argv, cwd, env = {}) {
   return spawnSync(process.execPath, [bin, ...argv], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, ORG_NOW: '2026-10-01T12:00:00Z', TZ: 'UTC', ...env },
+    env: { ...process.env, ORG_ACTOR: '', ORG_NOW: '2026-10-01T12:00:00Z', TZ: 'UTC', ...env },
   });
 }
 

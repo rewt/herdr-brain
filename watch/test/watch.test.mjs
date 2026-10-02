@@ -15,6 +15,7 @@ import {
   unavailableNotice,
 } from '../notice.mjs';
 
+const TEST_ENV = { ...process.env, ORG_ACTOR: 'watch-test-agent' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
 
 function executable(file, body) {
@@ -47,7 +48,7 @@ esac`);
 }
 
 function startWatcher(args) {
-  return spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  return spawn(process.execPath, args, { env: TEST_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 function waitForExit(child, timeoutMs = 3_000) {
@@ -102,7 +103,7 @@ esac`);
   const result = spawnSync(process.execPath, [
     WATCH, 'R-6', '--org', path.join(root, '.org'), '--herdr', herdr,
     '--cwd', cwd, '--spawn', '--dry-run',
-  ], { encoding: 'utf8', env: { ...process.env, HERDR_WORKSPACE_ID: '' } });
+  ], { encoding: 'utf8', env: { ...TEST_ENV, HERDR_WORKSPACE_ID: '' } });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /would create tab "watch R-6" in w-canonical/);
 });
@@ -127,7 +128,7 @@ case "$1 $2" in
 esac`);
   const result = spawnSync(process.execPath, [
     WATCH, 'R-7', '--org', path.join(root, '.org'), '--org-cli', org, '--herdr', herdr, '--to', 'supervisor-test',
-  ], { encoding: 'utf8' });
+  ], { encoding: 'utf8', env: TEST_ENV });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const sent = fs.readFileSync(calls, 'utf8');
   assert.match(sent, /agent prompt supervisor-test \[org-report\] run=R-7 item=ENG-3 outcome=done/);
@@ -156,7 +157,7 @@ esac`);
 esac`);
   const child = spawn(process.execPath, [
     WATCH, 'R-8', '--org', path.join(root, '.org'), '--org-cli', org, '--herdr', herdr, '--to', 'supervisor-test',
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  ], { env: TEST_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((resolve) => setTimeout(resolve, 100));
   fs.writeFileSync(report, reportText('R-8', 'Draft report'));
   await new Promise((resolve) => setTimeout(resolve, 100));

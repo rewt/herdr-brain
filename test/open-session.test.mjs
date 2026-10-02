@@ -37,7 +37,7 @@ esac`);
   const r = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const openTab = r.stdout.split('\n').find((l) => l.includes('[dry-run] open tab:'));
@@ -53,7 +53,7 @@ esac`);
     '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', runtime,
     '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(stopped.status, 1, stopped.stdout + stopped.stderr);
   assert.match(stopped.stdout, new RegExp(`${runtime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/STOP exists`));
@@ -64,7 +64,7 @@ esac`);
     '--lane-config', laneConfig, '--checklist', checklist,
     '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(defaultStopped.status, 1, defaultStopped.stdout + defaultStopped.stderr);
   assert.match(defaultStopped.stdout, new RegExp(`${defaultStop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} exists`));
@@ -76,7 +76,7 @@ esac`);
     '--cwd', path.join(root, 'not-the-checkout'), '--lane-config', laneConfig, '--checklist', checklist,
     '--ledger-dir', missingRuntime, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
     timeout: 2_000,
   });
   assert.equal(prepared.status, 1, prepared.stdout + prepared.stderr);
@@ -105,7 +105,7 @@ esac`);
   script(path.join(root, 'cmem'), 'exit 1');
   const r = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
-    encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const start = r.stdout.split('\n').find((l) => l.includes('[dry-run] start agent:'));
@@ -131,7 +131,7 @@ esac`);
 
   const result = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', supervisor], {
-    encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, timeout: 2_000,
+    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` }, timeout: 2_000,
   });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(result.error, undefined, 'the launcher refuses promptly rather than waiting');
@@ -152,7 +152,7 @@ test('a run with a recorded report never opens a duplicate settle session', () =
 
   const result = spawnSync(process.execPath, [OPEN_SESSION, 'R-8', '--dry-run', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist], {
-    encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
   });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /R-8 already has a recorded report; refusing to open another settle session/);

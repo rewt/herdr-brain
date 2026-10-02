@@ -7,6 +7,7 @@ import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from '../housekeeping.mjs';
 
+const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
 const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
 function installRuntime(root) {
@@ -23,7 +24,7 @@ function fixture(t, { promoted = true, reported = true } = {}) {
   const repo = path.join(root, 'project'), lane = path.join(root, 'lane');
   fs.mkdirSync(repo);
   const git = (args, cwd = repo) => {
-    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
+    const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: TEST_ENV });
     assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
   };
   git(['init', '-b', 'main']); git(['config', 'user.name', 'Test']); git(['config', 'user.email', 'test@example.invalid']);
@@ -218,7 +219,7 @@ function cliFixture(t) {
 
 test('one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses', (t) => {
   const f = cliFixture(t);
-  const run = () => spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8' });
+  const run = () => spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: TEST_ENV });
   assert.equal(run().status, 0);
   assert.equal(fs.existsSync(path.join(f.state, 'actions.jsonl')), true);
   fs.writeFileSync(f.config, '{"enabled":false}'); assert.match(run().stdout, /disabled/);
@@ -229,7 +230,7 @@ test('one-shot logs actions, disabled config stops, invalid config refuses, and 
 
 test('the loop rereads opt-in and shuts down with its lock removed', async (t) => {
   const f = cliFixture(t);
-  const child = spawn(process.execPath, [...f.args, '--loop'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [...f.args, '--loop'], { env: TEST_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => child.kill());
   let output = '', errors = '';
   child.stdout.on('data', (chunk) => {
@@ -254,7 +255,7 @@ test(`no configuration defaults on and project record/main are discovered from a
   const args = f.args.filter((arg, i, all) => !['--org', '--config'].includes(arg) && !['--org', '--config'].includes(all[i - 1]));
   if (target === 'linked preview') args[args.indexOf('--cwd') + 1] = f.lane;
   const r = spawnSync(process.execPath, [...args, '--once', ...(target === 'linked preview' ? ['--dry-run'] : [])],
-    { encoding: 'utf8', env: { ...process.env, ORG_DIR: '' } });
+    { encoding: 'utf8', env: { ...TEST_ENV, ORG_DIR: '' } });
   assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /scan/);
   assert.deepEqual(readConfig(path.join(f.root, 'missing')), { enabled: true, tick_seconds: 60, cleanup_seconds: 600 });
 });
@@ -262,9 +263,9 @@ test(`no configuration defaults on and project record/main are discovered from a
 
 test('no record and no Git project are quiet no-ops', (t) => {
   const f = cliFixture(t);
-  const r = spawnSync(process.execPath, [f.runtime, '--once', '--cwd', f.repo], { encoding: 'utf8', env: { ...process.env, ORG_DIR: '' } });
+  const r = spawnSync(process.execPath, [f.runtime, '--once', '--cwd', f.repo], { encoding: 'utf8', env: { ...TEST_ENV, ORG_DIR: '' } });
   assert.equal(r.status, 0); assert.match(r.stdout, /no-record/);
-  const outside = spawnSync(process.execPath, [f.runtime, '--once', '--cwd', f.root], { encoding: 'utf8' });
+  const outside = spawnSync(process.execPath, [f.runtime, '--once', '--cwd', f.root], { encoding: 'utf8', env: TEST_ENV });
   assert.equal(outside.status, 0); assert.match(outside.stdout, /no-project/);
 });
 
@@ -272,7 +273,7 @@ for (const runtimeKind of ['canonical checkout', 'installed copy']) {
 test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) => {
   const f = cliFixture(t);
   if (runtimeKind === 'installed copy') { f.runtime = installRuntime(path.join(f.root, 'plugin')); f.args[0] = f.runtime; }
-  const start = () => spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', timeout: 10000 });
+  const start = () => spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 10000 });
   const first = start(); assert.equal(first.status, 0, first.stderr); assert.match(first.stdout, /started/);
   const lock = path.join(f.state, 'lock');
   const pid = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8')).pid;
@@ -299,7 +300,7 @@ test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) 
 
 test('dry-run start leaves no timer process', (t) => {
   const f = cliFixture(t);
-  const r = spawnSync(process.execPath, [...f.args, '--start', '--dry-run'], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [...f.args, '--start', '--dry-run'], { encoding: 'utf8', env: TEST_ENV });
   assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /would-start/);
   assert.equal(fs.existsSync(path.join(f.state, 'lock')), false);
 });
@@ -308,7 +309,7 @@ test('old interruption with forty blank rows and a final reply is rejected withi
   const fixtureURL = new URL('./fixtures/old-interruption.txt', import.meta.url);
   const moduleURL = new URL('../housekeeping.mjs', import.meta.url);
   const script = `import fs from 'node:fs'; import { interruptedComposer } from ${JSON.stringify(moduleURL.href)}; console.log(interruptedComposer(fs.readFileSync(${JSON.stringify(fileURLToPath(fixtureURL))}, 'utf8')));`;
-  const r = spawnSync(process.execPath, ['--input-type=module', '--eval', script], { encoding: 'utf8', timeout: 2000 });
+  const r = spawnSync(process.execPath, ['--input-type=module', '--eval', script], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
   assert.equal(r.error, undefined, r.error?.message);
   assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout.trim(), 'false');
   const feedback = screen.replace('\n›', '\nSomething went wrong? Hit /feedback to report the issue.\n\n›');
@@ -319,14 +320,14 @@ for (const mode of ['--once', '--start', '--loop']) {
   test(`lane code cannot ${mode} live housekeeping even with the canonical target`, (t) => {
     const f = cliFixture(t);
     const args = [...f.args]; args[0] = installRuntime(f.lane);
-    const r = spawnSync(process.execPath, [...args, mode], { encoding: 'utf8', timeout: 2000 });
+    const r = spawnSync(process.execPath, [...args, mode], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
     assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /code from a linked worktree/);
     assert.equal(fs.existsSync(f.state), false);
   });
   test(`canonical code cannot ${mode} live housekeeping from a linked target`, (t) => {
     const f = cliFixture(t);
     f.args[f.args.indexOf('--cwd') + 1] = f.lane;
-    const r = spawnSync(process.execPath, [...f.args, mode], { encoding: 'utf8', timeout: 2000 });
+    const r = spawnSync(process.execPath, [...f.args, mode], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
     assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /canonical project checkout/);
     assert.equal(fs.existsSync(f.state), false);
   });
@@ -336,7 +337,7 @@ test('a record CLI override in a lane cannot pin a live schedule to removable co
   const f = cliFixture(t);
   const fake = path.join(f.lane, 'record.mjs'); fs.copyFileSync(f.fake, fake); fs.chmodSync(fake, 0o755);
   f.args[f.args.indexOf('--org-cli') + 1] = fake;
-  const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', timeout: 2000 });
+  const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
   assert.equal(r.status, 1); assert.match(r.stderr, /code from a linked worktree/);
   assert.equal(fs.existsSync(f.state), false);
 });
@@ -344,7 +345,7 @@ test('a record CLI override in a lane cannot pin a live schedule to removable co
 test('linked code remains usable for isolated dry-run previews', (t) => {
   const f = cliFixture(t); f.args[0] = installRuntime(f.lane);
   f.args[f.args.indexOf('--cwd') + 1] = f.lane;
-  const r = spawnSync(process.execPath, [...f.args, '--once', '--dry-run'], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [...f.args, '--once', '--dry-run'], { encoding: 'utf8', env: TEST_ENV });
   assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /scan/);
   assert.equal(fs.existsSync(path.join(f.state, 'lock')), false);
 });
@@ -362,7 +363,7 @@ for (const variant of ['different-script', 'different-record', 'missing-script',
     if (variant === 'legacy') { delete owner.script; delete owner.record_cli; }
     const original = JSON.stringify(owner);
     fs.writeFileSync(path.join(lock, 'owner.json'), original);
-    const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', timeout: 2000 });
+    const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
     assert.equal(r.status, 1); assert.doesNotMatch(r.stdout, /already-running/);
     assert.match(r.stderr, /different runtime|stale housekeeping runtime path|no runtime identity/);
     assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), original);

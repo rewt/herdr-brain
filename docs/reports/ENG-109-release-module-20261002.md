@@ -9,7 +9,8 @@ summary: |
   Scratch projects exercise real promotions through gate and operator decision.
   The repository preview built and invoked acceptance once with --skip-live;
   its pending cases correctly prevented shipping approval. Final lane validation
-  runs the complete offline npm suite on the committed implementation and report.
+  runs the complete offline npm test file list in three bounded phases on the
+  committed implementation and report, isolating the copied-entry probes.
 headline: Release candidates now batch promotions and wait for the operator to ship
 blockers: []
 proposals: []
@@ -25,11 +26,11 @@ artifacts:
   - "Commit: Keep release reminders after unresolved supervisor work"
   - "release/release.mjs, release/config.mjs, release/README.md, release/test/release.test.mjs"
   - ".release.json; lib/release-record.mjs; supervisor/PROTOCOL.md; console/modern/frame.mjs"
-  - "docs/reports/ENG-109-release-preview-20261002.json"
+  - "docs/reports/ENG-109-release-preview-20261002.json; docs/reports/ENG-109-validation-20261002.mjs"
   - "Offline release tests: /tmp/eng-109-focused-final.log (12 passed)"
   - "Offline acceptance tests: /tmp/eng-109-acceptance-offline-complete.log (81 passed)"
   - "Focused regression tests: /tmp/eng-109-regressions.log (44 passed)"
-  - "Final validation: node lanes/lane.mjs check --cmd 'npm test -- --suite-timeout=540000 --file-timeout=480000'; receipt .lane/gate.json; output /tmp/eng-109-lane-check.log"
+  - "Final validation: node lanes/lane.mjs check --cmd 'node docs/reports/ENG-109-validation-20261002.mjs'; receipt .lane/gate.json; output /tmp/eng-109-lane-check-phases.log"
 decisions:
   - text: "Use a finite foreground supervisor operation with the shared Git lock and an archived snapshot for each candidate."
     category: design
@@ -41,7 +42,7 @@ questions: []
 challenges:
   - "The preview is isolated wiring evidence, not a production-ready candidate: 8 PASS, 0 FAIL, 19 PENDING; gate exit 1 and no shipping question."
   - "High host load required a scratch-only preview threshold of three per CPU; production retains one per CPU. Dependency installation was skipped in the preview."
-  - "Initial npm runs exceeded the runner's six-minute suite bound. Final validation uses its existing nine-minute bound. Two cold-start ordering regressions were corrected; a child module-load failure coincided with rebasing and is rechecked on a stable tree."
+  - "Initial npm runs exceeded the six-minute aggregate bound; the last monolithic run also exceeded nine minutes and timed out the two copied-entry probes at their existing 15-second command limit. Final validation runs every npm test file in three bounded phases without relaxing fixture limits. Two cold-start ordering regressions were corrected; a rebase-time module-load failure passed on the stable tree."
 ---
 
 Promotions continue to use their fast lane validation. The new cycle is
@@ -84,7 +85,10 @@ No canonical candidate, installed release, activation, bch-cloak data, shared
 configuration or existing pane was changed.
 
 The lane was rebased onto the main update titled “Amend ENG-103/ENG-105 briefs:
-release gate per release, not per lane.” The final lane check runs the full offline
-npm suite with the existing bounded timeout options and records this report's
-commit as its validated head. No live acceptance run, model call, push or publish
-was performed.
+release gate per release, not per lane.” The final lane check runs the complete
+offline npm test file list with the existing bounded timeout options and records this report's
+commit as its validated head. The phased runner derives every file from
+package.json's npm test command, checks complete coverage, and retains the runner's
+existing file, command and suite bounds. The copied-entry probes run alone; the
+other core/module files and settle/supervisor/release files occupy separate phases.
+No live acceptance run, model call, push or publish was performed.

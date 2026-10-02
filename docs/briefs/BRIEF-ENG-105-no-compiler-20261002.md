@@ -11,7 +11,7 @@ requirement without weakening the lifetime guarantees ENG-81 established: ship t
 supported platform (with checksums and a rebuild path), or a no-compiler mechanism with equivalent
 guarantees, falling back clearly when neither is available. Update `docs/ADOPTING.md`.
 
-Judged by: offline tests for each behaviour; the release gate on a candidate from your lane still passes.
+Judged by: offline tests for each behaviour. (Amended 2026-10-02: the release gate runs once per release candidate, not per lane; see AGENTS.md.)
 
 ## Boundaries
 

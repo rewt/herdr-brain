@@ -11,7 +11,7 @@ fail a release: measure load during the run, scale waits with it or classify tim
 heavy load as harness PENDING with the load named, and keep genuine product timeouts (a candidate that
 never reports at normal load) as FAIL. Evidence: `/private/tmp/herdr-acceptance-Wj1fBy/evidence/` (read-only).
 
-Judged by: offline tests for each behaviour; the release gate on a candidate from your lane still passes.
+Judged by: offline tests for each behaviour. (Amended 2026-10-02: the release gate runs once per release candidate, not per lane; see AGENTS.md.)
 
 ## Boundaries
 

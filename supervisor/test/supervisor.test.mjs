@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -199,7 +199,7 @@ test('refusal retry cannot authorize a new unreviewed head or replay an interrup
   assert.equal(h.queue.load().pending.length, 0);
 });
 
-test('supervisor entry and final notices carry the unconfigured cycle through actual promotion', { timeout: 90000 }, async () => {
+test('supervisor entry and final notices carry the unconfigured cycle through actual promotion', { timeout: 60000 }, async () => {
   const proof = await supervisorCase(root);
   assert.match(proof.detail, /guarded record completion/);
 });

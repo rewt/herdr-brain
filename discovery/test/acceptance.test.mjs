@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 const source = fileURLToPath(new URL('../../', import.meta.url));
 
-for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product validates, guards and promotes worker and routing changes offline`, { timeout: 90000 }, (t) => {
+for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product validates, guards and promotes worker and routing changes offline`, { timeout: 60000 }, (t) => {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-probe-worker-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const env = { ...process.env };

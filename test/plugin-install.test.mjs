@@ -86,6 +86,19 @@ test('manifest build installs entry even when npm is skipped; restores preserve 
   assert.equal(fs.existsSync(path.join(f.home, '.zshenv')), false);
 });
 
+test('plugin build discovers native CLIs and installs default machine paths without entry overrides', { timeout: 30000 }, (t) => {
+  const f = fixture(t);
+  const defaults = { HERDR_MONITOR_HOME: undefined, HERDR_MONITOR_ENTRY_BIN: undefined, HERDR_MONITOR_CODEX: undefined, HERDR_MONITOR_CLAUDE: undefined };
+  f.ok('bash', [path.join(f.repo, 'herdr/install.sh')], f.repo, defaults);
+  const bin = path.join(f.home, '.local/share/herdr-monitor/entry/bin');
+  const receipt = JSON.parse(fs.readFileSync(path.join(bin, '.monitor-entry.json')));
+  assert.equal(receipt.native, f.native); assert.equal(receipt.claudeNative, f.native);
+  assert.equal(receipt.product, f.repo);
+  const restored = f.run(process.execPath, [path.join(source, 'herdr/entry-install.mjs'), '--remove'], f.repo, defaults);
+  assert.equal(restored.status, 0, restored.stderr);
+  assert.equal(fs.existsSync(path.join(bin, 'codex')), false); assert.equal(fs.existsSync(path.join(f.home, '.zshrc')), false);
+});
+
 test('edited adapters/snippets and planted symlinks refuse before activation or removal mutates state', { timeout: 30000 }, (t) => {
   const f = fixture(t); f.release('build', 'first'); f.release('build', 'second'); f.release('activate', 'first');
   const current = fs.readlinkSync(path.join(f.env.HERDR_MONITOR_HOME, 'current'));

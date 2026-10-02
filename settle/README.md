@@ -72,9 +72,25 @@ exact match can replace the clean lane head, and validation runs again at that
 rebased head. The result retains the original reviewed commit and includes rebase
 heads, expected/actual trees and log evidence. Changes already present upstream
 count as preserved; unrelated upstream edits can survive in the same file.
+Affected paths using custom merge drivers (including `merge.default`) receive a
+handoff before preparation: a successful driver can discard reviewed edits in
+both the expected merge and the replay. Settle inspects attributes in the current
+lane, captured base/main and every replayed commit, including intermediate trees.
+Built-in text, binary and union drivers remain available unless custom driver
+configuration overrides their names.
+The final replacement reserves the saved lane ref with an expected-old-commit
+Git transaction while holding the lane's HEAD and index locks. It rechecks branch
+identity and clean worktrees under those locks, then checks out the proved tree
+through Git's edit-preserving two-tree update. Concurrent commits or branch
+switches cause refusal; another branch is never reset. Unexpected interruption
+during checkout retains the HEAD/index locks for inspection rather than attempting
+an unsafe rollback. A lost response after the completed replacement can still
+adopt the exact saved prepared head.
 Merge commits requiring linearization, net-tree conflicts, intermediate replay
 conflicts and preservation mismatches receive an evidence handoff. Conflicts name
-their files. The reviewed lane remains intact; settle aborts and removes its own
+their files or directories, including paths present only in Git's informational
+conflict records; ordinary auto-merge notices do not contribute conflict paths.
+The reviewed lane remains intact; settle aborts and removes its own
 scratch replay, never a rebase in the lane. Unexpected dirty scratch data is kept
 for inspection. An interrupted preparation also retains its scratch path; inspect
 it before further work. An interrupted lane-head update can adopt only the exact

@@ -47,11 +47,11 @@ test('a lost lane-head update response resumes only the saved proved commit with
   const f = setup(t), run = f.start(); f.commit('correct\n'); f.report(run);
   mainCommit(f, 'main-only.txt', 'upstream\n');
   const realGit = f.exec('which', ['git']).stdout.trim();
-  const marker = path.join(f.root, 'reset-response-lost');
+  const marker = path.join(f.root, 'update-response-lost');
   fs.writeFileSync(path.join(f.root, 'bin/git'), `#!/usr/bin/env node
 import fs from 'node:fs';import {spawnSync} from 'node:child_process';
 const args=process.argv.slice(2),r=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});
-if(r.status===0&&args[0]==='reset'&&args[1]==='--keep'){
+if(r.status===0&&args[0]==='update-ref'&&args.includes('--stdin')){
  if(fs.existsSync(${JSON.stringify(marker)})){console.error('unexpected second head update');process.exit(1);}
  fs.writeFileSync(${JSON.stringify(marker)},'lost response');console.error('injected lost head-update response');process.exit(1);
 }

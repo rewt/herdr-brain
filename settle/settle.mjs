@@ -31,13 +31,13 @@ const hash = (text) => createHash('sha256').update(text).digest('hex');
 const inheritedValidation = '- Validation is inherited from settle; the explicit zero-command review budget permits no independent execution.';
 const cli = (key, file) => opt[`${key}-cli`] ? [opt[`${key}-cli`]] : [process.execPath, local(file)];
 let job, journal, release, laneConfig = null;
-function call(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
+function call(argv, args, cwd = job?.repo ?? path.resolve(opt.repo), options = {}) {
   const env = { ...process.env, ORG_DIR: opt.org };
   delete env.LANE_CONFIG;
   if (laneConfig !== null) env.LANE_CONFIG = laneConfig;
   return spawnSync(argv[0], [...argv.slice(1), ...args], {
     cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
-    env,
+    env, ...options,
   });
 }
 function checked(argv, args, cwd) {
@@ -184,11 +184,56 @@ function validate(name) {
   job.validation = { log: evidence(`${name}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`), exit_code: r.status, error: r.error?.message ?? null };
   save(); return !r.error && r.status === 0;
 }
+function customMergePaths(base) {
+  const revisions = git(['rev-list', `${base}..${job.finalHead}`], job.workspace).split('\n').filter(Boolean);
+  const paths = new Set(git(['diff', '--no-renames', '--name-only', '-z', base, job.mainHead], job.workspace).split('\0').filter(Boolean));
+  for (const revision of revisions) {
+    for (const file of git(['diff-tree', '--no-commit-id', '--no-renames', '--name-only', '-r', '-z', `${revision}^`, revision], job.workspace).split('\0').filter(Boolean)) paths.add(file);
+  }
+  const configured = call(['git'], ['config', '--get', 'merge.default'], job.workspace);
+  if (configured.error || ![0, 1].includes(configured.status)) throw new Error('Cannot inspect merge.default');
+  const defaultDriver = configured.stdout?.trim() || 'text';
+  const definitions = call(['git'], ['config', '-z', '--name-only', '--get-regexp', '^merge\\..*\\.(driver|name|recursive)$'], job.workspace);
+  if (definitions.error || ![0, 1].includes(definitions.status)) throw new Error('Cannot inspect custom merge driver definitions');
+  const custom = new Set(definitions.stdout.split('\0').filter(Boolean).map((key) => key.match(/^merge\.(.*)\.(?:driver|name|recursive)$/)[1]));
+  const unsafe = new Set();
+  // Check current attributes (including info/global attributes), the captured
+  // upstream, and every replayed tree: intermediate attributes matter too.
+  for (const revision of [null, base, job.mainHead, ...revisions]) {
+    const r = call(['git'], ['check-attr', ...(revision ? ['--source', revision] : []), '-z', '--stdin', 'merge'], job.workspace,
+      { input: [...paths].join('\0') + '\0' });
+    if (r.error || r.status !== 0) throw new Error(`Cannot inspect rebase merge attributes: ${r.stderr || r.error?.message}`);
+    const fields = r.stdout.split('\0');
+    for (let i = 0; i + 2 < fields.length; i += 3) {
+      const attribute = fields[i + 2], driver = attribute === 'unspecified' ? defaultDriver : attribute;
+      // Named drivers may themselves be called set/unset/unspecified, which
+      // check-attr prints exactly like its sentinel values. Refuse ambiguity.
+      if (custom.has(attribute) || custom.has(driver) || !['set', 'unset', 'text', 'binary', 'union'].includes(driver)) unsafe.add(fields[i]);
+    }
+  }
+  return [...unsafe].sort();
+}
+function mergeConflictPaths(fields) {
+  const separator = fields.indexOf('');
+  if (separator < 0) throw new Error('Malformed merge-tree conflict records');
+  const paths = new Set(fields.slice(0, separator));
+  // Informational records are: path count, paths, type, message. Only CONFLICT
+  // types add paths; ordinary auto-merge/rename notices are not conflicts.
+  let i = separator + 1;
+  while (i < fields.length && fields[i] !== '') {
+    const count = Number(fields[i++]);
+    if (!Number.isSafeInteger(count) || count < 0 || i + count + 2 > fields.length) throw new Error('Malformed merge-tree informational record');
+    const names = fields.slice(i, i + count); i += count;
+    const type = fields[i++]; i++; // Skip the prose message.
+    if (type.startsWith('CONFLICT')) for (const name of names) paths.add(name);
+  }
+  return [...paths].sort();
+}
 // Prepare in an owned detached worktree. The reviewed lane is untouched until
 // the replay's full tree equals the mechanical merge of the captured diff.
 function rebaseForPromotion() {
   if (job.rebase?.state === 'prepared' && head() === job.rebase.to) {
-    // A lost response to reset adopts only the exact previously proved commit.
+    // A lost update response adopts only the exact previously proved commit.
     unchanged({ expectedHead: job.rebase.to });
     job.finalHead = job.rebase.to; job.rebase.state = 'applied'; save();
   }
@@ -198,9 +243,14 @@ function rebaseForPromotion() {
   if (!job.rebase) {
     if (git(['rev-list', '--merges', `${job.mainHead}..${job.finalHead}`], job.workspace)) return 'The lane contains merge commits; a mechanical rebase could linearize reviewed work';
     const base = git(['merge-base', job.mainHead, job.head], job.workspace);
+    const drivers = customMergePaths(base);
+    if (drivers.length) {
+      job.rebase = { from: job.finalHead, onto: job.mainHead, base, reviewed_commit: job.head, custom_merge_paths: drivers, state: 'refused' }; save();
+      return `Custom merge drivers prevent independent reviewed-diff preservation for: ${drivers.join(', ')}; the lane is intact`;
+    }
     const merged = call(['git'], ['merge-tree', '--write-tree', '--name-only', '-z', job.mainHead, job.finalHead], job.workspace);
     const [tree, ...fields] = (merged.stdout ?? '').split('\0');
-    const conflicts = fields.slice(0, Math.max(0, fields.indexOf(''))).filter(Boolean);
+    const conflicts = merged.status === 1 ? mergeConflictPaths(fields) : [];
     job.rebase = { from: job.finalHead, onto: job.mainHead, base, reviewed_commit: job.head,
       expected_tree: tree, conflicts, state: 'preflight',
       log: evidence('rebase-preflight.log', `${merged.stdout ?? ''}\n${merged.stderr ?? ''}`) }; save();
@@ -242,9 +292,14 @@ function rebaseForPromotion() {
   const state = recordState();
   const invalid = recordedReportProblem(state) ?? superseded(state) ?? correctionBlocker([], state);
   if (invalid) return invalid;
-  // --keep refuses to overwrite concurrent worktree edits. Never move main or
-  // any other branch. The exact candidate is saved before this recoverable step.
-  git(['reset', '--keep', job.rebase.to], job.workspace);
+  const drivers = customMergePaths(job.rebase.base);
+  if (drivers.length) return `Custom merge drivers appeared before lane-head replacement for: ${drivers.join(', ')}; the lane is intact`;
+  // The helper holds HEAD/index locks and prepares a named-ref CAS transaction
+  // before rechecking identity and performing an edit-preserving checkout.
+  const replaced = call([process.execPath, local('./replace-lane-head.mjs')], [JSON.stringify({ workspace: job.workspace, repo: job.repo,
+    common: job.common, branch: `refs/heads/lane/${job.lane}`, from: job.rebase.from, to: job.rebase.to,
+    main: job.main, mainHead: job.mainHead })], job.workspace);
+  if (replaced.error || replaced.status !== 0) throw new Error(`Lane-head replacement refused: ${(replaced.stderr || replaced.error?.message || `exit ${replaced.status}`).trim()}`);
   job.finalHead = job.rebase.to; job.rebase.state = 'applied'; save();
   unchanged();
   return null;

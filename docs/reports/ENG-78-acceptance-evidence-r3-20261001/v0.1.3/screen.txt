@@ -1,0 +1,26 @@
+Release acceptance: v0.1.3 (117s) — 7 pass / 6 fail / 11 pending — NOT READY
+PASS    01 Candidate snapshot
+FAIL    02 New project: record discovers and populates
+PENDING 03 New project: routes resolve without config
+PENDING 04 New project: installed supervisor entry and record bootstrap
+PASS    05 Real Herdr boundary and configured fixture
+PENDING 06 Configured cycle: dispatch/report/ingest/promote/close
+PENDING 07 Unconfigured promotion queue: FIFO, notices and refusal
+PENDING 08 Failure path: missing worker
+PENDING 09 Failure path: invalid worker
+PENDING 10 Failure path: blocked worker
+PENDING 11 Fix round: same worker, fresh durable run
+PENDING 12 Watch cutover: idle grace and exclusive watcher
+PENDING 13 Housekeeping closes only eligible finished workers
+PASS    14 Scratch release build/activate/rollback/restore
+PASS    15 Full console dependency build (offline)
+PASS    16 Existing project: copy live calls and inventory drift
+PENDING 17 Existing project: routing and both wrapper dry runs
+PASS    18 Existing project: org PATH consumers
+FAIL    19 ENG-64: every file switch and rollback
+FAIL    20 ENG-64: final contrib removal and restoration
+FAIL    21 Real discovery: concurrent lanes and promotion
+FAIL    22 Real discovery: routing question waits and answer applies
+FAIL    23 New project: default supervisor dispatch/watch/ingest cycle
+PASS    24 Cleanup and scope audit
+Evidence: /private/tmp/herdr-acceptance-Xt3Nvi/evidence (NN.jsonl; summary.json has reasons)

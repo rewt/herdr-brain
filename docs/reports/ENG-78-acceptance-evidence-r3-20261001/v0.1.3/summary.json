@@ -1,0 +1,231 @@
+{
+  "candidate": "v0.1.3",
+  "candidateCommit": "6b353db6bcda5f5f4b37e0b35192fead7770f7ad",
+  "elapsedSeconds": 117,
+  "counts": {
+    "PASS": 7,
+    "FAIL": 6,
+    "PENDING": 11
+  },
+  "evidence": "/private/tmp/herdr-acceptance-Xt3Nvi/evidence",
+  "results": [
+    {
+      "id": "01",
+      "key": "candidate-snapshot",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "v0.1.3: 6b353db6bcda5f5f4b37e0b35192fead7770f7ad",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "key": "new-project-record",
+      "name": "New project: record discovers and populates",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "record status requires setup: record: no record found: run record init, or set ORG_DIR\n\n1 !== 0\n",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "key": "new-project-routes",
+      "name": "New project: routes resolve without config",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks lanes/routes.mjs",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "key": "supervisor-entry",
+      "name": "New project: installed supervisor entry and record bootstrap",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "key": "herdr-fixture",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "05.jsonl"
+    },
+    {
+      "id": "06",
+      "key": "configured-cycle",
+      "name": "Configured cycle: dispatch/report/ingest/promote/close",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "06.jsonl"
+    },
+    {
+      "id": "07",
+      "key": "promotion-queue",
+      "name": "Unconfigured promotion queue: FIFO, notices and refusal",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks promote/promote.mjs",
+      "evidence": "07.jsonl"
+    },
+    {
+      "id": "08",
+      "key": "missing-worker",
+      "name": "Failure path: missing worker",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "08.jsonl"
+    },
+    {
+      "id": "09",
+      "key": "invalid-worker",
+      "name": "Failure path: invalid worker",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "09.jsonl"
+    },
+    {
+      "id": "10",
+      "key": "blocked-worker",
+      "name": "Failure path: blocked worker",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "10.jsonl"
+    },
+    {
+      "id": "11",
+      "key": "fix-round",
+      "name": "Fix round: same worker, fresh durable run",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "11.jsonl"
+    },
+    {
+      "id": "12",
+      "key": "watch-grace",
+      "name": "Watch cutover: idle grace and exclusive watcher",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks dispatch/dispatch.mjs",
+      "evidence": "12.jsonl"
+    },
+    {
+      "id": "13",
+      "key": "housekeeping",
+      "name": "Housekeeping closes only eligible finished workers",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks housekeeping/housekeeping.mjs",
+      "evidence": "13.jsonl"
+    },
+    {
+      "id": "14",
+      "key": "scratch-release",
+      "name": "Scratch release build/activate/rollback/restore",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "candidate code archived into immutable scratch releases; old-install launcher migration checked; npm/plugin/launchd excluded",
+      "evidence": "14.jsonl"
+    },
+    {
+      "id": "15",
+      "key": "console-build",
+      "name": "Full console dependency build (offline)",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "15.jsonl"
+    },
+    {
+      "id": "16",
+      "key": "existing-copy",
+      "name": "Existing project: copy live calls and inventory drift",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)",
+      "evidence": "16.jsonl"
+    },
+    {
+      "id": "17",
+      "key": "existing-wrappers",
+      "name": "Existing project: routing and both wrapper dry runs",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "candidate lacks supervisor/open-session.mjs",
+      "evidence": "17.jsonl"
+    },
+    {
+      "id": "18",
+      "key": "org-path",
+      "name": "Existing project: org PATH consumers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk",
+      "evidence": "18.jsonl"
+    },
+    {
+      "id": "19",
+      "key": "cutover-switches",
+      "name": "ENG-64: every file switch and rollback",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "cutover candidate lacks supervisor/open-session.mjs",
+      "evidence": "19.jsonl"
+    },
+    {
+      "id": "20",
+      "key": "contrib-retirement",
+      "name": "ENG-64: final contrib removal and restoration",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "prerequisite cutover-switches (ENG-64: every file switch and rollback): cutover candidate lacks supervisor/open-session.mjs",
+      "evidence": "20.jsonl"
+    },
+    {
+      "id": "21",
+      "key": "discovery-concurrent",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "no product-provided policy source was read; source attribution is required",
+      "evidence": "21.jsonl"
+    },
+    {
+      "id": "22",
+      "key": "discovery-routing",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "no product-provided policy source was read; source attribution is required",
+      "evidence": "22.jsonl"
+    },
+    {
+      "id": "23",
+      "key": "default-cycle",
+      "name": "New project: default supervisor dispatch/watch/ingest cycle",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "default cycle candidate lacks dispatch/dispatch.mjs",
+      "evidence": "23.jsonl"
+    },
+    {
+      "id": "24",
+      "key": "scope-cleanup",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "24.jsonl"
+    }
+  ],
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

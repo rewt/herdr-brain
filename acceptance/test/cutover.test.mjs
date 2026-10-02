@@ -133,3 +133,20 @@ test('only unreferenced timestamped script backups qualify as historical materia
   const compat=path.join(root,'compat.mjs');fs.writeFileSync(compat,'blob');
   assert.throws(()=>retireContrib(root,compat),/retirement refused/);
 });
+
+test('executable shell case arms cannot hide contrib callers or references to historical backups', (t) => {
+  const root = fixture(t), compat = path.join(root, 'compat.mjs');
+  fs.writeFileSync(compat, 'compatibility blob');
+  const script = path.join(root, '.lane/supervisor/case-caller.sh');
+  fs.writeFileSync(script, '#!/bin/sh\ncase "$1" in\n  *) node "$CURRENT/contrib/settle-watch.mjs" --open ;;\nesac\n', { mode: 0o755 });
+  const active = callers(root, 'contrib/settle-watch.mjs');
+  assert.ok(active.some((v) => v.file === script && v.line === 3));
+  assert.throws(() => retireContrib(root, compat), /retirement refused/);
+  assert.equal(fs.readFileSync(compat, 'utf8'), 'compatibility blob');
+  const backup = path.join(root, '.lane/supervisor/old.py.bak-20261002-copy');
+  fs.writeFileSync(backup, 'subprocess.run(["node", "contrib/settle-watch.mjs"])\n', { mode: 0o755 });
+  fs.writeFileSync(script, `#!/bin/sh\ncase "$1" in\n  *) python3 ${backup} ;;\nesac\n`);
+  assert.ok(callerInventory(root).active.includes(backup));
+  assert.ok(!callerInventory(root).historical.includes(backup));
+  assert.throws(() => retireContrib(root, compat), /retirement refused/);
+});

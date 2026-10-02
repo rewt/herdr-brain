@@ -19,11 +19,23 @@ export function classifyFailure(error, { cleanup = false } = {}) {
 }
 
 // Dependent cases retain the cause and classification of their prerequisites.
-export function requirePrerequisite(results, id) {
-  const result = results.find((v) => v.id === id);
+export function requirePrerequisite(results, key) {
+  const result = results.find((v) => v.key === key);
   if (result?.status === 'PASS') return;
-  const reason = result ? `prerequisite ${id} (${result.name}): ${result.detail}` : `prerequisite ${id} has no result`;
+  const reason = result ? `prerequisite ${key} (${result.name}): ${result.detail}` : `prerequisite ${key} has no result`;
   if (!result || result.origin === 'harness') throw new HarnessLimit(reason);
   if (result.status === 'PENDING') throw new Pending(reason);
   throw commandFailure(reason);
+}
+
+// Preserve the original kind of failure while collecting independent checks.
+export function requireSuccessfulChecks(results) {
+  const failures = results.filter((v) => v.status !== 'PASS');
+  if (!failures.length) return;
+  const product = failures.filter((v) => v.status === 'FAIL');
+  const chosen = product.length ? product : failures;
+  const detail = chosen.map((v) => `${v.key} (${v.name}): ${v.detail}`).join('; ');
+  if (product.length) throw commandFailure(detail);
+  if (chosen.some((v) => v.origin === 'harness')) throw new HarnessLimit(detail);
+  throw new Pending(detail);
 }

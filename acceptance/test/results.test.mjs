@@ -57,18 +57,18 @@ test('ordinary product entry and source-attribution gaps fail without a safety o
 
 test('dependent cutover/default-cycle cases preserve prerequisite causes and origins', () => {
   const scenarios=[
-    {id:'18',name:'Scratch switches',...classifyFailure(new Pending('pass --bch-cloak LIVE_REPO'))},
-    {id:'18',name:'Scratch switches',...classifyFailure(new HarnessLimit('stand-in acknowledgement unavailable'))},
-    {id:'05',name:'Supervisor fixture',...classifyFailure(new HarnessLimit('native socket unavailable'))},
-    {id:'18',name:'Scratch switches',...classifyFailure(new Error('cutover candidate lacks supervisor/open-session.mjs'))},
-    {id:'18',name:'Scratch switches',...classifyFailure(new ProductBoundary('acceptance_product_boundary: foreign target'))},
+    {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new Pending('pass --bch-cloak LIVE_REPO'))},
+    {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new HarnessLimit('stand-in acknowledgement unavailable'))},
+    {key:'herdr-fixture',name:'Supervisor fixture',...classifyFailure(new HarnessLimit('native socket unavailable'))},
+    {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new Error('cutover candidate lacks supervisor/open-session.mjs'))},
+    {key:'cutover-switches',name:'Scratch switches',...classifyFailure(new ProductBoundary('acceptance_product_boundary: foreign target'))},
   ];
   for (const prerequisite of scenarios) {
-    let error;try{requirePrerequisite([prerequisite],prerequisite.id);}catch(e){error=e;}
+    let error;try{requirePrerequisite([prerequisite],prerequisite.key);}catch(e){error=e;}
     const result=classifyFailure(error);
     assert.equal(result.status,prerequisite.status);assert.equal(result.origin,prerequisite.origin);
     assert.ok(result.detail.includes(prerequisite.detail));
   }
-  assert.doesNotThrow(()=>requirePrerequisite([{id:'18',status:'PASS'}],'18'));
-  assert.throws(()=>requirePrerequisite([],'05'),HarnessLimit);
+  assert.doesNotThrow(()=>requirePrerequisite([{key:'cutover-switches',status:'PASS'}],'cutover-switches'));
+  assert.throws(()=>requirePrerequisite([],'herdr-fixture'),HarnessLimit);
 });

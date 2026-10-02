@@ -1,3 +1,4 @@
+import { cases } from './cases.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -106,7 +107,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
       return { events, answer, sources, attributionError, usage: totals };
     };
   };
-  await test('Real discovery: concurrent lanes and promotion', async () => {
+  await test(cases.discovery, async () => {
     if (opt['skip-live']) pending('real discovery explicitly skipped; release gate cannot pass');
     const ownership = path.join(root, 'ownership.json');
     if (!fs.existsSync(ownership)) pending('Herdr boundary unavailable');
@@ -143,7 +144,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
     write(path.join(evidence, 'discovery-verification.json'), JSON.stringify({ sandbox: 'native acceptance, read-only project/Git, network off', status: verified.status, stdout: verified.stdout, stderr: verified.stderr, temp: verifiers.get(repo).temp }, null, 2));
     return 'two real sessions discovered policy, recorded work, used separate lanes and completed green fast-forwards';
   });
-  await test('Real discovery: routing question waits and answer applies', async () => {
+  await test(cases.routingQuestion, async () => {
     if (opt['skip-live']) pending('real discovery explicitly skipped; release gate cannot pass');
     if (!fs.existsSync(path.join(root, 'ownership.json'))) pending('Herdr boundary unavailable');
     const repo = freshProject('project');

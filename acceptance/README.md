@@ -16,8 +16,8 @@ it never modifies that source or an activated release. `main` means the commit
 resolved at startup, not a moving branch during the test.
 
 The primary cases enter new Git projects without `.org`, `.lane.json`, routes or
-agent instructions. Missing product capabilities fail. Genuine environment limitations remain pending. Case 04 executes installed supervisor entry and record bootstrap in a
-dedicated untouched project; it does not claim a dispatch/watch cycle. Case 22 executes the default supervisor dispatch/watch/ingest cycle in another untouched project: the scripted supervisor in a real PTY executes entry and record bootstrap, dispatches on the suggested engineer route, consumes watch's single final notice, and runs the record CLI to check and ingest it. Default lane validation and fast-forward promotion also execute. Only an ordinary package test script and a scratch HOME are provided, with no workflow config. The delivery target is an owned scratch stand-in rather than a live supervisor name. The configured mechanics
+agent instructions. Missing product capabilities fail. Genuine environment limitations remain pending. `supervisor-entry` executes installed supervisor entry and record bootstrap in a
+dedicated untouched project; it does not claim a dispatch/watch cycle. `default-cycle` executes the default supervisor dispatch/watch/ingest cycle in another untouched project: the scripted supervisor in a real PTY executes entry and record bootstrap, dispatches on the suggested engineer route, consumes watch's single final notice, and runs the record CLI to check and ingest it. Default lane validation and fast-forward promotion also execute. Only an ordinary package test script and a scratch HOME are provided, with no workflow config. The delivery target is an owned scratch stand-in rather than a live supervisor name. The configured mechanics
 fixture is a separate case: its record, route, validation command and ignored
 session registry are explicit test setup, never evidence that defaults work.
 
@@ -130,7 +130,7 @@ section before any review desk dispatch. The full settle/review handoff remains
 unproven. A background workspace omitted from `workspace list` metadata is a
 failure only after a bounded 15-second metadata poll. The shell cwd must first equal the copied project, just as in the configured
 fixture; each metadata sample includes the fixture comparison. Every sample is
-raw evidence. Case 16 executes the frozen contrib wrappers to retain their
+raw evidence. `existing-wrappers` executes the frozen contrib wrappers to retain their
 identity refusal when metadata is absent, then changes only the audited scratch
 launcher's entry target to `supervisor/open-session.mjs` (the ENG-64 switch).
 Both wrapper dry runs and routing tests must pass through the candidate's native
@@ -162,7 +162,7 @@ workspace and supervisor names are bound to this run's creation receipts, so
 neither switched nor restored scripts can target a live supervisor. The native
 socket endpoint is pinned in the ownership ledger before changing HOME.
 
-Case 18 executes naming/restart and missing-target refusal, routed launcher tests,
+`cutover-switches` executes naming/restart and missing-target refusal, routed launcher tests,
 executive dry run, real busy-session refusal and same-request retry, real copied
 dispatch through the new arm wrapper, watch-log recovery through tidy across multiple run logs, one mutating copied
 tidy/close-finished-agents cycle with recorded done, blocked and needs-human workers (all idle), released
@@ -170,12 +170,14 @@ notice constructors, zero-caller notify retirement, exact rollback, legacy wrapp
 tests and a real restored notify-watch canary. The normal application's build is
 outside this watcher switch: its trusted empty lane is prebuilt before legacy
 dispatch, which still uses the actual copied lane/routing/dispatch code. Every
-subcheck is retained in `cutover-switches.json`; a product failure takes precedence
-over a separate harness limitation. The final notice must actually arrive before
+subcheck has a stable key and is retained in `cutover-switches.json`. Recovery and
+copied cleanup require `switched-canary`; a pending canary preserves its cause and
+classification through both dependents and final retirement. An independent product
+failure takes precedence over a separate harness limitation. The final notice must actually arrive before
 a canary qualifies for retirement. Documentation contract assertions supplement
 the executed consumers; they do not establish an agent's interpretation of prose.
 
-Case 19 first plants an extra caller and proves contrib removal refuses, then
+`contrib-retirement` first plants an extra caller and proves contrib removal refuses, then
 removes it, scans both caller trees, retires the snapshot's compatibility blob only
 after zero callers and a delivered switched canary, executes the split routing
 suite without contrib, and restores the exact blob/mode before restoring legacy
@@ -195,7 +197,12 @@ Keep only `summary.json` and `screen.txt` per candidate in the repository. All
 numbered logs, prompts, transcripts, source/permission receipts and usage stay
 under the printed scratch evidence path and must be named in the report.
 The screen lists each case and points to its numbered JSONL evidence. `summary.json`
-contains reasons, candidate commit and elapsed time. Any failure **or pending**
+contains stable case keys, reasons, candidate commit and elapsed time. Case keys
+and declared prerequisites live in `acceptance/cases.mjs`; numbered IDs and log
+filenames are presentation only. Dependencies resolve by key, so inserting or
+reordering unrelated cases cannot redirect them. Offline regressions insert a case
+at every position in the current merged ordering and compare all keyed outcomes
+and executed bodies. Any failure **or pending**
 case exits 1. Passing mechanics never overrides failed discovery or pending
 cutover work. A full run usually takes a few minutes; network latency and the
 real-session timeouts can make it longer.
@@ -226,8 +233,8 @@ The scratch cutover plan also changes `close-finished-agents.sh`: only a latest
 recorded done or unreported abandoned run permits closing an idle worker tab.
 Blocked, needs-human, open, unknown, unrecorded workers and mixed protected tabs
 remain; the old agentless sweep and tidy label/branch-based workspace sweep are
-removed so they cannot bypass the outcome guard. Case 18 executes the copied installed
-cleanup through tidy with real mutations, independently of case 12 housekeeping.
+removed so they cannot bypass the outcome guard. `cutover-switches` executes the copied installed
+cleanup through tidy with real mutations, independently of `housekeeping`.
 Recovery retains a labelled bounded tail from every run, so a late notice in an
 older run cannot be hidden by a long newer log. Dependent cases retain prerequisite
 causes: omitted optional copies and failed Herdr fixtures remain pending rather
@@ -236,4 +243,6 @@ than becoming product failures; missing candidate modules still fail explicitly.
 The copier archives timestamped script backups outside the executable caller tree
 only after proving they have no reference from any active source, including
 transitive references through other backups. The retirement scanner itself has no
-backup/notify-file exemption; these source and archive receipts stay in evidence.
+backup/notify-file exemption. It conservatively retains asterisk-leading lines,
+including executable shell case arms, both for callers and backup references.
+These source and archive receipts stay in evidence.

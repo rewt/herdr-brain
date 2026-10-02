@@ -1,0 +1,57 @@
+// Stable identities and dependencies. Ordinals belong only to presentation.
+import assert from 'node:assert/strict';
+import { classifyFailure, requirePrerequisite } from './limits.mjs';
+
+const spec = (key, name, prerequisites = [], options = {}) => Object.freeze({ key, name, prerequisites: Object.freeze(prerequisites), ...options });
+export const cases = Object.freeze({
+  tools: spec('required-tools', 'Required tools'),
+  snapshot: spec('candidate-snapshot', 'Candidate snapshot'),
+  record: spec('new-project-record', 'New project: record discovers and populates'),
+  routes: spec('new-project-routes', 'New project: routes resolve without config'),
+  entry: spec('supervisor-entry', 'New project: installed supervisor entry and record bootstrap'),
+  fixture: spec('herdr-fixture', 'Real Herdr boundary and configured fixture'),
+  cycle: spec('configured-cycle', 'Configured cycle: dispatch/report/ingest/promote/close', ['herdr-fixture']),
+  queue: spec('promotion-queue', 'Unconfigured promotion queue: FIFO, notices and refusal', ['herdr-fixture']),
+  missing: spec('missing-worker', 'Failure path: missing worker', ['herdr-fixture']),
+  invalid: spec('invalid-worker', 'Failure path: invalid worker', ['herdr-fixture']),
+  blocked: spec('blocked-worker', 'Failure path: blocked worker', ['herdr-fixture']),
+  fix: spec('fix-round', 'Fix round: same worker, fresh durable run', ['herdr-fixture']),
+  grace: spec('watch-grace', 'Watch cutover: idle grace and exclusive watcher', ['herdr-fixture']),
+  housekeeping: spec('housekeeping', 'Housekeeping closes only eligible finished workers', ['herdr-fixture']),
+  release: spec('scratch-release', 'Scratch release build/activate/rollback/restore'),
+  console: spec('console-build', 'Full console dependency build (offline)'),
+  copy: spec('existing-copy', 'Existing project: copy live calls and inventory drift', ['herdr-fixture']),
+  wrappers: spec('existing-wrappers', 'Existing project: routing and both wrapper dry runs', ['existing-copy']),
+  path: spec('org-path', 'Existing project: org PATH consumers', ['existing-copy']),
+  switches: spec('cutover-switches', 'ENG-64: every file switch and rollback', ['existing-copy']),
+  retirement: spec('contrib-retirement', 'ENG-64: final contrib removal and restoration', ['cutover-switches']),
+  discovery: spec('discovery-concurrent', 'Real discovery: concurrent lanes and promotion'),
+  routingQuestion: spec('discovery-routing', 'Real discovery: routing question waits and answer applies'),
+  defaultCycle: spec('default-cycle', 'New project: default supervisor dispatch/watch/ingest cycle', ['herdr-fixture']),
+  cleanup: spec('scope-cleanup', 'Cleanup and scope audit', [], { cleanup: true }),
+});
+export const cutoverChecks = Object.freeze({
+  name: spec('stable-name', 'stable name: startup and missing-target refusal'),
+  routes: spec('routed-wrappers', 'launcher, continue and routed wrapper tests'),
+  retry: spec('busy-retry', 'continue: busy refusal and same-request retry'),
+  canary: spec('switched-canary', 'dispatch and arm: real canary'),
+  recovery: spec('tidy-recovery', 'tidy recovery across multiple run logs', ['switched-canary']),
+  cleanup: spec('copied-cleanup', 'copied cleanup: close done, preserve blocked and needs_human', ['switched-canary']),
+  notices: spec('notice-contract', 'SETTLE and WORK-PATTERN consumer contract'),
+  retirement: spec('notify-retirement', 'notify retirement has zero callers'),
+  rollback: spec('exact-rollback', 'rollback: all eleven bytes/modes and restored legacy routes/wrappers'),
+  legacy: spec('legacy-canary', 'rollback: real restored notify canary'),
+});
+
+export async function runCase(results, definition, fn) {
+  assert.ok(definition?.key && definition?.name, 'case requires a stable key and name');
+  assert.ok(!results.some((result) => result.key === definition.key), `duplicate case key: ${definition.key}`);
+  const result = { id: String(results.length + 1).padStart(2, '0'), key: definition.key, name: definition.name,
+    status: 'PASS', origin: 'product', detail: '' };
+  try {
+    for (const key of definition.prerequisites) requirePrerequisite(results, key);
+    result.detail = await fn() ?? '';
+  } catch (error) { Object.assign(result, classifyFailure(error, { cleanup: definition.cleanup })); }
+  results.push(result);
+  return result;
+}

@@ -128,7 +128,7 @@ export function callerInventory(copy) {
   const active = new Set(files.filter((file) => !backups.includes(file)));
   for (;;) {
     const referenced = backups.filter((backup) => !active.has(backup) && [...active].some((file) => fs.readFileSync(file, 'utf8').split('\n')
-      .some((line) => !/^\s*(#|\/\/|\*)/.test(line) && line.includes(path.basename(backup)))));
+      .some((line) => !/^\s*(#|\/\/)/.test(line) && line.includes(path.basename(backup)))));
     if (!referenced.length) break;
     for (const file of referenced) active.add(file);
   }
@@ -140,7 +140,7 @@ export function callers(copy, needle) {
     fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
       // Only comment-only historical lines are excluded. notify-watch is a
       // real caller until the switch rewrites it, so it has no file exemption.
-      if (!/^\s*(#|\/\/|\*)/.test(line) && line.includes(needle)) found.push({ file, line: i + 1, text: line });
+      if (!/^\s*(#|\/\/)/.test(line) && line.includes(needle)) found.push({ file, line: i + 1, text: line });
     });
   }
   return found;

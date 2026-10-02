@@ -200,3 +200,21 @@ test('gate result receipts are immutable and duplicate completion creates no ext
   const r = f.exec(process.execPath, [path.join(ROOT, 'bin/org.mjs'), 'release', 'result', c.id, '--file', input]);
   assert.equal(r.status, 1); assert.match(r.stderr, /different result/);
 });
+
+test('preparation env is scoped and a signaled gate records interruption without a replay', t => {
+  const f = fixture(t, {
+    prepare: ['node', '-e', "require('fs').writeFileSync('built',process.env.ENG109_PREP_ONLY)"],
+    prepare_env: { ENG109_PREP_ONLY: 'prepared' },
+    gate: ['node', '-e', "require('assert').equal(require('fs').readFileSync('built','utf8'),'prepared');require('assert').equal(process.env.ENG109_PREP_ONLY,undefined);process.kill(process.pid,'SIGTERM')"],
+  });
+  const c = f.attempt().candidate;
+  assert.equal(c.gate.result, 'interrupted'); assert.equal(c.gate.signal, 'SIGTERM'); assert.equal(c.question, null);
+  assert.equal(f.attempt().candidate.id, c.id); assert.equal(f.record(['releases', '--json']).candidates.length, 1);
+});
+
+test('a moved candidate tag cannot reuse its green evidence', t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] }); const c = f.attempt().candidate;
+  const changed = f.git(['commit-tree', c.tree, '-m', 'Different candidate identity']);
+  f.git(['tag', '-f', c.tag, changed]);
+  assert.throws(() => f.attempt(), /tag moved/); assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
+});

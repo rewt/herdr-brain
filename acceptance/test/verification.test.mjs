@@ -15,7 +15,9 @@ function fixture(t) {
   const repo = path.join(root, 'project'), temp = path.join(root, 'session');
   for (const directory of [repo, temp, path.join(root, 'installed'), path.join(root, 'runtime')]) fs.mkdirSync(directory);
   const run = (command, args, options = {}) => {
-    const result = spawnSync(command, args, { cwd: options.cwd ?? repo, env: options.isolatedEnv ?? { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8', timeout: 20000, input: options.input });
+    const result = spawnSync(command, args, { cwd: options.cwd ?? repo, env: options.isolatedEnv ?? { PATH: process.env.PATH,
+      ORG_ACTOR: `acceptance-${t.name.replaceAll(/[^a-z0-9]/giu, '-').slice(0, 80)}`,
+      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8', timeout: 20000, input: options.input });
     if (options.ok !== false) assert.equal(result.status, 0, result.stderr || result.error?.message);
     return result;
   };
@@ -72,7 +74,7 @@ test('model-controlled tests and Git filters execute only sandboxed; fsmonitor/h
 
 test('record verification and scripted answer are kernel-confined even if model output redirects .org', { skip }, (t) => {
   const { root, repo, spec, run, discoveryRoots, scratchRoots } = fixture(t);
-  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'housekeeping'], { cwd: path.resolve('.'), encoding: undefined });
+  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'housekeeping', 'settle'], { cwd: path.resolve('.'), encoding: undefined });
   assert.equal(archive.status, 0, String(archive.stderr));
   const unpack = spawnSync('tar', ['-x', '-C', spec.installation], { input: archive.stdout }); assert.equal(unpack.status, 0, String(unpack.stderr));
   run(process.execPath, [path.join(spec.installation, 'bin/org.mjs'), 'init', path.join(repo, '.org')]);

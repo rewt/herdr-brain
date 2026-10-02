@@ -120,3 +120,18 @@ test('a review retry retains discovery when the new invocation sets LANE_CONFIG'
   assert.equal(receipt(f, run).laneConfig, null);
   assert.equal(workerPrompts(f).length, 0);
 });
+
+test('CLI desk overrides are consumed by settle without adopting routes or losing lifecycle settings', (t) => {
+  const f = fixture(t, { actor: 'settle-cli-desks-test' });
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ main: 'main', validate: 'node --test test.mjs' }));
+  const configured = f.exec(process.execPath, [path.join(f.source, 'bin/org.mjs'), 'desks', 'set', '--review-route=review-codex', '--fix-route=engineer-xhigh', '--timeout=15', '--review-round-cap=2', '--reuse=false', '--to=project-supervisor']);
+  assert.equal(configured.status, 0, configured.stderr);
+  const own = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.json')));
+  assert.equal(own.validate, 'node --test test.mjs'); assert.equal(Object.hasOwn(own, 'routes'), false);
+  f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Configure desks through record CLI']); f.git(['rebase', 'main'], f.workspace);
+  const run = f.start(); f.commit('correct\n'); f.report(run);
+  assert.equal(result(f.settle(run)).result, 'promotable');
+  const job = receipt(f, run);
+  assert.equal(job.reviewRoute, 'review-codex'); assert.equal(job.fixRoute, 'engineer-xhigh'); assert.equal(job.timeout, 15); assert.equal(job.reuse, false); assert.equal(job.to, 'project-supervisor');
+  assert.equal(job.reviewPolicy.cap, 2); assert.equal(job.reviewPolicy.source, 'project');
+});

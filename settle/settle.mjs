@@ -12,6 +12,7 @@ import { readReport } from '../lib/report.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { laterRuns, releases } from '../lib/state.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, readRoutesConfig, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
+import { validateDeskSettings } from './config.mjs';
 import { acquire } from './lock.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
@@ -316,11 +317,7 @@ function main() {
     }
     if (config.main !== undefined && (typeof config.main !== 'string' || !config.main.trim())) throw new Error('main must be a nonempty string');
     const settings = config.settle ?? {};
-    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('settle config must be an object');
-    for (const key of ['review_route', 'fix_route', 'to']) {
-      if (settings[key] !== undefined && (typeof settings[key] !== 'string' || !settings[key].trim())) throw new Error(`settle.${key} must be a nonempty string`);
-    }
-    if (settings.reuse !== undefined && typeof settings.reuse !== 'boolean') throw new Error('settle.reuse must be boolean');
+    validateDeskSettings(settings);
     const reviewRoute = opt['review-route'] ?? settings.review_route ?? (config.selection_policy ? selectRoute(config, 'review', run.meta?.harness) : 'review');
     const fixRoute = opt['fix-route'] ?? settings.fix_route ?? run.meta?.route ?? 'engineer';
     resolveLaunchRoute(config, { route: reviewRoute }); resolveLaunchRoute(config, { route: fixRoute });

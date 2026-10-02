@@ -45,10 +45,10 @@ usage: record console [--project NAME] [--modern]
        record console --modern --folder PATH
        node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
 
---modern opens the project console. Answers, routes, priorities and housekeeping use validating record commands.
---print is read only, including confirmed answers, route edits and priority changes.
+--modern opens the project console. Answers, routes, desks, priorities and housekeeping use validating record commands.
+--print is read only, including confirmed answers, project settings and priority changes.
 --keys sends characters in order: literal \\n means Enter and \\e means Escape.
-Modern keys: p scope dropdown, h overview, c control, d decided, f asked, u routes, P priorities, H housekeeping,
+Modern keys: p scope dropdown, h overview, c control, d decided, f asked, u routes, P priorities, H housekeeping, S desks,
 g goals, t tasks, a activity, s sessions, ! waiting.
 Tab changes section; Up/Down select rows; Left/Right change views; Enter opens; Esc goes back.
 w toggles checkouts. In output: l transcript, v live screen, Shift+arrows pan, o native terminal.
@@ -106,6 +106,7 @@ if (opt.print) {
     herdrStartChat: async () => ({ ok: false, error: '--print does not start agents' }),
     herdrRename: async () => ({ ok: false, error: '--print does not rename sessions' }),
     orgAnswer: async () => ({ ok: false, error: '--print does not record answers' }),
+    orgSettingsSet: async () => ({ ok: false, error: '--print does not change project settings' }),
     orgHousekeepingSet: async () => ({ ok: false, error: '--print does not change housekeeping' }),
     orgRouteSet: async () => ({ ok: false, error: '--print does not change routes' }),
     orgPriorityChange: async () => ({ ok: false, error: '--print does not change priorities' }),

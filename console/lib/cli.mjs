@@ -77,6 +77,20 @@ export async function orgRoutes(project) {
   return JSON.parse(r.stdout);
 }
 
+export async function orgDesks(project) {
+  const r = await run(process.execPath, [ORG_BIN, 'desks', '--json'], { cwd: routeDirectory(project) });
+  if (!r.ok) throw new Error(firstLine(r.stderr) || 'record desks failed');
+  return JSON.parse(r.stdout);
+}
+export async function orgSettingsSet(project, review, revision) {
+  let cwd;
+  try { cwd = routeDirectory(project); } catch (error) { return { ok: false, error: error.message }; }
+  const args = review.command ? ['routes', review.command, `--value=${JSON.stringify(review.value)}`] :
+    ['desks', 'set', ...Object.entries(review.patch).map(([key, value]) => `--${key.replaceAll('_', '-')}=${value}`), ...review.unset.map(key => `--unset=${key}`)];
+  const r = await run(process.execPath, [ORG_BIN, ...args, `--expect=${revision}`, '--json'], { cwd, env: { ...process.env, ORG_ACTOR: 'human' } });
+  return r.ok ? { ok: true } : { ok: false, error: firstLine(r.stderr) || 'Project settings were not saved' };
+}
+
 export async function orgHousekeeping(project) {
   const r = await run(process.execPath, [ORG_BIN, 'housekeeping', '--json'], { cwd: routeDirectory(project), env: orgEnv(project) });
   if (!r.ok) throw new Error(firstLine(r.stderr) || 'record housekeeping failed');

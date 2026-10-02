@@ -9,6 +9,8 @@ import { needChoices, needActions, needEffect } from './needs.mjs';
 import { regionFor, pickerEntries } from './navigation.mjs';
 import { relatedWork, acceptanceCriteria, itemOrigin } from './model.mjs';
 import { resolveLaunchRoute } from '../../lanes/routes.mjs';
+import { settingsReview } from './settings.mjs';
+import { deskFallback, DESK_DEFAULTS } from '../../settle/config.mjs';
 import { routeReview } from './routes.mjs';
 import { DEFAULTS, FIELDS, housekeepingReview } from './housekeeping.mjs';
 
@@ -95,7 +97,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
   const title = s.view === 'projects' ? 'Your projects' : s.view === 'folder' ? 'Open a folder' : s.view === 'ideas' ? 'Start with an idea' : s.view === 'output' ? space?.label ?? 'Session output' : p?.name ?? 'Start where you are';
-  const action = s.housekeepingEdit ? 'Enter reviews / confirms' : s.view === 'housekeeping' ? 'H Housekeeping' : s.priorityEdit ? 'Enter reviews / confirms' : s.view === 'priorities' ? 'Enter re-rank' : s.routeEdit ? 'Enter reviews / confirms' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
+  const action = s.settingsEdit ? 'Enter reviews / confirms' : s.view === 'desks' ? 'S Desks' : s.housekeepingEdit ? 'Enter reviews / confirms' : s.view === 'housekeeping' ? 'H Housekeeping' : s.priorityEdit ? 'Enter reviews / confirms' : s.view === 'priorities' ? 'Enter re-rank' : s.routeEdit ? 'Enter reviews / confirms' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
   put(2, x, title, 'bright', 'bg', true, width - action.length - 2);
   put(2, cols - action.length - 2, action, 'muted', 'bg', false, action.length);
   const errors = Object.entries(s.errors);
@@ -163,6 +165,14 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const r = m.routes, config = r.config;
     paragraph(r.suggested ? 'Suggested defaults · confirmation pending. Saving an edit adopts them for this project.' : 'Project routes · Enter a route to change its kind, model or effort.');
     if (s.errors.routes) paragraph('Showing last loaded routes; refresh before editing.', 'amber');
+    if (limit === Infinity && r.editable && !s.errors.routes) {
+      row('+ Add route / model ›', { id: 'settings:add', fg: 'blue' });
+      row('Change primary pool ›', { id: 'settings:pool', fg: 'blue' });
+      row('Edit dispatch defaults ›', { id: 'settings:defaults', fg: 'blue' });
+      row('+ Add task selection ›', { id: 'settings:policy', fg: 'blue' });
+      row('+ Set always arguments ›', { id: 'settings:arguments', fg: 'blue' });
+      row();
+    }
     if (limit === Infinity && config.authority) paragraph(config.authority);
     for (const file of r.files) paragraph(`Source: ${file}`);
     const defaults = resolveLaunchRoute(config);
@@ -178,9 +188,12 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
     if (limit === Infinity) {
       row(); section('Selection policy');
-      for (const [task, choice] of Object.entries(config.selection_policy?.by_task_class ?? {})) paragraph(`${task} → ${typeof choice === 'string' ? choice : Object.entries(choice).map(([pool, name]) => `${pool}: ${name}`).join(' · ')}`, 'fg');
-      for (const [kind, args] of Object.entries(config.always_args ?? {})) paragraph(`${kind} always: ${JSON.stringify(args)}`);
-    row(); paragraph(`Edits save in ${r.target}`);
+      for (const [task, choice] of Object.entries(config.selection_policy?.by_task_class ?? {})) {
+        if (typeof choice === 'string') row(`${task} → ${choice}`, { id: `settings:policy:${encodeURIComponent(task)}`, fg: 'blue' });
+        else for (const [pool, name] of Object.entries(choice)) row(`${task} · ${pool} → ${name}`, { id: `settings:policy:${encodeURIComponent(task)}:${encodeURIComponent(pool)}`, fg: 'blue' });
+      }
+      for (const [kind, args] of Object.entries(config.always_args ?? {})) row(`${kind} always: ${JSON.stringify(args)}`, { id: `settings:arguments:${encodeURIComponent(kind)}`, fg: 'blue' });
+      row(); paragraph(`Edits save in ${r.target}`);
       if (!r.editable) paragraph('Open a Git project to save a route change.', 'amber');
     }
   };
@@ -194,7 +207,32 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     paragraph(`Last live scan: ${doc.lastScan?.at ?? 'not recorded'}${doc.lastScan ? ` · ${age(Date.parse(doc.lastScan.at), now)}` : ''}`);
     if (doc.lastAttempt?.action === 'error') paragraph(`Last attempt failed: ${doc.lastAttempt.error}`, 'amber');
   };
-  if (s.housekeepingEdit) {
+  const deskSummary = () => {
+    const doc = m.desks;
+    if (!doc) { paragraph(s.errors.desks ? `Desks unavailable: ${s.errors.desks}` : 'Desks have not loaded.'); return; }
+    const settings = doc.settings;
+    paragraph(`Review: ${settings.review_route ?? deskFallback('review_route', doc.config)}`);
+    paragraph(`Fix: ${settings.fix_route ?? deskFallback('fix_route', doc.config)}`);
+    paragraph(`Round cap: ${settings.review_round_cap ?? 0} (${(settings.review_round_cap ?? 0) === 0 ? 'unlimited' : 'Moderate/Minor only'}) · review timeout ${settings.timeout ?? 1800}s`);
+  };
+  if (s.settingsEdit) {
+    const e = s.settingsEdit;
+    section(`${e.confirm ? 'Review' : 'Edit'} ${e.title}`, 'blue');
+    if (e.confirm) {
+      const review = settingsReview(e);
+      for (const text of review.lines) paragraph(text, 'fg');
+      if (e.kind !== 'desks' && m.routes?.suggested && review.writes) paragraph('Saving confirms the portable route preset for this project.');
+      paragraph('Applies to future launches and settle intake. Existing receipts keep their captured settings.');
+      row(e.busy ? 'Saving…' : review.writes ? 'Enter  Save project settings' : 'Enter  Close without changes', { id: 'settings-save', fg: 'teal' });
+    } else {
+      if (e.kind === 'add' && m.routes?.suggested) paragraph('Saving confirms the portable route preset for this project.');
+      if (e.kind === 'desks') paragraph('Blank uses the built-in default. Cap 0 is unlimited; timeout 3–7200s; reuse true / false.');
+      e.labels.forEach((label, i) => row(`${label}: ${clip(e.values[i] || '(default)', Math.max(1, width - label.length - 5))}${e.field === i ? '▏' : ''}`, { id: `settings-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i }));
+      row('Enter  Review change', { id: 'settings-save', fg: 'blue' });
+    }
+    row('Cancel', { id: 'settings-cancel', fg: 'muted' });
+    paragraph(`Writes project config: ${e.target}`, 'muted');
+  } else if (s.housekeepingEdit) {
     const e = s.housekeepingEdit;
     section(e.confirm ? 'Review housekeeping change' : 'Edit housekeeping overrides', 'blue');
     if (e.confirm) {
@@ -251,8 +289,11 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
     row('Cancel', { id: 'route-cancel', fg: 'muted' });
   } else if (s.view === 'control') {
-    section('Housekeeping', 'blue'); housekeepingSummary();
-    row('H Activity / pause / overrides ›', { id: 'view:housekeeping', fg: 'blue' }); row();
+    section('Project settings', 'blue');
+    row('P Priorities ›', { id: 'view:priorities', fg: 'blue' });
+    row('u Routes / models / primary pool ›', { id: 'view:routes', fg: 'blue' });
+    row('S Settle / review desks ›', { id: 'view:desks', fg: 'blue' });
+    row('H Housekeeping / pause / overrides ›', { id: 'view:housekeeping', fg: 'blue' }); row();
     section(`Waiting on you · ${m.needs.length}`, 'amber');
     if (m.categoryFlags?.length) row(`Category flags · ${m.categoryFlags.length} · ! review ›`, { id: 'view:needs', fg: 'amber' });
     m.needs.slice(0, 3).forEach(needRow); if (!m.needs.length) paragraph(s.errors.today || s.errors.brain ? 'Waiting sources unavailable · r retry' : 'Nothing waiting on you.');
@@ -263,7 +304,22 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     row('f All questions ›', { id: 'view:asked', fg: 'blue' }); row();
     section('Routes in effect', 'blue'); routesRows(2);
     row('u All routes / edit ›', { id: 'view:routes', fg: 'blue' });
-    row('P Operator priorities ›', { id: 'view:priorities', fg: 'blue' });
+  } else if (s.view === 'desks') {
+    section('Settle and review desks', 'blue'); deskSummary();
+    const doc = m.desks;
+    if (doc) {
+      if (s.errors.desks) paragraph('Showing last loaded settings; refresh before editing.', 'amber');
+      if (doc.editable && !s.errors.desks) row('Edit desk settings ›', { id: 'desks-edit', fg: 'blue' });
+      else paragraph('Open a Git project to edit desks.', 'amber');
+      paragraph(`Reuse stopped worker: ${doc.settings.reuse ?? false} · notify ${doc.settings.to ?? DESK_DEFAULTS.to}`);
+      paragraph('Item round-cap overrides win. Only Moderate/Minor findings can stop at the cap; Major findings and failed checks still require correction.');
+      paragraph('These defaults apply at the next settle intake. Command flags override them; saved receipts retain their settings.');
+      row(); section('Configuration sources');
+      paragraph(`Desk source: ${doc.source}`);
+      paragraph(`Save: ${doc.target}`);
+      paragraph(doc.suggested ? 'Routes are portable suggestions; saving desks leaves route confirmation pending.' : 'Review and fix route names use the project route table.');
+      row('u Inspect routes / selection policy ›', { id: 'view:routes', fg: 'blue' });
+    }
   } else if (s.view === 'housekeeping') {
     section('Housekeeping', 'blue'); housekeepingSummary();
     const doc = m.housekeeping;
@@ -519,7 +575,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes · P Priorities · H Housekeeping', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, housekeeping overrides, and session input. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes · P Priorities · H Housekeeping · S Desks', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, desks, housekeeping overrides, and session input. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
@@ -560,7 +616,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.housekeepingEdit ? ' Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels' : s.view === 'housekeeping' ? ' H Housekeeping · Enter edits · PageDown activity · Esc back' : s.priorityEdit?.confirm ? ' ↑↓ / PgUp / PgDn review · Enter saves · Backspace edits · Esc cancels' : s.priorityEdit ? ' Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : s.view === 'priorities' ? ' P Priorities · Enter re-rank · choose Add for a new outcome · Esc back' : s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.settingsEdit ? ' Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels' : s.view === 'desks' ? ' S Desks · Enter edits · u Routes · Esc back' : s.housekeepingEdit ? ' Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels' : s.view === 'housekeeping' ? ' H Housekeeping · Enter edits · PageDown activity · Esc back' : s.priorityEdit?.confirm ? ' ↑↓ / PgUp / PgDn review · Enter saves · Backspace edits · Esc cancels' : s.priorityEdit ? ' Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : s.view === 'priorities' ? ' P Priorities · Enter re-rank · choose Add for a new outcome · Esc back' : s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

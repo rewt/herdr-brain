@@ -19,6 +19,7 @@ import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 import { blockJson, renderBlock } from '../lib/block.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
+import { desksCommand } from '../settle/desks-command.mjs';
 import { routesCommand } from '../lanes/routes-command.mjs';
 import { housekeepingCommand } from '../housekeeping/command.mjs';
 import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
@@ -81,6 +82,10 @@ Views (zero inference)
   record housekeeping pause [--expect REV] save enabled=false for the next tick
   record housekeeping set --resume false [--unset KEY] [--expect REV]
                                           validate project .housekeeping.json overrides
+  record desks [--json]                   settle/review project settings
+  record desks set [--review-route R] [--fix-route R] [--review-round-cap N] [--timeout S]
+                   [--reuse true|false] [--to AGENT] [--unset FIELD] [--expect REV]
+  record routes add|policy|defaults|arguments --value JSON [--expect REV]
   record routes [--json]                  project routes and their configuration sources
   record routes set NAME --kind K --model M --effort E [--expect REV]
                                           validate and save an override in the project's .lane.json
@@ -922,7 +927,7 @@ function priorities(argv) {
 
 const COMMANDS = {
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, routes: routesCommand, housekeeping: housekeepingCommand,
+  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
 };
 
 function main(argv) {

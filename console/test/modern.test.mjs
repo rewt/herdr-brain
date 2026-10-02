@@ -25,6 +25,7 @@ function fixture(overrides = {}) {
   const reads = [], calls = [], panes = [];
   const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), orgLog: async p => p.name === 'Alpha' ? events : [], brainQueue: async () => ({ rows: [], off: true }),
     herdrList: async what => what === 'workspace' ? workspaces : what === 'pane' ? panes : tabs, herdrAgents: async () => ({ ok: true, agents }),
+    orgDesks: async () => null,
     orgHousekeeping: async () => null,
     orgRoutes: async () => ({ config: { routes: {} }, files: [], editable: false, target: '/a/.lane.json' }),
     herdrRead: async target => { reads.push(target); return { ok: true, text: `EXACT ${target.pane}\n${'output\n'.repeat(45)}` }; }, herdrGo: async target => { calls.push(target); return { ok: true }; }, gitSummary: async () => ({ branch: 'lane/alpha', changes: 2 }), ...overrides };

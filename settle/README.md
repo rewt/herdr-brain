@@ -149,6 +149,22 @@ defaults. Projects may put `settle` settings in their tracked `.lane.json`:
 }
 ```
 
+Inspect and edit these settings through the validating record CLI or console's
+Desks screen (`S`):
+
+```sh
+record desks --json
+record desks set --review-route review-codex --review-round-cap 3 --timeout 1800
+record desks set --unset review_route
+```
+
+Writes target the canonical Git project's tracked `.lane.json`, ignore ambient
+`LANE_CONFIG` launch overrides, preserve lifecycle and other effective desk fields,
+and share the route editor's lock. `--expect REV` rejects a stale reviewed edit,
+including changed parent settings. Clearing a field uses the built-in fallback;
+a project desk object replaces the whole inherited desk object. The console
+shows item-cap/command precedence and the existing-receipt snapshot boundary.
+
 These settings can stand alone; a project with only settle or lifecycle settings
 uses the portable route preset for review. Settle captures the effective routing
 fields at intake and passes that snapshot to `lane review --route-config`, keeping

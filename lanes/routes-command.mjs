@@ -17,7 +17,7 @@ export function routesSnapshot(cwd = process.cwd()) {
   const loaded = loadDiscoveredRoutes({ cwd: root, env: {} });
   const target = path.join(root, '.lane.json');
   const bytes = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
-  const revision = crypto.createHash('sha256').update(JSON.stringify([loaded, target, bytes])).digest('hex');
+  const revision = crypto.createHash('sha256').update(JSON.stringify([loaded, loaded.files.map(file => fs.readFileSync(file, 'utf8')), target, bytes])).digest('hex');
   return { ...loaded, target, editable: Boolean(project), revision };
 }
 
@@ -28,11 +28,10 @@ function safeTarget(target) {
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
 
-export function setProjectRoute(name, patch, { cwd = process.cwd(), expect } = {}) {
+// All project .lane.json controls share one lock and atomic replacement.
+export function editProjectConfig(mutate, { cwd = process.cwd(), expect, adoptRoutes = true } = {}) {
   const before = routesSnapshot(cwd);
-  if (!before.editable) throw new UserError('route edits require a Git project');
-  if (!Object.hasOwn(before.config.routes ?? {}, name)) throw new UserError(`unknown route: ${name}`);
-  if (!name.trim() || /[\x00-\x1f\x7f]/u.test(name)) throw new UserError('route name must be non-empty printable text');
+  if (!before.editable) throw new UserError('config edits require a Git project');
   const lock = `${before.target}.lock`;
   try { fs.mkdirSync(lock); }
   catch (error) { if (error.code === 'EEXIST') throw new UserError(`route config is locked: ${lock}`); throw error; }
@@ -44,11 +43,9 @@ export function setProjectRoute(name, patch, { cwd = process.cwd(), expect } = {
     const own = fs.existsSync(current.target) ? JSON.parse(fs.readFileSync(current.target, 'utf8')) : {};
     // Materialize the portable preset on its first edit so one override does not
     // silently remove every other suggested route and the selection policy.
-    const next = current.suggested ? structuredClone(current.config) : own;
-    if (current.suggested) next.authority = 'Project routes confirmed by the operator';
-    // Preserve the named route, including absent fields that continue to use
-    // dispatch or harness defaults, rather than pinning resolved defaults.
-    next.routes = { ...next.routes, [name]: { ...current.config.routes[name], ...patch } };
+    const next = current.suggested && adoptRoutes ? { ...own, ...structuredClone(current.config) } : own;
+    if (current.suggested && adoptRoutes) next.authority = 'Project routes confirmed by the operator';
+    mutate(next, current);
     validateRoutesConfig(next, { references: false });
     // Project route maps replace individual inherited routes; all policy
     // references must still resolve before any bytes are replaced.
@@ -69,18 +66,44 @@ export function setProjectRoute(name, patch, { cwd = process.cwd(), expect } = {
   }
 }
 
+export function setProjectRoute(name, patch, options = {}) {
+  return editProjectConfig((next, current) => {
+    if (!Object.hasOwn(current.config.routes ?? {}, name)) throw new UserError(`unknown route: ${name}`);
+    validateRouteName(name);
+    next.routes = { ...next.routes, [name]: { ...current.config.routes[name], ...patch } };
+  }, options);
+}
+function validateRouteName(name) {
+  if (!name.trim() || /[\x00-\x1f\x7f]/u.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name)) throw new UserError('route name must be non-empty printable text and not reserved');
+}
+export function configureProjectRoutes(kind, value, options = {}) {
+  return editProjectConfig((next, current) => {
+    if (kind === 'add') {
+      validateRouteName(value.name);
+      if (Object.hasOwn(current.config.routes ?? {}, value.name)) throw new UserError(`route already exists: ${value.name}`);
+      if (!value.route.kind) throw new UserError('new route kind is required');
+      next.routes = { ...next.routes, [value.name]: value.route };
+    } else if (kind === 'policy') next.selection_policy = value;
+    else if (kind === 'defaults') next.dispatch = value;
+    else if (kind === 'arguments') next.always_args = value;
+    else throw new UserError('unknown route configuration control');
+  }, options);
+}
+
 export function routesCommand(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
-    json: { type: 'boolean' }, kind: { type: 'string' }, model: { type: 'string' }, effort: { type: 'string' }, expect: { type: 'string' },
+    json: { type: 'boolean' }, kind: { type: 'string' }, model: { type: 'string' }, effort: { type: 'string' }, expect: { type: 'string' }, value: { type: 'string' },
   } });
   const [verb, name] = positionals;
   const patch = Object.fromEntries(['kind', 'model', 'effort'].filter(k => values[k] !== undefined).map(k => [k, values[k]]));
   let result;
   try {
-    if (!verb && !Object.keys(patch).length && !values.expect) result = routesSnapshot();
+    if (!verb && !positionals.length && !Object.keys(patch).length && !values.expect && !values.value) result = routesSnapshot();
     else if (verb === 'set' && name && positionals.length === 2 && Object.keys(patch).length) {
       result = setProjectRoute(name, patch, { expect: values.expect });
-    } else throw new UserError('usage: record routes [--json] | record routes set NAME --kind K --model M --effort E [--expect REV]');
+    } else if (['add', 'policy', 'defaults', 'arguments'].includes(verb) && positionals.length === 1 && values.value && !Object.keys(patch).length) {
+      result = configureProjectRoutes(verb, JSON.parse(values.value), { expect: values.expect });
+    } else throw new UserError('usage: record routes [--json] | record routes set NAME --kind K --model M --effort E | record routes add|policy|defaults|arguments --value JSON [--expect REV]');
   } catch (error) { throw new UserError(error.message); }
   process.stdout.write(values.json ? JSON.stringify(result, null, 2) + '\n' : renderRoutes(result));
   return 0;

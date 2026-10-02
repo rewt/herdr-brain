@@ -41,6 +41,23 @@ inspect dispatch defaults. The same dependency-free resolver supplies
 same harness, model, and effort without copied flags. Route selection policy is
 project configuration; pool and task-class names are opaque to Herdr.
 
+The modern console Routes screen (`u`) edits routes, adds a model as a new named
+route, switches the primary pool, changes task selections and edits dispatch or
+always arguments. These controls save through validating record commands:
+
+```sh
+record routes add --value '{"name":"specialist","route":{"kind":"opaque","model":"project-model"}}'
+record routes policy --value '{"primary_implementation_pool":"project-pool","by_task_class":{"implementation":"specialist"}}'
+record routes defaults --value '{"kind":"opaque","args":["--option","value with spaces"]}'
+record routes arguments --value '{"opaque":["--option","value with spaces"]}'
+```
+
+Policy/defaults/arguments values replace their whole routing field; the console
+preserves other entries when editing one selection or harness. Every write keeps
+lifecycle and desk settings and validates effective references. All project
+config controls share an atomic writer and lock, with `--expect REV` for reviewed
+edits. Names stay opaque; no model/provider catalog or machine settings are needed.
+
 ## Lifecycle
 
 `lane promote TOPIC --expected-head FULL_COMMIT_HASH` checks an authorized head

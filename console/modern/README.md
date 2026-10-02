@@ -4,7 +4,7 @@ This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes
 are the project screen's prompt (a new chat, or a task under the work block),
 what the operator types into a session, session names, Waiting on you answers,
-project route and housekeeping overrides, and operator priority changes through validating record commands.
+project route, desk and housekeeping overrides, and operator priority changes through validating record commands.
 It runs in Ink through `console/app.mjs`; it is not the browser design preview or
 `console/proto` fixture application. Opt in per launch; the existing console
 remains the default and retains all of its operational actions.
@@ -86,6 +86,28 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   `.lane.json`; a newly created config is ready to add and commit in Git.
   An unconfigured project shows portable suggestions as confirmation pending;
   its first saved edit adopts the complete preset, preserving other defaults.
+- `S` opens Desks: review route (or worker-pool selection), fix route (or the
+  worker route), review round cap, review timeout, stopped-worker reuse and
+  supervisor target. Enter opens the six fields; Tab changes field, Ctrl+U clears,
+  Enter reviews the before/after values, then Enter saves through `record desks
+  set`. Blank removes that setting and uses its built-in default (cap 0 is
+  unlimited). Item caps win; existing settle receipts keep their intake snapshot.
+  Editing inherited desks preserves other effective settings because settle uses
+  whole-object precedence. Saving desks does not confirm suggested routes.
+  Opening a project requires no setup and writes nothing. Errors and stale reads
+  block editing; stale confirmation keeps the draft for inspection. The console
+  never launches settlement or review by changing desk settings.
+- Routes also offers Add route/model, primary pool, dispatch defaults, task
+  selections and always arguments. Existing task selections and always arguments
+  are clickable further down the page. All use the same edit/review/save flow,
+  then `record routes add|policy|defaults|arguments --value JSON --expect REV`.
+  Route/model/effort/pool names remain opaque; references and pool coverage must
+  validate. Argument arrays preserve token boundaries (JSON arrays of strings).
+  Blank dispatch fields inherit harness defaults. The first route configuration
+  change confirms the portable preset and preserves lifecycle/desk fields.
+  All `.lane.json` editors share one lock, detect changes in parent configuration
+  too, and replace only the canonical project's file. `--print` cannot save any
+  of these changes.
 - `H` opens Housekeeping, also linked from Control: running/stopped/unknown or
   stale-lock state, effective defaults and overrides, last live scan, recent
   closed/kept/resumed workers, reasons, failures and explicitly labeled previews.
@@ -186,7 +208,7 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | `p` | Scope dropdown; type to filter, Up/Down choose, Enter selects, Esc dismisses |
 | `h` | Project overview |
 | `g` / `t` / `a` / `s` / `!` | Goals / Tasks / Activity / Sessions / Waiting on you |
-| `c` / `d` / `f` / `u` / `P` / `H` | Control / Decided / Asked / Routes / Priorities / Housekeeping |
+| `c` / `d` / `f` / `u` / `P` / `H` / `S` | Control / Decided / Asked / Routes / Priorities / Housekeeping / Desks |
 | `Tab` / `Shift+Tab` | Change section, remembering selection within it |
 | `j` / `k`, Up / Down | Select within the current section |
 | Left / Right | Change central view, or the selected checkout's horizontal tab |
@@ -223,7 +245,8 @@ task, and `herdr tab create` / `agent start` / `agent prompt` for a chat, on the
 operator's typed text and Enter. Renaming sets only a pane label. A Waiting on you
 answer goes through the Brain CLI or `record answer` after the answer line says
 what it will do. Route overrides use `record routes set` after review. Housekeeping overrides use
-`record housekeeping set` after review. There is no dispatch or model-call path; use
+`record housekeeping set` after review. Desks and additional routing controls use
+`record desks set` and `record routes` through the same reviewed flow. There is no dispatch or model-call path; use
 `node bin/org.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
 
 Goal/session associations use recorded run data. A title resemblance does not

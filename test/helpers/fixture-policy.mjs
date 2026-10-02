@@ -5,8 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 const runner = fileURLToPath(new URL('./run.mjs', import.meta.url));
 const policy = fileURLToPath(import.meta.url);
+const detachedFixture = fileURLToPath(new URL('./detached-fixture.mjs', import.meta.url));
 function containedEnv(env = process.env, command, args) {
   const result = { ...env };
+  if (command === process.execPath && args?.[0] === detachedFixture) {
+    // This fixed, bounded entrypoint puts a native alarm on every detached
+    // descendant before exec. Those deadlines survive suite cancellation.
+    delete result.NODE_OPTIONS;
+    return result;
+  }
   if (command?.endsWith('/sandbox-exec') || (command?.endsWith('/codex') && args?.[0] === 'sandbox')) {
     // The acceptance kernel boundary forbids importing host test helpers.
     // Keep that boundary intact; these synchronous attack fixtures are already

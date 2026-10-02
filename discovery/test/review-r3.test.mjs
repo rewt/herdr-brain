@@ -8,6 +8,8 @@ import { socketFilter } from '../bubblewrap.mjs';
 import { runBounded } from '../bounded.mjs';
 import { sandboxCommand } from '../confinement.mjs';
 import { lifetimeScope, closeScope } from '../lifetime.mjs';
+import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
+import { waitForExit } from '../../test/helpers/child.mjs';
 const product = new URL('../../', import.meta.url).pathname;
 const actorTest = (name, fn, options = {}) => test(name, { timeout: 20000, ...options }, (t) => {
   process.env.ORG_ACTOR = `r93-${name.replaceAll(/[^a-z0-9]/giu, '-').slice(0, 90)}`;
@@ -44,32 +46,14 @@ for (const [arch, audit, read, write, openat, socket, pair] of [
   assert.equal(evaluate(program, read, 0), 0x80000000);
 });
 
-for (const mode of ['completion', 'deadline']) actorTest(`detached double-fork descendants are gone after ${mode}; unrelated same-group processes survive`, async (t) => {
-  const root = fixture(t), marker = path.join(root, 'late-write'), receipt = path.join(root, 'leaf-launched'), unrelated = path.join(root, 'unrelated');
-  const other = spawn(process.execPath, ['-e', `setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(unrelated)},'alive'),900);`], { stdio: 'ignore' });
-  t.after(() => { if (other.exitCode === null) other.kill(); });
-  const writer = `setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe'),1000);`;
-  const middle = `const c=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(writer)}],{detached:true,stdio:'ignore'});c.unref();require('fs').writeFileSync(${JSON.stringify(receipt)},String(c.pid));`;
-  const parent = `const fs=require('fs'),c=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,stdio:'ignore'});c.unref();const poll=setInterval(()=>{if(fs.existsSync(${JSON.stringify(receipt)})&&${mode === 'completion'}){clearInterval(poll);}},10);`;
-  const status = await runBounded(process.execPath, ['-e', parent], { timeoutMs: mode === 'deadline' ? 650 : 2500 });
-  assert.equal(status, mode === 'deadline' ? 124 : 0);
-  assert.ok(fs.existsSync(receipt), 'detached leaf actually launched');
-  await delay(1100);
-  assert.ok(!fs.existsSync(marker), 'no descendant writes after return');
-  assert.equal(fs.readFileSync(unrelated, 'utf8'), 'alive', 'unidentified unrelated process was never signalled');
-});
-actorTest('descendants are cleaned after the JavaScript wrapper is killed', async (t) => {
-  const root = fixture(t), marker = path.join(root, 'late-write'), receipt = path.join(root, 'launched');
-  const writer = `setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe'),1200);`;
-  const command = `const c=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(writer)}],{detached:true,stdio:'ignore'});c.unref();require('fs').writeFileSync(${JSON.stringify(receipt)},String(c.pid));setInterval(()=>{},1000);`;
-  const source = `import {runBounded} from ${JSON.stringify(new URL('../bounded.mjs', import.meta.url).href)};await runBounded(process.execPath,['-e',${JSON.stringify(command)}],{timeoutMs:3000});`;
-  const wrapper = spawn(process.execPath, ['--input-type=module', '-e', source], { stdio: 'ignore' });
-  t.after(() => { if (wrapper.exitCode === null) wrapper.kill('SIGKILL'); });
-  const deadline = Date.now() + 5000;
-  while (!fs.existsSync(receipt) && Date.now() < deadline) await delay(20);
-  assert.ok(fs.existsSync(receipt), 'project descendant actually launched');
-  const closed = new Promise((resolve) => wrapper.once('close', resolve)); wrapper.kill('SIGKILL'); await closed;
-  await delay(1400); assert.ok(!fs.existsSync(marker), 'native owner cleaned descendants after losing its parent');
+for (const [mode, name] of [
+  ['completion', 'detached double-fork descendants are gone after completion; unrelated same-group processes survive'],
+  ['deadline', 'detached double-fork descendants are gone after deadline; unrelated same-group processes survive'],
+  ['wrapper-death', 'descendants are cleaned after the JavaScript wrapper is killed'],
+]) actorTest(name, async (t) => {
+  const { child } = spawnDetachedFixture(t, mode);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
 });
 actorTest('macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary', async (t) => {
   const root = fixture(t), scope = lifetimeScope(); t.after(() => closeScope(scope));

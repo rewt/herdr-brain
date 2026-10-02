@@ -5,11 +5,66 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
-import { killProcess, registerProcess } from './helpers/processes.mjs';
+import { killProcess, registerProcess, createProcessTracker } from './helpers/processes.mjs';
+import { spawnDetachedFixture, waitForDetachedCleanup } from './helpers/detached.mjs';
 
 const helper = new URL('./helpers/bounded-test.mjs', import.meta.url).href;
 const childHelper = new URL('./helpers/child.mjs', import.meta.url).href;
 const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
+
+test('real detached fixture cleanup survives an assertion failure', async (t) => {
+  const { root, child } = spawnDetachedFixture(t, 'failure');
+  const result = await waitForExit(child);
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /injected detached fixture assertion failure/);
+  const leaf = JSON.parse(fs.readFileSync(path.join(root, 'leaf.json')));
+  assert.equal(leaf.pid, leaf.pgid);
+  assert.notEqual(leaf.pgid, leaf.parentGroup);
+  await waitForDetachedCleanup(root);
+});
+
+for (const kind of ['SIGTERM', 'SIGKILL', 'SIGKILL-before-receipt', 'blocked']) test(`${kind} cleanup bounds genuinely detached fixtures outside the suite group`, async (t) => {
+  const detachedHelper = new URL('./helpers/detached.mjs', import.meta.url).href;
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'detached-cancellation-'));
+  const f = { root, file: path.join(root, 'culprit.test.mjs') };
+  fs.writeFileSync(f.file, `import test from ${JSON.stringify(helper)};
+import {waitForExit} from ${JSON.stringify(childHelper)};
+import fs from 'node:fs';
+import {spawnDetachedFixture} from ${JSON.stringify(detachedHelper)};
+test('real detached cancellation fixture',async(t)=>{
+const {child}=spawnDetachedFixture(t,${JSON.stringify(kind === 'blocked' ? 'blocked' : kind === 'SIGKILL-before-receipt' ? 'early-cancel' : kind === 'SIGKILL' ? 'blocked-leaf' : 'hold')},${JSON.stringify(root)},${kind === 'blocked' ? 3000 : 15000});
+fs.writeFileSync(${JSON.stringify(path.join(root, 'suite'))},String(process.env.HERDR_TEST_SUITE_PID));
+await waitForExit(child);
+});`);
+  const outer = spawnChild(t, process.execPath, [runner, f.file]);
+  t.after(async () => {
+    await waitForDetachedCleanup(root);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const receiptFile = kind === 'SIGKILL-before-receipt' ? 'spawned.json' : 'leaf.json';
+  const deadline = Date.now() + 10000;
+  while (!fs.existsSync(path.join(f.root, receiptFile)) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(fs.existsSync(path.join(f.root, receiptFile)), 'detached cancellation fixture reached its launch');
+  const leaf = JSON.parse(fs.readFileSync(path.join(f.root, receiptFile)));
+  if (kind === 'SIGKILL-before-receipt') {
+    const snapshot = createProcessTracker().snapshot();
+    assert.ok(snapshot.ok, snapshot.error);
+    leaf.pgid = snapshot.value.get(leaf.pid)?.pgid;
+    assert.ok(!fs.existsSync(path.join(root, 'leaf.json')), 'cancellation precedes receipt publication');
+  }
+  const suite = Number(fs.readFileSync(path.join(f.root, 'suite')));
+  assert.equal(leaf.pid, leaf.pgid);
+  assert.notEqual(leaf.pgid, leaf.parentGroup);
+  assert.notEqual(leaf.pgid, suite, 'leaf is outside the suite group');
+  if (kind !== 'blocked') outer.kill(kind === 'SIGKILL-before-receipt' ? 'SIGKILL' : kind);
+  const result = await waitForExit(outer);
+  if (kind === 'blocked') {
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /real detached cancellation fixture/);
+    assert.match(result.stdout, /did not exit within 3000ms/);
+  }
+  await waitForDetachedCleanup(f.root);
+});
 
 function fixture(t, source) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'test-hang-regression-'));

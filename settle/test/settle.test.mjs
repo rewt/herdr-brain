@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fixture } from './fixture.mjs';
+import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
+const journal = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
 test('unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable', async (t) => {
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   assert.ok(!fs.existsSync(path.join(f.repo, '.lane.json')));
@@ -20,6 +22,11 @@ test('unconfigured project: report, independent claim finding, fresh fix run, re
   assert.equal(f.git(['rev-list', '--merges', 'HEAD'], f.workspace), '');
   const prompt = fs.readFileSync(path.join(f.root, 'review-prompt'), 'utf8');
   assert.match(prompt, /Claim: work.txt contains correct/); assert.match(prompt, /work.txt must contain correct/);
+  assert.match(prompt, /## Review run budget\nBuild, test, prepare, install and check commands: maximum count 0/);
+  const review = fs.readFileSync(second.review.path, 'utf8');
+  assert.match(review, /## Non-claims\n- Validation is inherited from settle/);
+  assert.match(review, /## Re-executed\n```json\n\[\]/);
+  assert.match(review, /## Unverified\nNone/);
   assert.ok(!fs.existsSync(path.join(f.repo, '.lane.json')));
   const count = f.calls().filter((a) => a[1] === 'start').length;
   assert.equal(result(f.settle(first.fix.run)).result, 'promotable');
@@ -40,6 +47,80 @@ test('non-done outcomes escalate with substance without launching a reviewer or 
     const r = result(f.settle(run)); assert.equal(r.result, 'escalate');
     assert.match(fs.readFileSync(r.handoff, 'utf8'), /scope|Worker reported/);
     assert.ok(f.show(run).report); assert.equal(f.calls().length, 0);
+    const item = f.show(f.show(run).item);
+    assert.equal(item.outcome.value, outcome, 'settlement preserves the recorded non-done outcome');
+    assert.equal(item.status, outcome === 'failed' ? 'ready' : outcome, 'derived blocked and needs-human views retain the item');
+  }
+});
+test('inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence', (t) => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  fs.writeFileSync(path.join(f.root, 'inherited-unverified'), '');
+  assert.equal(result(f.settle(run)).result, 'promotable');
+  const g = fixture(t), next = g.start(); g.commit('correct\n'); g.report(next);
+  fs.writeFileSync(path.join(g.root, 'inherited-unverified'), '');
+  fs.writeFileSync(path.join(g.root, 'unverified'), '');
+  const unresolved = result(g.settle(next));
+  assert.equal(unresolved.result, 'escalate');
+  assert.match(unresolved.reason, /unverified claims/);
+});
+test('discovered project settings override parent settle values and inherit a non-main integration branch', (t) => {
+  const f = fixture(t);
+  f.git(['branch', '-m', 'main', 'develop']);
+  fs.writeFileSync(path.join(f.root, '.lane.json'), JSON.stringify({ ...ROUTE_PRESET, main: 'develop',
+    settle: { review_route: 'review-max', fix_route: 'engineer-max', reuse: true, timeout: 17, to: 'parent-supervisor' } }));
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ settle: {
+    review_route: 'review', fix_route: 'engineer-xhigh', timeout: 25, to: 'configured-supervisor' } }));
+  f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Configure project settlement']);
+  f.git(['rebase', 'develop'], f.workspace);
+  const run = f.start(); f.commit('wrong\n'); f.report(run);
+  const r = result(f.settle(run)); assert.equal(r.result, 'fix_round');
+  const saved = journal(f, run);
+  assert.equal(saved.main, 'develop'); assert.equal(saved.mainHead, f.git(['rev-parse', 'develop']));
+  assert.equal(saved.reviewRoute, 'review'); assert.equal(saved.fixRoute, 'engineer-xhigh');
+  assert.equal(saved.reuse, false, 'repository settle object replaces the parent object');
+  assert.equal(saved.timeout, 25); assert.equal(saved.to, 'configured-supervisor');
+  assert.equal(r.review.route, 'review'); assert.equal(f.show(r.fix.run).meta.route, 'engineer-xhigh');
+});
+test('explicit configuration selects one layer and command flags override settle settings', (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.root, '.lane.json'), 'invalid ignored parent config');
+  const file = path.join(f.root, 'explicit.json');
+  fs.writeFileSync(file, JSON.stringify({ ...ROUTE_PRESET, settle: {
+    review_route: 'review', fix_route: 'engineer-max', reuse: false, timeout: 23, to: 'configured-supervisor' } }));
+  f.env.LANE_CONFIG = file;
+  const run = f.start(); f.report(run, 'blocked');
+  assert.equal(result(f.settle(run, ['--review-route', 'review-max', '--fix-route', 'engineer-xhigh', '--reuse', '--timeout', '7', '--to', 'flag-supervisor'])).result, 'escalate');
+  const saved = journal(f, run);
+  assert.equal(saved.reviewRoute, 'review-max'); assert.equal(saved.fixRoute, 'engineer-xhigh');
+  assert.equal(saved.reuse, true); assert.equal(saved.timeout, 7); assert.equal(saved.to, 'flag-supervisor');
+});
+test('an item dropped or blocked during NEEDS-WORK review cannot launch a correction', (t) => {
+  for (const change of ['drop', 'block']) {
+    const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
+    const item = f.show(run).item;
+    const blocker = change === 'block' ? f.record(['add', 'Resolve scope first', '--role', 'architect']).split(' ')[0] : null;
+    const action = change === 'drop' ? ['close', item, '--dropped'] : ['block', item, '--by', blocker];
+    fs.writeFileSync(path.join(f.root, 'review-record-action.json'), JSON.stringify(action));
+    const r = result(f.settle(run)); assert.equal(r.result, 'escalate');
+    assert.equal(r.review.verdict, 'NEEDS-WORK'); assert.match(r.reason, /supervisor judgment/);
+    assert.equal(f.show(item).status, change === 'drop' ? 'dropped' : 'blocked');
+    assert.deepEqual(f.show(item).runs, [run], 'no correction run was recorded');
+    assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the independent reviewer started');
+    assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3]?.startsWith('You are run ')).length, 0);
+    assert.match(fs.readFileSync(r.handoff, 'utf8'), /closure or blockers/);
+  }
+});
+test('initial and cached readiness both require a clean canonical checkout', (t) => {
+  for (const cached of [false, true]) {
+    const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+    if (cached) assert.equal(result(f.settle(run)).result, 'promotable');
+    const laneHead = f.git(['rev-parse', 'HEAD'], f.workspace), base = f.git(['rev-parse', 'main']);
+    fs.writeFileSync(path.join(f.repo, 'work.txt'), 'operator edit\n');
+    const r = f.settle(run); assert.equal(r.status, 1); assert.match(r.stderr, /canonical checkout is dirty/);
+    assert.equal(JSON.parse(r.stdout).result, 'escalate');
+    assert.equal(f.git(['rev-parse', 'main']), base);
+    if (cached) assert.equal(f.git(['rev-parse', 'HEAD'], f.workspace), laneHead);
+    assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'operator edit\n');
   }
 });
 test('dirty lanes and foreign Git identities cannot be reviewed or dispatched', (t) => {
@@ -113,4 +194,8 @@ test('other-item lane work and dropped items require judgment; a saved PASS rech
   const h = fixture(t), ready = h.start(); h.commit('correct\n'); h.report(ready);
   assert.equal(result(h.settle(ready)).result, 'promotable'); h.start();
   const r = h.settle(ready); assert.equal(r.status, 1); assert.match(r.stderr, /readiness changed/);
+  const i = fixture(t), concurrent = i.start(); i.commit('correct\n'); i.report(concurrent);
+  i.record(['start', i.show(concurrent).item, '--workspace', i.repo]);
+  assert.equal(result(i.settle(concurrent)).result, 'escalate');
+  assert.equal(i.calls().length, 0, 'an open run on the same item in another checkout prevents overlap');
 });

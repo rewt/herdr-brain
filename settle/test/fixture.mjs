@@ -27,6 +27,7 @@ export function fixture(t, { source = rootTool } = {}) {
   git(['add', '.']); git(['commit', '-qm', 'Create unconfigured project']);
   git(['worktree', 'add', '-q', '-b', 'lane/topic', workspace]);
   const org = path.join(repo, '.org');
+  env.SETTLE_TEST_RECORD = path.join(source, 'bin/org.mjs');
   const record = (args) => checked(process.execPath, [path.join(source, 'bin/org.mjs'), ...args], repo, { ORG_DIR: org });
   record(['init']);
   const item = record(['add', 'Produce correct work', '--role', 'engineer', '--accept', 'work.txt contains correct']).split(' ')[0];
@@ -81,9 +82,15 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   const correct=fs.readFileSync(path.join(cwd,'work.txt'),'utf8').trim()==='correct';
   const verdict=correct?'PASS':'NEEDS-WORK';
   const findings=correct?'None':'- [Major] work.txt:1 - Report claims correct content but diff contains wrong; Fix: write correct';
-  const unverified=fs.existsSync(path.join(root,'unverified'))?'- The acceptance evidence remains unresolved.':'None';
+  const budget=prompt.includes('## Review run budget')&&prompt.includes('Build, test, prepare, install and check commands: maximum count 0 for each command.');
+  const inherited='- Validation is inherited from settle; the explicit zero-command review budget permits no independent execution.';
+  const acknowledgment=fs.existsSync(path.join(root,'inherited-unverified'));
+  const unverified=!budget?'- No unambiguous Review run budget; default zero-command limit.':fs.existsSync(path.join(root,'unverified'))?(acknowledgment?inherited+'\\n':'')+'- The acceptance evidence remains unresolved.':acknowledgment?inherited:'None';
+  const nonclaims=budget&&!acknowledgment?inherited:'None';
+  const recordAction=path.join(root,'review-record-action.json');
+  if(fs.existsSync(recordAction)) execFileSync(process.execPath,[process.env.SETTLE_TEST_RECORD,...JSON.parse(fs.readFileSync(recordAction,'utf8'))],{cwd:repo,env:{...process.env,ORG_DIR:path.join(repo,'.org')}});
   const reviewed=fs.existsSync(path.join(root,'wrong-head'))?'0'.repeat(40):field('Reviewed commit');
-  const lines=['**'+verdict+'**','Schema: lane-review/v1','Reviewed commit: '+reviewed,'Topic: '+field('Topic'),'Round: '+field('Round'),'Review ID: '+field('Review ID'),'Base branch: '+field('Base branch'),'Base commit: '+field('Base commit'),'','## Findings',findings,'','## Re-executed','~~~json','[]','~~~','','## Non-claims','None','','## Unverified',unverified,'','## Private identifiers','~~~json','[]','~~~','','## Analysis','Scripted independent claim check.','','<!-- lane-review-complete -->',''];
+  const lines=['**'+verdict+'**','Schema: lane-review/v1','Reviewed commit: '+reviewed,'Topic: '+field('Topic'),'Round: '+field('Round'),'Review ID: '+field('Review ID'),'Base branch: '+field('Base branch'),'Base commit: '+field('Base commit'),'','## Findings',findings,'','## Re-executed','~~~json','[]','~~~','','## Non-claims',nonclaims,'','## Unverified',unverified,'','## Private identifiers','~~~json','[]','~~~','','## Analysis','Scripted independent claim check.','','<!-- lane-review-complete -->',''];
   const dest=field('Private record file');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,lines.join('\\n').replaceAll('~~~',String.fromCharCode(96).repeat(3)));
  } else if(prompt.startsWith('You are run ')) {
   const [,run,report]=prompt.match(/You are run (R-\\d+).*Write the report to ([^;]+);/);

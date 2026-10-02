@@ -33,7 +33,17 @@ checks material claims against code. A `done` report never substitutes for this
 judgment. Already ingested reports use the record's immutable copy; subsequent
 edits to the source cannot silently replace it. Report-provided commands are
 never executed. Blocked, failed and needs-human reports are recorded and handed
-to the supervisor with their substance, without guessing a scope decision.
+to the supervisor with their substance and recorded outcomes intact, without
+guessing a scope decision. Only a done outcome is reopened while review is pending.
+
+The generated review brief explicitly budgets zero build, test, prepare, install
+and check commands. Reviewers independently inspect code, Git and the validation
+log; they acknowledge inherited validation under Non-claims and claim no fresh
+test execution. If an acceptance requirement needs additional evidence or an
+execution beyond that budget, the reviewer names it under Unverified for a
+supervisor handoff. The brief supplies one exact inherited-validation
+acknowledgment that can also appear alone under Unverified; that scoped non-claim
+does not prevent readiness. Any additional Unverified entry does.
 
 Settle commits only the validated public review record, after checking the exact
 reviewed HEAD and only that dirty path. `promotable` requires PASS, no remaining
@@ -44,7 +54,10 @@ supervisor's judgment. Settle never promotes, pushes, closes worktrees or tidies
 panes. An unrebased lane or unresolved record blocker receives an evidence handoff.
 
 NEEDS-WORK, FAIL or red validation produce a correction brief and call dispatch
-for a new run on the same item/lane. A fresh worker is the default. `--reuse`
+for a new run on the same item/lane. Immediately before a new launch or incomplete
+dispatch retry, settle checks current item closure, blockers and concurrent runs;
+an operator drop or new blocker receives a handoff. A completed dispatch receipt
+can still be adopted without launching work. A fresh worker is the default. `--reuse`
 requests dispatch's existing identity-checked stopped-worker reuse; older runs
 without occupant evidence require a fresh worker. Budgets and total runs appear
 in the result and remain advisory. There is no automatic send-back cap or loop;
@@ -66,15 +79,20 @@ defaults. Projects may put `settle` settings in their tracked `.lane.json`:
 }
 ```
 
-These settings accompany normal lifecycle/routes configuration; partial project
-route configurations must declare the routes they select. Named routes retain
+These settings accompany normal lifecycle/routes configuration. Discovery uses
+the nearest parent config followed by the canonical repository config; repository
+`main` and the whole `settle` object replace parent values when present.
+`LANE_CONFIG` selects exactly one file, and command flags override its settings.
+The integration branch defaults to `main`. Partial project route configurations
+must declare the routes they select. Named routes retain
 all model/effort plumbing in the routes and lane modules.
 
 Receipts, report/diff snapshots, logs, correction briefs and compact handoffs
 live under the discovered `.org/settle/`. Status remains derived from record
 events. A per-repository/lane lock serializes settlement, including stale-owner
 cleanup. Repeating a finished invocation returns its saved receipt; repeating a
-promotable invocation first checks that its Git evidence is still current.
+promotable invocation first checks that its Git evidence is still current, both
+the lane and canonical checkout are clean, and record readiness still holds.
 
 ```sh
 node settle/settle.mjs R-123 --status

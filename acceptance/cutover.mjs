@@ -105,8 +105,9 @@ export function restore(copy, originals) {
     assert.equal(fs.statSync(path.join(copy, file)).mode & 0o777, mode);
   }
 }
+const scriptBackup = /\.(sh|mjs|py)\.bak-\d{8}-[^/]+$/;
 // The copier and retirement guard share the same recursively enumerated source
-// set. Executable files with nonstandard extensions are included as well.
+// set. Interpreters can invoke recognized script backups without an execute bit.
 export function callerFiles(copy) {
   const found = [];
   function visit(dir) {
@@ -114,7 +115,7 @@ export function callerFiles(copy) {
       const file = path.join(dir, entry.name);
       if (entry.isSymbolicLink()) throw new Error(`caller scan refuses symlink ${file}`);
       if (entry.isDirectory()) visit(file);
-      else if (entry.isFile() && (/\.(sh|mjs|py)$/.test(file) || (fs.statSync(file).mode & 0o111))) found.push(file);
+      else if (entry.isFile() && (/\.(sh|mjs|py)$/.test(file) || scriptBackup.test(file) || (fs.statSync(file).mode & 0o111))) found.push(file);
     }
   }
   for (const dir of ['scripts/lane', '.lane/supervisor']) visit(path.join(copy, dir));
@@ -124,7 +125,7 @@ export function callerFiles(copy) {
 // references them. Retain their bytes outside the executable scratch caller tree.
 export function callerInventory(copy) {
   const files = callerFiles(copy);
-  const backups = files.filter((file) => /\.(sh|mjs|py)\.bak-\d{8}-[^/]+$/.test(file));
+  const backups = files.filter((file) => scriptBackup.test(file));
   const active = new Set(files.filter((file) => !backups.includes(file)));
   for (;;) {
     const referenced = backups.filter((backup) => !active.has(backup) && [...active].some((file) => fs.readFileSync(file, 'utf8').split('\n')

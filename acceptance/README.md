@@ -184,6 +184,17 @@ suite without contrib, and restores the exact blob/mode before restoring legacy
 callers. The checkout's contrib file is untouched. Missing split modules in older
 candidates are product FAIL in these three cases, rather than permanent pending
 coverage. Notifications are captured as scratch evidence without showing host UI.
+The busy-retry check resolves the copied launcher's actual existing-project
+workspace from its native canonical lookup and checks it against the creation
+receipt. Refusal must leave its tabs/panes unchanged, with no successful creation
+or received prompt anywhere in the owned fixture. Retry must produce exactly one
+new destination tab/pane, one registered executive and one matching scripted PTY
+prompt receipt. Exit status alone cannot establish a retry. Both stages retain
+native topology, creation and input receipts in `cutover-busy-retry.json`. Offline
+controls reject a leaking refusal (even when the configured workspace stays
+unchanged), a leak closed before the final topology read, an exit-zero no-op retry,
+and missing or misdirected session/prompt receipts.
+
 Legacy detached watcher PIDs come from a scratch nohup adapter's creation receipt;
 cleanup does not discover processes by names or global scans.
 
@@ -242,7 +253,12 @@ than becoming product failures; missing candidate modules still fail explicitly.
 
 The copier archives timestamped script backups outside the executable caller tree
 only after proving they have no reference from any active source, including
-transitive references through other backups. The retirement scanner itself has no
+transitive references through other backups. Recognized timestamped sh/mjs/py
+backups are enumerated regardless of executable mode: an interpreter can invoke
+a readable mode-0644 backup. Referenced backups remain in the copied caller tree
+with their original mode; only proven unreferenced ones qualify as historical.
+The native retirement refusal probe includes a wrapper invoking a mode-0644
+Python backup. The retirement scanner itself has no
 backup/notify-file exemption. It conservatively retains asterisk-leading lines,
 including executable shell case arms, both for callers and backup references.
 These source and archive receipts stay in evidence.

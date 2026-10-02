@@ -150,3 +150,31 @@ test('executable shell case arms cannot hide contrib callers or references to hi
   assert.ok(!callerInventory(root).historical.includes(backup));
   assert.throws(() => retireContrib(root, compat), /retirement refused/);
 });
+
+test('referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement', (t) => {
+  const root = fixture(t), compat = path.join(root, 'compat.mjs');
+  fs.writeFileSync(compat, 'compatibility blob');
+  const backup = path.join(root, '.lane/supervisor/old.py.bak-20261002-copy');
+  const nested = path.join(root, '.lane/supervisor/nested.mjs.bak-20261002-copy');
+  const unused = path.join(root, '.lane/supervisor/unused.sh.bak-20261002-copy');
+  fs.writeFileSync(backup, `import subprocess\nsubprocess.run(['node', '${nested}'])\n`);
+  fs.writeFileSync(nested, 'invoke("contrib/settle-watch.mjs");\n');
+  fs.writeFileSync(unused, 'node contrib/settle-watch.mjs\n');
+  for (const file of [backup, nested, unused]) fs.chmodSync(file, 0o644);
+  fs.writeFileSync(path.join(root, 'scripts/lane/active.sh'), `#!/bin/sh\npython3 '${backup}'\n`);
+  for (const file of [backup, nested, unused]) assert.ok(callerFiles(root).includes(file));
+  const inventory = callerInventory(root);
+  for (const file of [backup, nested]) {
+    assert.ok(inventory.active.includes(file)); assert.ok(!inventory.historical.includes(file));
+    assert.equal(fs.statSync(file).mode & 0o777, 0o644);
+  }
+  assert.deepEqual(inventory.historical, [unused]);
+  assert.ok(callers(root, 'contrib/settle-watch.mjs').some(v => v.file === nested));
+  assert.throws(() => retireContrib(root, compat), /retirement refused/);
+  assert.equal(fs.readFileSync(compat, 'utf8'), 'compatibility blob');
+  // The shared inventory used by the copier must retain the readable Python
+  // backup's own compatibility call too, not only the transitive variant.
+  fs.writeFileSync(backup, 'invoke("contrib/settle-watch.mjs");\n');
+  assert.ok(callers(root, 'contrib/settle-watch.mjs').some(v => v.file === backup));
+  assert.throws(() => retireContrib(root, compat), /retirement refused/);
+});

@@ -15,6 +15,7 @@ import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine } from './results.mjs';
 import { liveSocket } from './probe.mjs';
 import { cases, cutoverChecks, runCase } from './cases.mjs';
+import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -543,6 +544,7 @@ try {
     return 'live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)';
   });
   const existingReady = () => { requirePrerequisite(results, cases.copy.key); requirePrerequisite(results, cases.fixture.key); };
+  let existingWorkspace;
   await test(cases.wrappers, async () => {
     existingReady(); requireCandidate('contrib/settle-watch.mjs');
     initRepo(copy);
@@ -552,6 +554,7 @@ try {
     const output = node(path.join(candidate, 'bin/org.mjs'), ['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', copy, '--report', report], { extra: { ORG_DIR: org } }).stdout;
     const id = output.match(/^(R-\d+)/)[1]; node(path.join(candidate, 'bin/org.mjs'), ['set', id, `agent=${supervisor.name}`], { extra: { ORG_DIR: org } });
     const existingWs = h('workspace', 'create', '--cwd', copy, '--label', 'acceptance-existing-project', '--no-focus');
+    existingWorkspace = existingWs.workspace.workspace_id;
     const cwdProbes = [], cwdStart = Date.now();
     try {
       await until(() => {
@@ -699,19 +702,40 @@ try {
       const busy = `exec-busy-${process.pid}`;
       h('agent', 'rename', pane, busy);
       h('agent', 'prompt', busy, 'acceptance-state working');
-      const before = h('tab', 'list', '--workspace', supervisor.workspace).tabs.length;
-      const began = Date.now();
-      const options = ['--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
-      const refused = execute('.lane/supervisor/continue.sh', options, { ok: false, timeout: 10_000 });
-      assert.notEqual(refused.status, 0); assert.ok(Date.now() - began < 10_000);
-      assert.ok(refused.stdout.includes(busy)); assert.match(refused.stdout, /retry.*stops/);
-      assert.equal(h('tab', 'list', '--workspace', supervisor.workspace).tabs.length, before);
-      h('agent', 'prompt', busy, 'acceptance-state idle');
-      h('agent', 'wait', busy, '--until', 'idle', '--until', 'done', '--timeout', '10000');
-      h('agent', 'rename', pane, target);
-      try { execute('.lane/supervisor/continue.sh', options, { timeout: 90_000 }); }
-      catch (error) { throw commandFailure(`busy refusal passed; same-request retry failed: ${error.message}`); }
-      return 'actual wrapper refused busy owned session without opening a tab; retained request retried after a real wait';
+      const native = h('worktree', 'list', '--cwd', copy);
+      const destinations = native.worktrees.filter((v) => v.path === copy && v.is_linked_worktree === false);
+      assert.equal(destinations.length, 1, 'launcher must resolve one canonical destination');
+      const workspace = destinations[0].open_workspace_id;
+      assert.equal(workspace, existingWorkspace, 'launcher destination must match existing-project creation receipt');
+      assert.notEqual(workspace, supervisor.workspace, 'existing and configured fixtures must be distinct');
+      const rows = (file) => fs.existsSync(file) ? read(file).trim().split('\n').filter(Boolean).map(JSON.parse) : [];
+      const snapshot = () => ({ workspace,
+        tabs: h('tab', 'list', '--workspace', workspace).tabs,
+        panes: h('pane', 'list', '--workspace', workspace).panes,
+        agents: h('agent', 'list').agents,
+        creations: launchCreations(rows(path.join(root, 'herdr.jsonl'))),
+        prompts: rows(path.join(root, 'worker-input.jsonl')),
+      });
+      const receipt = { nativeDestination: native, configuredWorkspace: supervisor.workspace };
+      try {
+        receipt.before = snapshot();
+        const began = Date.now();
+        const options = ['--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
+        receipt.refused = execute('.lane/supervisor/continue.sh', options, { ok: false, timeout: 10_000 });
+        assert.notEqual(receipt.refused.status, 0); assert.ok(Date.now() - began < 10_000);
+        assert.ok(receipt.refused.stdout.includes(busy)); assert.match(receipt.refused.stdout, /retry.*stops/);
+        receipt.afterRefusal = snapshot();
+        assertLaunchRefused(receipt.before, receipt.afterRefusal);
+        h('agent', 'prompt', busy, 'acceptance-state idle');
+        h('agent', 'wait', busy, '--until', 'idle', '--until', 'done', '--timeout', '10000');
+        h('agent', 'rename', pane, target);
+        receipt.beforeRetry = snapshot();
+        try { receipt.retried = execute('.lane/supervisor/continue.sh', options, { timeout: 90_000 }); }
+        catch (error) { throw commandFailure(`busy refusal passed; same-request retry failed: ${error.message}`); }
+        receipt.afterRetry = snapshot();
+        receipt.session = assertLaunchPrompted(receipt.beforeRetry, receipt.afterRetry);
+      } finally { write(path.join(evidence, 'cutover-busy-retry.json'), JSON.stringify(receipt, null, 2)); }
+      return 'actual destination unchanged on refusal with zero creation/prompt receipts; retry created exactly one registered, prompted executive session';
     });
     async function legacyCanary(stage, mode = stage === 'switched' ? 'held' : 'done') {
       const topic = `cutover-${stage}`;
@@ -856,10 +880,13 @@ try {
     assert.ok(fs.existsSync(compat), 'candidate compatibility entry missing before retirement');
     const saved = fs.readFileSync(compat), mode = fs.statSync(compat).mode & 0o777;
     // Prove a live copied caller prevents removal, including an omitted caller.
-    const trap = path.join(copy, '.lane/supervisor/nested/retirement-probe.py');
-    write(trap, `#!/usr/bin/env python3\nimport subprocess\nsubprocess.run(['node', ${JSON.stringify(compat)}, '--open'])\n`); fs.chmodSync(trap, 0o755);
+    const trap = path.join(copy, '.lane/supervisor/nested/retirement-probe.py.bak-20261001-copy');
+    const wrapper = path.join(copy, '.lane/supervisor/nested/retirement-probe.sh');
+    write(trap, `import subprocess\nsubprocess.run(['node', ${JSON.stringify(compat)}, '--open'])\n`); fs.chmodSync(trap, 0o644);
+    write(wrapper, `#!/bin/sh\npython3 ${quote(trap)}\n`); fs.chmodSync(wrapper, 0o755);
+    assert.ok(callerInventory(copy).active.includes(trap), 'referenced non-executable backup must stay active');
     assert.throws(() => retireContrib(copy, compat), /retirement refused/);
-    assert.deepEqual(fs.readFileSync(compat), saved); fs.unlinkSync(trap);
+    assert.deepEqual(fs.readFileSync(compat), saved); fs.unlinkSync(wrapper); fs.unlinkSync(trap);
     assert.ok(cutoverCanary, 'final retirement requires a delivered switched canary');
     try {
       retireContrib(copy, compat); assert.ok(!fs.existsSync(compat));

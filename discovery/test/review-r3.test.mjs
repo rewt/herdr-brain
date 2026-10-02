@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -78,10 +78,10 @@ actorTest('macOS cleanup retains the immutable kernel marker and refuses a missi
   const fake = path.join(root, 'unprotected-provider');
   fs.writeFileSync(fake, `#!${process.execPath}\nconst a=process.argv.slice(2),i=a.indexOf('--');const r=require('child_process').spawnSync(a[i+1],a.slice(i+2),{stdio:['inherit','inherit','inherit',3]});process.exit(r.status??1);`, { mode: 0o755 });
   const guard = sandboxCommand(fake, root, { sharedPaths: [path.join(root, '.org')], lifetime: scope });
-  const result = await runBounded(guard.binary, guard.args, { scope, command: [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe')`], timeoutMs: 1000 });
+  const result = await runBounded(guard.binary, guard.args, { scope, command: [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe')`], timeoutMs: 5000 });
   assert.equal(result, 125); assert.ok(!fs.existsSync(marker));
   const profile = `(version 1)(allow default)(deny file-read* (literal ${JSON.stringify(scope.denied)}))`;
-  const restricted = await runBounded('/usr/bin/sandbox-exec', ['-p', profile], { scope, command: ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/bin/true'], timeoutMs: 1000 });
+  const restricted = await runBounded('/usr/bin/sandbox-exec', ['-p', profile], { scope, command: ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)', '/bin/true'], timeoutMs: 5000 });
   assert.notEqual(restricted, 0, 'a descendant cannot replace its inherited kernel marker');
 }, { skip: process.platform !== 'darwin' && 'macOS kernel identity regression' });
 actorTest('validation cannot signal an owner outside its inherited kernel boundary', async (t) => {

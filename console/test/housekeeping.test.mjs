@@ -187,3 +187,53 @@ test('console retains failed housekeeping reads with explicit stale state and pr
   fail = false; await s.refresh(); await s.activate('housekeeping-pause');
   assert.ok(s.ui.housekeepingEdit);
 });
+
+test('a discovered Git project without a record opens and edits housekeeping through the real console CLI adapters', { timeout: 30000 }, async t => {
+  const f = fixture(t);
+  fs.rmSync(f.env.ORG_DIR, { recursive: true });
+  const workspace = { workspace_id: 'fresh-workspace', worktree: {
+    repo_key: fs.realpathSync(path.join(f.cwd, '.git')), repo_root: f.cwd, checkout_path: f.cwd, is_linked_worktree: false,
+  } };
+  const s = createModernSession({ config: { projects: [] }, env: { ...f.env, HERDR_WORKSPACE_ID: workspace.workspace_id },
+    deps: { herdrList: async kind => kind === 'workspace' ? [workspace] : [], herdrAgents: async () => ({ ok: true, agents: [] }),
+      herdrRead: async () => ({ ok: true, text: '' }), brainQueue: async () => ({ rows: [], off: true }) } });
+  t.after(() => s.stop());
+  await s.refresh(); await s.key('H');
+  assert.match(s.project.id, /^discovered:/); assert.equal(s.project.org, null);
+  assert.equal(s.ui.errors.housekeeping, undefined);
+  assert.match(render(s), /Schedule: no record/); assert.match(render(s), /Enabled · recovery on/);
+  assert.equal(fs.existsSync(f.configFile), false);
+  await s.activate('housekeeping-pause'); await s.key('', { return: true });
+  assert.equal(s.ui.housekeepingEdit, null);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.configFile, 'utf8')), { enabled: false });
+  await s.activate('housekeeping-edit'); await s.key('', { tab: true }); await s.key('false');
+  await s.key('', { return: true }); await s.key('', { return: true });
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.configFile, 'utf8')), { enabled: false, resume: false });
+  assert.match(render(s), /Paused · recovery off/);
+  assert.equal(s.model.housekeeping.stateDir, null); assert.equal(s.project.org, null);
+  assert.equal(fs.existsSync(f.env.ORG_DIR), false, 'opening and editing do not initialize a record');
+  assert.equal(fs.existsSync(path.join(f.cwd, 'null')), false, 'no literal-null record directory');
+});
+
+test('housekeeping close failures show both the actual error and planned reason in console and text CLI renders', { timeout: 30000 }, async t => {
+  const f = fixture(t), s = f.session;
+  fs.writeFileSync(f.logFile, JSON.stringify({ at: f.at, action: 'close-failed', tab_id: 'tab-failed', label: 'Finished worker',
+    why: 'R-9 report recorded; clean lane promoted', error: 'Herdr refused to close tab-failed' }) + '\n');
+  await s.refresh(); await s.key('H');
+  for (const width of [80, 100, 140]) {
+    const frame = s.frame(width, 40), text = frame.lines.map(lineText).join('\n');
+    assert.match(text, /close-failed/); assert.match(text, /Error: Herdr refused to close tab-failed/);
+    assert.match(text, /Reason: R-9 report recorded; clean lane promoted/);
+    const errorLine = frame.lines.find(line => lineText(line).includes('Error: Herdr'));
+    assert.ok(errorLine.spans.some(span => span.fg === 'amber'), 'actual failure remains highlighted');
+  }
+  const cliText = f.org(['housekeeping']);
+  assert.match(cliText, /Error: Herdr refused to close tab-failed/);
+  assert.match(cliText, /Reason: R-9 report recorded; clean lane promoted/);
+  const config = path.join(f.scratch, 'failed-close-console.json');
+  fs.writeFileSync(config, JSON.stringify({ projects: [{ name: 'Close failure fixture', cwd: f.cwd, org: f.env.ORG_DIR }] }));
+  const output = execFileSync(process.execPath, [app, '--modern', '--config', config, '--print', '100x40', '--keys', 'H'],
+    { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 10000 });
+  assert.match(output, /Error: Herdr refused to close tab-failed/);
+  assert.match(output, /Reason: R-9 report recorded; clean lane promoted/);
+});

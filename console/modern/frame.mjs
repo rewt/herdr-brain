@@ -278,7 +278,8 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       if (!doc.actions.length) paragraph('No activity recorded.');
       for (const entry of doc.actions) {
         paragraph(`${entry.at} · ${entry.action}${entry.dryRun || entry.action.startsWith('would-') ? ' · preview' : ''} · ${entry.label ?? entry.run ?? entry.tab_id ?? entry.pane ?? ''}`);
-        if (entry.why || entry.error) paragraph(`  ${entry.why ?? entry.error}`, entry.error ? 'amber' : 'muted');
+        if (entry.error) paragraph(`  Error: ${entry.error}`, 'amber');
+        if (entry.why) paragraph(`  ${entry.error ? 'Reason: ' : ''}${entry.why}`, 'muted');
         if (entry.action === 'scan') paragraph(entry.cleanup === false ? '  Cleanup not due this tick.' : entry.cleanup === undefined ? `  ${entry.close} close candidates · ${entry.keep} kept · cleanup scope not recorded` : `  ${entry.close} close candidates · ${entry.keep} kept`, 'muted');
       }
       row(); section('Configuration sources');

@@ -31,7 +31,9 @@ function orgEnv(project) {
   // Writes from the console are the operator's own, and say so: an inherited
   // session name must not be used, and without a terminal an unnamed write
   // would be flagged unattributed.
-  return { ...process.env, ORG_DIR: project.org, ORG_ACTOR: 'human' };
+  // Child-process environments stringify null. An absent record must clear an
+  // inherited override so discovery can return the project's no-record defaults.
+  return { ...process.env, ORG_DIR: project.org ?? '', ORG_ACTOR: 'human' };
 }
 
 function firstLine(text) {

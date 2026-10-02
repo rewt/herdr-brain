@@ -1,0 +1,15 @@
+{
+  "outcome": "passed",
+  "root": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-plugin-entry-nbAvcP",
+  "candidate": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-plugin-install",
+  "binary": "/Users/rewt/.codex/packages/standalone/releases/0.160.0-aarch64-apple-darwin/bin/codex",
+  "cleanup": [],
+  "coverage": "real native Herdr worker start and native supervisor UI; installed policy receipt; no inference or housekeeping loop",
+  "excluded": [
+    "absolute native binary paths",
+    "desktop/remote entry",
+    "plugin linking",
+    "npm dependency build",
+    "launchd"
+  ]
+}

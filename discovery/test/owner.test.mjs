@@ -6,6 +6,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ownerTargets, bundledOwner, prepareOwner, sha256, verifyOwner } from '../owner.mjs';
 import { snapshot } from '../../herdr/entry-runtime.mjs';
+import { validationTransport } from '../../acceptance/validation.mjs';
+import { sandboxCommand } from '../confinement.mjs';
+import { lifetimeScope, closeScope } from '../lifetime.mjs';
 import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
 import { waitForExit } from '../../test/helpers/child.mjs';
 
@@ -63,10 +66,20 @@ actorTest('verified owner bytes are copied into private scratch with restricted 
   const owner = prepareOwner(); t.after(owner.cleanup);
   assert.notEqual(path.dirname(owner.executable), path.join(product, 'discovery/native'));
   assert.equal(fs.statSync(path.dirname(owner.executable)).mode & 0o777, 0o700);
-  assert.equal(fs.statSync(owner.executable).mode & 0o777, 0o500);
+  assert.equal(fs.statSync(owner.executable).mode & 0o777, 0o755);
   assert.equal(sha256(fs.readFileSync(owner.executable)), sha256(bundledOwner()));
   owner.cleanup(); assert.equal(fs.existsSync(owner.executable), false);
 });
+actorTest('staged owner preserves the installed validation transport lifetime protocol', t => {
+  const root = fixture(t), owner = prepareOwner(), scope = lifetimeScope();
+  t.after(owner.cleanup); t.after(() => closeScope(scope));
+  const repo = path.join(root, 'project'), temp = path.join(root, 'session'), shared = path.join(repo, '.org');
+  fs.mkdirSync(shared, { recursive: true }); fs.mkdirSync(temp); fs.mkdirSync(path.join(repo, '.git'));
+  const guard = sandboxCommand('/native/codex', repo, { sharedPaths: [shared], lifetime: scope });
+  const result = validationTransport({ repo, temp, installation: product, toolRoots: [], gitCommon: path.join(repo, '.git') },
+    [...guard.args, owner.executable, '--enter', scope.allowed, scope.denied, '/usr/bin/true'], repo);
+  assert.equal(result.lifetime, true);
+}, { skip: process.platform !== 'darwin' && 'macOS installed validation transport' });
 actorTest('installed runtime snapshot carries the verified owner and validates without a compiler', t => {
   const root = fixture(t), plan = snapshot(product, path.join(root, 'runtime'), 'owner-test');
   plan.prepare();

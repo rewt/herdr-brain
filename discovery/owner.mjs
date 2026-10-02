@@ -74,7 +74,9 @@ export function prepareOwner() {
       const identity = fs.fstatSync(fd);
       if (!identity.isFile() || identity.uid !== process.getuid()) throw new Error('validation owner identity changed');
       if (bytes && sha256(fs.readFileSync(fd)) !== sha256(bytes)) throw new Error('validation owner copy checksum mismatch');
-      fs.fchmodSync(fd, 0o500);
+      // Retain the source-built owner's protocol mode. The private directory
+      // and provider's read-only boundary prevent project access or replacement.
+      fs.fchmodSync(fd, 0o755);
     } finally { fs.closeSync(fd); }
     return { executable, cleanup };
   } catch (error) { cleanup(); throw error; }

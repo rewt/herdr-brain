@@ -394,6 +394,7 @@ function answer(argv) {
     if (item.role !== 'human') throw new UserError(`${id} is not a question (only role=human items are answered)`);
     if (item.meta.category === 'priorities' && actor !== 'human') throw new UserError('priority questions wait for the operator');
     if (item.meta.operator_reserved && actor !== 'human') throw new UserError('release questions are reserved for the operator');
+    if (item.meta.operator_reserved && !['yes', 'no'].includes(reply)) throw new UserError('release questions require a yes or no answer; start the reply with yes or no and put any explanation after it or in --note');
     const answered = item.closed && item.meta.answer != null;
     if (values.overrule && !answered) throw new UserError(`${id} has not been answered; nothing to overrule (drop --overrule)`);
     if (!values.overrule && answered) {

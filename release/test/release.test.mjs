@@ -92,6 +92,57 @@ test('publish auto policy cannot approve a release and agents cannot forge, clos
   assert.equal(f.attempt().result, 'approved');
 });
 
+for (const [reply, answer, explanation] of [
+  ['  YeS: ship it  ', 'yes', 'ship it'],
+  ['  NO, not yet  ', 'no', 'not yet'],
+]) test(`release replies require normalized ${answer} and leave later promotions eligible`, t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] });
+  const c = f.attempt({ tag: `rc-answer-${answer}` }).candidate;
+  const eventFile = path.join(f.repo, '.org/events.jsonl');
+  const refuseText = flags => {
+    const before = fs.readFileSync(eventFile);
+    for (const text of ['ship it', 'hold this candidate', 'yesterday', 'nope', 'yes_no']) {
+      const r = f.exec(process.execPath, [path.join(ROOT, 'bin/org.mjs'), 'answer', c.question, text, '--note', 'Operator decision.', ...flags], f.repo, { ORG_ACTOR: 'human' });
+      assert.equal(r.status, 1, `${text}: ${r.stderr}`);
+      assert.match(r.stderr, /release questions require a yes or no answer/);
+      assert.deepEqual(fs.readFileSync(eventFile), before, 'refusal appends no event, including no answer note or reopening');
+    }
+  };
+  refuseText([]);
+  assert.equal(f.record(['show', c.question, '--json']).closed, null);
+  assert.deepEqual(f.record(['today', '--json']).waiting.map(q => q.id), [c.question]);
+  assert.equal(f.record(['releases', '--json']).candidates[0].status, 'awaiting-operator');
+
+  // A real promotion stays pending until a valid operator reply resolves the first batch.
+  const topic = `next-answer-${answer}`, lane = path.join(f.root, topic);
+  f.git(['worktree', 'add', '-qb', `lane/${topic}`, lane, 'main']);
+  fs.writeFileSync(path.join(lane, 'next-batch.txt'), topic);
+  f.git(['add', '.'], lane); f.git(['commit', '-qm', 'Promote the next release batch'], lane);
+  const tip = f.git(['rev-parse', 'HEAD'], lane);
+  f.ok(process.execPath, [path.join(ROOT, 'lanes/lane.mjs'), 'promote', topic], f.repo, { LANE_VALIDATE: 'true' });
+  const deferred = f.attempt();
+  assert.equal(deferred.result, 'deferred'); assert.equal(deferred.candidate.id, c.id);
+  assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
+
+  f.org(['answer', c.question, reply, '--note', 'Operator decision.'], { ORG_ACTOR: 'human' });
+  const question = f.record(['show', c.question, '--json']);
+  assert.equal(question.meta.answer, answer); assert.equal(question.meta.answered_by, 'human');
+  assert.equal(question.closed.as, 'done'); assert.equal(question.closed.note, `${explanation}; Operator decision.`);
+  assert.deepEqual(f.record(['today', '--json']).waiting, []);
+  refuseText(['--overrule']);
+  const decided = f.record(['releases', '--json']).candidates[0];
+  assert.equal(decided.status, answer === 'yes' ? 'approved' : 'declined'); assert.equal(decided.decision, answer);
+
+  const next = f.attempt({ tag: `rc-next-${answer}` });
+  assert.equal(next.result, 'awaiting-operator'); assert.equal(next.candidate.commit, tip);
+  assert.equal(next.candidate.previous, c.commit); assert.deepEqual(next.candidate.commits, [tip]);
+  assert.notEqual(next.candidate.question, c.question);
+  assert.deepEqual(f.record(['today', '--json']).waiting.map(q => q.id), [next.candidate.question]);
+  assert.equal(f.record(['releases', '--json']).candidates.length, 2);
+  assert.equal(f.attempt().candidate.id, next.candidate.id);
+  assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\ngate\n', 'each candidate gates once');
+});
+
 for (const answer of ['yes', 'no']) test(`agents cannot start a run on an operator-reserved question answered ${answer}`, t => {
   const f = fixture(t, { gate: ['node', 'gate.cjs'] });
   const c = f.attempt().candidate;

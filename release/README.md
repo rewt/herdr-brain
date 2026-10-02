@@ -78,7 +78,10 @@ instead of invoking an acceptance gate whose required inputs were omitted.
 The record stores candidate, gate-start and gate-result events through the record
 CLI. On a passing result it atomically creates one `publish` question, reserved for
 `ORG_ACTOR=human`, even if publish is configured as auto. Agents cannot answer,
-overrule, forge decision fields, close or reopen that question. A yes records
+overrule, forge decision fields, close or reopen that question. Operator replies,
+including `--overrule`, must start with yes or no. Case and punctuation are
+normalized, and any following explanation is retained as the note. Other replies
+are rejected without writing events or closing the question. A yes records
 approval; it executes nothing. The operator executes the displayed ship argv from
 the project checkout and controls any activation separately. A no retains the
 candidate and evidence. The console's **Control → Releases** (`L`) shows candidates,

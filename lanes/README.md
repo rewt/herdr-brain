@@ -96,9 +96,13 @@ The command runs configured preparation and validation, then records
 after the final commit so the printed `GATE <head> exit=0` names that commit.
 
 The [promotion queue](../promote/README.md) runs promotion, scoped finished-tab cleanup,
-lane closure and supervisor notices in order. Direct `lane promote` shares its Git
-lock and refuses a simultaneous gate. `lane close --git-only` preserves Herdr
-workspaces; the queue uses it after closing only authorized finished tabs.
+lane closure and supervisor notices in order. `lane promote` and `lane close` share
+a Git lock, so closing cannot remove a worktree while a gate is running.
+`lane close --git-only` preserves Herdr workspaces; the queue uses it after closing
+only authorized finished tabs. Its `--expected-tip COMMIT` guard requires that exact
+tip to remain on the lane and be contained in the base, checked under the lock
+before removal. Without that guard, ordinary close retains unmerged archive-tag
+recovery.
 
 Promote and close from the clean canonical checkout:
 

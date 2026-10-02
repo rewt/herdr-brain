@@ -105,11 +105,9 @@ function perform(job, queue) {
     queue.transaction((data) => { data.current = { ...job, phase: 'promoted', tip, log }; });
     const warnings = workspace ? cleanup(job, queue, workspace) : ['lane worktree no longer present'];
     try {
-      if (git(cwd, ['rev-parse', `refs/heads/lane/${job.topic}`]) !== tip) throw new Error('lane tip changed after promotion; lane kept');
-      git(cwd, ['merge-base', '--is-ancestor', tip, 'HEAD']);
       // The lane CLI's generic close removes its entire Herdr workspace. Queue
       // cleanup closes only authorized finished tabs, so protect remaining chats.
-      const closed = invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only'], { cwd, env });
+      const closed = invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', tip], { cwd, env });
       fs.appendFileSync(log, closed + '\n');
     } catch (error) { warnings.push(`lane close: ${error.message}`); }
     return { outcome: 'promoted', tip, reason: warnings.length ? warnings.join('; ') : 'green fast-forward; lane closed', warnings, log };
@@ -152,26 +150,37 @@ export async function drain(queue) {
   process.send?.({ ready: true });
   try {
     for (;;) {
-      const job = queue.transaction((data) => {
-        if (data.current) return data.current;
+      const entry = queue.transaction((data) => {
+        if (data.current) {
+          // Old workers leaked freshness into their promoted checkpoint. Never
+          // trust a persisted flag to authorize replay of an external effect.
+          const job = { ...data.current };
+          delete job.fresh;
+          data.current = job;
+          return { job, newlyDequeued: false };
+        }
         const next = data.pending.shift();
         if (!next) { release(); release = null; return null; }
-        data.current = { ...next, phase: 'promoting' };
-        return { ...data.current, fresh: true };
+        const job = { ...next, phase: 'promoting' };
+        delete job.fresh;
+        data.current = job;
+        // Freshness belongs only to this dequeue, never to queue.json.
+        return { job, newlyDequeued: true };
       });
-      if (!job) break;
+      if (!entry) break;
+      const { job, newlyDequeued } = entry;
       let result;
       if (job.phase === 'completed') result = job.result;
-      else if (!job.fresh) result = { outcome: 'interrupted', tip: job.tip,
+      else if (!newlyDequeued) result = { outcome: 'interrupted', tip: job.tip,
         reason: `previous worker stopped in ${job.phase}; lane preserved; inspect Git and log before explicitly re-enqueuing`, log: job.log ?? path.join(queue.directory, `${job.id}.log`) };
       else {
         try { result = perform(job, queue); }
         catch (error) { result = { outcome: 'refused', reason: error.message, log: path.join(queue.directory, `${job.id}.log`) }; }
       }
-      queue.transaction((data) => { data.current = { ...job, fresh: undefined, phase: 'completed', result }; });
+      queue.transaction((data) => { data.current = { ...job, phase: 'completed', result }; });
       const delivery = await deliver(job, result, queue);
       queue.transaction((data) => {
-        data.results.push({ ...job, fresh: undefined, ...result, ...delivery, finished: new Date().toISOString() });
+        data.results.push({ ...job, ...result, ...delivery, finished: new Date().toISOString() });
         data.current = null;
       });
       process.stdout.write(JSON.stringify({ id: job.id, topic: job.topic, ...result, ...delivery }) + '\n');

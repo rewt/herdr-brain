@@ -47,11 +47,13 @@ function fixture(t) {
   };
   const results = () => queue.load().results;
   const messages = () => fs.existsSync(notices) ? fs.readFileSync(notices, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
+  let cleanupProcesses = async () => {};
   t.after(async () => {
+    await cleanupProcesses();
     await until(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')));
     fs.rmSync(root, { recursive: true, force: true });
   });
-  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr };
+  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
 
 test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
@@ -207,4 +209,115 @@ console.log(JSON.stringify({result:r}));\n`);
   assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));
   assert.ok(!actions.some((a) => ['pane','tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'));
   assert.equal(fs.existsSync(wt), false); assert.equal(fs.existsSync(other), true);
+});
+
+function blockCleanup(f) {
+  const org = path.join(f.root, 'cleanup-record');
+  const orgCLI = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
+  const initialized = spawnSync(process.execPath, [orgCLI, 'init', org], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(initialized.status, 0, initialized.stderr);
+  const marker = path.join(f.root, 'cleanup-pid');
+  const release = path.join(f.root, 'cleanup-release');
+  fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const args=process.argv.slice(2);
+if (args[0]==='workspace' && args[1]==='list') {
+  fs.writeFileSync(${JSON.stringify(marker)}, String(process.pid));
+  while (!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
+}
+if (args[0]==='agent' && args[1]==='prompt') fs.appendFileSync(${JSON.stringify(path.join(f.root, 'notices.jsonl'))},JSON.stringify(args)+'\\n');
+console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
+  return { marker, release, org };
+}
+function alive(pid) {
+  try { process.kill(pid, 0); return true; } catch (error) { if (error.code === 'ESRCH') return false; throw error; }
+}
+async function killCreated(pid) {
+  if (!pid) return;
+  try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+  await until(() => !alive(pid));
+}
+
+test('crash during actual saved promoted phase never repeats gate or deletes the lane, even with legacy freshness', async (t) => {
+  const f = fixture(t); const wt = f.lane('first'); const blocked = blockCleanup(f);
+  const gates = path.join(f.root, 'gates');
+  const validate = `${process.execPath} -e 'require("fs").appendFileSync(${JSON.stringify(gates)}, "gate\\n")'`;
+  const request = f.launch(['first', '--org', blocked.org, '--validate', validate]);
+  const stop = async () => {
+    fs.writeFileSync(blocked.release, 'release');
+    await killCreated(request.worker.pid);
+    if (fs.existsSync(blocked.marker)) await killCreated(Number(fs.readFileSync(blocked.marker, 'utf8')));
+    fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
+  };
+  f.onCleanup(stop);
+  await until(() => fs.existsSync(blocked.marker));
+  const saved = f.queue.load().current;
+  // This is the actual checkpoint written after the real lane CLI fast-forward.
+  await killCreated(request.worker.pid);
+  await killCreated(Number(fs.readFileSync(blocked.marker, 'utf8')));
+  fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true });
+  fs.writeFileSync(blocked.release, 'release');
+  assert.equal(saved.phase, 'promoted');
+  assert.equal(Object.hasOwn(saved, 'fresh'), false, 'freshness must never be durable');
+  assert.equal(f.git(['rev-parse', 'main']), f.git(['rev-parse', 'lane/first']));
+  // Also recover a checkpoint produced by the older worker that leaked this flag.
+  f.queue.transaction((data) => { data.current.fresh = true; });
+  const r = f.cli(['--drain']); assert.equal(r.status, 0, r.stderr);
+  assert.equal(f.results()[0].outcome, 'interrupted');
+  assert.match(f.messages()[0][3], /previous worker stopped in promoted/);
+  assert.equal(fs.readFileSync(gates, 'utf8'), 'gate\n');
+  assert.equal(fs.existsSync(wt), true);
+  assert.equal(f.git(['rev-parse', 'lane/first']), saved.tip);
+  assert.equal(Object.hasOwn(f.results()[0], 'fresh'), false);
+  f.onCleanup(async () => {});
+});
+
+test('direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane', async (t) => {
+  const f = fixture(t); const wt = f.lane('first'); const blocked = blockCleanup(f);
+  const request = f.launch(['first', '--org', blocked.org]);
+  const ready = path.join(f.root, 'direct-gate-pid'); const release = path.join(f.root, 'direct-gate-release');
+  const script = path.join(f.root, 'direct-gate.mjs');
+  fs.writeFileSync(script, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));
+while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);\n`);
+  let direct;
+  f.onCleanup(async () => {
+    fs.writeFileSync(blocked.release, 'release'); fs.writeFileSync(release, 'release');
+    await killCreated(request.worker.pid);
+    await killCreated(direct?.pid);
+    for (const marker of [blocked.marker, ready]) if (fs.existsSync(marker)) await killCreated(Number(fs.readFileSync(marker, 'utf8')));
+    fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
+  });
+  await until(() => fs.existsSync(blocked.marker));
+  const tip = f.git(['rev-parse', 'lane/first']);
+  direct = spawn(process.execPath, [LANE, 'promote', 'first'], { cwd: f.repo,
+    env: { ...f.env, LANE_VALIDATE: `${process.execPath} ${script}` }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = ''; direct.stdout.on('data', (v) => { output += v; }); direct.stderr.on('data', (v) => { output += v; });
+  const exited = new Promise((resolve, reject) => { direct.once('error', reject); direct.once('close', resolve); });
+  await until(() => fs.existsSync(ready));
+  fs.writeFileSync(blocked.release, 'release');
+  await until(() => f.results().length === 1);
+  assert.equal(direct.exitCode, null, 'the direct gate is still in progress');
+  assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
+  assert.match(f.results()[0].reason, /lane close:.*lane-promote.lock/);
+  assert.match(f.messages()[0][3], /lane close:.*lane-promote.lock/);
+  assert.ok(fs.existsSync(wt)); assert.equal(f.git(['rev-parse', 'lane/first']), tip);
+  // All close callers must respect a live gate, even outside queue orchestration.
+  const close = spawnSync(process.execPath, [LANE, 'close', 'first', '--git-only'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.notEqual(close.status, 0); assert.match(close.stderr, /lane-promote.lock/);
+  fs.writeFileSync(release, 'release'); assert.equal(await exited, 0, output);
+  await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
+  f.onCleanup(async () => {});
+});
+
+test('conditional close rechecks the promoted tip and base before any removal', (t) => {
+  const f = fixture(t); const wt = f.lane('first'); const original = f.git(['rev-parse', 'lane/first']);
+  f.git(['merge', '--ff-only', 'lane/first']);
+  fs.writeFileSync(path.join(wt, 'first.txt'), 'new work'); f.git(['add', '.'], wt); f.git(['commit', '-qm', 'new lane work'], wt);
+  const close = (tip) => spawnSync(process.execPath, [LANE, 'close', 'first', '--git-only', '--expected-tip', tip], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  const changed = close(original); assert.notEqual(changed.status, 0); assert.match(changed.stderr, /tip changed/);
+  assert.ok(fs.existsSync(wt));
+  const unmerged = close(f.git(['rev-parse', 'lane/first']));
+  assert.notEqual(unmerged.status, 0); assert.match(unmerged.stderr, /not contained/);
+  assert.ok(fs.existsSync(wt)); assert.equal(f.git(['tag', '--list', 'archive/lane/first']), '');
+  f.git(['merge', '--ff-only', 'lane/first']);
+  const safe = close(f.git(['rev-parse', 'lane/first'])); assert.equal(safe.status, 0, safe.stderr);
+  assert.equal(fs.existsSync(wt), false);
 });

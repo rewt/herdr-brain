@@ -1,4 +1,5 @@
-// Shared by direct lane promotion and queue workers. Crash locks fail closed:
+// Shared by lane promotion and closure, including queue workers.
+// Crash locks fail closed:
 // removing a lock requires inspecting its owner and any surviving gate first.
 import fs from 'node:fs';
 import path from 'node:path';

@@ -18,9 +18,9 @@ workspace label or session registry.
 Each attempt runs the existing `lane promote`: clean canonical and lane worktrees,
 clean replay onto the configured base, preparation, green validation and local
 fast-forward. Its default gate is `npm test`; `.lane.json` keeps the lane CLI's
-existing configuration rules. Direct promotions and queued promotions share a
-Git-common-directory lock. Direct contention refuses with the lock path rather
-than racing a gate. Validation rechecks clean trees, branches, lane tip and base
+existing configuration rules. Direct promotions, queued promotions and all lane
+closures share a Git-common-directory lock. Direct contention refuses with the
+lock path rather than racing a gate. Validation rechecks clean trees, branches, lane tip and base
 before the fast-forward. There are no pushes or merge commits.
 
 On success the worker runs one cleanup pass limited to the promoted lane, with
@@ -28,8 +28,12 @@ resume disabled. It discovers the record and uses housekeeping's existing live
 occupant, record, Git and topology checks to close eligible finished worker tabs.
 It never starts the project-wide housekeeping loop. Missing records, unavailable
 Herdr, blocked/open workers and operator chats preserve tabs. Cleanup failures
-appear in the outcome. Then `lane close TOPIC --git-only` removes the worktree
-and merged branch without removing a whole Herdr workspace and its protected tabs.
+appear in the outcome. Then `lane close TOPIC --git-only --expected-tip COMMIT`
+takes the same promotion lock and rechecks the saved promoted tip, base ancestry
+and clean worktree before removing the worktree and merged branch. Contention with a direct gate preserves
+the lane and is included in the supervisor outcome as a closure warning. It does
+not repeat promotion. Git-only closure preserves the Herdr workspace and its
+protected tabs.
 Remaining workspace shells/chats stay for the operator; promotion does not close
 unrecognized tabs merely because a lane was merged. A red gate, dirty tree or
 conflicting rebase leaves the lane intact and continues with the next request.
@@ -67,16 +71,18 @@ is mechanical bookkeeping, not stored item/run status. Logs/results are retained
 without a retention policy.
 
 `queue.lock` serializes atomic queue replacements; `worker.lock` owns the drain;
-`GIT_COMMON_DIR/lane-promote.lock` excludes simultaneous gates/fast-forwards. Locks
-contain an owner PID and command. Crash locks deliberately fail closed: inspect
-the saved owner, logs and any surviving validation child before removing only the
+`GIT_COMMON_DIR/lane-promote.lock` excludes overlapping gates, fast-forwards and
+lane removals. Locks contain an owner PID and command. Crash locks deliberately
+fail closed: inspect the saved owner, logs and any surviving validation child before removing only the
 stale lock. Never remove a live lock. A worker exit between enqueue and empty
 shutdown cannot strand the request: both transitions hold `queue.lock`.
 
 After inspection/removing stale locks, `--drain --repo /project` resumes pending
 requests. A current interrupted promotion receives an `interrupted` notice and
 leaves its lane alone; the worker does not guess whether its gate/fast-forward or
-cleanup already happened. Inspect Git/logs before explicitly enqueuing it again.
+cleanup already happened. Freshness is local to the dequeue operation; no saved
+flag authorizes replay, including an older worker's leaked `fresh` flag. Inspect
+Git/logs before explicitly enqueuing it again.
 A recorded completed outcome awaiting delivery is delivered without redoing Git.
 A crash in the message acknowledgement window can cause a duplicate notice with
 the same request ID; receivers can deduplicate it. For an exhausted delivery,
@@ -86,6 +92,8 @@ can deliver that exact message without re-enqueuing promotion.
 Offline tests in `npm test` use real disposable Git worktrees, the default npm
 gate, detached workers and a fake Herdr delivery endpoint. They cover ordered
 promotions, dirty/red/conflicting refusals, continuation, concurrent enqueues/direct
-promotion, crash recovery, duplicate entries, delivery exhaustion and post-gate
-mutation. `acceptance/run.mjs` also has an unconfigured-project queue case using
-its owned supervisor PTY. That release harness is separate from offline tests.
+promotion, actual crashes during the promoted cleanup checkpoint, legacy recovery,
+a direct gate overlapping queued closure, conditional removal checks, duplicate
+entries, delivery exhaustion and post-gate mutation. `acceptance/run.mjs` also has
+an unconfigured-project queue case using its owned supervisor PTY. That release
+harness is separate from offline tests.

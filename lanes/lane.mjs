@@ -2166,16 +2166,20 @@ function check(args) {
   process.exit(exitCode);
 }
 
-function promote(topic) {
-  const root = repositoryRoot({ requiredBy: "promote" });
+function withPromotionLock(operation) {
   let release;
   try { release = acquireLock(join(REPO_IDENTITY, "lane-promote.lock")); }
   catch (error) { fail(error.message); }
   // fail() exits; the exit handler releases ordinary refusals too. Signals leave
-  // the lock behind because a validation child may still be alive.
+  // the lock behind because a validation or lifecycle child may still be alive.
   process.once("exit", release);
-  try { promoteLocked(topic, root); }
+  try { return operation(); }
   finally { process.off("exit", release); release(); }
+}
+
+function promote(topic) {
+  const root = repositoryRoot({ requiredBy: "promote" });
+  return withPromotionLock(() => promoteLocked(topic, root));
 }
 
 function promoteLocked(topic, root) {
@@ -2229,10 +2233,22 @@ function promoteLocked(topic, root) {
   process.stdout.write("No push performed. Close the lane with: lane close " + topic + "\n");
 }
 
-function close(topic, { gitOnly = false } = {}) {
+function close(topic, options = {}) {
   repositoryRoot({ requiredBy: "close" });
+  return withPromotionLock(() => closeLocked(topic, options));
+}
+
+function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
   const branch = laneBranch(topic);
   if (!branchExists(branch)) fail(`no such lane branch: ${branch}`);
+  if (expectedTip !== undefined) {
+    if (git(["rev-parse", `refs/heads/${branch}`]) !== expectedTip) {
+      fail("lane tip changed after promotion; lane kept");
+    }
+    if (tryGit(["merge-base", "--is-ancestor", expectedTip, MAIN]) === undefined) {
+      fail(`lane tip is not contained in ${MAIN}; lane kept`);
+    }
+  }
   const path = worktreeFor(branch);
   if (path !== undefined) {
     requireClean(path, "lane worktree");
@@ -2402,11 +2418,19 @@ switch (command) {
     if (topic === undefined) fail("usage: lane.mjs promote <topic>");
     promote(topic);
     break;
-  case "close":
-    if (topic === undefined) fail("usage: lane.mjs close <topic>");
-    if (rest.some((arg) => arg !== "--git-only")) fail("usage: lane close <topic> [--git-only]");
-    close(topic, { gitOnly: rest.includes("--git-only") });
+  case "close": {
+    const usage = "usage: lane close <topic> [--git-only] [--expected-tip COMMIT]";
+    if (topic === undefined) fail(usage);
+    let gitOnly = false, expectedTip;
+    for (let index = 0; index < rest.length; index++) {
+      if (rest[index] === "--git-only") gitOnly = true;
+      else if (rest[index] === "--expected-tip" && expectedTip === undefined && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(rest[index + 1] ?? "")) {
+        expectedTip = rest[++index];
+      } else fail(usage);
+    }
+    close(topic, { gitOnly, expectedTip });
     break;
+  }
   default:
     process.stdout.write(
       "usage: lane <open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|close> [topic] [base-ref]\n" +
@@ -2431,7 +2455,7 @@ switch (command) {
         "  check [--cmd <validate command>]\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
-        "  close <topic> [--git-only]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
+        "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",
     );
     process.exit(1);

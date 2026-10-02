@@ -68,6 +68,15 @@ challenges:
     evidence: Main reaches the exact copied checkout after 32 ms and discovery after 28 ms. During the subsequent bounded poll, all 72 main and 73 discovery idle-workspace samples lack worktree metadata while their configured comparison workspaces have it in every sample.
 ---
 
+**Correction, round five (2026-10-01):** the subsequent review found that the
+adapter's broad product-boundary catch also mislabeled native Herdr errors,
+stand-in timeouts and cleanup failures as safety violations. The [round-five
+report](ENG-74-release-acceptance-r5-20261001.md) records explicit capability-error
+typing and operational-error regressions. The prior comparison scope followed
+the supervisor's round-four instruction to rerun main and the discovery head;
+it was not an engineer omission. Round five reruns the older release as well.
+The original results below remain historical.
+
 All four findings in the [round-three review](../reviews/release-acceptance/a6b67c9-r3.md)
 are addressed by **Sandbox discovery verification and keep the default cycle
 release-gated**. The resulting gate remains **NOT READY** for both candidates.

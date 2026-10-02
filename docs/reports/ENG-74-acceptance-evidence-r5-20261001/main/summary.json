@@ -1,0 +1,199 @@
+{
+  "candidate": "main",
+  "candidateCommit": "7a550819f444cf37e6545012c283f2efee8b0613",
+  "elapsedSeconds": 299,
+  "counts": {
+    "PASS": 19,
+    "FAIL": 1,
+    "PENDING": 3
+  },
+  "evidence": "/private/tmp/herdr-acceptance-FUJd7V/evidence",
+  "results": [
+    {
+      "id": "01",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "main: 7a550819f444cf37e6545012c283f2efee8b0613",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "name": "New project: record discovers and populates",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "name": "New project: routes resolve without config",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "name": "New project: installed supervisor entry and record bootstrap",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "actual supervisor entry executed in an untouched project and bootstrapped the record; this does not execute a dispatch/watch cycle",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "05.jsonl"
+    },
+    {
+      "id": "06",
+      "name": "Configured cycle: dispatch/report/ingest/promote/close",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1: one notice, recorded report, green fast-forward, lane removed; red/dirty gates refused",
+      "evidence": "06.jsonl"
+    },
+    {
+      "id": "07",
+      "name": "Failure path: missing worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-2: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "07.jsonl"
+    },
+    {
+      "id": "08",
+      "name": "Failure path: invalid worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-3: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "08.jsonl"
+    },
+    {
+      "id": "09",
+      "name": "Failure path: blocked worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-4: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "09.jsonl"
+    },
+    {
+      "id": "10",
+      "name": "Fix round: same worker, fresh durable run",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-5 -> R-6: blocked report then done, same PTY, distinct run/report",
+      "evidence": "10.jsonl"
+    },
+    {
+      "id": "11",
+      "name": "Watch cutover: idle grace and exclusive watcher",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)",
+      "evidence": "11.jsonl"
+    },
+    {
+      "id": "12",
+      "name": "Housekeeping closes only eligible finished workers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved",
+      "evidence": "12.jsonl"
+    },
+    {
+      "id": "13",
+      "name": "Scratch release build/activate/rollback/restore",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "candidate code archived into immutable scratch releases; old-install launcher migration checked; npm/plugin/launchd excluded",
+      "evidence": "13.jsonl"
+    },
+    {
+      "id": "14",
+      "name": "Full console dependency build (offline)",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "14.jsonl"
+    },
+    {
+      "id": "15",
+      "name": "Existing project: copy live calls and inventory drift",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)",
+      "evidence": "15.jsonl"
+    },
+    {
+      "id": "16",
+      "name": "Existing project: routing and both wrapper dry runs",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "timeout: canonical workspace metadata before wrapper execution",
+      "evidence": "16.jsonl"
+    },
+    {
+      "id": "17",
+      "name": "Existing project: org PATH consumers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk",
+      "evidence": "17.jsonl"
+    },
+    {
+      "id": "18",
+      "name": "ENG-64: every file switch and rollback",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "ten file switches each enumerated; rollback bytes/modes pass; live cutover is unapplied, so wrapper/recovery/name/canary checks cannot pass",
+      "evidence": "18.jsonl"
+    },
+    {
+      "id": "19",
+      "name": "ENG-64: final contrib removal and restoration",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "compatibility blob restoration passes in scratch; existing launcher still calls contrib, so retirement is forbidden",
+      "evidence": "19.jsonl"
+    },
+    {
+      "id": "20",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "two real sessions discovered policy, recorded work, used separate lanes and completed green fast-forwards",
+      "evidence": "20.jsonl"
+    },
+    {
+      "id": "21",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "HUM-1: category=other, waited for a human, scripted yes applied by real agent",
+      "evidence": "21.jsonl"
+    },
+    {
+      "id": "22",
+      "name": "New project: default supervisor dispatch/watch/ingest cycle",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "unconfigured default-route dispatch, armed watch and ingestion are not executed; the entry/bootstrap and configured-cycle cases cannot satisfy this gate",
+      "evidence": "22.jsonl"
+    },
+    {
+      "id": "23",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "23.jsonl"
+    }
+  ],
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

@@ -1,5 +1,5 @@
 import { DESK_FIELDS, DESK_DEFAULTS, deskFallback, parseDeskValue, validateDeskSettings } from '../../settle/config.mjs';
-import { mergeRoutesConfig } from '../../lanes/routes.mjs';
+import { mergeRoutesConfig, resolveLaunchRoute } from '../../lanes/routes.mjs';
 export const DESK_LABELS = ['Review route', 'Fix route', 'Review round cap', 'Review timeout (seconds)', 'Reuse stopped worker', 'Notify supervisor'];
 export function settingsEditor(kind, doc, project, extra = {}) {
   const base = { kind, project: { ...project }, revision: doc.revision, target: doc.target, config: doc.config, field: 0, confirm: false, busy: false, ...extra };
@@ -57,9 +57,15 @@ export function settingsReview(edit) {
     if (!v[0]) throw new Error('Kind is required.');
     value = { ...config.always_args, [v[0]]: array(v[1]) }; next = { always_args: value };
   }
-  mergeRoutesConfig([config, next]);
+  const merged = mergeRoutesConfig([config, next]);
   const field = Object.keys(next)[0];
   const selections = command === 'policy' ? ['Resulting task selections:', ...Object.entries(value.by_task_class).flatMap(([task, choice]) => typeof choice === 'string' ? [`${task} → ${choice}`] : Object.entries(choice).map(([pool, route]) => `${task} · ${pool} → ${route}`))] : [];
-  return { command, value, writes: command === 'add' || JSON.stringify(next[field]) !== JSON.stringify(config[field]),
-    lines: command === 'add' ? [`New route ${value.name}: ${value.route.kind} · ${value.route.model ?? 'harness default'} · ${value.route.effort ?? 'harness default'}`] : edit.labels.map((label, i) => `${label}: ${edit.initial[i] || '(default)'} → ${v[i] || '(default)'}`).concat(selections) };
+  let lines;
+  if (command === 'add') {
+    const launch = resolveLaunchRoute(merged, { route: value.name });
+    lines = [`New route ${value.name}: ${launch.kind} · ${launch.model ?? 'harness default'} · ${launch.effort ?? 'harness default'}`, `Launch args: ${JSON.stringify(launch.args)}`];
+  } else if (command === 'arguments') {
+    lines = [`Kind: ${v[0]}`, `Arguments (JSON array): ${JSON.stringify(config.always_args?.[v[0]] ?? [])} → ${JSON.stringify(value[v[0]])}`];
+  } else lines = edit.labels.map((label, i) => `${label}: ${edit.initial[i] || '(default)'} → ${v[i] || '(default)'}`).concat(selections);
+  return { command, value, writes: command === 'add' || JSON.stringify(next[field]) !== JSON.stringify(config[field]), lines };
 }

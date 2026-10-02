@@ -1,0 +1,30 @@
+  Independent project ▾       ‹  Project / Routes                    r Refresh
+
+  Independent project                                 Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 0   Control
+────────────────────────────────────────────────────────────────────────────────
+  Review Always launch arguments
+  Kind: codex
+  Arguments (JSON array): ["--always-option","value with spaces"] → []
+  Applies to future launches and settle intake. Existing receipts keep their
+  captured settings.
+  Enter  Save project settings
+  Cancel
+  Writes project config:
+  /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-eng102-r120-w
+  2njzi/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels

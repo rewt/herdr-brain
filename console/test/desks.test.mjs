@@ -97,6 +97,63 @@ test('route addition, primary pool, task selection and launch settings save via 
   }
 });
 
+test('new route confirmation resolves blank model and effort with dispatch defaults and launch arguments', async t => {
+  const f = fixture(t), { s } = f;
+  await s.refresh(); await s.key('u'); await s.activate('settings:add');
+  await field(s, 0, 'inherited-route'); await field(s, 1, 'codex');
+  await s.key('', { return: true });
+  for (const cols of [80, 100, 140]) {
+    assert.match(render(s, cols), /New route inherited-route: codex · gpt-6\.1-sol · high/);
+    assert.match(render(s, cols), /Launch args: \[\]/);
+  }
+  assert.equal(f.calls.length, 0); assert.equal(fs.existsSync(f.target), false);
+  await s.key('', { return: true });
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.target)).routes['inherited-route'], { kind: 'codex' });
+  const launch = resolveLaunchRoute(s.model.routes.config, { route: 'inherited-route' });
+  assert.equal(launch.model, 'gpt-6.1-sol'); assert.equal(launch.effort, 'high'); assert.deepEqual(launch.args, []);
+
+  f.org(['routes', 'defaults', '--value=' + JSON.stringify({ kind: 'codex', model: 'project-model', args: ['--config', 'model_reasoning_effort=xhigh', '--opaque', 'value with spaces'] })]);
+  f.org(['routes', 'arguments', '--value=' + JSON.stringify({ codex: ['--always', 'two words'] })]);
+  await s.refresh(); await s.activate('settings:add');
+  await field(s, 0, 'argument-effort-route'); await field(s, 1, 'codex');
+  await s.key('', { return: true });
+  const screen = render(s, 140);
+  assert.match(screen, /New route argument-effort-route: codex · project-model · xhigh/);
+  assert.ok(screen.includes('Launch args: ["--config","model_reasoning_effort=xhigh","--opaque","value with spaces","--always","two words"]'));
+  assert.equal(f.calls.length, 1);
+  await s.key('', { return: true });
+  assert.equal(f.calls.at(-1)[1].command, 'add');
+  const saved = JSON.parse(fs.readFileSync(f.target));
+  assert.deepEqual(saved.routes['argument-effort-route'], { kind: 'codex' });
+  const resolved = resolveLaunchRoute(s.model.routes.config, { route: 'argument-effort-route' });
+  assert.equal(resolved.model, 'project-model'); assert.equal(resolved.effort, 'xhigh');
+  assert.ok(screen.includes(`Launch args: ${JSON.stringify(resolved.args)}`));
+});
+
+test('generic always-arguments confirmation compares the entered kind with its captured arguments before CLI replacement', async t => {
+  const f = fixture(t), { s } = f;
+  const args = ['--option', 'value with spaces'], other = ['--keep', 'other value'];
+  f.org(['routes', 'arguments', '--value=' + JSON.stringify({ 'opaque-tool': args, other })]);
+  await s.refresh(); await s.key('u'); await s.activate('settings:arguments');
+  await field(s, 0, 'opaque-tool'); await s.key('', { return: true });
+  for (const cols of [80, 100, 140]) assert.match(render(s, cols), /Arguments \(JSON array\): \["--option","value with spaces"\] → \[\]/);
+  assert.equal(f.calls.length, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.target)).always_args['opaque-tool'], args);
+  await s.key('', { return: true });
+  assert.equal(f.calls.at(-1)[1].command, 'arguments');
+  assert.deepEqual(f.calls.at(-1)[1].value, { 'opaque-tool': [], other });
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.target)).always_args, { 'opaque-tool': [], other });
+  assert.deepEqual(resolveLaunchRoute(s.model.routes.config, { kind: 'opaque-tool' }).args, []);
+
+  // Even after switching kinds in the generic form, compare against that entry.
+  await s.activate('settings:arguments'); await field(s, 0, 'opaque-tool'); await field(s, 0, 'other');
+  await field(s, 1, JSON.stringify(other)); await s.key('', { return: true });
+  assert.match(render(s, 140), /Arguments \(JSON array\): \["--keep","other value"\] → \["--keep","other value"\]/);
+  assert.match(render(s), /Close without changes/);
+  const bytes = fs.readFileSync(f.target, 'utf8'); await s.key('', { return: true });
+  assert.equal(f.calls.length, 1); assert.equal(fs.readFileSync(f.target, 'utf8'), bytes);
+});
+
 test('worktrees edit only their canonical project; record-only selections and plain folders cannot save', async t => {
   const f = fixture(t); const wt = path.join(f.root, 'worktree'); f.git(['worktree', 'add', '-b', 'lane', wt]);
   const r = spawnSync(process.execPath, [bin, 'desks', 'set', '--timeout=40'], { cwd: wt, env: { ...f.env, LANE_CONFIG: '/missing' }, encoding: 'utf8', timeout: 10000 });

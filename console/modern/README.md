@@ -103,6 +103,10 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   then `record routes add|policy|defaults|arguments --value JSON --expect REV`.
   Route/model/effort/pool names remain opaque; references and pool coverage must
   validate. Argument arrays preserve token boundaries (JSON arrays of strings).
+  New-route reviews show the effective model, effort and launch arguments,
+  including inherited dispatch defaults and effort encoded in arguments.
+  Always-argument reviews compare the entered kind's current array with its
+  replacement, including when entering an existing kind through the generic form.
   Blank dispatch fields inherit harness defaults. The first route configuration
   change confirms the portable preset and preserves lifecycle/desk fields.
   All `.lane.json` editors share one lock, detect changes in parent configuration

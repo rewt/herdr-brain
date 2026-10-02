@@ -31,7 +31,7 @@ function fixture(t) {
   // MONITOR_TEST_ALTERNATIVE. No model binary or live project is invoked here.
   fs.writeFileSync(sandbox, `#!${process.execPath}\nconst fs=require('fs'),{spawnSync}=require('child_process'),a=process.argv.slice(2),i=a.indexOf('--');
 if(a[0]!=='sandbox'||i<0)process.exit(99);fs.appendFileSync(${JSON.stringify(audit)},JSON.stringify(a)+'\\n');
-const r=spawnSync(a[i+1],a.slice(i+2),{stdio:'inherit',timeout:5000});process.exit(r.status??1);\n`, { mode: 0o755 });
+process.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(a));\n`, { mode: 0o755 });
   const provider = process.env.MONITOR_TEST_ALTERNATIVE ?? sandbox;
   return { scratch, repo, bytes, entries, audit, provider, sandbox,
     options: { cwd: repo, sandboxBinary: provider, runtimeDir: path.join(scratch, 'runtime'), worktreeRoot: path.join(scratch, 'lanes') } };

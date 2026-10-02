@@ -137,7 +137,7 @@ test('automatic interactive entry honors the project main-checkout mode', { skip
 });
 test('worker mode validates and promotes to the declared integration branch', (t) => {
   const f = fixture(t, { main: 'trunk', validate: 'node --test', entry: { mode: 'worker' } });
-  const sandbox = path.join(f.scratch, 'sandbox'); fs.writeFileSync(sandbox, `#!${process.execPath}\nprocess.exit(0);`, { mode: 0o755 });
+  const sandbox = path.join(f.scratch, 'sandbox'); fs.writeFileSync(sandbox, `#!${process.execPath}\nprocess.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2),[process.execPath,'-e','']));`, { mode: 0o755 });
   const entry = f.open({ sandboxBinary: sandbox }), current = entry.dispatch({ op: 'start', text: 'Integrate on trunk' });
   fs.mkdirSync(path.dirname(current.report), { recursive: true });
   fs.writeFileSync(current.report, `---\nrun: ${current.run}\noutcome: done\nsummary: Integrated on trunk.\nheadline: The task is integrated\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
@@ -164,7 +164,7 @@ test('main-mode worker records and commits locally, refuses promotion and verifi
 test('main-mode done reports require clean committed work and successful sandboxed validation', (t) => {
   const f = fixture(t, { main: 'trunk', validate: 'node --test', entry: { mode: 'main' } });
   const sandbox = path.join(f.scratch, 'sandbox'), failure = path.join(f.scratch, 'fail-validation'), receipt = path.join(f.scratch, 'validation.json');
-  fs.writeFileSync(sandbox, `#!${process.execPath}\nconst fs=require('fs');fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify(process.argv.slice(2)));process.exit(fs.existsSync(${JSON.stringify(failure)})?17:0);`, { mode: 0o755 });
+  fs.writeFileSync(sandbox, `#!${process.execPath}\nconst fs=require('fs');fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify(process.argv.slice(2)));process.exit(fs.existsSync(${JSON.stringify(failure)})?17:require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2),[process.execPath,'-e','']));`, { mode: 0o755 });
   const entry = f.open({ sandboxBinary: sandbox });
   const current = entry.dispatch({ op: 'start', text: 'Complete validated main-mode work' });
   fs.mkdirSync(path.dirname(current.report), { recursive: true });
@@ -176,11 +176,11 @@ test('main-mode done reports require clean committed work and successful sandbox
   const rec = (args) => command(process.execPath, [path.join(product, 'bin/org.mjs'), ...args], f.repo, { ORG_DIR: current.org });
   assert.equal(JSON.parse(rec(['show', current.run, '--json'])).report, null);
   fs.unlinkSync(failure);
-  fs.writeFileSync(sandbox, `#!${process.execPath}\nrequire('fs').appendFileSync('AGENTS.md','Validation changed tracked instructions\\n');`, { mode: 0o755 });
+  fs.writeFileSync(sandbox, `#!${process.execPath}\nrequire('fs').appendFileSync('AGENTS.md','Validation changed tracked instructions\\n');process.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2),[process.execPath,'-e','']));`, { mode: 0o755 });
   assert.throws(() => entry.dispatch({ op: 'finish' }), /changed during validation/u);
   assert.equal(JSON.parse(rec(['show', current.run, '--json'])).report, null);
   command('git', ['checkout', '--', 'AGENTS.md'], f.repo);
-  fs.writeFileSync(sandbox, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)},JSON.stringify(process.argv.slice(2)));`, { mode: 0o755 });
+  fs.writeFileSync(sandbox, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)},JSON.stringify(process.argv.slice(2)));process.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2),[process.execPath,'-e','']));`, { mode: 0o755 });
   entry.dispatch({ op: 'finish' });
   assert.equal(JSON.parse(rec(['show', current.run, '--json'])).report.outcome, 'done');
   const args = JSON.parse(fs.readFileSync(receipt));

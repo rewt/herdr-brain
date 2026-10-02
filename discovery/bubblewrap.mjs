@@ -2,20 +2,25 @@
 // Network namespaces do not hide filesystem Unix sockets. Deny creation of
 // every socket as well, so project commands cannot reach a host control socket.
 import fs from 'node:fs';
+import { validationSyscalls } from './syscalls.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 export function socketFilter(arch = process.arch) {
-  const spec = { x64: { audit: 0xc000003e, socket: 41, pair: 53 }, arm64: { audit: 0xc00000b7, socket: 198, pair: 199 } }[arch];
+  const spec = { x64: { audit: 0xc000003e, column: 1 }, arm64: { audit: 0xc00000b7, column: 2 } }[arch];
   if (!spec) throw new Error(`bubblewrap socket guard unavailable on ${arch}`);
-  // Classic BPF over struct seccomp_data. A mismatched ABI is killed; x32's
-  // syscall-number flag is refused, so a 32-bit socketcall cannot bypass us.
+  // Deny by default. Unknown/new syscalls, every networking entry point,
+  // io_uring, ptrace, BPF and namespace attachment receive no allow rule.
+  // Kill mismatched ABIs and deny x32 before comparing explicit ABI numbers.
   const instructions = [
     [0x20, 0, 0, 4], [0x15, 1, 0, spec.audit], [0x06, 0, 0, 0x80000000],
     [0x20, 0, 0, 0], [0x35, 0, 1, 0x40000000], [0x06, 0, 0, 0x00050001],
-    [0x15, 0, 1, spec.socket], [0x06, 0, 0, 0x00050001],
-    [0x15, 0, 1, spec.pair], [0x06, 0, 0, 0x00050001], [0x06, 0, 0, 0x7fff0000],
+    // libc retries ordinary clone after ENOSYS; clone3 stays denied.
+    [0x15, 0, 1, 435], [0x06, 0, 0, 0x00050026],
+    ...[...new Set(validationSyscalls.map((row) => row[spec.column]).filter((nr) => nr != null))]
+      .flatMap((nr) => [[0x15, 0, 1, nr], [0x06, 0, 0, 0x7fff0000]]),
+    [0x06, 0, 0, 0x00050001],
   ];
   const bytes = Buffer.alloc(instructions.length * 8);
   instructions.forEach(([code, yes, no, value], i) => {

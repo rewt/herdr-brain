@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { validationTemporary } from './paths.mjs';
+import { lifetimeScope, closeScope, boundedArgs } from './lifetime.mjs';
 import { sandboxCommand } from './confinement.mjs';
 const [binary, cwd, sharedPathsJSON] = process.argv.slice(2);
 try {
@@ -31,10 +32,14 @@ try {
     if (typeof step !== 'string' || !step.trim()) throw new Error('invalid validation command');
     console.log(`sandboxed command (${commandSource}): ${step}`);
     const temporary = validationTemporary(cwd, { create: true });
-    const sandbox = sandboxCommand(binary, cwd, { sharedPaths, writablePaths: [temporary] });
-    const r = spawnSync(process.execPath, [new URL('./bounded.mjs', import.meta.url).pathname,
-      sandbox.binary, ...sandbox.args, '/bin/sh', '-c', step], { cwd, stdio: 'inherit', timeout: 125_000, killSignal: 'SIGKILL',
-      env: { ...process.env, TMPDIR: temporary, LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '' } });
+    const scope = lifetimeScope(cwd);
+    let r;
+    try {
+      const sandbox = sandboxCommand(binary, cwd, { sharedPaths, writablePaths: [temporary], lifetime: scope });
+      r = spawnSync(process.execPath, [new URL('./bounded.mjs', import.meta.url).pathname,
+        ...boundedArgs(scope, sandbox.binary, sandbox.args, ['/bin/sh', '-c', step])], { cwd, stdio: 'inherit', timeout: 145_000, killSignal: 'SIGKILL',
+        env: { ...process.env, TMPDIR: temporary, LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '' } });
+    } finally { closeScope(scope); }
     if (r.error || r.status !== 0) throw new Error(r.error?.message ?? `sandboxed validation exited ${r.status}`);
   }
 } catch (e) { console.error(`monitor validation: ${e.message}`); process.exitCode = 1; }

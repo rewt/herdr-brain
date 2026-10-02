@@ -33,13 +33,22 @@ const toml = (value) => typeof value === 'object'
   ? `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`).join(',')}}`
   : JSON.stringify(value);
 
-export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], runtimePaths = [], native = false, network = native }) {
+export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], runtimePaths = [], lifetime = null, native = false, network = native }) {
   if (!binary) throw new Error('a native sandbox is required for main-checkout workers');
   if (!Array.isArray(sharedPaths) || !sharedPaths.length || [...sharedPaths, ...writablePaths, ...runtimePaths].some((file) => typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0'))) {
     throw new Error('sandbox requires absolute shared-state paths from the session parent');
   }
   binary = selectSandbox(binary);
   cwd = checkedDirectory(cwd);
+  if (lifetime) {
+    const root = checkedDirectory(path.dirname(lifetime.allowed));
+    if (native || path.dirname(lifetime.denied) !== root || !path.basename(root).startsWith('monitor-lifetime-')
+      || !/^probe-[a-f0-9-]+$/u.test(path.basename(lifetime.allowed)) || !/^probe-[a-f0-9-]+$/u.test(path.basename(lifetime.denied)) || lifetime.allowed === lifetime.denied) throw new Error('invalid validation lifetime marker');
+    for (const file of [lifetime.allowed, lifetime.denied]) {
+      const entry = fs.lstatSync(file);
+      if (!entry.isFile() || entry.isSymbolicLink() || entry.uid !== process.getuid() || (entry.mode & 0o222) || fs.realpathSync(file) !== file) throw new Error('redirected validation lifetime marker');
+    }
+  }
   const protectedInput = [path.join(cwd, '.git'), ...sharedPaths];
   const protectedPaths = [...new Set(protectedInput.flatMap((file) => [file, resolved(file)]))];
   if (runtimePaths.length && !network) throw new Error('validation cannot grant external runtime writes');
@@ -65,9 +74,9 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], r
       const scoped = !native && workspaceWrites.includes(file) ? ` ${match(cwd)}` : '';
       return `(require-all ${match(file)}${scoped} (require-not (require-any ${exclusions.map(match).join(' ')})))`;
     });
-    const profile = `(version 1)\n(allow default)\n${network ? '' : '(deny network*)\n'}(deny file-write*)\n`
+    const profile = `(version 1)\n(allow default)\n${network ? '' : '(deny network*)\n'}${lifetime ? '(deny signal)\n(allow signal (target self) (target children) (target same-sandbox))\n' : ''}(deny file-write*)\n`
       + `(allow file-write* (literal "/dev/null") (require-all ${allowed} ${excluded})${exceptions.length ? ` ${exceptions.join(' ')}` : ''})\n`;
-    return { binary, args: ['-p', profile] };
+    return { binary, args: ['-p', profile + (lifetime ? `(deny file-read* (literal ${JSON.stringify(lifetime.denied)}))\n` : '')] };
   }
   if (path.basename(binary) === 'bwrap') {
     for (const file of protectedInput) {
@@ -97,6 +106,7 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], r
   // Validation instead grants writes only in the workspace and disables network.
   const filesystem = { ':root': native ? 'write' : 'read', ':workspace_roots': { '.': 'write', '.git': 'read' },
     ...Object.fromEntries(sharedPaths.map((file) => [file, 'read'])),
+    ...(lifetime ? { [lifetime.denied]: 'none' } : {}),
     ...Object.fromEntries(writable.map((file) => [file, 'write'])) };
   const profile = native ? 'monitor-main-worker' : 'monitor-validation';
   return { binary, args: ['sandbox', '--permission-profile', profile, '--include-managed-config', '-C', cwd,

@@ -16,15 +16,18 @@ const { values: opt } = parseArgs({ options: { binary: { type: 'string' }, harne
 if (!['codex', 'claude'].includes(opt.harness)) throw new Error('--harness must be codex or claude');
 opt.model ??= opt.harness === 'claude' ? 'haiku' : 'gpt-5.6-luna';
 const binary = opt.binary ?? spawnSync('which', [opt.harness], { encoding: 'utf8' }).stdout.trim();
-const install = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-installed-'));
-const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-projects-'));
-const evidence = path.join(scratch, 'evidence'); fs.mkdirSync(evidence);
+let install, scratch, evidence, setupComplete = false;
 const results = [], usage = [], active = new Set();
 let interrupted = false;
+try {
+  install = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-installed-'));
+  scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-projects-'));
+  evidence = path.join(scratch, 'evidence'); fs.mkdirSync(evidence);
+
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => {
   interrupted = true;
   for (const child of active) { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }
-  fs.rmSync(path.join(scratch, 'auth'), { recursive: true, force: true });
+  if (scratch) fs.rmSync(path.join(scratch, 'auth'), { recursive: true, force: true });
 });
 const cleanEnv = { ...process.env };
 for (const key of Object.keys(cleanEnv)) if (/^(ORG_|LANE_|MONITOR_|GIT_|HERDR_)/u.test(key)) delete cleanEnv[key];
@@ -61,7 +64,8 @@ const bin = path.join(install, 'bin');
 // Claude's native tools execute under a scratch-only kernel write boundary.
 // The launch wrapper supplies no workflow policy; installed entry owns that.
 let entryBinary = binary;
-if (opt.harness === 'claude') {
+const liveRequired = !opt['skip-live'] && !(opt.harness === 'claude' && !opt['claude-auth']);
+if (opt.harness === 'claude' && liveRequired) {
   if (process.platform !== 'darwin') throw new Error('the live Claude probe currently requires the macOS filesystem guard');
   entryBinary = path.join(install, 'claude-native.mjs');
   fs.writeFileSync(entryBinary, `#!${process.execPath}\nimport {spawn} from 'node:child_process';import {sandboxCommand} from ${JSON.stringify(path.join(product, 'discovery/confinement.mjs'))};
@@ -126,7 +130,7 @@ async function live(p, name, task) {
     });
   });
 }
-try {
+setupComplete = true;
   await check('02 Record bootstrap and canonical discovery', () => {
     const p = repo('cli-project'); record(p, ['status', '--json']); record(p, ['add', 'Actual CLI task']);
     assert.ok(fs.existsSync(path.join(p, '.org/events.jsonl')));
@@ -184,11 +188,25 @@ try {
       assert.equal(finished.items.find((i) => i.id === questions[0].parent).closed?.as, 'done');
     });
   }
+} catch (error) {
+  results.push({ name: 'Setup', status: 'FAIL', error: error.message });
+  console.error(`FAIL Setup: ${error.message}`);
 } finally {
-  fs.rmSync(path.join(scratch, 'auth'), { recursive: true, force: true });
-  fs.writeFileSync(path.join(evidence, 'summary.json'), JSON.stringify({ harness: opt.harness, results, usage, install, scratch, interrupted }, null, 2) + '\n');
-  console.log(`Evidence: ${evidence}`);
-  console.log(`Installed snapshot: ${install}`);
-  if (!opt.keep) fs.rmSync(install, { recursive: true, force: true });
+  try {
+    if (scratch) fs.rmSync(path.join(scratch, 'auth'), { recursive: true, force: true });
+    if (evidence) {
+      fs.writeFileSync(path.join(evidence, 'summary.json'), JSON.stringify({ harness: opt.harness, results, usage, install, scratch, interrupted, setupComplete }, null, 2) + '\n');
+      console.log(`Evidence: ${evidence}`);
+    }
+  } catch (error) {
+    results.push({ name: 'Evidence', status: 'FAIL', error: error.message });
+    console.error(`FAIL Evidence: ${error.message}`);
+  } finally {
+    console.log(`Installed snapshot: ${install}`);
+    if (install && (!opt.keep || !setupComplete)) fs.rmSync(install, { recursive: true, force: true });
+    if (scratch && !setupComplete) for (const name of fs.readdirSync(scratch)) {
+      if (name !== 'evidence') fs.rmSync(path.join(scratch, name), { recursive: true, force: true });
+    }
+  }
 }
 process.exitCode = results.some((r) => r.status !== 'PASS') ? 1 : 0;

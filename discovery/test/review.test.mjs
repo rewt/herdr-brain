@@ -195,7 +195,7 @@ test('canonical preparation and validation remain authoritative in both check an
   fs.symlinkSync(operatorConfig, canonical);
   command('git', ['add', '.lane.json'], f.repo); command('git', ['commit', '-qm', 'Set canonical validation'], f.repo);
   const sandbox = path.join(f.scratch, 'sandbox'), log = path.join(f.scratch, 'validation.log');
-  fs.writeFileSync(sandbox, `#!${process.execPath}\nconst fs=require('fs'),step=process.argv.at(-1);fs.appendFileSync(process.env.VALIDATION_LOG,step+'\\n');process.exit(step==='canonical-failing-check'?17:0);`, { mode: 0o755 });
+  fs.writeFileSync(sandbox, `#!${process.execPath}\nconst fs=require('fs'),step=process.argv.at(-1);fs.appendFileSync(process.env.VALIDATION_LOG,step+'\\n');process.exit(step==='canonical-failing-check'?17:require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2),[process.execPath,'-e','']));`, { mode: 0o755 });
   const entry = createEntry({ ...f.options, sandboxBinary: sandbox }); t.after(entry.close);
   const started = entry.dispatch({ op: 'start', text: 'Cannot bypass gate' });
   const workerConfig = path.join(started.workspace, '.lane.json');

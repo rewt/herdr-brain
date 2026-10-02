@@ -263,9 +263,11 @@ to the assigned checkout and its validation temporary directory, and protect
 Git metadata, the selected record's aliases and resolved targets, and canonical
 coordination state. Main-mode guards retain native account/runtime writes and
 network settings while excluding shared state. Bubblewrap uses read-only mounts
-and separate PID/network namespaces for validation. A seccomp filter also denies
-socket creation on x64/arm64: network namespaces alone do not hide host filesystem
-Unix sockets. Other ABIs fail closed. It refuses protected
+and separate PID/network namespaces for validation. Its x64/arm64 seccomp filter
+allows only the synchronous file/process/runtime syscalls in `syscalls.mjs` and
+denies everything else, including sockets, all three io_uring entry points, BPF
+and ptrace. Network namespaces alone do not hide host filesystem Unix sockets;
+asynchronous socket operations must be denied too. Other ABIs fail closed. It refuses protected
 symlinks inside a writable tree (including a linked record in main mode): mounts
 cannot protect the symlink inode itself from unlink. Use Codex or the macOS
 provider for that layout. Missing protected mount paths also fail closed.
@@ -283,19 +285,36 @@ Filters that need network or writes outside the checkout, such as a Git LFS
 fetch/cache under `.git/lfs`, fail within this boundary; there is no permissive
 Git LFS exception.
 
-Preparation, validation and each filter process have a 120-second deadline and
-terminate their process group, including background descendants. Broker calls
-also have a 180-second deadline. These are execution safety bounds, independent
-of advisory org budgets.
+Preparation, validation and each filter process have a 120-second deadline.
+A foreground native owner stops and kills every owned descendant before returning,
+including detached children and double forks. On Linux it adopts orphans as a
+subreaper. On macOS two private read probes identify the inherited kernel policy;
+cleanup uses stable process identities and generation-checked audit-token signals.
+Processes without that policy identity are never cleanup targets. A trusted
+bootstrap confirms the policy before project execution. The macOS policy also
+denies signalling owners outside the sandbox. Missing ownership or unconfirmed
+cleanup fails the check rather than retrying without containment.
+
+The owner is built with `/usr/bin/cc` in a private, no-follow-checked system scratch
+directory; no npm dependency is added. Compiler environment overrides are ignored.
+A missing compiler or compilation failure refuses execution. Compilation has a
+15-second bound and cleanup a three-second bound. Broker calls retain their
+180-second deadline. These execution safety bounds are independent of org budgets.
 
 Offline adapter/profile/cleanup regressions run in `npm test`. Exercise the
 actual host boundary explicitly outside a nested sandbox:
 
 ```sh
 ORG_ACTOR=alternative-test MONITOR_TEST_ALTERNATIVE=/usr/bin/sandbox-exec \
-  node --test discovery/test/alternatives.test.mjs
+  node --test discovery/test/alternatives.test.mjs discovery/test/review-r3.test.mjs
 # Linux: substitute /absolute/path/to/bwrap.
 ```
+
+The Linux regression makes an asynchronous AF_UNIX connection to a host socket
+as its positive control, then attaches the actual seccomp program and checks that
+socket creation, io_uring setup/enter/register and an unknown syscall are refused.
+It skips explicitly on non-Linux hosts or when the host disables io_uring; those
+skips do not constitute Linux kernel proof.
 
 The real discovery probe now accepts either transport:
 
@@ -341,3 +360,7 @@ Without an explicitly authorized --claude-auth file, the Claude probe does not
 launch native sessions or read authentication. Both live cases are PENDING;
 ENG-81's proof awaits the operator's answer to HUM-19. Pending cases keep the
 acceptance exit nonzero, without classifying their absence as a code failure.
+Pending-only and `--skip-live` probes work on Linux too: the macOS guard is checked
+only when live Claude execution is required. All setup is covered by cleanup;
+setup failure removes the installed snapshot and copied project roots, preserving
+only an available evidence summary.

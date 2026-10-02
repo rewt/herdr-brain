@@ -152,7 +152,7 @@ test('Linux network guard refuses unsupported ABIs and sends seccomp over an inh
     assert.equal(evaluate(filter, socket, audit), 0x00050001);
     assert.equal(evaluate(filter, pair, audit), 0x00050001);
     assert.equal(evaluate(filter, socket | 0x40000000, audit), 0x00050001);
-    assert.equal(evaluate(filter, 0, audit), 0x7fff0000);
+    assert.equal(evaluate(filter, arch === 'x64' ? 0 : 63, audit), 0x7fff0000);
     assert.equal(evaluate(filter, socket, 0), 0x80000000);
   }
   const f = fixture(t), shared = path.join(f.repo, '.org'); fs.mkdirSync(shared);

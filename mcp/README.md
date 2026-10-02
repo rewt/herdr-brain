@@ -49,6 +49,8 @@ the process and cancel active CLI calls. stdout contains MCP messages only.
 Every tool advertises a strict JSON schema. Text is literal, including leading
 dashes, shell syntax and newlines; no shell interprets client input. Optional
 arguments map to their corresponding CLI flags; underscores map to hyphens.
+Clients may omit the `arguments` member for `record_ready`, which is equivalent
+to an empty object. Its optional `role` filter and strict schema still apply.
 
 | Tool | Required input | CLI behavior |
 | --- | --- | --- |

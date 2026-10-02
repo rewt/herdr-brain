@@ -127,6 +127,37 @@ test('stdio exposes every tool and resource and completes the record workflow of
   assert.equal(client.stderr(), '');
 });
 
+test('ready accepts omitted arguments while advertising and enforcing its strict role schema', { timeout: 20000 }, async t => {
+  const s = scratch(t);
+  s.env.ORG_ACTOR = 'arch14-ready-regression';
+  s.org(['init']);
+  const client = await connect(t, s);
+  await client.call('add', { title: 'Engineer ready work', role: 'engineer' });
+  await client.call('add', { title: 'Reviewer ready work', role: 'reviewer' });
+  const tools = (await client.request('tools/list')).result.tools;
+  const schema = tools.find(tool => tool.name === 'record_ready').inputSchema;
+  assert.equal(schema.type, 'object');
+  assert.deepEqual(schema.required ?? [], []);
+  assert.equal(schema.additionalProperties, false);
+  assert.equal(schema.properties.role.type, 'string');
+  assert.equal(schema.properties.role.minLength, 1);
+  const before = fs.readFileSync(path.join(s.root, '.org/events.jsonl'), 'utf8');
+  const reply = await client.request('tools/call', { name: 'record_ready' });
+  assert.equal(reply.error, undefined, JSON.stringify(reply));
+  assert.ok(!reply.result.isError, body(reply.result));
+  assert.deepEqual(reply.result, await client.call('ready', {}));
+  assert.deepEqual(reply.result.structuredContent.items.map(item => item.id).sort(), ['ENG-1', 'REV-1']);
+  assert.deepEqual((await client.call('ready', { role: 'engineer' })).structuredContent.items.map(item => item.id), ['ENG-1']);
+  for (const input of [{ role: 42 }, { role: '' }, { extra_field: true }]) {
+    await client.call('ready', input, { error: true });
+  }
+  const invalid = await client.request('tools/call', { name: 'record_ready', arguments: null });
+  assert.ok(invalid.error || invalid.result?.isError, 'explicit null remains invalid');
+  const required = await client.request('tools/call', { name: 'record_show' });
+  assert.ok(required.result.isError, 'required-input tools still reject omitted arguments');
+  assert.equal(fs.readFileSync(path.join(s.root, '.org/events.jsonl'), 'utf8'), before);
+});
+
 test('stdio preserves CLI refusals, policy and literal arguments without partial writes', { timeout: 30000 }, async t => {
   const s = scratch(t);
   s.org(['init']);

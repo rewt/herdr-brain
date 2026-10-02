@@ -112,7 +112,17 @@ async function main() {
   process.once('SIGTERM', close);
   process.once('SIGINT', close);
   process.stdin.once('end', close);
-  await server.connect(new StdioServerTransport());
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  const receive = transport.onmessage;
+  // Normalize valid name-only ready calls before the SDK validates against the
+  // advertised strict object schema, preserving its optional role filter.
+  transport.onmessage = (message, extra) => {
+    if (message.method === 'tools/call' && message.params?.name === 'record_ready' && message.params.arguments === undefined) {
+      message = { ...message, params: { ...message.params, arguments: {} } };
+    }
+    receive(message, extra);
+  };
 }
 
 main().catch(error => { process.stderr.write(`record MCP: ${error.message}\n`); process.exitCode = 1; });

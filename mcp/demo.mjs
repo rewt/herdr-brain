@@ -22,10 +22,10 @@ try {
   let diagnostics = '';
   transport.stderr.on('data', chunk => { diagnostics += chunk; });
   await client.connect(transport, options);
-  async function call(name, input = {}) {
-    const result = await client.callTool({ name: `record_${name}`, arguments: input }, undefined, options);
+  async function call(name, input) {
+    const result = await client.callTool({ name: `record_${name}`, ...(input === undefined ? {} : { arguments: input }) }, undefined, options);
     assert.ok(!result.isError, JSON.stringify(result));
-    transcript.push({ tool: `record_${name}`, output: result.content[0].text.split('\n')[0] });
+    transcript.push({ tool: `record_${name}`, argumentsOmitted: input === undefined, output: result.content[0].text.split('\n')[0] });
     return result;
   }
   const tools = (await client.listTools({}, options)).tools.map(tool => tool.name);

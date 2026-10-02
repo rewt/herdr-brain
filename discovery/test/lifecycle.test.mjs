@@ -55,7 +55,7 @@ if(reason==='committed'||reason==='integrated'){
 }
 if(reason==='run')entry.dispatch({op:'start',text:'Keep started work'});
 const gitDir=command('git',['rev-parse','--path-format=absolute','--git-dir'],context.workspace);
-fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({...context,metadata:gitDir+'/monitor-entry/'+context.requests.split('/').at(-1)}));
+fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify({...context,metadata:gitDir+'/monitor-entry/'+context.requests.split('/').at(-1)}));fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
 setInterval(()=>{},1000);`;
   return { ...childProcess(t, process.execPath, ['--input-type=module', '-e', source], { cwd: f.repo }), receipt };
 }

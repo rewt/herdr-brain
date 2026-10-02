@@ -2,7 +2,7 @@
 run: R-136
 outcome: done
 summary: |
-  Corrected the independent-review finding by requiring a normalized yes or no inside the answer transaction for operator-reserved release questions, including overruling. Other text is rejected without writing events or hiding the pending question. Two bounded scratch regressions cover both decisions, preserve explanations, and carry a subsequent real lane promotion through its own candidate, gate and operator question. The baseline npm suite, 34 focused release/approval tests and pre-rebase full lane check passed. Rebased onto main's validation-tier update, retaining its named test commands plus complete candidate coverage and copied-entry isolation; all 160 lane tests and 81 offline acceptance tests passed after rebase. Final lane validation explicitly runs npm test after this report is checked and committed.
+  Corrected the independent-review finding by requiring a normalized yes or no inside the answer transaction for operator-reserved release questions, including overruling. Other text is rejected without writing events or hiding the pending question. Two bounded scratch regressions cover both decisions, preserve explanations, and carry a subsequent real lane promotion through its own candidate, gate and operator question. The baseline npm suite, 34 focused release/approval tests and two full lane checks passed. Rebased onto main's validation-tier and supervisor-notice updates, retaining its named test commands plus complete candidate coverage and copied-entry isolation. All 160 lane tests passed on the validation-tier rebase; all 81 offline acceptance tests passed on both updated trees. Final lane validation explicitly runs npm test after this report is checked and committed.
 headline: Release questions now stay open until the operator gives a yes or no answer
 blockers: []
 proposals: []
@@ -14,13 +14,16 @@ artifacts:
   - "Commit: Require yes or no for operator release replies"
   - "Commit: Report validated release reply correction for run R-136"
   - "Commit: Preserve accurate test evidence after validation-tier rebase"
+  - "Commit: Record final rebase onto supervisor notice delivery"
   - "docs/reports/ENG-109-release-module-r3-20261002.md: committed copy of this report"
   - "npm test baseline: 76 files in three bounded phases; 765 passed, 11 skipped, 0 failed; /private/tmp/R-136-baseline-test.log"
   - "ORG_ACTOR=R-136 node test/helpers/run.mjs release/test/release.test.mjs before the fix: both new regressions failed because ship it exited zero; 16 passed, 2 failed; /private/tmp/R-136-regression-before.log"
   - "ORG_ACTOR=R-136 node test/helpers/run.mjs release/test/*.test.mjs test/approvals.test.mjs after the fix: 34 passed, 0 failed; /private/tmp/R-136-focused-test.log"
   - "Pre-rebase ORG_ACTOR=R-136 node lanes/lane.mjs check: 767 passed, 11 skipped, 0 failed; /private/tmp/R-136-pre-rebase-lane-check.log"
-  - "Rebased ORG_ACTOR=R-136 npm run test:lanes: 160 passed, 0 failed; /private/tmp/R-136-rebased-lanes-test.log"
-  - "Rebased ORG_ACTOR=R-136 npm run test:acceptance: 81 passed, 0 failed; /private/tmp/R-136-rebased-acceptance-test.log; offline tests only"
+  - "Validation-tier rebase ORG_ACTOR=R-136 npm run test:lanes: 160 passed, 0 failed; /private/tmp/R-136-rebased-lanes-test.log"
+  - "Validation-tier rebase ORG_ACTOR=R-136 npm run test:acceptance: 81 passed, 0 failed; /private/tmp/R-136-rebased-acceptance-test.log; offline tests only"
+  - "Validation-tier rebase ORG_ACTOR=R-136 node lanes/lane.mjs check --cmd 'npm test': 775 passed, 11 skipped, 0 failed; /private/tmp/R-136-validation-tiers-lane-check.log"
+  - "Final supervisor-notice rebase ORG_ACTOR=R-136 npm run test:acceptance: 81 passed, 0 failed; /private/tmp/R-136-final-acceptance-test.log; offline tests only"
   - "Final validation: ORG_ACTOR=R-136 node lanes/lane.mjs check --cmd 'npm test' runs the full npm suite on the committed report head; /private/tmp/R-136-lane-check.log and .lane/gate.json retain its result"
   - "docs/reports/ENG-109-release-preview-r2-20261002.json: inherited built-candidate and --skip-live gate wiring evidence from the preceding run"
 decisions:
@@ -36,6 +39,7 @@ challenges:
   - "The inherited repository preview remains wiring evidence from its recorded source commit: 9 PASS, 0 FAIL, 18 PENDING and acceptance exit 1. It does not establish live release readiness or execution of this final tree. No additional acceptance harness pass was needed or run for this answer-validation correction."
   - "The first sandboxed baseline attempt could not inspect its owned process (ps EPERM); the complete rerun with process-inspection access passed."
   - "Main advanced during the first final lane check to Report validation tier corrections for run R-133. That check passed before rebase. The subsequent rebase resolved package and discovery conflicts, retains both discovery declarations, and is followed by offline lane tests and a new full npm lane check."
+  - "Main advanced again during validation to Report capped long-running notice fix for run R-135. The validation-tier tree passed its full check before a second, conflict-free rebase. The operator-reply fix, candidate tests, declarations and npm wiring are unchanged by this update; final full npm validation follows the report commit on the resulting tree."
 ---
 
 The answer transaction rejects free-text release replies before any answer note,

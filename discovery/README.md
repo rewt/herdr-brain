@@ -332,7 +332,9 @@ declared promotion command. The trusted parent selects the tier; worker requests
 cannot supply commands or deadlines. Each validation wrapper reserves another
 25 seconds for compilation and confirmed descendant cleanup. The entry command
 also reserves preparation time and 35 seconds for Git preflight/integration,
-with a one-hour overall cap. The request client waits up to that cap plus five
+with a one-hour overall cap. Each native step also respects the remaining entry
+time, reserving its wrapper's cleanup grace before that cap can expire.
+The request client waits up to that cap plus five
 seconds for check, promote and finish replies; other operations keep their
 three-minute deadline. The filesystem/network boundary, lifetime markers and
 descendant cleanup are the same for both tiers.

@@ -17,5 +17,14 @@ export function entryValidationTimeout(tier, prepareCount = 0) {
   return Math.min(MAX_ENTRY_TIMEOUT, validationTimeout(tier) + VALIDATION_WRAPPER_GRACE + ENTRY_COMMAND_GRACE +
     prepareCount * (FAST_VALIDATION_TIMEOUT + VALIDATION_WRAPPER_GRACE));
 }
+export function validationStepTimeout(tier, expiresAt, now = Date.now()) {
+  const requested = validationTimeout(tier);
+  if (expiresAt === undefined) return requested;
+  const deadline = Number(expiresAt);
+  if (!Number.isSafeInteger(deadline) || deadline <= 0) throw new Error('invalid entry validation deadline');
+  const remaining = Math.min(requested, deadline - now - VALIDATION_WRAPPER_GRACE);
+  if (remaining <= 0) throw new Error('entry validation deadline exhausted before command launch');
+  return remaining;
+}
 export const requestTimeout = op => ['check', 'promote', 'finish'].includes(op)
   ? MAX_ENTRY_TIMEOUT + REQUEST_REPLY_GRACE : DEFAULT_REQUEST_TIMEOUT;

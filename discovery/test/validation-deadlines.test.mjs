@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { command } from '../runtime.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { FAST_VALIDATION_TIMEOUT, PROMOTION_VALIDATION_TIMEOUT, VALIDATION_WRAPPER_GRACE,
-  ENTRY_COMMAND_GRACE, MAX_ENTRY_TIMEOUT, entryValidationTimeout, requestTimeout, validationTimeout } from '../deadlines.mjs';
+  ENTRY_COMMAND_GRACE, MAX_ENTRY_TIMEOUT, entryValidationTimeout, requestTimeout, validationTimeout, validationStepTimeout } from '../deadlines.mjs';
 
 const product = new URL('../../', import.meta.url).pathname;
 test('entry reserves bounded owner, wrapper, preparation and reply time for promotion', () => {
@@ -21,6 +21,10 @@ test('entry reserves bounded owner, wrapper, preparation and reply time for prom
   for (const op of ['check', 'promote', 'finish']) assert.ok(requestTimeout(op) > MAX_ENTRY_TIMEOUT);
   assert.equal(requestTimeout('commit'), 180_000);
   for (const count of [-1, Infinity, 0.5]) assert.throws(() => entryValidationTimeout('fast', count));
+  assert.equal(validationStepTimeout('promotion', 100_000, 70_000), 5_000);
+  assert.equal(validationStepTimeout('fast', 1_000_000, 70_000), FAST_VALIDATION_TIMEOUT);
+  assert.throws(() => validationStepTimeout('promotion', 100_000, 75_000), /exhausted/);
+  assert.throws(() => validationStepTimeout('promotion', 'invalid'), /invalid/);
 });
 
 test('declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup', { timeout: 30000 }, async t => {
@@ -49,6 +53,7 @@ test('declared promotion outlives fast owner, wrapper and client bounds with rea
   const late = path.join(scratch, 'late-write'), complete = path.join(scratch, 'complete');
   fs.writeFileSync(path.join(repo, 'slow.cjs'), `const cp=require('child_process');
 require('assert').equal(process.env.MONITOR_VALIDATION_TIER,undefined);
+require('assert').equal(process.env.MONITOR_VALIDATION_DEADLINE,undefined);
 cp.spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(late)},'leaked'),7000);`)}],{stdio:'ignore'}).unref();
 setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(complete)},'complete'),4400);\n`);
   fs.writeFileSync(path.join(repo, '.lane.json'), JSON.stringify({ main: 'main' }));
@@ -64,6 +69,12 @@ setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(complete)},'complete
   entry.dispatch({ op: 'commit', text: 'Complete promotion fixture' });
   assert.throws(() => entry.dispatch({ op: 'check' }), /sandboxed validation exited 124/, 'fast owner must still enforce its shorter bound');
   assert.equal(fs.existsSync(complete), false);
+  assert.throws(() => command(process.execPath, [path.join(source, 'discovery/validate.mjs'), sandbox,
+    current.workspace, JSON.stringify([current.org]), `${process.execPath} slow.cjs`], current.workspace,
+    { MONITOR_PROJECT_CONFIG: path.join(repo, '.lane.json'), MONITOR_VALIDATION_TIER: 'promotion',
+      MONITOR_VALIDATION_DEADLINE: String(Date.now() + scaled.VALIDATION_WRAPPER_GRACE + 1000) }),
+  /sandboxed validation exited 124/, 'remaining aggregate time must shorten the native owner before the broker expires');
+  assert.equal(fs.existsSync(complete), false);
   const client = spawnChild(t, process.execPath, [path.join(source, 'discovery/client.mjs'), 'promote'], {
     cwd: current.workspace, env: { ...process.env, ORG_ACTOR: 'entry-long-promotion-client', MONITOR_REQUEST_DIR: current.requests },
   });
@@ -76,7 +87,7 @@ setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(complete)},'complete
   assert.equal(fs.readFileSync(complete, 'utf8'), 'complete');
   assert.equal(command('git', ['rev-parse', 'main'], repo), command('git', ['rev-parse', 'HEAD'], current.workspace));
   const args = fs.readFileSync(profiles, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(args.length, 2, 'one red fast check and one green promotion');
+  assert.equal(args.length, 3, 'red fast and aggregate-bound checks, then one green promotion');
   for (const profile of args) {
     const filesystem = profile.find(arg => arg.startsWith('permissions.monitor-validation.filesystem='));
     assert.ok(filesystem.includes(`${JSON.stringify(path.join(repo, '.org'))}="read"`));

@@ -64,6 +64,8 @@ Native entry keeps a two-minute owner deadline for fast checks, preparation and
 Git filters, and allows promotion checks up to 30 minutes. Wrapper and broker
 bounds reserve compilation/cleanup and preparation/Git time; the broker has a
 one-hour cap and the request client reserves five more seconds for its reply.
+Each native step is shortened when needed to preserve cleanup time within the
+remaining aggregate deadline, including after preparation.
 These are trusted execution bounds, not agent-configurable request fields. An
 identical command that passes fast validation still supplies reusable promotion
 evidence. The offline regression copies this policy with shorter numeric bounds

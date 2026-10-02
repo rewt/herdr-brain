@@ -16,7 +16,7 @@ import { projectEntrySettings } from './settings.mjs';
 import { sandboxCommand, selectSandbox } from './confinement.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
 import { createHash } from 'node:crypto';
-import { DEFAULT_REQUEST_TIMEOUT, entryValidationTimeout } from './deadlines.mjs';
+import { DEFAULT_REQUEST_TIMEOUT, ENTRY_COMMAND_GRACE, entryValidationTimeout } from './deadlines.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -200,6 +200,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     const current = Object.assign({}, ...routes.files.map(file => JSON.parse(fs.readFileSync(file, 'utf8'))));
     const settings = resolveValidation({ root: project.canonical, config: current, env: {} });
     const tier = args[0] === 'promote' || args.includes('promotion') ? 'promotion' : 'fast';
+    const timeout = entryValidationTimeout(tier, current.prepare?.length ?? 0);
     const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace, JSON.stringify(sharedPaths), settings.tiers[tier].command].map(quote).join(' ');
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
       ...boundedGitEnv(), LANE_CONFIG: configFile, LANE_VALIDATE: validation,
@@ -207,8 +208,9 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       // This only selects a lifetime bound. Keep it out of the evidence key so
       // identical fast/promotion commands can still share a passing result.
       MONITOR_VALIDATION_TIER: tier,
+      MONITOR_VALIDATION_DEADLINE: String(Date.now() + timeout - ENTRY_COMMAND_GRACE),
       MONITOR_VALIDATION_FINGERPRINT: createHash('sha256').update(JSON.stringify([current.prepare ?? [], settings.environment])).digest('hex'),
-    }, entryValidationTimeout(tier, current.prepare?.length ?? 0));
+    }, timeout);
   };
   const context = () => ({ role, canonical: project.canonical, identity: project.identity, workspace,
     branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,

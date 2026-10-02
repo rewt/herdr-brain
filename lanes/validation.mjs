@@ -52,7 +52,7 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
 // command inputs except transport/cwd bookkeeping. Unlisted variables invalidate
 // reuse conservatively. Projects can salt ignored dependencies/container images
 // with validation.environment; lockfiles and scripts already belong to the tree.
-const bookkeeping = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'ORG_ACTOR', 'ORG_DIR', 'LANE_CONFIG', 'LANE_VALIDATE', 'LANE_WORKTREE_ROOT', 'MONITOR_VALIDATION_TIER']);
+const bookkeeping = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'ORG_ACTOR', 'ORG_DIR', 'LANE_CONFIG', 'LANE_VALIDATE', 'LANE_WORKTREE_ROOT', 'MONITOR_VALIDATION_TIER', 'MONITOR_VALIDATION_DEADLINE']);
 const paneIdentity = new Set(['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID']);
 // Session identity cannot be a validation input. Remove it from both execution
 // and hashing, matching the promotion queue's detached environment.

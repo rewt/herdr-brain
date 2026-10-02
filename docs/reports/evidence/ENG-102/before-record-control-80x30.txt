@@ -1,0 +1,30 @@
+  herdr-brain ▾               ‹  Project / Control                   r Refresh
+
+  herdr-brain                                                        c Control
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control
+─────────────────────────────────────────────────────━━━━━━━────────────────────
+  Housekeeping
+  Schedule: unknown · pid 52987
+  Enabled · recovery on · tick 60s · cleanup 600s
+  Last live scan: 2026-10-02T18:31:16.290Z · 58s ago
+  H Activity / pause / overrides ›
+
+  Waiting on you · 1
+  Category flags · 10 · ! review ›
+  HUM-19           May the Claude discovery tests use a scratch Claude profil…
+  ! Open waiting queue ›
+
+  Decided · 431
+  ENG-98 · supervisor-herdr · 2026-10-02 18:28
+    operator-focus promoted to main.
+  R-115 · lane-operator-focu-87217e-8774d0 · 2026-10-02 18:13
+    Subscribe using pane.focused and consume the native pane_focused envelope.
+  d All decisions ›
+
+  Asked · 21
+  R-83 · security · In report · no record question
+    Authorize the full matching-main comparison's four gpt-5.6-luna low-effor…
+    recommended: yes · by lane-release-snaps-438b97-9f0015
+
+ c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back

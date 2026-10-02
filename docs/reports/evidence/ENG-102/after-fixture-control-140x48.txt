@@ -1,0 +1,48 @@
+  Fresh project ▾             ‹  Project / Control                                                                               r Refresh
+
+  Fresh project                                                                                                                  c Control
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                                                               w Checkouts
+────────────────────────────────────────────────────━━━━━━━─────────────────────────────────────────────────────────────────────────────────
+  Project settings
+  P Priorities ›
+  u Routes / models / primary pool ›
+  S Settle / review desks ›
+  H Housekeeping / pause / overrides ›
+
+  Waiting on you · 1
+  HUM-1            Publish the pilot?
+  ! Open waiting queue ›
+
+  Decided · 1
+  G-1 · phase4-evidence · 2026-10-02 18:32
+    Keep the implementation dependency-free.
+  d All decisions ›
+
+  Asked · 1
+  HUM-1 · publish · Waiting on you
+    Publish the pilot?
+    recommended: yes · by phase4-evidence
+  f All questions ›
+
+  Routes in effect
+  Suggested defaults · confirmation pending. Saving an edit adopts them for this project.
+  Default: codex · gpt-6.1-sol · high
+  Primary pool: codex
+  Route → kind · model · effort
+  chore
+    codex · gpt-5.6-terra · medium · Mechanical changes
+    Launch args: []
+  engineer
+    codex · gpt-6.1-sol · high · Default implementation
+    Launch args: []
+  u All routes / edit ›
+
+
+
+
+
+
+
+
+ c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back                                      Live · 0s ago

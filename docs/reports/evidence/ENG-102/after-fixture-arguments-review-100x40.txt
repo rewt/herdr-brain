@@ -1,0 +1,40 @@
+  Fresh project ▾             ‹  Project / Routes                                        r Refresh
+
+  Fresh project                                                           Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                       w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Review Always launch arguments
+  Kind: (default) → opaque-tool
+  Arguments (JSON array): [] → []
+  Saving confirms the portable route preset for this project.
+  Applies to future launches and settle intake. Existing receipts keep their captured settings.
+  Enter  Save project settings
+  Cancel
+  Writes project config: /private/tmp/herdr-eng102-r116-fixture/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels              Live · 0s ago

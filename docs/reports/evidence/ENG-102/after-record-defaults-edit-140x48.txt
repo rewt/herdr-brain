@@ -1,0 +1,48 @@
+  herdr-brain ▾               ‹  Project / Routes                                                                                r Refresh
+
+  herdr-brain                                                                                                     Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control                                                              w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Edit Dispatch defaults
+  Kind: codex▏
+  Model: gpt-6.1-sol
+  Effort: high
+  Launch arguments (JSON array): ["-p","claude-mem-rewt"]
+  Enter  Review change
+  Cancel
+  Writes project config: /Users/rewt/development/rewt/herdr-brain/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels                                                      Live · 0s ago

@@ -1,0 +1,48 @@
+  Fresh project ▾             ‹  Project / Desks                                                                                 r Refresh
+
+  Fresh project                                                                                                                    S Desks
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                                                               w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Settle and review desks
+  Review: by worker pool: claude → review · codex → review-codex
+  Fix: worker route, otherwise engineer
+  Round cap: 0 (unlimited) · review timeout 1800s
+  Edit desk settings ›
+  Reuse stopped worker: false · notify supervisor-herdr
+  Item round-cap overrides win. Only Moderate/Minor findings can stop at the cap; Major findings and failed checks still require
+  correction.
+  These defaults apply at the next settle intake. Command flags override them; saved receipts retain their settings.
+
+  Configuration sources
+  Desk source: default
+  Save: /private/tmp/herdr-eng102-r116-fixture/.lane.json
+  Routes are portable suggestions; saving desks leaves route confirmation pending.
+  u Inspect routes / selection policy ›
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ S Desks · Enter edits · u Routes · Esc back                                                                          Live · 0s ago

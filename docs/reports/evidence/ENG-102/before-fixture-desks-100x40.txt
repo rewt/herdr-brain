@@ -1,0 +1,40 @@
+  Fresh project ▾             ‹  Project / Overview                                      r Refresh
+
+  Fresh project                                                                            n Start
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                       w Checkouts
+──━━━━━━━━──────────────────────────────────────────────────────────────────────────────────────────
+   0 sessions   0 working   0 blocked   0 idle   0 done
+
+   Decided 1   Asked 1   Waiting on you 1
+   Last: Keep the implementation dependency-free.
+   Routes · suggested defaults · confirmation pending · u open
+   Priorities · 0 operator outcomes · P open
+
+   now · no work block · goals ›
+
+   Waiting on you · 1                                                                open queue ›
+    HUM-1     Publish the pilot?                                                           y / n
+
+  No sessions here yet. Write below to start one.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ────────────────────────────────────────────────────────────────────────────────────────────────
+  › write a task or a message…  n                                                  task → no goal
+ 1-9 open session · click a name to rename · n write · p project · g goals…   Live · 0s ago

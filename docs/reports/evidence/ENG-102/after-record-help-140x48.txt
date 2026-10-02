@@ -1,0 +1,48 @@
+  herdr-brain ▾               ‹  Project / Help                                                                                  r Refresh
+
+  herdr-brain                                                                                                                    Read only
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control                                                              w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Keyboard and mouse
+  Tab / Shift+Tab Change section · Enter opens
+  j / k or Up / Down Select within section
+  Left / Right Change main view or checkout tab
+  p Project dropdown · type to filter · Esc dismisses
+  h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you
+  w Show/hide checkouts · native Herdr owns the sidebar
+  Esc / b / Alt+Left Back · Alt+Right Forward
+  PageUp / PageDown or wheel Scroll; live output switches to transcript
+  v Live screen · l Transcript · Shift+arrows pan screen locally
+  r Refresh · o Open selected native terminal · D Light/dark · q Quit
+  n Start a chat or a task from the project screen · a second Enter confirms
+  Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session
+  Back restores your project, selection and scroll.
+  Answer questions from Waiting on you; n adds a task or starts a chat.
+  c Control · d Decided · f Asked · u Routes · P Priorities · H Housekeeping · S Desks
+  Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels
+  Writes: the start bar, answers, project routes, desks, housekeeping overrides, and session input. No model calls.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start                                                  Live · 0s ago

@@ -1,0 +1,40 @@
+  herdr-brain ▾               ‹  Project / Control                                       r Refresh
+
+  herdr-brain                                                                            c Control
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control                      w Checkouts
+─────────────────────────────────────────────────────━━━━━━━────────────────────────────────────────
+  Project settings
+  P Priorities ›
+  u Routes / models / primary pool ›
+  S Settle / review desks ›
+  H Housekeeping / pause / overrides ›
+
+  Waiting on you · 1
+  Category flags · 10 · ! review ›
+  HUM-19           May the Claude discovery tests use a scratch Claude profile signed in with you…
+  ! Open waiting queue ›
+
+  Decided · 432
+  G-3 · supervisor-herdr · 2026-10-02 18:37
+    v0.1.8 gate inconclusive under heavy load; re-run when quiet.
+  ENG-98 · supervisor-herdr · 2026-10-02 18:28
+    operator-focus promoted to main.
+  d All decisions ›
+
+  Asked · 21
+  R-83 · security · In report · no record question
+    Authorize the full matching-main comparison's four gpt-5.6-luna low-effort discovery sessions…
+    recommended: yes · by lane-release-snaps-438b97-9f0015
+  HUM-19 · security · Waiting on you
+    May the Claude discovery tests use a scratch Claude profile signed in with your existing Clau…
+    recommended: no · by supervisor-herdr
+  f All questions ›
+
+  Routes in effect
+  Project routes · Enter a route to change its kind, model or effort.
+  Source: /Users/rewt/development/rewt/.lane.json
+  Default: codex · gpt-6.1-sol · high
+  Default launch args: ["-p","claude-mem-rewt"]
+
+ c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc…  Live · 0s ago

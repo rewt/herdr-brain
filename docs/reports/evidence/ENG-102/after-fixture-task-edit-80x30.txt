@@ -1,0 +1,30 @@
+  Fresh project ▾             ‹  Project / Routes                    r Refresh
+
+  Fresh project                                       Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control
+────────────────────────────────────────────────────────────────────────────────
+  Edit Task route selection
+  Task class: (default)▏
+  Pool (blank for every pool): (default)
+  Route: (default)
+  Enter  Review change
+  Cancel
+  Writes project config: /private/tmp/herdr-eng102-r116-fixture/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels

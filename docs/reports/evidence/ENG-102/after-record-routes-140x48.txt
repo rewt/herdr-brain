@@ -1,0 +1,48 @@
+  herdr-brain ▾               ‹  Project / Routes                                                                                r Refresh
+
+  herdr-brain                                                                                                                   Enter edit
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control                                                              w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Routes in effect
+  Project routes · Enter a route to change its kind, model or effort.
+  + Add route / model ›
+  Change primary pool ›
+  Edit dispatch defaults ›
+  + Add task selection ›
+  + Set always arguments ›
+
+  Source: /Users/rewt/development/rewt/.lane.json
+  Default: codex · gpt-6.1-sol · high
+  Default launch args: ["-p","claude-mem-rewt"]
+  Route → kind · model · effort
+  chore
+    codex · gpt-5.6-terra · medium · Mechanical, isolated changes: renames, doc sweeps, generated-file refreshes.
+    Launch args: ["-p","claude-mem-rewt"]
+  engineer
+    codex · gpt-6.1-sol · high · Default engineering lane: Sol at high effort.
+    Launch args: ["-p","claude-mem-rewt"]
+  engineer-max
+    codex · gpt-6.1-sol · max · Correctness-critical logic only.
+    Launch args: ["-p","claude-mem-rewt"]
+  engineer-xhigh
+    codex · gpt-6.1-sol · xhigh · Specific hard problems: cross-cutting features, tricky concurrency or protocol work.
+    Launch args: ["-p","claude-mem-rewt"]
+  executive
+    claude · opus · high · Act on operator answers and dispatch the next ready work. Judgment across the whole org.
+    Launch args: ["--plugin-dir","/Users/rewt/development/claude-mem/adapters/claude-rewt"]
+  monitor
+    codex · gpt-5.6-luna · low · One-shot read-only status from concise durable evidence; no repeated agent waits; exit after the answer.
+    Launch args: ["-p","claude-mem-rewt"]
+  research
+    claude · opus · high · Bounded evaluation or design research that needs the web and a hands-on trial in scratch; produces a
+    recommendation and evidence, not product code.
+    Launch args: ["--plugin-dir","/Users/rewt/development/claude-mem/adapters/claude-rewt"]
+  review
+    claude · opus · high · Independent review of a lane diff; verdict PASS, NEEDS-WORK, or FAIL with findings.
+    Launch args: ["--plugin-dir","/Users/rewt/development/claude-mem/adapters/claude-rewt"]
+  review-codex
+    codex · gpt-6-astra · xhigh · Independent fixed-commit review when a Codex-only route is required; follow the review template.
+    Launch args: ["-p","claude-mem-rewt"]
+
+ c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back                                      Live · 0s ago

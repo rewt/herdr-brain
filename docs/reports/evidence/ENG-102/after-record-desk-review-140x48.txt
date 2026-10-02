@@ -1,0 +1,48 @@
+  herdr-brain ▾               ‹  Project / Desks                                                                                 r Refresh
+
+  herdr-brain                                                                                                     Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control                                                              w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Review Settle and review desks
+  Review route: review (default) → review-codex
+  Fix route: worker route, otherwise engineer → worker route, otherwise engineer
+  Review round cap: 0 → 0
+  Review timeout (seconds): 1800 → 1800
+  Reuse stopped worker: false → false
+  Notify supervisor: supervisor-herdr → supervisor-herdr
+  Applies to future launches and settle intake. Existing receipts keep their captured settings.
+  Enter  Save project settings
+  Cancel
+  Writes project config: /Users/rewt/development/rewt/herdr-brain/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels                                                      Live · 0s ago

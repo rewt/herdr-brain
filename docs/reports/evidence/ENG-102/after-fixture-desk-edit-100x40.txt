@@ -1,0 +1,40 @@
+  Fresh project ▾             ‹  Project / Desks                                         r Refresh
+
+  Fresh project                                                           Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                       w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Edit Settle and review desks
+  Blank uses the built-in default. Cap 0 is unlimited; timeout 3–7200s; reuse true / false.
+  Review route: (default)▏
+  Fix route: (default)
+  Review round cap: (default)
+  Review timeout (seconds): (default)
+  Reuse stopped worker: (default)
+  Notify supervisor: (default)
+  Enter  Review change
+  Cancel
+  Writes project config: /private/tmp/herdr-eng102-r116-fixture/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels              Live · 0s ago

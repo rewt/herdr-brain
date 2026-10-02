@@ -1,0 +1,30 @@
+  Fresh project ▾             ‹  Project / Control                   r Refresh
+
+  Fresh project                                                      c Control
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control
+────────────────────────────────────────────────────━━━━━━━─────────────────────
+  Project settings
+  P Priorities ›
+  u Routes / models / primary pool ›
+  S Settle / review desks ›
+  H Housekeeping / pause / overrides ›
+
+  Waiting on you · 1
+  HUM-1            Publish the pilot?
+  ! Open waiting queue ›
+
+  Decided · 1
+  G-1 · phase4-evidence · 2026-10-02 18:32
+    Keep the implementation dependency-free.
+  d All decisions ›
+
+  Asked · 1
+  HUM-1 · publish · Waiting on you
+    Publish the pilot?
+    recommended: yes · by phase4-evidence
+  f All questions ›
+
+  Routes in effect
+
+ c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back

@@ -1,0 +1,48 @@
+  Fresh project ▾             ‹  Project / Routes                                                                                r Refresh
+
+  Fresh project                                                                                                   Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                                                               w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Edit Add route
+  Saving confirms the portable route preset for this project.
+  Name: (default)▏
+  Kind: (default)
+  Model: (default)
+  Effort: (default)
+  Enter  Review change
+  Cancel
+  Writes project config: /private/tmp/herdr-eng102-r116-fixture/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels                                                      Live · 0s ago

@@ -1,0 +1,48 @@
+  herdr-brain ▾               ‹  Project / Desks                                                                                 r Refresh
+
+  herdr-brain                                                                                                                      S Desks
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control                                                              w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Settle and review desks
+  Review: review (default)
+  Fix: worker route, otherwise engineer
+  Round cap: 0 (unlimited) · review timeout 1800s
+  Edit desk settings ›
+  Reuse stopped worker: false · notify supervisor-herdr
+  Item round-cap overrides win. Only Moderate/Minor findings can stop at the cap; Major findings and failed checks still require
+  correction.
+  These defaults apply at the next settle intake. Command flags override them; saved receipts retain their settings.
+
+  Configuration sources
+  Desk source: default
+  Save: /Users/rewt/development/rewt/herdr-brain/.lane.json
+  Review and fix route names use the project route table.
+  u Inspect routes / selection policy ›
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ S Desks · Enter edits · u Routes · Esc back                                                                          Live · 0s ago

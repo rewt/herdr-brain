@@ -1,0 +1,30 @@
+  Fresh project ▾             ‹  Project / Routes                    r Refresh
+
+  Fresh project                                       Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control
+────────────────────────────────────────────────────────────────────────────────
+  Review Primary pool
+  Primary pool: codex → codex
+  Resulting task selections:
+  implementation → engineer
+  difficult → engineer-xhigh
+  critical → engineer-max
+  chore → chore
+  planning → unblock
+  review · claude → review
+  review · codex → review-codex
+  status → monitor
+  settle → settle
+  executive → executive
+  writing → writer
+  research → research
+  Applies to future launches and settle intake. Existing receipts keep their
+  captured settings.
+  Enter  Close without changes
+  Cancel
+  Writes project config: /private/tmp/herdr-eng102-r116-fixture/.lane.json
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels

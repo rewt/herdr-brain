@@ -1,0 +1,30 @@
+  herdr-brain ▾               ‹  Project / Overview                  r Refresh
+
+  herdr-brain                                                          n Start
+
+  Overview   Goals   Tasks   Activity   Waiting 11   Control
+──━━━━━━━━──────────────────────────────────────────────────────────────────────
+   0 sessions   0 working   0 blocked   0 idle   0 done
+   ENG-84 · Category review: design is auto but R-64 decisions[1] mentions
+   deletion; check operator authority
+   ENG-78 · Category review: design is auto but R-68 decisions[0] mentions
+   deletion; check operator authority
+   ENG-80 · Category review: design is auto but R-97 decisions[0] mentions
+   publish; check operator authority
+   ENG-80 · Category review: tooling is auto but R-97 decisions[1] mentions
+   publish; check operator authority
+   ENG-88 · Category review: design is auto but R-94 decisions[1] mentions
+   deletion; check operator authority
+   ENG-88 · Category review: design is auto but R-94 decisions[4] mentions
+   deletion; check operator authority
+   ENG-88 · Category review: design is auto but R-104 decisions[1] mentions
+   deletion; check operator authority
+   ENG-94 · Category review: design is auto but R-103 decisions[1] mentions
+   deletion; check operator authority
+   ENG-94 · Category review: prover is auto but R-103 decisions[3] mentions
+   deletion; check operator authority
+   ENG-88 · Category review: design is auto but R-106 decisions[1] mentions
+
+  ────────────────────────────────────────────────────────────────────────────
+  › write a task or a message…  n                              task → no goal
+ 1-9 open session · click a name to rename · n write · p project · g goals · t…

@@ -1,0 +1,48 @@
+  Fresh project ▾             ‹  Project / Routes                                                                                r Refresh
+
+  Fresh project                                                                                                                 Enter edit
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control                                                               w Checkouts
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Routes in effect
+  Suggested defaults · confirmation pending. Saving an edit adopts them for this project.
+  Herdr Monitor suggested routes (operator confirmation pending)
+  Default: codex · gpt-6.1-sol · high
+  Primary pool: codex
+  Route → kind · model · effort
+  chore
+    codex · gpt-5.6-terra · medium · Mechanical changes
+    Launch args: []
+  engineer
+    codex · gpt-6.1-sol · high · Default implementation
+    Launch args: []
+  engineer-max
+    codex · gpt-6.1-sol · max · Correctness-critical implementation
+    Launch args: []
+  engineer-xhigh
+    codex · gpt-6.1-sol · xhigh · Difficult implementation
+    Launch args: []
+  executive
+    claude · opus · high · Operator steering
+    Launch args: []
+  monitor
+    codex · gpt-5.6-luna · low · One-shot status
+    Launch args: []
+  research
+    claude · opus · high · Bounded research
+    Launch args: []
+  review
+    claude · opus · high · Independent review
+    Launch args: []
+  review-codex
+    codex · gpt-6-astra · xhigh · Independent Codex review
+    Launch args: []
+  review-max
+    claude · opus · xhigh · Critical review
+    Launch args: []
+  settle
+    claude · sonnet · medium · Report settlement
+    Launch args: []
+  settle-opus
+
+ c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back                                      Live · 0s ago

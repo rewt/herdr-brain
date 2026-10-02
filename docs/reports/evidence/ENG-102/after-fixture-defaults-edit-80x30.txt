@@ -1,0 +1,30 @@
+  Fresh project ▾             ‹  Project / Routes                    r Refresh
+
+  Fresh project                                       Enter reviews / confirms
+
+  Overview   Goals   Tasks   Activity   Waiting 1   Control
+────────────────────────────────────────────────────────────────────────────────
+  Edit Dispatch defaults
+  Kind: codex▏
+  Model: gpt-6.1-sol
+  Effort: high
+  Launch arguments (JSON array): []
+  Enter  Review change
+  Cancel
+  Writes project config: /private/tmp/herdr-eng102-r116-fixture/.lane.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels

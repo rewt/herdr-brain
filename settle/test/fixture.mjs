@@ -3,7 +3,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync, spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { createProcessTracker, killProcess } from '../../test/helpers/processes.mjs';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const rootTool = fileURLToPath(new URL('../../', import.meta.url));
@@ -18,7 +20,30 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
   env.ORG_ACTOR = actor;
   delete env.NODE_TEST_CONTEXT;
   fs.mkdirSync(env.HOME); fs.mkdirSync(env.XDG_CONFIG_HOME);
-  const exec = (file, args, cwd = repo, extra = {}) => spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 45_000 });
+  const watchers = new Map(), observed = new Set(), tracker = createProcessTracker();
+  const rememberWatchers = () => {
+    const directory = path.join(repo, '.org/dispatch');
+    if (!fs.existsSync(directory)) return;
+    const current = tracker.snapshot();
+    if (!current.ok) throw Error('Cannot confirm fixture watcher ownership');
+    for (const file of fs.readdirSync(directory).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json'))) {
+      const job = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
+      if (!job.watcher?.pid || observed.has(file)) continue;
+      observed.add(file);
+      const row = current.value.get(job.watcher?.pid);
+      if (!row || /^Z/.test(row.state)) continue;
+      if (!row.command.includes(path.join(source, 'watch/watch.mjs')) || !row.command.includes(path.join(repo, '.org'))) {
+        console.error(`Fixture watcher PID ${row.pid} already changed after acknowledgment; no signal sent`);
+        continue;
+      }
+      watchers.set(file, { pid: row.pid, identity: row.identity, command: row.command, group: false });
+    }
+  };
+  const exec = (file, args, cwd = repo, extra = {}) => {
+    const result = spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 15_000 });
+    rememberWatchers();
+    return result;
+  };
   const checked = (file, args, cwd, extra) => { const r = exec(file, args, cwd, extra); assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim(); };
   const git = (args, cwd = repo) => checked('git', args, cwd);
   git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Settle tests']); git(['config', 'user.email', 'settle@example.invalid']);
@@ -42,17 +67,22 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
   const retry = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--retry', ...args]);
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
   const concurrent = (id) => {
-    const child = spawn(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief], { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '', stderr = ''; child.stdout.on('data', (x) => stdout += x); child.stderr.on('data', (x) => stderr += x);
-    t.after(() => { if (child.exitCode === null) child.kill('SIGKILL'); });
-    return { child, done: new Promise((resolve) => child.on('close', (status) => resolve({ status, stdout, stderr }))) };
+    const child = spawnChild(t, process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief], { cwd: repo, env });
+    return { child, done: waitForExit(child).then(result => { rememberWatchers(); return result; }) };
   };
-  t.after(() => {
-    const directory = path.join(org, 'dispatch');
-    if (fs.existsSync(directory)) for (const file of fs.readdirSync(directory).filter((x) => x.endsWith('.json') && !x.endsWith('.routes.json'))) {
-      const job = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
-      if (job.watcher?.pid) try { process.kill(job.watcher.pid, 'SIGTERM'); } catch {}
+  t.after(async () => {
+    for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
+    const deadline = Date.now() + 2000;
+    while (watchers.size && Date.now() < deadline) {
+      const current = tracker.snapshot();
+      if (!current.ok) throw Error('Cannot confirm watcher shutdown');
+      for (const [file, entry] of watchers) {
+        const row = current.value.get(entry.pid);
+        if (!row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command) watchers.delete(file);
+      }
+      if (watchers.size) await new Promise(resolve => setTimeout(resolve, 20));
     }
+    assert.equal(watchers.size, 0, 'fixture watchers did not shut down');
     // A just-terminated watcher can still finish a scratch log write. Retry
     // transient removal races briefly; cleanup remains bounded and owned here.
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

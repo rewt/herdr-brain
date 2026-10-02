@@ -22,7 +22,14 @@ ${source(root)}`);
   return { root, file };
 }
 
-function assertGone(pid) {
+async function assertGone(pid) {
+  const deadline = Date.now() + 2000;
+  for (;;) {
+    try { process.kill(pid, 0); }
+    catch (error) { if (error.code === 'ESRCH') return; throw error; }
+    if (Date.now() >= deadline) break;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `fixture process ${pid} survived cleanup`);
 }
 
@@ -69,7 +76,7 @@ ${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" :
     assert.equal(result.code, 1, result.stdout + result.stderr);
     assert.ok(result.stdout.includes(name), result.stdout);
     assert.match(result.stdout, kind === 'test timeout' ? /testTimeoutFailure/ : kind === 'child timeout' ? /did not exit within 500ms/ : kind === 'assertion' ? /injected failure before waitForExit/ : /left child running/);
-    for (const file of ['pid', 'grandchild']) assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
+    for (const file of ['pid', 'grandchild']) await assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
   });
 }
 
@@ -85,7 +92,7 @@ while(true) {}
     assert.equal(result.code, 1, result.stdout + result.stderr);
     assert.ok((result.stdout + result.stderr).includes(f.file), result.stdout + result.stderr);
     assert.match(result.stdout + result.stderr, kind === 'file' ? /testTimeoutFailure/ : /Test suite exceeded 1000ms/);
-    assertGone(Number(fs.readFileSync(path.join(f.root, 'pid'), 'utf8')));
+    await assertGone(Number(fs.readFileSync(path.join(f.root, 'pid'), 'utf8')));
   });
 }
 
@@ -153,7 +160,7 @@ await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes(name), result.stdout);
   assert.match(result.stderr, /Surviving fixture: PID \d+, command sleep 60/);
-  assertGone(Number(fs.readFileSync(path.join(f.root, 'background'), 'utf8')));
+  await assertGone(Number(fs.readFileSync(path.join(f.root, 'background'), 'utf8')));
 });
 
 test('a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures', async (t) => {
@@ -172,7 +179,7 @@ syncBuiltinESMExports();`);
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /process snapshot failed: injected audit timeout/);
-  for (const file of ['worker', 'fixture']) assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
+  for (const file of ['worker', 'fixture']) await assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
 });
 
 test('suite cancellation clears a detached spawn frozen before its ownership lookup', async (t) => {
@@ -195,7 +202,7 @@ spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true})
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Test suite exceeded 2500ms/);
   const state = JSON.parse(fs.readFileSync(path.join(f.root, 'spawning'), 'utf8'));
-  for (const pid of Object.values(state)) assertGone(pid);
+  for (const pid of Object.values(state)) await assertGone(pid);
 });
 
 test('fixture environment overrides cannot detach a grandchild from the suite group', async (t) => {
@@ -217,7 +224,7 @@ if(!fs.existsSync(${JSON.stringify(receipt)}))throw Error('grandchild receipt mi
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Surviving fixture:.*r94-policy-leaf/);
-  assertGone(JSON.parse(fs.readFileSync(path.join(f.root, 'leaf.json'), 'utf8')).leaf);
+  await assertGone(JSON.parse(fs.readFileSync(path.join(f.root, 'leaf.json'), 'utf8')).leaf);
 });
 
 test('a fresh signal confirms the same owned birth tuple across caller timezone changes', async (t) => {
@@ -229,7 +236,7 @@ test('a fresh signal confirms the same owned birth tuple across caller timezone 
     assert.equal(child.kill('SIGTERM'), true, 'time formatting must not turn the same owned process into a mismatch');
     assert.equal(child.killed, true, 'a verified child signal retains native ChildProcess kill bookkeeping');
     assert.equal((await waitForExit(child)).signal, 'SIGTERM');
-    assertGone(child.pid);
+    await assertGone(child.pid);
   } finally {
     // This also safely reaps the negative control using its original clock.
     process.env.TZ = 'Pacific/Honolulu';

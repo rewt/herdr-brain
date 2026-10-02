@@ -36,14 +36,14 @@ if (worker) {
     stream.on('test:fail', () => { code = 1; });
     try { await pipeline(stream.compose(tap), process.stdout, { end: false }); }
     catch (error) { console.error(error); code = 1; }
-    if (process.connected) process.send({ complete: true, code });
+    if (process.connected) process.send({ complete: true, code }, error => { if (error) cleanup(); });
     // Keep IPC referenced: the coordinator audits and kills this live leader.
   });
   setTimeout(() => {
     console.error(`Test suite exceeded ${suiteTimeout}ms. Files: ${files.join(', ')}`);
     cleanup();
   }, suiteTimeout + 2500);
-  process.send({ ready: true });
+  process.send({ ready: true }, error => { if (error) cleanup(); });
 } else {
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
@@ -82,6 +82,7 @@ if (worker) {
     else { child.once('exit', exit); setTimeout(exit, 2500); }
   }
   child.on('message', message => {
+    if (finished) return;
     if (message.ready) {
       try { owner = registerProcess(child.pid, true); child.send('start'); }
       catch (error) { console.error(error); finish(1); }

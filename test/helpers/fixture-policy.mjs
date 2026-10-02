@@ -40,7 +40,7 @@ ChildProcess.prototype.spawn = function (options) {
     this.kill = () => {
       // A file deadline ends this entire owned group, keeping its leader alive
       // until the coordinator's fresh group signal. No detached fixture escapes.
-      if (process.connected) process.send({ timeout: options.args.at(-1) });
+      if (process.connected) process.send({ timeout: options.args.at(-1) }, error => { if (error && process.connected) process.disconnect(); });
       this.killed = true;
       return true;
     };

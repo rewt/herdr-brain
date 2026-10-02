@@ -122,6 +122,28 @@ Earlier failed harness attempts remain in their own scratch roots; no product
 code was changed to get the proof green. The final passing recipe is the one
 linked above.
 
+## Corrective evidence, 2026-10-02
+
+Corrective automated rehearsal: **PASSED**, using the candidate at `c2721fd`
+("Keep scratch release registration fixture across observation steps").
+
+- Evidence: `/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-adoption-mhl0eN/evidence/summary.json`;
+  `commands.json`, `prerequisites.txt` and `herdr-commands.jsonl` beside it retain
+  the bounded commands, host toolchain checks and scratch registry calls.
+- Fresh unrelated project: `/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/adopter-projects-0zFm4Y/hello`.
+  Run `R-1` integrated commit `00576c07258474eccf63fc7f04bcfda44077ea97`.
+- Host dependencies: Apple clang 21.0.0 at `/usr/bin/cc`, Python 3.14.7 on PATH;
+  the worker's native sandbox checks also compiled/linked the actual lifetime
+  owner and ran the project's assertions. The scratch HOME has no user settings;
+  the compiler, Python and native executable come from the host installation.
+- Release plugin registration used the local fixture with real Python-backed
+  discovery: A linked, A unlinked/B linked, B unlinked/A linked, then A unlinked
+  on restore. Final registration was absent, shell bytes/mode matched, scratch
+  entry/launchers were gone, and the integrated project/record survived.
+- The first corrective attempt reached integration but its console list-only
+  fixture leaked into later release steps. The final runner scopes that override
+  to the console child; the fresh passing attempt exercises all release receipts.
+
 ## Limits
 
 The native canary substitutes a local repository for GitHub transport and omits

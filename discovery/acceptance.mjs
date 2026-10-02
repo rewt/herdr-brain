@@ -57,7 +57,7 @@ async function check(name, fn) {
   console.log(`${results.at(-1).status.padEnd(7)} ${name}${results.at(-1).error ? `: ${results.at(-1).error}` : ''}`);
 }
 const product = path.join(install, 'product'); fs.mkdirSync(product);
-for (const directory of ['bin', 'lib', 'lanes', 'dispatch', 'watch', 'housekeeping', 'supervisor', 'discovery']) {
+for (const directory of ['bin', 'lib', 'lanes', 'dispatch', 'watch', 'housekeeping', 'promote', 'supervisor', 'discovery']) {
   fs.cpSync(path.join(source, directory), path.join(product, directory), { recursive: true, filter: (p) => !['test', 'node_modules'].includes(path.basename(p)) });
 }
 fs.copyFileSync(path.join(source, 'package.json'), path.join(product, 'package.json'));

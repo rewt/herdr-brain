@@ -239,6 +239,12 @@ model call, can be run explicitly outside a nested sandbox:
 MONITOR_TEST_SANDBOX=/absolute/path/to/codex node --test discovery/test/sandbox.test.mjs discovery/test/confinement.test.mjs
 ```
 
+Offline probe regressions also use the probe's copied product and installed
+Codex/Claude adapters for scripted worker checks, guarded promotion and approved
+route integration. Project tests actually run; dirty trees, red gates, changed
+expected heads and supervisor STOP refuse promotion before the fast-forward.
+These cases use no authentication or model calls.
+
 The independent real discovery probe is outside `npm test`:
 
 ```sh

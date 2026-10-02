@@ -7,6 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
+import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function fixture(t) {
@@ -14,7 +15,7 @@ function fixture(t) {
   t.after(() => { spawnSync('chmod', ['-R', 'u+w', root], { timeout: 5000 }); fs.rmSync(root, { recursive: true, force: true }); });
   const repo = path.join(root, 'source'), home = path.join(root, 'user'), nativeBin = path.join(root, 'native');
   for (const dir of [repo, home, nativeBin]) fs.mkdirSync(dir);
-  for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'settle']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
+  for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'supervisor']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
   fs.copyFileSync(path.join(source, 'herdr-plugin.toml'), path.join(repo, 'herdr-plugin.toml'));
   const native = path.join(nativeBin, 'codex'), receipt = path.join(root, 'native.json');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));\n`, { mode: 0o755 });
@@ -346,6 +347,7 @@ test('release carries entry, pins final versions, rolls back and restores exact 
   f.ok('bash', [path.join(marker().product, 'herdr/supervisor.sh'), '--model', 'literal'], project);
   const supervisor = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(supervisor.cwd, project);
+  assertSupervisorEntry(JSON.parse(supervisor.args.find((arg) => arg.startsWith('developer_instructions=')).slice('developer_instructions='.length)));
   assert.match(supervisor.args.join('\n'), /At session entry, start the default project schedule/u);
   assert.ok(supervisor.args.join('\n').includes(`${marker().product}/housekeeping/housekeeping.mjs`));
   f.release('activate', 'second'); f.release('activate', 'second');
@@ -436,6 +438,7 @@ test('supervisor resolves the selected workspace to canonical Git instead of its
   f.ok('bash', [path.join(f.repo, 'herdr/supervisor.sh'), '--model', 'literal'], f.repo, context);
   const native = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(native.cwd, project);
+  assertSupervisorEntry(JSON.parse(native.args.find((arg) => arg.startsWith('developer_instructions=')).slice('developer_instructions='.length)));
   assert.match(native.args.join('\n'), /At session entry, start the default project schedule/u);
   assert.equal(fs.existsSync(path.join(f.repo, '.org')), false);
   assert.notEqual(f.run('bash', [path.join(f.repo, 'herdr/supervisor.sh')], f.repo, { ...context, HERDR_PLUGIN_CONTEXT_JSON: '{}', HERDR_WORKSPACE_ID: '' }).status, 0);

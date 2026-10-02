@@ -1,0 +1,108 @@
+{
+  "run": "R-107",
+  "reviewed_commit": "3260140139b1cb4622ab35c52200350b7bc5f434",
+  "review": "docs/reviews/supervisor-module/3260140-r1.md",
+  "rebased_main": "21aa41922b86433686d427a980f61cc966bb7707",
+  "nested_baseline": {
+    "tests": 581,
+    "pass": 553,
+    "fail": 17,
+    "skipped": 11,
+    "disposition": "Nested macOS sandbox fixture setup refused; repeat the required offline baseline outside the outer sandbox."
+  },
+  "baseline": {
+    "command": "ORG_ACTOR=R-107-baseline npm test",
+    "tests": 581,
+    "pass": 570,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 164109.357292,
+    "failures": []
+  },
+  "reproduced_review_finding": {
+    "command": "node --test discovery/test/acceptance.test.mjs",
+    "tests": 2,
+    "pass": 0,
+    "fail": 2,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "duration_ms": 3983.688625,
+    "failures": [
+      "copied codex probe product validates, guards and promotes worker and routing changes offline",
+      "copied claude probe product validates, guards and promotes worker and routing changes offline"
+    ],
+    "reason": "Both copied adapters reach worker check and fail loading the omitted product/promote/guard.mjs."
+  },
+  "copied_product": {
+    "command": "node --test discovery/test/acceptance.test.mjs",
+    "tests": 2,
+    "pass": 2,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "duration_ms": 17672.191,
+    "failures": []
+  },
+  "post_rebase_initial": {
+    "command": "ORG_ACTOR=R-107-validation npm test",
+    "tests": 622,
+    "pass": 607,
+    "fail": 4,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 176018.983292,
+    "failures": [
+      "relocated installed runtime executes lane review through its bundled template dependency",
+      "release carries entry, pins final versions, rolls back and restores exact shell state",
+      "Herdr build checkout can move or disappear while installed entry and restore still work",
+      "supervisor resolves the selected workspace to canonical Git instead of its plugin cwd"
+    ],
+    "disposition": "The rebased plugin-install fixture omitted supervisor/promotion dependencies; expand the fixture and assert the shared supervisor entry contract."
+  },
+  "plugin_integration": {
+    "command": "node --test test/plugin-install.test.mjs",
+    "tests": 39,
+    "pass": 39,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "duration_ms": 61954.438708,
+    "failures": []
+  },
+  "post_change": {
+    "command": "ORG_ACTOR=R-107-validation npm test",
+    "tests": 622,
+    "pass": 611,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 213428.262083,
+    "failures": []
+  },
+  "cold_start": {
+    "through": 1260,
+    "after": 0,
+    "characters": 5750,
+    "approximate_tokens": 1438,
+    "counts": {
+      "running": 4,
+      "reports": 23,
+      "waiting": 1,
+      "decisions": 377
+    },
+    "report_decisions": 245,
+    "verification": "Running routes, current report rows and structured report decision provenance/rationale checked against the event fold through the captured sequence; no shared record/checkpoint writes."
+  },
+  "final_gate": "Run lane check last after the implementation and checked report commits; exact HEAD, command and result saved in local .lane/gate.json.",
+  "limits": [
+    "Native worker/validator transport is scripted in the new regression; real project tests, Git, record and lane guards execute.",
+    "No live model, actual operator chat clearing, full release harness, bch-cloak cutover, full optional lane suite or new filesystem-isolation proof is claimed."
+  ]
+}

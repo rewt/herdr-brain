@@ -81,6 +81,11 @@ async function ownedPane(id) {
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 try {
   const [group, verb, target] = argv;
+  if (group === 'notification' && verb === 'show') {
+    // Notification UI is excluded; retain the candidate's attempt in scratch.
+    fs.appendFileSync(path.join(root, 'notifications.jsonl'), JSON.stringify(argv) + '\n');
+    process.stdout.write('{"result":{}}\n'); process.exit(0);
+  }
   if (group === 'workspace' && verb === 'create') safePath(requireOption('--cwd'));
   else if (group === 'workspace' && verb === 'list') { /* filtered below */ }
   else if (group === 'workspace' && ['get', 'close'].includes(verb)) owned(target, 'workspaces');

@@ -30,8 +30,10 @@ export function relocate(text, { live, home, scratchHome, copy, candidate, root,
     text = text.replaceAll(target, JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs')));
   }
   return text.replaceAll(path.dirname(live), path.dirname(copy))
-    .replaceAll(path.join(home, '.herdr/worktrees/bch-cloak'), path.join(root, '.herdr/worktrees/bch-cloak'))
+    .replaceAll(path.join(home, '.herdr/worktrees/bch-cloak'), path.join(scratchHome, '.herdr/worktrees/bch-cloak'))
     .replaceAll('/private/tmp/apply-settle-cmds.', path.join(root, 'apply-settle-cmds.'))
+    .replaceAll('/tmp/orgctx-', path.join(root, 'orgctx-'))
+    .replaceAll('/tmp/prep-', path.join(root, 'prep-'))
     .replaceAll('${HOME}', scratchHome).replaceAll('$HOME', scratchHome)
     .replaceAll('homedir()', JSON.stringify(scratchHome))
     .replaceAll(home, scratchHome).replaceAll('~/', `${scratchHome}/`);

@@ -183,3 +183,20 @@ test('missing live pane cwd receipt is a harness limit, not a candidate capabili
     assert.ok(!JSON.parse(fs.readFileSync(path.join(f.root, 'ownership.json'))).panes.includes('late-own:p2'));
   } finally { f.close(); }
 });
+
+test('native transport pins the original socket when copied HOME changes', () => {
+  const f = fixture();
+  try {
+    const ledger = path.join(f.root, 'ownership.json');
+    const state = JSON.parse(fs.readFileSync(ledger));
+    state.socketPath = path.join(f.root, 'original.sock'); fs.writeFileSync(ledger, JSON.stringify(state));
+    const binary = state.binary;
+    const source = fs.readFileSync(binary, 'utf8');
+    fs.writeFileSync(binary, source.replace("const a=process.argv.slice(2);", `fs.writeFileSync(${JSON.stringify(path.join(f.root, 'socket-receipt'))}, process.env.HERDR_SOCKET_PATH ?? 'missing');const a=process.argv.slice(2);`));
+    const result = spawnSync(process.execPath, [guard, 'pane', 'get', 'own:p1'], {
+      env: { ...process.env, HOME: f.root, ACCEPTANCE_ROOT: f.root, HERDR_SOCKET_PATH: '/wrong.sock' }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(path.join(f.root, 'socket-receipt'), 'utf8'), state.socketPath);
+  } finally { f.close(); }
+});

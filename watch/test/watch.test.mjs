@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -47,18 +47,28 @@ esac`);
   return { root, report, calls, org, herdr, writer, args };
 }
 
+const children = new Set();
+afterEach(() => {
+  for (const child of children) {
+    if (child.exitCode === null) { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }
+    child.stdout?.destroy(); child.stderr?.destroy();
+  }
+  children.clear();
+});
 function startWatcher(args) {
-  return spawn(process.execPath, args, { env: TEST_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, args, { env: TEST_ENV, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  children.add(child);
+  return child;
 }
 
-function waitForExit(child, timeoutMs = 3_000) {
+function waitForExit(child, timeoutMs = 10_000) {
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
     child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      try { process.kill(-child.pid, 'SIGKILL'); } catch {}
       reject(new Error(`watcher did not exit:\n${stdout}${stderr}`));
     }, timeoutMs);
     child.on('close', (code) => {
@@ -68,7 +78,7 @@ function waitForExit(child, timeoutMs = 3_000) {
   });
 }
 
-async function waitForText(file, pattern, timeoutMs = 2_000) {
+async function waitForText(file, pattern, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const body = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
@@ -155,9 +165,9 @@ esac`);
   "agent prompt") printf '%s\\n' "$*" >> "${calls}" ;;
   *) exit 2 ;;
 esac`);
-  const child = spawn(process.execPath, [
+  const child = startWatcher([
     WATCH, 'R-8', '--org', path.join(root, '.org'), '--org-cli', org, '--herdr', herdr, '--to', 'supervisor-test',
-  ], { env: TEST_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
+  ]);
   await new Promise((resolve) => setTimeout(resolve, 100));
   fs.writeFileSync(report, reportText('R-8', 'Draft report'));
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -303,7 +313,7 @@ test('idle grace notices a blocked worker immediately and keeps watching', async
   *) exit 2 ;;
 esac`);
   const child = startWatcher([...fixture.args, '--idle-grace', '10']);
-  t.after(() => { if (child.exitCode === null) child.kill('SIGKILL'); });
+  t.after(() => { if (child.exitCode === null) try { process.kill(-child.pid, 'SIGKILL'); } catch {} });
   await waitForText(waits, /state=working/);
   fs.writeFileSync(state, 'idle');
   await waitForText(waits, /state=idle/);

@@ -14,6 +14,7 @@ import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
 import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine } from './results.mjs';
 import { liveSocket } from './probe.mjs';
+import { switches, switchedFiles, capture, restore, callers, retireContrib } from './cutover.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -31,7 +32,7 @@ const evidence = path.join(root, 'evidence');
 fs.mkdirSync(evidence);
 const started = Date.now();
 const results = [];
-let logFile, candidateCommit, fixture, supervisor;
+let logFile, candidateCommit, fixture, supervisor, defaultOrg;
 const pids = new Set();
 const discoveryRoots = [];
 const env = { ...process.env };
@@ -49,7 +50,7 @@ function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_00
   if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd, status: r.status, error: r.error?.message,
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
   if (ok && (r.error || r.status !== 0)) {
-    const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? String(r.stderr || r.stdout).trim()}`;
+    const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? (String(r.stdout ?? '') + String(r.stderr ?? '')).trim()}`;
     throw commandFailure(message);
   }
   return r;
@@ -155,11 +156,17 @@ async function cleanupScope() {
   try {
     // PIDs originate only in successful candidate detach receipts or in this
     // scratch record’s dispatch journals (including partially failed dispatch).
-    if (fixture && fs.existsSync(path.join(fixture.org, 'dispatch'))) {
-      for (const file of fs.readdirSync(path.join(fixture.org, 'dispatch'))) {
+    for (const org of [fixture?.org, defaultOrg].filter(Boolean)) {
+      if (!fs.existsSync(path.join(org, 'dispatch'))) continue;
+      for (const file of fs.readdirSync(path.join(org, 'dispatch'))) {
         if (!file.endsWith('.json') || file.endsWith('.routes.json')) continue;
-        const job = JSON.parse(read(path.join(fixture.org, 'dispatch', file)));
+        const job = JSON.parse(read(path.join(org, 'dispatch', file)));
         if (job.watcher?.pid) pids.add(job.watcher.pid);
+      }
+    }
+    if (fs.existsSync(path.join(root, 'legacy-watcher-pids'))) {
+      for (const value of read(path.join(root, 'legacy-watcher-pids')).trim().split('\n')) {
+        const pid = Number(value); if (Number.isSafeInteger(pid) && pid > 1) pids.add(pid);
       }
     }
     for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') errors.push(e.message); } }
@@ -174,7 +181,7 @@ async function cleanupScope() {
       const remaining = h('workspace', 'list').workspaces;
       write(path.join(evidence, 'ownership.json'), JSON.stringify(owned, null, 2));
       write(path.join(evidence, 'cleanup-residue.json'), JSON.stringify({ workspaces: remaining, errors }, null, 2));
-      for (const file of ['herdr.jsonl', 'denied.jsonl', 'supervisor-input.jsonl', 'worker-input.jsonl']) {
+      for (const file of ['herdr.jsonl', 'denied.jsonl', 'supervisor-input.jsonl', 'worker-input.jsonl', 'notifications.jsonl']) {
         if (fs.existsSync(path.join(root, file))) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
       }
       if (remaining.length) errors.push(`${remaining.length} owned workspace(s) left`);
@@ -278,6 +285,10 @@ try {
       write(path.join(bin, name), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'record-shim.mjs'))} "$@"\n`);
       fs.chmodSync(path.join(bin, name), 0o755);
     }
+    // A legacy detached watcher has no dispatch journal. Its scratch nohup
+    // adapter emits its own process receipt before exec; cleanup never scans PIDs.
+    write(path.join(bin, 'nohup'), `#!/bin/sh\nprintf '%s\\n' "$$" >> ${quote(path.join(root, 'legacy-watcher-pids'))}\nexec /usr/bin/nohup "$@"\n`);
+    fs.chmodSync(path.join(bin, 'nohup'), 0o755);
     fs.symlinkSync(path.join(candidate, 'lanes/lane.mjs'), path.join(bin, 'lane'));
     env.PATH = `${bin}:${process.env.PATH}`;
     fixture = { repo: path.join(root, 'configured-project'), org: path.join(root, 'record'), brief: path.join(root, 'ask.md') };
@@ -445,6 +456,10 @@ try {
     write(path.join(repo, 'acceptance-release-marker'), 'rollback fixture'); git(repo, ['add', '-A']); git(repo, ['commit', '-qm', 'Second scratch release']); git(repo, ['tag', 'second']);
     const home = path.join(root, 'monitor-home'), bin = path.join(root, 'release-bin'); fs.mkdirSync(bin);
     fs.symlinkSync(path.join(candidate, 'bin/org.mjs'), path.join(bin, 'org'));
+    // A legacy detached watcher has no dispatch journal. Its scratch nohup
+    // adapter emits its own process receipt before exec; cleanup never scans PIDs.
+    write(path.join(bin, 'nohup'), `#!/bin/sh\nprintf '%s\\n' "$$" >> ${quote(path.join(root, 'legacy-watcher-pids'))}\nexec /usr/bin/nohup "$@"\n`);
+    fs.chmodSync(path.join(bin, 'nohup'), 0o755);
     fs.symlinkSync(path.join(candidate, 'lanes/lane.mjs'), path.join(bin, 'lane'));
     write(path.join(home, 'before/org'), path.join(candidate, 'bin/org.mjs') + '\n');
     write(path.join(home, 'before/lane'), path.join(candidate, 'lanes/lane.mjs') + '\n');
@@ -514,7 +529,8 @@ try {
         const file = path.join(directory, entry.name);
         if (entry.isDirectory()) { transform(file); continue; }
         write(file, relocate(read(file), { live, home: process.env.HOME, scratchHome, copy, candidate, root,
-          launcher: file === path.join(copy, 'scripts/lane/launch-supervisor.mjs') }));
+          launcher: file === path.join(copy, 'scripts/lane/launch-supervisor.mjs') })
+          .replaceAll('wFN', supervisor.workspace).replaceAll('supervisor-opus', supervisor.name).replaceAll('supervisor-fable', supervisor.name));
       }
     };
     transform(copy); auditCopies(copy, { live, home: process.env.HOME }); liveCopyReady = true;
@@ -631,47 +647,214 @@ try {
     assert.ok(JSON.parse(rec(['status', '--json'])).items.some((i) => i.title === 'Independent acceptance review'));
     return 'copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk';
   });
-  const switches = [
-    ['launch-supervisor.mjs', 'scripts/lane/launch-supervisor.mjs', 'supervisor/open-session.mjs'],
-    ['continue.sh', '.lane/supervisor/continue.sh', 'launch-supervisor.mjs'],
-    ['arm-watch.sh', '.lane/supervisor/arm-watch.sh', 'watch/watch.mjs'],
-    ['dispatch.sh', '.lane/supervisor/dispatch.sh', 'arm-watch.sh'],
-    ['tidy recovery', '.lane/supervisor/tidy-tabs.sh', 'watch-logs'],
-    ['stable supervisor name', '.lane/supervisor/session-start.sh', 'supervisor-opus'],
-    ['SETTLE protocol', '.lane/supervisor/SETTLE.md', 'open-session'],
-    ['WORK-PATTERN notices/cleanup', '.lane/supervisor/WORK-PATTERN.md', 'watch-no-report'],
-    ['routing tests', 'scripts/lane/routing.test.mjs', 'open-session'],
-    ['notify retirement', '.lane/supervisor/notify-watch.sh', null],
-  ];
-  await test('ENG-64: every file switch and rollback', () => {
+  let cutover, cutoverCanary;
+  await test('ENG-64: every file switch and rollback', async () => {
     existingReady();
+    for (const file of ['watch/watch.mjs', 'supervisor/open-session.mjs']) assert.ok(present(file), `cutover candidate lacks ${file}`);
+    const originals = capture(copy);
+    const target = `cutover-${process.pid}`;
+    // Stable name is scratch-local; never seize a live supervisor-opus name.
+    const receiver = h('tab', 'create', '--workspace', supervisor.workspace, '--cwd', copy, '--label', 'supervisor', '--no-focus');
+    const pane = receiver.root_pane.pane_id;
+    h('pane', 'run', pane, [process.execPath, path.join(root, 'worker.mjs'), root, 'supervisor', target].map(quote).join(' '));
+    await until(() => node(path.join(root, 'herdr.mjs'), ['agent', 'get', pane], { ok: false }).status === 0, 'cutover supervisor receipt');
+    const org = path.join(path.dirname(copy), '.org');
+    if (!fs.existsSync(org)) node(path.join(candidate, 'bin/org.mjs'), ['init', org]);
+    const rec = (args) => node(path.join(candidate, 'bin/org.mjs'), args, { cwd: copy, extra: { ORG_DIR: org } }).stdout;
+    const base = switchedFiles({ copy, candidate, workspace: supervisor.workspace, target, legacyTarget: supervisor.name, home: scratchHome });
+    cutover = { originals, base, target, pane, org, rec };
+    for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
+    auditCopies(copy, { live, home: process.env.HOME });
     const checks = [];
-    for (const [name, rel, marker] of switches) {
-      const source = path.join(backup, rel), sandbox = path.join(copy, rel);
-      const before = fs.readFileSync(source), mode = fs.statSync(source).mode & 0o777;
-      const current = read(sandbox);
-      const applied = marker === null ? !read(path.join(copy, '.lane/supervisor/dispatch.sh')).includes('notify-watch.sh')
-        : current.includes(marker) && (name !== 'stable supervisor name' || !current.includes('|| true'));
-      // Exercise actual byte/mode restoration even while the switch is pending.
-      fs.writeFileSync(sandbox, 'scratch rollback probe\n'); fs.chmodSync(sandbox, 0o600);
-      fs.copyFileSync(source, sandbox); fs.chmodSync(sandbox, mode);
-      assert.deepEqual(fs.readFileSync(sandbox), before); assert.equal(fs.statSync(sandbox).mode & 0o777, mode);
-      checks.push({ name, file: rel, switch: applied ? 'PENDING: marker present; behavioral canary still required' : 'PENDING: switch not implemented in copied live file', rollback: 'PASS: exact bytes and mode restored' });
+    async function check(name, fn) {
+      try { const detail = await fn(); checks.push({ name, status: 'PASS', detail }); }
+      catch (error) { checks.push({ name, ...classifyFailure(error) }); }
     }
-    write(path.join(evidence, 'cutover-switches.json'), JSON.stringify(checks, null, 2));
-    pending('ten file switches each enumerated; rollback bytes/modes pass; live cutover is unapplied, so wrapper/recovery/name/canary checks cannot pass');
+    const execute = (rel, args = [], options = {}) => runCopy(rel.endsWith('.mjs') ? process.execPath : '/bin/zsh',
+      [...(rel.endsWith('.mjs') ? [] : ['-f']), path.join(copy, rel), ...args], { cwd: copy, extra: { ORG_DIR: org, HERDR_PANE_ID: pane }, ...options });
+    const persona = path.join(root, 'cutover-persona');
+    write(persona, `#!/bin/sh\nprintf 'CLAUDE_CONFIG_DIR=%s\\n' ${quote(path.join(root, 'persona'))}\n`); fs.chmodSync(persona, 0o755);
+    const isolation = ['--dry-run', '--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
+    await check('stable name: startup and missing-target refusal', () => {
+      execute('.lane/supervisor/session-start.sh');
+      assert.equal(h('agent', 'get', target).agent.pane_id, pane);
+      const events = read(path.join(org, 'events.jsonl'));
+      h('agent', 'rename', pane, `${target}-away`);
+      const missing = execute('.lane/supervisor/dispatch.sh', ['ENG-unknown', 'refusal', 'engineer', 'codex', 'scripted', 'low', fixture.brief, path.join(root, 'refusal.md')], { ok: false });
+      assert.notEqual(missing.status, 0); assert.match(missing.stdout + missing.stderr, /no org run started/);
+      assert.equal(read(path.join(org, 'events.jsonl')), events);
+      execute('.lane/supervisor/session-start.sh');
+      assert.equal(h('agent', 'get', target).agent.pane_id, pane);
+      return 'same owned pane renamed after restart; absent target refused without record event';
+    });
+    await check('launcher, continue and routed wrapper tests', () => {
+      runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
+      execute('.lane/supervisor/continue.sh', isolation);
+      return 'actual copied routing suite and executive wrapper dry run';
+    });
+    await check('continue: busy refusal and same-request retry', () => {
+      const busy = `exec-busy-${process.pid}`;
+      h('agent', 'rename', pane, busy);
+      h('agent', 'prompt', busy, 'acceptance-state working');
+      const before = h('tab', 'list', '--workspace', supervisor.workspace).tabs.length;
+      const began = Date.now();
+      const options = ['--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
+      const refused = execute('.lane/supervisor/continue.sh', options, { ok: false, timeout: 10_000 });
+      assert.notEqual(refused.status, 0); assert.ok(Date.now() - began < 10_000);
+      assert.ok(refused.stdout.includes(busy)); assert.match(refused.stdout, /retry.*stops/);
+      assert.equal(h('tab', 'list', '--workspace', supervisor.workspace).tabs.length, before);
+      h('agent', 'prompt', busy, 'acceptance-state idle');
+      h('agent', 'wait', busy, '--until', 'idle', '--until', 'done', '--timeout', '10000');
+      h('agent', 'rename', pane, target);
+      try { execute('.lane/supervisor/continue.sh', options, { timeout: 90_000 }); }
+      catch (error) { throw commandFailure(`busy refusal passed; same-request retry failed: ${error.message}`); }
+      return 'actual wrapper refused busy owned session without opening a tab; retained request retried after a real wait';
+    });
+    async function legacyCanary(stage) {
+      const topic = `cutover-${stage}`;
+      const wt = path.join(scratchHome, '.herdr/worktrees/bch-cloak', `lane-${topic}`);
+      fs.mkdirSync(path.dirname(wt), { recursive: true });
+      // The ordinary app build is outside the watcher switch. Prebuild the trusted
+      // empty fixture lane, then execute the unchanged legacy lane dispatch.
+      git(copy, ['add', '-A']); git(copy, ['commit', '-qm', 'Scratch cutover files']);
+      h('worktree', 'create', '--cwd', copy, '--branch', `lane/${topic}`, '--base', 'main', '--path', wt, '--no-focus');
+      const item = rec(['add', 'Cutover scripted canary', '--role', 'engineer']).match(/^(\S+)/)[1];
+      const report = path.join(root, `cutover-${stage}.md`), ask = path.join(root, `cutover-${stage}-ask.md`);
+      write(ask, `You are run R-RUN. Write the report to ${report}; commit a scratch file.\n`);
+      write(path.join(root, 'mode'), stage === 'switched' ? 'held' : 'done');
+      const dispatched = execute('.lane/supervisor/dispatch.sh', [item, topic, 'engineer', 'codex', 'scripted', 'low', ask, report], { timeout: 90_000 });
+      const runId = dispatched.stdout.match(/(R-\d+) .*agent=/)?.[1]; assert.ok(runId, 'legacy dispatch receipt missing');
+      const watchReceipt = dispatched.stdout.split('\n').find((line) => line.startsWith('{'));
+      if (watchReceipt) pids.add(JSON.parse(watchReceipt).pid);
+      const info = json(rec(['show', runId, '--json']));
+      const job = { run: runId, info, wt };
+      if (stage === 'switched') {
+        await until(() => fs.existsSync(report), 'held worker report');
+        const duplicate = execute('.lane/supervisor/arm-watch.sh', [runId], { ok: false });
+        assert.notEqual(duplicate.status, 0, 'arm wrapper must refuse a second active watcher');
+        h('agent', 'prompt', info.meta.agent, 'acceptance-state idle');
+      }
+
+      await until(() => inbox().includes(`report=${report}`) && fs.existsSync(report), 'cutover final delivery');
+      const notices = inbox().split('\n').filter(Boolean).map(JSON.parse).filter((v) => v.line.startsWith(`[org-report] run=${runId} `) && v.line.includes(`report=${report}`));
+      assert.equal(notices.length, 1, 'one canary delivery');
+      const log = path.join(copy, '.lane/supervisor/watch-logs', `${runId}.log`);
+      await until(() => fs.existsSync(log) && read(log).includes('[org-report]'), 'canary delivery log');
+      assert.match(read(log), /\[org-report\]/);
+      if (stage === 'switched') assert.ok(!read(log).includes('verdict='));
+      else assert.match(read(log), /delivered by notify-watch/);
+      rec(['check', report]); rec(['ingest', report, '--run', runId]);
+      fs.copyFileSync(log, path.join(evidence, `cutover-${stage}-watch.log`));
+      return job;
+    }
+    await check('dispatch and arm: real canary', async () => {
+      cutoverCanary = await legacyCanary('switched');
+      return `${cutoverCanary.run}: actual copied dispatch -> arm -> released watch -> real PTY notice -> record ingest`;
+    });
+    await check('tidy recovery', () => {
+      assert.ok(cutoverCanary, 'dispatch canary did not deliver');
+      const output = execute('.lane/supervisor/tidy-tabs.sh', ['--dry-run', '--workspace', supervisor.workspace, '--log-lines', '50']).stdout;
+      assert.ok(output.includes(`[org-report] run=${cutoverCanary.run} `), 'canary absent from actual tidy recovery output');
+      write(path.join(evidence, 'cutover-tidy.txt'), output);
+      return 'actual merged watch-log output retains the delivered report';
+    });
+    await check('SETTLE and WORK-PATTERN consumer contract', () => {
+      const protocol = read(path.join(copy, '.lane/supervisor/SETTLE.md'));
+      const grammar = read(path.join(copy, '.lane/supervisor/WORK-PATTERN.md'));
+      assert.match(protocol, /retain.*original.*org-report/i); assert.match(protocol, /retry.*settle.sh/);
+      for (const prefix of ['watch-blocked', 'watch-no-report', 'watch-invalid-report', 'watch-long-running', 'watch-unavailable']) assert.ok(grammar.includes(`[${prefix}]`));
+      assert.match(grammar, /900/); assert.match(grammar, /Janitor/);
+      const probe = path.join(root, 'cutover-notices.mjs');
+      write(probe, `import assert from 'node:assert/strict';import * as n from ${JSON.stringify(path.join(candidate, 'watch/notice.mjs'))};const v={run:'R-1',item:'ENG-1',agent:'worker',report:'/scratch/report',state:'idle',error:'probe',minutes:1};for(const [fn,prefix] of Object.entries({blockedNotice:'watch-blocked',noReportNotice:'watch-no-report',invalidReportNotice:'watch-invalid-report',longRunningNotice:'watch-long-running',unavailableNotice:'watch-unavailable'})){const line=n[fn](v);assert.ok(line.startsWith('['+prefix+']'));console.log(line);}const line=n.reportNotice({...v,outcome:'done',headline:'Canary',check:'pass'});assert.match(line,/outcome=done.*headline=.*check=pass.*report=/);assert.ok(!line.includes('verdict='));console.log(line);`);
+      runCopy(process.execPath, [probe], { cwd: copy, extra: { ORG_DIR: org } });
+      return 'actual released notice constructors executed; real blocked/missing/invalid delivery and grace are checked by cases 07–11';
+    });
+    await check('notify retirement has zero callers', () => {
+      assert.deepEqual(callers(copy, 'notify-watch.sh'), []);
+      const retired = execute('.lane/supervisor/notify-watch.sh', ['R-1'], { ok: false });
+      assert.notEqual(retired.status, 0); assert.match(retired.stderr, /retired/);
+      return 'all executable callers switched; old entry visibly refuses';
+    });
+    // Rollback restores every exact relocated byte and mode before invoking
+    // restored legacy consumers; raw live bytes remain separately in backup.
+    restore(copy, originals);
+    await check('rollback: all ten bytes/modes and restored legacy routes/wrappers', () => {
+      assert.ok(callers(copy, 'contrib/settle-watch.mjs').length);
+      runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
+      execute('.lane/supervisor/continue.sh', isolation);
+      if (cutoverCanary) execute('.lane/supervisor/arm-watch.sh', [cutoverCanary.run, ...isolation]);
+      return 'all ten exact scratch baselines restored; actual legacy suite and both wrappers executed';
+    });
+    await check('rollback: real restored notify canary', async () => {
+      const legacy = await legacyCanary('legacy');
+      return `${legacy.run}: restored dispatch delivered through actual notify-watch with legacy notice fields`;
+    });
+    write(path.join(evidence, 'cutover-switches.json'), JSON.stringify({ files: switches, checks, rollback: originals.map(({ key, file, mode }) => ({ key, file, mode, exact: true })) }, null, 2));
+    for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
+    const failures = checks.filter((v) => v.status !== 'PASS');
+    if (failures.length) {
+      const product = failures.filter((v) => v.status === 'FAIL');
+      const detail = (product.length ? product : failures).map((v) => `${v.name}: ${v.detail}`).join('; ');
+      if (product.length) throw commandFailure(detail);
+      throw new HarnessLimit(detail);
+    }
+    return `${switches.length} switches applied, executed and restored; detailed receipts in cutover-switches.json`;
   });
   await test('ENG-64: final contrib removal and restoration', () => {
-    existingReady();
-    const compat = requireCandidate('contrib/settle-watch.mjs');
+    assert.ok(cutover, 'scratch switches did not apply');
+    const compat = path.join(candidate, 'contrib/settle-watch.mjs');
+    assert.ok(fs.existsSync(compat), 'candidate compatibility entry missing before retirement');
     const saved = fs.readFileSync(compat), mode = fs.statSync(compat).mode & 0o777;
-    fs.unlinkSync(compat); write(compat, saved); fs.chmodSync(compat, mode);
-    assert.deepEqual(fs.readFileSync(compat), saved);
-    pending('compatibility blob restoration passes in scratch; existing launcher still calls contrib, so retirement is forbidden');
+    // Prove a live copied caller prevents removal, including an omitted caller.
+    const trap = path.join(copy, '.lane/supervisor/retirement-probe.sh');
+    write(trap, `node ${quote(compat)} --open\n`);
+    assert.throws(() => retireContrib(copy, compat), /retirement refused/);
+    assert.deepEqual(fs.readFileSync(compat), saved); fs.unlinkSync(trap);
+    assert.ok(cutoverCanary, 'final retirement requires a delivered switched canary');
+    try {
+      retireContrib(copy, compat); assert.ok(!fs.existsSync(compat));
+      runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: cutover.org } });
+    } finally { write(compat, saved); fs.chmodSync(compat, mode); restore(copy, cutover.originals); }
+    assert.deepEqual(fs.readFileSync(compat), saved); assert.equal(fs.statSync(compat).mode & 0o777, mode);
+    assert.ok(callers(copy, 'contrib/settle-watch.mjs').length, 'rollback must restore the old caller after the blob');
+    return 'negative caller probe refused; zero-caller retirement executed; split launcher tests ran without contrib; blob restored before all legacy callers';
   });
   await discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
-  await test('New project: default supervisor dispatch/watch/ingest cycle', () => {
-    pending('unconfigured default-route dispatch, armed watch and ingestion are not executed; the entry/bootstrap and configured-cycle cases cannot satisfy this gate');
+  await test('New project: default supervisor dispatch/watch/ingest cycle', async () => {
+    for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs', 'discovery/adapters/codex.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);
+    assert.ok(supervisor, 'scratch supervisor unavailable');
+    const repo = path.join(root, 'default-cycle'); initRepo(repo);
+    // Ordinary project validation, never workflow configuration.
+    write(path.join(repo, 'package.json'), JSON.stringify({ private: true, scripts: { test: 'node --test' } }));
+    git(repo, ['add', '.']); git(repo, ['commit', '-qm', 'Ordinary project validation']);
+    for (const name of ['.org', '.lane.json', '.housekeeping.json', 'AGENTS.md']) assert.ok(!fs.existsSync(path.join(repo, name)));
+    const extra = { HOME: scratchHome };
+    defaultOrg = path.join(repo, '.org');
+    const ask = path.join(root, 'default-cycle-ask.md'); write(ask, 'Commit one scratch file and report.\n');
+    write(path.join(root, 'mode'), 'done');
+    const binary = run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim();
+    write(path.join(root, 'default-supervisor-task.json'), JSON.stringify({ repo, home: scratchHome, ask, binary }));
+    // The real PTY supervisor executes product entry, record creation and
+    // dispatch, then consumes watch's notice and checks/ingests through the CLI.
+    h('agent', 'prompt', supervisor.name, 'acceptance-default-cycle');
+    const receipt = path.join(root, 'default-supervisor-job.json');
+    await until(() => fs.existsSync(receipt), 'default supervisor dispatch receipt', 90_000);
+    const saved = JSON.parse(read(receipt));
+    if (saved.error) throw commandFailure(saved.error);
+    const { job, info } = saved; pids.add(job.watcher.pid);
+    await until(() => fs.existsSync(path.join(root, 'default-supervisor-ingest.json')), 'default supervisor ingestion receipt');
+    const ingested = JSON.parse(read(path.join(root, 'default-supervisor-ingest.json')));
+    if (ingested.error) throw commandFailure(ingested.error);
+    assert.equal(ingested.report.outcome, 'done');
+    const notices = inbox().split('\n').filter(Boolean).map(JSON.parse).filter((v) => v.line.includes(`[org-report] run=${job.run} `) && v.line.includes(`report=${info.report_path}`));
+    assert.equal(notices.length, 1); assert.match(notices[0].line, /check=pass/);
+    for (const file of ['default-supervisor-job.json', 'default-supervisor-ingest.json', 'default-supervisor-policy.txt']) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
+    assert.ok(!fs.existsSync(path.join(repo, '.lane.json')), 'cycle must retain discovered defaults');
+    assert.ok(!fs.existsSync(path.join(repo, '.housekeeping.json')));
+    node(path.join(candidate, 'lanes/lane.mjs'), ['check'], { cwd: info.workspace, extra });
+    node(path.join(candidate, 'lanes/lane.mjs'), ['promote', job.lane], { cwd: repo, extra });
+    node(path.join(candidate, 'lanes/lane.mjs'), ['close', job.lane], { cwd: repo, extra });
+    return `${job.run}: supervisor entry bootstrapped record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation and fast-forward passed`;
   });
 } catch (error) {
   if (!(error instanceof Pending)) results.push({ id: 'fatal', name: 'Harness setup', status: 'PENDING', origin: 'harness', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });

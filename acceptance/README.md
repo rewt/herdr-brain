@@ -16,11 +16,8 @@ it never modifies that source or an activated release. `main` means the commit
 resolved at startup, not a moving branch during the test.
 
 The primary cases enter new Git projects without `.org`, `.lane.json`, routes or
-agent instructions. Missing discovery fails; unexecuted default behavior stays
-pending. Case 04 executes installed supervisor entry and record bootstrap in a
-dedicated untouched project; it does not claim a dispatch/watch cycle. Case 22 separately
-keeps the unconfigured default supervisor dispatch/watch/ingest cycle PENDING
-until that behavior is actually executed. The configured mechanics
+agent instructions. Missing product capabilities fail. Genuine environment limitations remain pending. Case 04 executes installed supervisor entry and record bootstrap in a
+dedicated untouched project; it does not claim a dispatch/watch cycle. Case 22 executes the default supervisor dispatch/watch/ingest cycle in another untouched project: the scripted supervisor in a real PTY executes entry and record bootstrap, dispatches on the suggested engineer route, consumes watch's single final notice, and runs the record CLI to check and ingest it. Default lane validation and fast-forward promotion also execute. Only an ordinary package test script and a scratch HOME are provided, with no workflow config. The delivery target is an owned scratch stand-in rather than a live supervisor name. The configured mechanics
 fixture is a separate case: its record, route, validation command and ignored
 session registry are explicit test setup, never evidence that defaults work.
 
@@ -157,17 +154,41 @@ actual `npm ci --offline` runs separately using copies of the supplied cache's
 indexes and lockfile tarballs. Missing cache content fails; omitting
 `--npm-cache` leaves the full dependency build pending.
 
-The ten ENG-64 file switches are enumerated individually in
-`cutover-switches.json`, including exact byte/mode rollback probes. Unapplied
-switches and their behavioral canaries remain pending, as does final contrib
-retirement while a live copied caller still uses it. This is an explicit
-coverage limit: marker inspection and restoration do not establish switch
-behavior. Housekeeping uses the actual released one-pass entrypoint against a promoted,
+The ten ENG-64 switches are applied to the audited live-script copies and executed,
+then rolled back byte-for-byte with their original executable modes. Raw live
+bytes/checksums remain in a separate backup; executed baselines are relocated.
+Legacy temporary files and worktree constants all resolve inside scratch. Fixed
+workspace and supervisor names are bound to this run's creation receipts, so
+neither switched nor restored scripts can target a live supervisor. The native
+socket endpoint is pinned in the ownership ledger before changing HOME.
+
+Case 18 executes naming/restart and missing-target refusal, routed launcher tests,
+executive dry run, real busy-session refusal and same-request retry, real copied
+dispatch through the new arm wrapper, watch-log recovery through tidy, released
+notice constructors, zero-caller notify retirement, exact rollback, legacy wrapper
+tests and a real restored notify-watch canary. The normal application's build is
+outside this watcher switch: its trusted empty lane is prebuilt before legacy
+dispatch, which still uses the actual copied lane/routing/dispatch code. Every
+subcheck is retained in `cutover-switches.json`; a product failure takes precedence
+over a separate harness limitation. The final notice must actually arrive before
+a canary qualifies for retirement. Documentation contract assertions supplement
+the executed consumers; they do not establish an agent's interpretation of prose.
+
+Case 19 first plants an extra caller and proves contrib removal refuses, then
+removes it, scans both caller trees, retires the snapshot's compatibility blob only
+after zero callers and a delivered switched canary, executes the split routing
+suite without contrib, and restores the exact blob/mode before restoring legacy
+callers. The checkout's contrib file is untouched. Missing split modules in older
+candidates are product FAIL in these three cases, rather than permanent pending
+coverage. Notifications are captured as scratch evidence without showing host UI.
+Legacy detached watcher PIDs come from a scratch nohup adapter's creation receipt;
+cleanup does not discover processes by names or global scans.
+
+Housekeeping uses the actual released one-pass entrypoint against a promoted,
 ingested done worker alongside blocked and needs-human workers, with no optional
-housekeeping configuration. Candidates without that module leave the case pending. Late panes inside an
-owned workspace use verified membership/cwd receipts, not a guessed child ID.
-The cutover coverage gaps keep the gate closed until their behavioral fixtures are
-implemented; the current runner cannot approve a release.
+housekeeping configuration. Candidates without that module leave the case pending.
+Late panes inside an owned workspace use verified membership/cwd receipts, not a
+guessed child ID. No project-wide loop is started.
 
 Keep only `summary.json` and `screen.txt` per candidate in the repository. All
 numbered logs, prompts, transcripts, source/permission receipts and usage stay

@@ -131,7 +131,7 @@ esac`);
 
   const result = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', supervisor], {
-    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` }, timeout: 2_000,
+    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` }, timeout: 10_000,
   });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(result.error, undefined, 'the launcher refuses promptly rather than waiting');

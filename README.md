@@ -331,6 +331,15 @@ File and suite deadlines end the same group. Killing the coordinator closes
 IPC; the responsive leader tears down its own group. No suspension, descendant
 hunting, registration journals, ancestor chains or replacement reapers remain.
 
+Discovery's real-detachment regressions use the fixed
+`test/helpers/detached-fixture.mjs` entrypoint through `spawnDetachedFixture`.
+That bounded fixture omits the preload and execs each detached Node descendant
+through a six-second native alarm. The alarm survives a blocked event loop and
+suite cancellation. The regressions assert native process groups and observe
+late writes before this fallback deadline. Cleanup waits for live producers and
+descendants to disappear before removing the fixture directory; its process
+enumeration only reports, and never authorizes signals.
+
 Every helper signal requires a fresh successful lookup matching both the owned
 start time and full command. Group signals additionally require the same live
 group leader. Failed, timed-out or incomplete lookups never authorize a signal;

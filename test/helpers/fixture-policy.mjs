@@ -46,7 +46,8 @@ ChildProcess.prototype.spawn = function (options) {
   if (process.argv[1] === runner && process.argv[2] === '--worker' && !suite) {
     this.kill = () => {
       // A file deadline ends this entire owned group, keeping its leader alive
-      // until the coordinator's fresh group signal. No detached fixture escapes.
+      // until the coordinator's fresh group signal. The fixed detachment
+      // regression entrypoint additionally owns native descendant deadlines.
       if (process.connected) process.send({ timeout: options.args.at(-1) }, error => { if (error && process.connected) process.disconnect(); });
       this.killed = true;
       return true;

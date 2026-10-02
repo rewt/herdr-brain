@@ -32,6 +32,7 @@ export function settingsReview(edit) {
     const display = (obj, key) => obj[key] ?? DESK_DEFAULTS[key] ?? deskFallback(key, config);
     return { patch, unset, writes: Boolean(Object.keys(patch).length || unset.length), lines: DESK_FIELDS.map((key, i) => `${DESK_LABELS[i]}: ${display(edit.original, key)} → ${display(settings, key)}`) };
   }
+  if (edit.kind === 'pool' && !config.selection_policy && !v[0]) return { command: 'policy', writes: false, lines: ['Primary pool stays unset; no selection policy is written.'] };
   let command = edit.kind, value, next;
   if (command === 'add') {
     if (!v[0] || !v[1]) throw new Error('Route name and kind are required.');

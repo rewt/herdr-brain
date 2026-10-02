@@ -118,7 +118,7 @@ test('--print cannot commit new desk or route controls even after review confirm
 test('introducing a policy retains the implicit review route and long confirmations can be inspected before saving', async t => {
   const f = fixture(t), { s } = f;
   fs.writeFileSync(f.target, JSON.stringify({ routes: { engineer: { kind: 'opaque' }, review: { kind: 'opaque' } } }));
-  await s.refresh(); await s.key('u'); await s.activate('settings:pool'); await field(s, 0, 'project-pool'); await save(s);
+  await s.refresh(); await s.key('u'); const original = fs.readFileSync(f.target, 'utf8'); await s.activate('settings:pool'); await save(s); assert.equal(f.calls.length, 0); assert.equal(fs.readFileSync(f.target, 'utf8'), original); await s.activate('settings:pool'); await field(s, 0, 'project-pool'); await save(s);
   assert.equal(selectRoute(s.model.routes.config, 'review'), 'review');
   const config = JSON.parse(fs.readFileSync(f.target));
   for (let i = 0; i < 20; i++) config.selection_policy.by_task_class[`task-${i}`] = 'engineer';

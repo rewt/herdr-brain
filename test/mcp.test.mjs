@@ -1,5 +1,5 @@
 // Keep core tests runnable without installing the optional MCP module.
-import test from 'node:test';
+import test from './helpers/bounded-test.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(new URL('../mcp/package.json', import.meta.url));
 let installed = false;

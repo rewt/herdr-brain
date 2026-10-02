@@ -1,11 +1,11 @@
-import test from 'node:test';
+import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { once } from 'node:events';
 import { createCli } from '../cli.mjs';
 
 const SERVER = path.resolve(import.meta.dirname, '../server.mjs');
@@ -28,12 +28,21 @@ function scratch(t) {
 }
 
 async function connect(t, s, { args = [], cwd = s.root, env = {} } = {}) {
-  const child = spawn(process.execPath, [SERVER, ...args], { cwd, env: { ...s.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  let child, exited, lines;
+  // Graceful stdio shutdown runs before the helper's guaranteed teardown.
+  t.after(async () => {
+    if (!child) return;
+    child.stdin.end();
+    const timer = setTimeout(() => child.kill('SIGKILL'), 2000);
+    try { await exited; }
+    finally { clearTimeout(timer); lines?.close(); }
+  });
+  child = spawnChild(t, process.execPath, [SERVER, ...args], { cwd, env: { ...s.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   let stderr = '', seq = 0;
   const pending = new Map();
   child.stderr.on('data', chunk => { stderr += chunk; });
-  const exited = once(child, 'exit');
-  const lines = createInterface({ input: child.stdout });
+  exited = waitForExit(child).then(({ code, signal }) => [code, signal]);
+  lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
     let reply;
     try { reply = JSON.parse(line); }
@@ -44,13 +53,6 @@ async function connect(t, s, { args = [], cwd = s.root, env = {} } = {}) {
   child.on('exit', code => {
     for (const task of pending.values()) { clearTimeout(task.timer); task.reject(new Error(`Server exited ${code}: ${stderr}`)); }
     pending.clear();
-  });
-  t.after(async () => {
-    child.stdin.end();
-    const timer = setTimeout(() => child.kill('SIGKILL'), 2000);
-    await exited;
-    clearTimeout(timer);
-    lines.close();
   });
   function send(message) { child.stdin.write(`${JSON.stringify(message)}\n`); }
   function request(method, params = {}) {

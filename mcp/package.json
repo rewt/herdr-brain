@@ -6,7 +6,7 @@
   "description": "Foreground stdio MCP adapter over the record CLI.",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test/*.test.mjs",
+    "test": "node ../test/helpers/run.mjs test/*.test.mjs",
     "demo": "node demo.mjs"
   },
   "dependencies": {

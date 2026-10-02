@@ -32,6 +32,8 @@ else {
 try {
   entry = createEntry({ cwd: values.repo, role: values.role, runtimeDir: values['runtime-dir'] ?? process.env.MONITOR_RUNTIME_DIR,
     worktreeRoot: values['worktree-root'] ?? process.env.MONITOR_WORKTREE_ROOT, sandboxBinary: values.binary });
+  if (!entry) passthrough();
+  else {
   const context = entry.context();
   const policy = entryPolicy(context, root);
   if (values['policy-only']) { console.log(policy); entry.close(); }
@@ -47,6 +49,7 @@ try {
     for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(s, () => signal(s));
     child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
     child.on('close', (code, s) => { clearInterval(timer); entry.close(); process.exitCode = code ?? (s ? 1 : 0); });
+  }
   }
 } catch (e) {
   if (entry) entry.close();

@@ -68,6 +68,11 @@ Every key is optional. A repository can inherit reusable settings from one paren
 | `selection_policy.by_task_class` | none | Task class to route, directly or through an opaque pool-to-route map |
 | `seams_doc` | none | Optional task-map path printed by `seams` |
 
+The same project file may contain `entry.enabled`, `entry.mode` and `entry.policy`
+for installed Codex/Claude entry adapters; see [project entry settings](../../discovery/README.md#project-settings).
+Lane lifecycle commands preserve those fields without interpreting them. The
+entry adapters read only the canonical project's entry preferences.
+
 ### File discovery and merging
 
 Without `LANE_CONFIG`, `lane` identifies the canonical checkout through git's common

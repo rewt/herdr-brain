@@ -12,6 +12,7 @@ import { loadDiscoveredRoutes, validateRoutesConfig } from '../lanes/routes.mjs'
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { readReport } from '../lib/report.mjs';
 import { entryLifecycle, worktreeDirectory } from './lifecycle.mjs';
+import { projectEntrySettings } from './settings.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -22,9 +23,13 @@ export function command(binary, args, cwd, env = {}) {
 }
 
 export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, worktreeRoot, sandboxBinary }) {
-  if (!['worker', 'supervisor'].includes(role)) throw new Error('role must be worker or supervisor');
   const project = gitProject(cwd);
-  if (role === 'supervisor' && project.checkout !== project.canonical) throw new Error('supervisor entry requires the canonical checkout');
+  const settings = projectEntrySettings(project);
+  if (!settings.enabled) return null;
+  if (!['worker', 'supervisor'].includes(role)) throw new Error('role must be worker or supervisor');
+  const mode = role === 'supervisor' ? 'main' : settings.mode;
+  const workerLane = role === 'worker' && mode === 'worker';
+  if (mode === 'main' && project.checkout !== project.canonical) throw new Error(`${role} entry in main requires the canonical checkout`);
   const id = randomUUID().replaceAll('-', '');
   const topic = `entry-${id.slice(0, 12)}`;
   const env = { ORG_ACTOR: `entry-${id.slice(0, 12)}` };
@@ -62,7 +67,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const lifecycle = Object.assign({}, ...routes.files.map((file) => JSON.parse(fs.readFileSync(file, 'utf8'))));
   const branch = git(['branch', '--show-current']);
   const main = lifecycle.main ?? branch;
-  if (!main || branch !== main) throw new Error('canonical checkout must be on the configured integration branch');
+  if (typeof main !== 'string' || !main || branch !== main) throw new Error('canonical checkout must be on the configured integration branch');
   git(['rev-parse', '--verify', 'HEAD']);
   const coordination = path.join(project.canonical, '.lane/discovery');
   plainDirectory(coordination);
@@ -86,7 +91,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const recordPaths = Object.fromEntries(['events.jsonl', 'config.json', 'runs', 'reports'].map((name) => [name, fs.realpathSync(path.join(org, name))]));
   const lifecycleOwner = entryLifecycle({ project, coordination, git, externalGit });
   let workspace = project.canonical;
-  if (role === 'worker') {
+  if (workerLane) {
     const root = worktreeDirectory(worktreeRoot, project.identity);
     let containingProject;
     try { containingProject = gitProject(root); } catch {}
@@ -121,7 +126,8 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const verify = (op) => {
     const now = gitProject(workspace);
     if (now.identity !== project.identity || now.canonical !== project.canonical || now.checkout !== workspace) throw new Error('project identity changed');
-    if (role === 'worker' && git(['branch', '--show-current'], workspace) !== `lane/${topic}`) {
+    if (git(['branch', '--show-current'], workspace) !== (workerLane ? `lane/${topic}` : main)) {
+      if (!workerLane) throw new Error('assigned integration branch changed');
       // Rebase temporarily detaches HEAD. Only the actual Git rebase receipt
       // for our assigned branch permits conflict recovery, never display data.
       const gitDir = git(['rev-parse', '--path-format=absolute', '--git-dir'], workspace);
@@ -147,7 +153,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     });
   };
   const context = () => ({ role, canonical: project.canonical, identity: project.identity, workspace,
-    branch: role === 'worker' ? `lane/${topic}` : main, org, topic, run, item, report,
+    branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,
     routing: initial.routing ? { parent: initial.routing.parent, question: initial.routing.question } : null,
     suggestedRoutes: initial.routes.suggested === true, requests });
   const dispatch = (request) => {
@@ -158,6 +164,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     verify(op);
     if (op === 'context') return context();
     if (role !== 'worker') throw new Error('supervisor uses the record/dispatch/watch CLIs; worker Git capabilities are unavailable');
+    if (!workerLane && ['rebase', 'continue', 'abort', 'promote'].includes(op)) throw new Error('main checkout entry has no lane to rebase or promote; commit, check and finish here');
     if (op === 'start' || op === 'resume') {
       if (!text?.trim()) throw new Error('start requires the actual task');
       if (run) return context();
@@ -222,11 +229,22 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     if (op === 'finish') {
       const data = readReport(readPlainFile(report));
       if (data.report?.run !== run) throw new Error('report must name this session run');
+      record(['check', report]);
       if (data.report?.outcome === 'done') {
         const integrated = spawnSync('git', ['-C', workspace, 'merge-base', '--is-ancestor', 'HEAD', main]);
         if (integrated.status !== 0) throw new Error('done report requires successful promotion first; resolve/rebase, check and promote, or report blocked/needs_human without claiming integration');
+        if (!workerLane) {
+          // Main-mode completion still requires a clean, validated commit. Lane
+          // promotion already enforces this for isolated worker checkouts.
+          const checkedHead = git(['rev-parse', 'HEAD'], workspace);
+          lane(['check'], workspace);
+          verify(op);
+          if (git(['rev-parse', 'HEAD'], workspace) !== checkedHead || git(['status', '--porcelain', '--untracked-files=all'], workspace)) {
+            throw new Error('integration checkout changed during validation; commit the result and check again before finishing');
+          }
+          if (appliedRouting) record(['close', initial.routing.parent, '--note', 'Approved route configuration committed and validated in the integration checkout.']);
+        }
       }
-      record(['check', report]);
       return record(['ingest', report]);
     }
   };
@@ -260,7 +278,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     try {
       writeAgentFileAtomic(path.join(project.canonical, '.lane/discovery', `${topic}.audit.json`), JSON.stringify(audit, null, 2) + '\n');
     } finally {
-      if (role === 'supervisor') {
+      if (!workerLane) {
         removePlainDirectory(requests); removePlainDirectory(metadata);
       } else try { lifecycleOwner.close(); } catch (error) { console.error(`monitor entry cleanup: ${error.message}`); }
     }

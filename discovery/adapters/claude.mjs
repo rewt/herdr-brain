@@ -26,10 +26,12 @@ const enter = !automatic || freshInteractive({ kind: 'claude', args: native, cwd
 if (!enter) passthrough();
 else {
 try {
-  // Native --worktree creates a different checkout than our capability owns.
-  if (native.some((arg) => ['--worktree', '-w'].includes(arg) || arg.startsWith('--worktree='))) throw new Error('Monitor owns the checkout; native worktree overrides are unavailable');
   entry = createEntry({ cwd: values.repo, role: values.role, runtimeDir: values['runtime-dir'] ?? process.env.MONITOR_RUNTIME_DIR,
     worktreeRoot: values['worktree-root'] ?? process.env.MONITOR_WORKTREE_ROOT, sandboxBinary: values.validator });
+  if (!entry) passthrough();
+  else {
+  // Native --worktree creates a different checkout than our capability owns.
+  if (native.some((arg) => ['--worktree', '-w'].includes(arg) || arg.startsWith('--worktree='))) throw new Error('Monitor owns the checkout; native worktree overrides are unavailable');
   const context = entry.context(), policy = entryPolicy(context, root);
   if (values['policy-only']) { console.log(policy); entry.close(); }
   else {
@@ -40,6 +42,7 @@ try {
     for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(s, () => child.kill(s));
     child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
     child.on('close', (code) => { clearInterval(timer); entry.close(); process.exitCode = code ?? 1; });
+  }
   }
 } catch (e) {
   if (entry) entry.close();

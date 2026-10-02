@@ -331,5 +331,11 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   }
   const files = [nearestParentConfig(repository), join(repository, ".lane.json")].filter((candidate) => candidate && existsSync(candidate));
   if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
-  return { config: mergeRoutesConfig(files.map(readRoutesConfig)), files };
+  const config = mergeRoutesConfig(files.map(readRoutesConfig));
+  // Lifecycle/entry preferences alone do not declare operator model routes.
+  // Keep the same suggested preset as a project with no routing setup.
+  if (!["dispatch", "routes", "always_args", "selection_policy"].some((key) => Object.hasOwn(config, key))) {
+    return { config: mergeRoutesConfig([ROUTE_PRESET, config]), files, suggested: true };
+  }
+  return { config, files };
 }

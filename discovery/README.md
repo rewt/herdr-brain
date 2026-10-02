@@ -2,7 +2,7 @@
 
 The installed machine adapter supplies the workflow on session entry, even in a
 Git project with no `AGENTS.md`, `CLAUDE.md`, record or route configuration. It
-creates a separate worker checkout before the harness starts. Project files do
+creates a separate worker checkout by default before the harness starts. Project files do
 not need a setup edit. Core record/Git identity code remains dependency-free and
 has no harness branches; Codex and Claude prompt transport lives in `adapters/`.
 
@@ -60,6 +60,61 @@ record, dispatch, watch, lane promotion and default housekeeping. Only that
 supervisor starts the project housekeeping schedule. A worker's policy never
 starts a loop, dispatches another agent, pushes, deletes a lane or acts on a live
 Herdr pane. Entry itself makes no Herdr calls.
+
+## Project settings
+
+Projects can commit entry preferences in their canonical checkout's `.lane.json`,
+alongside existing routes and validation. No configuration is required to use the
+default worker-lane workflow:
+
+```json
+{
+  "main": "trunk",
+  "entry": {
+    "enabled": true,
+    "mode": "worker",
+    "policy": "Use the project review desk before integration."
+  }
+}
+```
+
+`entry.enabled` defaults to `true`. Set it to `false` to decline entry entirely.
+Both automatic `codex`/`claude` wrappers and explicit `monitor-*` entry then pass
+native arguments, working directory and environment straight through. Entry does
+not initialize or alter a record, exclusions, lane, runtime queue or existing
+entry receipts. Opt-out is checked before unused routing, branch or mode settings.
+
+`entry.mode` is `worker` (the default, isolated worker lane) or `main` (work in
+the canonical integration checkout). Main mode keeps the worker role: it cannot
+start housekeeping or acquire supervisor capabilities. Its bounded commands
+record the task, commit, check and finish in that checkout; there is no lane to
+rebase or promote. A done report requires a clean committed checkout and a green
+sandboxed check before ingestion. Main-mode sessions share that checkout, so a
+project choosing this mode also chooses to coordinate concurrent edits there.
+An explicit `--role supervisor` always uses the canonical checkout and its existing
+supervisor workflow, unless the project opts out.
+
+The existing top-level `main` field declares the integration branch for both
+modes. If omitted, entry uses the canonical checkout's current branch. Entry
+requires that checkout to be on the selected branch; automatic entry warns and
+passes through if it is on a different branch, while explicit entry fails before
+creating project runtime state. It never switches the integration checkout.
+
+`entry.policy` is additional text, defaulting to empty. Both transports receive
+it with its config source, plus the root `AGENTS.md` and `CLAUDE.md` contents when
+present. The generic workflow explicitly yields to the project's own instructions
+where they conflict, and tells agents to read applicable directory instructions.
+Project text does not change the adapter's fixed capabilities or lifecycle checks.
+
+Entry preferences come only from the canonical project's `.lane.json`, using
+Git common-directory identity. Parent configuration, `LANE_CONFIG`, and a linked
+worktree's edited config cannot opt a project out or change its mode. Existing
+parent route/lifecycle configuration still applies to its own fields; a project's
+top-level `main` overrides an inherited branch. Entry-only settings do not declare
+model preferences: the portable routing suggestion still waits for the operator.
+Invalid enabled entry settings fail clearly; automatic wrappers warn and preserve
+the native session without creating entry state. Help, resume, batch and managed
+session bypass rules continue to apply.
 
 The canonical Git common-directory identity owns the record and lanes. Lookup
 first walks from the original working directory to its checkout root, respecting

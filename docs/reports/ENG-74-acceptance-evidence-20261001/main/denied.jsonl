@@ -1,6 +1,0 @@
-{"argv":["pane","run","unowned:p1","echo bad"],"error":"unowned panes: unowned:p1"}
-{"argv":["workspace","close","unowned"],"error":"unowned workspaces: unowned"}
-{"argv":["agent","prompt","unowned-agent","bad"],"error":"{\"error\":{\"code\":\"agent_not_found\",\"message\":\"agent target unowned-agent not found\"},\"id\":\"cli:agent:get\"}\n"}
-{"argv":["workspace","create","--cwd","/"],"error":"path outside scratch: /"}
-{"argv":["server","stop"],"error":"unsupported Herdr operation: server stop"}
-{"argv":["pane","process-info","--pane","w111:p2"],"error":"unowned panes: w111:p2"}

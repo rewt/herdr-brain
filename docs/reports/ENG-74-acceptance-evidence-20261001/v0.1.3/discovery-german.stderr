@@ -1,6 +1,0 @@
-WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir "/private/tmp/herdr-acceptance-o5AW7m" (codex_home: AbsolutePathBuf("/private/tmp/herdr-acceptance-o5AW7m/codex-runtime/discovery-german"))
-Reading additional input from stdin...
-2026-10-02T00:11:51.288370Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /private/tmp/herdr-acceptance-o5AW7m/discovery-project/greetings.mjs:
-export const greetings = { en: 'Hello' };
-2026-10-02T00:12:02.358223Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /private/tmp/herdr-acceptance-o5AW7m/discovery-project/test/greetings.test.mjs:
-test('English stays',()=>assert.equal(greetings.en,'Hello'));test('French says Bonjour',()=>assert.equal(greetings.fr,'Bonjour'));

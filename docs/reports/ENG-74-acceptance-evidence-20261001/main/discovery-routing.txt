@@ -1,8 +1,0 @@
-Prepared [OPERATOR_QUESTION.md](/private/tmp/herdr-acceptance-RRjqu2/routing-discovery-project/OPERATOR_QUESTION.md) with a concrete two-tier model/effort recommendation and requested operator decisions.
-
-- Policy sources read: project `README.md`; no project policy or workflow entry point exists.
-- Checkout/branch: `/private/tmp/herdr-acceptance-RRjqu2/routing-discovery-project`, `main`.
-- Durable question ID: `OPERATOR_QUESTION.md`.
-- Validation: `git diff --check` passed; change remains uncommitted.
-- Work/run IDs: none.
-- Promotion evidence: none; operator confirmation is required before establishing policy.

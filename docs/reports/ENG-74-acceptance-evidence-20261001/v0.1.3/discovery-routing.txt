@@ -1,8 +1,0 @@
-Recorded durable question [MODEL_SELECTION_QUESTION.md](/private/tmp/herdr-acceptance-o5AW7m/routing-discovery-project/MODEL_SELECTION_QUESTION.md) with a concrete recommendation. Stopped pending operator approval.
-
-- Policy sources read: `README.md` only; it contains no policy.
-- Worked in: `routing-discovery-project`, branch `main`; no remote configured.
-- IDs: question artifact `MODEL_SELECTION_QUESTION.md`; no run or promotion IDs.
-- Validation: `git diff --check` passed.
-- Promotion: none.
-- No discoverable project policy or question-management entry point was present.

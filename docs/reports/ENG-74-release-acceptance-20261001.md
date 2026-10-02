@@ -5,8 +5,8 @@ summary: |
   Added an explicit local release gate that snapshots a selected candidate, uses real Herdr/Git/record/release code with scripted PTY workers for mechanics, and runs three real Luna discovery sessions in pristine projects. Main passes the configured cycle but fails fresh-project record, routing and lane discovery; v0.1.3 also lacks the newer modules. Both remain not ready. Existing wrapper lookup fails in background scratch workspaces, housekeeping is blocked by an ungranted automatically created pane, and staged cutover behavioral coverage is incomplete. Evidence and every measured discovery attempt's token cost are retained. No live project or release was switched.
 headline: Fresh projects do not discover the workflow, so both releases remain gated
 blockers:
-  - Entering agents find no project policy or discoverable bootstrap, work in the shared main checkout, and do not populate a record or file a recorded routing question.
-  - Existing supervisor wrapper dry runs cannot resolve the newly created background scratch workspace from workspace-list metadata.
+  - The original discovery environment exposed neighboring candidate policy files through find ..; its no-policy inference is withdrawn. R-50 isolates project parents and requires actual product-source attribution.
+  - The original wrapper probe checked metadata immediately, so it did not rule out a startup race. R-50 waits up to 15 seconds before permitting wrapper execution; see its report for the bounded result.
   - Housekeeping reaches an automatically created scratch layout pane outside creation receipts; the safety boundary refuses inspection, so closure remains unproved.
   - Ten staged cutover behavioral canaries, their behavioral rollback, and the final compatibility retirement gate are not implemented; restoration of bytes and modes alone is insufficient.
 proposals:
@@ -18,7 +18,7 @@ proposals:
     why: Apply each of the ten proposed edits to scratch copies, execute the canary and the restored legacy behavior, verify tidy recovery, stable-name restart and missing-target refusal, and retire contrib only after zero callers. Worktree creation must provide isolated shell/layout options and reliable descendant receipts so the gate can exercise housekeeping without granting unknown panes. The current two pending cutover cases permanently prevent release approval.
   - role: engineer
     title: Make background workspace identity available to release callers
-    why: Both copied supervisor wrappers fail while worktree list resolves the same scratch repository. Canonical identity must be available consistently without focusing operator panes or manufacturing metadata; verify the native lookup path on new background workspaces before any existing-project switch.
+    why: First reproduce canonical identity after a bounded startup wait: the original immediate lookup could race asynchronous metadata. R-50 repeats the cold-workspace probe for 15 seconds; if metadata remains absent, investigate that bounded failure without claiming an indefinite absence or manufacturing metadata.
 learnings:
   - A fresh record defaults approvals.default and tooling to ask; this organization's tooling auto-answer is an override. Unknown categories are rejected, so model-routing cannot be used without new configuration. The existing other category waits and accepts a scripted human answer.
   - Explicit workspace and tab creation support scratch ZDOTDIR and HISTFILE overrides; a file written by zsh startup is a reliable receipt where a background pane screen can be empty.
@@ -63,8 +63,14 @@ challenges:
     evidence: The copied scripts also reveal dispatch, notify, tidy, settle, stage, promotion queue and settle/review desk consumers. The durable call inventory retains their paths; PATH smoke checks do not prove the whole settle/review handoff.
   - premise: A usable configured cycle proves zero-setup project adoption.
     verdict: wrong
-    evidence: Main completes the configured cycle while pristine status/add require record init, route loading requires a file, and real agents read only README before writing the shared main checkout.
+    evidence: Main completes the configured cycle while pristine status/add require record init, route loading requires a file, and the original discovery agents could list the neighboring candidate AGENTS.md and module policy files; this contaminated the no-policy inference.
 ---
+
+R-50 correction: the original discovery projects exposed neighboring product
+policy, real-session writable roots included the harness, and wrapper lookup
+had no startup wait. Treat those findings as superseded by the R-50 isolated
+rerun, not proof of valid discovery isolation. Historical counts below remain
+the original observations. Raw evidence has been moved to scratch.
 
 The gate is delivered, but acceptance remains blocked. Main is **NOT READY** with
 13 passes, 7 failures and 2 pending cases; v0.1.3 is **NOT READY** with 7 passes,
@@ -148,12 +154,11 @@ PASS    22 Cleanup and scope audit
 Evidence: /private/tmp/herdr-acceptance-o5AW7m/evidence (NN.jsonl; summary.json has reasons)
 ```
 
-Durable copies of every numbered case log, summary, prompts, real-session
-transcripts, answers, token usage, ownership receipts, live-copy checksums and
-cutover enumeration are under
+Only candidate summary.json and screen.txt remain under
 [ENG-74-acceptance-evidence-20261001](ENG-74-acceptance-evidence-20261001).
-The temporary paths printed above retain raw evidence; durable copies omit the
-large unfiltered Herdr trace. All final created workspaces were closed and runtime
+R-50 archived every formerly committed raw artifact, including the mechanics
+rerun and cost ledger, under `/private/tmp/eng74-r46-evidence-archive-x3zjgyx3/ENG-74-acceptance-evidence-20261001`.
+The temporary paths printed above also retain original raw evidence. All final created workspaces were closed and runtime
 files and temporary authentication copies removed.
 
 What an entering agent actually found
@@ -167,7 +172,9 @@ Their isolated native CLI runtime excluded the operator's configuration and rule
 This tests the candidate CLIs available to a fresh agent; it does not activate an
 installed plugin or prove plugin entry hooks on another host.
 
-Both main agents reported reading the project README, finding no project policy,
+Both main agents reported reading the project README, but their find .. commands
+also listed neighboring candidate/AGENTS.md and module README files. The claim
+that this was an isolated no-policy environment is withdrawn. They reported
 working on branch `main` in the same checkout, and producing no record IDs. Both
 modified `greetings.mjs` and added tests there. They preserved the observed other
 change, but shared-checkout editing already violates lane isolation. Neither
@@ -201,7 +208,7 @@ concrete preference question instead of inventing models.
 
 Human-wait category proof
 
-[human-question-prerequisite.json](ENG-74-acceptance-evidence-20261001/human-question-prerequisite.json)
+`/private/tmp/eng74-r46-evidence-archive-x3zjgyx3/ENG-74-acceptance-evidence-20261001/human-question-prerequisite.json`
 records a separate scripted prerequisite using a newly initialized scratch record.
 Both `approvals.default` and `tooling` are `ask` there. `other` is an existing
 category with `ask`: a routing-preference question remained unanswered and blocked
@@ -246,8 +253,9 @@ modes preserved. The existing launcher now calls the installed `current/contrib`
 path; the inventory kit's canonical-checkout description is stale. Only absolute
 path constants and temporary destinations were relocated in scratch; route
 choices and `--model`/`--effort` forwarding were retained. Actual routing tests and
-invocation construction pass. Both supervisor wrapper dry runs fail because
-`workspace list` omits canonical metadata for the new background workspace,
+invocation construction pass. The original immediate supervisor wrapper dry runs failed when
+`workspace list` omitted canonical metadata for the new background workspace;
+that check did not rule out an asynchronous startup race,
 although `worktree list` resolves its repository. No metadata was synthesized and
 no pane was focused to make the case green.
 

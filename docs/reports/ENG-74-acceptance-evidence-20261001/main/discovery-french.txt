@@ -1,7 +1,0 @@
-Added French Bonjour and test, preserving the concurrent German change.
-
-- Checkout: `/private/tmp/herdr-acceptance-RRjqu2/discovery-project`, branch `main`
-- Validation: `node --test` — 3 passed; `git diff --check` clean
-- Policy read: project `README.md`; no `AGENTS.md` or other local policy found
-- Durable IDs: none
-- Commit/integration: blocked because Git could not create `.git/index.lock` (`Operation not permitted`); changes remain uncommitted.

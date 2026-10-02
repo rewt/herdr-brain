@@ -1,7 +1,0 @@
-Added German `de: 'Hallo'` and its test, preserving concurrent French changes.
-
-- Checkout/branch: `/private/tmp/herdr-acceptance-o5AW7m/discovery-project`, `main`
-- Validation: 3 tests passed; `git diff --check` passed
-- Integration: commit blocked because Git could not create `.git/index.lock` (`Operation not permitted`)
-- Durable IDs: none
-- Policy sources read: `README.md` only; no `AGENTS.md` or project manifest was present

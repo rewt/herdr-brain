@@ -1,9 +1,0 @@
-Added German greeting support:
-
-- `greetings.mjs`: `de: 'Hallo'`
-- Added German regression test
-- Validation: 2/2 Node tests passed; `git diff --check` passed
-
-Worked in `/private/tmp/herdr-acceptance-RRjqu2/discovery-project`, branch `main`, based on commit `1f98d01`.
-
-No project policy or contribution instructions were present beyond `README.md`. Changes remain uncommitted because the checkout’s `.git/index` is not writable. No durable run/question IDs or promotion evidence exist.

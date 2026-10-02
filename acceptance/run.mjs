@@ -16,6 +16,7 @@ import { retainedRoots, resultLine } from './results.mjs';
 import { liveSocket } from './probe.mjs';
 import { cases, cutoverChecks, runCase } from './cases.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
+import { createOwnedTempRoot } from './temp.mjs';
 import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 
@@ -30,7 +31,8 @@ const { values: opt } = parseArgs({ options: {
   'discovery-effort': { type: 'string', default: 'low' },
 } });
 if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--bch-cloak LIVE_REPO] [--keep]'); process.exit(2); }
-const root = fs.realpathSync(fs.mkdtempSync(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-')));
+const scratchRoots = [];
+const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-'), scratchRoots);
 const evidence = path.join(root, 'evidence');
 fs.mkdirSync(evidence);
 const started = Date.now();
@@ -54,7 +56,7 @@ function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_00
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
   if (ok && (r.error || r.status !== 0)) {
     const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? (String(r.stdout ?? '') + String(r.stderr ?? '')).trim()}`;
-    throw commandFailure(message, { scratchRoot: root, error: r.error });
+    throw commandFailure(message, { scratchRoots, error: r.error });
   }
   return r;
 }
@@ -87,7 +89,7 @@ async function test(definition, fn) {
   logFile = path.join(evidence, `${id}.jsonl`);
   write(logFile, '');
   try {
-    const result = await runCase(results, definition, fn, { scratchRoot: root });
+    const result = await runCase(results, definition, fn, { scratchRoots });
     result.evidence = `${id}.jsonl`;
     return result;
   } finally { logFile = undefined; }
@@ -677,7 +679,7 @@ try {
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
     auditCopies(copy, { live, home: process.env.HOME });
     const checks = [];
-    const check = (definition, fn) => runCase(checks, definition, fn, { scratchRoot: root });
+    const check = (definition, fn) => runCase(checks, definition, fn, { scratchRoots });
     const execute = (rel, args = [], options = {}) => runCopy(rel.endsWith('.mjs') ? process.execPath : '/bin/zsh',
       [...(rel.endsWith('.mjs') ? [] : ['-f']), path.join(copy, rel), ...args], { cwd: copy, extra: { ORG_DIR: org, HERDR_PANE_ID: pane }, ...options });
     const persona = path.join(root, 'cutover-persona');
@@ -898,7 +900,7 @@ try {
     assert.ok(callers(copy, 'contrib/settle-watch.mjs').length, 'rollback must restore the old caller after the blob');
     return 'negative caller probe refused; zero-caller retirement executed; split launcher tests ran without contrib; blob restored before all legacy callers';
   });
-  await discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
+  await discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
   await test(cases.defaultCycle, async () => {
     for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs', 'discovery/adapters/codex.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);
     requirePrerequisite(results, cases.fixture.key);

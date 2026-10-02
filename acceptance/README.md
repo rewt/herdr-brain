@@ -22,6 +22,11 @@ inside scratch; source modes and bytes remain untouched. Environment I/O errors
 (including permission and disk-space errors) naming this run's scratch paths
 are PENDING with `[HARNESS]`, including errors from child commands. Explicit
 product safety refusals retain precedence and remain FAIL with `[SAFETY]`.
+All temporary roots created by the runner, including separate discovery projects,
+session temps and verification temps, are registered before setup. Classification
+uses that shared registry and resolves real paths before checking containment.
+Parent traversal, dangling symlinks, mixed foreign paths or other uncertainty
+remain product failures; a scratch-looking path alone is insufficient.
 
 The primary cases enter new Git projects without `.org`, `.lane.json`, routes or
 agent instructions. Missing product capabilities fail. Genuine environment limitations remain pending. `supervisor-entry` executes installed supervisor entry and record bootstrap in a

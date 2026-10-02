@@ -8,6 +8,9 @@ import { makeSnapshotWritable } from '../snapshot.mjs';
 import { commandFailure, classifyFailure } from '../limits.mjs';
 import { cases, cutoverChecks, runCase } from '../cases.mjs';
 import { resultLine } from '../results.mjs';
+import { createOwnedTempRoot } from '../temp.mjs';
+import { discovery } from '../live.mjs';
+import { createVerification } from '../verify.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-snapshot-')));
@@ -104,5 +107,87 @@ test('scratch context preserves product refusals and excludes foreign, prefix, t
   }
   for (const message of [`acceptance_product_boundary: EACCES: '${scratch}/file'`, `acceptance_boundary: EPERM: '${scratch}/file'`, 'candidate installer missing', 'EACCES without a path']) {
     assert.equal(classifyFailure(commandFailure(message, { scratchRoot: scratch }), { scratchRoot: scratch }).status, 'FAIL');
+  }
+});
+
+test('foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM', async (t) => {
+  const root = fixture(t), scratch = path.join(root, 'scratch'), foreign = path.join(root, 'foreign');
+  fs.mkdirSync(scratch); fs.mkdirSync(path.join(foreign, 'child'), { recursive: true });
+  const denied = path.join(foreign, 'denied'); fs.writeFileSync(denied, 'foreign', { mode: 0o444 });
+  fs.symlinkSync(path.join(foreign, 'child'), path.join(scratch, 'escape'));
+  const file = `${scratch}/escape/../denied`;
+  assert.equal(fs.realpathSync.native(file), denied, 'OS resolves the link before its parent segment');
+  let error;
+  try { fs.writeFileSync(file, 'bad'); } catch (caught) { error = caught; }
+  assert.equal(error?.code, 'EACCES');
+  const results = [];
+  await runCase(results, cases.console, () => { throw error; }, { scratchRoots: [scratch] });
+  assert.equal(results[0].status, 'FAIL'); assert.equal(results[0].origin, 'product');
+  assert.equal(classifyFailure(commandFailure(`EPERM: open '${file}'`, { scratchRoots: [scratch] })).status, 'FAIL');
+  assert.equal(fs.readFileSync(denied, 'utf8'), 'foreign');
+});
+
+test('unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify', (t) => {
+  const root = fixture(t), scratch = path.join(root, 'scratch'), foreign = path.join(root, 'foreign');
+  fs.mkdirSync(scratch); fs.mkdirSync(foreign);
+  const alias = path.join(root, 'alias'); fs.symlinkSync(scratch, alias);
+  fs.symlinkSync(path.join(foreign, 'missing'), path.join(scratch, 'dangling'));
+  fs.symlinkSync(path.join(scratch, 'loop'), path.join(scratch, 'loop'));
+  for (const file of [`${scratch}/dangling/file`, `${scratch}/loop/file`, `${scratch}/ordinary/../file`]) {
+    assert.equal(classifyFailure(commandFailure(`EACCES: '${file}'`, { scratchRoots: [scratch] })).status, 'FAIL');
+  }
+  assert.equal(classifyFailure(Object.assign(Error('permission denied'), { code: 'EPERM', path: 'relative' }), { scratchRoots: [scratch] }).status, 'FAIL');
+  assert.equal(classifyFailure(commandFailure(`EACCES: '${scratch}/missing'`, { scratchRoots: [path.join(root, 'unregistered')] })).status, 'FAIL');
+  assert.equal(classifyFailure(commandFailure(`EACCES: '${scratch}/file' and '${foreign}/file'`, { scratchRoots: [scratch] })).status, 'FAIL');
+  assert.equal(classifyFailure(Object.assign(Error('copy denied'), { code: 'EACCES', path: `${scratch}/file`, dest: `${foreign}/file` }), { scratchRoots: [scratch] }).status, 'FAIL');
+  assert.equal(classifyFailure(commandFailure(`EACCES: '${alias}/missing/file'`, { scratchRoots: [scratch] })).origin, 'harness');
+});
+
+test('discovery setup failures use newly registered separate roots before candidate execution', async (t) => {
+  const fixtureRoot = fixture(t), scratchRoots = [], discoveryRoots = [];
+  const root = createOwnedTempRoot(path.join(fixtureRoot, 'primary-'), scratchRoots);
+  t.after(() => { for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true }); });
+  const candidate = path.join(root, 'candidate'), evidence = path.join(root, 'evidence');
+  fs.mkdirSync(candidate); fs.mkdirSync(evidence);
+  fs.writeFileSync(path.join(root, 'ownership.json'), '{}');
+  const results = [], failedPaths = [];
+  const forbidden = () => assert.fail('setup failed before candidate or model execution');
+  const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value); };
+  await discovery({ root, scratchRoots, discoveryRoots, candidate, evidence, opt: {}, env: {},
+    test: (definition, body) => runCase(results, definition, body, { scratchRoots }),
+    pending: forbidden, initRepo: (repo) => {
+      failedPaths.push(repo);
+      throw Object.assign(Error(`ENOSPC: mkdir '${repo}'`), { code: 'ENOSPC', path: repo });
+    }, run: forbidden, node: forbidden, git: forbidden, h: forbidden, until: forbidden,
+    write, read: (file) => fs.readFileSync(file, 'utf8') });
+  assert.equal(results.length, 2); assert.equal(discoveryRoots.length, 2);
+  assert.equal(scratchRoots.length, 3);
+  for (const [index, result] of results.entries()) {
+    assert.equal(result.status, 'PENDING'); assert.equal(result.origin, 'harness');
+    assert.match(resultLine(result), /HARNESS/);
+    assert.equal(fs.realpathSync(path.dirname(failedPaths[index])), discoveryRoots[index]);
+    assert.ok(scratchRoots.includes(discoveryRoots[index]));
+  }
+  const foreign = path.join(fixtureRoot, 'foreign'); fs.mkdirSync(foreign);
+  assert.equal(classifyFailure(commandFailure(`ENOSPC: '${foreign}/project'`, { scratchRoots })).status, 'FAIL');
+});
+
+test('session and verifier temp roots classify direct and command errors while preserving safety failures', async (t) => {
+  const fixtureRoot = fixture(t), scratchRoots = [], discoveryRoots = [];
+  const root = createOwnedTempRoot(path.join(fixtureRoot, 'primary-'), scratchRoots);
+  t.after(() => { for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true }); });
+  const session = createOwnedTempRoot('/private/tmp/herdr-session-test-', scratchRoots, discoveryRoots);
+  const verifier = createVerification({ name: 'proof', repo: root, installation: root, toolRoots: [] },
+    { root, scratchRoots, discoveryRoots, run: () => assert.fail('no model or native execution') });
+  assert.ok(scratchRoots.includes(session)); assert.ok(scratchRoots.includes(verifier.temp));
+  assert.ok(discoveryRoots.includes(session)); assert.ok(discoveryRoots.includes(verifier.temp));
+  const results = [];
+  for (const [index, directory] of [session, verifier.temp].entries()) {
+    const file = path.join(directory, 'denied'); fs.writeFileSync(file, 'immutable', { mode: 0o444 });
+    await runCase(results, index ? cases.routingQuestion : cases.discovery, () => fs.writeFileSync(file, 'bad'), { scratchRoots });
+    assert.equal(results[index].status, 'PENDING'); assert.equal(results[index].origin, 'harness');
+    const message = `npm error code EACCES\nnpm error path ${directory}/missing/file`;
+    assert.equal(classifyFailure(commandFailure(message, { scratchRoots })).origin, 'harness');
+    assert.equal(classifyFailure(commandFailure(`acceptance_product_boundary: EACCES '${file}'`, { scratchRoots })).status, 'FAIL');
   }
 });

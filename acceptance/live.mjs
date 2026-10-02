@@ -7,8 +7,9 @@ import { permissionArgs, sessionEnv, policyWitness } from './security.mjs';
 import { boundaryScript, liveSocket } from './probe.mjs';
 import { HarnessLimit, isHarnessBoundary, isProductBoundary, commandFailure } from './limits.mjs';
 import { createVerification } from './verify.mjs';
+import { createOwnedTempRoot } from './temp.mjs';
 
-export async function discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
+export async function discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
   const model = opt['discovery-model'] ?? 'gpt-5.6-luna', effort = opt['discovery-effort'] ?? 'low';
   const usage = [];
   const verifiers = new Map();
@@ -22,7 +23,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
   }
   write(path.join(evidence, 'discovery-installation.json'), JSON.stringify({ installation, entrypoints: fs.readdirSync(bin), excluded: ['AGENTS.md', 'README.md', 'docs', 'test', 'tests', 'kit', 'acceptance', 'node_modules', '.git'], source: candidate }, null, 2));
   const freshProject = (label) => {
-    const parent = fs.realpathSync(fs.mkdtempSync('/private/tmp/herdr-discovery-')); discoveryRoots.push(parent);
+    const parent = createOwnedTempRoot('/private/tmp/herdr-discovery-', scratchRoots, discoveryRoots);
     const repo = path.join(parent, label); initRepo(repo);
     assert.deepEqual(fs.readdirSync(parent), [label], 'no candidate, evidence or capability siblings');
     const ownership = path.join(root, 'ownership.json'); const ledger = JSON.parse(read(ownership));
@@ -38,7 +39,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
 
   const live = async (repo, name, task) => {
     const binary = fs.realpathSync(run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim());
-    const temp = fs.realpathSync(fs.mkdtempSync('/private/tmp/herdr-session-')); discoveryRoots.push(temp);
+    const temp = createOwnedTempRoot('/private/tmp/herdr-session-', scratchRoots, discoveryRoots);
     const runtimeHome = path.join(root, 'codex-runtime', name);
     fs.mkdirSync(runtimeHome, { recursive: true, mode: 0o700 });
     const auth = path.join(process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex'), 'auth.json');
@@ -81,7 +82,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
       write(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
     }
     write(path.join(evidence, `${name}.prompt.txt`), scope);
-    if (!verifiers.has(repo)) verifiers.set(repo, createVerification(spec, { root, discoveryRoots, run }));
+    if (!verifiers.has(repo)) verifiers.set(repo, createVerification(spec, { root, scratchRoots, discoveryRoots, run }));
     const ws = h('workspace', 'create', '--cwd', repo, '--label', `acceptance-${name}`, '--no-focus');
     await until(() => h('pane', 'get', ws.root_pane.pane_id).pane.foreground_cwd === repo, `${name} shell cwd`);
     h('pane', 'run', ws.root_pane.pane_id, [process.execPath, path.join(root, 'live-worker.mjs'), root, name].map((s) => "'" + s.replaceAll("'", "'\\''") + "'").join(' '));

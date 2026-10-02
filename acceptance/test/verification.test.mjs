@@ -26,8 +26,9 @@ function fixture(t) {
   const spec = { name: 'verification-test', repo, temp, binary, gitBinary, runtimeHome: path.join(root, 'runtime'), installation: path.join(root, 'installed'), gitCommon: path.join(repo, '.git'),
     toolRoots: [path.resolve(path.dirname(process.execPath), '..'), path.resolve(path.dirname(binary), '..'), '/opt/homebrew'], path: `${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/bin:/bin` };
   const discoveryRoots = [];
+  const scratchRoots = [root];
   t.after(() => { fs.rmSync(root, { recursive: true, force: true }); for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true }); });
-  return { root, repo, temp, spec, run, discoveryRoots };
+  return { root, repo, temp, spec, run, discoveryRoots, scratchRoots };
 }
 
 test('native direct session can commit/worktree/ref but cannot write common or worktree config and hooks', { skip }, (t) => {
@@ -45,8 +46,8 @@ test('native direct session can commit/worktree/ref but cannot write common or w
 });
 
 test('model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled', { skip }, async (t) => {
-  const { root, repo, spec, run, discoveryRoots } = fixture(t);
-  const verifier = createVerification(spec, { root, discoveryRoots, run });
+  const { root, repo, spec, run, discoveryRoots, scratchRoots } = fixture(t);
+  const verifier = createVerification(spec, { root, scratchRoots, discoveryRoots, run });
   const outside = path.join(root, 'operator-canary'), filterMarker = path.join(verifier.temp, 'filter-ran'), monitorMarker = path.join(verifier.temp, 'fsmonitor-ran');
   const socket = path.join(root, 'operator.sock'), server = net.createServer((connection) => { connection.destroy(); assert.fail('sandbox connected to operator socket'); });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
@@ -70,12 +71,12 @@ test('model-controlled tests and Git filters execute only sandboxed; fsmonitor/h
 });
 
 test('record verification and scripted answer are kernel-confined even if model output redirects .org', { skip }, (t) => {
-  const { root, repo, spec, run, discoveryRoots } = fixture(t);
-  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes'], { cwd: path.resolve('.'), encoding: undefined });
+  const { root, repo, spec, run, discoveryRoots, scratchRoots } = fixture(t);
+  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'housekeeping'], { cwd: path.resolve('.'), encoding: undefined });
   assert.equal(archive.status, 0, String(archive.stderr));
   const unpack = spawnSync('tar', ['-x', '-C', spec.installation], { input: archive.stdout }); assert.equal(unpack.status, 0, String(unpack.stderr));
   run(process.execPath, [path.join(spec.installation, 'bin/org.mjs'), 'init', path.join(repo, '.org')]);
-  const verifier = createVerification(spec, { root, discoveryRoots, run });
+  const verifier = createVerification(spec, { root, scratchRoots, discoveryRoots, run });
   const parent = verifier.record(['add', 'Routing decision', '--role', 'architect']).trim().split('\n')[0];
   const question = verifier.record(['ask', 'Configure routes?', '--parent', parent, '--category', 'other', '--recommend', 'yes', '--why', 'A concrete sandbox regression recommendation']).trim().split('\n')[0];
   assert.match(question, /^HUM-\d+/);

@@ -13,34 +13,43 @@ export const isHarnessBoundary = (text) => /acceptance_harness_limit|sandbox_app
 export const isProductBoundary = (text) => /acceptance_product_boundary|acceptance_boundary|native-transport boundary:/.test(text);
 const environmentCode = /\b(?:EACCES|EPERM|EROFS|ENOSPC|EDQUOT|EMFILE|ENFILE|EIO)\b/;
 function scratchPath(file, root) {
-  if (!path.isAbsolute(file)) return false;
-  // Resolve existing ancestors too: missing npm/node_modules paths are common,
-  // but a symlink pointing outside scratch must never qualify.
-  let ancestor = path.resolve(file);
+  // Never collapse parent segments before resolving symlinks. Reject traversal
+  // conservatively, even when it could turn out to stay inside scratch.
+  if (!path.isAbsolute(file) || file.split(path.sep).includes('..')) return false;
+  let canonicalRoot;
+  try { canonicalRoot = fs.realpathSync.native(root); } catch { return false; }
+  let ancestor = file;
   while (true) {
     try {
-      const relative = path.relative(fs.realpathSync(root), fs.realpathSync(ancestor));
+      const relative = path.relative(canonicalRoot, fs.realpathSync.native(ancestor));
       return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
     } catch (error) {
       if (error.code !== 'ENOENT' || ancestor === path.dirname(ancestor)) return false;
+      // A dangling symlink is an existing, unresolved entry, not a missing
+      // scratch child. Stop rather than peeling past it into an owned parent.
+      try { fs.lstatSync(ancestor); return false; }
+      catch (missing) { if (missing.code !== 'ENOENT') return false; }
       ancestor = path.dirname(ancestor);
     }
   }
 }
-function scratchEnvironmentError(error, scratchRoot) {
-  if (!scratchRoot || !environmentCode.test(`${error.code ?? ''} ${error.message}`)) return false;
+function scratchEnvironmentError(error, scratchRoots) {
+  if (!scratchRoots.length || !environmentCode.test(`${error.code ?? ''} ${error.message}`)) return false;
   const paths = [error.path, error.dest,
-    ...[...error.message.matchAll(/['"](\/[^'"\r\n]+)['"]|(?:^|\n)npm error path ([^\r\n]+)/g)].map((match) => match[1] ?? match[2])];
-  return paths.some((file) => typeof file === 'string' && scratchPath(file, scratchRoot));
+    ...[...error.message.matchAll(/['"](\/[^'"\r\n]+)['"]|(?:^|\n)npm error path ([^\r\n]+)/g)].map((match) => match[1] ?? match[2])]
+    .filter((file) => file !== undefined);
+  // Mixed or unresolved paths cannot prove this is solely scratch I/O.
+  return paths.length > 0 && paths.every((file) => typeof file === 'string'
+    && scratchRoots.some((root) => scratchPath(file, root)));
 }
-export function commandFailure(message, { scratchRoot, error } = {}) {
+export function commandFailure(message, { scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [], error } = {}) {
   if (isProductBoundary(message)) return new ProductBoundary(message);
-  return isHarnessBoundary(message) || scratchEnvironmentError({ ...error, message }, scratchRoot)
+  return isHarnessBoundary(message) || scratchEnvironmentError({ ...error, message }, scratchRoots)
     ? new HarnessLimit(message) : new Error(message);
 }
-export function classifyFailure(error, { cleanup = false, scratchRoot } = {}) {
+export function classifyFailure(error, { cleanup = false, scratchRoot, scratchRoots = scratchRoot ? [scratchRoot] : [] } = {}) {
   if (error instanceof ProductBoundary || isProductBoundary(error.message)) return { status: 'FAIL', origin: 'product', detail: error.message };
-  if (error instanceof HarnessLimit || cleanup || scratchEnvironmentError(error, scratchRoot)) return { status: 'PENDING', origin: 'harness', detail: error.message };
+  if (error instanceof HarnessLimit || cleanup || scratchEnvironmentError(error, scratchRoots)) return { status: 'PENDING', origin: 'harness', detail: error.message };
   return { status: error instanceof Pending ? 'PENDING' : 'FAIL', origin: 'product', detail: error.message };
 }
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { permissionArgs, sessionEnv, copiedSandbox } from './security.mjs';
+import { createOwnedTempRoot } from './temp.mjs';
 
 export const safeGitArgs = (repo, args) => ['--no-pager', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
   '-c', 'commit.gpgsign=false', '-C', repo, ...args];
@@ -9,9 +10,8 @@ export const safeGitArgs = (repo, args) => ['--no-pager', '-c', 'core.hooksPath=
 // the host. Verification has a fresh temp and host-owned CLI home, read-only
 // project/Git metadata, stripped environment and no network. Even Git reads
 // can invoke configured helpers, so every post-entry Git call goes here.
-export function createVerification(spec, { root, discoveryRoots, run }) {
-  const temp = fs.realpathSync(fs.mkdtempSync('/private/tmp/herdr-verification-'));
-  discoveryRoots.push(temp);
+export function createVerification(spec, { root, scratchRoots, discoveryRoots, run }) {
+  const temp = createOwnedTempRoot('/private/tmp/herdr-verification-', scratchRoots, discoveryRoots);
   const verified = { ...spec, temp, runtimeHome: path.join(root, `verification-runtime-${spec.name}`),
     entryBinary: undefined, worktreeRoot: undefined, probeGit: undefined };
   fs.mkdirSync(verified.runtimeHome, { recursive: true, mode: 0o700 });

@@ -15,8 +15,8 @@ export function createReceiptTracker({
       if (entry) entries.set(pid, entry);
       return entry;
     },
-    cleanup() {
-      for (const entry of entries.values()) tracker.killProcess(entry);
+    cleanup(signal = 'SIGKILL') {
+      for (const entry of entries.values()) tracker.killProcess(entry, signal);
     },
   };
 }

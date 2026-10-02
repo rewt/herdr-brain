@@ -1,5 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { configureCliFixture, installRuntime, rememberHousekeepingProcess, createHousekeepingStarter } from './helpers/cli-fixture.mjs';
 import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 import { createProcessTracker } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
@@ -12,15 +13,6 @@ import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
-const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
-function installRuntime(root) {
-  for (const relative of ['housekeeping/housekeeping.mjs', 'housekeeping/config.mjs', 'supervisor/tidy-tabs.mjs', 'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs']) {
-    const target = path.join(root, relative);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(path.join(sourceRoot, relative), target);
-  }
-  return fs.realpathSync(path.join(root, 'housekeeping/housekeeping.mjs'));
-}
 function fixture(t, { promoted = true, reported = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'housekeeping-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -208,18 +200,7 @@ test('incomplete or failed reads never authorize any action', (t) => {
   }
 });
 
-function cliFixture(t) {
-  const f = fixture(t);
-  f.config = path.join(f.root, 'config.json'); f.state = path.join(f.root, 'state');
-  fs.writeFileSync(f.config, JSON.stringify({ enabled: true, tick_seconds: 1, cleanup_seconds: 2 }));
-  const fake = path.join(f.root, 'fake.mjs');
-  fs.writeFileSync(fake, `#!${process.execPath}\nconst [group, op] = process.argv.slice(2);\nconst result = group === 'status' ? {runs:[], items:[]} : group === 'workspace' ? {workspaces:[]} : {agents:[]};\nconsole.log(JSON.stringify({result}));\n`);
-  fs.chmodSync(fake, 0o755);
-  f.runtime = installRuntime(f.repo);
-  f.fake = fs.realpathSync(fake);
-  f.args = [f.runtime, '--cwd', f.repo, '--org', f.root, '--config', f.config, '--state-dir', f.state, '--herdr', fake, '--org-cli', fake];
-  return f;
-}
+function cliFixture(t) { return configureCliFixture(fixture(t)); }
 
 test('one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses', (t) => {
   const f = cliFixture(t);
@@ -269,15 +250,6 @@ test('no record and no Git project are quiet no-ops', (t) => {
   assert.equal(outside.status, 0); assert.match(outside.stdout, /no-project/);
 });
 
-function rememberHousekeepingProcess(f, receipts) {
-  const ownerFile = path.join(f.state, 'lock/owner.json');
-  if (!fs.existsSync(ownerFile)) return;
-  const command = [process.execPath, f.runtime, '--cwd', fs.realpathSync(f.repo), '--org', f.root,
-    '--config', f.config, '--state-dir', f.state, '--main', 'main', '--herdr', f.fake,
-    '--org-cli', f.fake, '--loop'].join(' ');
-  receipts.remember(JSON.parse(fs.readFileSync(ownerFile, 'utf8')).pid, command);
-}
-
 test('housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'housekeeping-receipt-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -310,19 +282,68 @@ test('housekeeping lock cleanup refuses PID reuse before registration and retain
 });
 
 for (const runtimeKind of ['canonical checkout', 'installed copy']) {
+  test(`${runtimeKind} startup assertion failure stops a real schedule before removing a symlinked fixture`, async t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'housekeeping-start-failure-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const actual = path.join(root, 'actual'), alias = path.join(root, 'alias');
+    fs.mkdirSync(actual); fs.symlinkSync(actual, alias, 'dir');
+    const evidence = path.join(root, 'teardown.json');
+    const file = path.join(root, 'startup-failure.test.mjs');
+    const helper = new URL('./helpers/cli-fixture.mjs', import.meta.url).href;
+    const boundedTest = new URL('../../test/helpers/bounded-test.mjs', import.meta.url).href;
+    fs.writeFileSync(file, `import test from ${JSON.stringify(boundedTest)};
+import { configureCliFixture, installRuntime, createHousekeepingStarter } from ${JSON.stringify(helper)};
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+test('injected housekeeping startup assertion failure', t => {
+  let f, pid;
+  const start = createHousekeepingStarter(t, () => f);
+  const fixtureRoot = fs.mkdtempSync(path.join(${JSON.stringify(alias)}, 'fixture-'));
+  t.after(() => {
+    let alive = false;
+    try { process.kill(pid, 0); alive = true; }
+    catch (error) { if (error.code !== 'ESRCH') throw error; }
+    const directoryExists = fs.existsSync(fixtureRoot);
+    fs.writeFileSync(${JSON.stringify(evidence)}, JSON.stringify({ pid, alive, directoryExists, fixtureRoot,
+      herdr: f.args[f.args.indexOf('--herdr') + 1], expectedHerdr: f.fake, realRoot: fs.realpathSync(fixtureRoot) }));
+    try { assert.equal(alive, false, 'schedule survived until fixture directory removal'); }
+    finally { fs.rmSync(fixtureRoot, { recursive: true, force: true }); }
+  });
+  const repo = path.join(fixtureRoot, 'project'); fs.mkdirSync(repo);
+  for (const args of [['init', '-b', 'main'], ['config', 'user.name', 'Test'],
+    ['config', 'user.email', 'test@example.invalid'], ['commit', '--allow-empty', '-m', 'base']]) {
+    const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  f = configureCliFixture({ root: fixtureRoot, repo });
+  ${runtimeKind === 'installed copy' ? "f.runtime = installRuntime(path.join(f.root, 'plugin')); f.args[0] = f.runtime;" : ''}
+  const result = start();
+  assert.equal(result.status, 0, result.stderr); assert.match(result.stdout, /started/);
+  pid = JSON.parse(fs.readFileSync(path.join(f.state, 'lock/owner.json'), 'utf8')).pid;
+  assert.fail('injected failure after real housekeeping startup');
+});`);
+    const child = spawnChild(t, process.execPath, [fileURLToPath(new URL('../../test/helpers/run.mjs', import.meta.url)), file]);
+    const result = await waitForExit(child);
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /injected failure after real housekeeping startup/);
+    assert.doesNotMatch(result.stdout + result.stderr, /survived until fixture directory removal|Surviving fixture|not the expected fixture|hookFailed/);
+    const observed = JSON.parse(fs.readFileSync(evidence, 'utf8'));
+    assert.equal(observed.alive, false);
+    assert.equal(observed.directoryExists, true);
+    assert.notEqual(observed.fixtureRoot, observed.realRoot, 'regression must use a symlinked root');
+    assert.equal(observed.herdr, observed.expectedHerdr);
+    assert.equal(fs.existsSync(observed.fixtureRoot), false);
+  });
+}
+
+for (const runtimeKind of ['canonical checkout', 'installed copy']) {
 test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) => {
   let f;
-  const receipts = createReceiptTracker();
-  // Stop the schedule before cliFixture's directory-removal hook, including
-  // when a startup assertion fails before the test disables its configuration.
-  t.after(() => { try { if (f) rememberHousekeepingProcess(f, receipts); } finally { receipts.cleanup(); } });
+  const start = createHousekeepingStarter(t, () => f);
   f = cliFixture(t);
   if (runtimeKind === 'installed copy') { f.runtime = installRuntime(path.join(f.root, 'plugin')); f.args[0] = f.runtime; }
-  const start = () => {
-    const result = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 10000 });
-    rememberHousekeepingProcess(f, receipts);
-    return result;
-  };
   const first = start(); assert.equal(first.status, 0, first.stderr); assert.match(first.stdout, /started/);
   const lock = path.join(f.state, 'lock');
   const pid = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8')).pid;

@@ -332,11 +332,20 @@ bootstrap confirms the policy before project execution. The macOS policy also
 denies signalling owners outside the sandbox. Missing ownership or unconfirmed
 cleanup fails the check rather than retrying without containment.
 
-The owner is built with `/usr/bin/cc` in a private, no-follow-checked system scratch
-directory; no npm dependency is added. Compiler environment overrides are ignored.
-A missing compiler or compilation failure refuses execution. Compilation has a
-15-second bound and cleanup a three-second bound. Broker calls retain their
-180-second deadline. These execution safety bounds are independent of org budgets.
+The owner ships prebuilt for macOS and Linux on arm64/x64; validation needs no C
+compiler on those targets. Its binary and source SHA-256 checksums and native
+architecture are verified before copying the bytes into a private,
+no-follow-checked system scratch directory. Linux binaries statically link musl.
+No dependency or runtime download is added. See the [native helper guide](native/README.md)
+for the manifest, license notices and offline maintainer rebuild commands.
+
+A missing, redirected, damaged or stale bundle explains its rejection and tries
+the existing `/usr/bin/cc` source build in private scratch. Compiler environment
+overrides remain ignored. If that build also fails, execution is refused before
+project code runs. Compilation retains its 15-second bound and cleanup its
+three-second bound. Broker calls retain their 180-second deadline. These execution
+safety bounds are independent of org budgets; kernel identity and cleanup are
+unchanged from the source-built owner.
 
 Offline adapter/profile/cleanup regressions run in `npm test`. Exercise the
 actual host boundary explicitly outside a nested sandbox:

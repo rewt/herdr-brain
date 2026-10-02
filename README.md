@@ -34,12 +34,12 @@ a local fast-forward. Background pane creation preserves Herdr focus.
 
 ## Requirements and limits
 
-Node.js 20+, npm, Git 2.38+, Bash, Python 3 available as `python3`, a working C
-compiler at `/usr/bin/cc`, a supported Herdr installation (the manifest requires
-0.8.0+) and native Codex are needed for the normal machine install. The compiler
-builds the validation lifetime owner; Python handles release plugin discovery and
-restoration. On macOS install the Command Line Tools (`xcode-select --install`);
-on Linux install your distribution's C development toolchain. Install Python 3
+Node.js 20+, npm, Git 2.38+, Bash, Python 3 available as `python3`, a supported
+Herdr installation (the manifest requires 0.8.0+) and native Codex are needed
+for the normal machine install. macOS and Linux on arm64/x64 ship checksummed
+validation lifetime owners and require no C compiler. A rejected or missing
+bundle tries a bounded `/usr/bin/cc` source build, then refuses validation if
+neither is available. Python handles release plugin discovery and restoration. Install Python 3
 through your OS package manager or Python installer and keep `python3` on PATH.
 See the guide's [prerequisite checks](docs/ADOPTING.md#install-on-a-machine).
 Claude is optional. The scratch walkthrough was proved on macOS; native Codex is

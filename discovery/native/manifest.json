@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "targets": {
+    "darwin-arm64": {
+      "sha256": "d69b41cd80812c9a802fbcc07160f3262b12d098a00267ea75ca4ce51ec72c45",
+      "sourceSha256": "b5d1082f63461da77dc2dd167186e1c66f86dade2143563670eacd5938142f8d",
+      "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Library/Developer/CommandLineTools/usr/bin",
+      "flags": [
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra"
+      ]
+    },
+    "darwin-x64": {
+      "sha256": "6ed0961100de56f416cd9724e34500906f9310e1fe6313e5f2f8b58dded81e57",
+      "sourceSha256": "b5d1082f63461da77dc2dd167186e1c66f86dade2143563670eacd5938142f8d",
+      "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Library/Developer/CommandLineTools/usr/bin",
+      "flags": [
+        "-arch",
+        "x86_64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra"
+      ]
+    },
+    "linux-x64": {
+      "sha256": "a1018211c3aba70379701a623c47d008bd072b0442d7ef4e9ed939884d569d6c",
+      "sourceSha256": "b5d1082f63461da77dc2dd167186e1c66f86dade2143563670eacd5938142f8d",
+      "compiler": "0.15.2",
+      "flags": [
+        "cc",
+        "-target",
+        "x86_64-linux-musl",
+        "-static",
+        "-s",
+        "-Wl,--build-id=none",
+        "-O2",
+        "-Wall",
+        "-Wextra"
+      ]
+    },
+    "linux-arm64": {
+      "sha256": "8074f9f792758ee980fc5dab45d70b20eb09c6d78074da8e10b127c587d74c3b",
+      "sourceSha256": "b5d1082f63461da77dc2dd167186e1c66f86dade2143563670eacd5938142f8d",
+      "compiler": "0.15.2",
+      "flags": [
+        "cc",
+        "-target",
+        "aarch64-linux-musl",
+        "-static",
+        "-s",
+        "-Wl,--build-id=none",
+        "-O2",
+        "-Wall",
+        "-Wextra"
+      ]
+    }
+  }
+}

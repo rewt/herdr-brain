@@ -1,30 +1,17 @@
 #!/usr/bin/env node
 // The native foreground owner confirms descendant cleanup before returning.
-// Compilation/containment failures propagate; there is no unbounded retry.
-import fs from 'node:fs';
+// Provisioning/containment failures propagate; there is no unbounded retry.
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkedDirectory } from './paths.mjs';
+import { prepareOwner } from './owner.mjs';
 import { lifetimeScope, closeScope } from './lifetime.mjs';
 let helper;
 function supervisor() {
   if (helper) return helper;
-  if (!['darwin', 'linux'].includes(process.platform)) throw new Error('validation descendant containment unavailable on this platform');
-  // Ignore agent-controlled TMPDIR, CC and compiler flags. Project sandboxes
-  // cannot write this private, no-follow-checked system scratch directory.
-  const directory = fs.mkdtempSync(path.join(checkedDirectory('/tmp'), 'monitor-owner-'));
-  fs.chmodSync(directory, 0o700); checkedDirectory(directory);
-  const executable = path.join(directory, 'owner');
-  const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', executable,
-    fileURLToPath(new URL('./process-supervisor.c', import.meta.url))], { timeout: 15000, encoding: 'utf8',
-    env: { PATH: '/usr/bin:/bin', TMPDIR: directory } });
-  if (built.error || built.status) { fs.rmSync(directory, { recursive: true, force: true }); throw new Error(`validation owner unavailable: ${built.error?.message ?? built.stderr}`); }
-  const fd = fs.openSync(executable, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-  const identity = fs.fstatSync(fd); fs.closeSync(fd);
-  if (!identity.isFile() || identity.uid !== process.getuid()) throw new Error('validation owner identity changed');
+  const { executable, cleanup } = prepareOwner();
   helper = executable;
-  process.once('exit', () => fs.rmSync(directory, { recursive: true, force: true }));
+  process.once('exit', cleanup);
   return helper;
 }
 export function runBounded(binary, args, { timeoutMs = 120_000, scope = null, command = null } = {}) {

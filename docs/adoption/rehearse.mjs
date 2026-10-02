@@ -47,10 +47,10 @@ const release = (...args) => run('bash', [path.join(product, 'herdr/release.sh')
 let outcome = 'failed', failure, head, context, sourceCommit;
 try {
   console.log(`Evidence: ${evidence}`);
-  // Normal product prerequisites, inherited from the host toolchain. The real
-  // worker check below must also compile/link the product's lifetime owner.
+  // Normal product prerequisites. The real worker check below uses the bundled
+  // lifetime owner; a C compiler is no longer an adoption prerequisite.
   write(path.join(evidence, 'prerequisites.txt'),
-    run('/usr/bin/cc', ['--version']) + '\n' + run('python3', ['--version']) + '\n');
+    run(process.execPath, [path.join(source, 'discovery/native/build.mjs'), '--check']) + '\n' + run('python3', ['--version']) + '\n');
   // Exercise release.sh's actual Python JSON parsing without touching a live
   // Herdr server or machine registry. Linking over an existing entry is refused,
   // so a missing Python discovery result cannot silently pass an upgrade.
@@ -198,7 +198,7 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
 } catch (error) { failure = error.stack; }
 write(path.join(evidence, 'summary.json'), JSON.stringify({ outcome, failure, root, project, head, run: context?.run,
   source_commit: sourceCommit,
-  coverage: 'host compiler/Python prerequisite checks, scratch install and pinned dependencies, activation, Python-backed plugin discovery/relink/unlink against a local fixture, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, console, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell restoration',
+  coverage: 'bundled owner/Python prerequisite checks, scratch install and pinned dependencies, activation, Python-backed plugin discovery/relink/unlink against a local fixture, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, console, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell restoration',
   excluded: ['model judgment', 'live Herdr transport', 'GitHub distribution', 'launchd', 'Linux and desktop/remote transport'],
 }, null, 2) + '\n');
 console.log(`${outcome.toUpperCase()}: ${path.join(evidence, 'summary.json')}`);

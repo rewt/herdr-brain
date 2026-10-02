@@ -8,11 +8,11 @@ missing. It is outside `npm test` and never calls a model.
 
 ## Repeat it
 
-Prerequisites: all normal product requirements from the guide, including a working
-`/usr/bin/cc` and `python3`, plus the walkthrough tools zsh, `tar` and the BSD
-(macOS) or util-linux `script` PTY tool. The compiler is required for ordinary
-product validation, and Python for release plugin discovery and restoration;
-neither is merely a scratch prerequisite. Native Codex must support
+Prerequisites: all normal product requirements from the guide, including
+`python3`, plus the walkthrough tools zsh, `tar` and the BSD
+(macOS) or util-linux `script` PTY tool. macOS/Linux arm64/x64 use bundled lifetime
+owners without a C compiler. The runner verifies their checksums before setup;
+Python remains required for release plugin discovery and restoration. Native Codex must support
 `sandbox --permission-profile`. Pass the actual native executable, rather than a
 Monitor PATH wrapper. No native credentials or user configuration are needed.
 

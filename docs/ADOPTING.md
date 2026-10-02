@@ -15,20 +15,28 @@ URL. The commands below do not push or publish.
 ## Install on a machine
 
 The operator or supervisor owns installation. Requirements: Node.js 20+, npm,
-Git 2.38+, Bash, Python 3 available as `python3`, a working C compiler at
-`/usr/bin/cc`, Herdr 0.8.0+ (the native UI proof used 0.8.2), and an installed
+Git 2.38+, Bash, Python 3 available as `python3`, Herdr 0.8.0+ (the native UI proof used 0.8.2), and an installed
 native Codex executable. Claude is optional. Codex must support the native
 `sandbox --permission-profile` interface used for validation. The default install
 requires Codex even when you plan to use Claude workers. Configure and authenticate
 your native harness normally before adopting; Monitor does not replace its
 account, permissions, model, effort or user settings.
 
-The compiler is a normal product requirement: every validation session builds
-the native process lifetime owner before running project checks. Monitor invokes
-`/usr/bin/cc` directly and ignores `CC` and compiler flag overrides. On macOS,
-install Apple's Command Line Tools with `xcode-select --install`; on Linux,
-install your distribution's C development toolchain (for example,
-`build-essential` on Debian/Ubuntu). Python 3 is required by release plugin
+No C compiler is needed on macOS or Linux on arm64 or x64. Monitor ships the
+native process lifetime owner for those targets, verifies its binary and source
+checksums, and copies it into private scratch before running project checks.
+Linux binaries are static and require no particular host libc. The same lifetime
+identity and descendant cleanup apply as with the source build.
+
+A missing, damaged, redirected or stale bundle prints its reason and tries a
+bounded source build with `/usr/bin/cc`, ignoring `CC` and compiler flag overrides.
+If neither a verified bundle nor a working compiler is available, `monitor check`
+refuses with `validation owner unavailable` before running project code. Other
+Darwin/Linux architectures need a local compiler; other operating systems remain
+unsupported for validation. Maintainers can verify and rebuild bundles using the
+[native helper guide](../discovery/native/README.md).
+
+Python 3 is required by release plugin
 discovery/unlinking and existing Brain LaunchAgent restoration. Install it through
 your OS package manager or Python installer and ensure `python3` is on PATH.
 
@@ -40,14 +48,12 @@ node --version
 npm --version
 git --version
 bash --version
-/usr/bin/cc --version
 python3 --version
+node discovery/native/build.mjs --check
 ```
 
-The compiler must be able to compile and link C programs, not merely exist.
-Without it, `monitor check` refuses with `validation owner unavailable`.
 Without Python, release plugin discovery can appear empty and `restore` can leave
-the plugin registered; check both dependencies before installation and removal.
+the plugin registered; check it before installation and removal.
 
 Use an inspected tag from the local Monitor checkout. Substitute your actual
 checkout and tag in these commands:

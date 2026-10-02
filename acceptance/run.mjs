@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
+import { auditCopies, relocate, within, copiedSandbox } from './security.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -27,6 +28,7 @@ const started = Date.now();
 const results = [];
 let logFile, candidateCommit, fixture, supervisor;
 const pids = new Set();
+const discoveryRoots = [];
 const env = { ...process.env };
 for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_)/.test(key)) delete env[key];
 Object.assign(env, { ACCEPTANCE_ROOT: root, TMPDIR: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
@@ -37,13 +39,32 @@ const json = (text) => { const v = JSON.parse(text); return v.result ?? v; };
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 class Pending extends Error {}
 const pending = (reason) => { throw new Pending(reason); };
-function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false } = {}) {
-  const r = spawnSync(command, args, { cwd, env: { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
+function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv } = {}) {
+  const r = spawnSync(command, args, { cwd, env: isolatedEnv ?? { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
     input, maxBuffer: 32 * 1024 * 1024, timeout });
   if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd, status: r.status, error: r.error?.message,
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
   if (ok && (r.error || r.status !== 0)) throw new Error(`${path.basename(command)} ${args[0]}: ${r.error?.message ?? String(r.stderr || r.stdout).trim()}`);
   return r;
+}
+const scratchHome = path.join(root, 'copy-home'); fs.mkdirSync(scratchHome);
+const copiedPolicy = path.join(root, 'copied.sb');
+// Independent kernel write boundary: copied code cannot escape through a
+// dynamically computed record path even if a textual audit misses its spelling.
+write(copiedPolicy, copiedSandbox(root, [fs.realpathSync(path.join(path.dirname(process.execPath), '..'))]));
+let liveCopyReady = false, copy, live;
+function runCopy(command, args, options = {}) {
+  if (!liveCopyReady) throw new Error('copied scripts were not successfully relocated/audited');
+  auditCopies(copy, { live, home: process.env.HOME });
+  const org = options.extra?.ORG_DIR;
+  if (!org || !fs.existsSync(org) || !within(root, org)) throw new Error('copied invocation requires an explicit scratch ORG_DIR');
+  // Allow the installed native Herdr executable only as a tool for the scoped
+  // adapter. Live project code, activated releases and records stay unreadable.
+  const native = JSON.parse(read(path.join(root, 'ownership.json'))).binary;
+  const toolPolicy = read(copiedPolicy) + [native, fs.realpathSync(native)].map((file) => `(allow file-read* (literal ${JSON.stringify(file)}))\n`).join('');
+  write(copiedPolicy, toolPolicy);
+  return run('/usr/bin/sandbox-exec', ['-f', copiedPolicy, command, ...args],
+    { ...options, extra: { ...options.extra, HOME: scratchHome, TMPPREFIX: path.join(root, 'zsh'), ACCEPTANCE_PINNED_ORG: org } });
 }
 const node = (file, args, options) => run(process.execPath, [file, ...args], options);
 const git = (cwd, args) => run('git', ['-C', cwd, ...args]).stdout.trim();
@@ -123,6 +144,12 @@ async function stopWatcher(job) {
 }
 
 try {
+  const missing = ['node', 'git', 'bash', 'zsh', 'rg', 'python3', 'tar', 'npm', 'chmod', 'sandbox-exec', 'herdr',
+    ...(opt['skip-live'] ? [] : ['codex'])].filter((tool) => run('which', [tool], { ok: false }).status !== 0);
+  if (missing.length) {
+    await test('Required tools', () => pending(`missing prerequisite: ${missing.join(', ')}`));
+    throw new Pending('prerequisites unavailable; no candidate or copied code executed');
+  }
   await test('Candidate snapshot', () => {
     fs.mkdirSync(candidate);
     if (fs.existsSync(opt.candidate) && fs.statSync(opt.candidate).isDirectory()) {
@@ -173,7 +200,11 @@ try {
     for (const name of ['codex', 'claude', 'ai', 'cmem-domain', 'launchctl']) {
       write(path.join(bin, name), '#!/bin/sh\necho "acceptance: forbidden external executable" >&2\nexit 97\n'); fs.chmodSync(path.join(bin, name), 0o755);
     }
-    for (const name of ['org', 'record']) fs.symlinkSync(path.join(candidate, 'bin/org.mjs'), path.join(bin, name));
+    fs.copyFileSync(path.join(HERE, 'record-shim.mjs'), path.join(root, 'record-shim.mjs'));
+    for (const name of ['org', 'record']) {
+      write(path.join(bin, name), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'record-shim.mjs'))} "$@"\n`);
+      fs.chmodSync(path.join(bin, name), 0o755);
+    }
     fs.symlinkSync(path.join(candidate, 'lanes/lane.mjs'), path.join(bin, 'lane'));
     env.PATH = `${bin}:${process.env.PATH}`;
     fixture = { repo: path.join(root, 'configured-project'), org: path.join(root, 'record'), brief: path.join(root, 'ask.md') };
@@ -334,8 +365,8 @@ try {
   });
   // Existing-project compatibility and proposed switches are one section of the
   // gate. Every file comes from a fresh read-only copy, never the inventory kit.
-  const live = opt['bch-cloak'] ? path.resolve(opt['bch-cloak']) : undefined;
-  const copy = path.join(root, 'existing/bch-cloak');
+  live = opt['bch-cloak'] ? path.resolve(opt['bch-cloak']) : undefined;
+  copy = path.join(root, 'existing/bch-cloak');
   const tracked = ['.claude/skills/lane/SKILL.md', 'scripts/lane/launch-supervisor.mjs', 'scripts/lane/routing.mjs', 'scripts/lane/routing.json', 'scripts/lane/routing.test.mjs', 'scripts/lane/lane.mjs',
     ...['continue.sh', 'arm-watch.sh', 'dispatch.sh', 'notify-watch.sh', 'SETTLE.md', 'WORK-PATTERN.md', 'session-start.sh', 'tidy-tabs.sh', 'apply-settle.sh', 'close-finished-agents.sh'].map((v) => `.lane/supervisor/${v}`)];
   const backup = path.join(root, 'backup');
@@ -362,17 +393,18 @@ try {
     const scan = run('rg', ['-n', 'org |herdr-monitor|herdr-brain|lane.mjs|notify-watch|settle-watch', copy], { ok: false });
     write(path.join(evidence, 'existing-call-inventory.txt'), scan.stdout);
     // Only path constants are relocated; route table and command arguments stay intact.
-    for (const rel of tracked) if (rel !== 'scripts/lane/routing.json') {
-      let text = read(path.join(copy, rel));
-      text = text.replaceAll('/Users/rewt/development/bastian', path.dirname(copy))
-        .replaceAll('/Users/rewt/.herdr/worktrees/bch-cloak', path.join(root, '.herdr/worktrees/bch-cloak'))
-        .replaceAll('/private/tmp/apply-settle-cmds.', path.join(root, 'apply-settle-cmds.'));
-      if (rel === 'scripts/lane/launch-supervisor.mjs') text = text.replace('resolve(homedir(), ".local/share/herdr-monitor/current/contrib/settle-watch.mjs")', JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs')));
-      write(path.join(copy, rel), text);
-    }
+    const transform = (directory) => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const file = path.join(directory, entry.name);
+        if (entry.isDirectory()) { transform(file); continue; }
+        write(file, relocate(read(file), { live, home: process.env.HOME, scratchHome, copy, candidate, root,
+          launcher: file === path.join(copy, 'scripts/lane/launch-supervisor.mjs') }));
+      }
+    };
+    transform(copy); auditCopies(copy, { live, home: process.env.HOME }); liveCopyReady = true;
     return 'live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)';
   });
-  const existingReady = () => { if (!inventory.length) pending('live existing-project copy unavailable'); if (!fixture || !supervisor) pending('scratch record/supervisor unavailable'); };
+  const existingReady = () => { if (!liveCopyReady) pending('live existing-project copy not safely relocated/audited'); if (!fixture || !supervisor) pending('scratch record/supervisor unavailable'); };
   await test('Existing project: routing and both wrapper dry runs', async () => {
     existingReady(); requireCandidate('contrib/settle-watch.mjs');
     initRepo(copy);
@@ -385,17 +417,25 @@ try {
     // Retain the canonical resolver receipt separately. Do not synthesize
     // metadata if workspace list has not exposed it to the real wrappers.
     h('worktree', 'list', '--workspace', existingWs.workspace.workspace_id);
+    const probes = [], metadataStart = Date.now();
+    try {
+      await until(() => {
+        const workspace = h('workspace', 'list').workspaces.find((w) => w.workspace_id === existingWs.workspace.workspace_id);
+        probes.push({ elapsedMs: Date.now() - metadataStart, workspace });
+        return workspace?.worktree?.checkout_path === copy && workspace.worktree.repo_root === copy;
+      }, 'canonical workspace metadata before wrapper execution', 15_000);
+    } finally { write(path.join(evidence, 'workspace-metadata-probe.json'), JSON.stringify(probes, null, 2)); }
     const persona = path.join(root, 'persona-env');
     write(persona, `#!/bin/sh\nprintf 'CLAUDE_CONFIG_DIR=%s\\n' ${quote(path.join(root, 'persona'))}\n`); fs.chmodSync(persona, 0o755);
     fs.mkdirSync(path.dirname(copy), { recursive: true });
     // Invocation builder resolves routing.json, passes its exact --model/--effort.
     const probe = path.join(root, 'legacy-routes.mjs');
     write(probe, `import assert from 'node:assert/strict';import {buildSupervisorInvocation} from ${JSON.stringify(path.join(copy, 'scripts/lane/launch-supervisor.mjs'))};for(const route of ['executive','settle','settle-critical']){const i=buildSupervisorInvocation(${JSON.stringify(copy)},['--route',route,'--',...(route==='executive'?['--open']:['${id}']),'--dry-run']);assert.ok(i.args.includes('--model'));assert.ok(i.args.includes('--effort'));console.log(JSON.stringify(i));}`);
-    node(probe, []);
+    runCopy(process.execPath, [probe], { extra: { ORG_DIR: org } });
     const isolation = ['--dry-run', '--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
-    const executive = run('sh', [path.join(copy, '.lane/supervisor/continue.sh'), ...isolation], { cwd: copy, ok: false });
-    const settle = run('sh', [path.join(copy, '.lane/supervisor/arm-watch.sh'), id, ...isolation], { cwd: copy, ok: false });
-    const routing = run(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, ok: false });
+    const executive = runCopy('/bin/sh', [path.join(copy, '.lane/supervisor/continue.sh'), ...isolation], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
+    const settle = runCopy('/bin/sh', [path.join(copy, '.lane/supervisor/arm-watch.sh'), id, ...isolation], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
+    const routing = runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
     const errors = [];
     for (const [name, r] of [['continue', executive], ['arm-watch', settle], ['routing tests', routing]]) {
       if (r.status !== 0) errors.push(`${name}: ${(r.stdout + r.stderr).slice(-1800)}`);
@@ -407,16 +447,16 @@ try {
     existingReady();
     // The live close script runs against the configured scratch record and sees
     // only this run’s panes. Dry-run prevents its legacy path policy deleting.
-    run('zsh', [path.join(copy, '.lane/supervisor/close-finished-agents.sh'), '--dry-run'], { cwd: copy, extra: { ORG_DIR: fixture.org } });
+    runCopy('/bin/zsh', ['-f', path.join(copy, '.lane/supervisor/close-finished-agents.sh'), '--dry-run'], { cwd: copy, extra: { ORG_DIR: fixture.org } });
     const settle = path.join(root, 'settle.md'); write(settle, 'next_action: dispatch-review\nsettled_run: R-1\ndispatch_command: "dispatch ITEM review-lane lane/happy-path"\n');
     // apply-settle dry-run reads its own relocated record; stage a run there.
-    run('zsh', [path.join(copy, '.lane/supervisor/apply-settle.sh'), settle, 'R-1', '--dry-run'], { cwd: copy });
     const org = path.join(path.dirname(copy), '.org');
+    runCopy('/bin/zsh', ['-f', path.join(copy, '.lane/supervisor/apply-settle.sh'), settle, 'R-1', '--dry-run'], { cwd: copy, extra: { ORG_DIR: org } });
     const rec = (a) => node(path.join(candidate, 'bin/org.mjs'), a, { cwd: copy, extra: { ORG_DIR: org } }).stdout;
     const item = rec(['add', 'Settle PATH acceptance', '--role', 'orchestrator']).match(/^(\S+)/)[1];
     const id = rec(['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low']).match(/^(R-\d+)/)[1];
     write(settle, `---\nrun: ${id}\noutcome: done\nsummary: Exercise the copied settle command consumer.\nheadline: The settle command consumer ran\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\nnext_action: dispatch-review\nsettled_run: R-1\norg_commands: ["org add 'Independent acceptance review' --role reviewer"]\ndispatch_command: "dispatch ITEM review-lane lane/happy-path"\n---\n\nIntentionally no Draft section: stop after record commands, before any review desk.\n`);
-    const applied = run('zsh', [path.join(copy, '.lane/supervisor/apply-settle.sh'), settle, id], { cwd: copy, ok: false });
+    const applied = runCopy('/bin/zsh', ['-f', path.join(copy, '.lane/supervisor/apply-settle.sh'), settle, id], { cwd: copy, extra: { ORG_DIR: org }, ok: false });
     assert.notEqual(applied.status, 0, 'fixture must stop before review desk dispatch');
     assert.match(applied.stderr, /substring not found/);
     assert.ok(json(rec(['show', id, '--json'])).report, 'O ingest used the actual org launcher on PATH');
@@ -461,9 +501,9 @@ try {
     assert.deepEqual(fs.readFileSync(compat), saved);
     pending('compatibility blob restoration passes in scratch; existing launcher still calls contrib, so retirement is forbidden');
   });
-  await discovery({ root, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
+  await discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
 } catch (error) {
-  results.push({ id: 'fatal', name: 'Harness setup', status: 'FAIL', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });
+  if (!(error instanceof Pending)) results.push({ id: 'fatal', name: 'Harness setup', status: 'FAIL', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });
 } finally {
   await test('Cleanup and scope audit', async () => {
     // PIDs originate only in successful candidate detach receipts or in this
@@ -492,6 +532,7 @@ try {
     // Authentication copies are never evidence, even with --keep or a failed
     // session. Remove them after the owned panes/processes have stopped.
     fs.rmSync(path.join(root, 'codex-runtime'), { recursive: true, force: true });
+    for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true });
     // Preserve only evidence unless requested. chmod is limited to this mkdtemp.
     if (!opt.keep) {
       run('chmod', ['-R', 'u+w', root]);

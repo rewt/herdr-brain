@@ -9,7 +9,7 @@ const guard = path.resolve(import.meta.dirname, '../herdr.mjs');
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-boundary-')));
   const binary = path.join(root, 'fake-herdr');
-  fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');let r={};if(a[0]==='pane'&&a[1]==='list')r={panes:[{pane_id:'new:p2',workspace_id:'new'}]};if(a[0]==='tab'&&a[1]==='list')r={tabs:[{tab_id:'new:t2',workspace_id:'new'}]};if(a[0]==='pane'&&a[1]==='get')r={pane:{foreground_cwd:${JSON.stringify(root)}}};if(a[0]==='workspace'&&a[1]==='create'){fs.mkdirSync(${JSON.stringify(path.join(root, 'shell'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(root, 'shell/ready-new:p1'))},'');}if(a[0]==='agent'&&a[1]==='get')r={agent:{pane_id:a[2]==='foreign'?'other:p1':'own:p1',agent_status:'idle'}};if(a[0]==='workspace'&&a[1]==='create')r={workspace:{workspace_id:'new'},root_pane:{pane_id:'new:p1'},tab:{tab_id:'new:t1'}};console.log(JSON.stringify({result:r}));\n`, { mode: 0o755 });
+  fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');let r={};if(a[0]==='pane'&&a[1]==='list')r={panes:[{pane_id:'new:p2',workspace_id:'new'}]};if(a[0]==='tab'&&a[1]==='list')r={tabs:[{tab_id:'new:t2',workspace_id:'new'}]};if(a[0]==='pane'&&a[1]==='get')r={pane:{foreground_cwd:fs.existsSync(${JSON.stringify(path.join(root, 'moved-cwd'))})?fs.readFileSync(${JSON.stringify(path.join(root, 'moved-cwd'))},'utf8'):${JSON.stringify(root)}}};if(a[0]==='workspace'&&a[1]==='create'){fs.mkdirSync(${JSON.stringify(path.join(root, 'shell'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(root, 'shell/ready-new:p1'))},'');}if(a[0]==='agent'&&a[1]==='get')r={agent:{pane_id:a[2]==='foreign'?'other:p1':'own:p1',agent_status:'idle'}};if(a[0]==='workspace'&&a[1]==='create')r={workspace:{workspace_id:'new'},root_pane:{pane_id:'new:p1'},tab:{tab_id:'new:t1'}};console.log(JSON.stringify({result:r}));\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: ['own'], tabs: ['own:t1'], panes: ['own:p1'] }));
   const call = (...args) => spawnSync(process.execPath, [guard, ...args], { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8' });
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
@@ -48,5 +48,16 @@ test('creation receipts grant the only new targets and force no-focus', () => {
     assert.ok(f.calls().find((a) => a[0] === 'workspace').includes('--no-focus'));
     assert.equal(f.call('workspace', 'close', 'new').status, 0);
     assert.notEqual(f.call('workspace', 'close', 'newer').status, 0);
+  } finally { f.close(); }
+});
+test('agent send-keys requires an owned target and checks its live cwd', () => {
+  const f = fixture();
+  try {
+    assert.equal(f.call('agent', 'send-keys', 'own:p1', 'ctrl+u').status, 0);
+    assert.notEqual(f.call('agent', 'send-keys', 'foreign', 'ctrl+u').status, 0);
+    assert.ok(f.calls().some((a) => a[0] === 'pane' && a[1] === 'get' && a[2] === 'own:p1'));
+    fs.writeFileSync(path.join(f.root, 'moved-cwd'), os.tmpdir());
+    assert.notEqual(f.call('agent', 'send-keys', 'own:p1', 'ctrl+u').status, 0);
+    assert.equal(f.calls().filter((a) => a[0] === 'agent' && a[1] === 'send-keys').length, 1);
   } finally { f.close(); }
 });

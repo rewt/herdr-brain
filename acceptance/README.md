@@ -1,6 +1,9 @@
 # Local release acceptance
 
-Run from a Herdr pane, with Node 20+, Git, Bash, zsh and the installed Codex CLI:
+Run from a Herdr pane, with Node 20+, Git, Bash, zsh, ripgrep (`rg`), Python 3
+(`python3`), tar, npm, macOS `sandbox-exec`, Herdr and the installed Codex CLI.
+Startup probes every required executable; missing tools produce a named PENDING
+result before executing candidate or copied code.
 
 ```sh
 node acceptance/run.mjs --candidate main \
@@ -27,10 +30,28 @@ automatically escalate models. Each session has a 180-second runtime timeout.
 `discovery-usage.json` records the CLI's measured input, cached input, output and
 reasoning tokens per session. Billing rates are not inferred.
 
-The real sessions use the native `workspace-write` sandbox with only scratch
-roots writable, ephemeral sessions, no shared daemon, and no user configuration,
+Each discovery project has a separate temporary parent containing only that
+project. The native permission profile denies traversal of the parent and reads
+of the harness, product checkout, ledger and authentication home. Only a stripped
+runtime distribution is installed read-only; it excludes the product repository's
+AGENTS.md, README, docs, tests and kit. Source assertions require witnessed CLI
+output, a product-delivered project file, a witnessed installed policy file, or
+a host-captured policy delivered by the actual product entry adapter. An agent's
+self-report alone cannot satisfy discovery. When the candidate ships
+`discovery/install.mjs`, the gate runs that machine installer and launches through
+its Codex shim. A transparent native transport captures the adapter's policy and
+refuses checkout/add-dir escapes; it supplies no policy of its own. Candidates
+without that installer expose only their installed CLIs and must fail if no
+policy is discoverable.
+
+The real sessions extend Codex's native workspace permission profile with only
+their own project checkout and per-session temp directory writable, ephemeral
+sessions, no shared daemon, and no user configuration,
 rules, MCP integrations or memory profile. Isolated runtime homes receive
-temporary mode-0600 authentication copies, which are deleted even with `--keep`.
+temporary mode-0600 authentication copies outside all tool writable roots, which
+are deleted even with `--keep`. HERDR and ACCEPTANCE variables are stripped.
+A native sandbox probe, run before inference, proves harness reads/writes and a
+direct connect to the live Herdr socket are denied without sending a request.
 Neither approval bypass nor unrestricted sandbox modes are used. Native Git
 metadata protection can block commits; that is recorded as an execution limit,
 never silently bypassed. An initial nested-sandbox experiment cannot establish
@@ -61,14 +82,21 @@ server still records its normal runtime logs; this is not an isolated Herdr serv
 
 The existing-project case copies live bch-cloak scripts into scratch, records
 SHA-256 checksums/modes, and retains a scan of additional callers. Only absolute
-path constants and temporary-file locations are relocated. Route declarations
+path constants and temporary-file locations are relocated. A required launcher
+replacement must match, and every copied file is audited again before every
+execution; residual live repository/record/release/home paths and symlinks refuse
+execution. All copied invocations require a pinned scratch ORG_DIR, with record
+shims rejecting changed pins and symlink escapes. An independent kernel boundary
+restricts writes to scratch and denies reads of the operator's home, preventing
+computed paths from executing live code or writing live records. Route declarations
 and forwarded model/effort arguments remain intact. Persona resolution is a
 scratch environment-only stand-in. Both supervisor wrappers run in dry-run mode;
 the close script consumes actual `org status` from PATH, and apply-settle actually
 runs its record commands and ingest, then deliberately stops at a missing Draft
 section before any review desk dispatch. The full settle/review handoff remains
 unproven. A background workspace omitted from `workspace list` metadata is a
-failure of the real wrapper path, not replaced with fake metadata.
+failure only after a bounded 15-second metadata poll. Every poll sample is raw
+evidence; wrappers execute only after canonical checkout metadata appears.
 
 Release mechanics build immutable copies with the candidate release script in a
 scratch repository/home/bin, then activate, reactivate, roll back and restore.
@@ -89,6 +117,9 @@ housekeeping configuration. Candidates without that module leave the case pendin
 The cutover coverage gaps keep the gate closed until their behavioral fixtures are
 implemented; the current runner cannot approve a release.
 
+Keep only `summary.json` and `screen.txt` per candidate in the repository. All
+numbered logs, prompts, transcripts, source/permission receipts and usage stay
+under the printed scratch evidence path and must be named in the report.
 The screen lists each case and points to its numbered JSONL evidence. `summary.json`
 contains reasons, candidate commit and elapsed time. Any failure **or pending**
 case exits 1. Passing mechanics never overrides failed discovery or pending

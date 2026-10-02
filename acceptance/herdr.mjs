@@ -10,8 +10,10 @@ const ledger = path.join(root, 'ownership.json');
 const argv = process.argv.slice(2);
 const state = JSON.parse(fs.readFileSync(ledger, 'utf8'));
 const inside = (p) => {
-  const r = path.relative(root, fs.realpathSync(p));
-  return r === '' || (!r.startsWith('..' + path.sep) && r !== '..' && !path.isAbsolute(r));
+  return [root, ...(state.creationRoots ?? [])].some((base) => {
+    const r = path.relative(base, fs.realpathSync(p));
+    return r === '' || (!r.startsWith('..' + path.sep) && r !== '..' && !path.isAbsolute(r));
+  });
 };
 const option = (key) => argv[argv.indexOf(key) + 1];
 const requireOption = (key) => { if (!argv.includes(key)) throw new Error(`explicit ${key} required`); return option(key); };
@@ -62,7 +64,7 @@ try {
       throw new Error('pane run permits only the scripted stand-in');
     }
   } else if (group === 'agent' && verb === 'list') { /* filtered below */ }
-  else if (group === 'agent' && ['get', 'read', 'wait', 'prompt', 'rename', 'start'].includes(verb)) {
+  else if (group === 'agent' && ['get', 'read', 'wait', 'prompt', 'send-keys', 'rename', 'start'].includes(verb)) {
     if (verb === 'start') owned(requireOption('--pane'), 'panes');
     else if (state.panes.includes(target)) { /* owned pane */ }
     else {
@@ -72,8 +74,8 @@ try {
   } else throw new Error(`unsupported Herdr operation: ${group} ${verb}`);
 
   // Check the live cwd too: stale names and moved panes cannot escape the grant.
-  if ((group === 'pane' && ['run', 'report-agent', 'release-agent'].includes(verb)) || (group === 'agent' && verb === 'start')) {
-    const id = group === 'pane' ? target : option('--pane');
+  if ((group === 'pane' && ['run', 'report-agent', 'release-agent'].includes(verb)) || (group === 'agent' && ['start', 'send-keys'].includes(verb))) {
+    const id = group === 'pane' ? target : verb === 'start' ? option('--pane') : state.panes.includes(target) ? target : body(await real(['agent', 'get', target])).agent.pane_id;
     let pane;
     for (let attempt = 0; attempt < 50; attempt++) {
       pane = body(await real(['pane', 'get', id])).pane;
@@ -123,7 +125,7 @@ try {
     if (['workspace', 'tab'].includes(group)) {
       const shell = path.join(root, 'shell');
       fs.mkdirSync(shell, { recursive: true });
-      fs.writeFileSync(path.join(shell, '.zshrc'), `PROMPT='acceptance%# '\n: > ${quote(path.join(shell, 'ready-'))}$HERDR_PANE_ID\n`);
+      fs.writeFileSync(path.join(shell, '.zshrc'), `PROMPT='acceptance%# '\nprintf '\\033]7;file://localhost%s\\007' "$PWD"\nprintf '\\033]2;acceptance:%s\\007' "$PWD"\n: > ${quote(path.join(shell, 'ready-'))}$HERDR_PANE_ID\n`);
       args.push('--env', `ZDOTDIR=${shell}`, '--env', `HISTFILE=${path.join(shell, 'history')}`);
     }
   }

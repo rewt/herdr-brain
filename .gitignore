@@ -2,3 +2,8 @@
 node_modules/
 .org/
 .lane/
+# Raw acceptance evidence stays in scratch; retain one screen and summary only.
+docs/reports/ENG-74-acceptance-evidence-*/**
+!docs/reports/ENG-74-acceptance-evidence-*/*/
+!docs/reports/ENG-74-acceptance-evidence-*/*/summary.json
+!docs/reports/ENG-74-acceptance-evidence-*/*/screen.txt

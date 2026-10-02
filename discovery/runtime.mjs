@@ -13,12 +13,12 @@ import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { readReport } from '../lib/report.mjs';
 import { entryLifecycle, worktreeDirectory } from './lifecycle.mjs';
 import { projectEntrySettings } from './settings.mjs';
-import { sandboxCommand } from './confinement.mjs';
+import { sandboxCommand, selectSandbox } from './confinement.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 export function command(binary, args, cwd, env = {}) {
-  const r = spawnSync(binary, args, { cwd, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  const r = spawnSync(binary, args, { cwd, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 180_000, killSignal: 'SIGKILL' });
   if (r.error || r.status !== 0) throw new Error((`${r.stdout ?? ''}${r.stderr ?? ''}` || r.error?.message || `exit ${r.status}`).trim());
   return r.stdout.trim();
 }
@@ -47,21 +47,49 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     if (!identity) throw new Error('Git identity is unavailable');
     gitEnv[`GIT_${type}_NAME`] = identity[1]; gitEnv[`GIT_${type}_EMAIL`] = identity[2];
   }
-  const git = (args, location = project.canonical) => command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-C', location, ...args], location, gitEnv);
+  let filterPaths = [org, path.join(project.canonical, '.lane')];
+  const filterConfig = new Map([['core.hooksPath', '/dev/null'], ['core.fsmonitor', 'false'], ['commit.gpgsign', 'false']]);
+  let canonicalDrivers;
+  const boundedGitEnv = () => {
+    const pairs = [...filterConfig];
+    return { ...gitEnv, GIT_CONFIG_COUNT: String(pairs.length), ...Object.fromEntries(pairs.flatMap(([key, value], i) =>
+      [[`GIT_CONFIG_KEY_${i}`, key], [`GIT_CONFIG_VALUE_${i}`, value]])) };
+  };
+  const git = (args, location = project.canonical) => command('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-C', location, ...args], location, boundedGitEnv());
   const externalGit = (location) => {
     const inspect = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-C', location];
-    const r = spawnSync('git', [...inspect, 'config', '--get-regexp', '^(filter\\..*\\.(clean|smudge|process)|merge\\..*\\.driver|diff\\.(external|.*\\.(command|textconv)))$'], { encoding: 'utf8' });
+    const r = spawnSync('git', [...inspect, 'config', '-z', '--get-regexp', '^(filter\\..*\\.(clean|smudge|process)|merge\\..*\\.driver|diff\\.(external|.*\\.(command|textconv)))$'], { encoding: 'utf8', timeout: 10_000 });
     if (r.error || ![0, 1].includes(r.status)) throw new Error('could not inspect Git execution configuration');
-    const keys = r.stdout.trim().split('\n').map((line) => line.split(/\s/u)[0]);
+    const drivers = new Map(r.stdout.split('\0').filter(Boolean).map((line) => {
+      const split = line.indexOf('\n'); return [line.slice(0, split), line.slice(split + 1)];
+    }));
+    const keys = [...drivers.keys()];
+    const signature = JSON.stringify([...drivers].sort(([a], [b]) => a.localeCompare(b)));
+    if (location === project.canonical) canonicalDrivers = signature;
+    else if (signature !== canonicalDrivers) throw new Error('external Git driver configuration differs between lane and canonical checkout');
+    for (const key of filterConfig.keys()) if (key.startsWith('filter.')) filterConfig.delete(key);
     if (keys.includes('diff.external')) throw new Error('external Git filters/drivers require a project-specific bounded adapter');
-    const files = command('git', [...inspect, 'ls-files', '-z', '--cached', '--others', '--exclude-standard']);
-    const attributes = spawnSync('git', [...inspect, 'check-attr', '-z', '--stdin', 'filter', 'diff', 'merge'], { input: files, encoding: 'utf8' });
+    const files = spawnSync('git', [...inspect, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8', timeout: 10_000 });
+    if (files.error || files.status !== 0) throw new Error('could not inspect Git paths');
+    const attributes = spawnSync('git', [...inspect, 'check-attr', '-z', '--stdin', 'filter', 'diff', 'merge'], { input: files.stdout, encoding: 'utf8', timeout: 10_000 });
     if (attributes.error || attributes.status !== 0) throw new Error('could not inspect Git attributes');
     const fields = attributes.stdout.split('\0');
     for (let i = 0; i + 2 < fields.length; i += 3) {
       const [, attribute, driver] = fields.slice(i, i + 3);
       if (['unspecified', 'unset', 'set'].includes(driver)) continue;
-      if (keys.some((key) => key.startsWith(`${attribute}.${driver}.`))) throw new Error(`external Git filters/drivers used by ${fields[i]} require a project-specific bounded adapter`);
+      if (keys.some((key) => key.startsWith(`${attribute}.${driver}.`)) && (attribute !== 'filter' || !sandboxBinary))
+        throw new Error(`external Git filters/drivers used by ${fields[i]} require a native validation sandbox`);
+    }
+    // Capture effective operator clean/smudge/process commands before disabling
+    // global execution config. Every operation refreshes these trusted wrappers.
+    for (const [key, value] of drivers) if (key.startsWith('filter.')) {
+      if (!sandboxBinary) continue;
+      const provider = selectSandbox(sandboxBinary);
+      const encoded = Buffer.from(value).toString('base64');
+      filterConfig.set(key, [process.execPath, local('./git-driver.mjs'), provider, JSON.stringify(filterPaths), encoded].map(quote).join(' ')
+        + (value.includes('%f') ? ' %f' : ''));
+      const required = key.replace(/\.(clean|smudge|process)$/u, '.required');
+      filterConfig.set(required, 'true'); // a denied filter must never silently become identity
     }
   };
   externalGit(project.canonical);
@@ -92,6 +120,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   });
   const recordPaths = Object.fromEntries(['events.jsonl', 'config.json', 'runs', 'reports'].map((name) => [name, fs.realpathSync(path.join(org, name))]));
   const sharedPaths = [...new Set([recordAlias, org, ...Object.values(recordPaths), path.dirname(coordination), coordination])];
+  filterPaths = sharedPaths; externalGit(project.canonical);
   const lifecycleOwner = entryLifecycle({ project, coordination, git, externalGit });
   let workspace = project.canonical;
   if (workerLane) {
@@ -142,17 +171,15 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     for (const [name, target] of Object.entries(recordPaths)) {
       if (fs.realpathSync(path.join(org, name)) !== target) throw new Error('record path redirected');
     }
-    // Git clean filters can execute code outside the validation sandbox.
-    externalGit(workspace); externalGit(project.canonical);
+    // Refresh filter wrappers and reject drivers without a bounded transport.
+    externalGit(project.canonical); externalGit(workspace);
   };
   const lane = (args, location) => {
     if (!sandboxBinary) throw new Error('a native validation sandbox is required for check and promote');
     const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace, JSON.stringify(sharedPaths)].map(quote).join(' ');
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
-      ...gitEnv, LANE_CONFIG: configFile, LANE_VALIDATE: validation,
+      ...boundedGitEnv(), LANE_CONFIG: configFile, LANE_VALIDATE: validation,
       MONITOR_PROJECT_CONFIG: path.join(project.canonical, '.lane.json'),
-      GIT_CONFIG_COUNT: '3', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: '/dev/null',
-      GIT_CONFIG_KEY_1: 'core.fsmonitor', GIT_CONFIG_VALUE_1: 'false', GIT_CONFIG_KEY_2: 'commit.gpgsign', GIT_CONFIG_VALUE_2: 'false',
     });
   };
   const context = () => ({ role, canonical: project.canonical, identity: project.identity, workspace,

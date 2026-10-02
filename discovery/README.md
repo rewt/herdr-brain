@@ -186,15 +186,15 @@ cwd, shell command, validation command or arbitrary Git argv. There is no socket
 or persistent service. The request queue ends with the native session. Git hooks,
 fsmonitor and signing are disabled on broker Git calls. Author and committer
 identity resolve through the operator's normal Git configuration before execution
-configuration is bounded. External clean/smudge/merge/diff drivers referenced by
-project attributes require a project-specific bounded adapter; unused global
+configuration is bounded. External merge/diff drivers referenced by
+project attributes require a project-specific bounded adapter; clean/smudge/process
+filters run through the bounded adapter described below; unused global
 git-lfs registration does not prevent entry. Rebase conflicts remain in
 the lane; `monitor continue` stages the resolved files and continues only the
 rebase receipt for that assigned branch, and `monitor abort` restores it.
 
 Promotion calls the existing lane CLI with its clean/rebase/green/fast-forward
-checks intact. Preparation and validation execute in a native Codex permission
-profile: read access for runtime dependencies, write access only in the assigned
+checks intact. Preparation and validation execute in a native filesystem sandbox: read access for runtime dependencies, write access only in the assigned
 checkout, protected `.git`, and no network. The session parent also supplies
 read-only exclusions for the selected record (including resolved symlink targets)
 and the canonical `.lane` state, so preparation or validation cannot overwrite
@@ -202,8 +202,8 @@ ignored shared state from the main checkout. Its dedicated validation temporary
 directory remains writable. The default check is the project's
 `npm test`, or `node --test` for a Node test directory. Unknown validation asks for
 the real project command in `.lane.json`; it never substitutes a trivial check.
-The native Codex executable is currently the validation sandbox provider for
-both transports. Existing restrictive managed requirements remain authoritative.
+Installs containing Codex retain its validation provider and restrictive managed
+requirements; Claude-only installs select a host provider as described below.
 Canonical `validate` and `prepare` fields are authoritative independently; lane
 values are used only when the corresponding canonical field is absent. Both
 check and promote print the effective command and its configuration source.
@@ -244,3 +244,75 @@ transcripts and summaries include failures. Temporary authentication copies are
 mode 0600 and deleted. Native sessions keep `workspace-write`, exclude broad tmp
 write grants, and receive only their checkout and request queue as writable roots.
 This probe complements the ENG-74 release gate; it does not replace it.
+
+## Validation without Codex and bounded Git filters
+
+A Claude-only machine can install just `--claude /absolute/native/claude`.
+There is no Codex launcher or dependency in that install. Its validator defaults
+to `auto`: macOS selects `/usr/bin/sandbox-exec`, Linux selects an executable
+`bwrap` from the operator's PATH. An install with Codex retains the native Codex
+provider by default. `--validator auto` or `--validator /absolute/provider` on the
+installer or either entry adapter selects a different provider explicitly.
+An unavailable provider or failed kernel setup fails the check; execution never
+falls back to an ordinary shell. The Codex provider still includes managed
+configuration. Host alternatives enforce their own fixed filesystem and network
+boundary independently of any harness configuration.
+
+All validation providers allow runtime reads, deny network, permit writes only
+to the assigned checkout and its validation temporary directory, and protect
+Git metadata, the selected record's aliases and resolved targets, and canonical
+coordination state. Main-mode guards retain native account/runtime writes and
+network settings while excluding shared state. Bubblewrap uses read-only mounts
+and separate PID/network namespaces for validation. A seccomp filter also denies
+socket creation on x64/arm64: network namespaces alone do not hide host filesystem
+Unix sockets. Other ABIs fail closed. It refuses protected
+symlinks inside a writable tree (including a linked record in main mode): mounts
+cannot protect the symlink inode itself from unlink. Use Codex or the macOS
+provider for that layout. Missing protected mount paths also fail closed.
+
+External Git `filter.*.clean`, `.smudge` and `.process` commands now run through
+that same validation boundary during entry, commits, rebase and promotion.
+Their stdin/stdout protocol and `%f` filename substitution are retained; command
+text is encoded separately from Git's filename argument. Broker Git retains
+normal author identity, disables hooks, signing and fsmonitor, and carries the
+bounded overrides into the lane subprocess. Filter failures are required failures,
+so Git cannot silently store unfiltered content. Drivers must have the same
+execution configuration in the canonical checkout and assigned lane.
+External merge/diff drivers still require a dedicated adapter and are refused.
+Filters that need network or writes outside the checkout, such as a Git LFS
+fetch/cache under `.git/lfs`, fail within this boundary; there is no permissive
+Git LFS exception.
+
+Preparation, validation and each filter process have a 120-second deadline and
+terminate their process group, including background descendants. Broker calls
+also have a 180-second deadline. These are execution safety bounds, independent
+of advisory org budgets.
+
+Offline adapter/profile/cleanup regressions run in `npm test`. Exercise the
+actual host boundary explicitly outside a nested sandbox:
+
+```sh
+ORG_ACTOR=alternative-test MONITOR_TEST_ALTERNATIVE=/usr/bin/sandbox-exec \
+  node --test discovery/test/alternatives.test.mjs
+# Linux: substitute /absolute/path/to/bwrap.
+```
+
+The real discovery probe now accepts either transport:
+
+```sh
+ORG_ACTOR=claude-discovery node discovery/acceptance.mjs \
+  --harness claude --binary /absolute/native/claude \
+  --claude-auth /operator-authorized/credentials.json --keep
+```
+
+Claude defaults to `haiku` low; Codex retains `gpt-5.6-luna` low. Both run the same
+record bootstrap, route suggestion, installed policy, concurrent integration and
+operator-answer cases. Claude live probing currently requires macOS and applies
+an independent scratch-only filesystem guard while preserving network for
+inference. The guard adds no workflow instructions. Only an explicitly supplied
+Claude credential file is copied; hooks, settings, plugins and MCP configuration
+are excluded. Per-session credential copies are mode 0600 and removed on exit or
+handled interruption. Sessions have a four-minute process-group deadline.
+Claude result usage includes uncached input, cache creation/read, output, model
+usage and CLI-reported cost; failed/no-auth sessions cannot pass. `--skip-live`
+leaves the live cases pending and exits nonzero.

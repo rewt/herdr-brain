@@ -33,7 +33,8 @@ try {
     const temporary = path.join(cwd, '.lane/validation-tmp');
     plainDirectory(temporary);
     const sandbox = sandboxCommand(binary, cwd, { sharedPaths, writablePaths: [temporary] });
-    const r = spawnSync(sandbox.binary, [...sandbox.args, 'sh', '-c', step], { cwd, stdio: 'inherit',
+    const r = spawnSync(process.execPath, [new URL('./bounded.mjs', import.meta.url).pathname,
+      sandbox.binary, ...sandbox.args, '/bin/sh', '-c', step], { cwd, stdio: 'inherit', timeout: 125_000, killSignal: 'SIGKILL',
       env: { ...process.env, TMPDIR: temporary, LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '' } });
     if (r.error || r.status !== 0) throw new Error(r.error?.message ?? `sandboxed validation exited ${r.status}`);
   }

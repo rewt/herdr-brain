@@ -10,7 +10,7 @@ import { spawnNative } from '../session.mjs';
 const separator = process.argv.indexOf('--');
 const { values } = parseArgs({ args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
-  binary: { type: 'string', default: 'claude' }, validator: { type: 'string', default: 'codex' },
+  binary: { type: 'string', default: 'claude' }, validator: { type: 'string', default: 'auto' },
   'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' }, 'policy-only': { type: 'boolean' }, 'auto-entry': { type: 'boolean' },
 } });
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);

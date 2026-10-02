@@ -16,6 +16,7 @@ const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const { values } = parseArgs({ args: adapterArgs, options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
   binary: { type: 'string', default: 'codex' }, 'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' },
+  validator: { type: 'string' },
   'policy-only': { type: 'boolean' }, 'auto-entry': { type: 'boolean' },
 } });
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
@@ -31,7 +32,7 @@ if (!enter) passthrough();
 else {
 try {
   entry = createEntry({ cwd: values.repo, role: values.role, runtimeDir: values['runtime-dir'] ?? process.env.MONITOR_RUNTIME_DIR,
-    worktreeRoot: values['worktree-root'] ?? process.env.MONITOR_WORKTREE_ROOT, sandboxBinary: values.binary });
+    worktreeRoot: values['worktree-root'] ?? process.env.MONITOR_WORKTREE_ROOT, sandboxBinary: values.validator ?? values.binary });
   if (!entry) passthrough();
   else {
   const context = entry.context();

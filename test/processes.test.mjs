@@ -1,6 +1,7 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { createProcessTracker, parseProcessLookup } from './helpers/processes.mjs';
+import { createReceiptTracker } from './helpers/receipts.mjs';
 
 function row(pid, identity = 'first fixture', command = 'owned fixture', extra = {}) {
   return { pid, identity, command, ppid: 1, pgid: pid, state: 'S', ...extra };
@@ -21,10 +22,29 @@ function harness() {
   return { rows, signals, reports, queries, hooks, tracker };
 }
 
+for (const failure of ['absent', 'zombie', 'failed', 'incomplete', 'changed leader', 'nonleader']) {
+  test(`receipt registration refuses ${failure} ownership without signalling`, () => {
+    const h = harness();
+    const receipts = createReceiptTracker({ tracker: h.tracker, suitePid: 101 });
+    h.rows.set(202, row(202, 'fixture birth', 'expected command', { pgid: 101 }));
+    if (failure === 'absent') h.rows.delete(202);
+    if (failure === 'zombie') h.rows.get(202).state = 'Z';
+    if (failure === 'changed leader') h.rows.set(101, row(101, 'replacement leader'));
+    if (failure === 'nonleader') h.rows.get(101).pgid = 303;
+    if (['failed', 'incomplete'].includes(failure)) h.hooks.individual = pid => pid === 101
+      ? failure === 'failed' ? { ok: false, error: 'ps failed' } : { ok: true, value: { pid } }
+      : { ok: true, value: h.rows.get(pid) };
+    if (['absent', 'zombie'].includes(failure)) assert.equal(receipts.remember(202, 'expected command'), null);
+    else assert.throws(() => receipts.remember(202, 'expected command'), /cannot verify live suite group/);
+    receipts.cleanup();
+    assert.deepEqual(h.signals, []);
+  });
+}
+
 for (const group of [false, true]) {
   for (const failure of ['timeout', 'failed', 'incomplete', 'thrown']) {
     test(`${failure} individual lookup never signals an unrelated replacement (${group ? 'group' : 'PID'})`, () => {
-      const h = harness(), entry = h.tracker.registerProcess(101, group, []);
+      const h = harness(), entry = h.tracker.registerProcess(101, group);
       h.rows.set(101, row(101, 'recycled PID', 'live operator session'));
       h.hooks.individual = () => {
         if (failure === 'thrown') throw Error('ps unavailable');
@@ -64,7 +84,7 @@ test('the audit reports group members whose parent exited, without hunting or si
 });
 
 test('confirmed absence, command changes and a changed group leader never authorize historical signals', () => {
-  const h = harness(), entry = h.tracker.registerProcess(101, true, []);
+  const h = harness(), entry = h.tracker.registerProcess(101, true);
   h.rows.delete(101); h.tracker.killProcess(entry);
   h.rows.set(101, row(101, entry.identity, 'changed command')); h.tracker.killProcess(entry);
   h.rows.set(101, row(101, entry.identity, entry.command, { pgid: 303 })); h.tracker.killProcess(entry);
@@ -81,7 +101,7 @@ test('a zombie never licenses a signal even when its command has become defunct'
 
 test('a positive current tuple immediately precedes both PID and group signals', () => {
   const h = harness();
-  const single = h.tracker.registerProcess(101, false, []), group = h.tracker.registerProcess(101, true, []);
+  const single = h.tracker.registerProcess(101, false), group = h.tracker.registerProcess(101, true);
   h.tracker.killProcess(single, 'SIGTERM'); h.tracker.killProcess(group, 'SIGKILL');
   assert.deepEqual(h.signals, [{ pid: 101, signal: 'SIGTERM' }, { pid: process.platform === 'win32' ? 101 : -101, signal: 'SIGKILL' }]);
 });
@@ -107,7 +127,7 @@ test('invalid owned identities and mismatched snapshot keys never authorize sign
   for (const entry of [{ pid: 1, identity: 'first fixture', command: 'owned fixture' }, { pid: 101, identity: 'first fixture' }]) {
     assert.equal(h.tracker.killProcess(entry).ok, false);
   }
-  const entry = h.tracker.registerProcess(101, true, []);
+  const entry = h.tracker.registerProcess(101, true);
   h.hooks.batch = () => ({ ok: true, value: new Map([[202, h.rows.get(101)]]) });
   assert.equal(h.tracker.auditGroup(entry).ok, false);
   assert.deepEqual(h.signals, []);

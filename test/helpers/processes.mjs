@@ -65,12 +65,27 @@ export function createProcessTracker({
   };
   return {
     snapshot,
-    registerProcess(pid, group = false) {
+    registerProcess(pid, group = false, receipt) {
       if (!Number.isInteger(pid) || pid <= 1) throw new Error(`invalid fixture pid: ${pid}`);
       const result = readIdentity(pid);
+      if (receipt && result?.ok && result.value === null) return null;
       if (!result?.ok || !complete(result.value) || result.value.pid !== pid) {
         const error = `cannot establish ownership of PID ${pid}: ${result?.error ?? 'absent or incomplete identity'}`;
         fail(error); throw new Error(error);
+      }
+      if (receipt) {
+        const { suite, command } = receipt;
+        const leader = readIdentity(suite.pid);
+        if (!leader?.ok || !complete(leader.value) || leader.value.pid !== suite.pid ||
+            !same(suite, leader.value) || leader.value.pgid !== suite.pid || /^Z/.test(leader.value.state)) {
+          throw new Error(`cannot verify live suite group ${suite.pid}`);
+        }
+        // A receipt supplies a candidate PID, never proof of ownership. A
+        // replacement must not become owned merely because its lookup succeeds.
+        if (result.value.pgid !== suite.pid || result.value.command !== command || /^Z/.test(result.value.state)) {
+          report(`receipt PID ${pid} is not the expected fixture in suite group ${suite.pid}; no signal sent`);
+          return null;
+        }
       }
       return entryFor(result.value, group);
     },

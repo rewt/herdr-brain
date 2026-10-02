@@ -1,6 +1,7 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
-import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
+import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
+import { createProcessTracker } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -268,17 +269,58 @@ test('no record and no Git project are quiet no-ops', (t) => {
   assert.equal(outside.status, 0); assert.match(outside.stdout, /no-project/);
 });
 
+function rememberHousekeepingProcess(f, receipts) {
+  const ownerFile = path.join(f.state, 'lock/owner.json');
+  if (!fs.existsSync(ownerFile)) return;
+  const command = [process.execPath, f.runtime, '--cwd', fs.realpathSync(f.repo), '--org', f.root,
+    '--config', f.config, '--state-dir', f.state, '--main', 'main', '--herdr', f.fake,
+    '--org-cli', f.fake, '--loop'].join(' ');
+  receipts.remember(JSON.parse(fs.readFileSync(ownerFile, 'utf8')).pid, command);
+}
+
+test('housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'housekeeping-receipt-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const f = { root, repo: root, runtime: path.join(root, 'housekeeping.mjs'), config: path.join(root, 'config'),
+    state: path.join(root, 'state'), fake: path.join(root, 'fake') };
+  fs.mkdirSync(path.join(f.state, 'lock'), { recursive: true });
+  fs.writeFileSync(path.join(f.state, 'lock/owner.json'), '{"pid":101}');
+  const command = [process.execPath, f.runtime, '--cwd', fs.realpathSync(root), '--org', root, '--config', f.config,
+    '--state-dir', f.state, '--main', 'main', '--herdr', f.fake, '--org-cli', f.fake, '--loop'].join(' ');
+  const suite = { pid: 700, ppid: 1, pgid: 700, state: 'S', identity: 'suite birth', command: 'suite worker' };
+  const signals = [], rows = new Map([[700, suite]]);
+  const receipts = createReceiptTracker({ suitePid: 700, tracker: createProcessTracker({
+    readIdentity: pid => ({ ok: true, value: rows.get(pid) ?? null }),
+    sendSignal: pid => signals.push(pid), report: () => {},
+  }) });
+  for (const replacement of [{ command, pgid: 900 }, { command: 'operator session', pgid: 700 }]) {
+    rows.set(101, { ...suite, pid: 101, identity: 'replacement birth', ...replacement });
+    rememberHousekeepingProcess(f, receipts); receipts.cleanup();
+    assert.deepEqual(signals, []);
+  }
+  rows.set(101, { ...suite, pid: 101, command, identity: 'fixture birth' });
+  rememberHousekeepingProcess(f, receipts);
+  const original = receipts.remember(101, command);
+  rows.set(101, { ...suite, pid: 101, command, identity: 'reused birth' });
+  rememberHousekeepingProcess(f, receipts); receipts.cleanup();
+  assert.equal(receipts.remember(101, command), original);
+  assert.deepEqual(signals, []);
+  rows.set(101, { ...suite, pid: 101, command, identity: 'fixture birth' });
+  receipts.cleanup(); assert.deepEqual(signals, [101]);
+});
+
 for (const runtimeKind of ['canonical checkout', 'installed copy']) {
 test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) => {
-  const f = cliFixture(t);
+  let f;
+  const receipts = createReceiptTracker();
+  // Stop the schedule before cliFixture's directory-removal hook, including
+  // when a startup assertion fails before the test disables its configuration.
+  t.after(() => { try { if (f) rememberHousekeepingProcess(f, receipts); } finally { receipts.cleanup(); } });
+  f = cliFixture(t);
   if (runtimeKind === 'installed copy') { f.runtime = installRuntime(path.join(f.root, 'plugin')); f.args[0] = f.runtime; }
   const start = () => {
     const result = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 10000 });
-    const ownerFile = path.join(f.state, 'lock/owner.json');
-    if (fs.existsSync(ownerFile)) {
-      const entry = registerProcess(JSON.parse(fs.readFileSync(ownerFile, 'utf8')).pid);
-      t.after(() => killProcess(entry));
-    }
+    rememberHousekeepingProcess(f, receipts);
     return result;
   };
   const first = start(); assert.equal(first.status, 0, first.stderr); assert.match(first.stdout, /started/);

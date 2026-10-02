@@ -25,6 +25,7 @@ if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout
 if (worker) {
   // This leader never exits voluntarily with fixtures running in its group.
   const owner = registerProcess(process.pid, true);
+  process.env.HERDR_TEST_SUITE_PID = String(process.pid);
   const cleanup = () => {
     const result = killProcess(owner);
     if (!result.ok || !result.signaled) { console.error('Suite group cleanup unconfirmed'); process.exit(1); }

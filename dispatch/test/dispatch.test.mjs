@@ -1,6 +1,7 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
-import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
+import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
+import { createProcessTracker } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,7 +12,6 @@ const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
 const fake = `#!/usr/bin/env node
-import { registerProcess } from ${JSON.stringify(fileURLToPath(new URL('../../test/helpers/processes.mjs', import.meta.url)))};
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -40,7 +40,7 @@ if(type==='lane') {
  if(a[0]==='verify-agent') { if(!workers[a[1]] || fs.realpathSync(workers[a[1]].cwd)!==fs.realpathSync(a[2])) process.exit(1); }
 } else if(type==='watch') {
  if(fail==='watch') { console.error('injected watch');process.exit(1); }
- const child=spawn(process.execPath,['-e','setTimeout(()=>{},10000)'],{stdio:'ignore'}); child.unref();
+ const child=spawn(process.execPath,['-e','setTimeout(()=>{},10000)','--',root],{stdio:'ignore'}); child.unref();
  fs.appendFileSync(path.join(root,'pids'),child.pid+'\\n');
  result({run:a[0],pid:child.pid,log:path.join(root,a[0]+'.log')});
 } else {
@@ -58,6 +58,52 @@ if(type==='lane') {
  }
 }
 `;
+function rememberProcesses(root, org, realWatch, receipts) {
+  const fakeCommand = [process.execPath, '-e', 'setTimeout(()=>{},10000)', '--', root].join(' ');
+  for (const pid of fs.existsSync(path.join(root, 'pids')) ? fs.readFileSync(path.join(root, 'pids'), 'utf8').trim().split('\n').filter(Boolean).map(Number) : []) {
+    receipts.remember(pid, fakeCommand);
+  }
+  for (const file of fs.existsSync(path.join(org, 'dispatch')) ? fs.readdirSync(path.join(org, 'dispatch')).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json')) : []) {
+    const job = JSON.parse(fs.readFileSync(path.join(org, 'dispatch', file)));
+    if (job.watcher?.pid) receipts.remember(job.watcher.pid, realWatch ? [process.execPath, WATCH, job.run,
+      '--org', org, '--to', job.to, '--cwd', job.repo, '--log', path.join(org, 'dispatch', `${job.run}.watch.log`)].join(' ') : fakeCommand);
+  }
+}
+for (const source of ['fake watcher receipt', 'real watcher journal']) {
+  test(`${source} refuses PID reuse before registration and retains ownership across retries`, t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-receipt-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const org = path.join(root, 'org'), dir = path.join(org, 'dispatch');
+    fs.mkdirSync(dir, { recursive: true });
+    const real = source === 'real watcher journal';
+    if (real) fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify({ run: 'R-1', to: 'supervisor', repo: root, watcher: { pid: 101 } }));
+    else fs.writeFileSync(path.join(root, 'pids'), '101\n');
+    const command = real ? [process.execPath, WATCH, 'R-1', '--org', org, '--to', 'supervisor', '--cwd', root,
+      '--log', path.join(dir, 'R-1.watch.log')].join(' ') : [process.execPath, '-e', 'setTimeout(()=>{},10000)', '--', root].join(' ');
+    const suite = { pid: 700, ppid: 1, pgid: 700, state: 'S', identity: 'suite birth', command: 'suite worker' };
+    const signals = [], rows = new Map([[700, suite]]);
+    const receipts = createReceiptTracker({ suitePid: 700, tracker: createProcessTracker({
+      readIdentity: pid => ({ ok: true, value: rows.get(pid) ?? null }),
+      sendSignal: pid => signals.push(pid), report: () => {},
+    }) });
+    // Same command outside the suite, and an unrelated command inside it, both
+    // represent replacement processes before the first receipt registration.
+    for (const replacement of [{ command, pgid: 900 }, { command: 'operator session', pgid: 700 }]) {
+      rows.set(101, { ...suite, pid: 101, identity: 'replacement birth', ...replacement });
+      rememberProcesses(root, org, real, receipts); receipts.cleanup();
+      assert.deepEqual(signals, []);
+    }
+    rows.set(101, { ...suite, pid: 101, command, identity: 'fixture birth' });
+    rememberProcesses(root, org, real, receipts);
+    const original = receipts.remember(101, command);
+    rows.set(101, { ...suite, pid: 101, command, identity: 'reused birth' });
+    rememberProcesses(root, org, real, receipts); receipts.cleanup();
+    assert.equal(receipts.remember(101, command), original);
+    assert.deepEqual(signals, [], 'retry must not refresh an owned birth tuple');
+    rows.set(101, { ...suite, pid: 101, command, identity: 'fixture birth' });
+    receipts.cleanup(); assert.deepEqual(signals, [101]);
+  });
+}
 function fixture(t, { realWatch = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
@@ -66,23 +112,15 @@ function fixture(t, { realWatch = false } = {}) {
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
   for(const key of Object.keys(env)) if(key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
-  const fixtureProcesses = new Map();
-  const rememberProcesses = () => {
-    const pids=fs.existsSync(path.join(root,'pids'))?fs.readFileSync(path.join(root,'pids'),'utf8').trim().split('\n').filter(Boolean).map(Number):[];
-    for(const file of fs.existsSync(path.join(org,'dispatch'))?fs.readdirSync(path.join(org,'dispatch')).filter(x=>x.endsWith('.json')&&!x.endsWith('.routes.json')).map(x=>path.join(org,'dispatch',x)):[]) {
-      const job=JSON.parse(fs.readFileSync(file)); if(job.watcher?.pid) pids.push(job.watcher.pid);
-    }
-    for(const pid of pids) if(!fixtureProcesses.has(pid)) fixtureProcesses.set(pid,registerProcess(pid));
-  };
+  const receipts = createReceiptTracker();
   // Install cleanup before setup or any assertion can fail.
   t.after(()=>{
-    rememberProcesses();
-    for(const entry of fixtureProcesses.values()) killProcess(entry);
-    fs.rmSync(root,{recursive:true,force:true});
+    try { rememberProcesses(root, org, realWatch, receipts); }
+    finally { receipts.cleanup(); fs.rmSync(root,{recursive:true,force:true}); }
   });
   const exec=(cmd,args,cwd=repo,overrides={})=>{
     const result=spawnSync(cmd,args,{cwd,env:{...env,...overrides},encoding:'utf8'});
-    rememberProcesses();
+    rememberProcesses(root, org, realWatch, receipts);
     return result;
   };
   const git=(args,cwd)=>{const r=exec('git',args,cwd);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};

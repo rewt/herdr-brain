@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { sandboxCommand } from './confinement.mjs';
 import { fileURLToPath } from 'node:url';
+import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 const source = fileURLToPath(new URL('../', import.meta.url));
 const { values: opt } = parseArgs({ options: { binary: { type: 'string' }, harness: { type: 'string', default: 'codex' },
   validator: { type: 'string' }, 'claude-auth': { type: 'string' }, model: { type: 'string' },
@@ -60,6 +61,8 @@ for (const directory of ['bin', 'lib', 'lanes', 'dispatch', 'watch', 'housekeepi
   fs.cpSync(path.join(source, directory), path.join(product, directory), { recursive: true, filter: (p) => !['test', 'node_modules'].includes(path.basename(p)) });
 }
 fs.copyFileSync(path.join(source, 'package.json'), path.join(product, 'package.json'));
+fs.mkdirSync(path.join(product, 'acceptance'));
+fs.copyFileSync(path.join(source, 'acceptance/entry.mjs'), path.join(product, 'acceptance/entry.mjs'));
 const bin = path.join(install, 'bin');
 // Claude's native tools execute under a scratch-only kernel write boundary.
 // The launch wrapper supplies no workflow policy; installed entry owns that.
@@ -146,7 +149,7 @@ setupComplete = true;
   await check('04 Installed entry teaches dispatch, watch, worker and supervisor defaults', () => {
     const p = repo('entry-project');
     const policy = run(process.execPath, [path.join(product, `discovery/adapters/${opt.harness}.mjs`), '--repo', p, '--binary', entryBinary, '--role', 'supervisor', '--policy-only'], p);
-    assert.match(policy, /dispatch.*ITEM/u); assert.match(policy, /watch\/watch.mjs/u); assert.match(policy, /Only a supervisor/u);
+    assertSupervisorEntry(policy);
     const help = run(process.execPath, [path.join(product, 'dispatch/dispatch.mjs')], p); assert.match(help, /watch/u);
   });
   if (opt['skip-live'] || (opt.harness === 'claude' && !opt['claude-auth'])) {

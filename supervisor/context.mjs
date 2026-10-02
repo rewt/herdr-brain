@@ -92,10 +92,26 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   ready.sort((a, b) => rank(a) - rank(b) || (b.priority ?? -Infinity) - (a.priority ?? -Infinity));
   const held = items.filter((i) => i.role !== 'human' && ['blocked', 'needs_human'].includes(itemStatus(state, i.id)))
     .map((i) => ({ id: i.id, title: i.title, status: itemStatus(state, i.id), outcome: i.outcome }));
-  const decisions = events.filter((e) => e.seq > after && (
-    (e.type === 'note.added' && e.decision && (ids.has(e.id) || runs.some((r) => r.id === e.id)))
-    || ['priority.added', 'priorities.ranked'].includes(e.type)))
-    .map((e) => ({ seq: e.seq, at: e.at, by: e.by, id: e.id ?? null, text: e.text ?? describeEvent(e), summary: e.summary ?? null }));
+  const scopedRuns = new Map(runs.map((r) => [r.id, r]));
+  const decisions = events.filter((e) => e.seq > after).flatMap((e) => {
+    if ((e.type === 'note.added' && e.decision && (ids.has(e.id) || scopedRuns.has(e.id)))
+      || ['priority.added', 'priorities.ranked'].includes(e.type)) {
+      return [{ seq: e.seq, at: e.at, by: e.by, id: e.id ?? null, text: e.text ?? describeEvent(e), summary: e.summary ?? null }];
+    }
+    const run = e.type === 'report.ingested' ? scopedRuns.get(e.run) : null;
+    if (!run) return [];
+    // The ingestion event is the checkpoint boundary, even for a closed item
+    // or deleted lane. Read only structured fields, never report narrative.
+    const fields = e.report.decisions ?? e.report.extra?.decisions;
+    const entries = Array.isArray(fields) ? fields : fields == null ? [] : [fields];
+    return entries.flatMap((decision, index) => {
+      const text = typeof decision === 'string' ? decision : decision?.text ?? decision?.decision;
+      if (typeof text !== 'string' || !text.trim()) return [];
+      return [{ seq: e.seq, at: e.at, by: run.meta.agent ?? `run:${run.id}`, ingested_by: e.by,
+        id: run.id, run: run.id, item: run.item, source: 'report', index, text,
+        summary: decision?.summary ?? null, category: decision?.category ?? null, why: decision?.why ?? null }];
+    });
+  });
   const goals = items.filter((i) => i.kind === 'goal' && !isResolved(itemStatus(state, i.id)))
     .map((i) => ({ id: i.id, title: i.title, decisions: i.notes.filter((n) => n.decision) }));
   const stopped = fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'));
@@ -135,7 +151,7 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
   section('Reports and settlement', doc.reports.slice().reverse(), (r) => `${r.run} ${r.item} · ${r.outcome ?? 'file; stop unconfirmed'} · ${r.promotion ? `promotion ${r.promotion.phase}` : r.settlement?.result ?? (r.recorded ? 'no settle receipt' : 'awaits final watch notice')}${r.checkout_missing ? ' · checkout missing; inspect disposition' : ''} · ${line(r.headline ?? r.settlement?.reason ?? r.title, 100)}${r.settlement?.handoff ? ` · ${r.settlement.handoff}` : ''}`);
   section('Waiting on operator', doc.waiting, (q) => `${q.id} ${line(q.title, 100)} · ${q.category ?? '?'} · recommend ${q.recommend ?? '?'}`);
   section('Held work', doc.held, (i) => `${i.id} ${line(i.title, 90)} · ${i.status}`);
-  section('Decisions since checkpoint', doc.decisions.slice().reverse(), (d) => `#${d.seq} ${d.id ?? ''} ${d.by}: ${line(d.summary ?? d.text, 200)}`);
+  section('Decisions since checkpoint', doc.decisions.slice().reverse(), (d) => `#${d.seq} ${d.id ?? ''}${d.item ? ` ${d.item}` : ''} ${d.by}: ${line(d.summary ?? d.text, 200)}`);
   section('Current goals (retrieve authority with record show)', doc.goals, (g) => `${g.id} ${line(g.title, 100)}`);
   section('Next', doc.next, (n) => `${n.action} ${n.run ?? n.item ?? ''}${n.evidence ? ` · ${n.evidence}` : ''}`);
   section('Recovery evidence', doc.recovery, (r) => `${r.file}: ${line(r.reason)}`);

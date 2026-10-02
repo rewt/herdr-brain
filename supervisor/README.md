@@ -33,7 +33,11 @@ Existing record advisory budget/stale/parallel/category signals are surfaced.
 
 Text previews show six rows per section, full counts and retrieval pointers.
 Titles and decision summaries are shortened; JSON has all rows and full decision
-text, standing goal decisions and approvals. The command prints characters and
+text, standing goal decisions and approvals. Structured report decisions join
+the stream at their ingestion sequence, with run/item provenance, worker and
+ingestion actors, category and rationale in JSON. Closing the item or removing
+its lane does not remove those decisions; narrative is never mined for them.
+The command prints characters and
 an approximate token count (`ceil(characters/4)`, the record's existing estimate).
 No tokenizer/model is called. `--since-seq N` retrieves decisions from any event
 sequence, including across midnight; it does not use `today`'s date boundary.
@@ -60,6 +64,11 @@ opening the deleted checkout. It verifies the bound run/head and integrated tip,
 then uses the same guarded record close as a queue notice. This can finish a
 missed queue-notice handoff; duplicates write no new record events. Newer work or
 blockers still require judgment.
+An older run whose correction received promotion has no promotion request of its
+own. If its checkout is gone and the record names a newer run, `handle` returns
+`superseded` with that current run before invoking settle. This read-only result
+claims no integration and closes nothing; completion still requires the current
+run's bound promotion receipts and all the same guards.
 
 Automatic settlement includes independent review judgment on the project review
 route and settle's permitted fix dispatch. Non-done outcomes, blockers, incomplete
@@ -113,7 +122,8 @@ call a model or touch real panes. The release harness adds `supervisor-cycle`;
 run it alone with `node acceptance/supervisor.mjs [CANDIDATE_DIRECTORY]`. It proves
 fresh/history/restarted entry, a real watch notice, review finding, watched fix,
 PASS, explicit supervisor promotion judgment, real queue gate/fast-forward/lane
-close, guarded record completion and duplicate final reports after lane closure. Only Herdr/model
+close, guarded record completion and repeated original/correction final reports
+after lane closure. Only Herdr/model
 transport and reviewer work are scripted. This is mechanical acceptance; live
 fresh-chat continuity remains a canary observation.
 

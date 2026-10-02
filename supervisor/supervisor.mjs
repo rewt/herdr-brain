@@ -114,6 +114,19 @@ export function main(argv = process.argv.slice(2)) {
         if (promotion?.outcome === 'promoted') { print(handlePromotion(saved, promotion)); return; }
       }
     }
+    // An original run has no promotion request when its correction was the
+    // run integrated. A missing checkout cannot be settled again; report only
+    // supersession proven by the record, without claiming or closing promotion.
+    const run = JSON.parse(call(local('../bin/org.mjs'), ['show', id, '--json']));
+    if (run.workspace && !fs.existsSync(run.workspace)) {
+      const item = JSON.parse(call(local('../bin/org.mjs'), ['show', run.item, '--json']));
+      const current = item.runs.at(-1);
+      if (current && current !== id) {
+        print({ result: 'superseded', run: id, item: run.item, current_run: current,
+          reason: 'A newer run exists and the original checkout is gone; nothing settled or closed',
+          next: 'inspect the current run and its settlement or promotion receipts' }); return;
+      }
+    }
     for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
     for (const name of ['retry', 'review-again']) if (opt[name]) settleArgs.push(`--${name}`);
     const result = JSON.parse(call(settle, settleArgs));

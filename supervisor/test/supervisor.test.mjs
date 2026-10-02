@@ -131,6 +131,40 @@ test('late final reports recover completed promotion after lane closure and reta
   assert.equal(f.show(ready.item).status, 'active');
 });
 
+test('late original and correction notices after lane removal preserve promotion guards and never replay settlement', { timeout: 25000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-late-correction-test' }), original = f.start(); f.commit('wrong\n'); f.report(original);
+  const correction = result(invoke(f, ['handle', original, '--role', 'supervisor']));
+  assert.equal(correction.result, 'fix_round');
+  const run = correction.fix.run, ready = result(invoke(f, ['handle', run, '--role', 'supervisor']));
+  assert.equal(ready.result, 'promotable');
+  const h = promotionHarness(f, run); result(h.promote()); const base = f.git(['rev-parse', 'HEAD']);
+  assert.equal(h.drain().outcome, 'promoted'); assert.ok(!fs.existsSync(f.workspace));
+  const handle = (id) => invoke(f, ['handle', '--notice', `[org-report] run=${id} item=${ready.item} outcome=done headline=The work is correct`,
+    '--role', 'supervisor', '--settle-cli', path.join(f.root, 'must-not-settle.mjs')]);
+  assert.equal(result(handle(original)).current_run, run);
+  assert.equal(f.show(ready.item).closed, null, 'an old notice only reports supersession, never completes the correction');
+  h.queue.transaction((q) => { q.results[0].expectedHead = base; });
+  assert.match(handle(run).stderr, /head or run binding differs/);
+  h.queue.transaction((q) => { q.results[0].expectedHead = ready.head; });
+  f.git(['reset', '--hard', base]);
+  assert.match(handle(run).stderr, /not integrated/);
+  assert.equal(result(handle(original)).result, 'superseded');
+  assert.equal(f.show(ready.item).closed, null, 'a superseded result never attests integration');
+  f.git(['reset', '--hard', ready.head]);
+  assert.equal(result(handle(run)).result, 'recorded_promotion');
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), calls = f.calls();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const old = result(handle(original)); assert.equal(old.result, 'superseded'); assert.equal(old.current_run, run);
+    assert.equal(result(handle(run)).result, 'recorded_promotion');
+    assert.equal(result(invoke(f, ['handle', original, '--role', 'supervisor'])).result, 'superseded');
+  }
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
+  assert.deepEqual(f.calls(), calls); assert.equal(h.queue.load().results.length, 1);
+  const latest = f.start();
+  assert.equal(result(handle(original)).current_run, latest);
+  assert.match(handle(run).stderr, /superseded/); assert.equal(f.show(ready.item).status, 'active');
+});
+
 test('refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt', { timeout: 20000 }, (t) => {
   const f = fixture(t, { actor: 'supervisor-retry-stale-test' }), run = f.start(); f.commit('correct\n'); f.report(run);
   assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');
@@ -176,6 +210,49 @@ test('cold start includes routes, priorities, history across midnight and a dura
   const all = result(invoke(f, ['brief', '--json', '--since-seq', '0']));
   assert.ok(all.decisions.some((d) => d.text === 'Yesterday remains available'));
   assert.equal(invoke(f, ['checkpoint', '--through', '9999999', '--role', 'supervisor']).status, 1);
+});
+
+test('ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository', { timeout: 15000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-report-decisions-test' }), run = f.start(), item = f.show(run).item;
+  const before = result(invoke(f, ['brief', '--json']));
+  result(invoke(f, ['checkpoint', '--through', String(before.project.through), '--role', 'supervisor']));
+  const report = f.show(run).report_path;
+  fs.writeFileSync(report, `---\n${JSON.stringify({ run, outcome: 'done', headline: 'Decisions are recorded', summary: 'Keep the structured facts.',
+    decisions: [{ text: 'Keep the record dependency-free.', category: 'design', why: 'Cold starts must work without installs or model calls.' },
+      'Keep legacy decisions visible.', { decision: 'Retain older structured decision text.', why: 'Existing reports use this field.' }, {}, null] })}\n---\n\nNarrative decision: this must not enter the decision stream.\n`);
+  assert.deepEqual(result(invoke(f, ['brief', '--json'])).decisions, [], 'a worker file alone is not recorded evidence');
+  f.record(['ingest', report]);
+  const ingestion = f.show(run).report;
+  const recorded = result(invoke(f, ['brief', '--json']));
+  assert.deepEqual(recorded.decisions.map((d) => d.text), ['Keep the record dependency-free.', 'Keep legacy decisions visible.', 'Retain older structured decision text.']);
+  for (const decision of recorded.decisions) {
+    assert.equal(decision.seq, ingestion.seq); assert.equal(decision.at, ingestion.at);
+    assert.equal(decision.run, run); assert.equal(decision.item, item); assert.equal(decision.id, run);
+    assert.equal(decision.source, 'report'); assert.equal(decision.by, 'original'); assert.equal(decision.ingested_by, `run:${run}`);
+  }
+  assert.equal(recorded.decisions[0].category, 'design');
+  assert.equal(recorded.decisions[0].why, 'Cold starts must work without installs or model calls.');
+  f.record(['close', item, '--if-current-run', run]);
+  // Remove only this fixture's checkout; its exact settle identity receipt is
+  // the same repository binding used after a real promotion closes the lane.
+  fs.mkdirSync(path.join(f.org, 'settle'), { recursive: true });
+  fs.writeFileSync(path.join(f.org, 'settle', `${run}.json`), JSON.stringify({ common: path.join(f.repo, '.git') }));
+  f.git(['worktree', 'remove', f.workspace]);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  const closed = result(invoke(f, ['brief', '--json']));
+  assert.deepEqual(closed.reports, []); assert.deepEqual(closed.decisions, recorded.decisions);
+  assert.match(renderColdStart(closed), /R-1.*Keep the record dependency-free/);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events, 'fresh sessions only read the record');
+
+  const foreign = fixture(t, { actor: 'supervisor-report-foreign-test' });
+  assert.deepEqual(coldStart({ cwd: foreign.repo, org: f.org }).decisions, [], 'closed report decisions cannot cross repository identity');
+  result(invoke(f, ['checkpoint', '--through', String(closed.project.through), '--role', 'supervisor']));
+  assert.deepEqual(result(invoke(f, ['brief', '--json'])).decisions, []);
+  f.record(['note', item, 'Keep decisions after the report checkpoint.', '--decision']);
+  assert.deepEqual(result(invoke(f, ['brief', '--json'])).decisions.map((d) => d.text), ['Keep decisions after the report checkpoint.']);
+  const recovered = result(invoke(f, ['brief', '--json', '--since-seq', String(before.project.through)]));
+  assert.deepEqual(recovered.decisions.slice(0, 3), recorded.decisions, 'explicit history recovery retains full report rationale');
+  assert.equal(f.calls().length, 0);
 });
 
 test('workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics', { timeout: 15000 }, (t) => {

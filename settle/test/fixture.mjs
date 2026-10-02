@@ -53,7 +53,9 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
       const job = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
       if (job.watcher?.pid) try { process.kill(job.watcher.pid, 'SIGTERM'); } catch {}
     }
-    fs.rmSync(root, { recursive: true, force: true });
+    // A just-terminated watcher can still finish a scratch log write. Retry
+    // transient removal races briefly; cleanup remains bounded and owned here.
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
   return { root, repo, workspace, org, env, exec, record, start, show, report, commit, git, settle, retry, calls, concurrent, source };
 }

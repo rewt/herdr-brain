@@ -76,8 +76,17 @@ export async function supervisorCase(candidate) {
     const closed = command(['handle', '--notice', finalNotice, '--role', 'supervisor']);
     assert.equal(closed.result, 'recorded_promotion');
     assert.equal(f.show(settled.item).status, 'done'); receipts.push(closed);
-    assert.equal(command(['handle', '--notice', finalNotice, '--role', 'supervisor']).result, 'recorded_promotion');
-    assert.equal(command(['handle', '--notice', watchNotice(handled.fix.run), '--role', 'supervisor']).result, 'recorded_promotion', 'late final report reuses completed promotion after lane closure');
+    const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), calls = f.calls();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      assert.equal(command(['handle', '--notice', finalNotice, '--role', 'supervisor']).result, 'recorded_promotion');
+      assert.equal(command(['handle', '--notice', watchNotice(handled.fix.run), '--role', 'supervisor']).result, 'recorded_promotion', 'late correction report reuses completed promotion after lane closure');
+      const original = command(['handle', '--notice', watchNotice(run), '--role', 'supervisor']);
+      assert.equal(original.result, 'superseded', 'late original report never settles a deleted checkout');
+      assert.equal(original.run, run); assert.equal(original.current_run, handled.fix.run);
+      receipts.push(original);
+    }
+    assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events, 'both runs duplicate notices write no events');
+    assert.deepEqual(f.calls(), calls, 'both runs duplicate notices call no model or transport');
     assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3]?.includes('Private record file:')).length, reviews, 'late final report launches no review');
     assert.deepEqual(command(['promote', handled.fix.run, '--role', 'supervisor', '--why', 'Duplicate notice']).queue, promoted.queue);
     assert.equal(queue().results.length, 1, 'duplicate promotion never repeats the gate');
@@ -86,7 +95,7 @@ export async function supervisorCase(candidate) {
     assert.match(finalPolicy, /Running \(record; no live pane inference\) \(0\)/);
     assert.match(finalPolicy, /Reports and settlement \(0\)/);
     return { receipts, calls: f.calls(), final_policy: finalPolicy,
-      detail: `${run} -> ${handled.fix.run}: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicates reuse receipts; no config or model` };
+      detail: `${run} -> ${handled.fix.run}: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicate original reports return supersession, correction reports reuse receipts; no config or model` };
   } finally {
     if (previousActor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = previousActor;
     cleanup.forEach((fn) => fn());

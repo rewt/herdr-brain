@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-// Shared by the release gate and offline installed-entry regression. Watch is
+// Shared by release/discovery probes and offline installed-entry regression. Watch is
 // armed by dispatch; supervisor entry supplies the cold start and notice path.
 export function assertSupervisorEntry(policy) {
   assert.match(policy, /dispatch.*ITEM/);

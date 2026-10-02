@@ -58,7 +58,9 @@ require inspection or continued observation; they never authorize settle. A
 promotion notice is an outcome, never a new report or another promotion request.
 Duplicate final notices reuse settle receipts, or completed promotion receipts
 after lane closure, with the same integrated-head and current-run checks as queue
-notices. Duplicate promotion commands reuse
+notices. A superseded run with a missing checkout returns the record's current
+run without settling or closing anything; inspect that run's receipts for its
+actual disposition. Duplicate promotion commands reuse
 their queue receipt even after the lane is closed. Uncertain enqueue acknowledges
 nothing and requires inspection; it never blindly enqueues again.
 

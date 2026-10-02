@@ -1,0 +1,166 @@
+{
+  "run": "R-103",
+  "reviewed_commit": "4c2804441211a6c54c00d253cdf5c1563f06e210",
+  "review": "docs/reviews/supervisor-module/4c28044-r1.md",
+  "rebased_main": "83b2b8432ae81c7d9019494606eecbfda728edfa",
+  "baseline": {
+    "command": "npm test",
+    "tests": 530,
+    "pass": 525,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 5,
+    "todo": 0,
+    "duration_ms": 148958.681167,
+    "failures": [],
+    "execution": "before rebase and source changes"
+  },
+  "reproduced_review_findings": {
+    "command": "node --test --test-name-pattern=\"ingested report decisions|supervisor entry and final notices\" supervisor/test/supervisor.test.mjs",
+    "tests": 13,
+    "pass": 0,
+    "fail": 2,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 12067.037208,
+    "failures": [
+      "supervisor entry and final notices carry the unconfigured cycle through actual promotion",
+      "ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository"
+    ],
+    "expected_failures": [
+      "report decisions absent after ingestion",
+      "original final notice enters settle after correction promotion and raises ENOENT"
+    ]
+  },
+  "focused": {
+    "command": "node --test supervisor/test/supervisor.test.mjs discovery/test/entry.test.mjs",
+    "tests": 20,
+    "pass": 20,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "duration_ms": 81000.745666,
+    "failures": []
+  },
+  "nested_sandbox_attempt": {
+    "command": "npm test",
+    "tests": 581,
+    "pass": 550,
+    "fail": 20,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 202601.408,
+    "failures": [
+      "bounded commands kill descendants before they can write after a deadline",
+      "disabled clean filters preserve binary bytes across integration",
+      "disabled smudge filters preserve binary bytes across integration",
+      "disabled process filters preserve binary bytes across integration",
+      "disabled clean/smudge/process filters preserve binary bytes across integration",
+      "disabled process/clean/smudge filters preserve binary bytes across integration",
+      "disabled clean/smudge filters preserve binary bytes across integration",
+      "disabled clean/smudge filters preserve binary bytes across integration",
+      "clean-only required filters preserve the missing direction as identity",
+      "smudge-only required filters preserve the missing direction as identity",
+      "Claude live cases stay pending without authorized authentication and never launch the native binary",
+      "detached double-fork descendants are gone after completion; unrelated same-group processes survive",
+      "detached double-fork descendants are gone after deadline; unrelated same-group processes survive",
+      "descendants are cleaned after the JavaScript wrapper is killed",
+      "validation cannot signal an owner outside its inherited kernel boundary",
+      "pending Claude probe emits Linux evidence without a platform guard (no-auth)",
+      "pending Claude probe emits Linux evidence without a platform guard (skip-live)",
+      "canonical preparation and validation remain authoritative in both check and promote",
+      "worker mode validates and promotes to the declared integration branch",
+      "main-mode done reports require clean committed work and successful sandboxed validation"
+    ],
+    "disposition": "17 macOS nested sandbox setup failures; 3 discovery probes still asserted the old watch entrypoint"
+  },
+  "host_attempt_before_probe_correction": {
+    "command": "npm test",
+    "tests": 581,
+    "pass": 566,
+    "fail": 4,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 187962.715584,
+    "failures": [
+      "Claude live cases stay pending without authorized authentication and never launch the native binary",
+      "pending Claude probe emits Linux evidence without a platform guard (no-auth)",
+      "pending Claude probe emits Linux evidence without a platform guard (skip-live)",
+      "resolved blocker links allow recovery of only the recorded correction run"
+    ],
+    "disposition": "3 old discovery policy assertions plus one transient ENOTEMPTY scratch cleanup race; assertion now shared and fixture cleanup retries bounded"
+  },
+  "reproduced_discovery_probe": {
+    "command": "node discovery/acceptance.mjs --harness claude --binary SCRATCH_FAKE --skip-live",
+    "results": [
+      {
+        "name": "02 Record bootstrap and canonical discovery",
+        "status": "PASS"
+      },
+      {
+        "name": "03 Suggested routes without project configuration",
+        "status": "PASS"
+      },
+      {
+        "name": "04 Installed entry teaches dispatch, watch, worker and supervisor defaults",
+        "status": "FAIL",
+        "error": "The input did not match the regular expression /watch\\/watch.mjs/u. Input:"
+      },
+      {
+        "name": "20 Real concurrent own-lane work and sandboxed fast-forward promotion",
+        "status": "PENDING"
+      },
+      {
+        "name": "21 Real routing question waits and actual operator answer applies",
+        "status": "PENDING"
+      }
+    ],
+    "usage": []
+  },
+  "probe_focused": {
+    "command": "node --test --test-name-pattern=\"Claude live cases stay pending|pending Claude probe emits Linux evidence\" discovery/test/review-r2.test.mjs discovery/test/review-r3.test.mjs",
+    "tests": 33,
+    "pass": 3,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 30,
+    "todo": 0,
+    "duration_ms": 2716.012875,
+    "failures": []
+  },
+  "post_change": {
+    "command": "npm test",
+    "tests": 581,
+    "pass": 570,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 200121.966667,
+    "failures": [],
+    "execution": "outside the outer worker sandbox; tests offline with their own disposable sandbox boundaries"
+  },
+  "cold_start": {
+    "through": 1218,
+    "after": 0,
+    "characters": 5438,
+    "approximate_tokens": 1360,
+    "counts": {
+      "running": 3,
+      "reports": 24,
+      "waiting": 1,
+      "decisions": 365
+    },
+    "report_decisions": 236,
+    "report_decisions_on_closed_items": 19,
+    "verification": "Running routes, current report rows and every structured report decision/rationale checked against the event fold through the captured sequence; no checkpoint or shared record mutation"
+  },
+  "final_gate": "Run lane check last after the implementation and checked report commits; exact HEAD, command and result saved in local .lane/gate.json",
+  "limits": [
+    "No live model, live operator chat-clear, full release/cutover or full optional lane suite proof claimed."
+  ]
+}

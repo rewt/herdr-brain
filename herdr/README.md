@@ -76,9 +76,11 @@ that is not valid UTF-8. Legacy installed shell receipts remain removable and
 upgrade to the new encoding while preserving current shell bytes.
 
 The journal records each file's prior bytes and mode and durable write intent;
-a failed write rolls back only started changes. New runtime directories carry
-the transaction's ownership token, so rollback never removes another owner's
-runtime. After a terminated install, `node herdr/entry-install.mjs
+a failed write rolls back only started changes. Recovery compares the exact
+before and after bytes and mode before preserving a caller's chmod of untouched
+before-bytes, so a mode-only replacement still restores the inspected mode.
+New runtime directories carry the transaction's ownership token, so rollback
+never removes another owner's runtime. After a terminated install, `node herdr/entry-install.mjs
 --recover` (or the next install/remove) restores the previous state. A live
 owner or edits to files needing recovery refuse without overwriting them. A
 pending journal from the older installer must be recovered with that original

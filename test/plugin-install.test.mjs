@@ -230,6 +230,56 @@ for (const crash of [false, true]) test(`non-UTF-8 shell bytes survive ${crash ?
   assert.equal(fs.existsSync(path.join(path.dirname(f.bin), '.monitor-install.lock')), false);
 });
 
+for (const crash of [false, true]) {
+  for (const point of ['staged', 'applied', 'operator chmod']) {
+    test(`mode-only reinstallation at ${point} survives ${crash ? 'terminated-install recovery' : 'failed-write rollback'}`, { timeout: 30000 }, (t) => {
+      const f = fixture(t), rc = path.join(f.home, '.zshrc'), journal = path.join(f.bin, '.monitor-recovery.json');
+      fs.writeFileSync(rc, '# Operator shell\n', { mode: 0o644 });
+      assert.equal(f.driver('--snapshot').status, 0);
+      fs.chmodSync(rc, 0o600);
+      const files = [...fs.readdirSync(f.bin).map((name) => path.join(f.bin, name)), ...['.zshenv', '.zshrc', '.bashrc', '.bash_profile'].map((name) => path.join(f.home, name))];
+      const before = files.map((file) => ({ file, content: fs.readFileSync(file), mode: fs.statSync(file).mode & 0o777 }));
+      const runtimes = path.join(f.env.HERDR_MONITOR_HOME, 'entry/runtimes'), installedRuntimes = fs.readdirSync(runtimes);
+      const evidence = path.join(f.root, 'mode-fault.json'), preload = path.join(f.root, 'mode-fault.cjs');
+      // Fail immediately before or after the actual replacement. A third state
+      // is an operator chmod while the original bytes still occupy the path.
+      fs.writeFileSync(preload, `const fs=require('fs'),rename=fs.renameSync;let done=false;fs.renameSync=function(from,to){
+  if(to!==${JSON.stringify(rc)}||done)return rename.apply(this,arguments);
+  done=true;
+  const plan=JSON.parse(fs.readFileSync(${JSON.stringify(journal)})),change=plan.changes.find(change=>change.file===to);
+  ${point === 'applied' ? 'rename.apply(this,arguments);' : point === 'operator chmod' ? 'fs.chmodSync(to,0o640);' : ''}
+  fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify({change,mode:fs.statSync(to).mode&0o777}));
+  ${crash ? 'process.exit(73);' : "throw Object.assign(new Error('injected shell replacement failure'),{code:'EIO'});"}
+};\n`);
+      const failed = f.run(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot']);
+      const proof = JSON.parse(fs.readFileSync(evidence));
+      assert.equal(proof.change.started, true, 'write intent precedes the fault');
+      assert.equal(proof.change.before.mode, 0o600);
+      assert.equal(proof.change.after.mode, 0o644);
+      assert.equal(proof.change.before.content, proof.change.after.content, 'replacement changes only the mode');
+      assert.equal(proof.mode, point === 'applied' ? 0o644 : point === 'operator chmod' ? 0o640 : 0o600);
+      if (crash) {
+        assert.equal(failed.status, 73);
+        assert.equal(fs.existsSync(journal), true);
+        assert.equal(fs.existsSync(proof.change.temporary), point !== 'applied');
+        assert.equal(f.driver('--recover').status, 0);
+      } else {
+        assert.equal(failed.status, 1);
+        assert.match(failed.stderr, /injected shell replacement failure/u);
+      }
+      for (const { file, content, mode } of before) {
+        assert.deepEqual(fs.readFileSync(file), content, file);
+        assert.equal(fs.statSync(file).mode & 0o777, file === rc && point === 'operator chmod' ? 0o640 : mode, file);
+      }
+      assert.equal(fs.existsSync(journal), false);
+      assert.equal(fs.existsSync(proof.change.temporary), false);
+      assert.equal(fs.existsSync(path.join(path.dirname(f.bin), '.monitor-install.lock')), false);
+      assert.deepEqual(fs.readdirSync(runtimes), installedRuntimes);
+      assert.equal(f.driver('--recover').status, 0, 'completed recovery is idempotent');
+    });
+  }
+}
+
 test('legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet', { timeout: 30000 }, (t) => {
   const f = fixture(t); assert.equal(f.driver('--snapshot').status, 0);
   const marker = path.join(f.bin, '.monitor-shell.json'), receipt = JSON.parse(fs.readFileSync(marker));

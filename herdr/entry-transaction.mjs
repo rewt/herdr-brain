@@ -72,9 +72,13 @@ export function recover(journal, bin, runtimeRoot) {
     // Its exclusive temporary path is part of the same recovery receipt.
     if (change.temporary && state(change.temporary)) { fs.unlinkSync(change.temporary); syncDirectory(path.dirname(change.temporary)); }
     const current = state(change.file);
-    // A chmod on an untouched file belongs to the caller, not this transaction.
-    if (same(current, change.before) || (current && change.before && current.content.equals(change.before.content))) continue;
-    if (!same(current, change.after)) throw new Error(`recovery file changed: ${change.file}; retain ${journal}`);
+    if (same(current, change.before)) continue;
+    if (!same(current, change.after)) {
+      // A chmod on untouched before-bytes belongs to the caller. Check the
+      // exact after-state first: a mode-only replacement has those bytes too.
+      if (current && change.before && current.content.equals(change.before.content)) continue;
+      throw new Error(`recovery file changed: ${change.file}; retain ${journal}`);
+    }
     apply(change.file, change.before, change.temporary);
   }
   if (plan.runtime) {

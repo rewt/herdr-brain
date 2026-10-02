@@ -6,9 +6,9 @@ namespace change, push, release activation or publication. Existing live pilot
 compatibility remains intact.
 
 The exact file list is [publication-files.tsv](adoption/publication-files.tsv):
-460 entries, each with an action, recommendation and source line references
+468 entries, each with an action, recommendation and source line references
 where applicable. [publication-history.tsv](adoption/publication-history.tsv)
-adds 697 paths requiring outgoing-history review or exclusion. Directory
+adds 705 paths requiring outgoing-history review or exclusion. Directory
 entries below cover every descendant, including
 files without a regex hit. The TSV expands them into individual paths. File
 line numbers refer to the lane's source at the audit, not future rewritten files.
@@ -37,13 +37,33 @@ or all possible credential formats are safe. Never copy a secret hit into public
 review evidence. Re-run on the exact proposed publication commit and outgoing
 history; concurrent work can add new paths.
 
+Corrective inspection at `1816a2f` ("Add adoption independent review round 1")
+covered the **749 tracked paths** then present and read the 50 tracked Markdown/
+text documents absent from the original current-path TSV. This added the private
+`docs/INVENTORY.md`, the production-derived review fixture, the pilot-themed memo,
+internal study/approval references in two module/prototype READMEs, and the new
+adoption review. The adopter README also needs its private audit links replaced
+before publication. Both inventories include those seven paths and this run's
+new private report. The original blob scan above is inherited evidence; this
+correction does not claim a fresh whole-history secret scan.
+
+The 43 remaining unlisted Markdown/text documents were inspected: the Herdr,
+lanes, MCP, promote and settle READMEs; the supervisor protocol and lane brief/
+review templates; two generic interruption fixtures; and 33 console prototype
+snapshots. These contain supported product behaviour, placeholder examples or
+synthetic `harbor`/`orchard` data, not private pilot chronology or real branch/
+review receipts. Snapshot provenance was checked against the synthetic sources
+`console/proto/fixtures.mjs` and `autonomy.mjs`. Keep them subject to the normal
+exact-candidate scan; a generic word such as "operator" is not itself private
+history.
+
 ## Private material to exclude
 
 | Path (all descendants) | Tracked files | Recommendation before publication |
 | --- | ---: | --- |
 | `kit/bch-cloak-20261001/` | 29 | Keep the protective private snapshot privately; exclude from public source and archives. It carries personal account/profile/harness settings, absolute home/project paths, workspace IDs, operating instructions and copied scripts. Preserve it here until the existing project's gated switch; replace dependent tests first. |
-| `docs/reports/` | 237 | Exclude operational reports and captured acceptance evidence: paths, machine settings, model usage, session/pane IDs, private project history and source receipts are not public product documentation. Publish a separately reviewed synthetic summary if needed. Includes this adoption run's report. |
-| `docs/reviews/` | 72 | Exclude historical reviews and operator studies. Even sanitized review projections refer to internal work/history; do not assume a directory named reviews is public-safe. |
+| `docs/reports/` | 239 | Exclude operational reports and captured acceptance evidence: paths, machine settings, model usage, session/pane IDs, private project history and source receipts are not public product documentation. Publish a separately reviewed synthetic summary if needed. Includes both adoption run reports. |
+| `docs/reviews/` | 73 | Exclude historical reviews and operator studies. Even sanitized review projections refer to internal work/history; do not assume a directory named reviews is public-safe. |
 | `docs/briefs/` | 43 | Exclude internal dispatch asks, authority/boundary instructions and private operational context. |
 | `docs/archive/` | 4 | Keep the archived pilot protocol and launch scripts private. |
 | `docs/config/` | 1 | Exclude the operator's harness effort patch; never apply it to adopters. |
@@ -61,6 +81,12 @@ listed: `docs/pilot-M1.md`, `docs/pilot-M1-results-2026-09-16.md`,
 originals and extract current portable requirements if publication needs them.
 Rewrite `docs/north-star.md` and `docs/roadmap.md` for public readers, removing
 personal record locations, private evidence links and operator/project history.
+**Rewrite or exclude `docs/INVENTORY.md` explicitly.** It reproduces private
+pilot/operator-study chronology, internal branch/commit/review receipts and the
+reference graph of excluded reports/specifications. Its lack of personal absolute
+paths does not make that operational history public product documentation.
+Keep the original privately; publish only a separately reviewed portable inventory
+if one is needed. Both TSVs list it individually, outside directory exclusions.
 
 ## Runtime and fixture changes
 
@@ -73,6 +99,10 @@ personal record locations, private evidence links and operator/project history.
 | `acceptance/test/cutover.test.mjs` | Also copies the private kit and contains personal path/workspace assumptions. Replace its input with synthetic legacy files before kit removal. |
 | `acceptance/run.mjs`, `acceptance/cutover.mjs`, `acceptance/security.mjs`, `acceptance/test/results.test.mjs`, `acceptance/test/security.test.mjs` | Public acceptance must be independently reproducible; it currently models a specific private pilot migration (the full gate reads a supplied live project, not the inventory kit). Generalize relocation/layout premises and use a synthetic legacy fixture. Preserve forbidden-root checks and safety classification. |
 | `brain/test/fixtures/codex-final.txt`, `brain/test/fixtures/codex-typed-composer.txt`, `console/test/model.test.mjs` | Replace captured personal paths/identity text with synthetic screenshots/transcripts while preserving parser layout and terminal behaviour. |
+| `lanes/test/fixtures/board-cli-pass-review.md` | Replace the sanitized production-derived review with a wholly synthetic full-schema fixture. It still carries real internal commit/review receipts and historical measurements; preserve multi-finding and execution/witness projection coverage. |
+| `console/test/fixtures/memo.md` | Replace the pilot-themed theft/O1 decision wording alongside its matching console model fixture with a generic synthetic decision memo, preserving document parsing coverage. |
+| `console/proto/README.md`, `discovery/README.md` | Remove private study/evidence links, work-item/approval history and internal review-round narratives; keep synthetic prototype usage, supported validation commands and explicit experimental limits. |
+| `README.md` | Replace links to the private publication audit with reviewed public installation/distribution information when the candidate is approved. Keep the portable adopter introduction. |
 | Remaining matching code/tests/docs in the TSV | Replace pilot names, personal aliases or unapproved namespace literals with synthetic examples or the approved identity. Source line references identify each file's hits. Keep the behaviour and safety assertions. |
 
 `contrib/settle-watch.mjs` is a compatibility surface. Its remaining pilot-specific

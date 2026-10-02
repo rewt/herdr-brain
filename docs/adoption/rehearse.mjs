@@ -29,7 +29,7 @@ Object.assign(env, {
   ORG_ACTOR: `adoption-rehearsal-${process.pid}`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
   HERDR_MONITOR_HOME: path.join(home, '.local/share/herdr-monitor'),
   HERDR_MONITOR_BIN: path.join(home, '.local/bin'), HERDR_MONITOR_CLAUDE: '-',
-  HERDR_MONITOR_REPO: product, RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1',
+  HERDR_MONITOR_REPO: product, RELEASE_NO_LAUNCHD: '1',
   MONITOR_RUNTIME_DIR: path.join(home, 'entry-queue'), MONITOR_WORKTREE_ROOT: path.join(projects, 'lanes'),
   npm_config_cache: path.join(home, '.npm'),
 });
@@ -47,6 +47,27 @@ const release = (...args) => run('bash', [path.join(product, 'herdr/release.sh')
 let outcome = 'failed', failure, head, context, sourceCommit;
 try {
   console.log(`Evidence: ${evidence}`);
+  // Normal product prerequisites, inherited from the host toolchain. The real
+  // worker check below must also compile/link the product's lifetime owner.
+  write(path.join(evidence, 'prerequisites.txt'),
+    run('/usr/bin/cc', ['--version']) + '\n' + run('python3', ['--version']) + '\n');
+  // Exercise release.sh's actual Python JSON parsing without touching a live
+  // Herdr server or machine registry. Linking over an existing entry is refused,
+  // so a missing Python discovery result cannot silently pass an upgrade.
+  const pluginState = path.join(home, 'scratch-plugin-root');
+  const scratchHerdr = path.join(root, 'herdr.cjs');
+  write(scratchHerdr, `#!${process.execPath}
+const fs = require('fs'), assert = require('assert/strict');
+const args = process.argv.slice(2), state = ${JSON.stringify(pluginState)};
+fs.appendFileSync(${JSON.stringify(path.join(evidence, 'herdr-commands.jsonl'))}, JSON.stringify(args)+'\\n');
+if (args[0] !== 'plugin') { console.log(JSON.stringify({result:[]})); process.exit(0); }
+if (args[1] === 'list') console.log(JSON.stringify({result:{plugins:fs.existsSync(state) ? [{plugin_root:fs.readFileSync(state,'utf8')}] : []}}));
+else if (args[1] === 'link') { assert.ok(!fs.existsSync(state), 'unlink existing registration before linking'); fs.writeFileSync(state,fs.realpathSync(args[2])); }
+else if (args[1] === 'unlink') { assert.ok(fs.existsSync(state)); fs.unlinkSync(state); }
+else throw new Error('unsupported scratch plugin command');
+`, 0o755);
+  env.HERDR_BIN_PATH = scratchHerdr;
+  const registered = () => fs.readFileSync(pluginState, 'utf8');
   // Optional cached tarballs are copied by integrity from pinned lockfiles only.
   // This reads no account/configuration files and never writes the input cache.
   if (values['npm-cache']) {
@@ -123,6 +144,7 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
   release('build', 'adoption-a');
   assert.equal(fs.existsSync(path.join(home, '.zshenv')), false, 'build must not install entry');
   release('activate', 'adoption-a'); release('status');
+  assert.equal(registered(), path.join(env.HERDR_MONITOR_HOME, 'releases/adoption-a'));
   const entryBin = path.join(env.HERDR_MONITOR_HOME, 'entry/bin');
   const discovered = run('zsh', ['-ic', 'command -v codex; command -v monitor-codex']);
   assert.equal(discovered, `${entryBin}/codex\n${entryBin}/monitor-codex`);
@@ -160,9 +182,12 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
   write(path.join(evidence, 'reviewed-cycle.txt'), run(process.execPath, [path.join(active, 'acceptance/supervisor.mjs'), active], project, {}, 240_000));
   release('build', 'adoption-b'); release('activate', 'adoption-b');
   assert.equal(fs.realpathSync(path.join(env.HERDR_MONITOR_HOME, 'current')), path.join(env.HERDR_MONITOR_HOME, 'releases/adoption-b'));
+  assert.equal(registered(), path.join(env.HERDR_MONITOR_HOME, 'releases/adoption-b'));
   release('rollback');
   assert.equal(fs.realpathSync(path.join(env.HERDR_MONITOR_HOME, 'current')), active);
+  assert.equal(registered(), active);
   release('restore');
+  assert.equal(fs.existsSync(pluginState), false, 'restore must discover and unlink the release plugin');
   assert.deepEqual(fs.readFileSync(path.join(home, '.zshrc')), original);
   assert.equal(fs.statSync(path.join(home, '.zshrc')).mode & 0o777, 0o600);
   for (const file of ['.zshenv', '.bashrc', '.bash_profile']) assert.equal(fs.existsSync(path.join(home, file)), false);
@@ -174,7 +199,7 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
 } catch (error) { failure = error.stack; }
 write(path.join(evidence, 'summary.json'), JSON.stringify({ outcome, failure, root, project, head, run: context?.run,
   source_commit: sourceCommit,
-  coverage: 'scratch install and pinned dependencies, activation, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, console, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell restoration',
+  coverage: 'host compiler/Python prerequisite checks, scratch install and pinned dependencies, activation, Python-backed plugin discovery/relink/unlink against a local fixture, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, console, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell restoration',
   excluded: ['model judgment', 'live Herdr transport', 'GitHub distribution', 'launchd', 'Linux and desktop/remote transport'],
 }, null, 2) + '\n');
 console.log(`${outcome.toUpperCase()}: ${path.join(evidence, 'summary.json')}`);

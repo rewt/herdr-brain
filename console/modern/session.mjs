@@ -257,7 +257,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (s.errors.routes || !routes?.editable || !Object.hasOwn(routes.config.routes ?? {}, name)) { s.message = 'Refresh project routes before editing.'; changed(); return; }
       const r = routes.config.routes[name], defaults = routes.config.dispatch ?? {};
       s.routeEdit = { name, project: { ...project() }, revision: routes.revision, target: routes.target, field: 0, confirm: false, busy: false,
-        original: { kind: r.kind ?? defaults.kind ?? 'claude', model: r.model ?? defaults.model ?? '', effort: r.effort ?? defaults.effort ?? '' },
+        original: { kind: r.kind ?? defaults.kind ?? 'claude', model: r.model ?? defaults.model, effort: r.effort ?? defaults.effort },
         values: [r.kind ?? defaults.kind ?? 'claude', r.model ?? defaults.model ?? '', r.effort ?? defaults.effort ?? ''] };
       changed(); return;
     }
@@ -452,11 +452,21 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (edit.busy) return false;
     if (k.escape) { s.routeEdit = null; changed(); return false; }
     if (k.return) {
-      if (!edit.values.every(v => v.trim())) { s.message = 'Kind, model and effort are required.'; changed(); return false; }
+      const fields = ['kind', 'model', 'effort'], patch = {};
+      for (const [i, field] of fields.entries()) {
+        const value = edit.values[i].trim();
+        if (!value && (field === 'kind' || edit.original[field] !== undefined)) {
+          s.message = field === 'kind' ? 'Kind is required.' : `Keep the existing ${field} or enter a replacement; removing overrides is not supported.`;
+          changed(); return false;
+        }
+        if (value && value !== edit.original[field]) patch[field] = value;
+      }
+      // Reviewing an unchanged suggestion can still adopt the portable preset.
+      if (!Object.keys(patch).length) patch.kind = edit.values[0].trim();
       if (!edit.confirm) { edit.confirm = true; s.message = ''; changed(); return false; }
       edit.busy = true; changed();
       let result;
-      try { result = await d.orgRouteSet(edit.project, { name: edit.name, kind: edit.values[0].trim(), model: edit.values[1].trim(), effort: edit.values[2].trim(), revision: edit.revision }); }
+      try { result = await d.orgRouteSet(edit.project, { name: edit.name, ...patch, revision: edit.revision }); }
       catch (error) { result = { ok: false, error: error.message }; }
       if (!result.ok) { edit.busy = false; edit.confirm = false; s.message = `Route not saved: ${result.error}`; changed(); return false; }
       s.routeEdit = null; await refresh(); s.message = `Saved ${edit.name} in project .lane.json.`; changed(); return false;

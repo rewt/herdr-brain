@@ -191,9 +191,10 @@ export function controlEntries(status) {
     why: i.notes?.find(n => n.kind === 'why')?.text ?? i.created?.why,
     answerState: i.meta?.answer != null && i.closed ? `${i.meta.answer} · ${i.meta.answered_by ?? 'unknown'}` : i.closed ? 'dropped' : 'Waiting on you',
   })).sort((a, b) => (b.created?.seq ?? 0) - (a.created?.seq ?? 0));
-  const decided = [...items, ...runs].flatMap(i => (i.notes ?? []).filter(n => n.decision && n.kind !== 'answer').map(n => ({
+  const decided = [...items, ...runs].flatMap(i => (i.notes ?? []).filter(n => n.decision).map(n => ({
     key: `${i.id}:${n.seq}`, item: i.item ?? i.id, source: i.id, at: n.at, by: n.by ?? 'unknown', seq: n.seq,
-    text: n.summary ?? n.text, detail: n.text,
+    ...(n.kind === 'answer' ? { heading: i.title } : {}),
+    text: n.kind === 'answer' ? `${i.title} → ${n.summary ?? n.text}` : n.summary ?? n.text, detail: n.text,
   })));
   const fields = value => Array.isArray(value) ? value : value == null ? [] : [value];
   const textOf = value => typeof value === 'string' ? value : value?.text ?? value?.decision ?? value?.question;
@@ -217,7 +218,10 @@ export function controlEntries(status) {
         answerState: 'In report · no record question', reportQuestion: true });
     }
   }
-  for (const q of asked.filter(q => q.closed && q.meta?.answer != null)) decided.push({
+  // record answer writes note, metadata, close as one batch. Only that
+  // corresponding note replaces the current summary; older notes stay visible.
+  for (const q of asked.filter(q => q.closed && q.meta?.answer != null &&
+    !q.notes?.some(n => n.decision && n.kind === 'answer' && n.seq === q.closed.seq - 2))) decided.push({
     key: `${q.id}:${q.closed.seq}`, item: q.id, source: q.id, at: q.closed.at, by: q.meta.answered_by ?? 'unknown', seq: q.closed.seq,
     text: `${q.title} → ${q.meta.answer}`, detail: q.notes?.filter(n => n.kind === 'answer').at(-1)?.text ?? q.why,
   });

@@ -63,6 +63,9 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   route edits kind, model and effort; Tab changes fields, Ctrl+U clears, Enter
   reviews, and a second Enter saves through `record routes set`. Esc or Cancel
   leaves the config unchanged. A stale review cannot overwrite a newer edit.
+  Model and effort may stay at the harness default; edits send only changed
+  fields. Clearing an existing override requires a replacement. A record-only
+  project must have its folder opened before routes can be read or edited.
   Reads and writes use the canonical Git project's routing layers; inherited
   `LANE_CONFIG` launch overrides do not redirect project edits. The CLI preserves
   project lifecycle fields and inherited routes and writes only the project's

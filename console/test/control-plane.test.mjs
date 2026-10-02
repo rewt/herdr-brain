@@ -10,9 +10,10 @@ import { controlEntries } from '../modern/model.mjs';
 import { lineText } from '../lib/frame.mjs';
 import { routesSnapshot } from '../../lanes/routes-command.mjs';
 import { resolveRoute } from '../../lanes/routes.mjs';
+import { orgRouteSet } from '../lib/cli.mjs';
 
 const bin = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
-function fixture(t) {
+function fixture(t, deps = {}) {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'console-control-'));
   const cwd = path.join(scratch, 'project'); fs.mkdirSync(cwd);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -20,7 +21,7 @@ function fixture(t) {
   git(['init', '-b', 'main']); git(['config', 'user.name', 'Fixture']); git(['config', 'user.email', 'fixture@example.test']);
   fs.writeFileSync(path.join(cwd, 'README.md'), 'New project\n'); git(['add', '.']); git(['commit', '-m', 'New project']);
   const env = { ...process.env, ORG_DIR: path.join(cwd, '.org'), ORG_ACTOR: 'fixture-agent' };
-  const org = args => execFileSync(process.execPath, [bin, ...args], { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const org = (args, overrides = {}) => execFileSync(process.execPath, [bin, ...args], { cwd, env: { ...env, ...overrides }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   org(['init']);
   const goal = org(['add', 'Ship useful work', '--goal']);
   org(['set', goal, 'meta.block=now']);
@@ -29,6 +30,7 @@ function fixture(t) {
   const session = createModernSession({ config: { projects: [{ name: 'Fresh project', cwd }], refresh_seconds: 60 }, env: { HERDR_ENV: '1' }, deps: {
     herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }), herdrRead: async () => ({ ok: true, text: '' }),
     brainQueue: async () => ({ rows: [], off: true }),
+    ...deps,
   } });
   t.after(() => session.stop());
   return { scratch, cwd, git, org, goal, question, session };
@@ -55,7 +57,7 @@ test('a project with no console config discovers its record, answers and edits r
   const question = JSON.parse(f.org(['show', f.question, '--json']));
   assert.equal(question.meta.answer, 'yes'); assert.equal(question.meta.answered_by, 'human');
   assert.equal(s.model.needs.length, 0); assert.equal(s.model.asked[0].answerState, 'yes · human');
-  assert.match(s.model.decided[0].text, /Publish this project\? → yes/);
+  assert.match(s.model.decided[0].text, /Publish this project\? → Answered yes/);
   await s.key('u'); await s.activate('route:engineer');
   await s.key('', { tab: true }); await s.key('u', { ctrl: true }); await s.key('portable-model');
   await s.key('', { tab: true }); await s.key('u', { ctrl: true }); await s.key('xhigh');
@@ -123,12 +125,12 @@ test('route CLI uses the canonical Git project, ignores launch override paths, a
 
 test('decisions include older notes and automatic answers, retain provenance, and never mine narrative', () => {
   const facts = controlEntries({ items: [{ id: 'HUM-1', role: 'human', kind: 'work', title: 'Use defaults?', created: { seq: 1, by: 'agent' },
-    closed: { seq: 4, at: '2020-01-01T00:00:00Z' }, meta: { answer: 'yes', answered_by: 'auto', recommend: 'yes' }, notes: [{ kind: 'answer', decision: true, seq: 3, text: 'Answered automatically.' }] },
+    closed: { seq: 5, at: '2020-01-01T00:00:00Z' }, meta: { answer: 'yes', answered_by: 'auto', recommend: 'yes' }, notes: [{ kind: 'answer', decision: true, seq: 3, by: 'agent', at: '2020-01-01T00:00:00Z', text: 'Answered automatically.' }] },
   { id: 'ENG-1', role: 'engineer', notes: [{ text: 'Narrative asks a question but is not structured.', decision: false }] }],
   runs: [{ id: 'R-1', item: 'ENG-1', notes: [{ decision: true, seq: 5, by: 'agent', at: '2020-01-02T00:00:00Z', summary: 'Use the established design.', text: 'Full reasoning.' }] }] });
   assert.equal(facts.asked.length, 1); assert.equal(facts.decided.length, 2);
   assert.equal(facts.decided[0].source, 'R-1'); assert.equal(facts.decided[0].item, 'ENG-1');
-  assert.equal(facts.decided[1].by, 'auto'); assert.equal(facts.asked[0].answerState, 'yes · auto');
+  assert.equal(facts.decided[1].by, 'agent'); assert.equal(facts.decided[1].seq, 3); assert.equal(facts.asked[0].answerState, 'yes · auto');
 });
 
 test('--print stays read only even when keys confirm an answer or a route change', t => {
@@ -162,4 +164,100 @@ test('structured ingested report fields appear in Decided and Asked without inve
   await s.activate(`decision:${s.model.decided[0].key}`); assert.match(render(s), /The durable facts already exist/);
   await s.activate(`asked:${s.model.asked[0].id}`); assert.match(render(s), /Which direction next/); assert.match(render(s), /Several directions remain useful/);
   assert.match(render(s), /no record question to answer/);
+});
+
+test('an org-only selection launched in another repository cannot read or edit that repository routes', t => {
+  const { scratch, cwd } = fixture(t), selected = path.join(scratch, 'selected'); fs.mkdirSync(selected);
+  const org = path.join(selected, '.org');
+  execFileSync(process.execPath, [bin, 'init'], { cwd: selected, env: { ...process.env, ORG_DIR: org }, stdio: 'pipe' });
+  const target = path.join(cwd, '.lane.json'), bytes = JSON.stringify({ routes: { engineer: { kind: 'foreign-harness', model: 'foreign-model' } } });
+  fs.writeFileSync(target, bytes);
+  const sessionModule = new URL('../modern/session.mjs', import.meta.url).href, cliModule = new URL('../lib/cli.mjs', import.meta.url).href;
+  const script = `
+    import { createModernSession } from ${JSON.stringify(sessionModule)};
+    import { orgRoutes, orgRouteSet } from ${JSON.stringify(cliModule)};
+    const project = { name: 'Record-only project', org: ${JSON.stringify(org)} };
+    const session = createModernSession({ config: { projects: [project] }, env: { HERDR_ENV: '1' }, deps: {
+      herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }), brainQueue: async () => ({ rows: [], off: true })
+    } });
+    await session.refresh(); await session.key('u');
+    const screen = session.frame(110, 32).lines.map(l => l.spans.map(s => s.text).join('')).join(String.fromCharCode(10));
+    await session.activate('route:engineer');
+    let readError; try { await orgRoutes(project); } catch (error) { readError = error.message; }
+    const write = await orgRouteSet(project, { name: 'engineer', model: 'wrong-project', revision: ${JSON.stringify(routesSnapshot(cwd).revision)} });
+    console.log(JSON.stringify({ routes: session.model.routes, edit: session.ui.routeEdit, screen, readError, write })); session.stop();
+  `;
+  const result = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd, encoding: 'utf8' }));
+  assert.equal(result.routes, null); assert.equal(result.edit, null);
+  assert.match(result.readError, /Project directory unknown/); assert.equal(result.write.ok, false); assert.match(result.write.error, /Project directory unknown/);
+  assert.match(result.screen, /Read only/); assert.match(result.screen, /Open its folder/); assert.doesNotMatch(result.screen, /foreign-model|Enter edit/);
+  assert.equal(fs.readFileSync(target, 'utf8'), bytes); assert.equal(fs.existsSync(path.join(selected, '.lane.json')), false);
+});
+
+test('route editor sends partial CLI patches and retains absent harness model and effort defaults', async t => {
+  const requests = [], f = fixture(t, { orgRouteSet: async (project, request) => { requests.push(request); return orgRouteSet(project, request); } }), s = f.session;
+  const target = path.join(f.cwd, '.lane.json');
+  fs.writeFileSync(target, JSON.stringify({ routes: { engineer: { kind: 'opaque', model: 'model-only' }, reviewer: { kind: 'opaque', effort: 'effort-only' } } }));
+  await s.refresh(); await s.key('u'); await s.activate('route:engineer');
+  assert.match(render(s), /Effort: \(harness default\)/);
+  await s.key('', { tab: true }); await s.key('u', { ctrl: true }); await s.key('new-model'); await s.key('', { return: true });
+  assert.match(render(s), /effort: \(harness default\) → \(harness default\)/);
+  await s.key('', { return: true });
+  assert.deepEqual(Object.keys(requests[0]).sort(), ['model', 'name', 'revision']);
+  let own = JSON.parse(fs.readFileSync(target, 'utf8'));
+  assert.equal(own.routes.engineer.model, 'new-model'); assert.equal(Object.hasOwn(own.routes.engineer, 'effort'), false);
+  await s.activate('route:reviewer');
+  assert.match(render(s), /Model: \(harness default\)/);
+  await s.key('', { tab: true, shift: true }); await s.key('u', { ctrl: true }); await s.key('new-effort'); await s.key('', { return: true }); await s.key('', { return: true });
+  assert.deepEqual(Object.keys(requests[1]).sort(), ['effort', 'name', 'revision']);
+  own = JSON.parse(fs.readFileSync(target, 'utf8'));
+  assert.equal(own.routes.reviewer.effort, 'new-effort'); assert.equal(Object.hasOwn(own.routes.reviewer, 'model'), false);
+  await s.activate('route:engineer'); await s.key('', { tab: true }); await s.key('u', { ctrl: true }); await s.key('', { return: true });
+  assert.match(s.ui.message, /removing overrides is not supported/); assert.equal(requests.length, 2);
+});
+
+test('real answer, overrule and reopen retain each decision note with its original provenance', async t => {
+  const { session: s, org, question, goal, cwd } = fixture(t);
+  const answers = () => s.model.decided.filter(d => d.source === question);
+  const assertNotes = () => {
+    const item = JSON.parse(org(['show', question, '--json'])), notes = item.notes.filter(n => n.kind === 'answer');
+    assert.deepEqual(answers().map(d => ({ seq: d.seq, at: d.at, by: d.by, detail: d.detail })),
+      notes.toReversed().map(n => ({ seq: n.seq, at: n.at, by: n.by, detail: n.text })));
+  };
+  org(['answer', question, 'yes', '--note=First answer'], { ORG_ACTOR: 'first-operator', ORG_NOW: '2026-10-01T23:01:00Z' });
+  await s.refresh(); assert.equal(answers().length, 1); assertNotes();
+  org(['answer', question, 'no', '--overrule', '--note=Changed direction'], { ORG_ACTOR: 'second-operator', ORG_NOW: '2026-10-01T23:02:00Z' });
+  await s.refresh(); assert.equal(answers().length, 2); assertNotes();
+  org(['reopen', question]); await s.refresh(); assert.equal(answers().length, 2); assertNotes();
+  assert.equal(s.model.asked[0].answerState, 'Waiting on you');
+  await s.key('d'); assert.match(render(s), /First answer/); assert.match(render(s), /overruling yes/);
+  await s.activate(`decision:${answers()[1].key}`); assert.match(render(s), /first-operator/); assert.match(render(s), /First answer/);
+  assert.equal(render(s).match(/First answer/g).length, 1, 'the full answer evidence appears once in its reader');
+  org(['answer', question, 'yes'], { ORG_ACTOR: 'third-operator', ORG_NOW: '2026-10-01T23:03:00Z' });
+  await s.refresh(); assert.equal(answers().length, 3); assertNotes();
+  const configFile = path.join(cwd, '.org/config.json'), config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  config.approvals = { categories: { tooling: 'auto' } }; fs.writeFileSync(configFile, JSON.stringify(config));
+  const auto = org(['ask', 'Use defaults?', '--parent', goal, '--category=tooling', '--recommend=yes', '--why=Routine choice']);
+  await s.refresh(); const decision = s.model.decided.find(d => d.source === auto);
+  assert.equal(decision.by, 'fixture-agent'); assert.match(decision.text, /automatically/);
+});
+
+test('legacy answer summaries remain available without hiding unrelated earlier answer notes', () => {
+  const facts = controlEntries({ items: [{ id: 'HUM-1', role: 'human', title: 'Use defaults?', meta: { answer: 'no', answered_by: 'human' },
+    closed: { seq: 10, at: 'later' }, notes: [{ kind: 'answer', decision: true, seq: 2, at: 'earlier', by: 'agent', text: 'Answered yes' }] }] });
+  assert.equal(facts.decided.length, 2); assert.equal(facts.decided[0].text, 'Use defaults? → no'); assert.equal(facts.decided[1].seq, 2);
+});
+
+test('partial route CLI edits preserve dispatch inheritance rather than pinning defaults', t => {
+  const { cwd, org } = fixture(t), target = path.join(cwd, '.lane.json');
+  fs.writeFileSync(target, JSON.stringify({ dispatch: { kind: 'opaque', model: 'shared-model', effort: 'shared-effort' },
+    routes: { engineer: { model: 'named-model' }, reviewer: { effort: 'named-effort' } } }));
+  org(['routes', 'set', 'engineer', '--model=new-model']); org(['routes', 'set', 'reviewer', '--effort=new-effort']);
+  const own = JSON.parse(fs.readFileSync(target, 'utf8'));
+  assert.deepEqual(own.routes.engineer, { model: 'new-model' }); assert.deepEqual(own.routes.reviewer, { effort: 'new-effort' });
+  own.dispatch.model = 'next-shared-model'; own.dispatch.effort = 'next-shared-effort';
+  fs.writeFileSync(target, JSON.stringify(own));
+  const config = JSON.parse(org(['routes', '--json'])).config;
+  assert.equal(resolveRoute(config, { route: 'engineer' }).effort, 'next-shared-effort');
+  assert.equal(resolveRoute(config, { route: 'reviewer' }).model, 'next-shared-model');
 });

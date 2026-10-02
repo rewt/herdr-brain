@@ -92,7 +92,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
   const title = s.view === 'projects' ? 'Your projects' : s.view === 'folder' ? 'Open a folder' : s.view === 'ideas' ? 'Start with an idea' : s.view === 'output' ? space?.label ?? 'Session output' : p?.name ?? 'Start where you are';
-  const action = s.routeEdit ? 'Enter reviews / saves' : s.view === 'routes' ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
+  const action = s.routeEdit ? 'Enter reviews / saves' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
   put(2, x, title, 'bright', 'bg', true, width - action.length - 2);
   put(2, cols - action.length - 2, action, 'muted', 'bg', false, action.length);
   const errors = Object.entries(s.errors);
@@ -156,7 +156,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     if (!m.asked.length) paragraph(s.errors.status ? 'Record unavailable · r retry' : 'No questions recorded.');
   };
   const routesRows = limit => {
-    if (!m.routes) { paragraph(s.errors.routes ? 'Routes unavailable · r retry' : 'Routes have not loaded.'); return; }
+    if (!m.routes) { paragraph(s.errors.routes ? `Routes unavailable: ${s.errors.routes}` : 'Routes have not loaded.'); return; }
     const r = m.routes, config = r.config;
     paragraph(r.suggested ? 'Suggested defaults · confirmation pending. Saving an edit adopts them for this project.' : 'Project routes · Enter a route to change its kind, model or effort.');
     if (s.errors.routes) paragraph('Showing last loaded routes; refresh before editing.', 'amber');
@@ -183,13 +183,13 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const e = s.routeEdit;
     section(`${e.confirm ? 'Review route change' : 'Edit route'} · ${e.name}`);
     if (e.confirm) {
-      for (const [i, field] of ['kind', 'model', 'effort'].entries()) paragraph(`${field}: ${e.original[field] || '(default)'} → ${e.values[i].trim()}`, 'fg');
+      for (const [i, field] of ['kind', 'model', 'effort'].entries()) paragraph(`${field}: ${e.original[field] ?? '(harness default)'} → ${e.values[i].trim() || '(harness default)'}`, 'fg');
       paragraph(`Save for ${e.project.name} in ${e.target}`);
       paragraph('This applies to future launches.');
       row(e.busy ? 'Saving…' : 'Enter  Save route', { id: 'route-save', fg: 'teal' });
     } else {
       for (const [i, field] of ['Kind', 'Model', 'Effort'].entries()) {
-        row(`${field}: ${clip(e.values[i], Math.max(1, width - field.length - 5))}${e.field === i ? '▏' : ''}`, { id: `route-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i });
+        row(`${field}: ${clip(e.values[i] || '(harness default)', Math.max(1, width - field.length - 5))}${e.field === i ? '▏' : ''}`, { id: `route-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i });
       }
       row(); paragraph('Tab / ↑↓ field · Ctrl+U clears · Enter reviews');
       row('Enter  Review change', { id: 'route-save', fg: 'blue' });
@@ -224,7 +224,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   } else if (s.view === 'decision') {
     const n = m.decided.find(n => n.key === s.detail);
     if (!n) paragraph('This decision is no longer available.');
-    else { section(`${n.source} · ${n.by}`, 'teal'); paragraph(n.at); paragraph(n.text, 'fg'); row(); paragraph(n.detail, 'fg');
+    else { section(`${n.source} · ${n.by}`, 'teal'); paragraph(n.at); paragraph(n.heading ?? n.text, 'fg'); row(); paragraph(n.detail, 'fg');
       row(`Open ${n.item} ›`, { id: `item:${n.item}`, fg: 'blue' }); }
   } else if (s.view === 'projects' || (!p && s.view === 'overview')) {
     section('Continue a project');

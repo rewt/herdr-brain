@@ -12,6 +12,7 @@
 // available in that pane meanwhile. Without HERDR_PANE_ID nothing is routed.
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseAgentList, parseTabList } from './sources.mjs';
 
@@ -58,15 +59,28 @@ export async function orgStatus(project) {
   return doc;
 }
 
+function routeDirectory(project) {
+  // An org path identifies a record, not its Git project. Never let an
+  // org-only selection inherit the directory that launched the console.
+  const directory = project.root ?? project.cwd;
+  if (typeof directory !== 'string' || !path.isAbsolute(directory)) throw new Error('Project directory unknown. Open its folder to inspect or edit routes.');
+  const resolved = fs.realpathSync(directory);
+  if (!fs.statSync(resolved).isDirectory()) throw new Error('Project directory is unavailable.');
+  return resolved;
+}
+
 export async function orgRoutes(project) {
-  const r = await run(process.execPath, [ORG_BIN, 'routes', '--json'], { cwd: project.root ?? project.cwd });
+  const r = await run(process.execPath, [ORG_BIN, 'routes', '--json'], { cwd: routeDirectory(project) });
   if (!r.ok) throw new Error(firstLine(r.stderr) || 'record routes failed');
   return JSON.parse(r.stdout);
 }
 
 export async function orgRouteSet(project, { name, kind, model, effort, revision }) {
-  const r = await run(process.execPath, [ORG_BIN, 'routes', 'set', name, `--kind=${kind}`, `--model=${model}`, `--effort=${effort}`, `--expect=${revision}`, '--json'],
-    { cwd: project.root ?? project.cwd, env: { ...process.env, ORG_ACTOR: 'human' } });
+  let cwd;
+  try { cwd = routeDirectory(project); } catch (error) { return { ok: false, error: error.message }; }
+  const patch = Object.entries({ kind, model, effort }).filter(([, value]) => value !== undefined).map(([field, value]) => `--${field}=${value}`);
+  const r = await run(process.execPath, [ORG_BIN, 'routes', 'set', name, ...patch, `--expect=${revision}`, '--json'],
+    { cwd, env: { ...process.env, ORG_ACTOR: 'human' } });
   return r.ok ? { ok: true, routes: JSON.parse(r.stdout) } : { ok: false, error: firstLine(r.stderr) || 'record routes set failed' };
 }
 

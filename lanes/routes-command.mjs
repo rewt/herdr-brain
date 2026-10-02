@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { gitProject } from '../lib/project.mjs';
 import { UserError } from '../lib/store.mjs';
 import { renderRoutes } from '../lib/render.mjs';
-import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, validateRoutesConfig } from './routes.mjs';
+import { loadDiscoveredRoutes, mergeRoutesConfig, validateRoutesConfig } from './routes.mjs';
 
 export function routesSnapshot(cwd = process.cwd()) {
   let project;
@@ -46,10 +46,9 @@ export function setProjectRoute(name, patch, { cwd = process.cwd(), expect } = {
     // silently remove every other suggested route and the selection policy.
     const next = current.suggested ? structuredClone(current.config) : own;
     if (current.suggested) next.authority = 'Project routes confirmed by the operator';
-    const effective = resolveRoute(current.config, { route: name });
-    next.routes = { ...next.routes, [name]: { ...current.config.routes[name],
-      kind: effective.kind, ...(effective.model ? { model: effective.model } : {}),
-      ...(effective.effort ? { effort: effective.effort } : {}), ...patch } };
+    // Preserve the named route, including absent fields that continue to use
+    // dispatch or harness defaults, rather than pinning resolved defaults.
+    next.routes = { ...next.routes, [name]: { ...current.config.routes[name], ...patch } };
     validateRoutesConfig(next, { references: false });
     // Project route maps replace individual inherited routes; all policy
     // references must still resolve before any bytes are replaced.

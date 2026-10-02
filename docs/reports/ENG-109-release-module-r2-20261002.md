@@ -18,6 +18,7 @@ artifacts:
   - "docs/reports/ENG-109-release-preview-r2-20261002.json: replacement build receipt, actual acceptance argv, three record events and all case dispositions"
   - "docs/reports/ENG-109-release-module-r2-20261002.md: committed copy of this report"
   - "ORG_ACTOR=R-134 node test/helpers/run.mjs release/test/*.test.mjs test/suite.test.mjs: 22 passed, 0 failed; /tmp/eng-109-r134-rebased-focused-fixed.log"
+  - "ORG_ACTOR=R-134 npm run test:acceptance: 81 passed, 0 failed after the compiler-free owner rebase; /tmp/eng-109-r134-acceptance-offline.log"
   - "Initial complete npm test attempt: /tmp/eng-109-r134-npm-test.log; every file ran, with a snapshot failure subsequently diagnosed and corrected"
   - "Final validation command: ORG_ACTOR=R-134 node lanes/lane.mjs check; runs npm test on the committed report head and retains .lane/gate.json plus /tmp/eng-109-r134-lane-check.log"
 decisions:

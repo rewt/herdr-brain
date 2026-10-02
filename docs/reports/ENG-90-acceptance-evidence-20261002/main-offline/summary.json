@@ -1,0 +1,231 @@
+{
+  "candidate": "main",
+  "candidateCommit": "f47658935ed23b8eccb1c34ec659a596670eb6e9",
+  "elapsedSeconds": 114,
+  "counts": {
+    "PASS": 22,
+    "FAIL": 0,
+    "PENDING": 2
+  },
+  "evidence": "/private/tmp/herdr-acceptance-ocGRUu/evidence",
+  "results": [
+    {
+      "id": "01",
+      "key": "candidate-snapshot",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "main: f47658935ed23b8eccb1c34ec659a596670eb6e9",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "key": "new-project-record",
+      "name": "New project: record discovers and populates",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "key": "new-project-routes",
+      "name": "New project: routes resolve without config",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "key": "supervisor-entry",
+      "name": "New project: installed supervisor entry and record bootstrap",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "actual supervisor entry executed in an untouched project and bootstrapped the record; this does not execute a dispatch/watch cycle",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "key": "herdr-fixture",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "05.jsonl"
+    },
+    {
+      "id": "06",
+      "key": "configured-cycle",
+      "name": "Configured cycle: dispatch/report/ingest/promote/close",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1: one notice, recorded report, green fast-forward, lane removed; red/dirty gates refused",
+      "evidence": "06.jsonl"
+    },
+    {
+      "id": "07",
+      "key": "promotion-queue",
+      "name": "Unconfigured promotion queue: FIFO, notices and refusal",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "unconfigured project: two default npm gates promoted FIFO, lanes closed; dirty refusal kept its lane; three supervisor PTY notices",
+      "evidence": "07.jsonl"
+    },
+    {
+      "id": "08",
+      "key": "missing-worker",
+      "name": "Failure path: missing worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-2: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "08.jsonl"
+    },
+    {
+      "id": "09",
+      "key": "invalid-worker",
+      "name": "Failure path: invalid worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-3: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "09.jsonl"
+    },
+    {
+      "id": "10",
+      "key": "blocked-worker",
+      "name": "Failure path: blocked worker",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-4: matching intermediate notice, watcher alive, no ingestion; abandoned and closed",
+      "evidence": "10.jsonl"
+    },
+    {
+      "id": "11",
+      "key": "fix-round",
+      "name": "Fix round: same worker, fresh durable run",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-5 -> R-6: blocked report then done, same PTY, distinct run/report",
+      "evidence": "11.jsonl"
+    },
+    {
+      "id": "12",
+      "key": "watch-grace",
+      "name": "Watch cutover: idle grace and exclusive watcher",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)",
+      "evidence": "12.jsonl"
+    },
+    {
+      "id": "13",
+      "key": "housekeeping",
+      "name": "Housekeeping closes only eligible finished workers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved",
+      "evidence": "13.jsonl"
+    },
+    {
+      "id": "14",
+      "key": "scratch-release",
+      "name": "Scratch release build/activate/rollback/restore",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "candidate code archived into immutable scratch releases; old-install launcher migration checked; npm/plugin/launchd excluded",
+      "evidence": "14.jsonl"
+    },
+    {
+      "id": "15",
+      "key": "console-build",
+      "name": "Full console dependency build (offline)",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "",
+      "evidence": "15.jsonl"
+    },
+    {
+      "id": "16",
+      "key": "existing-copy",
+      "name": "Existing project: copy live calls and inventory drift",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)",
+      "evidence": "16.jsonl"
+    },
+    {
+      "id": "17",
+      "key": "existing-wrappers",
+      "name": "Existing project: routing and both wrapper dry runs",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "background identity resolved by native Git lookup; both copied wrappers and routing tests pass after the scratch-only supervisor entry switch; original bytes/mode restored",
+      "evidence": "17.jsonl"
+    },
+    {
+      "id": "18",
+      "key": "org-path",
+      "name": "Existing project: org PATH consumers",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk",
+      "evidence": "18.jsonl"
+    },
+    {
+      "id": "19",
+      "key": "cutover-switches",
+      "name": "ENG-64: every file switch and rollback",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "11 switches applied, executed and restored; detailed receipts in cutover-switches.json",
+      "evidence": "19.jsonl"
+    },
+    {
+      "id": "20",
+      "key": "contrib-retirement",
+      "name": "ENG-64: final contrib removal and restoration",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "negative caller probe refused; zero-caller retirement executed; split launcher tests ran without contrib; blob restored before all legacy callers",
+      "evidence": "20.jsonl"
+    },
+    {
+      "id": "21",
+      "key": "discovery-concurrent",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "real discovery explicitly skipped; release gate cannot pass",
+      "evidence": "21.jsonl"
+    },
+    {
+      "id": "22",
+      "key": "discovery-routing",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "PENDING",
+      "origin": "product",
+      "detail": "real discovery explicitly skipped; release gate cannot pass",
+      "evidence": "22.jsonl"
+    },
+    {
+      "id": "23",
+      "key": "default-cycle",
+      "name": "New project: default supervisor dispatch/watch/ingest cycle",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "R-1: supervisor entry bootstrapped record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation and fast-forward passed",
+      "evidence": "23.jsonl"
+    },
+    {
+      "id": "24",
+      "key": "scope-cleanup",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "24.jsonl"
+    }
+  ],
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

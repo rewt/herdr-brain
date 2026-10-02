@@ -928,6 +928,8 @@ function open(topic, base = MAIN) {
       "worktree", "create",
       ...(parent === undefined ? ["--cwd", REPO_ROOT] : ["--workspace", parent]),
       "--branch", branch, "--base", base, "--path", path, "--label", label,
+      // Never move the operator's Herdr focus to a new lane.
+      "--no-focus",
     ],
     { encoding: "utf8" },
   );
@@ -1098,7 +1100,7 @@ function dispatch(topic, promptText, options = {}) {
   if (workspaceId === undefined) {
     fail(`herdr shows no open workspace for ${path} and could not open one from the ${REPO_ROOT} workspace`);
   }
-  const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`];
+  const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
   for (const pair of resolved.env) tabArgs.push("--env", pair);
   tabArgs.push("--env", "MONITOR_ENTRY_BYPASS=1");
   const created = JSON.parse(execFileSync("herdr", tabArgs, {

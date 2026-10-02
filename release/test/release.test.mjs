@@ -111,7 +111,8 @@ for (const answer of ['yes', 'no']) test(`agents cannot start a run on an operat
   refuseStart();
   assert.equal(f.attempt().result, answer === 'yes' ? 'approved' : 'declined');
   f.commit('next-batch');
-  assert.equal(f.attempt().result, 'awaiting-operator', 'the prior decision does not block the next batch');
+  const next = f.attempt();
+  assert.equal(next.result, 'awaiting-operator', `the prior decision does not block the next batch: ${fs.readFileSync(next.candidate.gate.log, 'utf8')}`);
 });
 
 test('low load, drained promotion queue, clean base and supervisor ownership are required', t => {
@@ -251,6 +252,7 @@ test('scratch preview runs preparation with inherited dependency-skip switches r
 
 test('a moved candidate tag cannot reuse its green evidence', t => {
   const f = fixture(t, { gate: ['node', 'gate.cjs'] }); const c = f.attempt().candidate;
+  assert.equal(c.gate.result, 'passed', fs.readFileSync(c.gate.log, 'utf8'));
   const changed = f.git(['commit-tree', c.tree, '-m', 'Different candidate identity']);
   f.git(['tag', '-f', c.tag, changed]);
   assert.throws(() => f.attempt(), /tag moved/); assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');

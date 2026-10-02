@@ -1,0 +1,260 @@
+{
+  "command": "ORG_ACTOR=R-134 RELEASE_NPM_CACHE=/Users/rewt/.npm RELEASE_BCH_CLOAK=/Users/rewt/development/bastian/bch-cloak node release/release.mjs --dry-run --skip-live --max-load-per-cpu 3",
+  "source_commit": "ec5dbcdf2426f281dda39f1e95a39c3c5605721a",
+  "source_commit_subject": "Build release candidates offline with complete gates and protected operator decisions",
+  "preview": "/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz",
+  "preview_max_load_per_cpu": 3,
+  "production_max_load_per_cpu": 1,
+  "dependency_installation": "real npm ci for console and MCP, offline, in the isolated candidate with a private copied cache",
+  "candidate": {
+    "id": "RC-1",
+    "tag": "rc-20261002T222706552Z-9638f2ca19",
+    "commit": "9638f2ca19b415cb902baf57f33e436f18098542",
+    "tree": "d6c5a959c3120223edd3c43185b805c3d1e10029",
+    "snapshot": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19",
+    "prepare": [
+      "node",
+      "herdr/release-candidate.mjs",
+      "prepare",
+      "--candidate",
+      "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19"
+    ],
+    "gate_command": [
+      "node",
+      "herdr/release-candidate.mjs",
+      "gate",
+      "--candidate",
+      "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19",
+      "--skip-live"
+    ],
+    "actual_gate_command": [
+      "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
+      "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19/acceptance/run.mjs",
+      "--candidate",
+      "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19",
+      "--npm-cache",
+      "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19/.release-npm-cache",
+      "--bch-cloak",
+      "/Users/rewt/development/bastian/bch-cloak",
+      "--skip-live"
+    ],
+    "ship": [
+      "bash",
+      "herdr/release.sh",
+      "build",
+      "rc-20261002T222706552Z-9638f2ca19"
+    ],
+    "gate": {
+      "result": "failed",
+      "stage": "gate",
+      "exit_code": 1,
+      "command": [
+        "node",
+        "herdr/release-candidate.mjs",
+        "gate",
+        "--candidate",
+        "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19",
+        "--skip-live"
+      ],
+      "log": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/RC-1.log",
+      "detail": "gate exited 1",
+      "signal": null
+    },
+    "question": null
+  },
+  "build": {
+    "commit": "9638f2ca19b415cb902baf57f33e436f18098542",
+    "completed_at": "2026-10-02T22:27:12.574Z",
+    "command": [
+      "bash",
+      "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19/herdr/install.sh"
+    ],
+    "offline": true,
+    "cache": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19/.release-npm-cache",
+    "modules": [
+      {
+        "module": "console",
+        "package_lock_sha256": "cbd534129331b5110c513659b01506a3ecf1f7b3371592122ef5696f7c0d580c",
+        "installed_packages": 40
+      },
+      {
+        "module": "mcp",
+        "package_lock_sha256": "9b3f7d8e2defd968d08d5d7c6a865b98f655e7cefbd93f312bd3549e00dafca5",
+        "installed_packages": 94
+      }
+    ]
+  },
+  "record_events": [
+    {
+      "type": "release.cut",
+      "seq": 1,
+      "by": "R-134",
+      "at": "2026-10-02T22:27:06.661Z",
+      "id": "RC-1"
+    },
+    {
+      "type": "release.gate.started",
+      "seq": 2,
+      "by": "R-134",
+      "at": "2026-10-02T22:27:06.755Z",
+      "id": "RC-1"
+    },
+    {
+      "type": "release.gate.finished",
+      "seq": 3,
+      "by": "R-134",
+      "at": "2026-10-02T22:28:33.409Z",
+      "id": "RC-1"
+    }
+  ],
+  "harness": {
+    "counts": {
+      "PASS": 9,
+      "FAIL": 0,
+      "PENDING": 18
+    },
+    "evidence": "/private/tmp/herdr-acceptance-QXqaBM/evidence",
+    "candidateCommit": "9638f2ca19b415cb902baf57f33e436f18098542",
+    "elapsedSeconds": 81,
+    "results": [
+      {
+        "key": "candidate-snapshot",
+        "status": "PASS",
+        "detail": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-release-preview-27i0uz/project/.git/release/candidates/rc-20261002T222706552Z-9638f2ca19: 9638f2ca19b415cb902baf57f33e436f18098542"
+      },
+      {
+        "key": "new-project-record",
+        "status": "PASS",
+        "detail": ""
+      },
+      {
+        "key": "new-project-routes",
+        "status": "PASS",
+        "detail": ""
+      },
+      {
+        "key": "supervisor-entry",
+        "status": "PASS",
+        "detail": "actual supervisor entry executed in an untouched project and bootstrapped the record; this does not execute a dispatch/watch cycle"
+      },
+      {
+        "key": "herdr-fixture",
+        "status": "PENDING",
+        "detail": "run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "configured-cycle",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "promotion-queue",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "missing-worker",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "invalid-worker",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "blocked-worker",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "fix-round",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "watch-grace",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "housekeeping",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "scratch-release",
+        "status": "PASS",
+        "detail": "candidate code archived into immutable scratch releases; launcher migration and reversible entry install checked in an isolated user home; npm/plugin/launchd excluded"
+      },
+      {
+        "key": "console-build",
+        "status": "PASS",
+        "detail": ""
+      },
+      {
+        "key": "existing-copy",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "existing-wrappers",
+        "status": "PENDING",
+        "detail": "prerequisite existing-copy (Existing project: copy live calls and inventory drift): prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "org-path",
+        "status": "PENDING",
+        "detail": "prerequisite existing-copy (Existing project: copy live calls and inventory drift): prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "cutover-switches",
+        "status": "PENDING",
+        "detail": "prerequisite existing-copy (Existing project: copy live calls and inventory drift): prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "contrib-retirement",
+        "status": "PENDING",
+        "detail": "prerequisite cutover-switches (ENG-64: every file switch and rollback): prerequisite existing-copy (Existing project: copy live calls and inventory drift): prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "discovery-concurrent",
+        "status": "PENDING",
+        "detail": "real discovery explicitly skipped; release gate cannot pass"
+      },
+      {
+        "key": "discovery-routing",
+        "status": "PENDING",
+        "detail": "real discovery explicitly skipped; release gate cannot pass"
+      },
+      {
+        "key": "default-cycle",
+        "status": "PENDING",
+        "detail": "prerequisite herdr-fixture (Real Herdr boundary and configured fixture): run inside Herdr (HERDR_ENV=1); no session inspected"
+      },
+      {
+        "key": "settle-cycle",
+        "status": "PASS",
+        "detail": "R-1 -> R-2: actual record/review/check/dispatch/watch, no project config, scripted transport and claim check, no model"
+      },
+      {
+        "key": "supervisor-cycle",
+        "status": "PASS",
+        "detail": "R-1 -> R-2: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicate original reports return supersession, correction reports reuse receipts; queue and final-report replays preserve explicit reopening; no config or model"
+      },
+      {
+        "key": "scope-cleanup",
+        "status": "PASS",
+        "detail": "all created workspaces closed; only evidence retained"
+      },
+      {
+        "key": "operator-focus",
+        "status": "PENDING",
+        "detail": "operator focus trace incomplete: missing baseline or samples"
+      }
+    ]
+  },
+  "result": "gate-failed",
+  "shipping_executed": false,
+  "activation_executed": false
+}

@@ -15,12 +15,15 @@ export function phases(files) {
   ].filter(([, rows]) => rows.length);
 }
 
-export function main(files = process.argv.slice(2)) {
+export function main(argv = process.argv.slice(2)) {
+  const options = argv.filter(arg => arg.startsWith('--'));
+  if (options.some(arg => !/^--(file|suite)-timeout=\d+$/.test(arg))) throw new Error('unsupported suite option');
+  const files = argv.filter(arg => !arg.startsWith('--'));
   const groups = phases(files);
   console.log(`Complete npm test list: ${files.length} files; ${groups.length} bounded phases`);
   for (const [name, rows] of groups) {
     console.log(`Validation phase ${name}: ${rows.length} files`);
-    const result = spawnSync(process.execPath, [fileURLToPath(new URL('./run.mjs', import.meta.url)), ...rows], { stdio: 'inherit' });
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('./run.mjs', import.meta.url)), ...options, ...rows], { stdio: 'inherit' });
     if (result.error) throw result.error;
     if (result.status !== 0) { process.exitCode = result.status ?? 1; return; }
   }

@@ -8,6 +8,7 @@ import { boundaryScript, liveSocket } from './probe.mjs';
 import { HarnessLimit, isHarnessBoundary, isProductBoundary, commandFailure } from './limits.mjs';
 import { createVerification } from './verify.mjs';
 import { createOwnedTempRoot } from './temp.mjs';
+import { copyNativeTransport } from './transport.mjs';
 
 export async function discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
   const model = opt['discovery-model'] ?? 'gpt-5.6-luna', effort = opt['discovery-effort'] ?? 'low';
@@ -36,6 +37,7 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
     ...Object.fromEntries(['checkout', 'branch', 'work_id', 'run_id', 'question_id', 'result'].map((name) => [name, { type: 'string' }])),
   } }));
   fs.copyFileSync(path.join(import.meta.dirname, 'security.mjs'), path.join(root, 'security.mjs'));
+  const nativeTransport = copyNativeTransport(root);
 
   const live = async (repo, name, task) => {
     const binary = fs.realpathSync(run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim());
@@ -71,10 +73,8 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
     // the candidate's installer when shipped rather than bypassing its adapter.
     const installer = path.join(installation, 'discovery/install.mjs');
     if (fs.existsSync(installer)) {
-      fs.copyFileSync(path.join(import.meta.dirname, 'native-transport.mjs'), path.join(root, 'native-transport.mjs'));
-      fs.copyFileSync(path.join(import.meta.dirname, 'validation.mjs'), path.join(root, 'validation.mjs'));
       const native = path.join(root, `native-${name}`), entryBin = path.join(installation, `entry-${name}`);
-      write(native, `#!/bin/sh\nexec '${process.execPath}' '${path.join(root, 'native-transport.mjs')}' '${root}' '${name}' "$@"\n`);
+      write(native, `#!/bin/sh\nexec '${process.execPath}' '${nativeTransport}' '${root}' '${name}' "$@"\n`);
       fs.chmodSync(native, 0o755);
       run(process.execPath, [installer, '--bin', entryBin, '--codex', native], { isolatedEnv: clean });
       spec.entryBinary = path.join(entryBin, 'monitor-codex');

@@ -8,6 +8,7 @@ import { createEntry, command } from '../../discovery/runtime.mjs';
 import { sandboxCommand } from '../../discovery/confinement.mjs';
 import { lifetimeScope, closeScope } from '../../discovery/lifetime.mjs';
 import { validationTransport } from '../validation.mjs';
+import { copyNativeTransport } from '../transport.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
 const discovered = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout?.trim();
@@ -94,7 +95,8 @@ test('actual native transport validates and promotes work and approved routes of
     fs.mkdirSync(path.join(root, 'live-jobs')); fs.mkdirSync(path.join(root, 'evidence'));
     fs.writeFileSync(path.join(root, 'live-jobs/offline.json'), JSON.stringify(spec));
     const native = path.join(root, 'native');
-    fs.writeFileSync(native, `#!/bin/sh\nexec '${process.execPath}' '${path.join(source, 'acceptance/native-transport.mjs')}' '${root}' offline "$@"\n`, { mode: 0o755 });
+    const nativeTransport = copyNativeTransport(root);
+    fs.writeFileSync(native, `#!/bin/sh\nexec '${process.execPath}' '${nativeTransport}' '${root}' offline "$@"\n`, { mode: 0o755 });
     // This uses the trusted parent directly, the actual gate transport and native
     // Codex sandbox, with no authentication, model or Herdr calls.
     const previous = { ...process.env };

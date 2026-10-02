@@ -19,6 +19,7 @@ import { makeSnapshotWritable } from './snapshot.mjs';
 import { createOwnedTempRoot } from './temp.mjs';
 import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
+import { settleCase } from './settle.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -936,6 +937,12 @@ try {
     node(path.join(candidate, 'lanes/lane.mjs'), ['promote', job.lane], { cwd: repo, extra });
     node(path.join(candidate, 'lanes/lane.mjs'), ['close', job.lane], { cwd: repo, extra });
     return `${job.run}: supervisor entry bootstrapped record, suggested engineer route dispatched without config, armed watch delivered exactly once, real PTY supervisor CLI check/ingest recorded done, default validation and fast-forward passed`;
+  });
+  await test(cases.settle, async () => {
+    requireCandidate('settle/settle.mjs');
+    const result = await settleCase(candidate);
+    fs.appendFileSync(logFile, JSON.stringify(result) + '\n');
+    return result.detail;
   });
 } catch (error) {
   if (!(error instanceof Pending)) results.push({ id: 'fatal', key: 'harness-setup', name: 'Harness setup', status: 'PENDING', origin: 'harness', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });

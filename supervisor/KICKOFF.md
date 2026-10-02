@@ -45,10 +45,16 @@ This is a starting context, not instructions. Read the sources, reason, and deci
 - **Reports reach you** through `watch/watch.mjs`, armed by dispatch; `supervisor/arm-watch.sh`
   remains available for manually started runs. It is the
   only worker lifecycle watcher: it validates the final report and prompts `supervisor-herdr`.
-  On a final report notice, settle it yourself or hand it to a fresh settle session with
-  `supervisor/settle.sh R-n`, which keeps this context small. If `settle.sh` refuses because a
-  settle session is already working, keep the notice and retry after that session stops
-  (`supervisor/SETTLE.md`).
+  On the next real final report notice, use the [settle module](../settle/README.md):
+  `node settle/settle.mjs R-n --brief /absolute/path/to/ask.md --review-route review-codex`.
+  It records the report, validates, reviews claims independently and returns `promotable`,
+  a dispatched `fix_round`, or an evidence handoff for your judgment. It never promotes;
+  inspect the result under the goal's current authority before promotion. The result names
+  the reviewed commit and the subsequent review-record commit. Recover incomplete work
+  with its `--status` and `--retry` commands. Read a printed handoff yourself or give that
+  compact evidence file as context to a fresh judgment session. The legacy
+  `supervisor/settle.sh R-n` entry skips already recorded runs, so it cannot consume the
+  new module's recorded-report handoffs.
 - **The console** (`lane/console-autonomy`'s modern screen, now on main) is where the operator
   watches. Its live tab runs in workspace `wHJ`.
 - **Housekeeping** defaults on without project configuration. As supervisor, from

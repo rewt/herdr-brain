@@ -28,6 +28,7 @@ export const cases = Object.freeze({
   discovery: spec('discovery-concurrent', 'Real discovery: concurrent lanes and promotion'),
   routingQuestion: spec('discovery-routing', 'Real discovery: routing question waits and answer applies'),
   defaultCycle: spec('default-cycle', 'New project: default supervisor dispatch/watch/ingest cycle', ['herdr-fixture']),
+  settle: spec('settle-cycle', 'New project: report/settle/fix/settle/promotable without config'),
   cleanup: spec('scope-cleanup', 'Cleanup and scope audit', [], { cleanup: true }),
 });
 export const cutoverChecks = Object.freeze({

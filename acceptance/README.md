@@ -34,6 +34,13 @@ dedicated untouched project; it does not claim a dispatch/watch cycle. `default-
 fixture is a separate case: its record, route, validation command and ignored
 session registry are explicit test setup, never evidence that defaults work.
 
+The settle case separately executes report → settle → correction run → watch
+delivery → settle → promotable in a project with no route/lifecycle configuration.
+Git, record, lane review/check, dispatch and watch are actual candidate code;
+Herdr and model transport and the independent claim check are scripted. It does
+not establish live review quality, real PTY transport or the default supervisor
+cycle. Run this case alone offline with `node acceptance/settle.mjs [CANDIDATE_DIR]`.
+
 Two real sessions receive overlapping greeting changes in the same new project.
 A third receives a routing task in another new project. Their prompts provide
 tasks and scratch safety boundaries; they do not name lanes, record setup,

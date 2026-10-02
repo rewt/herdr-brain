@@ -32,22 +32,33 @@ const inheritedValidation = '- Validation is inherited from settle; the explicit
 const cli = (key, file) => opt[`${key}-cli`] ? [opt[`${key}-cli`]] : [process.execPath, local(file)];
 let job, journal, release, laneConfig = null;
 function call(argv, args, cwd = job?.repo ?? path.resolve(opt.repo), options = {}) {
-  const env = { ...process.env, ORG_DIR: opt.org };
+  const env = { ...process.env, ...options.env, ORG_DIR: opt.org };
   delete env.LANE_CONFIG;
   if (laneConfig !== null) env.LANE_CONFIG = laneConfig;
   return spawnSync(argv[0], [...argv.slice(1), ...args], {
     cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
-    env, ...options,
+    ...options, env,
   });
 }
-function checked(argv, args, cwd) {
-  const r = call(argv, args, cwd);
+function checked(argv, args, cwd, options) {
+  const r = call(argv, args, cwd, options);
   if (r.error || r.status !== 0) throw new Error(`${args[0]}: ${(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()}`);
   return r.stdout.trim();
 }
 const record = (args) => checked(cli('org', '../bin/org.mjs'), args);
 const show = (run) => JSON.parse(record(['show', run, '--json']));
-const git = (args, cwd) => checked(['git'], args, cwd);
+const git = (args, cwd, options) => checked(['git'], args, cwd, options);
+function nulFields(bytes) {
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) throw new Error('Git NUL-delimited output cannot round-trip through UTF-8; automatic rebase refused, the lane is intact');
+  if (bytes.length && bytes.at(-1) !== 0) throw new Error('Git NUL-delimited output is not terminated');
+  return text.split('\0'); // Whitespace and the final empty field are data.
+}
+function gitNul(args, cwd, options = {}) {
+  const r = call(['git'], args, cwd, { ...options, encoding: null });
+  if (r.error || r.status !== 0) throw new Error(`${args[0]}: ${(r.stderr?.toString('utf8') || r.error?.message || `exit ${r.status}`).trim()}`);
+  return nulFields(r.stdout);
+}
 const save = () => writeFileAtomic(journal, `${JSON.stringify(job, null, 2)}\n`, 0o600);
 const evidence = (name, text) => {
   const file = path.join(path.dirname(journal), `${id}.${name}`);
@@ -186,30 +197,38 @@ function validate(name) {
 }
 function customMergePaths(base) {
   const revisions = git(['rev-list', `${base}..${job.finalHead}`], job.workspace).split('\n').filter(Boolean);
-  const paths = new Set(git(['diff', '--no-renames', '--name-only', '-z', base, job.mainHead], job.workspace).split('\0').filter(Boolean));
+  const paths = new Set(gitNul(['diff', '--no-renames', '--name-only', '-z', base, job.mainHead], job.workspace).filter(Boolean));
   for (const revision of revisions) {
-    for (const file of git(['diff-tree', '--no-commit-id', '--no-renames', '--name-only', '-r', '-z', `${revision}^`, revision], job.workspace).split('\0').filter(Boolean)) paths.add(file);
+    for (const file of gitNul(['diff-tree', '--no-commit-id', '--no-renames', '--name-only', '-r', '-z', `${revision}^`, revision], job.workspace).filter(Boolean)) paths.add(file);
   }
-  const configured = call(['git'], ['config', '--get', 'merge.default'], job.workspace);
+  const configured = call(['git'], ['config', '-z', '--get', 'merge.default'], job.workspace, { encoding: null });
   if (configured.error || ![0, 1].includes(configured.status)) throw new Error('Cannot inspect merge.default');
-  const defaultDriver = configured.stdout?.trim() || 'text';
-  const definitions = call(['git'], ['config', '-z', '--name-only', '--get-regexp', '^merge\\..*\\.(driver|name|recursive)$'], job.workspace);
+  const defaultDriver = nulFields(configured.stdout)[0] || 'text';
+  const definitions = call(['git'], ['config', '-z', '--name-only', '--get-regexp', '^merge\\..*\\.(driver|name|recursive)$'], job.workspace, { encoding: null });
   if (definitions.error || ![0, 1].includes(definitions.status)) throw new Error('Cannot inspect custom merge driver definitions');
-  const custom = new Set(definitions.stdout.split('\0').filter(Boolean).map((key) => key.match(/^merge\.(.*)\.(?:driver|name|recursive)$/)[1]));
+  const custom = new Set(nulFields(definitions.stdout).filter(Boolean).map((key) => key.match(/^merge\.(.*)\.(?:driver|name|recursive)$/)[1]));
   const unsafe = new Set();
   // Check current attributes (including info/global attributes), the captured
   // upstream, and every replayed tree: intermediate attributes matter too.
-  for (const revision of [null, base, job.mainHead, ...revisions]) {
-    const r = call(['git'], ['check-attr', ...(revision ? ['--source', revision] : []), '-z', '--stdin', 'merge'], job.workspace,
-      { input: [...paths].join('\0') + '\0' });
-    if (r.error || r.status !== 0) throw new Error(`Cannot inspect rebase merge attributes: ${r.stderr || r.error?.message}`);
-    const fields = r.stdout.split('\0');
-    for (let i = 0; i + 2 < fields.length; i += 3) {
-      const attribute = fields[i + 2], driver = attribute === 'unspecified' ? defaultDriver : attribute;
-      // Named drivers may themselves be called set/unset/unspecified, which
-      // check-attr prints exactly like its sentinel values. Refuse ambiguity.
-      if (custom.has(attribute) || custom.has(driver) || !['set', 'unset', 'text', 'binary', 'union'].includes(driver)) unsafe.add(fields[i]);
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-attributes-')));
+  const index = path.join(directory, 'index'), input = Buffer.from([...paths].join('\0') + '\0', 'utf8');
+  try {
+    for (const revision of [null, base, job.mainHead, ...revisions]) {
+      // --cached is available on Git 2.38/2.39. read-tree without -u populates
+      // only our alternate index; the lane's real index and files stay intact.
+      const options = revision ? { env: { GIT_INDEX_FILE: index } } : {};
+      if (revision) git(['read-tree', revision], job.workspace, options);
+      const fields = gitNul(['check-attr', ...(revision ? ['--cached'] : []), '-z', '--stdin', 'merge'], job.workspace,
+        { ...options, input });
+      for (let i = 0; i + 2 < fields.length; i += 3) {
+        const attribute = fields[i + 2], driver = attribute === 'unspecified' ? defaultDriver : attribute;
+        // Named drivers may themselves be called set/unset/unspecified, which
+        // check-attr prints exactly like its sentinel values. Refuse ambiguity.
+        if (custom.has(attribute) || custom.has(driver) || !['set', 'unset', 'text', 'binary', 'union'].includes(driver)) unsafe.add(fields[i]);
+      }
     }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
   }
   return [...unsafe].sort();
 }
@@ -248,12 +267,12 @@ function rebaseForPromotion() {
       job.rebase = { from: job.finalHead, onto: job.mainHead, base, reviewed_commit: job.head, custom_merge_paths: drivers, state: 'refused' }; save();
       return `Custom merge drivers prevent independent reviewed-diff preservation for: ${drivers.join(', ')}; the lane is intact`;
     }
-    const merged = call(['git'], ['merge-tree', '--write-tree', '--name-only', '-z', job.mainHead, job.finalHead], job.workspace);
-    const [tree, ...fields] = (merged.stdout ?? '').split('\0');
+    const merged = call(['git'], ['merge-tree', '--write-tree', '--name-only', '-z', job.mainHead, job.finalHead], job.workspace, { encoding: null });
+    const [tree, ...fields] = nulFields(merged.stdout ?? Buffer.alloc(0));
     const conflicts = merged.status === 1 ? mergeConflictPaths(fields) : [];
     job.rebase = { from: job.finalHead, onto: job.mainHead, base, reviewed_commit: job.head,
       expected_tree: tree, conflicts, state: 'preflight',
-      log: evidence('rebase-preflight.log', `${merged.stdout ?? ''}\n${merged.stderr ?? ''}`) }; save();
+      log: evidence('rebase-preflight.log', Buffer.concat([merged.stdout ?? Buffer.alloc(0), Buffer.from('\n'), merged.stderr ?? Buffer.alloc(0)])) }; save();
     if (merged.error || merged.status !== 0) return conflicts.length
       ? `The reviewed diff conflicts with ${job.main}; conflicts in: ${conflicts.join(', ')}; the lane is intact`
       : `Rebase preservation preflight failed; inspect ${job.rebase.log}; the lane is intact`;
@@ -267,7 +286,7 @@ function rebaseForPromotion() {
         '--onto', job.mainHead, base], scratch);
       job.rebase.log = evidence('rebase.log', `${replay.stdout ?? ''}\n${replay.stderr ?? ''}`);
       if (replay.error || replay.status !== 0) {
-        job.rebase.conflicts = git(['diff', '--name-only', '--diff-filter=U', '-z'], scratch).split('\0').filter(Boolean);
+        job.rebase.conflicts = gitNul(['diff', '--name-only', '--diff-filter=U', '-z'], scratch).filter(Boolean);
         // The conflict belongs to our scratch replay, never to the lane.
         const aborted = call(['git'], ['rebase', '--abort'], scratch);
         if (aborted.error || aborted.status !== 0) throw new Error(`Rebase replay failed and scratch recovery is uncertain; inspect ${scratch} and ${job.rebase.log}; the lane is intact`);

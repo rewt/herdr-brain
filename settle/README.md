@@ -76,6 +76,14 @@ Affected paths using custom merge drivers (including `merge.default`) receive a
 handoff before preparation: a successful driver can discard reviewed edits in
 both the expected merge and the replay. Settle inspects attributes in the current
 lane, captured base/main and every replayed commit, including intermediate trees.
+Settle retains the Git 2.38+ minimum: historical attributes are read from an owned
+temporary index with `read-tree` and `check-attr --cached`, without the newer
+`check-attr --source` option. The real lane index and worktree are untouched by
+attribute inspection, and the temporary index is removed after success or refusal.
+NUL-delimited Git output is read as raw bytes without trimming; whitespace and
+UTF-8 byte-order marks in filenames remain intact. Paths that cannot round-trip
+through UTF-8 receive a clear refusal before attribute lookup or replay, rather
+than allowing a changed path spelling to bypass the driver check.
 Built-in text, binary and union drivers remain available unless custom driver
 configuration overrides their names.
 The final replacement reserves the saved lane ref with an expected-old-commit

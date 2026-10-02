@@ -16,6 +16,7 @@ const receipt = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle'
 for (const { defaults, driver } of [
   { defaults: false, driver: 'keep-current' }, { defaults: true, driver: 'keep-current' }, { defaults: false, driver: 'text' },
   { defaults: false, driver: 'set' }, { defaults: false, driver: 'unspecified' },
+  { defaults: true, driver: ' keep-current' },
 ]) test(`content-discarding ${defaults ? 'merge.default' : `path merge=${driver}`} driver cannot establish preservation`, (t) => {
   const f = setup(t);
   if (!defaults) {
@@ -109,7 +110,17 @@ const r=spawnSync(process.execPath,[process.env.SETTLE_TEST_RECORD,...args],{std
 test('HEAD and index locks exclude native commits and branch switches during the ref transaction', (t) => {
   const f = setup(t), run = f.start(); f.commit('correct\n'); f.report(run); advance(f);
   const realGit = f.exec('which', ['git']).stdout.trim(), marker = path.join(f.root, 'locked-races.json');
-  fs.writeFileSync(path.join(f.root, 'bin/git'), `#!/usr/bin/env node
+  const script = path.join(f.root, 'locked-git.mjs');
+  Object.assign(f.env, { SETTLE_TEST_GIT: realGit, SETTLE_TEST_LOCK_SCRIPT: script, SETTLE_TEST_NODE: process.execPath });
+  // Start Node only for the injected transaction. Pass-through native Git calls
+  // do not need an extra runtime and remain inside the existing command bound.
+  fs.writeFileSync(path.join(f.root, 'bin/git'), `#!/bin/sh
+if [ "$1" = update-ref ]; then
+  exec "$SETTLE_TEST_NODE" "$SETTLE_TEST_LOCK_SCRIPT" "$@"
+fi
+exec "$SETTLE_TEST_GIT" "$@"
+`, { mode: 0o755 });
+  fs.writeFileSync(script, `#!/usr/bin/env node
 import fs from 'node:fs';import {spawnSync} from 'node:child_process';
 const args=process.argv.slice(2);
 if(args[0]==='update-ref'&&args.includes('--stdin')) {

@@ -64,10 +64,24 @@ does not prevent readiness. Any additional Unverified entry does.
 Settle commits only the validated public review record, after checking the exact
 reviewed HEAD and only that dirty path. `promotable` requires PASS, no remaining
 unverified claims, clean worktrees, the captured main as an ancestor, and green
-validation at the resulting review-record commit. The result names both heads.
+validation at the resulting review-record commit. When the lane is behind the
+captured integration branch, settle prepares a plain rebase in an owned temporary
+detached worktree. It compares the replay's full tree with Git's mechanical merge
+of the captured lane diff onto that branch, including the review record. Only an
+exact match can replace the clean lane head, and validation runs again at that
+rebased head. The result retains the original reviewed commit and includes rebase
+heads, expected/actual trees and log evidence. Changes already present upstream
+count as preserved; unrelated upstream edits can survive in the same file.
+Merge commits requiring linearization, net-tree conflicts, intermediate replay
+conflicts and preservation mismatches receive an evidence handoff. Conflicts name
+their files. The reviewed lane remains intact; settle aborts and removes its own
+scratch replay, never a rebase in the lane. Unexpected dirty scratch data is kept
+for inspection. An interrupted preparation also retains its scratch path; inspect
+it before further work. An interrupted lane-head update can adopt only the exact
+prepared commit saved in the receipt. The result names both heads.
 It is readiness evidence: project authority and promotion policy are still the
 supervisor's judgment. Settle never promotes, pushes, closes worktrees or tidies
-panes. An unrebased lane or unresolved record blocker receives an evidence handoff.
+panes. An unresolved record blocker receives an evidence handoff.
 
 NEEDS-WORK (unless the review-round cap applies), FAIL or red validation produce
 a correction brief and call dispatch for a new run on the same item/lane.

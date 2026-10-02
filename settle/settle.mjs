@@ -2,6 +2,7 @@
 // Foreground coordination. The record owns status; this journal owns receipts.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
@@ -89,9 +90,9 @@ function activeWork(except = [], state = recordState()) {
     try { return fs.realpathSync(r.workspace) === job.workspace; } catch { return false; }
   });
 }
-function unchanged({ reviewOnly = false } = {}) {
+function unchanged({ reviewOnly = false, expectedHead = job.finalHead ?? job.head } = {}) {
   if (common(job.repo) !== job.common || common(job.workspace) !== job.common) throw new Error('Git common-directory identity changed');
-  if (head() !== (job.finalHead ?? job.head) || git(['branch', '--show-current'], job.workspace) !== `lane/${job.lane}`) throw new Error('lane HEAD or branch moved; settle the new run instead');
+  if (head() !== expectedHead || git(['branch', '--show-current'], job.workspace) !== `lane/${job.lane}`) throw new Error('lane HEAD or branch moved; settle the new run instead');
   if (git(['rev-parse', job.main], job.repo) !== job.mainHead) throw new Error('base branch moved; rebase and settle a new run');
   const status = dirty();
   const allowed = reviewOnly ? [`?? ${job.reviewRelative}`, `A  ${job.reviewRelative}`] : [''];
@@ -160,7 +161,8 @@ function finish(result, reason, extra = {}) {
     report: job.report, validation: job.validation,
     review: job.review ? { verdict: job.review.verdict, path: job.review.path, route: job.review.route, sha256: job.review.sha256 } : null,
     journal, rounds: show(job.item).runs.length, budget: show(job.item).budget ?? {},
-    review_policy: job.reviewPolicy ?? { cap: 0, source: 'legacy' }, ...extra };
+    review_policy: job.reviewPolicy ?? { cap: 0, source: 'legacy' },
+    ...(job.rebase ? { rebase: job.rebase } : {}), ...extra };
   const policy = job.result.review_policy;
   job.settleDecision = `Settle: ${result}. ${reason}. Review round cap: ${policy.cap} (${policy.source}); round: ${policy.round ?? 'unknown'}. Reviewed ${job.result.reviewed_commit}; head ${job.result.head}. Evidence: ${journal}`;
   job.stage = 'complete'; save();
@@ -172,7 +174,7 @@ function escalate(reason) {
   const item = show(job.item);
   const text = `# Settle handoff for ${id}\n\n${reason}\n\nRecommendation: inspect this evidence and decide whether to resume review, dispatch a correction, change scope, or ask the operator.\n\n${JSON.stringify({ item: item.title, acceptance: item.accept, record_blockers: item.blocked_by, record_status: item.status, record_outcome: item.outcome, record_runs: item.runs,
     report: job.report, summary: job.summary, blockers: job.blockers, proposals: job.proposals,
-    questions: job.questions, review: job.review, validation: job.validation,
+    questions: job.questions, review: job.review, validation: job.validation, rebase: job.rebase,
     workspace: job.workspace, head: job.head, journal }, null, 2)}\n`;
   finish('escalate', reason, { handoff: evidence('handoff.md', text), recommendation: 'supervisor judgment',
     options: ['continue with a correction', 'change scope', 'ask the operator with these findings'] });
@@ -181,6 +183,71 @@ function validate(name) {
   const r = call(cli('lane', '../lanes/lane.mjs'), ['check'], job.workspace);
   job.validation = { log: evidence(`${name}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`), exit_code: r.status, error: r.error?.message ?? null };
   save(); return !r.error && r.status === 0;
+}
+// Prepare in an owned detached worktree. The reviewed lane is untouched until
+// the replay's full tree equals the mechanical merge of the captured diff.
+function rebaseForPromotion() {
+  if (job.rebase?.state === 'prepared' && head() === job.rebase.to) {
+    // A lost response to reset adopts only the exact previously proved commit.
+    unchanged({ expectedHead: job.rebase.to });
+    job.finalHead = job.rebase.to; job.rebase.state = 'applied'; save();
+  }
+  unchanged(); cleanCanonical();
+  if (job.rebase?.state === 'preparing') throw new Error(`Rebase preparation was interrupted; inspect retained scratch ${job.rebase.scratch}; the reviewed lane was not changed`);
+  if (git(['merge-base', job.mainHead, job.finalHead], job.workspace) === job.mainHead) return null;
+  if (!job.rebase) {
+    if (git(['rev-list', '--merges', `${job.mainHead}..${job.finalHead}`], job.workspace)) return 'The lane contains merge commits; a mechanical rebase could linearize reviewed work';
+    const base = git(['merge-base', job.mainHead, job.head], job.workspace);
+    const merged = call(['git'], ['merge-tree', '--write-tree', '--name-only', '-z', job.mainHead, job.finalHead], job.workspace);
+    const [tree, ...fields] = (merged.stdout ?? '').split('\0');
+    const conflicts = fields.slice(0, Math.max(0, fields.indexOf(''))).filter(Boolean);
+    job.rebase = { from: job.finalHead, onto: job.mainHead, base, reviewed_commit: job.head,
+      expected_tree: tree, conflicts, state: 'preflight',
+      log: evidence('rebase-preflight.log', `${merged.stdout ?? ''}\n${merged.stderr ?? ''}`) }; save();
+    if (merged.error || merged.status !== 0) return conflicts.length
+      ? `The reviewed diff conflicts with ${job.main}; conflicts in: ${conflicts.join(', ')}; the lane is intact`
+      : `Rebase preservation preflight failed; inspect ${job.rebase.log}; the lane is intact`;
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree)) throw new Error('Rebase preflight did not produce a tree');
+    const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-rebase-')));
+    job.rebase.scratch = scratch; job.rebase.state = 'preparing'; save();
+    git(['worktree', 'add', '--detach', scratch, job.rebase.from], job.workspace);
+    try {
+      const replay = call(['git'], ['rebase', '--no-fork-point', '--no-autostash', '--no-update-refs',
+        '--no-rebase-merges', '--no-autosquash', '--reapply-cherry-picks', '--empty=keep',
+        '--onto', job.mainHead, base], scratch);
+      job.rebase.log = evidence('rebase.log', `${replay.stdout ?? ''}\n${replay.stderr ?? ''}`);
+      if (replay.error || replay.status !== 0) {
+        job.rebase.conflicts = git(['diff', '--name-only', '--diff-filter=U', '-z'], scratch).split('\0').filter(Boolean);
+        // The conflict belongs to our scratch replay, never to the lane.
+        const aborted = call(['git'], ['rebase', '--abort'], scratch);
+        if (aborted.error || aborted.status !== 0) throw new Error(`Rebase replay failed and scratch recovery is uncertain; inspect ${scratch} and ${job.rebase.log}; the lane is intact`);
+        job.rebase.state = 'refused'; save();
+        const paths = job.rebase.conflicts.length ? `conflicts in: ${job.rebase.conflicts.join(', ')}` : `inspect ${job.rebase.log}`;
+        return `Rebase replay onto ${job.main} failed; ${paths}; the lane is intact`;
+      }
+      const candidate = git(['rev-parse', 'HEAD'], scratch);
+      job.rebase.actual_tree = git(['rev-parse', 'HEAD^{tree}'], scratch);
+      if (job.rebase.actual_tree !== tree || git(['merge-base', job.mainHead, candidate], scratch) !== job.mainHead) {
+        job.rebase.state = 'refused'; save();
+        return `The rebased tree does not preserve the reviewed diff; expected ${tree}, got ${job.rebase.actual_tree}; the lane is intact`;
+      }
+      job.rebase.to = candidate; job.rebase.state = 'prepared'; save();
+    } finally {
+      // Non-forced removal refuses to discard unexpected dirty scratch data.
+      git(['worktree', 'remove', scratch], job.workspace);
+    }
+  }
+  if (job.rebase.state !== 'prepared') throw new Error('Rebase evidence is incomplete; inspect the saved receipt');
+  unchanged(); cleanCanonical();
+  const state = recordState();
+  const invalid = recordedReportProblem(state) ?? superseded(state) ?? correctionBlocker([], state);
+  if (invalid) return invalid;
+  // --keep refuses to overwrite concurrent worktree edits. Never move main or
+  // any other branch. The exact candidate is saved before this recoverable step.
+  git(['reset', '--keep', job.rebase.to], job.workspace);
+  job.finalHead = job.rebase.to; job.rebase.state = 'applied'; save();
+  unchanged();
+  return null;
 }
 function dispatchArgs() {
   return [job.item, '--repo', job.repo, '--org', opt.org, '--lane', job.lane, '--route', job.fixRoute,
@@ -447,22 +514,33 @@ function main() {
     else {
       const unverified = job.review.text.match(/## Unverified\n([\s\S]*?)\n## Sanitization/)?.[1]?.trim();
       if (unverified !== 'None' && unverified !== inheritedValidation) return escalate('The reviewer has unverified claims; the supervisor must resolve the remaining evidence');
-      if (!validate('final-validation')) return escalate('Validation failed after the review record commit; inspect the log');
-      unchanged();
-      if (git(['merge-base', job.mainHead, job.finalHead], workspace) !== job.mainHead) return escalate('The lane needs a rebase before promotion');
-      cleanCanonical();
-      const state = recordState(), item = state.items.get(job.item);
-      const stale = superseded(state);
-      if (stale) return escalate(stale);
-      if (activeWork([], state).length || ['blocked', 'needs_human', 'active', 'dropped'].includes(item.status)) return escalate(`The record still has concurrent work or says ${item.status}; resolve its blockers or concurrent work`);
-      if (withFindings) {
-        const reason = `Review round ${policy.round} reached cap ${policy.cap} with no Major or FAIL; the supervisor must decide whether to accept findings or request another correction`;
-        const handoff = evidence('handoff.md', `# Capped review for ${id}\n\n${reason}\n\nReviewed commit: ${job.head}\nHead including review record: ${job.finalHead}\nReview: ${job.review.path}\nValidation: ${job.validation.log}\nPolicy: ${JSON.stringify(policy)}\n\n## Findings\n${findings.text}\n\nAccept findings under project authority with supervisor promote --accept-findings --why REASON, or request another correction with handle ${id} --retry --fix-findings --role supervisor.\n`);
-        finish('promotable_with_findings', reason, { findings: findings.text, handoff,
-          options: ['accept findings and promote under project authority', 'request another correction'] });
-      } else finish('promotable', 'Report recorded, claims independently reviewed, clean lane and green validation; use the promotion module under project authority');
-      return;
+      job.stage = 'rebase'; save();
     }
+  }
+  if (job.stage === 'rebase') {
+    const reason = rebaseForPromotion();
+    if (reason) return escalate(reason);
+    job.stage = 'ready'; save();
+  }
+  if (job.stage === 'ready') {
+    unchanged();
+    const policy = job.reviewPolicy, findings = reviewFindings();
+    const withFindings = job.review.verdict === 'NEEDS-WORK';
+    if (!validate('final-validation')) return escalate('Validation failed after the review record commit; inspect the log');
+    unchanged();
+    if (git(['merge-base', job.mainHead, job.finalHead], workspace) !== job.mainHead) return escalate('The validated lane does not contain the captured integration branch');
+    cleanCanonical();
+    const state = recordState(), item = state.items.get(job.item);
+    const stale = superseded(state);
+    if (stale) return escalate(stale);
+    if (activeWork([], state).length || ['blocked', 'needs_human', 'active', 'dropped'].includes(item.status)) return escalate(`The record still has concurrent work or says ${item.status}; resolve its blockers or concurrent work`);
+    if (withFindings) {
+      const reason = `Review round ${policy.round} reached cap ${policy.cap} with no Major or FAIL; the supervisor must decide whether to accept findings or request another correction`;
+      const handoff = evidence('handoff.md', `# Capped review for ${id}\n\n${reason}\n\nReviewed commit: ${job.head}\nHead including review record: ${job.finalHead}\nReview: ${job.review.path}\nValidation: ${job.validation.log}\nPolicy: ${JSON.stringify(policy)}\n\n## Findings\n${findings.text}\n\nAccept findings under project authority with supervisor promote --accept-findings --why REASON, or request another correction with handle ${id} --retry --fix-findings --role supervisor.\n`);
+      finish('promotable_with_findings', reason, { findings: findings.text, handoff,
+        options: ['accept findings and promote under project authority', 'request another correction'] });
+    } else finish('promotable', 'Report recorded, claims independently reviewed, clean lane and green validation; use the promotion module under project authority');
+    return;
   }
   if (['fix', 'dispatching'].includes(job.stage)) fix();
 }

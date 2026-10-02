@@ -87,7 +87,12 @@ The finite queue worker retains the lane clean/green/fast-forward checks. Its re
 notice returns through `handle`: that command verifies the queue receipt and
 integrated tip, then closes the item with `record close --if-current-run RUN`.
 The record checks that precondition under its lock, including current done report,
-newer runs, unresolved/declined blockers, open work and changed outcomes. A failed
+newer runs, unresolved/declined blockers, open work and changed outcomes. Conditional
+completion also refuses an item explicitly reopened after this report's prior
+closure. It binds that closure to the report-ingestion sequence in the event log,
+under the same record lock, including for older receipts. Duplicate queue and
+final-report notices preserve the reopening and require supervisor judgment;
+an unconditional close or a newer run's report can complete the work again. A failed
 promotion stays an evidence handoff. No push, publication or release follows.
 
 After a confirmed `refused` queue result and resolution of its cause, use

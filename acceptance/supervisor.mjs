@@ -94,8 +94,24 @@ export async function supervisorCase(candidate) {
     const finalPolicy = entryPolicy(restarted.context(), candidate); restarted.close();
     assert.match(finalPolicy, /Running \(record; no live pane inference\) \(0\)/);
     assert.match(finalPolicy, /Reports and settlement \(0\)/);
+    f.record(['reopen', settled.item, '--note', 'Reconsider the completed work']);
+    const reopenedEvents = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+    for (let attempt = 0; attempt < 2; attempt++) {
+      for (const notice of [finalNotice, watchNotice(handled.fix.run)]) {
+        const replay = f.exec(process.execPath, [path.join(candidate, 'supervisor/supervisor.mjs'),
+          'handle', '--notice', notice, '--role', 'supervisor']);
+        assert.equal(replay.status, 1, replay.stdout);
+        assert.match(replay.stderr, /reopened after completion/);
+        assert.equal(f.show(settled.item).closed, null);
+        assert.equal(f.show(settled.item).status, 'ready');
+      }
+      assert.equal(command(['handle', '--notice', watchNotice(run), '--role', 'supervisor']).result, 'superseded');
+    }
+    assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), reopenedEvents, 'replays preserve the explicit reopening');
+    assert.deepEqual(f.calls(), calls, 'replays after reopening launch no model or transport');
+    assert.equal(queue().results.length, 1, 'reopening never replays promotion');
     return { receipts, calls: f.calls(), final_policy: finalPolicy,
-      detail: `${run} -> ${handled.fix.run}: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicate original reports return supersession, correction reports reuse receipts; no config or model` };
+      detail: `${run} -> ${handled.fix.run}: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicate original reports return supersession, correction reports reuse receipts; queue and final-report replays preserve explicit reopening; no config or model` };
   } finally {
     if (previousActor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = previousActor;
     cleanup.forEach((fn) => fn());

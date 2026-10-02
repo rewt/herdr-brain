@@ -475,7 +475,7 @@ function close(argv) {
     { min: 1, max: 1, usage: 'record close <ID> [--dropped] [--note TEXT] [--if-current-run R-n]' });
   const id = positionals[0];
   const as = values.dropped ? 'dropped' : 'done';
-  const { added, result } = mutate(openOrg(), (s) => {
+  const { added, result } = mutate(openOrg(), (s, events) => {
     const item = requireItem(s, id);
     if (values['if-current-run'] !== undefined) {
       const runId = values['if-current-run'];
@@ -485,6 +485,12 @@ function close(argv) {
       if (item.outcome && item.outcome.run !== runId) throw new UserError(`${id} outcome does not belong to ${runId}`);
       const blocked = s.links.some((l) => l.blocked === id && !releases(s, l.blocker, itemStatus(s, l.blocker)));
       if (openRuns(s, id).length || blocked || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(s, id))) throw new UserError('conditional close needs supervisor judgment: work, blockers or outcome changed');
+      // A done report may survive explicit reopening. Its ingestion revision
+      // binds completion to the first subsequent closure, even for old receipts.
+      // Read that history inside this transaction, alongside the current-run guard.
+      if (!item.closed && events.some((e) => e.type === 'item.closed' && e.id === id && e.seq > run.report.seq)) {
+        throw new UserError(`${id} was reopened after completion of ${runId}; conditional close needs supervisor judgment`);
+      }
     }
     if (item.closed?.as === as) return { add: [], result: [] };
     return { add: [{ type: 'item.closed', id, as, note: values.note ?? null }], result: openRuns(s, id).map((r) => r.id) };

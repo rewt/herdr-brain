@@ -125,6 +125,26 @@ test('late final reports recover completed promotion after lane closure and reta
   assert.deepEqual(f.calls(), calls, 'duplicate completion calls no model or transport');
   assert.equal(h.queue.load().results.length, 1, 'no gate or promotion replay');
 
+  f.record(['reopen', ready.item, '--note', 'The completed work needs another look']);
+  const reopenedEvents = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  assert.equal(f.show(run).report.outcome, 'done', 'reopening retains the original done report');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const args of [
+      ['handle', '--notice', notice, '--role', 'supervisor'],
+      ['handle', run, '--role', 'supervisor'],
+      ['handle', '--notice', `[promote-queue] id=${promoted.id} lane=${promoted.topic}`, '--role', 'supervisor'],
+    ]) {
+      const replay = invoke(f, args);
+      assert.equal(replay.status, 1, replay.stdout);
+      assert.match(replay.stderr, /reopened after completion/);
+      assert.equal(f.show(ready.item).closed, null);
+      assert.equal(f.show(ready.item).status, 'ready');
+    }
+  }
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), reopenedEvents);
+  assert.deepEqual(f.calls(), calls);
+  assert.equal(h.queue.load().results.length, 1);
+
   f.start();
   assert.match(handle().stderr, /superseded/);
   assert.match(invoke(f, ['handle', '--notice', `[promote-queue] id=${promoted.id} lane=${promoted.topic}`, '--role', 'supervisor']).stderr, /superseded/);
@@ -316,8 +336,18 @@ test('conditional record completion preserves newer work, unresolved and decline
   f.record(['answer', question, 'no']); assert.equal(close().status, 1);
   f.record(['unblock', item, '--by', question]);
   assert.equal(close().status, 0);
-  f.start(); assert.equal(close().status, 1);
+  assert.equal(close().status, 0, 'a duplicate close without reopening stays idempotent');
+  f.record(['reopen', item, '--note', 'Reconsider the completed work']);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  const replay = close(); assert.equal(replay.status, 1);
+  assert.match(replay.stderr, /reopened after completion/);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
+  assert.equal(f.show(item).closed, null);
+  const latest = f.start(); assert.equal(close().status, 1);
   assert.equal(f.show(item).status, 'active');
+  f.report(latest); f.record(['ingest', f.show(latest).report_path]);
+  f.record(['close', item, '--if-current-run', latest]);
+  assert.equal(f.show(item).status, 'done', 'a newer report can complete explicitly reopened work');
 });
 
 test('a disappeared checkout retains its open record run through a dispatch identity receipt', { timeout: 15000 }, (t) => {

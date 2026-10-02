@@ -9,6 +9,8 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
 import { auditCopies, relocate, within, copiedSandbox } from './security.mjs';
+import { HarnessLimit, isHarnessBoundary } from './limits.mjs';
+import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -30,7 +32,7 @@ let logFile, candidateCommit, fixture, supervisor;
 const pids = new Set();
 const discoveryRoots = [];
 const env = { ...process.env };
-for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_)/.test(key)) delete env[key];
+for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_)/.test(key)) delete env[key];
 Object.assign(env, { ACCEPTANCE_ROOT: root, TMPDIR: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
   npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
 const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value); };
@@ -44,7 +46,10 @@ function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_00
     input, maxBuffer: 32 * 1024 * 1024, timeout });
   if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd, status: r.status, error: r.error?.message,
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
-  if (ok && (r.error || r.status !== 0)) throw new Error(`${path.basename(command)} ${args[0]}: ${r.error?.message ?? String(r.stderr || r.stdout).trim()}`);
+  if (ok && (r.error || r.status !== 0)) {
+    const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? String(r.stderr || r.stdout).trim()}`;
+    throw isHarnessBoundary(message) ? new HarnessLimit(message) : new Error(message);
+  }
   return r;
 }
 const scratchHome = path.join(root, 'copy-home'); fs.mkdirSync(scratchHome);
@@ -75,10 +80,10 @@ async function test(name, fn) {
   const id = String(results.length + 1).padStart(2, '0');
   logFile = path.join(evidence, `${id}.jsonl`);
   write(logFile, '');
-  let status = 'PASS', detail = '';
+  let status = 'PASS', detail = '', origin = 'product';
   try { detail = await fn() ?? ''; }
-  catch (e) { status = e instanceof Pending ? 'PENDING' : 'FAIL'; detail = e.message; }
-  results.push({ id, name, status, detail, evidence: `${id}.jsonl` });
+  catch (e) { origin = e instanceof HarnessLimit || name === 'Cleanup and scope audit' ? 'harness' : 'product'; status = e instanceof Pending || origin === 'harness' ? 'PENDING' : 'FAIL'; detail = e.message; }
+  results.push({ id, name, status, origin, detail, evidence: `${id}.jsonl` });
   logFile = undefined;
 }
 async function until(fn, label, ms = 25_000) {
@@ -143,11 +148,72 @@ async function stopWatcher(job) {
   lane(['close', job.lane]);
 }
 
+async function cleanupScope() {
+  const errors = [];
+  try {
+    // PIDs originate only in successful candidate detach receipts or in this
+    // scratch record’s dispatch journals (including partially failed dispatch).
+    if (fixture && fs.existsSync(path.join(fixture.org, 'dispatch'))) {
+      for (const file of fs.readdirSync(path.join(fixture.org, 'dispatch'))) {
+        if (!file.endsWith('.json') || file.endsWith('.routes.json')) continue;
+        const job = JSON.parse(read(path.join(fixture.org, 'dispatch', file)));
+        if (job.watcher?.pid) pids.add(job.watcher.pid);
+      }
+    }
+    for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') errors.push(e.message); } }
+    if (fs.existsSync(path.join(root, 'ownership.json'))) {
+      const owned = JSON.parse(read(path.join(root, 'ownership.json')));
+      for (const id of [...new Set(owned.workspaces)].reverse()) {
+        try {
+          const r = node(path.join(root, 'herdr.mjs'), ['workspace', 'get', id], { ok: false });
+          if (r.status === 0) h('workspace', 'close', id);
+        } catch (error) { errors.push(`workspace ${id}: ${error.message}`); }
+      }
+      const remaining = h('workspace', 'list').workspaces;
+      write(path.join(evidence, 'ownership.json'), JSON.stringify(owned, null, 2));
+      write(path.join(evidence, 'cleanup-residue.json'), JSON.stringify({ workspaces: remaining, errors }, null, 2));
+      for (const file of ['herdr.jsonl', 'denied.jsonl', 'supervisor-input.jsonl', 'worker-input.jsonl']) {
+        if (fs.existsSync(path.join(root, file))) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
+      }
+      if (remaining.length) errors.push(`${remaining.length} owned workspace(s) left`);
+    }
+    // Authentication copies are never evidence, even with --keep or a failed
+    // session. Remove them after the owned panes/processes have stopped.
+    removeCredentials(root);
+    if (errors.length) throw new HarnessLimit(`cleanup failed: ${errors.join('; ')}`);
+    if (!opt.keep) for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true });
+    // Preserve only evidence unless requested. chmod is limited to this mkdtemp.
+    if (!opt.keep) {
+      run('chmod', ['-R', 'u+w', root]);
+      for (const entry of fs.readdirSync(root)) if (entry !== 'evidence') fs.rmSync(path.join(root, entry), { recursive: true, force: true });
+    }
+    return opt.keep ? `scratch retained: ${root}; all created workspaces closed` : 'all created workspaces closed; only evidence retained';
+  } finally { removeCredentials(root); }
+}
+
+function emitSummary(interruption = {}) {
+  const elapsedSeconds = Math.round((Date.now() - started) / 1000);
+  const counts = Object.fromEntries(['PASS', 'FAIL', 'PENDING'].map((status) => [status, results.filter((v) => v.status === status).length]));
+  const authDirectory = path.join(root, 'codex-runtime');
+  const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, evidence, results,
+    credentialResidue: fs.existsSync(authDirectory) ? [authDirectory] : [], retainedDiscoveryRoots: opt.keep ? discoveryRoots : [], ...interruption };
+  write(path.join(evidence, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
+  const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending — ${counts.FAIL || counts.PENDING ? 'NOT READY' : 'READY'}`,
+    ...results.map((v) => `${v.status.padEnd(7)} ${v.id} ${v.origin === 'harness' ? '[HARNESS] ' : ''}${v.name}${v.origin === 'harness' ? ' — ' + v.detail.split('\n')[0].slice(0, 100) : ''}`), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');
+  write(path.join(evidence, 'screen.txt'), screen + '\n'); console.log(screen);
+  process.exitCode = counts.FAIL || counts.PENDING ? 1 : 0;
+}
+
+installSignalCleanup({ root, cleanup: cleanupScope, summarize: (interruption) => {
+  results.push({ id: 'interrupt', name: 'Interrupted run', status: 'PENDING', origin: 'harness', detail: interruption.signal, evidence: 'summary.json' });
+  emitSummary(interruption);
+} });
+
 try {
   const missing = ['node', 'git', 'bash', 'zsh', 'rg', 'python3', 'tar', 'npm', 'chmod', 'sandbox-exec', 'herdr',
     ...(opt['skip-live'] ? [] : ['codex'])].filter((tool) => run('which', [tool], { ok: false }).status !== 0);
   if (missing.length) {
-    await test('Required tools', () => pending(`missing prerequisite: ${missing.join(', ')}`));
+    await test('Required tools', () => { throw new HarnessLimit(`missing prerequisite: ${missing.join(', ')}`); });
     throw new Pending('prerequisites unavailable; no candidate or copied code executed');
   }
   await test('Candidate snapshot', () => {
@@ -183,6 +249,14 @@ try {
   });
   await test('New project: discover dispatch/watch/default cycle', () => {
     requireCandidate('dispatch/dispatch.mjs'); requireCandidate('watch/watch.mjs');
+    if (present('discovery/install.mjs') && present('discovery/adapters/codex.mjs')) {
+      const binary = fs.realpathSync(run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim());
+      const policy = node(path.join(candidate, 'discovery/adapters/codex.mjs'), ['--repo', fresh, '--binary', binary, '--role', 'supervisor', '--policy-only'], { cwd: fresh }).stdout;
+      write(path.join(evidence, 'new-project-discovery.txt'), policy);
+      assert.match(policy, /dispatch.*ITEM/); assert.match(policy, /watch\/watch.mjs/); assert.match(policy, /Only a supervisor/);
+      assert.ok(fs.existsSync(path.join(fresh, '.org/events.jsonl')), 'product entry must bootstrap its own project record');
+      return 'actual product entry supplied supervisor defaults and bootstrapped the record; real worker execution is judged in cases 20/21';
+    }
     const manifest = read(path.join(candidate, 'herdr-plugin.toml'));
     const dispatchHelp = node(path.join(candidate, 'dispatch/dispatch.mjs'), [], { cwd: fresh, ok: false });
     const watchHelp = node(path.join(candidate, 'watch/watch.mjs'), [], { cwd: fresh, ok: false });
@@ -191,7 +265,7 @@ try {
     pending('default cycle needs a discoverable no-model entry contract; no setup was supplied');
   });
   await test('Real Herdr boundary and configured fixture', async () => {
-    if (process.env.HERDR_ENV !== '1') pending('run inside Herdr (HERDR_ENV=1); no session inspected');
+    if (process.env.HERDR_ENV !== '1') throw new HarnessLimit('run inside Herdr (HERDR_ENV=1); no session inspected');
     const binary = run('which', ['herdr']).stdout.trim();
     write(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: [], tabs: [], panes: [] }));
     for (const file of ['herdr.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
@@ -414,6 +488,15 @@ try {
     const output = node(path.join(candidate, 'bin/org.mjs'), ['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', copy, '--report', report], { extra: { ORG_DIR: org } }).stdout;
     const id = output.match(/^(R-\d+)/)[1]; node(path.join(candidate, 'bin/org.mjs'), ['set', id, `agent=${supervisor.name}`], { extra: { ORG_DIR: org } });
     const existingWs = h('workspace', 'create', '--cwd', copy, '--label', 'acceptance-existing-project', '--no-focus');
+    const cwdProbes = [], cwdStart = Date.now();
+    try {
+      await until(() => {
+        const pane = h('pane', 'get', existingWs.root_pane.pane_id).pane;
+        cwdProbes.push({ elapsedMs: Date.now() - cwdStart, pane });
+        return pane.foreground_cwd === copy;
+      }, 'existing-project shell cwd before metadata lookup');
+    } catch (error) { throw new HarnessLimit(error.message); }
+    finally { write(path.join(evidence, 'existing-shell-cwd-probe.json'), JSON.stringify(cwdProbes, null, 2)); }
     // Retain the canonical resolver receipt separately. Do not synthesize
     // metadata if workspace list has not exposed it to the real wrappers.
     h('worktree', 'list', '--workspace', existingWs.workspace.workspace_id);
@@ -421,7 +504,8 @@ try {
     try {
       await until(() => {
         const workspace = h('workspace', 'list').workspaces.find((w) => w.workspace_id === existingWs.workspace.workspace_id);
-        probes.push({ elapsedMs: Date.now() - metadataStart, workspace });
+        const configured = h('workspace', 'list').workspaces.find((w) => w.workspace_id === supervisor.workspace);
+        probes.push({ elapsedMs: Date.now() - metadataStart, workspace, configured });
         return workspace?.worktree?.checkout_path === copy && workspace.worktree.repo_root === copy;
       }, 'canonical workspace metadata before wrapper execution', 15_000);
     } finally { write(path.join(evidence, 'workspace-metadata-probe.json'), JSON.stringify(probes, null, 2)); }
@@ -503,49 +587,8 @@ try {
   });
   await discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
 } catch (error) {
-  if (!(error instanceof Pending)) results.push({ id: 'fatal', name: 'Harness setup', status: 'FAIL', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });
+  if (!(error instanceof Pending)) results.push({ id: 'fatal', name: 'Harness setup', status: 'PENDING', origin: 'harness', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });
 } finally {
-  await test('Cleanup and scope audit', async () => {
-    // PIDs originate only in successful candidate detach receipts or in this
-    // scratch record’s dispatch journals (including partially failed dispatch).
-    if (fixture && fs.existsSync(path.join(fixture.org, 'dispatch'))) {
-      for (const file of fs.readdirSync(path.join(fixture.org, 'dispatch'))) {
-        if (!file.endsWith('.json') || file.endsWith('.routes.json')) continue;
-        const job = JSON.parse(read(path.join(fixture.org, 'dispatch', file)));
-        if (job.watcher?.pid) pids.add(job.watcher.pid);
-      }
-    }
-    for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') throw e; } }
-    if (fs.existsSync(path.join(root, 'ownership.json'))) {
-    const owned = JSON.parse(read(path.join(root, 'ownership.json')));
-      for (const id of [...new Set(owned.workspaces)].reverse()) {
-        const r = node(path.join(root, 'herdr.mjs'), ['workspace', 'get', id], { ok: false });
-        if (r.status === 0) h('workspace', 'close', id);
-      }
-      const remaining = h('workspace', 'list').workspaces;
-      assert.equal(remaining.length, 0, 'no owned workspace left');
-      write(path.join(evidence, 'ownership.json'), JSON.stringify(owned, null, 2));
-      for (const file of ['herdr.jsonl', 'denied.jsonl', 'supervisor-input.jsonl', 'worker-input.jsonl']) {
-        if (fs.existsSync(path.join(root, file))) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
-      }
-    }
-    // Authentication copies are never evidence, even with --keep or a failed
-    // session. Remove them after the owned panes/processes have stopped.
-    fs.rmSync(path.join(root, 'codex-runtime'), { recursive: true, force: true });
-    for (const directory of discoveryRoots) fs.rmSync(directory, { recursive: true, force: true });
-    // Preserve only evidence unless requested. chmod is limited to this mkdtemp.
-    if (!opt.keep) {
-      run('chmod', ['-R', 'u+w', root]);
-      for (const entry of fs.readdirSync(root)) if (entry !== 'evidence') fs.rmSync(path.join(root, entry), { recursive: true, force: true });
-    }
-    return opt.keep ? `scratch retained: ${root}; all created workspaces closed` : 'all created workspaces closed; only evidence retained';
-  });
-  const elapsedSeconds = Math.round((Date.now() - started) / 1000);
-  const counts = Object.fromEntries(['PASS', 'FAIL', 'PENDING'].map((status) => [status, results.filter((v) => v.status === status).length]));
-  const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, evidence, results };
-  write(path.join(evidence, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
-  const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending — ${counts.FAIL || counts.PENDING ? 'NOT READY' : 'READY'}`,
-    ...results.map((v) => `${v.status.padEnd(7)} ${v.id} ${v.name}`), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');
-  write(path.join(evidence, 'screen.txt'), screen + '\n'); console.log(screen);
-  process.exitCode = counts.FAIL || counts.PENDING ? 1 : 0;
+  await test('Cleanup and scope audit', cleanupScope);
+  emitSummary();
 }

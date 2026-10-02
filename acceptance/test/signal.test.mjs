@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { spawn } from 'node:child_process';
+const module = path.resolve('acceptance/signal-cleanup.mjs');
+for (const signal of ['SIGINT', 'SIGTERM']) test(`${signal} removes credentials before cleanup and reports cleanup failure/residue`, async (t) => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-signal-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const code = `import fs from 'node:fs';import path from 'node:path';import assert from 'node:assert/strict';import {installSignalCleanup} from ${JSON.stringify(module)};
+    const root=${JSON.stringify(root)};fs.mkdirSync(path.join(root,'codex-runtime/session'),{recursive:true});fs.writeFileSync(path.join(root,'codex-runtime/session/auth.json'),'synthetic',{mode:0o600});
+    installSignalCleanup({root,cleanup:()=>{assert.ok(!fs.existsSync(path.join(root,'codex-runtime')));fs.writeFileSync(path.join(root,'closed-owned'),'yes');throw Error('simulated close failure')},summarize:s=>fs.writeFileSync(path.join(root,'summary.json'),JSON.stringify(s))});console.log('ready');setInterval(()=>{},1000);`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => child.kill('SIGKILL'));
+  const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (code) => resolve(code)); });
+  await new Promise((resolve, reject) => { child.stdout.once('data', resolve); child.once('error', reject); });
+  child.kill(signal);
+  assert.equal(await closed, signal === 'SIGINT' ? 130 : 143);
+  assert.ok(!fs.existsSync(path.join(root,'codex-runtime')));assert.ok(fs.existsSync(path.join(root,'closed-owned')));
+  const summary=JSON.parse(fs.readFileSync(path.join(root,'summary.json')));
+  assert.equal(summary.signal,signal);assert.deepEqual(summary.credentialResidue,[]);assert.deepEqual(summary.cleanupErrors,['simulated close failure']);
+});

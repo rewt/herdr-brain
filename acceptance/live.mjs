@@ -3,6 +3,8 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import { permissionArgs, sessionEnv, policyWitness } from './security.mjs';
+import { boundaryScript, liveSocket } from './probe.mjs';
+import { HarnessLimit, isHarnessBoundary } from './limits.mjs';
 
 export async function discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read }) {
   const model = opt['discovery-model'] ?? 'gpt-5.6-luna', effort = opt['discovery-effort'] ?? 'low';
@@ -36,34 +38,29 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
     const runtimeHome = path.join(root, 'codex-runtime', name);
     fs.mkdirSync(runtimeHome, { recursive: true, mode: 0o700 });
     const auth = path.join(process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex'), 'auth.json');
-    if (!fs.existsSync(auth)) pending('file-based Codex authentication unavailable for isolated discovery runtime');
+    if (!fs.existsSync(auth)) throw new HarnessLimit('file-based Codex authentication unavailable for isolated discovery runtime');
     fs.copyFileSync(auth, path.join(runtimeHome, 'auth.json'));
     fs.chmodSync(path.join(runtimeHome, 'auth.json'), 0o600);
     fs.copyFileSync(path.join(import.meta.dirname, 'live-worker.mjs'), path.join(root, 'live-worker.mjs'));
     const scope = `You are doing a bounded acceptance task in a brand-new project. Work as an entering coding agent normally would, using whatever project policy and installed tools you discover. Another independent session may work here at the same time. Safety boundary: changes only in this project (${repo}) and your temporary directory (${temp}); never push, contact other sessions, or operate Herdr. Do not read other projects or private records. Do not invent operator preferences. In your final JSON, list every policy source actually received or read, including its path or exact installed CLI invocation and a verbatim excerpt of the policy. Leave policy_sources empty if none exists. Name your checkout/branch and durable work/run/question IDs (empty strings when absent), and describe validation/promotion evidence in result. If a required policy or discoverable entry point is absent, state that clearly; do not invent a product policy.\n\nTask: ${task}`;
+    const gitProbe = path.join(temp, 'git-probe'); initRepo(gitProbe);
+    write(path.join(gitProbe, 'proof.txt'), 'before sandbox'); git(gitProbe, ['add', '.']); git(gitProbe, ['commit', '-qm', 'Seed Git capability proof']);
     const spec = { repo, binary, runtimeHome, model, effort, name, temp, installation, schema,
+      gitCommon: git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
+      worktreeRoot: path.join(temp, 'entry-worktrees'), probeGit: path.join(gitProbe, '.git'),
       toolRoots: [path.dirname(binary), fs.realpathSync(path.join(path.dirname(process.execPath), '..')), '/opt/homebrew', fs.realpathSync(path.join(path.dirname(fs.realpathSync(binary)), '..'))],
       path: `${bin}:${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`, prompt: scope };
     // Fail before inference if the native sandbox cannot prove its boundaries.
     const probe = path.join(temp, 'probe.mjs');
     write(path.join(root, 'protected-read-canary'), 'not project policy');
-    write(probe, `import fs from 'node:fs';import net from 'node:net';import assert from 'node:assert/strict';
-      const blocked=[];for(const [label,fn] of [
-        ['parent-list',()=>fs.readdirSync(${JSON.stringify(path.dirname(repo))})],
-        ['candidate-policy',()=>fs.readFileSync(${JSON.stringify(path.join(candidate, 'AGENTS.md'))})],
-        ['harness-read',()=>fs.readFileSync(${JSON.stringify(path.join(root, 'protected-read-canary'))})],
-        ['harness-write',()=>fs.writeFileSync(${JSON.stringify(path.join(root, 'forbidden-write-canary'))},'bad')]
-      ]){let denied=false;try{fn()}catch(e){denied=['EPERM','EACCES'].includes(e.code)}assert.ok(denied,label+' must be denied');blocked.push(label)}
-      fs.writeFileSync(${JSON.stringify(path.join(temp, 'allowed'))},'temporary');fs.writeFileSync(${JSON.stringify(path.join(repo, 'probe-allowed'))},'project');fs.unlinkSync(${JSON.stringify(path.join(repo, 'probe-allowed'))});
-      const socket=net.createConnection(${JSON.stringify(path.join(os.homedir(), '.config/herdr/herdr.sock'))});
-      await new Promise((resolve,reject)=>{const t=setTimeout(()=>{socket.destroy();reject(Error('socket probe timed out'))},2000);socket.once('connect',()=>{clearTimeout(t);socket.destroy();reject(Error('direct live Herdr socket allowed'))});socket.once('error',e=>{clearTimeout(t);if(['EPERM','EACCES'].includes(e.code))resolve();else reject(e)})});
-      assert.ok(!Object.keys(process.env).some(k=>/^(HERDR|ACCEPTANCE)/.test(k)));console.log(JSON.stringify({blocked:[...blocked,'live-herdr-socket'],writable:[${JSON.stringify(repo)},${JSON.stringify(temp)}]}));`);
+    const socket = liveSocket(process.env);
+    write(probe, boundaryScript({ repo, temp, candidate, root, socket, gitProbe }));
     const clean = sessionEnv(process.env, spec);
     const checked = run(binary, ['sandbox', '-C', repo, '-P', 'acceptance', ...permissionArgs(spec), '--', process.execPath, probe],
       { cwd: repo, isolatedEnv: clean, ok: false });
-    write(path.join(evidence, `${name}.boundary.json`), JSON.stringify({ status: checked.status, stdout: checked.stdout, stderr: checked.stderr, writableRoots: [repo, temp], environmentKeys: Object.keys(clean) }, null, 2));
+    write(path.join(evidence, `${name}.boundary.json`), JSON.stringify({ status: checked.status, stdout: checked.stdout, stderr: checked.stderr, socket, hostIsSocket: true, writableRoots: [repo, temp], gitCommon: spec.gitCommon, worktreeRoot: spec.worktreeRoot, environmentKeys: Object.keys(clean) }, null, 2));
     fs.unlinkSync(probe);
-    assert.equal(checked.status, 0, `native discovery boundary probe failed: ${checked.stderr || checked.stdout}`);
+    if (checked.status !== 0) throw new HarnessLimit(`native Git/isolation capability probe failed: ${(checked.stderr || checked.stdout).slice(-1600)}`);
     write(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
     // Machine installation is permitted; project configuration is not. Run
     // the candidate's installer when shipped rather than bypassing its adapter.
@@ -74,12 +71,14 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
       write(native, `#!/bin/sh\nexec '${process.execPath}' '${path.join(root, 'native-transport.mjs')}' '${root}' '${name}' "$@"\n`);
       fs.chmodSync(native, 0o755);
       run(process.execPath, [installer, '--bin', entryBin, '--codex', native], { isolatedEnv: clean });
-      spec.entryBinary = path.join(entryBin, 'codex');
+      spec.entryBinary = path.join(entryBin, 'monitor-codex');
+      if (!fs.existsSync(spec.entryBinary)) throw new HarnessLimit('candidate installer did not expose its documented monitor-codex entry');
       spec.path = `${entryBin}:${spec.path}`;
       write(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
     }
     write(path.join(evidence, `${name}.prompt.txt`), scope);
     const ws = h('workspace', 'create', '--cwd', repo, '--label', `acceptance-${name}`, '--no-focus');
+    await until(() => h('pane', 'get', ws.root_pane.pane_id).pane.foreground_cwd === repo, `${name} shell cwd`);
     h('pane', 'run', ws.root_pane.pane_id, [process.execPath, path.join(root, 'live-worker.mjs'), root, name].map((s) => "'" + s.replaceAll("'", "'\\''") + "'").join(' '));
     return async () => {
       await until(() => fs.existsSync(path.join(root, 'live-jobs', `${name}.done`)), `${name} real session finishes`, 200_000);
@@ -89,8 +88,10 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
       const totals = turns.reduce((a, u) => { for (const k of Object.keys(u ?? {})) a[k] = (a[k] ?? 0) + u[k]; return a; }, {});
       usage.push({ name, model, effort, ...done, usage: totals, completeTurns: turns.length });
       write(path.join(evidence, 'discovery-usage.json'), JSON.stringify(usage, null, 2));
-      assert.equal(done.code, 0, `real session failed: ${read(path.join(evidence, `${name}.stderr`)).slice(-1500)}`);
-      assert.ok(turns.length, 'real session must report measured token usage');
+      const sessionError = read(path.join(evidence, `${name}.stderr`)).slice(-2000);
+      if (isHarnessBoundary(sessionError) || done.signal) throw new HarnessLimit(`real session harness limit: ${sessionError || done.signal}`);
+      assert.equal(done.code, 0, `real session failed: ${sessionError}`);
+      if (!turns.length) throw new HarnessLimit('real session produced no measured model turn');
       const answer = JSON.parse(read(path.join(evidence, `${name}.txt`)));
       let sources, attributionError;
       const entryFile = path.join(evidence, `${name}.entry.json`);
@@ -140,6 +141,12 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
     if (opt['skip-live']) pending('real discovery explicitly skipped; release gate cannot pass');
     if (!fs.existsSync(path.join(root, 'ownership.json'))) pending('Herdr boundary unavailable');
     const repo = freshProject('project');
+    // An ordinary tiny application with a real check, not workflow config.
+    // Without a project test the installed parent correctly cannot validate
+    // approved routes, making this acceptance fixture impossible to finish.
+    write(path.join(repo, 'greetings.mjs'), "export const greetings = { en: 'Hello' };\n");
+    write(path.join(repo, 'test/greetings.test.mjs'), "import test from 'node:test';import assert from 'node:assert/strict';import {greetings} from '../greetings.mjs';test('English stays',()=>assert.equal(greetings.en,'Hello'));\n");
+    git(repo, ['add', '.']); git(repo, ['commit', '-qm', 'Seed unrelated routing project with a real test']);
     const finish = await live(repo, 'discovery-routing', 'Prepare how future engineering and independent review sessions should select models and effort. Respect any discovered project policy; when preferences need the operator, leave a durable question with a concrete recommendation for the operator and stop.');
     const worker = await finish();
     assert.ok(worker.sources?.length, worker.attributionError);

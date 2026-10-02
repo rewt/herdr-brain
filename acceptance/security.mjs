@@ -11,9 +11,14 @@ export function copiedSandbox(root, toolRoots) {
   // code through every host data location. Only scratch and trusted tools are
   // exceptions. Sandboxing matches resolved paths, including symlink aliases.
   const forbidden = ['/Users', '/home', '/Volumes', '/private/tmp', '/private/var/folders'];
+  const ancestors = new Set();
+  for (const directory of [root, ...toolRoots]) {
+    for (let current = path.dirname(directory); current !== path.dirname(current); current = path.dirname(current)) ancestors.add(current);
+  }
   return '(version 1)\n(allow default)\n(deny file-write*)\n'
     + forbidden.map((dir) => `(deny file-read* (subpath ${JSON.stringify(dir)}))\n`).join('')
     + '(allow file-read-metadata)\n' // Node must lstat ancestors to resolve scratch scripts
+    + [...ancestors].map((dir) => `(allow file-read-data (literal ${JSON.stringify(dir)}))\n`).join('') // Safe directory-FD traversal; no ancestor descendants granted
     + [root, ...toolRoots].map((dir) => `(allow file-read* (subpath ${JSON.stringify(dir)}))\n`).join('')
     + `(allow file-write* (literal "/dev/null"))\n(allow file-write* (subpath ${JSON.stringify(root)}))\n`;
 }
@@ -61,17 +66,33 @@ export function sessionEnv(inherited, spec) {
   return env;
 }
 
-export function permissionArgs({ repo, temp, installation, toolRoots, entryBinary }) {
+export function permissionArgs({ repo, temp, installation, toolRoots, entryBinary, gitCommon, worktreeRoot, probeGit }, { gitWrites = !entryBinary } = {}) {
+  const gitAccess = gitWrites ? 'write' : 'read';
   const filesystem = { ':root': 'deny', ':minimal': 'read', ':slash_tmp': 'deny',
-    ':tmpdir': 'write', ':workspace_roots': { '.': 'write' }, [installation]: 'read' };
+    ':tmpdir': 'write', ':workspace_roots': { '.': 'write', '.git': gitAccess }, [installation]: 'read' };
   for (const directory of toolRoots) filesystem[directory] = 'read';
   if (entryBinary) filesystem[repo] = 'read'; // lane cwd stays writable; shared record is readable
+  // Every extra grant is inside the session's existing project/temp roots.
+  for (const target of [gitCommon, worktreeRoot, probeGit].filter(Boolean)) {
+    let ancestor = target;
+    while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
+    if (!(within(repo, ancestor) || within(temp, ancestor))) throw new Error(`Git permission escaped session roots: ${target}`);
+    filesystem[target] = target === worktreeRoot ? 'write' : gitAccess;
+  }
   const toml = (obj) => `{${Object.entries(obj).map(([k, v]) => `${JSON.stringify(k)}=${typeof v === 'object' ? toml(v) : JSON.stringify(v)}`).join(',')}}`;
   return ['-c', 'default_permissions="acceptance"', '-c', 'permissions.acceptance.extends=":workspace"',
     '-c', `permissions.acceptance.filesystem=${toml(filesystem)}`, '-c', 'permissions.acceptance.network.enabled=false'];
 }
 
 export function policyWitness(events, sources, { repo, installation, entryReceipt }) {
+  const delivered = path.join(installation, 'discovery/policy.mjs');
+  // Developer instructions are received directly, without a file-reading
+  // command. The host transport captures the actual candidate adapter's full
+  // delivery, so model paraphrases cannot replace (or invalidate) that receipt.
+  if (entryReceipt?.source === delivered && typeof entryReceipt.policy === 'string'
+      && entryReceipt.policy.includes(delivered) && fs.existsSync(delivered)) {
+    return [{ source: delivered, excerpt: entryReceipt.policy, origin: 'installed adapter developer instructions' }];
+  }
   const executions = events.filter((e) => e.item?.type === 'command_execution' && e.item.exit_code === 0).map((e) => e.item);
   const simple = (command) => {
     const shell = command.match(/^\S*\/(?:zsh|bash|sh) -c (['"])(.*)\1$/s);
@@ -82,11 +103,6 @@ export function policyWitness(events, sources, { repo, installation, entryReceip
   const witnessed = [];
   for (const { source, excerpt } of sources) {
     if (typeof excerpt !== 'string' || excerpt.length < 20) throw new Error('policy source needs a substantive verbatim excerpt');
-    const delivered = path.join(installation, 'discovery/policy.mjs');
-    if (source === delivered && entryReceipt?.source === delivered && entryReceipt.policy?.includes(excerpt) && fs.existsSync(delivered)) {
-      witnessed.push({ source, excerpt, origin: 'installed adapter developer instructions' });
-      continue;
-    }
     if (/^(record|org|lane)\s/.test(source)) {
       if (!executions.some((e) => simple(e.command) === source && productCall(e.command) && e.aggregated_output?.includes(excerpt))) throw new Error(`unwitnessed product CLI policy: ${source}`);
       witnessed.push({ source, excerpt, origin: 'installed CLI output' });

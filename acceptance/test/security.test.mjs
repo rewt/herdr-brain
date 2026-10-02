@@ -29,11 +29,27 @@ test('kernel boundary denies dynamically computed external code reads and record
     const policy = path.join(root, 'copied.sb'), secret = path.join(outside, 'code.mjs');
     fs.writeFileSync(secret, 'process.exit(42)');
     fs.writeFileSync(policy, copiedSandbox(root, [fs.realpathSync(path.join(path.dirname(process.execPath), '..'))]));
-    const script = `const fs=require('fs');for(const op of [()=>fs.readFileSync(${JSON.stringify(secret)}),()=>fs.writeFileSync(${JSON.stringify(path.join(outside, 'events.jsonl'))},'bad')]){let blocked=false;try{op()}catch(e){blocked=['EPERM','EACCES'].includes(e.code)}require('assert').ok(blocked)}fs.writeFileSync(${JSON.stringify(path.join(root, 'allowed'))},'scratch')`;
+    const script = `const fs=require('fs');const fd=fs.openSync(${JSON.stringify(path.dirname(root))},'r');fs.closeSync(fd);for(const op of [()=>fs.readFileSync(${JSON.stringify(secret)}),()=>fs.writeFileSync(${JSON.stringify(path.join(outside, 'events.jsonl'))},'bad')]){let blocked=false;try{op()}catch(e){blocked=['EPERM','EACCES'].includes(e.code)}require('assert').ok(blocked)}fs.writeFileSync(${JSON.stringify(path.join(root, 'allowed'))},'scratch')`;
     const file = path.join(root, 'probe.cjs'); fs.writeFileSync(file, script);
     const result = spawnSync('/usr/bin/sandbox-exec', ['-f', policy, process.execPath, file], { cwd: root, encoding: 'utf8', env: { ...process.env, OPENSSL_CONF: '/dev/null' } });
     assert.equal(result.status, 0, JSON.stringify({ error: result.error?.message, signal: result.signal, stderr: result.stderr })); assert.ok(!fs.existsSync(path.join(outside, 'events.jsonl')));
   } finally { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+});
+
+test('scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes', (t) => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-grants-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const repo = path.join(root, 'project'), temp = path.join(root, 'session'), foreign = path.join(root, 'foreign');
+  for (const directory of [repo, temp, foreign]) fs.mkdirSync(directory);
+  const spec = { repo, temp, installation: path.join(root, 'installed'), toolRoots: [], gitCommon: path.join(repo, '.git'), worktreeRoot: path.join(temp, 'lanes') };
+  const direct = permissionArgs(spec).join(' ');
+  assert.ok(direct.includes(`${JSON.stringify(spec.gitCommon)}="write"`));
+  const installed = permissionArgs({ ...spec, entryBinary: '/installed/monitor-codex' }).join(' ');
+  assert.ok(installed.includes(`${JSON.stringify(spec.gitCommon)}="read"`));
+  assert.ok(installed.includes(`${JSON.stringify(spec.worktreeRoot)}="write"`));
+  assert.throws(() => permissionArgs({ ...spec, gitCommon: foreign }), /escaped session roots/);
+  fs.symlinkSync(foreign, path.join(temp, 'escape'));
+  assert.throws(() => permissionArgs({ ...spec, worktreeRoot: path.join(temp, 'escape/lanes') }), /escaped session roots/);
 });
 
 test('missing ripgrep is named pending before executing any candidate code', () => {
@@ -48,6 +64,8 @@ test('missing ripgrep is named pending before executing any candidate code', () 
     const evidence = path.join(root, fs.readdirSync(root).find((s) => s.startsWith('herdr-acceptance-')), 'evidence');
     const summary = JSON.parse(fs.readFileSync(path.join(evidence, 'summary.json')));
     assert.equal(summary.results[0].status, 'PENDING'); assert.equal(summary.results[0].detail, 'missing prerequisite: rg');
+    assert.equal(summary.results[0].origin, 'harness');
+    assert.match(fs.readFileSync(path.join(evidence, 'screen.txt'), 'utf8'), /PENDING.*\[HARNESS\].*missing prerequisite: rg/);
     assert.ok(!summary.candidateCommit); assert.ok(!summary.results.some((r) => r.name === 'Candidate snapshot'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -94,8 +112,10 @@ test('policy attribution refuses repository exposure and unwitnessed self-report
     const source = path.join(installation, 'discovery/policy.mjs');
     fs.mkdirSync(path.dirname(source)); fs.writeFileSync(source, 'export function entryPolicy() {}');
     assert.throws(() => policyWitness([], [{ source, excerpt }], { repo, installation }), /invalid product policy/);
-    const entryReceipt = { source, policy: excerpt };
+    const entryReceipt = { source, policy: `Herdr installed policy (${source}). ${excerpt}` };
     assert.equal(policyWitness([], [{ source, excerpt }], { repo, installation, entryReceipt })[0].origin, 'installed adapter developer instructions');
+    assert.equal(policyWitness([], [{ source, excerpt: 'a paraphrase' }], { repo, installation, entryReceipt })[0].excerpt, entryReceipt.policy);
+    assert.equal(policyWitness([], [], { repo, installation, entryReceipt })[0].source, source);
     assert.throws(() => policyWitness([], [{ source, excerpt }], { repo, installation, entryReceipt: { ...entryReceipt, source: '/foreign/policy.mjs' } }), /invalid product policy/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

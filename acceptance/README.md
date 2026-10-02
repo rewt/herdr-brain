@@ -39,7 +39,9 @@ output, a product-delivered project file, a witnessed installed policy file, or
 a host-captured policy delivered by the actual product entry adapter. An agent's
 self-report alone cannot satisfy discovery. When the candidate ships
 `discovery/install.mjs`, the gate runs that machine installer and launches through
-its Codex shim. A transparent native transport captures the adapter's policy and
+its documented `monitor-codex -- exec` machine entry for measured headless
+sessions. The automatic interactive PATH shim can deliberately pass headless
+`codex exec` through; it is not substituted for explicit entry. A transparent native transport captures the adapter's policy and
 refuses checkout/add-dir escapes; it supplies no policy of its own. Candidates
 without that installer expose only their installed CLIs and must fail if no
 policy is discoverable.
@@ -52,9 +54,16 @@ temporary mode-0600 authentication copies outside all tool writable roots, which
 are deleted even with `--keep`. HERDR and ACCEPTANCE variables are stripped.
 A native sandbox probe, run before inference, proves harness reads/writes and a
 direct connect to the live Herdr socket are denied without sending a request.
-Neither approval bypass nor unrestricted sandbox modes are used. Native Git
-metadata protection can block commits; that is recorded as an execution limit,
-never silently bypassed. An initial nested-sandbox experiment cannot establish
+The host resolves original HERDR_SOCKET_PATH with the core client fallback,
+requires an existing socket before probing, and records that actual endpoint.
+Neither approval bypass nor unrestricted sandbox modes are used. A pre-inference native probe must successfully commit, create a worktree and
+update a ref in a disposable Git project inside the session temp, using explicit
+scratch Git common-directory grants. Direct native sessions can write only that
+project/session Git metadata. Installed sessions keep the product
+Git protections and perform writes through its actual bounded session parent;
+project validation always keeps Git metadata read-only. Failed capability probes
+and other harness-boundary refusals are PENDING with `[HARNESS]` on the screen,
+not product FAIL. Successful discovery still requires actual integration. An initial nested-sandbox experiment cannot establish
 discovery: the model must actually read the project and report token usage.
 
 Mechanics use real Herdr PTYs running Node scripts, real Git, record, dispatch,
@@ -69,9 +78,11 @@ part of `npm test`.
 Every mutation uses opaque IDs returned by this run's creation calls. The adapter
 filters global workspace/agent lists to those receipts, rejects foreign targets,
 rejects paths and symlink escapes outside scratch, verifies the foreground cwd
-before starting scripts, and disallows service/plugin/focus commands. Worktree
+before starting scripts or sending agent keys, and disallows service/plugin/focus commands. Worktree
 creation has no environment override; its initial shell/default layout remains a
-host-startup isolation limit, and an ungranted extra pane blocks housekeeping. Ownership
+host-startup isolation limit, and default layouts may add a late pane. A late pane is granted under the ledger
+lock only after native pane get proves its current workspace was created by this
+run and its cwd lies inside scratch; foreign or out-of-scratch panes are denied. Ownership
 updates are locked and atomic for concurrent creation. Explicit workspace/tab
 creation uses a scratch zsh startup and waits for its file receipt before sending
 a command; a background pane screen alone is not a reliable startup receipt.
@@ -95,8 +106,9 @@ the close script consumes actual `org status` from PATH, and apply-settle actual
 runs its record commands and ingest, then deliberately stops at a missing Draft
 section before any review desk dispatch. The full settle/review handoff remains
 unproven. A background workspace omitted from `workspace list` metadata is a
-failure only after a bounded 15-second metadata poll. Every poll sample is raw
-evidence; wrappers execute only after canonical checkout metadata appears.
+failure only after a bounded 15-second metadata poll. The shell cwd must first equal the copied project, just as in the configured
+fixture; each metadata sample includes the fixture comparison. Every sample is
+raw evidence; wrappers execute only after canonical checkout metadata appears.
 
 Release mechanics build immutable copies with the candidate release script in a
 scratch repository/home/bin, then activate, reactivate, roll back and restore.
@@ -113,7 +125,8 @@ retirement while a live copied caller still uses it. This is an explicit
 coverage limit: marker inspection and restoration do not establish switch
 behavior. Housekeeping uses the actual released one-pass entrypoint against a promoted,
 ingested done worker alongside blocked and needs-human workers, with no optional
-housekeeping configuration. Candidates without that module leave the case pending.
+housekeeping configuration. Candidates without that module leave the case pending. Late panes inside an
+owned workspace use verified membership/cwd receipts, not a guessed child ID.
 The cutover coverage gaps keep the gate closed until their behavioral fixtures are
 implemented; the current runner cannot approve a release.
 
@@ -128,8 +141,11 @@ real-session timeouts can make it longer.
 
 By default the runner closes every workspace it created and removes everything
 except evidence under `/tmp/herdr-acceptance-*/evidence`. `--keep` retains other
-scratch files for debugging, but still closes created workspaces and removes
-authentication copies. `ACCEPTANCE_TMPDIR` can select another scratch parent.
+scratch files for debugging, including separate discovery project parents and per-session temps, but still
+closes created workspaces and removes authentication copies. SIGINT/SIGTERM
+remove credentials before shutting down owned workspaces, remove them again
+afterward, and emit an interrupted summary with cleanup errors and credential
+residue. Forced SIGKILL cannot run a handler. `ACCEPTANCE_TMPDIR` can select another scratch parent.
 If cleanup fails, the summary identifies the failure and scratch ownership ledger.
 
 `--skip-live` is for mechanics debugging: discovery becomes pending, so this

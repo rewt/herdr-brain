@@ -7,15 +7,15 @@ import { spawn } from 'node:child_process';
 import { within, permissionArgs } from './security.mjs';
 const [root, name, ...args] = process.argv.slice(2);
 const spec = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs', `${name}.json`), 'utf8'));
-assert.ok(within(spec.repo, process.cwd()), 'product entry checkout escaped its project');
-assert.ok(!Object.keys(process.env).some((k) => /^(HERDR|ACCEPTANCE)/.test(k)), 'product entry leaked capabilities');
+assert.ok(within(spec.repo, process.cwd()) || within(spec.temp, process.cwd()), 'native-transport boundary: product entry checkout escaped its project/session');
+assert.ok(!Object.keys(process.env).some((k) => /^(HERDR|ACCEPTANCE)/.test(k)), 'native-transport boundary: product entry leaked capabilities');
 for (let i = 0; i < args.length; i++) {
-  assert.ok(!/^(?:--dangerously|--yolo|--sandbox|--full-auto)/.test(args[i]), 'product entry cannot bypass the gate profile');
+  assert.ok(!/^(?:--dangerously|--yolo|--sandbox|--full-auto)/.test(args[i]), 'native-transport boundary: product entry cannot bypass the gate profile');
   const equals = args[i].match(/^(?:--cd|--add-dir)=(.*)$/);
   const short = args[i].match(/^-C(.+)$/);
   if (!equals && !short && !['-C', '--cd', '--add-dir'].includes(args[i])) continue;
   const target = equals?.[1] ?? short?.[1] ?? args[++i];
-  assert.ok(within(spec.repo, target) || within(spec.temp, target), 'product entry added a foreign root');
+  assert.ok(within(spec.repo, target) || within(spec.temp, target), 'native-transport boundary: product entry added a foreign root');
 }
 const instruction = args.find((s) => s.startsWith('developer_instructions='));
 if (instruction) {
@@ -32,7 +32,7 @@ if (args[0] === 'sandbox') {
   assert.ok(separator > 0, 'sandbox transport requires a command separator');
   const options = args.slice(1, separator).filter((arg, index, list) =>
     !['-P', '--permission-profile'].includes(arg) && !['-P', '--permission-profile'].includes(list[index - 1]));
-  nativeArgs = ['sandbox', ...options, '--permission-profile', 'acceptance', ...permissionArgs(spec), '--', ...args.slice(separator + 1)];
+  nativeArgs = ['sandbox', ...options, '--permission-profile', 'acceptance', ...permissionArgs(spec, { gitWrites: false }), '--', ...args.slice(separator + 1)];
 }
 const child = spawn(spec.binary, nativeArgs, { cwd: process.cwd(), env: process.env, stdio: 'inherit' });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));

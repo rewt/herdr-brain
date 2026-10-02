@@ -9,7 +9,7 @@ const spec = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs', `${name}.js
 const log = path.join(root, 'evidence', `${name}.jsonl`);
 const errors = path.join(root, 'evidence', `${name}.stderr`);
 const out = fs.openSync(log, 'w'), err = fs.openSync(errors, 'w');
-const child = spawn(spec.entryBinary ?? spec.binary, [...(spec.entryBinary ? [] : ['--no-daemon']), 'exec',
+const child = spawn(spec.entryBinary ?? spec.binary, [...(spec.entryBinary ? ['--'] : ['--no-daemon']), 'exec',
   '--ephemeral', '--ignore-user-config', '--ignore-rules', '--add-dir', spec.temp, '--json',
   ...permissionArgs(spec), '--output-schema', spec.schema,
   ...(spec.entryBinary ? [] : ['-C', spec.repo]), '--model', spec.model, '-c', `model_reasoning_effort=${spec.effort}`,
@@ -19,7 +19,7 @@ const child = spawn(spec.entryBinary ?? spec.binary, [...(spec.entryBinary ? [] 
   '-c', 'approval_policy="never"', '-c', 'allow_login_shell=false',
   '-c', 'shell_environment_policy.inherit="all"', '-o', path.join(root, 'evidence', `${name}.txt`), spec.prompt], {
   cwd: spec.repo, env: { ...sessionEnv(process.env, spec), ...(spec.entryBinary ? {
-    MONITOR_RUNTIME_DIR: path.join(spec.temp, 'entry-requests'), MONITOR_WORKTREE_ROOT: path.join(spec.repo, '.lane/entry-worktrees'),
+    MONITOR_RUNTIME_DIR: path.join(spec.temp, 'entry-requests'), MONITOR_WORKTREE_ROOT: spec.worktreeRoot,
   } : {}) },
   stdio: ['ignore', 'pipe', 'pipe'],
 });

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Capability boundary for acceptance. Never forwards a target not returned by
-// creation in this run, and never launches a model executable.
+// creation or a verified late-pane receipt in this run. Native model sessions
+// launch only through this run's confined live worker.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -18,6 +19,20 @@ const inside = (p) => {
 const option = (key) => argv[argv.indexOf(key) + 1];
 const requireOption = (key) => { if (!argv.includes(key)) throw new Error(`explicit ${key} required`); return option(key); };
 const owned = (id, collection) => { if (!state[collection].includes(id)) throw new Error(`unowned ${collection}: ${id}`); };
+async function updateOwnership(change) {
+  const lock = path.join(root, 'ownership.lock');
+  for (;;) {
+    try { fs.mkdirSync(lock); break; }
+    catch (error) { if (error.code !== 'EEXIST') throw error; await new Promise((resolve) => setTimeout(resolve, 25)); }
+  }
+  try {
+    const latest = JSON.parse(fs.readFileSync(ledger, 'utf8'));
+    change(latest);
+    const temporary = `${ledger}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify(latest)); fs.renameSync(temporary, ledger);
+    Object.assign(state, latest);
+  } finally { fs.rmdirSync(lock); }
+}
 function safePath(p) {
   let ancestor = path.resolve(p);
   while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
@@ -41,6 +56,20 @@ async function real(args) {
   });
 }
 const body = (r) => { if (r.code !== 0) throw new Error(r.stderr || r.stdout); return r.stdout.trim() ? JSON.parse(r.stdout).result : {}; };
+async function ownedPane(id) {
+  if (state.panes.includes(id)) return;
+  // Late default-layout children must have a live identity and scratch cwd;
+  // a list row or a workspace-shaped ID never grants a capability.
+  const pane = body(await real(['pane', 'get', id])).pane;
+  if (!pane || pane.pane_id !== id || !state.workspaces.includes(pane.workspace_id) || !pane.foreground_cwd || !inside(pane.foreground_cwd)) {
+    throw new Error(`unowned panes: ${id}; live workspace/cwd proof failed`);
+  }
+  await updateOwnership((latest) => {
+    if (!latest.workspaces.includes(pane.workspace_id)) throw new Error('late pane workspace has no creation receipt');
+    latest.panes = [...new Set([...latest.panes, id])];
+    latest.latePanes = [...(latest.latePanes ?? []), { pane_id: id, workspace_id: pane.workspace_id, cwd: pane.foreground_cwd }];
+  });
+}
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 try {
   const [group, verb, target] = argv;
@@ -57,19 +86,19 @@ try {
     if (argv.includes('--cwd')) safePath(option('--cwd'));
   } else if (group === 'tab' && ['get', 'close'].includes(verb)) owned(target, 'tabs');
   else if (group === 'pane' && verb === 'list') owned(requireOption('--workspace'), 'workspaces');
-  else if (group === 'pane' && verb === 'process-info') owned(requireOption('--pane'), 'panes');
+  else if (group === 'pane' && verb === 'process-info') await ownedPane(requireOption('--pane'));
   else if (group === 'pane' && ['get', 'read', 'run', 'report-agent', 'release-agent'].includes(verb)) {
-    owned(target, 'panes');
+    await ownedPane(target);
     if (verb === 'run' && !['worker.mjs', 'live-worker.mjs'].some((f) => argv[3].startsWith(`${quote(process.execPath)} ${quote(path.join(root, f))} `))) {
       throw new Error('pane run permits only the scripted stand-in');
     }
   } else if (group === 'agent' && verb === 'list') { /* filtered below */ }
   else if (group === 'agent' && ['get', 'read', 'wait', 'prompt', 'send-keys', 'rename', 'start'].includes(verb)) {
-    if (verb === 'start') owned(requireOption('--pane'), 'panes');
+    if (verb === 'start') await ownedPane(requireOption('--pane'));
     else if (state.panes.includes(target)) { /* owned pane */ }
     else {
       const agent = body(await real(['agent', 'get', target])).agent;
-      owned(agent.pane_id, 'panes');
+      await ownedPane(agent.pane_id);
     }
   } else throw new Error(`unsupported Herdr operation: ${group} ${verb}`);
 
@@ -153,20 +182,12 @@ try {
           }
         }
       }
-      const lock = path.join(root, 'ownership.lock');
-      for (;;) {
-        try { fs.mkdirSync(lock); break; }
-        catch (e) { if (e.code !== 'EEXIST') throw e; await new Promise((r) => setTimeout(r, 25)); }
-      }
-      try {
-        const latest = JSON.parse(fs.readFileSync(ledger, 'utf8'));
+      await updateOwnership((latest) => {
         if (workspace?.workspace_id) latest.workspaces.push(workspace.workspace_id);
         if (pane?.pane_id) latest.panes.push(pane.pane_id);
         if (tab?.tab_id) latest.tabs.push(tab.tab_id);
         for (const collection of ['panes', 'tabs']) latest[collection] = [...new Set([...latest[collection], ...children[collection]])];
-        const temp = `${ledger}.${process.pid}.tmp`;
-        fs.writeFileSync(temp, JSON.stringify(latest)); fs.renameSync(temp, ledger);
-      } finally { fs.rmdirSync(lock); }
+      });
       if (pane?.pane_id && ['workspace', 'tab'].includes(group)) {
         let ready = false;
         for (let attempt = 0; attempt < 100; attempt++) {

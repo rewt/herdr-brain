@@ -9,7 +9,7 @@ const guard = path.resolve(import.meta.dirname, '../herdr.mjs');
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-boundary-')));
   const binary = path.join(root, 'fake-herdr');
-  fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');let r={};if(a[0]==='pane'&&a[1]==='list')r={panes:[{pane_id:'new:p2',workspace_id:'new'}]};if(a[0]==='tab'&&a[1]==='list')r={tabs:[{tab_id:'new:t2',workspace_id:'new'}]};if(a[0]==='pane'&&a[1]==='get')r={pane:{foreground_cwd:fs.existsSync(${JSON.stringify(path.join(root, 'moved-cwd'))})?fs.readFileSync(${JSON.stringify(path.join(root, 'moved-cwd'))},'utf8'):${JSON.stringify(root)}}};if(a[0]==='workspace'&&a[1]==='create'){fs.mkdirSync(${JSON.stringify(path.join(root, 'shell'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(root, 'shell/ready-new:p1'))},'');}if(a[0]==='agent'&&a[1]==='get')r={agent:{pane_id:a[2]==='foreign'?'other:p1':'own:p1',agent_status:'idle'}};if(a[0]==='workspace'&&a[1]==='create')r={workspace:{workspace_id:'new'},root_pane:{pane_id:'new:p1'},tab:{tab_id:'new:t1'}};console.log(JSON.stringify({result:r}));\n`, { mode: 0o755 });
+  fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');let r={};if(a[0]==='pane'&&a[1]==='list')r={panes:[{pane_id:'new:p2',workspace_id:'new'}]};if(a[0]==='tab'&&a[1]==='list')r={tabs:[{tab_id:'new:t2',workspace_id:'new'}]};if(a[0]==='pane'&&a[1]==='get')r={pane:{pane_id:a[2],workspace_id:a[2].startsWith('late-own:')||a[2].startsWith('own:')?'own':a[2].startsWith('new:')?'new':'other',foreground_cwd:fs.existsSync(${JSON.stringify(path.join(root, 'moved-cwd'))})?fs.readFileSync(${JSON.stringify(path.join(root, 'moved-cwd'))},'utf8'):${JSON.stringify(root)}}};if(a[0]==='workspace'&&a[1]==='create'){fs.mkdirSync(${JSON.stringify(path.join(root, 'shell'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(root, 'shell/ready-new:p1'))},'');}if(a[0]==='agent'&&a[1]==='get')r={agent:{pane_id:a[2]==='foreign'?'other:p1':'own:p1',agent_status:'idle'}};if(a[0]==='workspace'&&a[1]==='create')r={workspace:{workspace_id:'new'},root_pane:{pane_id:'new:p1'},tab:{tab_id:'new:t1'}};console.log(JSON.stringify({result:r}));\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: ['own'], tabs: ['own:t1'], panes: ['own:p1'] }));
   const call = (...args) => spawnSync(process.execPath, [guard, ...args], { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8' });
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
@@ -23,7 +23,7 @@ test('foreign pane/workspace targets and symlink escapes never reach mutation AP
     }
     fs.symlinkSync(os.tmpdir(), path.join(f.root, 'escape'));
     assert.notEqual(f.call('workspace', 'create', '--cwd', path.join(f.root, 'escape')).status, 0);
-    assert.ok(f.calls().every((a) => a[0] === 'agent' && a[1] === 'get'), 'only read-only identity lookup is allowed');
+    assert.ok(f.calls().every((a) => (['agent','pane'].includes(a[0]) && a[1] === 'get')), 'only read-only identity lookup is allowed');
   } finally { f.close(); }
 });
 test('model launch requests are always replaced by the scratch worker script', () => {
@@ -59,5 +59,20 @@ test('agent send-keys requires an owned target and checks its live cwd', () => {
     fs.writeFileSync(path.join(f.root, 'moved-cwd'), os.tmpdir());
     assert.notEqual(f.call('agent', 'send-keys', 'own:p1', 'ctrl+u').status, 0);
     assert.equal(f.calls().filter((a) => a[0] === 'agent' && a[1] === 'send-keys').length, 1);
+  } finally { f.close(); }
+});
+
+test('late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt', () => {
+  const f = fixture();
+  try {
+    assert.equal(f.call('pane', 'process-info', '--pane', 'late-own:p2').status, 0);
+    const state = JSON.parse(fs.readFileSync(path.join(f.root, 'ownership.json')));
+    assert.ok(state.panes.includes('late-own:p2'));
+    assert.deepEqual(state.latePanes, [{ pane_id: 'late-own:p2', workspace_id: 'own', cwd: f.root }]);
+    assert.notEqual(f.call('pane', 'process-info', '--pane', 'foreign:p2').status, 0);
+    fs.writeFileSync(path.join(f.root, 'moved-cwd'), os.tmpdir());
+    assert.notEqual(f.call('pane', 'process-info', '--pane', 'late-own:p3').status, 0);
+    assert.ok(!JSON.parse(fs.readFileSync(path.join(f.root, 'ownership.json'))).panes.includes('late-own:p3'));
+    assert.equal(f.calls().filter((a) => a[1] === 'process-info').length, 1);
   } finally { f.close(); }
 });

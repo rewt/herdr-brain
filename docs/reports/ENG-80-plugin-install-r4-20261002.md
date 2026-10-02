@@ -4,7 +4,7 @@ outcome: done
 summary: |
   Resolved both independent review findings with ten new regressions. Installation now retains the first inspected byte-and-mode snapshot for every destination, derives ownership and replacement plans from it, and refuses planning edits before publishing a recovery journal, including edits to unchanged files.
   Both release-test fixture paths now isolate HOME, ZDOTDIR and the entry bin and discard inherited installation overrides. A child release suite runs under a separate installed scratch parent's environment and proves its adapters, receipts and shell files retain every byte and mode.
-  The fixes are committed on the lane. The full offline suite, all lane tests and the real native Herdr plugin entry canary passed. Main remains an ancestor of this lane; report checking, the report commit and the final lane gate follow.
+  The fixes are committed on the lane. The full offline suite, all lane tests and the real native Herdr plugin entry canary passed. The first final gate then exposed a settlement test counting asynchronous watcher traffic as duplicate retry work; its assertion now compares worker launch and prompt mutations and passes its focused regression. Main remains an ancestor of this lane; report checking, the report commit and a fresh final lane gate follow.
 headline: Plugin installation preserves planning edits and release tests stay inside scratch homes
 blockers: []
 proposals: []
@@ -12,12 +12,15 @@ learnings:
   - An installation mutex excludes installers but not editors. Ownership checks, planned replacements and recovery before-state must all use the same first inspected destination bytes and mode; rereading during planning can silently accept and discard an operator edit.
   - Validation must include inspected destinations whose replacement is unchanged, so an idempotent install cannot accept edits made after ownership preflight.
   - A scratch release home alone does not isolate machine installation. Release fixtures must own HOME, ZDOTDIR and HERDR_MONITOR_ENTRY_BIN and sanitize inherited installation and release controls on every invocation path.
+  - A detached watcher can append independent reads or notices during a settlement retry. Idempotence assertions must compare worker dispatch mutations and recorded runs rather than the complete concurrent Herdr call history.
 artifacts:
   - Commit subject Preserve inspected entry state and isolate release fixtures on lane/plugin-install
+  - Commit subject Exclude watcher traffic from correction retry proof on lane/plugin-install
   - herdr/entry-install.mjs; herdr/README.md; test/plugin-install.test.mjs; test/release.test.mjs; test/helpers/release-environment.mjs
   - docs/reports/ENG-80-plugin-install-r4-evidence-20261002/summary.json
   - /private/tmp/eng80-r97-red.log; /private/tmp/eng80-r97-release-witness.log; /private/tmp/eng80-r97-regressions.log
   - /private/tmp/eng80-r97-core.log; /private/tmp/eng80-r97-lanes.log
+  - /private/tmp/eng80-r97-final-gate-attempt1.log; /private/tmp/eng80-r97-retry-regression.log; settle/test/receipts.test.mjs
   - /private/tmp/e80-native-R6emZt/evidence; /private/tmp/eng80-r97-native-authorized.log
   - /private/tmp/e80-native-wXUfJs/evidence; /private/tmp/eng80-r97-native.log
   - /private/tmp/eng80-r97-runner.py
@@ -31,9 +34,13 @@ decisions:
   - text: Share sanitized installation environments across both release-test invocation paths and verify an inherited parent installation through a complete child suite.
     category: tooling
     why: Supported machine overrides must remain usable in the product while offline release fixtures stay inside their own scratch destinations.
+  - text: Compare worker tab creation, agent starts and worker prompts across completed settlement retries while retaining exact recorded-run and result assertions.
+    category: prover
+    why: An independent detached watcher's concurrent reads and supervisor notices are not evidence of duplicate worker dispatch.
 questions: []
 challenges:
   - The sandbox prevented the first native canary's isolated Herdr server from starting with Operation not permitted. The explicitly authorized scratch canary was rerun with approved access and passed with an empty cleanup-error list; no live installation or unowned pane was changed.
+  - The first final gate had 540 passes, one failure and five optional skips. The settlement retry test compared total concurrent Herdr calls and observed 37 instead of 36. The fixture runs a detached watcher, while a completed retry only returns its saved result. The corrected assertion compares actual worker dispatch calls; its focused regression passes and the final full gate is rerun after this report commit.
 ---
 
 The first finding is fixed at the initial inspection boundary. The installer
@@ -77,6 +84,10 @@ Validation:
 - npm run test:lanes passed all 148 cases with zero failures or skips. Full suites
   ran with isolated actors and a ten-minute process-group bound; the lane suite
   used the existing scratch launcher limiting Node test workers to four.
+- The first final gate exposed a pre-existing settlement receipt assertion race
+  after the earlier full suite passed. The focused correction-retry regression
+  passes after comparing worker dispatch calls instead of total watcher traffic;
+  its result, one correction run and one worker prompt remain required.
 - The real native Herdr canary passed its actual temporary plugin checkout,
   manifest build, managed move, native Codex worker start, manifest supervisor
   entry from an unrelated pristine Git project, restore and uninstall. Native

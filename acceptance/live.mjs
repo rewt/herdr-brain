@@ -4,11 +4,14 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import { permissionArgs, sessionEnv, policyWitness } from './security.mjs';
 import { boundaryScript, liveSocket } from './probe.mjs';
-import { HarnessLimit, isHarnessBoundary } from './limits.mjs';
+import { HarnessLimit, ProductBoundary, isHarnessBoundary, isProductBoundary, commandFailure } from './limits.mjs';
+import { createVerification } from './verify.mjs';
 
-export async function discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read }) {
+export async function discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
   const model = opt['discovery-model'] ?? 'gpt-5.6-luna', effort = opt['discovery-effort'] ?? 'low';
   const usage = [];
+  const verifiers = new Map();
+  const git = (repo, args) => verifiers.has(repo) ? verifiers.get(repo).git(args) : trustedGit(repo, args);
   const installation = path.join(root, 'installed-product');
   fs.cpSync(candidate, installation, { recursive: true, filter: (file) => !['AGENTS.md', 'README.md', 'docs', 'test', 'tests', 'kit', 'acceptance', 'node_modules', '.git'].includes(path.basename(file)) });
   const bin = path.join(installation, 'entrypoints'); fs.mkdirSync(bin);
@@ -45,7 +48,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
     const scope = `You are doing a bounded acceptance task in a brand-new project. Work as an entering coding agent normally would, using whatever project policy and installed tools you discover. Another independent session may work here at the same time. Safety boundary: changes only in this project (${repo}) and your temporary directory (${temp}); never push, contact other sessions, or operate Herdr. Do not read other projects or private records. Do not invent operator preferences. In your final JSON, list every policy source actually received or read, including its path or exact installed CLI invocation and a verbatim excerpt of the policy. Leave policy_sources empty if none exists. Name your checkout/branch and durable work/run/question IDs (empty strings when absent), and describe validation/promotion evidence in result. If a required policy or discoverable entry point is absent, state that clearly; do not invent a product policy.\n\nTask: ${task}`;
     const gitProbe = path.join(temp, 'git-probe'); initRepo(gitProbe);
     write(path.join(gitProbe, 'proof.txt'), 'before sandbox'); git(gitProbe, ['add', '.']); git(gitProbe, ['commit', '-qm', 'Seed Git capability proof']);
-    const spec = { repo, binary, runtimeHome, model, effort, name, temp, installation, schema,
+    const spec = { repo, binary, gitBinary: fs.realpathSync(run('which', ['git'], { extra: { PATH: process.env.PATH } }).stdout.trim()), runtimeHome, model, effort, name, temp, installation, schema,
       gitCommon: git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
       worktreeRoot: path.join(temp, 'entry-worktrees'), probeGit: path.join(gitProbe, '.git'),
       toolRoots: [path.dirname(binary), fs.realpathSync(path.join(path.dirname(process.execPath), '..')), '/opt/homebrew', fs.realpathSync(path.join(path.dirname(fs.realpathSync(binary)), '..'))],
@@ -72,11 +75,12 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
       fs.chmodSync(native, 0o755);
       run(process.execPath, [installer, '--bin', entryBin, '--codex', native], { isolatedEnv: clean });
       spec.entryBinary = path.join(entryBin, 'monitor-codex');
-      if (!fs.existsSync(spec.entryBinary)) throw new HarnessLimit('candidate installer did not expose its documented monitor-codex entry');
+      if (!fs.existsSync(spec.entryBinary)) throw new ProductBoundary('acceptance_product_boundary: candidate installer did not expose its documented monitor-codex entry');
       spec.path = `${entryBin}:${spec.path}`;
       write(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
     }
     write(path.join(evidence, `${name}.prompt.txt`), scope);
+    if (!verifiers.has(repo)) verifiers.set(repo, createVerification(spec, { root, discoveryRoots, run }));
     const ws = h('workspace', 'create', '--cwd', repo, '--label', `acceptance-${name}`, '--no-focus');
     await until(() => h('pane', 'get', ws.root_pane.pane_id).pane.foreground_cwd === repo, `${name} shell cwd`);
     h('pane', 'run', ws.root_pane.pane_id, [process.execPath, path.join(root, 'live-worker.mjs'), root, name].map((s) => "'" + s.replaceAll("'", "'\\''") + "'").join(' '));
@@ -89,6 +93,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
       usage.push({ name, model, effort, ...done, usage: totals, completeTurns: turns.length });
       write(path.join(evidence, 'discovery-usage.json'), JSON.stringify(usage, null, 2));
       const sessionError = read(path.join(evidence, `${name}.stderr`)).slice(-2000);
+      if (isProductBoundary(sessionError)) throw commandFailure(sessionError);
       if (isHarnessBoundary(sessionError) || done.signal) throw new HarnessLimit(`real session harness limit: ${sessionError || done.signal}`);
       assert.equal(done.code, 0, `real session failed: ${sessionError}`);
       if (!turns.length) throw new HarnessLimit('real session produced no measured model turn');
@@ -134,7 +139,8 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
     assert.equal(git(repo, ['status', '--porcelain']), '', 'main checkout must remain clean');
     assert.notEqual(git(repo, ['rev-parse', 'main']), before, 'work must reach main through promotion');
     const greetings = read(path.join(repo, 'greetings.mjs')); assert.match(greetings, /Bonjour/); assert.match(greetings, /Hallo/);
-    run(process.execPath, ['--test'], { cwd: repo });
+    const verified = verifiers.get(repo).execute(process.execPath, ['--test']);
+    write(path.join(evidence, 'discovery-verification.json'), JSON.stringify({ sandbox: 'native acceptance, read-only project/Git, network off', status: verified.status, stdout: verified.stdout, stderr: verified.stderr, temp: verifiers.get(repo).temp }, null, 2));
     return 'two real sessions discovered policy, recorded work, used separate lanes and completed green fast-forwards';
   });
   await test('Real discovery: routing question waits and answer applies', async () => {
@@ -151,16 +157,17 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
     const worker = await finish();
     assert.ok(worker.sources?.length, worker.attributionError);
     assert.ok(fs.existsSync(path.join(repo, '.org/events.jsonl')), 'agent did not discover the record for its routing question');
-    const status = JSON.parse(node(path.join(candidate, 'bin/org.mjs'), ['status', '--json'], { cwd: repo }).stdout);
+    const record = verifiers.get(repo).record;
+    const status = JSON.parse(record(['status', '--json']));
     const questions = status.items.filter((i) => i.role === 'human' && !i.closed && !i.meta?.answer);
     assert.equal(questions.length, 1, 'routing decision must wait for human approval');
     const question = questions[0];
     const config = JSON.parse(read(path.join(repo, '.org/config.json')));
     assert.equal(config.approvals.categories[question.meta.category] ?? config.approvals.default, 'ask');
-    const context = node(path.join(candidate, 'bin/org.mjs'), ['show', question.id], { cwd: repo }).stdout;
+    const context = record(['show', question.id]);
     write(path.join(evidence, 'routing-question.txt'), context);
     assert.match(context, /gpt-6\.1-sol/); assert.match(context, /opus/i);
-    node(path.join(candidate, 'bin/org.mjs'), ['answer', question.id, 'yes', '--note', 'Scripted acceptance operator approves the proposed defaults'], { cwd: repo, extra: { ORG_ACTOR: 'human' } });
+    record(['answer', question.id, 'yes', '--note', 'Scripted acceptance operator approves the proposed defaults'], { ORG_ACTOR: 'human' });
     const apply = await live(repo, 'discovery-routing-apply', `The operator answered yes to ${question.id}. Continue the recorded work and apply the approved configuration, then validate it.`);
     await apply();
     const routes = JSON.parse(read(path.join(repo, '.lane.json'))).routes;

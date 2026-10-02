@@ -19,6 +19,7 @@ const inside = (p) => {
 const option = (key) => argv[argv.indexOf(key) + 1];
 const requireOption = (key) => { if (!argv.includes(key)) throw new Error(`explicit ${key} required`); return option(key); };
 const owned = (id, collection) => { if (!state[collection].includes(id)) throw new Error(`unowned ${collection}: ${id}`); };
+class ReceiptLimit extends Error {}
 async function updateOwnership(change) {
   const lock = path.join(root, 'ownership.lock');
   for (;;) {
@@ -175,7 +176,9 @@ try {
       const children = { panes: [], tabs: [] };
       if (workspace?.workspace_id) {
         for (const [kind, collection] of [['pane', 'panes'], ['tab', 'tabs']]) {
-          const topology = body(await real([kind, 'list', '--workspace', workspace.workspace_id]));
+          let topology;
+          try { topology = body(await real([kind, 'list', '--workspace', workspace.workspace_id])); }
+          catch (error) { throw new ReceiptLimit(`pane-layout receipt unavailable: ${error.message}`); }
           for (const item of topology[collection] ?? []) {
             if (item.workspace_id && item.workspace_id !== workspace.workspace_id) throw new Error('creation topology escaped its workspace');
             children[collection].push(item[`${kind}_id`]);
@@ -194,7 +197,7 @@ try {
           if (fs.existsSync(path.join(root, 'shell', `ready-${pane.pane_id}`))) { ready = true; break; }
           await new Promise((r) => setTimeout(r, 100));
         }
-        if (!ready) throw new Error('created shell never reached its scratch startup receipt');
+        if (!ready) throw new ReceiptLimit('created shell never reached its scratch startup receipt');
       }
     }
     if (group === 'workspace' && verb === 'list') r.workspaces = r.workspaces.filter((w) => state.workspaces.includes(w.workspace_id));
@@ -203,6 +206,6 @@ try {
   } else { process.stderr.write(result.stderr || result.stdout); process.exitCode = result.code ?? 1; }
 } catch (error) {
   fs.appendFileSync(path.join(root, 'denied.jsonl'), JSON.stringify({ argv, error: error.message }) + '\n');
-  process.stderr.write(JSON.stringify({ error: { code: 'acceptance_boundary', message: error.message } }) + '\n');
+  process.stderr.write(JSON.stringify({ error: { code: error instanceof ReceiptLimit ? 'acceptance_harness_limit' : 'acceptance_product_boundary', message: error.message } }) + '\n');
   process.exitCode = 1;
 }

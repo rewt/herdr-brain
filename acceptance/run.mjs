@@ -9,8 +9,10 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
 import { auditCopies, relocate, within, copiedSandbox } from './security.mjs';
-import { HarnessLimit, isHarnessBoundary } from './limits.mjs';
+import { HarnessLimit, Pending, commandFailure, classifyFailure } from './limits.mjs';
 import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
+import { safeGitArgs } from './verify.mjs';
+import { retainedRoots, resultLine } from './results.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -39,7 +41,6 @@ const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: t
 const read = (file) => fs.readFileSync(file, 'utf8');
 const json = (text) => { const v = JSON.parse(text); return v.result ?? v; };
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
-class Pending extends Error {}
 const pending = (reason) => { throw new Pending(reason); };
 function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv } = {}) {
   const r = spawnSync(command, args, { cwd, env: isolatedEnv ?? { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
@@ -48,7 +49,7 @@ function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_00
     stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
   if (ok && (r.error || r.status !== 0)) {
     const message = `${path.basename(command)} ${args[0]}: ${r.error?.message ?? String(r.stderr || r.stdout).trim()}`;
-    throw isHarnessBoundary(message) ? new HarnessLimit(message) : new Error(message);
+    throw commandFailure(message);
   }
   return r;
 }
@@ -72,7 +73,7 @@ function runCopy(command, args, options = {}) {
     { ...options, extra: { ...options.extra, HOME: scratchHome, TMPPREFIX: path.join(root, 'zsh'), ACCEPTANCE_PINNED_ORG: org } });
 }
 const node = (file, args, options) => run(process.execPath, [file, ...args], options);
-const git = (cwd, args) => run('git', ['-C', cwd, ...args]).stdout.trim();
+const git = (cwd, args) => run('git', safeGitArgs(cwd, args)).stdout.trim();
 const candidate = path.join(root, 'candidate');
 const present = (file) => fs.existsSync(path.join(candidate, file));
 const requireCandidate = (file) => { if (!present(file)) pending(`candidate lacks ${file}`); return path.join(candidate, file); };
@@ -82,7 +83,7 @@ async function test(name, fn) {
   write(logFile, '');
   let status = 'PASS', detail = '', origin = 'product';
   try { detail = await fn() ?? ''; }
-  catch (e) { origin = e instanceof HarnessLimit || name === 'Cleanup and scope audit' ? 'harness' : 'product'; status = e instanceof Pending || origin === 'harness' ? 'PENDING' : 'FAIL'; detail = e.message; }
+  catch (e) { ({ status, origin, detail } = classifyFailure(e, { cleanup: name === 'Cleanup and scope audit' })); }
   results.push({ id, name, status, origin, detail, evidence: `${id}.jsonl` });
   logFile = undefined;
 }
@@ -196,10 +197,10 @@ function emitSummary(interruption = {}) {
   const counts = Object.fromEntries(['PASS', 'FAIL', 'PENDING'].map((status) => [status, results.filter((v) => v.status === status).length]));
   const authDirectory = path.join(root, 'codex-runtime');
   const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, evidence, results,
-    credentialResidue: fs.existsSync(authDirectory) ? [authDirectory] : [], retainedDiscoveryRoots: opt.keep ? discoveryRoots : [], ...interruption };
+    credentialResidue: fs.existsSync(authDirectory) ? [authDirectory] : [], retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
   write(path.join(evidence, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
   const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending — ${counts.FAIL || counts.PENDING ? 'NOT READY' : 'READY'}`,
-    ...results.map((v) => `${v.status.padEnd(7)} ${v.id} ${v.origin === 'harness' ? '[HARNESS] ' : ''}${v.name}${v.origin === 'harness' ? ' — ' + v.detail.split('\n')[0].slice(0, 100) : ''}`), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');
+    ...results.map((v) => resultLine(v, summary.retainedDiscoveryRoots)), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');
   write(path.join(evidence, 'screen.txt'), screen + '\n'); console.log(screen);
   process.exitCode = counts.FAIL || counts.PENDING ? 1 : 0;
 }
@@ -247,22 +248,19 @@ try {
     write(probe, `import {loadDiscoveredRoutes,resolveLaunchRoute} from ${JSON.stringify(path.join(candidate, 'lanes/routes.mjs'))};\nconsole.log(JSON.stringify(resolveLaunchRoute(loadDiscoveredRoutes().config)));\n`);
     node(probe, [], { cwd: fresh });
   });
-  await test('New project: discover dispatch/watch/default cycle', () => {
+  await test('New project: installed supervisor entry and record bootstrap', () => {
     requireCandidate('dispatch/dispatch.mjs'); requireCandidate('watch/watch.mjs');
+    const bootstrap = path.join(root, 'entry-project'); initRepo(bootstrap);
+    for (const name of ['.org', '.lane.json', 'AGENTS.md']) assert.ok(!fs.existsSync(path.join(bootstrap, name)), 'entry bootstrap must start from a separate untouched project');
     if (present('discovery/install.mjs') && present('discovery/adapters/codex.mjs')) {
       const binary = fs.realpathSync(run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim());
-      const policy = node(path.join(candidate, 'discovery/adapters/codex.mjs'), ['--repo', fresh, '--binary', binary, '--role', 'supervisor', '--policy-only'], { cwd: fresh }).stdout;
+      const policy = node(path.join(candidate, 'discovery/adapters/codex.mjs'), ['--repo', bootstrap, '--binary', binary, '--role', 'supervisor', '--policy-only'], { cwd: bootstrap }).stdout;
       write(path.join(evidence, 'new-project-discovery.txt'), policy);
       assert.match(policy, /dispatch.*ITEM/); assert.match(policy, /watch\/watch.mjs/); assert.match(policy, /Only a supervisor/);
-      assert.ok(fs.existsSync(path.join(fresh, '.org/events.jsonl')), 'product entry must bootstrap its own project record');
-      return 'actual product entry supplied supervisor defaults and bootstrapped the record; real worker execution is judged in cases 20/21';
+      assert.ok(fs.existsSync(path.join(bootstrap, '.org/events.jsonl')), 'product entry must bootstrap its own project record');
+      return 'actual supervisor entry executed in an untouched project and bootstrapped the record; this does not execute a dispatch/watch cycle';
     }
-    const manifest = read(path.join(candidate, 'herdr-plugin.toml'));
-    const dispatchHelp = node(path.join(candidate, 'dispatch/dispatch.mjs'), [], { cwd: fresh, ok: false });
-    const watchHelp = node(path.join(candidate, 'watch/watch.mjs'), [], { cwd: fresh, ok: false });
-    write(path.join(evidence, 'new-project-discovery.txt'), `${manifest}\n${dispatchHelp.stderr}\n${watchHelp.stderr}`);
-    assert.equal(dispatchHelp.status, 0, `entry requires hand setup: ${dispatchHelp.stderr.trim()}; watch: ${watchHelp.stderr.trim()}`);
-    pending('default cycle needs a discoverable no-model entry contract; no setup was supplied');
+    assert.fail('candidate has no installed supervisor entry to execute and bootstrap an unconfigured project');
   });
   await test('Real Herdr boundary and configured fixture', async () => {
     if (process.env.HERDR_ENV !== '1') throw new HarnessLimit('run inside Herdr (HERDR_ENV=1); no session inspected');
@@ -586,6 +584,9 @@ try {
     pending('compatibility blob restoration passes in scratch; existing launcher still calls contrib, so retirement is forbidden');
   });
   await discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
+  await test('New project: default supervisor dispatch/watch/ingest cycle', () => {
+    pending('unconfigured default-route dispatch, armed watch and ingestion are not executed; the entry/bootstrap and configured-cycle cases cannot satisfy this gate');
+  });
 } catch (error) {
   if (!(error instanceof Pending)) results.push({ id: 'fatal', name: 'Harness setup', status: 'PENDING', origin: 'harness', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });
 } finally {

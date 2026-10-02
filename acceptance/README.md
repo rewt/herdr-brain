@@ -16,7 +16,11 @@ it never modifies that source or an activated release. `main` means the commit
 resolved at startup, not a moving branch during the test.
 
 The primary cases enter new Git projects without `.org`, `.lane.json`, routes or
-agent instructions. Missing discovery/defaults fail. The configured mechanics
+agent instructions. Missing discovery fails; unexecuted default behavior stays
+pending. Case 04 executes installed supervisor entry and record bootstrap in a
+dedicated untouched project; it does not claim a dispatch/watch cycle. Case 22 separately
+keeps the unconfigured default supervisor dispatch/watch/ingest cycle PENDING
+until that behavior is actually executed. The configured mechanics
 fixture is a separate case: its record, route, validation command and ignored
 session registry are explicit test setup, never evidence that defaults work.
 
@@ -58,13 +62,30 @@ The host resolves original HERDR_SOCKET_PATH with the core client fallback,
 requires an existing socket before probing, and records that actual endpoint.
 Neither approval bypass nor unrestricted sandbox modes are used. A pre-inference native probe must successfully commit, create a worktree and
 update a ref in a disposable Git project inside the session temp, using explicit
-scratch Git common-directory grants. Direct native sessions can write only that
-project/session Git metadata. Installed sessions keep the product
+scratch Git common-directory grants. Direct native sessions can write only
+objects, refs, logs, index/lock and lifecycle files and worktree registrations;
+Git config and hooks remain read-only, including denied worktree config paths.
+The pre-inference probe also requires actual config/hook write denials. Installed sessions keep the product
 Git protections and perform writes through its actual bounded session parent;
 project validation always keeps Git metadata read-only. Failed capability probes
-and other harness-boundary refusals are PENDING with `[HARNESS]` on the screen,
-not product FAIL. Successful discovery still requires actual integration. An initial nested-sandbox experiment cannot establish
+and prerequisites, interruptions or pane-layout receipt failures are PENDING
+with `[HARNESS]` on the screen. Candidate safety violations (capability leaks,
+sandbox bypass, foreign roots, unowned targets or outside-scratch paths) are
+product FAIL with `[SAFETY]`; an installer missing its documented entry also
+fails. A boundary refusal is not automatically a harness limitation. Successful discovery still requires actual integration. An initial nested-sandbox experiment cannot establish
 discovery: the model must actually read the project and report token usage.
+
+After any real session starts, every harness Git operation on its project runs
+inside native acceptance confinement with a read-only checkout/Git metadata,
+a fresh verification temp, network disabled, hooks disabled by an absolute
+/dev/null hooksPath, and fsmonitor disabled. Final node --test on promoted
+model-written code uses that same sandbox. Filters/configuration cannot execute
+on the host through evidence capture. The actual installed Git binary is resolved
+before entry; macOS /usr/bin/git is a developer-tools launcher that this narrow
+profile may not be able to resolve. Trusted record inspection and the scripted
+human answer also run under a kernel sandbox with a pinned project .org write
+root; redirecting .org cannot write a foreign record. No model-written project
+module is imported by host verification.
 
 Mechanics use real Herdr PTYs running Node scripts, real Git, record, dispatch,
 watch and lane code. The Herdr adapter replaces `agent start` with the script.
@@ -147,6 +168,9 @@ remove credentials before shutting down owned workspaces, remove them again
 afterward, and emit an interrupted summary with cleanup errors and credential
 residue. Forced SIGKILL cannot run a handler. `ACCEPTANCE_TMPDIR` can select another scratch parent.
 If cleanup fails, the summary identifies the failure and scratch ownership ledger.
+Every discovery/verification root that still exists is listed in the summary and
+on the cleanup screen line regardless of keep; a failed non-keep cleanup never
+hides retained paths.
 
 `--skip-live` is for mechanics debugging: discovery becomes pending, so this
 cannot approve a release. Omitting `--bch-cloak` leaves that compatibility case

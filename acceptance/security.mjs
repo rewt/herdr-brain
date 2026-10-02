@@ -66,10 +66,14 @@ export function sessionEnv(inherited, spec) {
   return env;
 }
 
-export function permissionArgs({ repo, temp, installation, toolRoots, entryBinary, gitCommon, worktreeRoot, probeGit }, { gitWrites = !entryBinary } = {}) {
-  const gitAccess = gitWrites ? 'write' : 'read';
+export function permissionArgs({ repo, temp, installation, toolRoots, entryBinary, gitCommon, worktreeRoot, probeGit }, { gitWrites = !entryBinary, projectWrites = true } = {}) {
+  const gitAccess = gitWrites ? { '.': 'read', ...Object.fromEntries([
+    'objects', 'refs', 'logs', 'index', 'index.lock', 'HEAD', 'HEAD.lock', 'ORIG_HEAD', 'ORIG_HEAD.lock',
+    'FETCH_HEAD', 'COMMIT_EDITMSG', 'packed-refs', 'packed-refs.lock', 'shallow', 'shallow.lock',
+    'MERGE_HEAD', 'MERGE_MSG', 'MERGE_MODE', 'AUTO_MERGE', 'worktrees',
+  ].map((name) => [name, 'write'])), 'worktrees/**/config*': 'deny', 'worktrees/**/hooks': 'deny' } : 'read';
   const filesystem = { ':root': 'deny', ':minimal': 'read', ':slash_tmp': 'deny',
-    ':tmpdir': 'write', ':workspace_roots': { '.': 'write', '.git': gitAccess }, [installation]: 'read' };
+    ':tmpdir': 'write', ':workspace_roots': { '.': projectWrites ? 'write' : 'read', '.git': 'read' }, [installation]: 'read' };
   for (const directory of toolRoots) filesystem[directory] = 'read';
   if (entryBinary) filesystem[repo] = 'read'; // lane cwd stays writable; shared record is readable
   // Every extra grant is inside the session's existing project/temp roots.

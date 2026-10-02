@@ -43,7 +43,8 @@ test('scratch Git grants permit direct writes, preserve installed-parent protect
   for (const directory of [repo, temp, foreign]) fs.mkdirSync(directory);
   const spec = { repo, temp, installation: path.join(root, 'installed'), toolRoots: [], gitCommon: path.join(repo, '.git'), worktreeRoot: path.join(temp, 'lanes') };
   const direct = permissionArgs(spec).join(' ');
-  assert.ok(direct.includes(`${JSON.stringify(spec.gitCommon)}="write"`));
+  assert.ok(direct.includes(`${JSON.stringify(spec.gitCommon)}={"."="read"`));
+  assert.ok(direct.includes('"objects"="write"')); assert.ok(direct.includes('"worktrees/**/config*"="deny"'));
   const installed = permissionArgs({ ...spec, entryBinary: '/installed/monitor-codex' }).join(' ');
   assert.ok(installed.includes(`${JSON.stringify(spec.gitCommon)}="read"`));
   assert.ok(installed.includes(`${JSON.stringify(spec.worktreeRoot)}="write"`));

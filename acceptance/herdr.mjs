@@ -45,6 +45,14 @@ function safePath(p) {
 let child;
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child?.kill(signal); process.exit(1); });
 async function real(args) {
+  const mutating = !['list', 'get', 'read', 'wait', 'process-info'].includes(args[1]);
+  const id = `${process.pid}:${Date.now()}:${Math.random()}`;
+  const focusCalls = path.join(root, 'evidence', 'focus-calls.jsonl');
+  const traceCall = (type) => {
+    if (mutating && fs.existsSync(path.dirname(focusCalls))) fs.appendFileSync(focusCalls,
+      JSON.stringify({ type, id, at: Date.now(), args, requested: argv }) + '\n');
+  };
+  traceCall('start');
   return await new Promise((resolve, reject) => {
     child = spawn(state.binary, args, { stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...(state.socketPath ? { HERDR_SOCKET_PATH: state.socketPath } : {}) } });
@@ -55,6 +63,7 @@ async function real(args) {
     child.on('error', reject);
     child.on('close', (code) => {
       clearTimeout(timer);
+      traceCall('end');
       fs.appendFileSync(path.join(root, 'herdr.jsonl'), JSON.stringify({ args, code, stdout, stderr }) + '\n');
       resolve({ code, stdout, stderr });
     });
@@ -93,7 +102,7 @@ try {
     if (argv.includes('--workspace')) owned(option('--workspace'), 'workspaces');
     else safePath(requireOption('--cwd'));
     if (['create', 'open'].includes(verb)) safePath(requireOption('--path'));
-    if (verb === 'remove' && argv.includes('--force')) throw new CapabilityRefusal('forced worktree removal forbidden');
+    if (verb === 'remove') throw new CapabilityRefusal('Herdr worktree remove changes focus; close the owned workspace and remove the checkout through Git');
   } else if (group === 'tab' && ['list', 'create'].includes(verb)) {
     owned(requireOption('--workspace'), 'workspaces');
     if (argv.includes('--cwd')) safePath(option('--cwd'));

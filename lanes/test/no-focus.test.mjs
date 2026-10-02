@@ -19,3 +19,8 @@ test("lane never moves Herdr focus when it creates or opens a workspace, worktre
   assert.ok(calls.length >= 3, `expected the worktree create/open and tab create calls, found ${calls.length}`);
   for (const [call] of calls) assert.match(call, /"--no-focus"/, `missing --no-focus: ${call.slice(0, 120)}`);
 });
+
+test("lane closure cannot invoke Herdr's parent-focusing worktree removal", () => {
+  assert.doesNotMatch(source, /\[\s*"worktree",\s*"remove",\s*"--workspace"/);
+  assert.match(source, /spawnSync\("herdr", \["workspace", "close", workspaceId\]/);
+});

@@ -2274,9 +2274,9 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
   const path = worktreeFor(branch);
   if (path !== undefined) {
     requireClean(path, "lane worktree");
-    // Prefer herdr-native removal so the console workspace retires with the
-    // worktree; a git-only removal leaves a ghost workspace behind.
-    let removed = false;
+    // Herdr 0.8.2 worktree.remove always focuses the parent workspace, even
+    // when removing a background lane. Close its workspace separately, then
+    // let Git remove the clean checkout; workspace.close preserves other focus.
     let mismatchedMetadata = false;
     try {
       const workspaceId = gitOnly ? undefined : openWorkspaceIdFor(path, {
@@ -2284,19 +2284,16 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
         onMismatch: () => { mismatchedMetadata = true; },
       });
       if (workspaceId !== undefined) {
-        const run = spawnSync("herdr", ["worktree", "remove", "--workspace", workspaceId], {
+        spawnSync("herdr", ["workspace", "close", workspaceId], {
           encoding: "utf8",
         });
-        removed = run.status === 0 && !existsSync(path);
       }
     } catch {
       // herdr unavailable; fall back to git below
     }
-    if (!removed) {
-      git(["worktree", "remove", path]);
-      if (mismatchedMetadata) {
-        process.stderr.write(`lane: note: Herdr metadata for ${path} does not match this repository; removed the worktree with git only\n`);
-      }
+    git(["worktree", "remove", path]);
+    if (mismatchedMetadata) {
+      process.stderr.write(`lane: note: Herdr metadata for ${path} does not match this repository; removed the worktree with git only\n`);
     }
     process.stdout.write(`removed worktree ${path}\n`);
   }

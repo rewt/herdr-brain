@@ -29,13 +29,13 @@ command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/herdr/supervisor.sh\""]
 id = "open"
 title = "Herdr Monitor: open the console"
 contexts = ["pane", "workspace"]
-command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console"]
+command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint console --no-focus"]
 
 [[actions]]
 id = "supervisor"
 title = "Herdr Monitor: open project supervisor"
 contexts = ["pane", "workspace"]
-command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint supervisor"]
+command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin rewt.herdr-monitor --entrypoint supervisor --no-focus"]
 
 [[actions]]
 id = "restore-entry"

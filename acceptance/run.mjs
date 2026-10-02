@@ -22,6 +22,7 @@ import { switches, switchedFiles, capture, restore, callers, retireContrib, call
 import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
 import { assertSupervisorEntry } from './entry.mjs';
+import { startFocusMonitor, assertFocus } from './focus.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -41,6 +42,7 @@ fs.mkdirSync(evidence);
 const started = Date.now();
 const results = [];
 let logFile, candidateCommit, fixture, supervisor, defaultOrg;
+let focusMonitor, focusError;
 const pids = new Set();
 const discoveryRoots = [];
 const env = { ...process.env };
@@ -91,6 +93,9 @@ async function test(definition, fn) {
   const id = String(results.length + 1).padStart(2, '0');
   logFile = path.join(evidence, `${id}.jsonl`);
   write(logFile, '');
+  const phaseFile = path.join(evidence, 'focus-phase.json');
+  write(`${phaseFile}.tmp`, JSON.stringify({ key: definition.key, id }));
+  fs.renameSync(`${phaseFile}.tmp`, phaseFile);
   try {
     const result = await runCase(results, definition, fn, { scratchRoots });
     result.evidence = `${id}.jsonl`;
@@ -221,7 +226,16 @@ function emitSummary(interruption = {}) {
   process.exitCode = counts.FAIL || counts.PENDING ? 1 : 0;
 }
 
-installSignalCleanup({ root, cleanup: cleanupScope, summarize: (interruption) => {
+async function finishFocus() {
+  await test(cases.focus, async () => {
+    if (focusError) throw focusError;
+    if (!focusMonitor) throw new HarnessLimit('focus monitor never started; no full-run focus proof');
+    return assertFocus(await focusMonitor.stop());
+  });
+}
+installSignalCleanup({ root, cleanup: async () => {
+  try { return await cleanupScope(); } finally { await finishFocus(); }
+}, summarize: (interruption) => {
   results.push({ id: 'interrupt', key: 'interrupted-run', name: 'Interrupted run', status: 'PENDING', origin: 'harness', detail: interruption.signal, evidence: 'summary.json' });
   emitSummary(interruption);
 } });
@@ -232,6 +246,10 @@ try {
   if (missing.length) {
     await test(cases.tools, () => { throw new HarnessLimit(`missing prerequisite: ${missing.join(', ')}`); });
     throw new Pending('prerequisites unavailable; no candidate or copied code executed');
+  }
+  if (process.env.HERDR_ENV === '1') {
+    try { focusMonitor = await startFocusMonitor({ socketPath: liveSocket(process.env), evidence }); }
+    catch (error) { focusError = error; }
   }
   await test(cases.snapshot, () => {
     fs.mkdirSync(candidate);
@@ -281,6 +299,7 @@ try {
   });
   await test(cases.fixture, async () => {
     if (process.env.HERDR_ENV !== '1') throw new HarnessLimit('run inside Herdr (HERDR_ENV=1); no session inspected');
+    if (focusError) throw focusError;
     const binary = run('which', ['herdr']).stdout.trim();
     write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
     for (const file of ['herdr.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
@@ -963,5 +982,6 @@ try {
   if (!(error instanceof Pending)) results.push({ id: 'fatal', key: 'harness-setup', name: 'Harness setup', status: 'PENDING', origin: 'harness', detail: error.stack, evidence: logFile ? path.basename(logFile) : 'summary.json' });
 } finally {
   await test(cases.cleanup, cleanupScope);
+  await finishFocus();
   emitSummary();
 }

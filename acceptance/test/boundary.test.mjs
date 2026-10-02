@@ -24,6 +24,7 @@ test('native adapter pins the original socket despite an isolated HOME or caller
 });
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-boundary-')));
+  fs.mkdirSync(path.join(root, 'evidence'));
   const binary = path.join(root, 'fake-herdr');
   fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');const modeFile=${JSON.stringify(path.join(root, 'mode.json'))};const mode=fs.existsSync(modeFile)?JSON.parse(fs.readFileSync(modeFile)):{};if(mode.fail&&mode.fail.every((v,i)=>a[i]===v)){console.error(JSON.stringify({error:{code:'herdr_unavailable',message:'injected native command failure'}}));process.exit(1)}let r={};if(a[0]==='pane'&&a[1]==='list')r={panes:[{pane_id:'new:p2',workspace_id:'new'}]};if(a[0]==='tab'&&a[1]==='list')r={tabs:[{tab_id:'new:t2',workspace_id:'new'}]};if(a[0]==='pane'&&a[1]==='get')r={pane:{pane_id:a[2],workspace_id:a[2].startsWith('late-own:')||a[2].startsWith('own:')?'own':a[2].startsWith('new:')?'new':'other',foreground_cwd:mode.missingCwd?undefined:fs.existsSync(${JSON.stringify(path.join(root, 'moved-cwd'))})?fs.readFileSync(${JSON.stringify(path.join(root, 'moved-cwd'))},'utf8'):${JSON.stringify(root)}}};if(a[0]==='workspace'&&a[1]==='create'){fs.mkdirSync(${JSON.stringify(path.join(root, 'shell'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(root, 'shell/ready-new:p1'))},'');}if(a[0]==='agent'&&a[1]==='get')r={agent:{pane_id:a[2]==='foreign'?'other:p1':'own:p1',agent_status:mode.registerTimeout?'working':'idle'}};if(a[0]==='workspace'&&a[1]==='create')r={workspace:{workspace_id:'new'},root_pane:{pane_id:'new:p1'},tab:{tab_id:'new:t1'}};console.log(JSON.stringify({result:r}));\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: ['own'], tabs: ['own:t1'], panes: ['own:p1'] }));
@@ -51,6 +52,20 @@ test('model launch requests are always replaced by the scratch worker script', (
     const transported = f.calls().find((a) => a[0] === 'pane' && a[1] === 'run');
     assert.ok(transported[3].includes(path.join(f.root, 'worker.mjs')));
     assert.ok(!transported[3].includes('expensive'));
+    const trace = fs.readFileSync(path.join(f.root, 'evidence/focus-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    const call = trace.find((row) => row.type === 'start' && row.args[0] === 'pane' && row.args[1] === 'run');
+    assert.deepEqual(call.args, transported);
+    assert.deepEqual(call.requested.slice(0, 3), ['agent', 'start', 'script']);
+    assert.ok(trace.some((row) => row.id === call.id && row.type === 'end'));
+  } finally { f.close(); }
+});
+test('parent-focusing worktree removal is refused before any native mutation', () => {
+  const f = fixture();
+  try {
+    const reply = f.call('worktree', 'remove', '--workspace', 'own');
+    assert.notEqual(reply.status, 0);
+    assert.match(reply.stderr, /acceptance_product_boundary.*worktree remove changes focus/);
+    assert.deepEqual(f.calls(), []);
   } finally { f.close(); }
 });
 test('creation receipts grant the only new targets and force no-focus', () => {

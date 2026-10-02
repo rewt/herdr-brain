@@ -31,6 +31,7 @@ export const cases = Object.freeze({
   settle: spec('settle-cycle', 'New project: report/settle/fix/settle/promotable without config'),
   supervisor: spec('supervisor-cycle', 'New project: fresh/history supervisor, notices, fix, promotion and record completion'),
   cleanup: spec('scope-cleanup', 'Cleanup and scope audit', [], { cleanup: true }),
+  focus: spec('operator-focus', 'Operator focused pane stays unchanged throughout the run'),
 });
 export const cutoverChecks = Object.freeze({
   name: spec('stable-name', 'stable name: startup and missing-target refusal'),

@@ -58,6 +58,24 @@ uses that shared registry and resolves real paths before checking containment.
 Parent traversal, dangling symlinks, mixed foreign paths or other uncertainty
 remain product failures; a scratch-looking path alone is insufficient.
 
+The `operator-focus` case watches the server's focused pane from before the
+candidate snapshot through owned-workspace cleanup. A separate read-only process
+samples every 200 ms, including while the runner blocks in child commands, and
+subscribes to `pane.focused` so a change restored between samples also fails.
+`focus-trace.jsonl`, `focus-calls.jsonl` and `focus-summary.json` retain the baseline,
+case, timestamps, samples, events and actual/requested Herdr calls. A change names
+the active or immediately preceding call; changes without a correlated harness
+call are labelled external client/plugin activity and still fail. Missing samples
+or a broken subscription are PENDING, never proof of unchanged focus. Do not
+switch the operator's pane during the run. The monitor never restores focus.
+
+On Herdr 0.8.2, `--no-focus` covers workspace/worktree/tab creation, worktree open,
+pane split/move and plugin pane open; it is not an option for agent start, pane run
+or terminal input. Those input operations preserve focus. `worktree remove`
+unconditionally focuses its parent, so lane closure instead closes the background
+workspace and removes the checkout through Git. Explicit focus/attach and zoom
+are reserved for operator navigation, never background dispatch or acceptance.
+
 The primary cases enter new Git projects without `.org`, `.lane.json`, routes or
 agent instructions. Missing product capabilities fail. Genuine environment limitations remain pending. `supervisor-entry` executes installed supervisor entry and record bootstrap in a
 dedicated untouched project. It verifies the generated cold start and final-notice

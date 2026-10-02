@@ -334,7 +334,11 @@ if (args[0] === "workspace" && args[1] === "list") {
   }
   result("cli:worktree:open", { type: "worktree_open", workspace_id: "w-lane" });
 } else if (args[0] === "worktree" && args[1] === "remove") {
-  result("cli:worktree:remove", { type: "worktree_remove", workspace_id: args[3] });
+  throw new Error("worktree.remove steals focus; use workspace.close and Git removal");
+} else if (args[0] === "workspace" && args[1] === "close") {
+  state.opened = false;
+  save();
+  result("cli:workspace:close", { type: "workspace_close", workspace_id: args[2] });
 } else if (args[0] === "tab" && args[1] === "create") {
   result("cli:tab:create", {
     type: "tab_create", tab: { tab_id: "w-lane:t2", workspace_id: "w-lane" },
@@ -812,18 +816,21 @@ test("close deletes a merged branch", () => {
   }
 });
 
-test("close archive-tags an unmerged branch", () => {
+test("close retires a background workspace without worktree.remove and preserves the archive", () => {
   const fixture = makeFixture();
   try {
     const path = openLane(fixture, "unmerged-topic");
     commitFile(path, "lane.txt", "lane\n", "lane change");
     const laneHead = git(fixture.repo, ["rev-parse", "lane/unmerged-topic"]);
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/unmerged-topic", initiallyOpened: true });
 
     const run = lane(fixture, ["close", "unmerged-topic"]);
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /archived unmerged lane as tag archive\/lane\/unmerged-topic/);
     assert.ok(!refExists(fixture.repo, "refs/heads/lane/unmerged-topic"));
     assert.equal(git(fixture.repo, ["rev-parse", "archive/lane/unmerged-topic"]), laneHead);
+    assert.ok(fake.calls().some((args) => args[0] === "workspace" && args[1] === "close" && args[2] === "w-lane"));
+    assert.ok(!fake.calls().some((args) => args[0] === "worktree" && args[1] === "remove"));
     negativeControl("unmerged archive");
   } finally {
     fixture.cleanup();

@@ -874,8 +874,9 @@ function verifyAgentCwd(agentName, path, deadline) {
   return { ok: samePath(record.cwd, path), cwd: record.cwd, record };
 }
 
-// Dry-run a rebase of `branch` onto `against` with merge-tree (no worktree
-// touched). Conflicts are returned by file so the implementer sees them. A
+// Preflight the final trees of `branch` and `against` with merge-tree (no
+// worktree touched); intermediate replay can still conflict. Return conflicts
+// by file so the implementer sees them. A
 // lane that already contains `against` needs no rebase (promote fast-forwards
 // it), so only a lane that is behind can be refused for carrying merges.
 function rebaseCheck(branch, against = MAIN) {
@@ -2197,16 +2198,26 @@ function promoteLocked(topic, root) {
   }
   let mainHead = git(["rev-parse", MAIN]);
   if (git(["merge-base", MAIN, branch]) !== mainHead) {
-    // A promotion elsewhere moved main. Rebasing is mechanical when the dry
-    // run is clean, and the gate below validates the rebased tree; conflicts
-    // go back to the implementer with the file list.
+    // The net-tree preflight cannot prove that every intermediate commit will
+    // replay cleanly. A replay refusal must also reach the supervisor with its
+    // file list, leaving the paused rebase available to the implementer.
     const check = rebaseCheck(branch);
     if (!check.clean) {
       const reason = check.reason ?? `conflicts in: ${check.conflicts.join(", ")}`;
       fail(`lane is behind ${MAIN} and does not rebase cleanly; ${reason}`);
     }
     const before = git(["rev-parse", "--short", branch]);
-    git(["rebase", MAIN], { cwd: path });
+    try {
+      git(["rebase", MAIN], { cwd: path });
+    } catch (error) {
+      if (error.stdout) process.stdout.write(error.stdout);
+      const conflicts = tryGit(["diff", "--name-only", "--diff-filter=U"], { cwd: path, silent: true });
+      const diagnostic = `${error.stdout ?? ""}\n${error.stderr ?? ""}`.split("\n")
+        .filter((line) => /^(CONFLICT|error:|fatal:)/.test(line)).join("; ");
+      const reason = conflicts ? `conflicts in: ${conflicts.split("\n").join(", ")}`
+        : (diagnostic || error.message).replace(/\s+/g, " ").slice(0, 400);
+      fail(`rebase replay onto ${MAIN} failed; ${reason}; lane kept at ${path}; resolve or abort the rebase there before retrying`);
+    }
     process.stdout.write(`rebased ${branch} onto ${MAIN} (${before} -> ${git(["rev-parse", "--short", branch])}, clean replay)\n`);
     mainHead = git(["rev-parse", MAIN]);
   }

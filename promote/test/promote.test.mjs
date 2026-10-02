@@ -91,6 +91,49 @@ for (const mode of ['dirty', 'red', 'conflict']) test(`${mode} refusal is delive
   assert.match(f.messages()[0][3], /lane=bad outcome=refused/);
 });
 
+test('replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane', async (t) => {
+  const f = fixture(t); const bad = f.lane('bad'), good = f.lane('good');
+  fs.writeFileSync(path.join(bad, 'shared'), 'lane edit\n');
+  f.git(['add', 'shared'], bad); f.git(['commit', '-qm', 'edit shared'], bad);
+  fs.writeFileSync(path.join(bad, 'shared'), 'base\n');
+  f.git(['add', 'shared'], bad); f.git(['commit', '-qm', 'revert shared'], bad);
+  fs.writeFileSync(path.join(f.repo, 'shared'), 'upstream edit\n');
+  f.git(['add', 'shared']); f.git(['commit', '-qm', 'upstream edit']);
+  const before = f.git(['rev-parse', 'lane/bad']);
+  const upstream = f.git(['rev-parse', 'main']);
+  const preflight = spawnSync(process.execPath, [LANE, 'rebase-check', 'bad'], {
+    cwd: f.repo, env: f.env, encoding: 'utf8',
+  });
+  assert.equal(preflight.status, 0, preflight.stderr);
+  assert.match(preflight.stdout, / clean\n$/);
+
+  f.launch(['bad', 'good']); await until(() => f.results().length === 2);
+  const refused = f.results()[0];
+  const log = fs.readFileSync(refused.log, 'utf8');
+  assert.equal(refused.outcome, 'refused', log);
+  assert.equal(refused.delivered, true);
+  assert.match(log, /CONFLICT .*shared/);
+  assert.doesNotMatch(log, /validating in/);
+  assert.match(refused.reason, /^lane: rebase replay onto main failed; conflicts in: shared; lane kept/);
+  assert.match(f.messages()[0][3], /lane=bad outcome=refused .*lane: rebase replay onto main failed; conflicts in: shared; lane kept/);
+  assert.match(f.messages()[0][3], /resolve or abort the rebase/);
+  assert.ok(fs.existsSync(bad));
+  assert.equal(f.git(['rev-parse', 'lane/bad']), before);
+  assert.equal(f.git(['diff', '--name-only', '--diff-filter=U'], bad), 'shared');
+  assert.ok(fs.existsSync(f.git(['rev-parse', '--git-path', 'rebase-merge'], bad)));
+  assert.equal(f.results()[1].outcome, 'promoted');
+  assert.equal(fs.existsSync(good), false);
+  assert.equal(f.git(['merge-base', upstream, 'main']), upstream);
+  assert.equal(f.git(['show', 'main:shared']), 'upstream edit');
+  assert.equal(fs.existsSync(path.join(f.repo, 'bad.txt')), false);
+  assert.equal(f.git(['status', '--porcelain']), '');
+  f.git(['rebase', '--abort'], bad);
+  assert.equal(f.git(['symbolic-ref', '--short', 'HEAD'], bad), 'lane/bad');
+  assert.equal(f.git(['rev-parse', 'HEAD'], bad), before);
+  assert.equal(f.git(['status', '--porcelain'], bad), '');
+  assert.equal(fs.readFileSync(path.join(bad, 'shared'), 'utf8'), 'base\n');
+});
+
 test('delivery failure is durable with notification fallback; draining continues', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second'); fs.writeFileSync(path.join(f.root, 'delivery-fail'), '1');
   f.launch(['first', 'second']); await until(() => f.results().length === 2);

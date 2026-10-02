@@ -37,6 +37,10 @@ protected tabs.
 Remaining workspace shells/chats stay for the operator; promotion does not close
 unrecognized tabs merely because a lane was merged. A red gate, dirty tree or
 conflicting rebase leaves the lane intact and continues with the next request.
+The merge-tree preflight checks final trees; an intermediate replay can still
+conflict. In that case the notice names the conflicting files and the lane keeps
+its paused rebase for the implementer to resolve or abort before retrying. Its
+branch is retained and neither validation nor fast-forward runs for that request.
 
 After **every** attempt, including unknown lanes, refusals and interrupted attempts,
 `herdr agent prompt` sends a compact `[promote-queue]` message to `supervisor-herdr`.

@@ -1,0 +1,7 @@
+Release acceptance: 2d22bb9^ (235s) — 5 pass / 0 fail / 0 pending — READY
+PASS    01 Candidate snapshot
+PASS    02 Real Herdr boundary and configured fixture
+PASS    03 Real discovery: concurrent lanes and promotion
+PASS    04 Real discovery: routing question waits and answer applies
+PASS    05 Cleanup and scope audit
+Evidence: /private/tmp/herdr-acceptance-tdokqK/evidence (NN.jsonl; summary.json has reasons)

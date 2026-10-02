@@ -1,0 +1,60 @@
+{
+  "candidate": "f476589",
+  "candidateCommit": "f47658935ed23b8eccb1c34ec659a596670eb6e9",
+  "elapsedSeconds": 228,
+  "counts": {
+    "PASS": 5,
+    "FAIL": 0,
+    "PENDING": 0
+  },
+  "evidence": "/private/tmp/herdr-acceptance-16thYw/evidence",
+  "results": [
+    {
+      "id": "01",
+      "key": "candidate-snapshot",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "f476589: f47658935ed23b8eccb1c34ec659a596670eb6e9",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "key": "herdr-fixture",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "key": "discovery-concurrent",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "two real sessions discovered policy, recorded work, used separate lanes and completed green fast-forwards",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "key": "discovery-routing",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "HUM-1: category=other, waited for a human, scripted yes applied by real agent",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "key": "scope-cleanup",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "05.jsonl"
+    }
+  ],
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

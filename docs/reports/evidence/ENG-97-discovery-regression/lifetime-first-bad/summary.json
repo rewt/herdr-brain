@@ -1,0 +1,60 @@
+{
+  "candidate": "2d22bb9",
+  "candidateCommit": "2d22bb9dee9e4e3fc398dd5d777c31a9afc641a1",
+  "elapsedSeconds": 235,
+  "counts": {
+    "PASS": 3,
+    "FAIL": 2,
+    "PENDING": 0
+  },
+  "evidence": "/private/tmp/herdr-acceptance-4210NK/evidence",
+  "results": [
+    {
+      "id": "01",
+      "key": "candidate-snapshot",
+      "name": "Candidate snapshot",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "2d22bb9: 2d22bb9dee9e4e3fc398dd5d777c31a9afc641a1",
+      "evidence": "01.jsonl"
+    },
+    {
+      "id": "02",
+      "key": "herdr-fixture",
+      "name": "Real Herdr boundary and configured fixture",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "PTY workers use explicit report-agent states; all targets constrained to creation receipts and scratch cwd",
+      "evidence": "02.jsonl"
+    },
+    {
+      "id": "03",
+      "key": "discovery-concurrent",
+      "name": "Real discovery: concurrent lanes and promotion",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "work must reach main through promotion",
+      "evidence": "03.jsonl"
+    },
+    {
+      "id": "04",
+      "key": "discovery-routing",
+      "name": "Real discovery: routing question waits and answer applies",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "ENOENT: no such file or directory, open '/private/tmp/herdr-discovery-ZXSZM3/project/.lane.json'",
+      "evidence": "04.jsonl"
+    },
+    {
+      "id": "05",
+      "key": "scope-cleanup",
+      "name": "Cleanup and scope audit",
+      "status": "PASS",
+      "origin": "product",
+      "detail": "all created workspaces closed; only evidence retained",
+      "evidence": "05.jsonl"
+    }
+  ],
+  "credentialResidue": [],
+  "retainedDiscoveryRoots": []
+}

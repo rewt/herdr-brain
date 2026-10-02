@@ -66,6 +66,10 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   Model and effort may stay at the harness default; edits send only changed
   fields. Clearing an existing override requires a replacement. A record-only
   project must have its folder opened before routes can be read or edited.
+  Unchanged configured routes close without a write; unchanged suggestions can
+  still be adopted explicitly. Effective effort and launch arguments use the
+  lane launch resolver, including legacy argument-encoded effort. Reading or
+  changing another field does not turn that inferred effort into an override.
   Reads and writes use the canonical Git project's routing layers; inherited
   `LANE_CONFIG` launch overrides do not redirect project edits. The CLI preserves
   project lifecycle fields and inherited routes and writes only the project's

@@ -8,6 +8,8 @@ import { projectRows, composeModes, currentBlock, checkoutName } from './project
 import { needChoices, needActions, needEffect } from './needs.mjs';
 import { regionFor, pickerEntries } from './navigation.mjs';
 import { relatedWork, acceptanceCriteria, itemOrigin } from './model.mjs';
+import { resolveLaunchRoute } from '../../lanes/routes.mjs';
+import { routeReview } from './routes.mjs';
 
 // These are the actual light/dark tokens from modern-console-overview.html.
 export const MODERN_PALETTES = {
@@ -92,7 +94,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
   const title = s.view === 'projects' ? 'Your projects' : s.view === 'folder' ? 'Open a folder' : s.view === 'ideas' ? 'Start with an idea' : s.view === 'output' ? space?.label ?? 'Session output' : p?.name ?? 'Start where you are';
-  const action = s.routeEdit ? 'Enter reviews / saves' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
+  const action = s.routeEdit ? 'Enter reviews / confirms' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
   put(2, x, title, 'bright', 'bg', true, width - action.length - 2);
   put(2, cols - action.length - 2, action, 'muted', 'bg', false, action.length);
   const errors = Object.entries(s.errors);
@@ -162,14 +164,16 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     if (s.errors.routes) paragraph('Showing last loaded routes; refresh before editing.', 'amber');
     if (limit === Infinity && config.authority) paragraph(config.authority);
     for (const file of r.files) paragraph(`Source: ${file}`);
-    const defaults = config.dispatch ?? {};
+    const defaults = resolveLaunchRoute(config);
     paragraph(`Default: ${defaults.kind ?? 'claude'} · ${defaults.model ?? 'harness default'} · ${defaults.effort ?? 'harness default'}`);
+    if (defaults.args.length) paragraph(`Default launch args: ${JSON.stringify(defaults.args)}`);
     if (config.selection_policy?.primary_implementation_pool) paragraph(`Primary pool: ${config.selection_policy.primary_implementation_pool}`);
     row('Route → kind · model · effort', { fg: 'muted' });
     for (const [name, route] of Object.entries(config.routes ?? {}).sort(([a], [b]) => a.localeCompare(b)).slice(0, limit)) {
-      const id = `route:${name}`;
+      const id = `route:${name}`, resolved = resolveLaunchRoute(config, { route: name });
       row(name, { id, fg: 'blue', bold: true });
-      for (const text of wrap(`${route.kind ?? defaults.kind ?? 'claude'} · ${route.model ?? defaults.model ?? 'harness default'} · ${route.effort ?? defaults.effort ?? 'harness default'}${route.use ? ` · ${route.use}` : ''}`, width - 2)) row(`  ${text}`, { id, hitOnly: true, focusAs: id });
+      for (const text of wrap(`${resolved.kind} · ${resolved.model ?? 'harness default'} · ${resolved.effort ?? 'harness default'}${route.use ? ` · ${route.use}` : ''}`, width - 2)) row(`  ${text}`, { id, hitOnly: true, focusAs: id });
+      for (const text of wrap(`Launch args: ${JSON.stringify(resolved.args)}`, width - 2)) row(`  ${text}`, { id, hitOnly: true, focusAs: id, fg: 'muted' });
     }
     if (limit === Infinity) {
       row(); section('Selection policy');
@@ -180,17 +184,23 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   };
   if (s.routeEdit) {
-    const e = s.routeEdit;
+    const e = s.routeEdit, review = routeReview(e);
     section(`${e.confirm ? 'Review route change' : 'Edit route'} · ${e.name}`);
     if (e.confirm) {
-      for (const [i, field] of ['kind', 'model', 'effort'].entries()) paragraph(`${field}: ${e.original[field] ?? '(harness default)'} → ${e.values[i].trim() || '(harness default)'}`, 'fg');
-      paragraph(`Save for ${e.project.name} in ${e.target}`);
-      paragraph('This applies to future launches.');
-      row(e.busy ? 'Saving…' : 'Enter  Save route', { id: 'route-save', fg: 'teal' });
+      for (const field of ['kind', 'model', 'effort']) paragraph(`${field}: ${review.before[field] ?? '(harness default)'} → ${review.after[field] ?? '(harness default)'}`, 'fg');
+      paragraph(`Launch args: ${JSON.stringify(review.after.args)}`);
+      if (review.writes) {
+        paragraph(`Save for ${e.project.name} in ${e.target}`);
+        paragraph(e.suggested ? 'Adopts the suggested routes for future launches.' : 'This applies to future launches.');
+      } else paragraph('No changes. Closing this review writes nothing.');
+      row(e.busy ? 'Saving…' : review.writes ? 'Enter  Save route' : 'Enter  Close without changes', { id: 'route-save', fg: 'teal' });
     } else {
       for (const [i, field] of ['Kind', 'Model', 'Effort'].entries()) {
-        row(`${field}: ${clip(e.values[i] || '(harness default)', Math.max(1, width - field.length - 5))}${e.field === i ? '▏' : ''}`, { id: `route-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i });
+        const value = e.values[i] || (field === 'Effort' && review.after.effort !== undefined ? `${review.after.effort} (from launch arguments)` : '(harness default)');
+        row(`${field}: ${clip(value, Math.max(1, width - field.length - 5))}${e.field === i ? '▏' : ''}`, { id: `route-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i });
       }
+      paragraph(`Effective launch: ${review.after.kind} · ${review.after.model ?? 'harness default'} · ${review.after.effort ?? 'harness default'}`);
+      paragraph(`Launch args: ${JSON.stringify(review.after.args)}`);
       row(); paragraph('Tab / ↑↓ field · Ctrl+U clears · Enter reviews');
       row('Enter  Review change', { id: 'route-save', fg: 'blue' });
     }
@@ -417,7 +427,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then saves · Esc cancels', 'Writes: the start bar, answers, project routes, and session input. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, and session input. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
@@ -458,7 +468,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then saves · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

@@ -10,6 +10,8 @@ import { needChoices, needActions, needEffect } from './needs.mjs';
 import { moveRegion, moveWithin, pickerEntries } from './navigation.mjs';
 import { observeTerminal } from './terminal.mjs';
 import { controlTerminal, splitInput } from './control.mjs';
+import { resolveRoute } from '../../lanes/routes.mjs';
+import { routeReview } from './routes.mjs';
 const exec = promisify(execFile);
 
 async function gitSummary(cwd) {
@@ -255,10 +257,11 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (id.startsWith('route:')) {
       const name = id.slice(6), routes = m.routes;
       if (s.errors.routes || !routes?.editable || !Object.hasOwn(routes.config.routes ?? {}, name)) { s.message = 'Refresh project routes before editing.'; changed(); return; }
-      const r = routes.config.routes[name], defaults = routes.config.dispatch ?? {};
+      const r = resolveRoute(routes.config, { route: name });
       s.routeEdit = { name, project: { ...project() }, revision: routes.revision, target: routes.target, field: 0, confirm: false, busy: false,
-        original: { kind: r.kind ?? defaults.kind ?? 'claude', model: r.model ?? defaults.model, effort: r.effort ?? defaults.effort },
-        values: [r.kind ?? defaults.kind ?? 'claude', r.model ?? defaults.model ?? '', r.effort ?? defaults.effort ?? ''] };
+        config: routes.config, suggested: Boolean(routes.suggested),
+        original: { kind: r.kind, model: r.model, effort: r.effort },
+        values: [r.kind, r.model ?? '', r.effort ?? ''] };
       changed(); return;
     }
     if (id.startsWith('activity:')) {
@@ -452,18 +455,19 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (edit.busy) return false;
     if (k.escape) { s.routeEdit = null; changed(); return false; }
     if (k.return) {
-      const fields = ['kind', 'model', 'effort'], patch = {};
+      const fields = ['kind', 'model', 'effort'];
       for (const [i, field] of fields.entries()) {
         const value = edit.values[i].trim();
         if (!value && (field === 'kind' || edit.original[field] !== undefined)) {
           s.message = field === 'kind' ? 'Kind is required.' : `Keep the existing ${field} or enter a replacement; removing overrides is not supported.`;
           changed(); return false;
         }
-        if (value && value !== edit.original[field]) patch[field] = value;
       }
-      // Reviewing an unchanged suggestion can still adopt the portable preset.
-      if (!Object.keys(patch).length) patch.kind = edit.values[0].trim();
+      const { patch, writes } = routeReview(edit);
       if (!edit.confirm) { edit.confirm = true; s.message = ''; changed(); return false; }
+      if (!writes) { s.routeEdit = null; s.message = 'No route changes; nothing written.'; changed(); return false; }
+      // Only a suggested preset can be adopted without changing a field.
+      if (!Object.keys(patch).length) patch.kind = edit.values[0].trim();
       edit.busy = true; changed();
       let result;
       try { result = await d.orgRouteSet(edit.project, { name: edit.name, ...patch, revision: edit.revision }); }

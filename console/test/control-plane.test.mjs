@@ -9,7 +9,7 @@ import { createModernSession } from '../modern/session.mjs';
 import { controlEntries } from '../modern/model.mjs';
 import { lineText } from '../lib/frame.mjs';
 import { routesSnapshot } from '../../lanes/routes-command.mjs';
-import { resolveRoute } from '../../lanes/routes.mjs';
+import { resolveRoute, resolveLaunchRoute } from '../../lanes/routes.mjs';
 import { orgRouteSet } from '../lib/cli.mjs';
 
 const bin = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
@@ -260,4 +260,97 @@ test('partial route CLI edits preserve dispatch inheritance rather than pinning 
   const config = JSON.parse(org(['routes', '--json'])).config;
   assert.equal(resolveRoute(config, { route: 'engineer' }).effort, 'next-shared-effort');
   assert.equal(resolveRoute(config, { route: 'reviewer' }).model, 'next-shared-model');
+});
+
+test('unchanged configured route saves do not write or pin an omitted kind', async t => {
+  const calls = [], f = fixture(t, { orgRouteSet: async (project, request) => { calls.push(request); return orgRouteSet(project, request); } }), s = f.session;
+  const target = path.join(f.cwd, '.lane.json'), config = { dispatch: { kind: 'codex' }, routes: { engineer: { model: 'inherited-kind' } } };
+  const bytes = JSON.stringify(config); fs.writeFileSync(target, bytes);
+  await s.refresh(); await s.key('u'); await s.activate('route:engineer');
+  const before = fs.statSync(target);
+  await s.key('x'); await s.key('', { backspace: true });
+  await s.key('', { return: true });
+  assert.match(render(s), /Closing this review writes nothing/);
+  await s.key('', { return: true });
+  assert.equal(s.ui.routeEdit, null); assert.match(s.ui.message, /nothing written/); assert.equal(calls.length, 0);
+  assert.equal(fs.readFileSync(target, 'utf8'), bytes);
+  const after = fs.statSync(target); assert.equal(after.ino, before.ino); assert.equal(after.mtimeMs, before.mtimeMs);
+  config.dispatch.kind = 'claude'; fs.writeFileSync(target, JSON.stringify(config)); await s.refresh();
+  assert.equal(resolveLaunchRoute(s.model.routes.config, { route: 'engineer' }).kind, 'claude');
+  assert.equal(Object.hasOwn(s.model.routes.config.routes.engineer, 'kind'), false);
+});
+
+test('unchanged ancestor-only routes are never copied into project config', async t => {
+  const calls = [], f = fixture(t, { orgRouteSet: async (project, request) => { calls.push(request); return orgRouteSet(project, request); } }), s = f.session;
+  const ancestor = path.join(f.scratch, '.lane.json'), target = path.join(f.cwd, '.lane.json');
+  const config = { routes: { engineer: { kind: 'codex', model: 'ancestor-model', args: ['-c', 'model_reasoning_effort=xhigh'] } } };
+  const parentBytes = JSON.stringify(config); fs.writeFileSync(ancestor, parentBytes);
+  for (const bytes of [null, JSON.stringify({ main: 'trunk', routes: {} })]) {
+    if (bytes !== null) fs.writeFileSync(target, bytes);
+    await s.refresh(); await s.key('u'); await s.activate('route:engineer');
+    assert.equal(s.ui.routeEdit.suggested, false);
+    await s.key('', { return: true }); await s.key('', { return: true });
+    assert.equal(calls.length, 0); assert.equal(fs.readFileSync(ancestor, 'utf8'), parentBytes);
+    assert.equal(fs.existsSync(target), bytes !== null);
+    if (bytes !== null) assert.equal(fs.readFileSync(target, 'utf8'), bytes);
+  }
+  config.routes.engineer.model = 'next-ancestor-model'; fs.writeFileSync(ancestor, JSON.stringify(config)); await s.refresh();
+  assert.equal(resolveLaunchRoute(s.model.routes.config, { route: 'engineer' }).model, 'next-ancestor-model');
+  assert.deepEqual(JSON.parse(fs.readFileSync(target, 'utf8')).routes, {});
+});
+
+test('unchanged suggested presets are explicitly adopted once, then configured saves write nothing', async t => {
+  const calls = [], f = fixture(t, { orgRouteSet: async (project, request) => { calls.push(request); return orgRouteSet(project, request); } }), s = f.session;
+  const target = path.join(f.cwd, '.lane.json');
+  await s.refresh(); await s.key('u'); await s.activate('route:engineer'); await s.key('', { return: true });
+  assert.match(render(s), /Adopts the suggested routes/); assert.equal(fs.existsSync(target), false); assert.equal(calls.length, 0);
+  await s.key('', { return: true });
+  assert.equal(calls.length, 1); assert.equal(Object.keys(JSON.parse(fs.readFileSync(target, 'utf8')).routes).length, 15);
+  const bytes = fs.readFileSync(target, 'utf8');
+  await s.activate('route:engineer'); await s.key('', { return: true }); await s.key('', { return: true });
+  assert.equal(calls.length, 1); assert.equal(fs.readFileSync(target, 'utf8'), bytes);
+});
+
+test('console route display, editor and review use launch resolution for legacy route and dispatch arguments', async t => {
+  const requests = [], f = fixture(t, { orgRouteSet: async (project, request) => { requests.push(request); return orgRouteSet(project, request); } }), s = f.session;
+  const target = path.join(f.cwd, '.lane.json');
+  const cases = [
+    { kind: 'codex', route: { args: ['-c', 'model_reasoning_effort=xhigh'] } },
+    { kind: 'codex', dispatch: { args: ['--config', 'model_reasoning_effort=high'] } },
+    { kind: 'codex', route: { args: ['--config=model_reasoning_effort=medium'] } },
+    { kind: 'codex', dispatch: { args: ['-cmodel_reasoning_effort=low'] } },
+    { kind: 'claude', route: { args: ['--effort', 'high'] } },
+    { kind: 'claude', dispatch: { args: ['--effort=xhigh'] } },
+    { kind: 'codex', dispatch: { args: ['-c', 'model_reasoning_effort=high'] }, route: { args: [] } },
+    { kind: 'codex', dispatch: { effort: 'high' }, route: { args: ['-c', 'model_reasoning_effort=xhigh'] } },
+  ];
+  for (const [index, example] of cases.entries()) {
+    const config = { dispatch: { kind: example.kind, model: 'shared-model', ...example.dispatch }, routes: { engineer: { ...example.route } } };
+    fs.writeFileSync(target, JSON.stringify(config)); await s.refresh(); await s.key('u');
+    const launch = resolveLaunchRoute(config, { route: 'engineer' }), defaults = resolveLaunchRoute(config);
+    const effort = launch.effort ?? 'harness default';
+    const screen = render(s, 140);
+    assert.ok(screen.includes(`${launch.kind} · shared-model · ${effort}`), `route effort matches launch case ${index}`);
+    assert.ok(screen.includes(`Default: ${defaults.kind} · shared-model · ${defaults.effort ?? 'harness default'}`));
+    assert.ok(screen.includes(`Launch args: ${JSON.stringify(launch.args)}`));
+    await s.activate('route:engineer');
+    assert.equal(s.ui.routeEdit.original.effort, resolveRoute(config, { route: 'engineer' }).effort, 'the write baseline stays raw');
+    assert.ok(render(s, 140).includes(`Effective launch: ${launch.kind} · shared-model · ${effort}`));
+    await s.key('', { tab: true }); await s.key('u', { ctrl: true }); await s.key(`new-model-${index}`); await s.key('', { return: true });
+    assert.ok(render(s, 140).includes(`effort: ${launch.effort ?? '(harness default)'} → ${launch.effort ?? '(harness default)'}`));
+    await s.key('', { return: true });
+    assert.deepEqual(Object.keys(requests.at(-1)).sort(), ['model', 'name', 'revision']);
+    const own = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.equal(Object.hasOwn(own.routes.engineer, 'effort'), false, 'inferred/default effort is never pinned by another edit');
+    assert.deepEqual(own.routes.engineer.args, config.routes.engineer.args);
+    assert.equal(resolveLaunchRoute(own, { route: 'engineer' }).effort, launch.effort);
+  }
+  fs.writeFileSync(target, JSON.stringify({ routes: { engineer: { kind: 'codex', args: ['-c', 'model_reasoning_effort=xhigh'] } } }));
+  await s.refresh(); await s.activate('route:engineer');
+  await s.key('', { tab: true, shift: true }); await s.key('max'); await s.key('', { return: true });
+  assert.match(render(s, 140), /effort: xhigh → max/);
+  await s.key('', { return: true });
+  const own = JSON.parse(fs.readFileSync(target, 'utf8'));
+  assert.equal(own.routes.engineer.effort, 'max'); assert.equal(resolveLaunchRoute(own, { route: 'engineer' }).effort, 'max');
+  assert.deepEqual(own.routes.engineer.args, ['-c', 'model_reasoning_effort=xhigh']);
 });

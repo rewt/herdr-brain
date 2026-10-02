@@ -53,6 +53,18 @@ instead of being overwritten. Failed promotions receive a judgment handoff.
    `promote RUN --retry --why REASON --role supervisor` to recheck readiness and
    bind a new attempt while retaining the previous receipt.
 
+For `promotable_with_findings`, settle reached the configured review-round cap
+with Moderate/Minor findings and current clean/green readiness evidence. Inspect
+the findings and exact reviewed/head commits. Decide whether to accept them and
+file follow-ups, then `promote RUN --accept-findings --why REASON --role supervisor`,
+or send one more correction with `handle RUN --retry --fix-findings --role supervisor`.
+Both choices are recorded; neither happens automatically. Set a recorded per-item
+cap with `record set ITEM meta.settle_review_round_cap=N`, or supply
+`--review-round-cap N` to the initial `handle`. The project default is tracked
+`settle.review_round_cap`; an item override wins, and 0 disables the cap.
+Completed reviews count across fix runs; Major findings, FAIL, red validation and
+unresolved evidence keep their correction or judgment path.
+
 Intermediate watch notices (blocked, invalid, no-report, unavailable, long-running)
 require inspection or continued observation; they never authorize settle. A
 promotion notice is an outcome, never a new report or another promotion request.

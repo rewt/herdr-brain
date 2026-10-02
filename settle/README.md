@@ -8,7 +8,8 @@ node /path/to/herdr-monitor/settle/settle.mjs R-123
 
 The foreground command discovers the canonical Git project and its record. It
 records the worker report, runs `lane check`, gets an independent `lane review`,
-and returns one JSON result: `promotable`, `fix_round`, or `escalate`.
+and returns one JSON result: `promotable`, `promotable_with_findings`, `fix_round`,
+or `escalate`.
 It has no dependencies and all record writes use the record CLI.
 
 No project config is required. Routes come from the portable preset when none
@@ -17,7 +18,7 @@ policy and the run's declared pool; an independent session is required, not a
 different provider. The fix route defaults to the worker's route or `engineer`.
 Validation follows the lane CLI's project `validate`, or `npm test` default.
 Runtime `.org/` and `.lane/` exclusions use the existing project discovery helper;
-settle adds no tracked configuration. A project without a known working check
+settle requires no tracked configuration. A project without a known working check
 needs its actual validation configured before it can become promotable.
 
 For a manually dispatched run, supply `--brief FILE`. Runs started by dispatch
@@ -68,8 +69,9 @@ It is readiness evidence: project authority and promotion policy are still the
 supervisor's judgment. Settle never promotes, pushes, closes worktrees or tidies
 panes. An unrebased lane or unresolved record blocker receives an evidence handoff.
 
-NEEDS-WORK, FAIL or red validation produce a correction brief and call dispatch
-for a new run on the same item/lane. Immediately before a new launch or incomplete
+NEEDS-WORK (unless the review-round cap applies), FAIL or red validation produce
+a correction brief and call dispatch for a new run on the same item/lane.
+Immediately before a new launch or incomplete
 dispatch retry, settle checks current item closure, blockers and concurrent runs;
 an operator drop or new blocker receives a handoff. Recovery exempts only its
 recorded correction run from supersession and overlap checks. If record start
@@ -83,9 +85,47 @@ A completed dispatch receipt
 can still be adopted without launching work. A fresh worker is the default. `--reuse`
 requests dispatch's existing identity-checked stopped-worker reuse; older runs
 without occupant evidence require a fresh worker. Budgets and total runs appear
-in the result and remain advisory. There is no automatic send-back cap or loop;
+in the result and remain advisory. There is no automatic loop;
 each command handles one landed report. The correction's watcher delivers the
 next report for the next settle invocation.
+
+A review-round cap pauses automatic correction for Moderate/Minor findings.
+Set the project default with `settle.review_round_cap` in tracked `.lane.json`,
+or record a per-item override with
+`record set ENG-123 meta.settle_review_round_cap=3`. `--review-round-cap 3`
+on settle (or supervisor `handle`) records the same item override. Item values
+win over project defaults; 0 disables the cap, including an inherited project
+default. Values must be nonnegative safe integers. With no setting, behaviour
+remains unlimited. Each intake snapshots the effective cap and its source;
+retries use that snapshot, and future correction runs read the item override.
+
+The current completed review counts toward the cap. Count one completed
+independent review per reported run on this item in this Git common-directory
+identity, using settle receipts bound to the recorded report hash. Worker starts,
+abandoned unreviewed runs and uncertain reviewer retries do not consume rounds.
+The result's `review_policy` names the cap, source, round and prior reviewed runs;
+the existing `rounds` field remains the advisory total run count. Old pending
+receipts without a cap snapshot retain unlimited behaviour.
+
+At or above the cap, NEEDS-WORK with only parsed Moderate/Minor findings returns
+`promotable_with_findings` without dispatch. It includes the findings, handoff,
+reviewed source commit and head containing the public review record. This still
+requires green initial and final validation, no unresolved Unverified entries,
+clean worktrees, the captured base as ancestor and current record readiness.
+Unparsed findings receive a supervisor handoff. Major findings, FAIL and red
+validation retain correction/escalation behaviour regardless of the cap. The cap
+and settlement decision are recorded through the record CLI; readiness never
+promotes by itself. A missing or lost decision-write response is reconciled on
+retry against the exact recorded note, without repeating review or dispatch.
+
+After inspecting the findings and project authority, the supervisor can file
+follow-ups and `promote RUN --accept-findings --why REASON --role supervisor`,
+which records the accepted findings and queues the exact settled head. Or use
+`handle RUN --retry --fix-findings --role supervisor` to dispatch one more
+correction without repeating review. Direct settle also supports
+`RUN --retry --fix-findings`. This explicit choice retains the capped result in
+the journal, records the correction decision, and respects current report/head,
+record, blocker and STOP checks. Repeating it adopts the saved correction receipt.
 
 The canonical `.lane/supervisor/STOP` is checked immediately before correction
 dispatch and incomplete-dispatch retry, even if it appeared during review. A stop
@@ -103,6 +143,7 @@ defaults. Projects may put `settle` settings in their tracked `.lane.json`:
     "fix_route": "engineer",
     "reuse": false,
     "timeout": 1800,
+    "review_round_cap": 3,
     "to": "supervisor-herdr"
   }
 }
@@ -128,8 +169,9 @@ Receipts, report/diff snapshots, logs, correction briefs and compact handoffs
 live under the discovered `.org/settle/`. Status remains derived from record
 events. A per-repository/lane lock serializes settlement, including stale-owner
 cleanup. Repeating a finished invocation returns its saved receipt; repeating a
-promotable invocation first checks that its Git evidence is still current, both
-the lane and canonical checkout are clean, and record readiness still holds.
+promotable or promotable-with-findings invocation first checks that its Git
+evidence is still current, both the lane and canonical checkout are clean, and
+record readiness still holds.
 
 ```sh
 node settle/settle.mjs R-123 --status

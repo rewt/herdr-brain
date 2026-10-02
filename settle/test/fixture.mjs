@@ -120,8 +120,10 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   if(fs.existsSync(path.join(root,'review-fail'))) {console.error('injected uncertain review');process.exit(1);}
   const field=(label)=>prompt.split('\\n').find(x=>x.startsWith(label+': '))?.slice(label.length+2);
   const correct=fs.readFileSync(path.join(cwd,'work.txt'),'utf8').trim()==='correct';
-  const verdict=correct?'PASS':'NEEDS-WORK';
-  const findings=correct?'None':'- [Major] work.txt:1 - Report claims correct content but diff contains wrong; Fix: write correct';
+  const override=path.join(root,'review-result.json');
+  const review=fs.existsSync(override)?JSON.parse(fs.readFileSync(override,'utf8')):{};
+  const verdict=review.verdict??(correct?'PASS':'NEEDS-WORK');
+  const findings=review.findings??(correct?'None':'- [Major] work.txt:1 - Report claims correct content but diff contains wrong; Fix: write correct');
   const budget=prompt.includes('## Review run budget')&&prompt.includes('Build, test, prepare, install and check commands: maximum count 0 for each command.');
   const inherited='- Validation is inherited from settle; the explicit zero-command review budget permits no independent execution.';
   const acknowledgment=fs.existsSync(path.join(root,'inherited-unverified'));

@@ -13,6 +13,41 @@ process.env.ORG_ACTOR = 'supervisor-test-reader';
 const invoke = (f, args, cwd = f.repo) => f.exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), ...args], cwd, { ORG_DIR: f.org });
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 
+test('handle returns capped findings and promotion records explicit acceptance with exact heads', { timeout: 45000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-cap-acceptance-test' }), run = f.start();
+  f.commit('correct\n'); f.report(run);
+  fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict: 'NEEDS-WORK',
+    findings: '- [Moderate] work.txt:1 - Follow-up remains; Fix: follow up' }));
+  const reviewed = f.git(['rev-parse', 'HEAD'], f.workspace);
+  const ready = result(invoke(f, ['handle', '--notice', `[org-report] run=${run} item=${f.show(run).item} outcome=done headline=Ready`,
+    '--review-round-cap', '1', '--role', 'supervisor']));
+  assert.equal(ready.result, 'promotable_with_findings'); assert.equal(ready.reviewed_commit, reviewed);
+  assert.match(ready.findings, /Follow-up remains/); assert.match(ready.next, /accept-findings.*fix-findings/);
+  const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  assert.ok(doc.next.some((n) => n.run === run && n.action === 'decide_findings'));
+  const h = promotionHarness(f, run);
+  const refused = h.promote(); assert.equal(refused.status, 1); assert.match(refused.stderr, /require --accept-findings/);
+  const saved = result(h.promote(['--accept-findings']));
+  assert.equal(saved.head, ready.head); assert.equal(saved.reviewed_commit, reviewed);
+  assert.equal(saved.accepted_findings, ready.findings); assert.deepEqual(saved.review_policy, ready.review_policy);
+  assert.ok(f.show(run).notes.some((n) => n.decision && /Accepted capped findings/.test(n.text)));
+  h.drain(); const promoted = h.queue.load().results[0]; assert.equal(promoted.outcome, 'promoted');
+  assert.equal(h.handle(promoted).result, 'recorded_promotion'); assert.equal(f.show(ready.item).status, 'done');
+});
+
+test('handle explicitly sends capped findings back once and adopts its saved correction', { timeout: 45000 }, (t) => {
+  const f = fixture(t, { actor: 'supervisor-cap-fix-test' }), run = f.start();
+  f.commit('correct\n'); f.report(run);
+  fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict: 'NEEDS-WORK',
+    findings: '- [Minor] work.txt:1 - Follow-up remains; Fix: follow up' }));
+  assert.equal(result(invoke(f, ['handle', run, '--review-round-cap', '1', '--role', 'supervisor'])).result, 'promotable_with_findings');
+  const next = result(invoke(f, ['handle', run, '--retry', '--fix-findings', '--role', 'supervisor']));
+  assert.equal(next.result, 'fix_round'); assert.match(next.next, /leave watched correction/);
+  const starts = f.calls().filter((a) => a[1] === 'start').length;
+  assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).fix.run, next.fix.run);
+  assert.equal(f.calls().filter((a) => a[1] === 'start').length, starts);
+});
+
 // Only defer drain to make the queued mutation deterministic. Enqueue and all
 // execution checks still run the real queue, lane CLI, Git and record.
 function promotionHarness(f, run) {

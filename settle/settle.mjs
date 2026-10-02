@@ -20,6 +20,7 @@ const { values: opt, positionals } = parseArgs({ allowPositionals: true, options
   brief: { type: 'string' }, 'review-route': { type: 'string' }, 'fix-route': { type: 'string' },
   to: { type: 'string' }, reuse: { type: 'boolean' }, retry: { type: 'boolean' },
   status: { type: 'boolean' }, 'review-again': { type: 'boolean' }, timeout: { type: 'string' },
+  'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' },
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'dispatch-cli': { type: 'string' },
   'watch-cli': { type: 'string' },
 }});
@@ -108,14 +109,61 @@ function correctionBlocker(except = [], state = recordState()) {
   const open = activeWork(except, state);
   return open.length ? `Another run is open: ${open.map((r) => r.id).join(', ')}` : null;
 }
+function roundCap(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a nonnegative safe integer (0 disables the cap)`);
+  return value;
+}
+function reviewPolicy(item, settings, identity) {
+  if (settings.review_round_cap !== undefined) roundCap(settings.review_round_cap, 'settle.review_round_cap');
+  if (opt['review-round-cap'] !== undefined) {
+    const value = opt['review-round-cap'];
+    const cap = roundCap(/^\d+$/.test(value) ? Number(value) : NaN, '--review-round-cap');
+    if (item.meta?.settle_review_round_cap !== cap) record(['set', item.id, `meta.settle_review_round_cap=${cap}`]);
+    item.meta = { ...item.meta, settle_review_round_cap: cap };
+  }
+  const override = item.meta?.settle_review_round_cap;
+  const cap = roundCap(override ?? settings.review_round_cap ?? 0, 'review round cap');
+  // Count completed independent reviews, once per reported run, across correction
+  // runs on this item. Worker starts and uncertain reviewer retries are not rounds.
+  const prior = [];
+  for (const runId of item.runs.slice(0, item.runs.indexOf(id))) {
+    const file = path.join(opt.org, 'settle', `${runId}.json`);
+    if (!fs.existsSync(file)) continue;
+    const receipt = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const run = show(runId);
+    if (receipt.run === runId && receipt.item === item.id && receipt.common === identity && receipt.org === opt.org &&
+        receipt.review && ['PASS', 'NEEDS-WORK', 'FAIL'].includes(receipt.review.verdict) &&
+        receipt.reportHash === run.report?.sha256 && hash(receipt.review.text) === receipt.review.sha256) prior.push(runId);
+  }
+  return { cap, source: override != null ? 'item' : settings.review_round_cap !== undefined ? 'project' : 'default',
+    round: prior.length + 1, prior_runs: prior };
+}
+function reviewFindings() {
+  const text = job.review.text.match(/## Findings\n([\s\S]*?)\n## Re-executed/)?.[1]?.trim();
+  if (text === 'None') return { text, severities: [] };
+  const lines = text?.split('\n').filter((line) => line.trim());
+  const matches = lines?.map((line) => line.match(/^- \[(Major|Moderate|Minor)\] .+:[1-9][0-9]* - .+; Fix: .+$/));
+  if (!matches?.length || matches.some((match) => !match)) return null;
+  return { text, severities: matches.map((match) => match[1]) };
+}
+function recordSettlementDecision() {
+  if (!job.settleDecision) return; // Older receipts already use their legacy note.
+  const recorded = () => show(id).notes.some((note) => note.decision && note.text === job.settleDecision);
+  if (recorded()) return;
+  record(['note', id, job.settleDecision, '--decision']);
+  if (!recorded()) throw new Error('Settlement decision is not recorded; retry to recover its receipt');
+}
 function finish(result, reason, extra = {}) {
   job.result = { result, run: id, item: job.item, lane: job.lane, reason,
     reviewed_commit: job.review ? job.head : null, head: job.finalHead ?? job.head,
     report: job.report, validation: job.validation,
     review: job.review ? { verdict: job.review.verdict, path: job.review.path, route: job.review.route, sha256: job.review.sha256 } : null,
-    journal, rounds: show(job.item).runs.length, budget: show(job.item).budget ?? {}, ...extra };
+    journal, rounds: show(job.item).runs.length, budget: show(job.item).budget ?? {},
+    review_policy: job.reviewPolicy ?? { cap: 0, source: 'legacy' }, ...extra };
+  const policy = job.result.review_policy;
+  job.settleDecision = `Settle: ${result}. ${reason}. Review round cap: ${policy.cap} (${policy.source}); round: ${policy.round ?? 'unknown'}. Reviewed ${job.result.reviewed_commit}; head ${job.result.head}. Evidence: ${journal}`;
   job.stage = 'complete'; save();
-  record(['note', id, `Settle: ${result}. ${reason}. Evidence: ${journal}`]);
+  recordSettlementDecision();
   print();
 }
 function print() { process.stdout.write(`${JSON.stringify(job.result)}\n`); }
@@ -202,10 +250,11 @@ function fix() {
 }
 function main() {
   if (!positionals.length) {
-    process.stdout.write('settle R-n [--repo DIR] [--org DIR] [--brief FILE] [--review-route ROUTE] [--fix-route ROUTE] [--reuse] [--retry | --status]\n'); return;
+    process.stdout.write('settle R-n [--repo DIR] [--org DIR] [--brief FILE] [--review-round-cap N] [--review-route ROUTE] [--fix-route ROUTE] [--reuse] [--retry [--fix-findings] | --status]\n'); return;
   }
   if (positionals.length !== 1 || !/^R-\d+$/.test(id)) throw new Error('settle requires one run ID');
   if (opt['review-again'] && !opt.retry) throw new Error('--review-again requires --retry after inspecting the old reviewer');
+  if (opt['fix-findings'] && (!opt.retry || opt['review-again'])) throw new Error('--fix-findings requires --retry and cannot repeat review');
   opt.org ??= findOrgDir({ cwd: opt.repo });
   if (!opt.org) throw new Error('no record discovered; enter the project through discovery first or supply --org');
   opt.org = fs.realpathSync(path.resolve(opt.org));
@@ -236,8 +285,12 @@ function main() {
     // Reread under the lock; an older pending receipt binds its selection once.
     bindLaneConfig(job);
     if (!Object.hasOwn(job, 'laneConfig')) { job.laneConfig = laneConfig; save(); }
+    if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
     if (job.stage === 'complete') {
-      if (job.result.result === 'promotable') {
+      recordSettlementDecision();
+      if (opt['fix-findings'] && job.findingsCorrection && job.result.result === 'fix_round') { print(); return; }
+      if (opt['fix-findings'] && job.result.result !== 'promotable_with_findings') throw new Error('--fix-findings requires saved promotable_with_findings evidence');
+      if (['promotable', 'promotable_with_findings'].includes(job.result.result)) {
         const state = recordState();
         const invalid = recordedReportProblem(state);
         if (invalid) return escalate(invalid);
@@ -246,10 +299,12 @@ function main() {
         unchanged(); cleanCanonical();
         if (activeWork().length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed; inspect current work and blockers');
       }
-      print(); return;
+      if (!opt['fix-findings']) { print(); return; }
+      record(['note', id, `Supervisor requested another correction after capped review round ${job.reviewPolicy.round} (cap ${job.reviewPolicy.cap}); findings ${job.review.path}; reviewed ${job.head}`, '--decision']);
+      job.cappedResult = job.result; job.findingsCorrection = true;
+      delete job.result; job.stage = 'fix'; save();
     }
     if (!opt.retry) throw new Error('settle is incomplete; inspect --status, then use --retry');
-    if (['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
   } else {
     if (opt.retry) throw new Error('no settle receipt to retry');
     const { config, files } = loadDiscoveredRoutes({ cwd: repo, env: { LANE_CONFIG: laneConfig ?? undefined } });
@@ -280,13 +335,14 @@ function main() {
     const parsed = readReport(reportText);
     if (parsed.errors.length || parsed.report.run !== id) throw new Error(`invalid report for ${id}: ${parsed.errors.join('; ') || 'run field mismatch'}`);
     if (run.report && hash(reportText) !== run.report.sha256) throw new Error('recorded report bytes changed');
+    const policy = reviewPolicy(item, settings, identity);
     job = { run: id, item: run.item, org: opt.org, repo, common: identity, workspace, lane, laneConfig,
       main: config.main ?? 'main', head: git(['rev-parse', 'HEAD'], workspace),
       mainHead: git(['rev-parse', config.main ?? 'main'], repo), ask, reviewRoute, fixRoute, timeout,
       reuse: opt.reuse ?? settings.reuse ?? false, to: opt.to ?? settings.to ?? 'supervisor-herdr',
       stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
-      outcome: parsed.report.outcome, round: 1 };
+      outcome: parsed.report.outcome, round: 1, reviewPolicy: policy };
     // Only routing fields enter this snapshot. Lifecycle settings keep their
     // original source files, including relative worktree-root provenance.
     job.routeConfig = routesSnapshot(config); save();
@@ -385,10 +441,15 @@ function main() {
     unchanged();
     const stale = superseded(recordState());
     if (stale) return escalate(stale);
-    if (!job.green || job.review.verdict !== 'PASS') { job.stage = 'fix'; save(); }
+    const policy = job.reviewPolicy;
+    const findings = reviewFindings();
+    const capped = policy?.cap > 0 && policy.round >= policy.cap && job.review.verdict === 'NEEDS-WORK';
+    const withFindings = capped && findings && !findings.severities.includes('Major');
+    if (capped && !findings && job.green) return escalate('The capped review has unparsed findings; the supervisor must determine their severity');
+    if (!job.green || (job.review.verdict !== 'PASS' && !withFindings)) { job.stage = 'fix'; save(); }
     else {
       const unverified = job.review.text.match(/## Unverified\n([\s\S]*?)\n## Sanitization/)?.[1]?.trim();
-      if (unverified !== 'None' && unverified !== inheritedValidation) return escalate('The reviewer passed with unverified claims; the supervisor must resolve the remaining evidence');
+      if (unverified !== 'None' && unverified !== inheritedValidation) return escalate('The reviewer has unverified claims; the supervisor must resolve the remaining evidence');
       if (!validate('final-validation')) return escalate('Validation failed after the review record commit; inspect the log');
       unchanged();
       if (git(['merge-base', job.mainHead, job.finalHead], workspace) !== job.mainHead) return escalate('The lane needs a rebase before promotion');
@@ -397,7 +458,12 @@ function main() {
       const stale = superseded(state);
       if (stale) return escalate(stale);
       if (activeWork([], state).length || ['blocked', 'needs_human', 'active', 'dropped'].includes(item.status)) return escalate(`The record still has concurrent work or says ${item.status}; resolve its blockers or concurrent work`);
-      finish('promotable', 'Report recorded, claims independently reviewed, clean lane and green validation; use the promotion module under project authority');
+      if (withFindings) {
+        const reason = `Review round ${policy.round} reached cap ${policy.cap} with no Major or FAIL; the supervisor must decide whether to accept findings or request another correction`;
+        const handoff = evidence('handoff.md', `# Capped review for ${id}\n\n${reason}\n\nReviewed commit: ${job.head}\nHead including review record: ${job.finalHead}\nReview: ${job.review.path}\nValidation: ${job.validation.log}\nPolicy: ${JSON.stringify(policy)}\n\n## Findings\n${findings.text}\n\nAccept findings under project authority with supervisor promote --accept-findings --why REASON, or request another correction with handle ${id} --retry --fix-findings --role supervisor.\n`);
+        finish('promotable_with_findings', reason, { findings: findings.text, handoff,
+          options: ['accept findings and promote under project authority', 'request another correction'] });
+      } else finish('promotable', 'Report recorded, claims independently reviewed, clean lane and green validation; use the promotion module under project authority');
       return;
     }
   }

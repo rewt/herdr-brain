@@ -28,9 +28,12 @@ export function main(argv = process.argv.slice(2)) {
     notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string' }, brief: { type: 'string' },
     'review-route': { type: 'string' }, 'fix-route': { type: 'string' }, timeout: { type: 'string' },
     retry: { type: 'boolean' }, 'review-again': { type: 'boolean' },
+    'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'accept-findings': { type: 'boolean' },
     'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
   } });
   const [action = 'brief', requested] = positionals;
+  if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
+  if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
   if (positionals.length > 2 || !['brief', 'checkpoint', 'handle', 'promote'].includes(action)) throw new Error('usage: supervisor.mjs brief [--json] | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT; mutations require --role supervisor');
   const doc = coldStart({ cwd: opt.repo, org: opt.org, sinceSeq: opt['since-seq'] === undefined ? undefined : Number(opt['since-seq']) });
   const project = doc.project;
@@ -127,10 +130,10 @@ export function main(argv = process.argv.slice(2)) {
           next: 'inspect the current run and its settlement or promotion receipts' }); return;
       }
     }
-    for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
-    for (const name of ['retry', 'review-again']) if (opt[name]) settleArgs.push(`--${name}`);
+    for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout', 'review-round-cap']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
+    for (const name of ['retry', 'review-again', 'fix-findings']) if (opt[name]) settleArgs.push(`--${name}`);
     const result = JSON.parse(call(settle, settleArgs));
-    print({ ...result, next: result.result === 'promotable' ? 'judge project authority, then supervisor promote RUN --why REASON' : result.result === 'fix_round' ? 'leave watched correction in flight' : result.result === 'stopped' ? 'inspect retained handoff; after STOP is cleared, handle RUN --retry' : 'judge compact handoff' });
+    print({ ...result, next: result.result === 'promotable_with_findings' ? 'judge findings and file follow-ups; promote RUN --accept-findings --why REASON, or handle RUN --retry --fix-findings' : result.result === 'promotable' ? 'judge project authority, then supervisor promote RUN --why REASON' : result.result === 'fix_round' ? 'leave watched correction in flight' : result.result === 'stopped' ? 'inspect retained handoff; after STOP is cleared, handle RUN --retry' : 'judge compact handoff' });
     return;
   }
   if (!opt.why?.trim()) throw new Error('promotion requires --why naming current authority and readiness evidence');
@@ -156,14 +159,17 @@ export function main(argv = process.argv.slice(2)) {
     // Settle rechecks report hash, record, exact heads, clean trees and readiness.
     const settledFile = path.join(project.org, 'settle', `${id}.json`);
     const settled = fs.existsSync(settledFile) ? JSON.parse(fs.readFileSync(settledFile, 'utf8')) : null;
-    if (settled?.common !== project.identity || settled.stage !== 'complete' || settled.result?.result !== 'promotable') throw new Error('handle the final report first; promotion requires saved promotable settlement evidence');
+    if (settled?.common !== project.identity || settled.stage !== 'complete' || !['promotable', 'promotable_with_findings'].includes(settled.result?.result)) throw new Error('handle the final report first; promotion requires saved promotable settlement evidence');
+    if (settled.result.result === 'promotable_with_findings' && !opt['accept-findings']) throw new Error('capped findings require --accept-findings and --why before promotion');
     const result = JSON.parse(call(settle, settleArgs));
-    if (result.result !== 'promotable' || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
+    if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
     const saved = { identity: project.identity, org: project.org, run: id, lane: result.lane,
-      reviewed_commit: result.reviewed_commit, head: result.head, why: opt.why.trim(), phase: 'enqueuing', ...(prior ? { prior_attempts: prior } : {}) };
+      reviewed_commit: result.reviewed_commit, head: result.head, why: opt.why.trim(), phase: 'enqueuing',
+      ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
+      ...(prior ? { prior_attempts: prior } : {}) };
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
-    call(local('../bin/org.mjs'), ['note', id, `Queue promotion of ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}`, '--decision', '--summary', `Promotion authorized: ${saved.why}`]);
+    call(local('../bin/org.mjs'), ['note', id, `Queue promotion of ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion authorized: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
     saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
       '--expected-head', result.head, '--if-current-run', id, ...(opt.to ? ['--to', opt.to] : [])]));

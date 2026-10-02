@@ -123,6 +123,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
     else if (!r.recorded) next.push({ action: 'await_watch_or_inspect', run: r.run, evidence: r.report });
     else if (!r.settlement) next.push({ action: 'settle', run: r.run });
     else if (r.settlement.result === 'promotable') next.push({ action: 'decide_promotion', run: r.run, evidence: r.journal });
+    else if (r.settlement.result === 'promotable_with_findings') next.push({ action: 'decide_findings', run: r.run, evidence: r.settlement.handoff ?? r.journal });
     else if (r.settlement.result !== 'fix_round') next.push({ action: 'judge_handoff', run: r.run, evidence: r.settlement.handoff ?? r.journal });
   }
   for (const i of ready) next.push({ action: 'consider_dispatch', item: i.id, serves: i.serves });

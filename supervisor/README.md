@@ -53,8 +53,8 @@ and retrieve the relevant goal's standing authority when judging an action.
 `handle` accepts a final `[org-report]` notice or an explicit run ID. It invokes
 settle's foreground CLI once and returns its compact result. Project review/fix
 routes and validation remain settle's responsibility. Manual runs may supply
-`--brief FILE`; `--to NAME`, `--review-route`, `--fix-route` and `--timeout` pass
-through. `--retry` and `--review-again` are explicit recovery choices after reading
+`--brief FILE`; `--to NAME`, `--review-route`, `--fix-route`, `--review-round-cap`
+and `--timeout` pass through. `--retry` and `--review-again` are explicit recovery choices after reading
 settle's retained evidence. Intermediate watch notices return inspection advice
 without launching settle. Report/notice strings never become commands or file
 selection: the record supplies the run binding.
@@ -73,10 +73,24 @@ run's bound promotion receipts and all the same guards.
 Automatic settlement includes independent review judgment on the project review
 route and settle's permitted fix dispatch. Non-done outcomes, blockers, incomplete
 reviews, changed scope and other escalations remain supervisor judgments. There
-is no automatic loop, resident executive model or invented revision cap.
+is no automatic loop or resident executive model. A configured review-round cap
+returns `promotable_with_findings` when only Moderate/Minor findings remain and
+the full clean/green readiness gates pass. `handle` preserves its findings,
+policy, reviewed source commit and head including the public review record, and
+the cold start suggests `decide_findings`. Settle's [guide](../settle/README.md)
+defines project defaults, recorded item overrides and round counting.
+
+After inspecting capped findings, explicitly choose
+`promote RUN --accept-findings --why REASON --role supervisor` to record their
+acceptance and enqueue the bound head, or
+`handle RUN --retry --fix-findings --role supervisor` to dispatch another fix
+without repeating the review. Repeated correction requests adopt the existing
+receipt. Follow-up items remain the supervisor's decision. Major/FAIL findings,
+red validation and unresolved evidence keep their correction or handoff path.
 
 `promote RUN --why REASON` is the supervisor's explicit authority judgment. It
-requires an existing promotable settle receipt, rechecks readiness without a new
+requires an existing promotable settle receipt (including explicitly accepted
+capped findings), rechecks readiness without a new
 review, writes a record decision through argument arrays,
 enqueues the exact settled head and authorized run through the promote CLI and
 returns. The expected head includes the review-record commit; the receipt also

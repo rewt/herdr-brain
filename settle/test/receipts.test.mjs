@@ -6,6 +6,9 @@ import { fixture } from './fixture.mjs';
 
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 const workerPrompts = (f) => f.calls().filter((a) => a[1] === 'prompt' && a[3]?.startsWith('You are run '));
+const workerLaunchCalls = (f) => f.calls().filter((a) =>
+  (a[0] === 'tab' && a[1] === 'create') || (a[0] === 'agent' &&
+    (a[1] === 'start' || (a[1] === 'prompt' && a[3]?.startsWith('You are run ')))));
 function recordAdapter(f, body) {
   const file = path.join(f.root, 'record-adapter.mjs');
   fs.writeFileSync(file, `#!${process.execPath}
@@ -85,8 +88,10 @@ test('lost successful correction start recovers through settle retry with one re
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, launches + 1);
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).run, correction);
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).stage, 'complete');
-  const calls = f.calls().length;
-  assert.deepEqual(result(f.retry(run, options)), recovered); assert.equal(f.calls().length, calls);
+  // The detached watcher may append reads or a supervisor notice during this
+  // retry. Compare worker dispatch mutations to prove no duplicate launch/work.
+  const calls = workerLaunchCalls(f);
+  assert.deepEqual(result(f.retry(run, options)), recovered); assert.deepEqual(workerLaunchCalls(f), calls);
   assert.deepEqual(f.show(item).runs, before.runs);
 });
 

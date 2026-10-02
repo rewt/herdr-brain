@@ -76,14 +76,14 @@ export function sessionEnv(inherited, spec) {
   return env;
 }
 
-export function permissionArgs({ repo, temp, installation, toolRoots, entryBinary, gitCommon, worktreeRoot, probeGit }, { gitWrites = !entryBinary, projectWrites = true } = {}) {
+export function permissionFilesystem({ repo, temp, installation, toolRoots, entryBinary, gitCommon, worktreeRoot, probeGit }, { gitWrites = !entryBinary, projectWrites = true, validation = false } = {}) {
   const gitAccess = gitWrites ? { '.': 'read', ...Object.fromEntries([
     'objects', 'refs', 'logs', 'index', 'index.lock', 'HEAD', 'HEAD.lock', 'ORIG_HEAD', 'ORIG_HEAD.lock',
     'FETCH_HEAD', 'COMMIT_EDITMSG', 'packed-refs', 'packed-refs.lock', 'shallow', 'shallow.lock',
     'MERGE_HEAD', 'MERGE_MSG', 'MERGE_MODE', 'AUTO_MERGE', 'worktrees',
   ].map((name) => [name, 'write'])), 'worktrees/**/config*': 'deny', 'worktrees/**/hooks': 'deny' } : 'read';
   const filesystem = { ':root': 'deny', ':minimal': 'read', ':slash_tmp': 'deny',
-    ':tmpdir': 'write', ':workspace_roots': { '.': projectWrites ? 'write' : 'read', '.git': 'read' }, [installation]: 'read' };
+    ':tmpdir': validation ? 'read' : 'write', ':workspace_roots': { '.': projectWrites ? 'write' : 'read', '.git': 'read' }, [installation]: 'read' };
   for (const directory of toolRoots) filesystem[directory] = 'read';
   if (entryBinary) filesystem[repo] = 'read'; // lane cwd stays writable; shared record is readable
   // Every extra grant is inside the session's existing project/temp roots.
@@ -91,8 +91,13 @@ export function permissionArgs({ repo, temp, installation, toolRoots, entryBinar
     let ancestor = target;
     while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
     if (!(within(repo, ancestor) || within(temp, ancestor))) throw new Error(`Git permission escaped session roots: ${target}`);
-    filesystem[target] = target === worktreeRoot ? 'write' : gitAccess;
+    filesystem[target] = target === worktreeRoot ? (validation ? 'read' : 'write') : gitAccess;
   }
+  return filesystem;
+}
+
+export function permissionArgs(spec, options = {}) {
+  const filesystem = options.filesystem ?? permissionFilesystem(spec, options);
   const toml = (obj) => `{${Object.entries(obj).map(([k, v]) => `${JSON.stringify(k)}=${typeof v === 'object' ? toml(v) : JSON.stringify(v)}`).join(',')}}`;
   return ['-c', 'default_permissions="acceptance"', '-c', 'permissions.acceptance.extends=":workspace"',
     '-c', `permissions.acceptance.filesystem=${toml(filesystem)}`, '-c', 'permissions.acceptance.network.enabled=false'];

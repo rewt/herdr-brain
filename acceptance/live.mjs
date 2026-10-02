@@ -72,6 +72,7 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
     const installer = path.join(installation, 'discovery/install.mjs');
     if (fs.existsSync(installer)) {
       fs.copyFileSync(path.join(import.meta.dirname, 'native-transport.mjs'), path.join(root, 'native-transport.mjs'));
+      fs.copyFileSync(path.join(import.meta.dirname, 'validation.mjs'), path.join(root, 'validation.mjs'));
       const native = path.join(root, `native-${name}`), entryBin = path.join(installation, `entry-${name}`);
       write(native, `#!/bin/sh\nexec '${process.execPath}' '${path.join(root, 'native-transport.mjs')}' '${root}' '${name}' "$@"\n`);
       fs.chmodSync(native, 0o755);

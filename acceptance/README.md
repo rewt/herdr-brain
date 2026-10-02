@@ -107,6 +107,14 @@ refuses checkout/add-dir escapes; it supplies no policy of its own. Candidates
 without that installer expose only their installed CLIs and must fail if no
 policy is discoverable.
 
+Validation transport composes the product's read-only shared-state exclusions
+with the gate profile, rather than replacing its lifetime identity. On macOS it
+grants read access to one verified private inert probe, retains the second probe's
+denial, and forwards the owner's readiness descriptor. Probe directories remain
+unreadable, session paths outside the validation checkout remain read-only, and
+Git metadata and network restrictions remain in force. Offline native transport
+regressions run in `npm run test:acceptance` without authentication or model calls.
+
 The real sessions extend Codex's native workspace permission profile with only
 their own project checkout and per-session temp directory writable, ephemeral
 sessions, no shared daemon, and no user configuration,

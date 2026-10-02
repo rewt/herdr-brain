@@ -11,7 +11,7 @@ const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
 const sourceRoot = fileURLToPath(new URL('../../', import.meta.url));
 function installRuntime(root) {
-  for (const relative of ['housekeeping/housekeeping.mjs', 'supervisor/tidy-tabs.mjs', 'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs']) {
+  for (const relative of ['housekeeping/housekeeping.mjs', 'housekeeping/config.mjs', 'supervisor/tidy-tabs.mjs', 'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs']) {
     const target = path.join(root, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(sourceRoot, relative), target);
@@ -118,6 +118,7 @@ for (const variant of ['open', 'unpromoted', 'dirty', 'blocked', 'working', 'unk
     if (variant === 'mixed-pane') { f.agents.push({ ...f.agent, name: 'operator', pane_id: 'w:q' }); f.panes.push({ pane_id: 'w:q', tab_id: 'w:t' }); }
     if (variant === 'running-shell') { f.shell = false; f.panes.push({ pane_id: 'w:q', tab_id: 'w:t' }); }
     f.runner().tick(); assert.deepEqual(f.actions, []);
+    if (variant !== 'wrong-repo') assert.ok(f.logs.some(entry => entry.action === 'keep' && entry.why && entry.dryRun === false), 'live kept tabs record reasons');
   });
 }
 

@@ -4,7 +4,7 @@ This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes
 are the project screen's prompt (a new chat, or a task under the work block),
 what the operator types into a session, session names, Waiting on you answers,
-project route overrides, and operator priority changes through validating record commands.
+project route and housekeeping overrides, and operator priority changes through validating record commands.
 It runs in Ink through `console/app.mjs`; it is not the browser design preview or
 `console/proto` fixture application. Opt in per launch; the existing console
 remains the default and retains all of its operational actions.
@@ -86,6 +86,24 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   `.lane.json`; a newly created config is ready to add and commit in Git.
   An unconfigured project shows portable suggestions as confirmation pending;
   its first saved edit adopts the complete preset, preserving other defaults.
+- `H` opens Housekeeping, also linked from Control: running/stopped/unknown or
+  stale-lock state, effective defaults and overrides, last live scan, recent
+  closed/kept/resumed workers, reasons, failures and explicitly labeled previews.
+  The module's bounded activity tail comes from the selected canonical Git
+  project's state under its record; projects sharing a record remain separate.
+  Pause reviews `enabled=false`, then saves through `record housekeeping set`.
+  Enter on Edit overrides changes enabled, recovery, tick and cleanup intervals;
+  blank fields remove an override and inherit its default. Tab changes field,
+  Ctrl+U clears, Enter reviews then confirms, and Cancel/Esc discards. Stale
+  reviews cannot overwrite newer config. Saving creates tracked-project config
+  ready to add and commit; it never starts or signals the schedule. Pause takes
+  effect at the next tick. A stopped schedule requires the project supervisor
+  to start it after enabling. `--print` cannot save housekeeping changes.
+  Missing/unreadable logs and PID checks stay explicit. A lock for a custom config
+  or mismatched runtime prevents editing the default file as if it controlled
+  that schedule. Older logs have counts but no per-tab keep reasons; new cleanup
+  passes record those reasons. A valid identity with an inaccessible PID can
+  still be paused through config, without guessing whether its process is alive.
 - Existing records are discovered when opening a project or folder, with no
   console configuration required. Reading a project without a record does not
   create one; plain folders can inspect route suggestions but need Git to save.
@@ -168,7 +186,7 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | `p` | Scope dropdown; type to filter, Up/Down choose, Enter selects, Esc dismisses |
 | `h` | Project overview |
 | `g` / `t` / `a` / `s` / `!` | Goals / Tasks / Activity / Sessions / Waiting on you |
-| `c` / `d` / `f` / `u` / `P` | Control / Decided / Asked / Routes / Priorities |
+| `c` / `d` / `f` / `u` / `P` / `H` | Control / Decided / Asked / Routes / Priorities / Housekeeping |
 | `Tab` / `Shift+Tab` | Change section, remembering selection within it |
 | `j` / `k`, Up / Down | Select within the current section |
 | Left / Right | Change central view, or the selected checkout's horizontal tab |
@@ -204,7 +222,8 @@ the operator is in it. The prompt bar writes `record add` through the CLI for a
 task, and `herdr tab create` / `agent start` / `agent prompt` for a chat, on the
 operator's typed text and Enter. Renaming sets only a pane label. A Waiting on you
 answer goes through the Brain CLI or `record answer` after the answer line says
-what it will do. Route overrides use `record routes set` after review. There is no dispatch or model-call path; use
+what it will do. Route overrides use `record routes set` after review. Housekeeping overrides use
+`record housekeeping set` after review. There is no dispatch or model-call path; use
 `node bin/org.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
 
 Goal/session associations use recorded run data. A title resemblance does not

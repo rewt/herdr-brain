@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { planTidy, isShellOnly } from '../supervisor/tidy-tabs.mjs';
 import { findOrgDir } from '../lib/store.mjs';
+import { readConfig } from './config.mjs';
+export { readConfig } from './config.mjs';
 
 const LOCAL_RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -185,8 +187,8 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
   function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath } = {}) {
     const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
     const plan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
-    log({ action: 'scan', close: plan.close.length, keep: plan.keep.length, dryRun });
-    if (dryRun) for (const tab of plan.keep) log({ action: 'keep', ...tab });
+    log({ action: 'scan', close: plan.close.length, keep: plan.keep.length, cleanup, resume, dryRun });
+    for (const tab of plan.keep) log({ action: 'keep', ...tab, dryRun });
     for (const tab of plan.close) {
       if (dryRun) { log({ action: 'would-close', ...tab }); continue; }
       // Re-read record, topology, process state and Git before every deletion.
@@ -216,24 +218,12 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
           continue;
         }
         invoke(herdr, ['agent', 'prompt', agent.pane_id, RESUME]);
-        log({ action: 'resumed', run: run.id, pane: agent.pane_id, seq: agent.state_change_seq });
+        log({ action: 'resumed', run: run.id, pane: agent.pane_id, seq: agent.state_change_seq, why: 'interrupted open run with only mouse-wheel escape text in the composer' });
       } catch (error) { log({ action: 'resume-failed', run: run.id, pane: agent.pane_id, error: error.message }); }
     }
     return plan;
   }
   return { tick, common };
-}
-
-export function readConfig(file) {
-  const config = file && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-  config.enabled ??= true;
-  if (typeof config.enabled !== 'boolean') throw new Error('config needs enabled: true|false');
-  if (config.resume !== undefined && typeof config.resume !== 'boolean') throw new Error('resume must be boolean');
-  for (const [key, fallback] of [['tick_seconds', 60], ['cleanup_seconds', 600]]) {
-    config[key] ??= fallback;
-    if (!Number.isFinite(config[key]) || config[key] < 1) throw new Error(`${key} must be >= 1`);
-  }
-  return config;
 }
 
 export function discoverProject(directory, orgOverride, env = process.env) {

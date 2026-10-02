@@ -12,6 +12,7 @@ import { observeTerminal } from './terminal.mjs';
 import { controlTerminal, splitInput } from './control.mjs';
 import { resolveRoute } from '../../lanes/routes.mjs';
 import { routeReview } from './routes.mjs';
+import { FIELDS, housekeepingReview } from './housekeeping.mjs';
 const exec = promisify(execFile);
 
 async function gitSummary(cwd) {
@@ -24,16 +25,16 @@ async function gitSummary(cwd) {
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
     herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, herdrRename: cli.herdrRename, orgAnswer: cli.orgAnswer,
-    orgRoutes: cli.orgRoutes, orgRouteSet: cli.orgRouteSet, orgPriorityChange: cli.orgPriorityChange,
+    orgHousekeeping: cli.orgHousekeeping, orgHousekeepingSet: cli.orgHousekeepingSet, orgRoutes: cli.orgRoutes, orgRouteSet: cli.orgRouteSet, orgPriorityChange: cli.orgPriorityChange,
     brainAct: args => brainAct(config.brain_bin, args), gitSummary, folderPath,
     observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
-  const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, events: [], routes: null, brain: { rows: [], off: true } };
+  const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, events: [], housekeeping: null, routes: null, brain: { rows: [], off: true } };
   const s = { projects: [], projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
     view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'scope', scroll: 0, outputScroll: 0,
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark',
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
-    picker: null, routeEdit: null, priorityEdit: null, regionFocus: {}, outputX: 0, screenScroll: 0,
+    picker: null, housekeepingEdit: null, routeEdit: null, priorityEdit: null, regionFocus: {}, outputX: 0, screenScroll: 0,
     outputMode: 'mirror', interactive: false, terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },
     history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, checkoutGit: {}, compose: null, rename: null, act: null, digits: '', digitTimer: null, chatKinds: config.chat_kinds ?? ['claude', 'codex'], message: '',
     frame: null, stopped: false, timer: null, outputTimer: null, pending: null, generation: 0, reading: false, loading: true };
@@ -101,7 +102,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     const before = route(), after = { ...before, ...next };
     if (routeKey(before) === routeKey(after)) return;
     s.history.push(before); s.future = [];
-    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, rename: null, act: null, routeEdit: null, priorityEdit: null, focus: next.focus ?? 'back' });
+    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, rename: null, act: null, housekeepingEdit: null, routeEdit: null, priorityEdit: null, focus: next.focus ?? 'back' });
     s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
     stopObserver(); s.terminalFrame = null; s.screenViewport = null; s.outputMode = 'mirror'; observerRetryAt = 0;
     changed();
@@ -116,8 +117,8 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   }
   function adoptProject() {
     const cached = s.cache.get(s.projectId);
-    data.today = cached?.today ?? null; data.status = cached?.status ?? null; data.events = cached?.events ?? []; data.routes = cached?.routes ?? null;
-    for (const key of ['today', 'status', 'events', 'routes']) { delete s.errors[key]; s.times[key] = cached?.times?.[key] ?? null; }
+    data.today = cached?.today ?? null; data.status = cached?.status ?? null; data.events = cached?.events ?? []; data.routes = cached?.routes ?? null; data.housekeeping = cached?.housekeeping ?? null;
+    for (const key of ['today', 'status', 'events', 'routes', 'housekeeping']) { delete s.errors[key]; s.times[key] = cached?.times?.[key] ?? null; }
   }
   async function readOutput() {
     // A transcript read in flight must not delay taking the terminal to type.
@@ -169,6 +170,9 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
         try { const value = await d.orgRoutes(p); cached.routes = value; cached.times.routes = d.now();
           if (s.projectId === id) { data.routes = value; delete s.errors.routes; s.times.routes = cached.times.routes; }
         } catch (e) { if (s.projectId === id) s.errors.routes = e.message; }
+        try { const value = await d.orgHousekeeping(p); cached.housekeeping = value; cached.times.housekeeping = d.now();
+          if (s.projectId === id) { data.housekeeping = value; delete s.errors.housekeeping; s.times.housekeeping = cached.times.housekeeping; }
+        } catch (e) { if (s.projectId === id) s.errors.housekeeping = e.message; }
         s.cache.set(id, cached);
       }
       if (p?.org && (selected === s.projectId || selected === null)) {
@@ -200,6 +204,13 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   }
   async function activate(id) {
     // Editors own input and navigation, including mouse header clicks.
+    if (s.housekeepingEdit) {
+      if (s.housekeepingEdit.busy) return;
+      if (id === 'housekeeping-cancel') { s.housekeepingEdit = null; changed(); }
+      else if (id === 'housekeeping-save') return housekeepingEditKey('', { return: true });
+      else if (id.startsWith('housekeeping-field:') && !s.housekeepingEdit.confirm) { s.housekeepingEdit.field = Number(id.split(':')[1]); changed(); }
+      return;
+    }
     if (s.priorityEdit) {
       if (s.priorityEdit.busy) return;
       if (id === 'priority-cancel') { s.priorityEdit = null; changed(); }
@@ -215,6 +226,15 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       return;
     }
     const m = model();
+    if (id === 'housekeeping-edit' || id === 'housekeeping-pause') {
+      const doc = m.housekeeping;
+      if (s.errors.housekeeping || !doc?.editable) { s.message = 'Refresh and inspect housekeeping before editing.'; changed(); return; }
+      s.housekeepingEdit = { project: { ...project() }, revision: doc.revision, target: doc.target, original: doc.overrides,
+        before: doc.config, values: FIELDS.map(key => Object.hasOwn(doc.overrides, key) ? String(doc.overrides[key]) : ''),
+        field: 0, confirm: id === 'housekeeping-pause', busy: false };
+      if (id === 'housekeeping-pause') s.housekeepingEdit.values[0] = 'false';
+      s.scroll = 0; s.message = ''; changed(); return;
+    }
     if (id === 'priority-add' || id.startsWith('priority:')) {
       if (!project()?.org || s.errors.status) { s.message = 'Open a project record and refresh before setting priorities.'; changed(); return; }
       const doc = m.priorities, p = doc.priorities.find(p => p.id === id.slice(9));
@@ -260,7 +280,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (next === s.projectId) { changed(); return; }
       navigate({ projectId: next, view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'view:overview' }); adoptProject(); return refresh();
     }
-    if (id.startsWith('view:')) { const view = id.slice(5); const first = { priorities: m.priorities?.priorities[0] ? `priority:${m.priorities.priorities[0].id}` : 'priority-add', control: m.needs[0] && `need:${m.needs[0].key}`, decided: m.decided[0] && `decision:${m.decided[0].key}`, asked: m.asked[0] && `asked:${m.asked[0].id}`, routes: Object.keys(m.routes?.config.routes ?? {}).sort()[0] && `route:${Object.keys(m.routes.config.routes).sort()[0]}`, goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, activity: m.activity[0] && `activity:${m.activity[0].seq}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
+    if (id.startsWith('view:')) { const view = id.slice(5); const first = { housekeeping: 'housekeeping-edit', priorities: m.priorities?.priorities[0] ? `priority:${m.priorities.priorities[0].id}` : 'priority-add', control: m.needs[0] && `need:${m.needs[0].key}`, decided: m.decided[0] && `decision:${m.decided[0].key}`, asked: m.asked[0] && `asked:${m.asked[0].id}`, routes: Object.keys(m.routes?.config.routes ?? {}).sort()[0] && `route:${Object.keys(m.routes.config.routes).sort()[0]}`, goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, activity: m.activity[0] && `activity:${m.activity[0].seq}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
     if (id.startsWith('decision:')) {
       if (m.decided.some(n => n.key === id.slice(9))) navigate({ view: 'decision', detail: id.slice(9) });
       return;
@@ -528,7 +548,37 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     else if (!k.ctrl && !k.meta) edit.values[edit.field] += input.replace(/[\x00-\x1f\x7f]/g, '');
     changed(); return false;
   }
+  async function housekeepingEditKey(input, k) {
+    const edit = s.housekeepingEdit;
+    if (edit.busy) return false;
+    if (k.escape) { s.housekeepingEdit = null; changed(); return false; }
+    if (k.return) {
+      let review;
+      try { review = housekeepingReview(edit); }
+      catch (error) { s.message = error.message; changed(); return false; }
+      if (!edit.confirm) { edit.confirm = true; s.scroll = 0; s.message = ''; changed(); return false; }
+      if (!review.writes) { s.housekeepingEdit = null; s.message = 'No housekeeping changes; nothing written.'; changed(); return false; }
+      edit.busy = true; changed();
+      let result;
+      try { result = await d.orgHousekeepingSet(edit.project, { patch: review.patch, unset: review.unset, revision: edit.revision }); }
+      catch (error) { result = { ok: false, error: error.message }; }
+      if (!result.ok) { edit.busy = false; edit.confirm = false; s.message = `Housekeeping not saved: ${result.error}`; changed(); return false; }
+      s.housekeepingEdit = null; await refresh(); s.message = 'Saved housekeeping overrides in project .housekeeping.json.'; changed(); return false;
+    }
+    if (edit.confirm) {
+      if (k.backspace) { edit.confirm = false; s.scroll = 0; }
+      else if (k.downArrow || k.pageDown) s.scroll = Math.min(s.frame?.maxScroll ?? 0, s.scroll + (k.pageDown ? s.frame?.bodyHeight ?? 8 : 1));
+      else if (k.upArrow || k.pageUp) s.scroll = Math.max(0, s.scroll - (k.pageUp ? s.frame?.bodyHeight ?? 8 : 1));
+      changed(); return false;
+    }
+    if (k.tab || k.downArrow || k.upArrow) edit.field = (edit.field + (k.shift || k.upArrow ? FIELDS.length - 1 : 1)) % FIELDS.length;
+    else if (k.ctrl && input === 'u') edit.values[edit.field] = '';
+    else if (k.backspace || k.delete) edit.values[edit.field] = [...edit.values[edit.field]].slice(0, -1).join('');
+    else if (!k.ctrl && !k.meta) edit.values[edit.field] += input.replace(/[\x00-\x1f\x7f]/g, '');
+    changed(); return false;
+  }
   async function key(input, k = {}) {
+    if (s.housekeepingEdit) return housekeepingEditKey(input, k);
     if (s.priorityEdit) return priorityEditKey(input, k);
     if (s.routeEdit) return routeEditKey(input, k);
     if (s.picker) {
@@ -592,7 +642,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     }
     if (s.view === 'output' && (input === 'l' || input === 'v')) return activate(input === 'l' ? 'transcript' : 'mirror');
     if (s.view === 'output' && input === 'i') return activate('interact');
-    const shortcut = { P: 'view:priorities', c: 'view:control', u: 'view:routes', d: 'view:decided', f: 'view:asked', p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
+    const shortcut = { H: 'view:housekeeping', P: 'view:priorities', c: 'view:control', u: 'view:routes', d: 'view:decided', f: 'view:asked', p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
     if (shortcut) return activate(shortcut);
     return false;
   }

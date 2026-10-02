@@ -130,7 +130,7 @@ export function lastRecorded(status) {
 }
 
 export function projectView(project, data, identity, now = Date.now()) {
-  const empty = { lastAt: null, sessions: [], goals: [], tasks: [], activity: [], decided: [], asked: [], routes: data.routes ?? null, needs: [], categoryFlags: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
+  const empty = { lastAt: null, sessions: [], goals: [], tasks: [], activity: [], decided: [], asked: [], housekeeping: data.housekeeping ?? null, routes: data.routes ?? null, needs: [], categoryFlags: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
   if (!project) return empty;
   const spaces = data.workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey && project.repoKey);
   const spacesById = new Map(spaces.map(w => [w.workspace_id, w]));

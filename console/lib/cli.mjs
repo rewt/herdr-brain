@@ -75,6 +75,21 @@ export async function orgRoutes(project) {
   return JSON.parse(r.stdout);
 }
 
+export async function orgHousekeeping(project) {
+  const r = await run(process.execPath, [ORG_BIN, 'housekeeping', '--json'], { cwd: routeDirectory(project), env: orgEnv(project) });
+  if (!r.ok) throw new Error(firstLine(r.stderr) || 'record housekeeping failed');
+  return JSON.parse(r.stdout);
+}
+
+export async function orgHousekeepingSet(project, { patch, unset = [], revision }) {
+  let cwd;
+  try { cwd = routeDirectory(project); } catch (error) { return { ok: false, error: error.message }; }
+  const args = Object.entries(patch).map(([key, value]) => `--${key.replaceAll('_', '-')}=${value}`);
+  const r = await run(process.execPath, [ORG_BIN, 'housekeeping', 'set', ...args,
+    ...unset.map(key => `--unset=${key}`), `--expect=${revision}`, '--json'], { cwd, env: orgEnv(project) });
+  return r.ok ? { ok: true, housekeeping: JSON.parse(r.stdout) } : { ok: false, error: firstLine(r.stderr) || 'record housekeeping set failed' };
+}
+
 export async function orgRouteSet(project, { name, kind, model, effort, revision }) {
   let cwd;
   try { cwd = routeDirectory(project); } catch (error) { return { ok: false, error: error.message }; }

@@ -10,6 +10,7 @@ import { regionFor, pickerEntries } from './navigation.mjs';
 import { relatedWork, acceptanceCriteria, itemOrigin } from './model.mjs';
 import { resolveLaunchRoute } from '../../lanes/routes.mjs';
 import { routeReview } from './routes.mjs';
+import { DEFAULTS, FIELDS, housekeepingReview } from './housekeeping.mjs';
 
 // These are the actual light/dark tokens from modern-console-overview.html.
 export const MODERN_PALETTES = {
@@ -94,7 +95,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
   const title = s.view === 'projects' ? 'Your projects' : s.view === 'folder' ? 'Open a folder' : s.view === 'ideas' ? 'Start with an idea' : s.view === 'output' ? space?.label ?? 'Session output' : p?.name ?? 'Start where you are';
-  const action = s.priorityEdit ? 'Enter reviews / confirms' : s.view === 'priorities' ? 'Enter re-rank' : s.routeEdit ? 'Enter reviews / confirms' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
+  const action = s.housekeepingEdit ? 'Enter reviews / confirms' : s.view === 'housekeeping' ? 'H Housekeeping' : s.priorityEdit ? 'Enter reviews / confirms' : s.view === 'priorities' ? 'Enter re-rank' : s.routeEdit ? 'Enter reviews / confirms' : s.view === 'routes' && m.routes?.editable && !s.errors.routes ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
   put(2, x, title, 'bright', 'bg', true, width - action.length - 2);
   put(2, cols - action.length - 2, action, 'muted', 'bg', false, action.length);
   const errors = Object.entries(s.errors);
@@ -183,7 +184,33 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
       if (!r.editable) paragraph('Open a Git project to save a route change.', 'amber');
     }
   };
-  if (s.priorityEdit) {
+  const housekeepingSummary = () => {
+    const doc = m.housekeeping;
+    if (!doc) { paragraph(s.errors.housekeeping ? `Housekeeping unavailable: ${s.errors.housekeeping}` : 'Housekeeping has not loaded.'); return; }
+    if (s.errors.housekeeping) paragraph(`Last loaded housekeeping; refresh before editing: ${s.errors.housekeeping}`, 'amber');
+    paragraph(`Schedule: ${doc.process}${doc.pid ? ` · pid ${doc.pid}` : ''}`);
+    if (doc.configError) paragraph(`Invalid config: ${doc.configError}`, 'amber');
+    else paragraph(`${doc.config.enabled ? 'Enabled' : 'Paused'} · recovery ${doc.config.resume ? 'on' : 'off'} · tick ${doc.config.tick_seconds}s · cleanup ${doc.config.cleanup_seconds}s`);
+    paragraph(`Last live scan: ${doc.lastScan?.at ?? 'not recorded'}${doc.lastScan ? ` · ${age(Date.parse(doc.lastScan.at), now)}` : ''}`);
+    if (doc.lastAttempt?.action === 'error') paragraph(`Last attempt failed: ${doc.lastAttempt.error}`, 'amber');
+  };
+  if (s.housekeepingEdit) {
+    const e = s.housekeepingEdit;
+    section(e.confirm ? 'Review housekeeping change' : 'Edit housekeeping overrides', 'blue');
+    if (e.confirm) {
+      const review = housekeepingReview(e);
+      FIELDS.forEach(key => paragraph(`${key}: ${e.before[key]} → ${review.after[key]}${review.unset.includes(key) ? ' (default)' : ''}`));
+      paragraph('Pause takes effect at the next tick. Enabling permits work; the project supervisor starts a stopped schedule.');
+      row(e.busy ? 'Saving…' : review.writes ? 'Enter  Save housekeeping' : 'Enter  Close without changes', { id: 'housekeeping-save', fg: 'teal' });
+    } else {
+      paragraph('Booleans: true / false. Seconds: at least 1. Blank inherits the default.');
+      FIELDS.forEach((key, i) => row(`${key}: ${clip(e.values[i], Math.max(1, width - key.length - 5))}${e.field === i ? '▏' : ''}`, { id: `housekeeping-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i }));
+      paragraph(`Defaults: enabled ${DEFAULTS.enabled}, recovery ${DEFAULTS.resume}, tick ${DEFAULTS.tick_seconds}s, cleanup ${DEFAULTS.cleanup_seconds}s`);
+      row('Enter  Review change', { id: 'housekeeping-save', fg: 'blue' });
+    }
+    row('Cancel', { id: 'housekeeping-cancel', fg: 'muted' });
+    paragraph(`Writes project config: ${e.target}`, 'muted');
+  } else if (s.priorityEdit) {
     const e = s.priorityEdit;
     section(`${e.confirm ? 'Review' : 'Edit'} operator ${e.id ? 'rank' : 'priority'}`, 'blue');
     if (e.id) paragraph(`${e.id} · ${e.title}`, 'bright');
@@ -224,6 +251,8 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
     row('Cancel', { id: 'route-cancel', fg: 'muted' });
   } else if (s.view === 'control') {
+    section('Housekeeping', 'blue'); housekeepingSummary();
+    row('H Activity / pause / overrides ›', { id: 'view:housekeeping', fg: 'blue' }); row();
     section(`Waiting on you · ${m.needs.length}`, 'amber');
     if (m.categoryFlags?.length) row(`Category flags · ${m.categoryFlags.length} · ! review ›`, { id: 'view:needs', fg: 'amber' });
     m.needs.slice(0, 3).forEach(needRow); if (!m.needs.length) paragraph(s.errors.today || s.errors.brain ? 'Waiting sources unavailable · r retry' : 'Nothing waiting on you.');
@@ -235,6 +264,27 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     section('Routes in effect', 'blue'); routesRows(2);
     row('u All routes / edit ›', { id: 'view:routes', fg: 'blue' });
     row('P Operator priorities ›', { id: 'view:priorities', fg: 'blue' });
+  } else if (s.view === 'housekeeping') {
+    section('Housekeeping', 'blue'); housekeepingSummary();
+    const doc = m.housekeeping;
+    if (doc) {
+      if (doc.editable && !s.errors.housekeeping) {
+        row('Edit overrides ›', { id: 'housekeeping-edit', fg: 'blue' });
+        if (doc.config.enabled) row('Pause at next tick ›', { id: 'housekeeping-pause', fg: 'amber' });
+      }
+      paragraph('Enabling a stopped schedule requires the project supervisor to start it.');
+      for (const warning of doc.warnings) paragraph(warning, 'amber');
+      row(); section('Recent activity · newest first');
+      if (!doc.actions.length) paragraph('No activity recorded.');
+      for (const entry of doc.actions) {
+        paragraph(`${entry.at} · ${entry.action}${entry.dryRun || entry.action.startsWith('would-') ? ' · preview' : ''} · ${entry.label ?? entry.run ?? entry.tab_id ?? entry.pane ?? ''}`);
+        if (entry.why || entry.error) paragraph(`  ${entry.why ?? entry.error}`, entry.error ? 'amber' : 'muted');
+        if (entry.action === 'scan') paragraph(entry.cleanup === false ? '  Cleanup not due this tick.' : entry.cleanup === undefined ? `  ${entry.close} close candidates · ${entry.keep} kept · cleanup scope not recorded` : `  ${entry.close} close candidates · ${entry.keep} kept`, 'muted');
+      }
+      row(); section('Configuration sources');
+      paragraph(`Config: ${doc.target}${Object.keys(doc.overrides ?? {}).length ? ' · project overrides' : ' · defaults'}`);
+      paragraph(`State: ${doc.stateDir ?? 'no record'}`);
+    }
   } else if (s.view === 'priorities') {
     const doc = m.priorities ?? { priorities: [], unaligned: { work: [], runs: [] } };
     section(`Priorities · ${doc.priorities.length} operator outcomes`, 'blue');
@@ -468,7 +518,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes · P Priorities', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, and session input. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes · P Priorities · H Housekeeping', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels', 'Writes: the start bar, answers, project routes, housekeeping overrides, and session input. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
@@ -509,7 +559,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.priorityEdit?.confirm ? ' ↑↓ / PgUp / PgDn review · Enter saves · Backspace edits · Esc cancels' : s.priorityEdit ? ' Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : s.view === 'priorities' ? ' P Priorities · Enter re-rank · choose Add for a new outcome · Esc back' : s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.housekeepingEdit ? ' Tab field · Ctrl+U clears · Enter reviews / saves · Esc cancels' : s.view === 'housekeeping' ? ' H Housekeeping · Enter edits · PageDown activity · Esc back' : s.priorityEdit?.confirm ? ' ↑↓ / PgUp / PgDn review · Enter saves · Backspace edits · Esc cancels' : s.priorityEdit ? ' Tab field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : s.view === 'priorities' ? ' P Priorities · Enter re-rank · choose Add for a new outcome · Esc back' : s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then confirms · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

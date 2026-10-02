@@ -20,6 +20,7 @@ import { renderToday, todayJson } from '../lib/today.mjs';
 import { blockJson, renderBlock } from '../lib/block.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { routesCommand } from '../lanes/routes-command.mjs';
+import { housekeepingCommand } from '../housekeeping/command.mjs';
 import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
@@ -75,6 +76,10 @@ Views (zero inference)
   record recap [--back N] [--json]        the latest work block top down: threads, what they spawned,
                                           asked and were told, what is pending (--back 1: the one before)
   record console [--project NAME] [--modern] the Herdr Monitor console (needs: npm --prefix console ci)
+  record housekeeping [--json]            schedule status, last scan and recent activity
+  record housekeeping pause [--expect REV] save enabled=false for the next tick
+  record housekeeping set --resume false [--unset KEY] [--expect REV]
+                                          validate project .housekeeping.json overrides
   record routes [--json]                  project routes and their configuration sources
   record routes set NAME --kind K --model M --effort E [--expect REV]
                                           validate and save an override in the project's .lane.json
@@ -878,7 +883,7 @@ function priorities(argv) {
 
 const COMMANDS = {
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, routes: routesCommand,
+  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, routes: routesCommand, housekeeping: housekeepingCommand,
 };
 
 function main(argv) {

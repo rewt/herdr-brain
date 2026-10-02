@@ -262,8 +262,33 @@ try {
     await final(job); assert.match(read(log), /\[org-report\]/); lane(['promote', job.lane]); lane(['close', job.lane]);
     return '900-second configuration stayed quiet for observed interval, resume/report woke it, duplicate refused (full 900s expiry not tested)';
   });
-  await test('Housekeeping closes only eligible finished workers', () => {
-    pending('ENG-73 has no released acceptance invocation yet; lane close cleanup does not prove scheduled housekeeping');
+  await test('Housekeeping closes only eligible finished workers', async () => {
+    const script = requireCandidate('housekeeping/housekeeping.mjs');
+    const jobs = [];
+    try {
+      const done = await dispatch('done', 'housekeeping-done'); jobs.push(done);
+      await final(done); lane(['check'], done.info.workspace); lane(['promote', done.lane]);
+      const blocked = await dispatch('blocked-report', 'housekeeping-blocked'); jobs.push(blocked);
+      await final(blocked);
+      const human = await dispatch('needs-human', 'housekeeping-human'); jobs.push(human);
+      await final(human);
+      const state = path.join(root, 'housekeeping-state');
+      let failure;
+      try {
+        node(script, ['--once', '--cwd', fixture.repo, '--org', fixture.org, '--state-dir', state],
+          { cwd: fixture.repo, extra: { HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' }, timeout: 60_000 });
+      } catch (error) { failure = error; }
+      if (fs.existsSync(path.join(state, 'actions.jsonl'))) fs.copyFileSync(path.join(state, 'actions.jsonl'), path.join(evidence, 'housekeeping-actions.jsonl'));
+      for (const job of [blocked, human]) assert.equal(node(path.join(root, 'herdr.mjs'), ['pane', 'get', job.pane], { ok: false }).status, 0,
+        'blocked and needs-human workers must remain');
+      if (failure) throw failure;
+      const close = node(path.join(root, 'herdr.mjs'), ['pane', 'get', done.pane], { ok: false });
+      assert.notEqual(close.status, 0, 'one real housekeeping pass left the promoted, ingested done worker open; inspect canonical workspace metadata and action log');
+      assert.match(read(path.join(state, 'actions.jsonl')), /"action":"closed"/);
+      return 'actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved';
+    } finally {
+      for (const job of jobs) lane(['close', job.lane]);
+    }
   });
   await test('Scratch release build/activate/rollback/restore', () => {
     const script = requireCandidate('herdr/release.sh');

@@ -49,7 +49,10 @@ Every mutation uses opaque IDs returned by this run's creation calls. The adapte
 filters global workspace/agent lists to those receipts, rejects foreign targets,
 rejects paths and symlink escapes outside scratch, verifies the foreground cwd
 before starting scripts, and disallows service/plugin/focus commands. Ownership
-updates are locked and atomic for concurrent creation. The scheduler may close
+updates are locked and atomic for concurrent creation. Explicit workspace/tab
+creation uses a scratch zsh startup and waits for its file receipt before sending
+a command; a background pane screen alone is not a reliable startup receipt.
+The scheduler may close
 only recorded watcher PIDs and created workspaces. It does not install plugins,
 change launchd or use the operator's bin or release home. The existing Herdr
 server still records its normal runtime logs; this is not an isolated Herdr server.
@@ -78,9 +81,11 @@ The ten ENG-64 file switches are enumerated individually in
 switches and their behavioral canaries remain pending, as does final contrib
 retirement while a live copied caller still uses it. This is an explicit
 coverage limit: marker inspection and restoration do not establish switch
-behavior. Housekeeping remains pending until its released entrypoint and live
-fixture are integrated. These pending cases keep the gate closed; they cannot be
-turned green by the current runner.
+behavior. Housekeeping uses the actual released one-pass entrypoint against a promoted,
+ingested done worker alongside blocked and needs-human workers, with no optional
+housekeeping configuration. Candidates without that module leave the case pending.
+The cutover coverage gaps keep the gate closed until their behavioral fixtures are
+implemented; the current runner cannot approve a release.
 
 The screen lists each case and points to its numbered JSONL evidence. `summary.json`
 contains reasons, candidate commit and elapsed time. Any failure **or pending**

@@ -55,6 +55,7 @@ try {
     if (argv.includes('--cwd')) safePath(option('--cwd'));
   } else if (group === 'tab' && ['get', 'close'].includes(verb)) owned(target, 'tabs');
   else if (group === 'pane' && verb === 'list') owned(requireOption('--workspace'), 'workspaces');
+  else if (group === 'pane' && verb === 'process-info') owned(requireOption('--pane'), 'panes');
   else if (group === 'pane' && ['get', 'read', 'run', 'report-agent', 'release-agent'].includes(verb)) {
     owned(target, 'panes');
     if (verb === 'run' && !['worker.mjs', 'live-worker.mjs'].some((f) => argv[3].startsWith(`${quote(process.execPath)} ${quote(path.join(root, f))} `))) {
@@ -119,15 +120,37 @@ try {
   if (['workspace', 'worktree', 'tab'].includes(group) && ['create', 'open'].includes(verb)) {
     if (args.includes('--focus')) throw new Error('focus changes forbidden');
     if (!args.includes('--no-focus')) args.push('--no-focus');
+    if (['workspace', 'tab'].includes(group)) {
+      const shell = path.join(root, 'shell');
+      fs.mkdirSync(shell, { recursive: true });
+      fs.writeFileSync(path.join(shell, '.zshrc'), `PROMPT='acceptance%# '\n: > ${quote(path.join(shell, 'ready-'))}$HERDR_PANE_ID\n`);
+      args.push('--env', `ZDOTDIR=${shell}`, '--env', `HISTFILE=${path.join(shell, 'history')}`);
+    }
   }
   const result = await real(args);
   if (result.code === 0) {
+    if (verb === 'read' && !result.stdout.trim().startsWith('{')) {
+      process.stdout.write(result.stdout); process.exit(0);
+    }
     const value = result.stdout.trim() ? JSON.parse(result.stdout) : { result: {} };
     const r = value.result;
     if (['create', 'open'].includes(verb)) {
       const workspace = r.workspace ?? r.open_result?.workspace;
       const pane = r.root_pane ?? r.open_result?.root_pane;
       const tab = r.tab ?? r.open_result?.tab;
+      // A new workspace can contain an extra initial shell tab not named in
+      // worktree.create's root receipt. Its topology belongs to this scratch
+      // workspace too; collect opaque child receipts, never infer their IDs.
+      const children = { panes: [], tabs: [] };
+      if (workspace?.workspace_id) {
+        for (const [kind, collection] of [['pane', 'panes'], ['tab', 'tabs']]) {
+          const topology = body(await real([kind, 'list', '--workspace', workspace.workspace_id]));
+          for (const item of topology[collection] ?? []) {
+            if (item.workspace_id && item.workspace_id !== workspace.workspace_id) throw new Error('creation topology escaped its workspace');
+            children[collection].push(item[`${kind}_id`]);
+          }
+        }
+      }
       const lock = path.join(root, 'ownership.lock');
       for (;;) {
         try { fs.mkdirSync(lock); break; }
@@ -138,9 +161,18 @@ try {
         if (workspace?.workspace_id) latest.workspaces.push(workspace.workspace_id);
         if (pane?.pane_id) latest.panes.push(pane.pane_id);
         if (tab?.tab_id) latest.tabs.push(tab.tab_id);
+        for (const collection of ['panes', 'tabs']) latest[collection] = [...new Set([...latest[collection], ...children[collection]])];
         const temp = `${ledger}.${process.pid}.tmp`;
         fs.writeFileSync(temp, JSON.stringify(latest)); fs.renameSync(temp, ledger);
       } finally { fs.rmdirSync(lock); }
+      if (pane?.pane_id && ['workspace', 'tab'].includes(group)) {
+        let ready = false;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          if (fs.existsSync(path.join(root, 'shell', `ready-${pane.pane_id}`))) { ready = true; break; }
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        if (!ready) throw new Error('created shell never reached its scratch startup receipt');
+      }
     }
     if (group === 'workspace' && verb === 'list') r.workspaces = r.workspaces.filter((w) => state.workspaces.includes(w.workspace_id));
     if (group === 'agent' && verb === 'list') r.agents = r.agents.filter((a) => state.panes.includes(a.pane_id));

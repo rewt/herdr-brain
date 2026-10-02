@@ -92,10 +92,31 @@ a second different report for a run is refused by the record. Blocked work can
 be reported without promotion. Worktrees/commits with work survive an interrupted
 adapter; the existing lane CLI close/archive protections still apply. Closing a
 session that never started a run removes its entry worktree and branch only when
-the assigned Git identity and branch still match, the worktree is clean, and the
-branch has no commits beyond integration. Cleanup runs under the coordination
-lock and never forces deletion. Setup failure after creating an untouched lane
-uses the same cleanup. Dirty, committed or started work is retained.
+the assigned Git identity and branch still match, the worktree has no modified,
+untracked **or ignored** files, and the branch has no commits beyond its creation
+base. An ignored `.env`, local settings or `.lane` notes therefore keep the lane.
+Cleanup runs under the coordination and record locks and never forces Git
+removal. Retained lanes print their path and reason. Setup failure after creating
+an untouched lane uses the same cleanup.
+
+Both adapters forward `SIGHUP`, `SIGINT` and `SIGTERM` to the native child and
+close entry resources after the child exits. Each next entry sweeps stale entry
+creation receipts under the coordination lock. It removes a candidate only after
+checking that neither parent nor registered native child is alive, the actual
+Git common-directory identity and assigned branch match, the complete record
+contains no run for that checkout, and the same base/cleanliness checks pass.
+Recorded, dirty, ignored or committed lanes survive. Unknown or unreceipted
+worktrees are preserved. This is foreground recovery; display-only lane session
+metadata never participates in removal.
+
+Native launch waits until the parent has recorded its PID, then execs in that
+same PID. A parent crash before this handoff cannot start an unregistered agent.
+Queue and Git metadata paths are recorded before creation for setup recovery.
+
+The default root resolves the operator's home directory, and an explicit
+`MONITOR_WORKTREE_ROOT` resolves its existing prefix before creating missing
+directories. Operator-selected links therefore work; no-follow checks remain
+below that boundary for privileged writes into agent-writable locations.
 
 The session parent exposes fixed operations only for its own worktree creation
 receipt, branch and verified Git identity. Requests cannot select a repository,
@@ -156,4 +177,4 @@ provides workflow policy. They use `gpt-5.6-luna` low by default; measured token
 transcripts and summaries include failures. Temporary authentication copies are
 mode 0600 and deleted. Native sessions keep `workspace-write`, exclude broad tmp
 write grants, and receive only their checkout and request queue as writable roots.
-This probe complements the release gate; it does not replace ENG-74/R-50.
+This probe complements the ENG-74 release gate; it does not replace it.

@@ -3,14 +3,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
-import { plainDirectory, readPlainFile, writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
+import { plainDirectory, readPlainFile, removePlainDirectory, writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { withLock, findOrgDir } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig } from '../lanes/routes.mjs';
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { readReport } from '../lib/report.mjs';
+import { entryLifecycle, worktreeDirectory } from './lifecycle.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -83,42 +84,36 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     return { routing, routes };
   });
   const recordPaths = Object.fromEntries(['events.jsonl', 'config.json', 'runs', 'reports'].map((name) => [name, fs.realpathSync(path.join(org, name))]));
+  const lifecycleOwner = entryLifecycle({ project, coordination, git, externalGit });
   let workspace = project.canonical;
   if (role === 'worker') {
-    const root = plainDirectory(path.resolve(worktreeRoot ?? path.join(os.homedir(), '.herdr/worktrees', createHash('sha256').update(project.identity).digest('hex').slice(0, 16))));
+    const root = worktreeDirectory(worktreeRoot, project.identity);
     let containingProject;
     try { containingProject = gitProject(root); } catch {}
     if (containingProject) throw new Error('worktree root must be outside existing Git checkouts');
     workspace = path.join(root, `lane-${topic}`);
-    withLock(coordination, () => git(['worktree', 'add', '-b', `lane/${topic}`, workspace, main]));
-  }
-  const cleanupUntouched = () => {
-    if (role !== 'worker') return;
-    withLock(coordination, () => {
-      if (!fs.existsSync(workspace)) return;
-      const now = gitProject(workspace);
-      if (now.identity !== project.identity || now.canonical !== project.canonical || now.checkout !== workspace) return;
-      if (git(['branch', '--show-current'], workspace) !== `lane/${topic}` || git(['branch', '--show-current']) !== main) return;
-      if (git(['status', '--porcelain', '--untracked-files=all'], workspace)) return;
-      if (git(['rev-list', `${main}..lane/${topic}`])) return;
-      // Never force removal. Git refuses if work appears after the clean check.
-      git(['worktree', 'remove', workspace]);
-      git(['branch', '-d', `lane/${topic}`]);
-    });
-  };
+    try { lifecycleOwner.allocate({ id, topic, workspace, main, org }); }
+    catch (error) {
+      try { lifecycleOwner.close(); } catch (cleanup) { console.error(`monitor entry cleanup: ${cleanup.message}`); }
+      throw error;
+    }
+  } else lifecycleOwner.sweep();
   let requests, metadata, configFile;
   try {
     const runtime = plainDirectory(path.resolve(runtimeDir ?? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-entry-'))));
-    requests = plainDirectory(path.join(runtime, id));
-    metadata = plainDirectory(path.join(git(['rev-parse', '--path-format=absolute', '--git-dir'], workspace), 'monitor-entry', id));
+    const requestPath = path.join(runtime, id);
+    const metadataPath = path.join(git(['rev-parse', '--path-format=absolute', '--git-dir'], workspace), 'monitor-entry', id);
+    lifecycleOwner.runtime({ requests: requestPath, metadata: metadataPath });
+    requests = plainDirectory(requestPath);
+    metadata = plainDirectory(metadataPath);
     configFile = path.join(metadata, 'lane-config.json');
     // Keep all project commands in the validation sandbox. The outer lane
     // process only runs trusted code and fixed Git operations.
     writeAgentFileAtomic(configFile, JSON.stringify({ main, prepare: [], worktree_root: path.dirname(workspace) }));
   } catch (error) {
-    if (requests) fs.rmSync(requests, { recursive: true, force: true });
-    if (metadata) fs.rmSync(metadata, { recursive: true, force: true });
-    try { cleanupUntouched(); } catch (cleanup) { console.error(`monitor entry cleanup: ${cleanup.message}`); }
+    if (requests) removePlainDirectory(requests);
+    if (metadata) removePlainDirectory(metadata);
+    try { lifecycleOwner.close(); } catch (cleanup) { console.error(`monitor entry cleanup: ${cleanup.message}`); }
     throw error;
   }
   let run, item, report, appliedRouting = false;
@@ -265,11 +260,10 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     try {
       writeAgentFileAtomic(path.join(project.canonical, '.lane/discovery', `${topic}.audit.json`), JSON.stringify(audit, null, 2) + '\n');
     } finally {
-      fs.rmSync(requests, { recursive: true, force: true });
-      fs.rmSync(metadata, { recursive: true, force: true });
-      // Keep every started run, dirty checkout or branch containing new work.
-      if (!run) try { cleanupUntouched(); } catch (error) { console.error(`monitor entry cleanup: ${error.message}`); }
+      if (role === 'supervisor') {
+        removePlainDirectory(requests); removePlainDirectory(metadata);
+      } else try { lifecycleOwner.close(); } catch (error) { console.error(`monitor entry cleanup: ${error.message}`); }
     }
   };
-  return { context, dispatch, poll, close };
+  return { context, dispatch, poll, close, attachChild: lifecycleOwner.attachChild };
 }

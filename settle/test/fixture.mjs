@@ -1,6 +1,7 @@
 // Real Git, record, lane review/check, dispatch and detached watch. Only Herdr's
 // transport/model execution is scripted. No routes or validation config exists.
 import fs from 'node:fs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -93,6 +94,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent' } = 
       if (watchers.size) await new Promise(resolve => setTimeout(resolve, 20));
     }
     assert.equal(watchers.size, 0, 'fixture watchers did not shut down');
+    await waitForInboxIdle(path.join(org, 'supervisor/inbox.log'));
     // A just-terminated watcher can still finish a scratch log write. Retry
     // transient removal races briefly; cleanup remains bounded and owned here.
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

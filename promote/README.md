@@ -72,10 +72,11 @@ After **every** attempt, including unknown lanes, refusals and interrupted attem
 idle/done with an empty composer on two ANSI reads three seconds apart. Typing or
 unavailable input queues the message and raises a non-focusing Herdr notification.
 `SUPERVISOR_INPUT_WAIT_SECONDS` defaults to 7200; capped messages stay in the inbox
-and drain before newer notices when input clears. The queue records delivery and
-its inbox/notice ID separately from promotion. Definite pre-input refusals retry
-with the configured attempts and delay; uncertain prompt outcomes require
-inspection and hold later notices. It never turns an undelivered success into a
+with an acknowledged delivery owner, and drain before newer notices when input
+clears, even after the queue caller exits. Housekeeping restarts a dead owner.
+The queue records delivery and its inbox/notice ID separately from promotion.
+Refusals and lost acknowledgements retry through the input gate; every prompt
+includes the same visible `notice-id`, making at-least-once duplicates recognisable. It never turns an undelivered success into a
 new promotion. Gates have no invented time budget.
 
 Optional overrides:
@@ -123,8 +124,9 @@ new pending attempt. Supervisor requests use its guarded `promote RUN --retry`
 command to preserve the run's acknowledgement history and recheck readiness.
 A crash in the message acknowledgement window can cause a duplicate notice with
 the same request ID; receivers can deduplicate it. For an exhausted delivery,
-the saved `message`, `to` and `delivery_error` are the retry evidence; the supervisor
-can deliver that exact message without re-enqueuing promotion.
+the saved `message`, `to`, `delivery_id` and `delivery_error` are the evidence;
+the inbox owner retries delivery without re-enqueuing promotion. The saved queue
+result describes its original wait window; current delivery is in the inbox journal.
 
 Offline tests in `npm test` use real disposable Git worktrees, the default npm
 gate, detached workers and a fake Herdr delivery endpoint. They cover ordered

@@ -29,13 +29,15 @@ bch-cloak's cutover uses 900 seconds to preserve its current watcher behavior.
 `--long-after` changes the default one-hour long-run notice. If an intermediate
 notice cannot reach the supervisor, an operator notification is raised and the
 watcher continues waiting. Final/gone-worker delivery failure stops the watcher,
-while retaining the notice in the shared durable inbox for later drain.
+while an acknowledged inbox worker retains and delivers the pending notice after
+the caller exits. The existing housekeeping tick restarts a dead delivery owner.
 Every supervisor prompt uses [the input gate](../supervisor/README.md): idle/done
 status and an empty composer on two ANSI reads three seconds apart. Typing,
 working, unknown layouts and failed reads queue the notice without touching input
 or focus. `SUPERVISOR_INPUT_WAIT_SECONDS` caps waiting (default 7200);
 `--inbox FILE` overrides the shared `ORG/supervisor/inbox.log` journal. Re-arming a
-completed run adopts its final notice instead of prompting it twice.
+completed run adopts its final notice. Lost acknowledgements can replay the same
+visible `notice-id`; acknowledged notices are not repeated.
 
 For a detached watcher with a log, use `--detach --log /path/to/R-29.watch.log`
 instead of `--spawn`. This returns JSON with run, PID and log only after the child

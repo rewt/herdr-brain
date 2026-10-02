@@ -3,13 +3,13 @@
 // is a transport journal; it never stores record status or writes record events.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir } from '../lib/store.mjs';
-import { acquireLock } from '../lanes/promotion-lock.mjs';
+import { noticeLock, ownerPid } from './notice-lock.mjs';
 import { composerEmpty } from './composer.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -36,6 +36,8 @@ export function readInbox(file) {
       if (event.type === 'sent') entry.state = 'sent';
       if (event.type === 'retry') entry.state = 'pending';
       if (event.type === 'notified') entry.notified = true;
+      if (event.type === 'owned') entry.owner_pid = event.pid;
+      if (event.type === 'waited') entry.waited_seconds = event.waited_seconds;
       if (event.error) entry.error = event.error;
     }
   }
@@ -44,7 +46,7 @@ export function readInbox(file) {
 
 function transaction(file, fn) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const release = acquireLock(`${file}.lock`, { waitMs: 5000 });
+  const release = noticeLock(`${file}.lock`, { waitMs: 5000 });
   try {
     const append = (event) => {
       const fd = fs.openSync(file, 'a', 0o600);
@@ -61,8 +63,7 @@ function invoke(herdr, args) {
   const result = spawnSync(herdr, args, { encoding: 'utf8', timeout: 10000, maxBuffer: 4 * 1024 * 1024 });
   if (result.error || result.status !== 0) {
     const error = new Error((result.stderr || result.stdout || result.error?.message || `Herdr exited ${result.status}`).trim());
-    // Only a documented pre-input refusal proves that retry cannot duplicate
-    // text. Lost acknowledgements and stalled prompts require inspection.
+    // Lost acknowledgements retry with the same delivered notice ID.
     try { error.code = JSON.parse(result.stderr || result.stdout).error?.code; } catch {}
     throw error;
   }
@@ -76,9 +77,8 @@ function quiet(entry) {
     if (!agent?.pane_id || agent.interactive_ready === false || !['idle', 'done'].includes(agent.agent_status)) return null;
     const screen = invoke(entry.herdr, ['pane', 'read', agent.pane_id, '--lines', '14', '--format', 'ansi']);
     if (!composerEmpty(screen, agent.agent)) return null;
-    const after = JSON.parse(invoke(entry.herdr, ['agent', 'get', entry.to])).result?.agent;
-    if (!after || !['idle', 'done'].includes(after.agent_status) || occupant(after) !== occupant(agent)) return null;
-    // Occupant identity must also match across the two empty reads.
+    // Keep pane read last: on the final check, prompt follows immediately.
+    // Screen-based gating still has an inherent read-to-input race.
     return occupant(agent);
   } catch { return null; }
 }
@@ -105,16 +105,20 @@ export async function drainInbox(file, options = {}) {
   const started = Date.now(), deadline = started + cap;
   const own = () => options.id && snapshot(file).find((entry) => entry.id === options.id);
   const result = (error) => ({ delivered: own()?.state === 'sent', id: options.id, inbox: file,
-    delivery_error: error, queued: own()?.state !== 'sent' });
+    delivery_error: error, queued: own()?.state !== 'sent', owner_pid: ownerPid(`${file}.owner.lock`) });
+  const retained = async (error) => {
+    if (!options.owner) await resumeInbox(file, options);
+    return result(error);
+  };
   let release;
   for (;;) {
     if (own()?.state === 'sent') return result();
-    try { release = acquireLock(`${file}.drain.lock`); break; }
+    try { release = noticeLock(`${file}.drain.lock`); break; }
     catch (error) {
       if (!error.message.startsWith('locked:')) throw error;
       const entry = own();
       if (entry) notify(file, entry, 'another sender is draining the inbox');
-      if (Date.now() >= deadline) return result(error.message);
+      if (Date.now() >= deadline) return retained(error.message);
       await delay(Math.min(Math.max(retry, 10), deadline - Date.now()));
     }
   }
@@ -125,15 +129,14 @@ export async function drainInbox(file, options = {}) {
       const waiting = own();
       if (waiting && waiting.id !== entry.id) notify(file, waiting, 'older supervisor notices are awaiting delivery');
       if (entry.state === 'uncertain') {
-        notify(file, entry, 'prompt outcome is uncertain; inspect before acknowledging or resending');
-        return result(`uncertain notice ${entry.id}; retained in ${file}; later notices wait`);
+        record(file, { type: 'retry', id: entry.id, error: 'unacknowledged attempt; replaying the same notice ID' });
       }
-      let waited = false, ready = false;
+      let waited = Boolean(entry.notified), ready = false, readyOccupant;
       for (;;) {
         const first = quiet(entry);
         if (first && Date.now() + confirm <= deadline) {
           await delay(confirm);
-          if (quiet(entry) === first) { ready = true; break; }
+          if (quiet(entry) === first) { ready = true; readyOccupant = first; break; }
         }
         waited = true;
         notify(file, entry, 'supervisor input is busy or unreadable; notice queued');
@@ -142,13 +145,12 @@ export async function drainInbox(file, options = {}) {
       }
       if (!ready) {
         record(file, { type: 'capped', id: entry.id, waited_seconds: (Date.now() - started) / 1000 });
-        return result(`input wait cap reached; notice ${entry.id} stays in ${file}`);
+        return await retained(`input wait cap reached; notice ${entry.id} stays in ${file}`);
       }
-      if (waited) {
-        const waitedSeconds = (Date.now() - started) / 1000;
+      if (waited || snapshot(file).find((candidate) => candidate.id === entry.id)?.notified) {
+        const waitedSeconds = (Date.now() - (Date.parse(entry.at) || started)) / 1000;
         record(file, { type: 'waited', id: entry.id, waited_seconds: waitedSeconds,
           message: `delivered after waiting ${waitedSeconds.toFixed(1)} s for an empty input box` });
-        options.log?.(`delivered after waiting ${waitedSeconds.toFixed(1)} s for an empty input box`);
       }
       const attempts = entry.attempts ?? 5;
       let sent = false;
@@ -160,25 +162,29 @@ export async function drainInbox(file, options = {}) {
           if (!first || Date.now() + confirm > deadline) break;
           await delay(confirm);
           if (quiet(entry) !== first) break;
+          readyOccupant = first;
         }
-        record(file, { type: 'sending', id: entry.id });
+        const deliveredText = `${entry.message} notice-id=${entry.id}`;
+        // Persist intent before the FINAL check, leaving no journal write or
+        // agent lookup between the final pane read and prompt invocation.
+        record(file, { type: 'sending', id: entry.id, delivered_text: deliveredText });
+        if (quiet(entry) !== readyOccupant) {
+          record(file, { type: 'retry', id: entry.id, error: 'input changed before sending' });
+          break;
+        }
         try {
-          invoke(entry.herdr, ['agent', 'prompt', entry.to, entry.message]);
-          record(file, { type: 'sent', id: entry.id });
+          invoke(entry.herdr, ['agent', 'prompt', entry.to, deliveredText]);
+          record(file, { type: 'sent', id: entry.id, delivered_text: deliveredText });
           sent = true; break;
         } catch (error) {
-          if (!['agent_blocked', 'agent_not_found'].includes(error.code)) {
-            record(file, { type: 'uncertain', id: entry.id, error: error.message });
-            notify(file, entry, error.message);
-            return result(`uncertain notice ${entry.id}: ${error.message}; inspect before retry`);
-          }
-          record(file, { type: 'retry', id: entry.id, error: error.message });
+          record(file, { type: 'retry', id: entry.id, error: error.message,
+            may_have_delivered: !['agent_blocked', 'agent_not_found'].includes(error.code) });
           if (attempt < attempts && Date.now() < deadline) await delay(Math.min(entry.retrySeconds * 1000, deadline - Date.now()));
         }
       }
       if (!sent) {
         notify(file, entry, 'prompt refused; notice retained');
-        return result(`notice ${entry.id} undelivered; retained in ${file}`);
+        return await retained(`notice ${entry.id} undelivered; retained in ${file}`);
       }
       if (entry.id === options.id) return result();
     }
@@ -188,26 +194,105 @@ export async function drainInbox(file, options = {}) {
 export async function promptSupervisor(to, message, options = {}) {
   const file = path.resolve(options.inbox ?? inboxPath(options));
   const id = options.id ?? randomUUID();
+  if (typeof id !== 'string' || !id || /\s|[\x00-\x1f\x7f]/.test(id)) throw new Error('notice id must be nonempty without whitespace or control characters');
   const attempts = options.attempts ?? 5;
   if (!Number.isInteger(attempts) || attempts < 1) throw new Error('delivery attempts must be a positive integer');
   const retrySeconds = seconds(options.retrySeconds, 10, 'retry seconds');
   // Validate settings before appending; each accepted notice gets one entry.
   seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'SUPERVISOR_INPUT_WAIT_SECONDS');
+  seconds(options.confirmSeconds ?? process.env.SUPERVISOR_INPUT_CONFIRM_SECONDS, 3, 'SUPERVISOR_INPUT_CONFIRM_SECONDS');
+  seconds(options.pollSeconds ?? process.env.SUPERVISOR_INPUT_POLL_SECONDS, 10, 'SUPERVISOR_INPUT_POLL_SECONDS');
   transaction(file, (entries, append) => {
     const prior = entries.find((entry) => entry.id === id);
     if (prior) {
       if (prior.to !== to || prior.message !== message) throw new Error(`notice ${id} has different content or target`);
       return;
     }
-    append({ type: 'notice', id, to, message, herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
+    append({ type: 'notice', id, to, message, owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });
   });
-  return { ...await drainInbox(file, { ...options, retrySeconds, id }), message };
+  // Acknowledged ownership precedes input. The worker survives this caller,
+  // including a crash between the prompt side effect and its acknowledgement.
+  await resumeInbox(file, options);
+  const receipt = await drainInbox(file, { ...options, retrySeconds, id });
+  const entry = snapshot(file).find((candidate) => candidate.id === id);
+  if (receipt.delivered && entry?.waited_seconds !== undefined)
+    options.log?.(`delivered after waiting ${entry.waited_seconds.toFixed(1)} s for an empty input box`);
+  return { ...receipt, message };
+}
+
+// One transport-only worker per inbox, never a project housekeeping schedule.
+// Housekeeping's existing tick and every sender call this recovery entry point.
+export async function resumeInbox(file, options = {}) {
+  file = path.resolve(file);
+  if (!fs.existsSync(file) || snapshot(file).every((entry) => entry.state === 'sent')) return null;
+  const pid = ownerPid(`${file}.owner.lock`);
+  if (pid) {
+    try { process.kill(pid, 0); return pid; }
+    catch (error) { if (error.code !== 'ESRCH') throw error; }
+  }
+  const settings = {};
+  for (const key of ['waitSeconds', 'confirmSeconds', 'pollSeconds']) if (options[key] !== undefined) settings[key] = options[key];
+  const output = fs.openSync(`${file}.worker.log`, 'a', 0o600);
+  let child;
+  try {
+    child = spawn(process.execPath, [SELF, '--inbox', file, '--owner-worker', '--settings', JSON.stringify(settings)], {
+      cwd: path.dirname(file), detached: true, stdio: ['ignore', output, output, 'ipc'],
+      env: { ...process.env, HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' },
+    });
+  } finally { fs.closeSync(output); }
+  return await new Promise((resolve, reject) => {
+    const finish = (error, pid) => {
+      clearTimeout(timer);
+      child.removeAllListeners();
+      if (child.connected) child.disconnect();
+      child.unref();
+      if (error) reject(error); else resolve(pid);
+    };
+    const timer = setTimeout(() => finish(new Error(`inbox worker startup unconfirmed; inspect ${file}.worker.log`)), 5000);
+    child.once('message', (message) => message?.ready ? finish(null, message.pid) : finish(new Error(message?.error ?? 'inbox worker failed')));
+    child.once('error', (error) => finish(error));
+    child.once('exit', (code) => finish(new Error(`inbox worker exited ${code}; inspect ${file}.worker.log`)));
+  });
+}
+
+async function ownInbox(file, options) {
+  let release;
+  try { release = noticeLock(`${file}.owner.lock`); }
+  catch (error) {
+    if (!error.message.startsWith('locked:')) throw error;
+    const pid = ownerPid(`${file}.owner.lock`);
+    if (!pid) throw error;
+    process.send?.({ ready: true, pid }); return;
+  }
+  try {
+    transaction(file, (entries, append) => {
+      for (const entry of entries.filter((entry) => entry.state !== 'sent')) append({ type: 'owned', id: entry.id, pid: process.pid });
+    });
+    process.send?.({ ready: true, pid: process.pid });
+    if (process.connected) process.disconnect();
+    const confirmSeconds = seconds(options.confirmSeconds ?? process.env.SUPERVISOR_INPUT_CONFIRM_SECONDS, 3, 'confirmation seconds');
+    const pollSeconds = seconds(options.pollSeconds ?? process.env.SUPERVISOR_INPUT_POLL_SECONDS, 10, 'poll seconds');
+    // The caller's cap limits its wait. The owner continues in bounded windows,
+    // long enough for two reads even when the caller requested a zero-second cap.
+    const waitSeconds = Math.max(confirmSeconds + 1, seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'wait seconds'));
+    for (;;) {
+      await drainInbox(file, { ...options, waitSeconds, owner: true });
+      const done = transaction(file, (entries) => {
+        if (entries.some((entry) => entry.state !== 'sent')) return false;
+        // Release under the journal lock so an enqueue cannot adopt an owner
+        // already committed to exiting before that notice exists.
+        release(); return true;
+      });
+      if (done) return;
+      await delay(Math.max(pollSeconds * 1000, 10));
+    }
+  } finally { release(); }
 }
 
 export function resolveNotice(file, id, sent) {
   // Explicit recovery after inspecting the target. Never infer prompt outcome.
-  const release = acquireLock(`${file}.drain.lock`);
+  const release = noticeLock(`${file}.drain.lock`);
   try {
     transaction(file, (entries, append) => {
       if (entries.find((entry) => entry.id === id)?.state !== 'uncertain') throw new Error(`notice ${id} is not uncertain`);
@@ -220,8 +305,10 @@ async function main() {
   const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
     inbox: { type: 'string' }, org: { type: 'string' }, herdr: { type: 'string' }, id: { type: 'string' },
     drain: { type: 'boolean' }, resolve: { type: 'string' }, sent: { type: 'boolean' }, resend: { type: 'boolean' },
+    'owner-worker': { type: 'boolean' }, settings: { type: 'string' },
   } });
   const file = path.resolve(opt.inbox ?? inboxPath(opt));
+  if (opt['owner-worker']) { await ownInbox(file, JSON.parse(opt.settings ?? '{}')); return; }
   if (opt.resolve) {
     if (Boolean(opt.sent) === Boolean(opt.resend)) throw new Error('--resolve ID needs exactly one of --sent or --resend');
     resolveNotice(file, opt.resolve, opt.sent); return;

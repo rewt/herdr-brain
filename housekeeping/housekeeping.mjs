@@ -9,6 +9,7 @@ import { parseArgs } from 'node:util';
 import { planTidy, isShellOnly } from '../supervisor/tidy-tabs.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
+import { resumeInbox, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 export { readConfig } from './config.mjs';
 
 const LOCAL_RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -333,6 +334,10 @@ async function main() {
       try {
         config = readConfig(configFile);
         if (!config.enabled && !opt['dry-run']) { log({ action: 'disabled' }); break; }
+        if (!opt['dry-run']) {
+          const pid = await resumeInbox(inboxPath({ org: project.org, cwd }));
+          if (pid) log({ action: 'supervisor-inbox-owned', pid });
+        }
         const cleanup = Date.now() - lastCleanup >= config.cleanup_seconds * 1000;
         runner.tick({ cleanup, resume: config.resume !== false, dryRun: opt['dry-run'], seen,
           remember: (key) => fs.appendFileSync(seenFile, `${JSON.stringify(key)}\n`) });

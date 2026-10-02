@@ -48,15 +48,24 @@ export function composerEmpty(raw, harness) {
     return text !== null && text.replace('❯', '').trim() === '';
   }
   if (harness === 'codex') {
-    // Captured Codex: highlighted › row, optional wrapped input rows, then
-    // blank padding and the model · cwd · task status bar. Require the footer
-    // so an old transcript prompt cannot authorize input.
+    // Captured Codex: one contiguous shaded box, with blank top/bottom
+    // padding and the model/cwd status bar. A continuation can itself start
+    // with ›, so only the FIRST row inside verified box chrome is the prompt.
     const status = visible.findLastIndex((line) => /^\s*\S.*\s·\s.*(?:~\/|\/)/.test(line));
     if (status < 0 || visible.slice(status + 1).some((line) => line.trim())) return false;
-    let start = status - 1;
-    while (start >= 0 && !/^\s*›(?:\s|$)/.test(visible[start])) start--;
-    if (start < 0) return false;
-    const text = typedText(lines.slice(start, status).join('\n'));
+    const shaded = (line) => /\x1b\[[0-9;]*48;(?:2;\d+;\d+;\d+|5;\d+)(?:;[0-9]+)*m/.test(line);
+    let end = status - 1;
+    while (end >= 0 && !visible[end].trim() && !shaded(lines[end])) end--;
+    let top = end;
+    while (top >= 0 && shaded(lines[top])) top--;
+    top++;
+    // Missing padding means the 14-line capture may have truncated a draft.
+    if (end - top < 2 || visible[top].trim() || visible[end].trim() ||
+        !/^\s*›(?:\s|$)/.test(visible[top + 1])) return false;
+    // Captured prompt chrome is bold before the glyph. A bare continuation
+    // after a blank draft row must not impersonate a truncated first row.
+    if (!/\x1b\[1m/.test(lines[top + 1].split('›')[0])) return false;
+    const text = typedText(lines.slice(top + 1, end).join('\n'));
     return text !== null && text.replace('›', '').trim() === '';
   }
   return false;

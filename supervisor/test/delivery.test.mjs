@@ -4,7 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from '../../test/helpers/bounded-test.mjs';
 import { composerEmpty } from '../composer.mjs';
-import { promptSupervisor, readInbox, resolveNotice } from '../prompt-supervisor.mjs';
+import { promptSupervisor, readInbox, resumeInbox } from '../prompt-supervisor.mjs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
+import { ownerPid } from '../notice-lock.mjs';
+import { fileURLToPath } from 'node:url';
 
 process.env.ORG_ACTOR = 'supervisor-delivery-test';
 const fixtureText = (name) => fs.readFileSync(new URL(`./fixtures/${name}.ansi`, import.meta.url), 'utf8');
@@ -27,11 +32,21 @@ test('compound styles, wrapped typing, and normal text identical to a placeholde
   assert.equal(composerEmpty(fixtureText('codex-empty').replace('›', '›\n  wrapped input'), 'codex'), false);
   assert.equal(composerEmpty(claude, 'unrecognized-harness'), false);
 });
+test('Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome', () => {
+  for (const name of ['codex-multiline-glyph', 'codex-multiline-prompt', 'codex-truncated', 'codex-truncated-padding', 'codex-unshaded'])
+    assert.equal(composerEmpty(fixtureText(name), 'codex'), false, name);
+});
 
 function fixture(t, harness = 'claude') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-delivery-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const inbox = path.join(root, 'inbox.log'), herdr = path.join(root, 'herdr');
+  t.after(async () => {
+    fs.writeFileSync(path.join(root, 'screen'), fixtureText(`${harness}-empty`));
+    fs.writeFileSync(path.join(root, 'status'), 'idle');
+    for (const name of ['read-fail', 'lost-ack', 'hold-before', 'hold-after', 'type-on-final']) fs.rmSync(path.join(root, name), { force: true });
+    await waitForInboxIdle(inbox);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   fs.writeFileSync(path.join(root, 'screen'), fixtureText(`${harness}-typed`));
   fs.writeFileSync(path.join(root, 'status'), 'idle');
   fs.writeFileSync(herdr, `#!${process.execPath}
@@ -41,22 +56,28 @@ fs.appendFileSync(file('calls'), JSON.stringify(args)+'\\n');
 if(args[0]==='agent'&&args[1]==='get') console.log(JSON.stringify({result:{agent:{agent:${JSON.stringify(harness)},pane_id:'fake:p1',terminal_id:fs.existsSync(file('occupant'))?fs.readFileSync(file('occupant'),'utf8'):'same',agent_status:fs.readFileSync(file('status'),'utf8')}}}));
 else if(args[0]==='pane'&&args[1]==='read') {
  if(fs.existsSync(file('read-fail'))) process.exit(1);
+ if(fs.existsSync(file('type-on-final')) && JSON.parse(fs.readFileSync(file('inbox.log'),'utf8').trim().split('\\n').at(-1)).type==='sending') {
+   fs.writeFileSync(file('screen'),${JSON.stringify(fixtureText(`${harness}-typed`))});fs.unlinkSync(file('type-on-final'));
+ }
  process.stdout.write(fs.readFileSync(file('screen'),'utf8'));
 }
 else if(args[0]==='agent'&&args[1]==='prompt') {
  if(!fs.readFileSync(file('inbox.log'),'utf8').includes(args[3])) throw Error('prompt before durable inbox');
+ if(fs.existsSync(file('hold-before'))) {fs.writeFileSync(file('reached'),String(process.pid));Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1000);process.exit(1);}
  if(fs.existsSync(file('reject'))) {fs.unlinkSync(file('reject'));console.error(JSON.stringify({error:{code:'agent_blocked'}}));process.exit(1);}
  fs.appendFileSync(file('sent'), JSON.stringify(args[3])+'\\n');
- if(fs.existsSync(file('lost-ack'))) process.exit(1);
+ if(fs.existsSync(file('hold-after'))) {fs.writeFileSync(file('reached'),String(process.pid));Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1000);process.exit(1);}
+ if(fs.existsSync(file('lost-ack'))) {fs.unlinkSync(file('lost-ack'));process.exit(1);}
  console.log('{}');
 } else if(args[0]==='notification'&&args[1]==='show') console.log('{}');
 else process.exit(2);
 `, { mode: 0o755 });
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
-  const sent = () => fs.existsSync(path.join(root, 'sent')) ? fs.readFileSync(path.join(root, 'sent'), 'utf8').trim().split('\n').map(JSON.parse) : [];
+  const transmitted = () => fs.existsSync(path.join(root, 'sent')) ? fs.readFileSync(path.join(root, 'sent'), 'utf8').trim().split('\n').map(JSON.parse) : [];
+  const sent = () => transmitted().map((text) => text.replace(/ notice-id=\S+$/, ''));
   const clear = () => fs.writeFileSync(path.join(root, 'screen'), fixtureText(`${harness}-empty`));
   const options = { inbox, herdr, waitSeconds: 5, confirmSeconds: 0.02, pollSeconds: 0.01, retrySeconds: 0.01 };
-  return { root, inbox, herdr, calls, sent, clear, options };
+  return { root, inbox, herdr, calls, sent, transmitted, clear, options };
 }
 async function until(fn) {
   const deadline = Date.now() + 5000;
@@ -77,6 +98,8 @@ for (const harness of ['claude', 'codex']) {
     assert.match(logs.join('\n'), /delivered after waiting .* s for an empty input box/);
     assert.ok(f.calls().every((args) => ['agent', 'pane', 'notification'].includes(args[0]) && !args.includes('focus')));
     assert.deepEqual(f.calls().filter((args) => args[0] === 'pane').at(-1), ['pane', 'read', 'fake:p1', '--lines', '14', '--format', 'ansi']);
+    for (const [index, args] of f.calls().entries()) if (args[0] === 'agent' && args[1] === 'prompt')
+      assert.deepEqual(f.calls()[index - 1].slice(0, 2), ['pane', 'read'], 'the final screen read immediately precedes input');
   });
 }
 test('two quiet reads use the default three-second separation', async (t) => {
@@ -93,6 +116,13 @@ test('typing between quiet reads restarts the confirmation window', async (t) =>
   await until(() => f.calls().some((args) => args[0] === 'notification'));
   assert.deepEqual(f.sent(), []); f.clear();
   assert.equal((await pending).delivered, true);
+});
+test('the immediate final read catches a draft introduced after the confirmation pair', async (t) => {
+  const f = fixture(t); f.clear(); fs.writeFileSync(path.join(f.root, 'type-on-final'), '1');
+  const result = await promptSupervisor('supervisor', 'final-check', { ...f.options, waitSeconds: .3, id: 'final-check' });
+  await until(() => !fs.existsSync(path.join(f.root, 'type-on-final')));
+  assert.equal(result.queued, true); assert.deepEqual(f.sent(), []);
+  f.clear(); await until(() => readInbox(f.inbox)[0].state === 'sent');
 });
 test('non-idle status, unknown layout and failed reads retain capped notices', async (t) => {
   for (const state of ['working', 'blocked', 'unknown', 'unreadable', 'layout']) {
@@ -131,19 +161,56 @@ test('a definite pre-input refusal retries through the empty-composer gate', asy
   const f = fixture(t); f.clear(); fs.writeFileSync(path.join(f.root, 'reject'), '1');
   assert.equal((await promptSupervisor('supervisor', 'notice', f.options)).delivered, true);
   assert.deepEqual(f.sent(), ['notice']);
-  assert.equal(f.calls().filter((args) => args[0] === 'pane').length, 4);
+  assert.equal(f.calls().filter((args) => args[0] === 'pane').length, 6);
 });
-test('lost prompt acknowledgement holds FIFO until explicit inspection, without automatic duplication', async (t) => {
+test('lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate', async (t) => {
   const f = fixture(t); f.clear(); fs.writeFileSync(path.join(f.root, 'lost-ack'), '1');
   const first = await promptSupervisor('supervisor', 'first', { ...f.options, id: 'first' });
-  assert.match(first.delivery_error, /uncertain/);
-  fs.unlinkSync(path.join(f.root, 'lost-ack'));
-  assert.equal((await promptSupervisor('supervisor', 'second', { ...f.options, id: 'second' })).delivered, false);
-  assert.deepEqual(f.sent(), ['first']);
-  assert.ok(f.calls().some((args) => args[0] === 'notification' && args.includes('second')), 'each queued notice raises a non-focusing notification');
-  resolveNotice(f.inbox, 'first', true);
+  assert.equal(first.delivered, true);
   assert.equal((await promptSupervisor('supervisor', 'second', { ...f.options, id: 'second' })).delivered, true);
-  assert.deepEqual(f.sent(), ['first', 'second']);
+  assert.deepEqual(f.transmitted(), ['first notice-id=first', 'first notice-id=first', 'second notice-id=second']);
+  const events = fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(events.some((event) => event.id === 'first' && event.type === 'retry' && event.may_have_delivered));
+  assert.ok(events.filter((event) => event.type === 'sending' || event.type === 'sent').every((event) => event.delivered_text.endsWith(`notice-id=${event.id}`)));
+});
+test('a lone capped notice delivers after its caller exits, without another enqueue or manual drain', async (t) => {
+  const f = fixture(t);
+  const cli = spawnChild(t, process.execPath, [fileURLToPath(new URL('../prompt-supervisor.mjs', import.meta.url)),
+    'supervisor', 'lone-final', '--inbox', f.inbox, '--herdr', f.herdr, '--id', 'lone'], {
+    env: { ...process.env, SUPERVISOR_INPUT_WAIT_SECONDS: '0', SUPERVISOR_INPUT_CONFIRM_SECONDS: '.02', SUPERVISOR_INPUT_POLL_SECONDS: '.01' },
+  });
+  const result = await waitForExit(cli);
+  assert.equal(result.code, 3, result.stderr);
+  const receipt = JSON.parse(result.stdout);
+  assert.equal(receipt.queued, true); assert.ok(receipt.owner_pid > 1);
+  assert.equal(readInbox(f.inbox)[0].state, 'pending'); assert.deepEqual(f.sent(), []);
+  f.clear();
+  await until(() => readInbox(f.inbox)[0].state === 'sent');
+  assert.deepEqual(f.transmitted(), ['lone-final notice-id=lone']);
+});
+for (const boundary of ['before', 'after']) test(`a dead sender ${boundary} the prompt side effect replays pending intent with the same ID`, async (t) => {
+  const f = fixture(t); f.clear(); fs.writeFileSync(path.join(f.root, `hold-${boundary}`), '1');
+  const prior = spawnChild(t, process.execPath, ['-e', 'process.exit(0)']);
+  assert.equal((await waitForExit(prior)).code, 0);
+  fs.mkdirSync(`${f.inbox}.lock`);
+  fs.writeFileSync(path.join(`${f.inbox}.lock`, 'owner.json'), JSON.stringify({ pid: prior.pid }));
+  // An abandoned pre-publication candidate does not prevent new ownership.
+  fs.mkdirSync(`${f.inbox}.owner.lock.new-abandoned`);
+  // Seed a durable entry, then use the same recovery entry point as housekeeping.
+  fs.writeFileSync(f.inbox, JSON.stringify({ type: 'notice', at: new Date().toISOString(), id: 'crash',
+    to: 'supervisor', message: 'crash-notice', herdr: f.herdr, attempts: 1, retrySeconds: 0, title: 'Notice', sound: 'request' }) + '\n');
+  await resumeInbox(f.inbox, f.options);
+  await until(() => fs.existsSync(path.join(f.root, 'reached')));
+  const promptPid = Number(fs.readFileSync(path.join(f.root, 'reached'), 'utf8'));
+  const entry = registerProcess(ownerPid(`${f.inbox}.owner.lock`));
+  assert.ok(entry.command.includes(f.inbox) && entry.command.includes('--owner-worker'));
+  assert.equal(killProcess(entry).signaled, true);
+  await until(() => { try { process.kill(entry.pid, 0); return false; } catch (error) { return error.code === 'ESRCH'; } });
+  fs.unlinkSync(path.join(f.root, `hold-${boundary}`));
+  await resumeInbox(f.inbox, f.options);
+  await until(() => readInbox(f.inbox)[0].state === 'sent');
+  assert.deepEqual(f.transmitted(), Array(boundary === 'after' ? 2 : 1).fill('crash-notice notice-id=crash'));
+  await until(() => { try { process.kill(promptPid, 0); return false; } catch (error) { return error.code === 'ESRCH'; } });
 });
 test('torn inbox tails fail closed and preserve their bytes', async (t) => {
   const f = fixture(t); fs.writeFileSync(f.inbox, '{"type":"notice"');

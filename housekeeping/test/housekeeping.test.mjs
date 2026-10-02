@@ -10,6 +10,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHousekeeping, interruptedComposer, matchingRun, readConfig } from '../housekeeping.mjs';
+import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' };
 const screen = fs.readFileSync(new URL('./fixtures/interrupted.txt', import.meta.url), 'utf8');
@@ -248,6 +250,27 @@ test('no record and no Git project are quiet no-ops', (t) => {
   assert.equal(r.status, 0); assert.match(r.stdout, /no-record/);
   const outside = spawnSync(process.execPath, [f.runtime, '--once', '--cwd', f.root], { encoding: 'utf8', env: TEST_ENV });
   assert.equal(outside.status, 0); assert.match(outside.stdout, /no-project/);
+});
+test('an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery', async (t) => {
+  const f = cliFixture(t), inbox = path.join(f.root, 'supervisor/inbox.log');
+  fs.mkdirSync(path.dirname(inbox));
+  const notice = { type: 'notice', at: new Date().toISOString(), id: 'tick-recovery', to: 'supervisor',
+    message: 'tick notice', herdr: f.fake, attempts: 1, retrySeconds: 0, title: 'Notice', sound: 'request' };
+  fs.writeFileSync(inbox, JSON.stringify(notice) + '\n' + JSON.stringify({ type: 'sending', id: notice.id }) + '\n');
+  fs.writeFileSync(f.fake, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));
+else if(a[0]==='pane'&&a[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
+else { if(a[0]==='agent'&&a[1]==='prompt') fs.writeFileSync(${JSON.stringify(path.join(f.root, 'notice.txt'))},a[3]);
+console.log(JSON.stringify({result:a[0]==='status'?{runs:[],items:[]}:a[0]==='workspace'?{workspaces:[]}:{agents:[]}})); }\n`);
+  const env = { ...TEST_ENV, SUPERVISOR_INPUT_CONFIRM_SECONDS: '.02', SUPERVISOR_INPUT_POLL_SECONDS: '.01', SUPERVISOR_INPUT_WAIT_SECONDS: '0' };
+  const preview = spawnSync(process.execPath, [...f.args, '--once', '--dry-run'], { env, encoding: 'utf8', timeout: 5000 });
+  assert.equal(preview.status, 0, preview.stderr); assert.equal(fs.existsSync(`${inbox}.owner.lock`), false);
+  assert.equal(readInbox(inbox)[0].state, 'uncertain');
+  const tick = spawnSync(process.execPath, [...f.args, '--once'], { env, encoding: 'utf8', timeout: 5000 });
+  assert.equal(tick.status, 0, tick.stderr); assert.match(tick.stdout, /supervisor-inbox-owned/);
+  await waitForInboxIdle(inbox);
+  assert.equal(readInbox(inbox)[0].state, 'sent');
+  assert.equal(fs.readFileSync(path.join(f.root, 'notice.txt'), 'utf8'), 'tick notice notice-id=tick-recovery');
 });
 
 test('housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries', t => {

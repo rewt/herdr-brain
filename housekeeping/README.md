@@ -150,3 +150,8 @@ node housekeeping/housekeeping.mjs --once --dry-run --state-dir "$PWD/.lane/hous
 `--dry-run` previews even a disabled project. Tests use disposable Git repositories,
 fake Herdr/record commands and synthetic screens; they never call a model or mutate
 real panes. `npm test` includes them.
+
+Each existing live tick also checks the shared supervisor notice inbox and
+restarts its finite delivery owner if necessary. That owner replays unacknowledged
+notice IDs through the composer gate. Dry-run previews never start delivery, and
+a missing or fully acknowledged inbox starts no worker.

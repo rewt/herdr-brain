@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 
 const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
 const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
@@ -77,6 +78,7 @@ function fixture(t) {
     try {
       await cleanupProcesses();
       await until(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')));
+      await waitForInboxIdle(path.join(repo, '.git/supervisor/inbox.log'));
     } finally {
       for (const entry of processes.values()) killProcess(entry);
       fs.rmSync(root, { recursive: true, force: true });
@@ -122,6 +124,8 @@ test('queue refuses a lane changed while pending behind another job before valid
   fs.writeFileSync(path.join(wt, 'second.txt'), 'unreviewed work'); f.git(['add', '.'], wt); f.git(['commit', '-qm', 'New work while queued'], wt);
   const actual = f.git(['rev-parse', 'lane/second']);
   const r = f.cli(['--drain']); assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.trim().split('\n').map((line) => JSON.parse(line).outcome),
+    ['promoted', 'refused'], 'wait diagnostics leave every JSON receipt intact');
   const [first, second] = f.results();
   assert.equal(first.outcome, 'promoted'); assert.equal(second.outcome, 'refused');
   assert.equal(second.expectedHead, expected);
@@ -240,11 +244,18 @@ test('replay conflict after clean merge-tree preflight names the file in the not
   assert.equal(fs.readFileSync(path.join(bad, 'shared'), 'utf8'), 'base\n');
 });
 
-test('uncertain delivery is durable and holds later notices while promotion continues', async (t) => {
+test('capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second'); fs.writeFileSync(path.join(f.root, 'delivery-fail'), '1');
   f.launch(['first', 'second']); await until(() => f.results().length === 2);
   assert.ok(f.results().every((r) => r.outcome === 'promoted' && r.delivered === false && r.delivery_error));
-  assert.equal(f.messages().length, 1, 'lost acknowledgements never replay prompts or overtake the first notice');
+  const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
+  assert.ok(fs.existsSync(`${inbox}.owner.lock`));
+  fs.unlinkSync(path.join(f.root, 'delivery-fail'));
+  await until(() => readInbox(inbox).every((entry) => entry.state === 'sent'));
+  const texts = f.messages().map((args) => args[3]);
+  assert.ok(texts.length >= 3);
+  assert.ok(texts.slice(0, -1).every((text) => text.includes(`notice-id=${f.results()[0].delivery_id}`)));
+  assert.ok(texts.at(-1).includes(`notice-id=${f.results()[1].delivery_id}`));
 });
 
 test('project override selects supervisor and duplicate pending lanes do not repeat', async (t) => {

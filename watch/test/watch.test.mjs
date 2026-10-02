@@ -16,6 +16,7 @@ import {
   unavailableNotice,
 } from '../notice.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 
 const TEST_ENV = { ...process.env, ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
@@ -161,7 +162,10 @@ esac`);
 
 test('final watch notice waits for fake operator typing, then sends once across watcher restart', async (t) => {
   const f = watcherFixture('R-125');
-  t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  t.after(async () => {
+    await waitForInboxIdle(path.join(f.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(f.root, { recursive: true, force: true });
+  });
   const screen = path.join(f.root, 'composer');
   const inbox = path.join(f.root, '.org/supervisor/inbox.log');
   fs.writeFileSync(f.report, reportText('R-125'));
@@ -182,6 +186,30 @@ else console.log('{}');\n`, { mode: 0o755 });
   const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse).filter((args) => args[1] === 'prompt');
   assert.equal(prompts.length, 1); assert.match(prompts[0][3], /^\[org-report\] run=R-125 /);
   assert.equal(readInbox(inbox).length, 1);
+});
+test('a capped final watcher exits while its owned notice later delivers without another watcher', async (t) => {
+  const f = watcherFixture('R-132'), screen = path.join(f.root, 'composer');
+  const inbox = path.join(f.root, '.org/supervisor/inbox.log');
+  const empty = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url));
+  t.after(async () => {
+    fs.writeFileSync(screen, empty); await waitForInboxIdle(inbox);
+    fs.rmSync(f.root, { recursive: true, force: true });
+  });
+  fs.writeFileSync(f.report, reportText('R-132'));
+  fs.writeFileSync(screen, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
+  fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));
+else if(a[0]==='pane'&&a[1]==='read') process.stdout.write(fs.readFileSync(${JSON.stringify(screen)},'utf8'));
+else console.log('{}');\n`, { mode: 0o755 });
+  const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV, SUPERVISOR_INPUT_WAIT_SECONDS: '0' } });
+  assert.equal((await waitForExit(child)).code, 1);
+  assert.equal(readInbox(inbox)[0].state, 'pending');
+  assert.doesNotMatch(fs.readFileSync(f.calls, 'utf8'), /"prompt"/);
+  fs.writeFileSync(screen, empty);
+  await waitForText(inbox, /"type":"sent"/);
+  const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse).filter((args) => args[1] === 'prompt');
+  assert.equal(prompts.length, 1); assert.match(prompts[0][3], /notice-id=watch:R-132:final$/);
 });
 
 test('a report landing wakes the watcher without polling Herdr', async (t) => {

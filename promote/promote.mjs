@@ -139,7 +139,7 @@ async function deliver(job, result, queue) {
     inbox: inboxPath({ org: job.org, cwd: queue.project.canonical }),
     herdr: job.herdr, attempts: job.attempts, retrySeconds: job.retry,
     id: `promote:${job.id}`, title: 'Promotion notice undelivered',
-    log: (line) => process.stdout.write(line + '\n'),
+    log: (line) => process.stderr.write(line + '\n'),
   });
   return { ...delivery, delivery_id: deliveryId };
 }

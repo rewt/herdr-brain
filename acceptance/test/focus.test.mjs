@@ -8,16 +8,18 @@ import { spawnChild, waitForExit, killChild } from '../../test/helpers/child.mjs
 import { startFocusMonitor, assertFocus } from '../focus.mjs';
 import { HarnessLimit } from '../limits.mjs';
 
-async function fixture(t, { panes = [], workspaces = [] } = {}) {
+async function fixture(t, { panes = [], workspaces = [], startupPanes = [] } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-focus-'));
   const socketPath = path.join(root, 'server.sock');
   const serverFile = path.join(root, 'server.mjs');
   fs.writeFileSync(serverFile, `import net from 'node:net';import fs from 'node:fs';
 const subscriptions=new Set();let pane='operator:p7';
 const workspace=id=>id==='unlisted:p3'?'scratch':id.split(':')[0];
+const event=id=>({event:'pane_focused',data:{type:'pane_focused',pane_id:id,workspace_id:workspace(id)}});
 const server=net.createServer(socket=>{let buffer='';socket.setEncoding('utf8');socket.on('error',()=>{});
 socket.on('data',chunk=>{buffer+=chunk;while(buffer.includes('\\n')){const i=buffer.indexOf('\\n'),r=JSON.parse(buffer.slice(0,i));buffer=buffer.slice(i+1);
-if(r.method==='events.subscribe'){if(JSON.stringify(r.params.subscriptions)!==JSON.stringify([{type:'pane.focused'}]))throw Error('invalid native subscription shape');subscriptions.add(socket);socket.write(JSON.stringify({id:r.id,result:{type:'subscription_started'}})+'\\n');}
+if(r.method==='events.subscribe'){if(JSON.stringify(r.params.subscriptions)!==JSON.stringify([{type:'pane.focused'}]))throw Error('invalid native subscription shape');subscriptions.add(socket);socket.write(JSON.stringify({id:r.id,result:{type:'subscription_started'}})+'\\n');
+${JSON.stringify(startupPanes)}.forEach((id,i)=>setTimeout(()=>{if(!socket.destroyed)socket.write(JSON.stringify(event(id))+'\\n');},100*(i+1)));}
 else if(r.method==='pane.list')socket.write(JSON.stringify({id:r.id,result:{panes:[{pane_id:pane,workspace_id:workspace(pane),focused:true}]}})+'\\n');
 else if(r.method==='pane.get')socket.write(JSON.stringify({id:r.id,result:{pane:{pane_id:r.params.pane_id,workspace_id:workspace(r.params.pane_id)}}})+'\\n');
 else socket.write(JSON.stringify({id:r.id,error:{code:'forbidden',message:'monitor attempted a mutation'}})+'\\n');}});
@@ -25,7 +27,7 @@ socket.on('close',()=>subscriptions.delete(socket));});
 server.listen(${JSON.stringify(socketPath)},()=>console.log('ready'));
 setInterval(()=>{const file=${JSON.stringify(path.join(root, 'change'))};if(!fs.existsSync(file))return;const content=fs.readFileSync(file,'utf8');fs.unlinkSync(file);
 const change=content?JSON.parse(content):{panes:['scratch:p2','operator:p7']};
-for(const next of change.panes){pane=next;if(change.events!==false)for(const socket of subscriptions)socket.write(JSON.stringify({event:'pane_focused',data:{type:'pane_focused',pane_id:pane,workspace_id:workspace(pane)}})+'\\n');}},10);
+for(const next of change.panes){pane=next;if(change.events!==false)for(const socket of subscriptions)socket.write(JSON.stringify(event(pane))+'\\n');}},10);
 `);
   let monitor, server;
   t.after(async () => {
@@ -74,6 +76,25 @@ test('native pane_focused events catch a transient change between unchanged samp
   assert.equal(summary.changes[0].type, 'event');
   assert.throws(() => assertFocus(summary), /configured-cycle; pane run scratch:p2 worker \(requested agent start worker/);
   assert.equal(summary.changes[0].panes[0], 'scratch:p2');
+});
+
+test('native startup replay settles before the baseline and subsequent transient owned moves still fail', async (t) => {
+  const { root, monitor, change } = await fixture(t, { workspaces: ['scratch'], startupPanes: ['scratch:p1', 'operator:p7'] });
+  change(['scratch:p2', 'operator:p7']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.baseline, 'operator:p7');
+  assert.equal(summary.externalChanges.length, 0);
+  assert.equal(summary.startupEvents.length, 2);
+  assert.ok(summary.monitoringStartedAt - summary.startupEvents.at(-1).at >= 400);
+  assert.equal(summary.events, 2);
+  assert.equal(summary.changes.length, 1);
+  assert.deepEqual(summary.changes[0].workspaces, ['scratch']);
+  const rows = fs.readFileSync(path.join(root, 'focus-trace.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(rows.slice(0, 2), summary.startupEvents);
+  assert.ok(rows.filter((row) => row.type === 'sample').every((row) => row.panes[0] === 'operator:p7'));
+  assert.throws(() => assertFocus(summary), /harness-owned destination \(scratch\)/);
 });
 
 test('owned changes need no correlated call and incomplete monitoring never passes', () => {

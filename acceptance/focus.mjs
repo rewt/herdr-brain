@@ -48,7 +48,7 @@ export async function startFocusMonitor({ socketPath, evidence, ownership = path
     const receive = (value) => { if (value.kind === kind) finish(undefined, value.summary); };
     const ended = () => finish(new HarnessLimit(`focus monitor exited early: ${stderr}`));
     const failed = (error) => finish(new HarnessLimit(`focus monitor unavailable: ${error.message}`));
-    const timer = setTimeout(() => { child.kill(); finish(new HarnessLimit(`focus monitor ${kind} timeout: ${stderr}`)); }, 7000);
+    const timer = setTimeout(() => { child.kill(); finish(new HarnessLimit(`focus monitor ${kind} timeout: ${stderr}`)); }, kind === 'ready' ? 12000 : 7000);
     child.on('message', receive); child.once('exit', ended); child.once('error', failed);
   });
   const ready = await message('ready');
@@ -71,8 +71,8 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   const client = new HerdrClient({ socketPath });
   const trace = path.join(evidence, 'focus-trace.jsonl');
   const summaryPath = path.join(evidence, 'focus-summary.json');
-  const summary = { baseline: null, currentBaseline: null, samples: 0, events: 0, changes: [], externalChanges: [], errors: [], startedAt: Date.now() };
-  let stopping = false, timer, inFlight, observations = Promise.resolve();
+  const summary = { baseline: null, currentBaseline: null, samples: 0, events: 0, startupEvents: [], changes: [], externalChanges: [], errors: [], startedAt: Date.now() };
+  let stopping = false, monitoring = false, timer, inFlight, lastEventAt = 0, observations = Promise.resolve();
   const ownedPanes = new Set(), ownedWorkspaces = new Set(), paneWorkspaces = new Map();
   const append = (row) => fs.appendFileSync(trace, JSON.stringify(row) + '\n');
   const context = (at) => {
@@ -148,8 +148,17 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
     // Protocol 20 uses pane.focused for the subscription filter, but
     // pane_focused for event envelopes. HerdrClient forwards them unchanged.
     if (event.event !== 'pane_focused') return;
-    summary.events++;
+    lastEventAt = Date.now();
     if (typeof event.data?.pane_id !== 'string') { error(new Error('malformed pane_focused event')); return; }
+    if (!monitoring) {
+      // Herdr 0.8.2 replays retained lifecycle events after the acknowledgement,
+      // one per 100ms poll, without an event timestamp or public cursor. Keep
+      // them as startup diagnostics before allowing any candidate work.
+      const row = { type: 'subscription-startup', at: lastEventAt, event };
+      summary.startupEvents.push(row); append(row);
+      return;
+    }
+    summary.events++;
     if (event.data.workspace_id) paneWorkspaces.set(event.data.pane_id, event.data.workspace_id);
     void observe([event.data.pane_id], 'event');
   });
@@ -168,12 +177,22 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   process.on('message', (value) => { if (value.kind === 'stop') void finish(); });
   process.on('disconnect', () => { clearTimeout(timer); client.close(); process.exit(); });
   try {
-    await sample();
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('focus event subscription timeout')), 3000);
       client.once('ready', () => { clearTimeout(timeout); resolve(); });
       client.subscribe([{ type: 'pane.focused' }]);
     });
+    // Four quiet native polling cycles drain startup replay. A busy or broken
+    // stream times out as a harness limitation; never discard events mid-run.
+    const drainingAt = Date.now();
+    lastEventAt = Math.max(lastEventAt, drainingAt);
+    while (Date.now() - lastEventAt < 400) {
+      if (Date.now() - drainingAt >= 5000) throw new Error('focus subscription startup did not settle');
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    await sample();
+    monitoring = true;
+    summary.monitoringStartedAt = Date.now();
     await sample();
   } catch (value) { error(value); }
   process.send?.({ kind: 'ready', summary });

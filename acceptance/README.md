@@ -63,6 +63,11 @@ candidate snapshot through owned-workspace cleanup. A separate read-only process
 samples every 200 ms, including while the runner blocks in child commands, and
 subscribes to `pane.focused` and handles native `pane_focused` event envelopes
 so an owned or call-correlated change restored between samples also fails.
+Herdr 0.8.2 replays retained lifecycle events when subscribing. Before candidate
+work starts, the monitor retains these as `subscription-startup` diagnostics,
+waits for four quiet 100 ms polling cycles (bounded to five seconds), then takes
+its baseline. A stream that cannot settle is PENDING. Events are never discarded
+after monitoring starts.
 `focus-trace.jsonl`, `focus-calls.jsonl` and `focus-summary.json` retain the initial
 and current baselines, case, timestamps, samples, events and actual/requested
 Herdr calls. A move into a harness-owned pane or workspace fails, including late

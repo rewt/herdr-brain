@@ -60,7 +60,11 @@ module.exports = function () {
   const head = git('rev-parse', 'HEAD');
   const promoted = success(monitor('promote'));
   assert.match(promoted, /validating in/u);
-  assert.match(promoted, /French added/u);
+  if (/REUSE/u.test(promoted)) {
+    const gate = JSON.parse(fs.readFileSync('.lane/gate.json', 'utf8'));
+    assert.equal(gate.reused, true); assert.equal(gate.tier, 'promotion');
+    assert.match(fs.readFileSync(gate.log, 'utf8'), /French added/u);
+  } else assert.match(promoted, /French added/u);
   assert.match(promoted, /fast-forward/u);
   assert.equal(git('rev-parse', 'main'), head);
   success(monitor('finish'));

@@ -7,7 +7,7 @@ node /path/to/herdr-monitor/settle/settle.mjs R-123
 ```
 
 The foreground command discovers the canonical Git project and its record. It
-records the worker report, runs `lane check`, gets an independent `lane review`,
+records the worker report, runs `lane check --tier promotion`, gets an independent `lane review`,
 and returns one JSON result: `promotable`, `promotable_with_findings`, `fix_round`,
 or `escalate`.
 It has no dependencies and all record writes use the record CLI.
@@ -16,7 +16,10 @@ No project config is required. Routes come from the portable preset when none
 is configured. The review route follows the routes module's review selection
 policy and the run's declared pool; an independent session is required, not a
 different provider. The fix route defaults to the worker's route or `engineer`.
-Validation follows the lane CLI's project `validate`, or `npm test` default.
+Validation follows the project's declared promotion tier, the legacy `validate`,
+or the lane CLI's default. Exact tree/command/environment passes are reused, with
+the original log linked in settlement evidence. A changed tree, including the
+public review-record commit, gets a new check; an unchanged-tree rebase does not.
 Runtime `.org/` and `.lane/` exclusions use the existing project discovery helper;
 settle requires no tracked configuration. A project without a known working check
 needs its actual validation configured before it can become promotable.
@@ -68,8 +71,9 @@ validation at the resulting review-record commit. When the lane is behind the
 captured integration branch, settle prepares a plain rebase in an owned temporary
 detached worktree. It compares the replay's full tree with Git's mechanical merge
 of the captured lane diff onto that branch, including the review record. Only an
-exact match can replace the clean lane head, and validation runs again at that
-rebased head. The result retains the original reviewed commit and includes rebase
+exact match can replace the clean lane head, and validation is obtained for that
+rebased tree, reusing an identical prior pass when available. The result retains
+the original reviewed commit and includes rebase
 heads, expected/actual trees and log evidence. Changes already present upstream
 count as preserved; unrelated upstream edits can survive in the same file.
 Affected paths using custom merge drivers (including `merge.default`) receive a

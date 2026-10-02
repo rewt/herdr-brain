@@ -41,6 +41,28 @@ inspect dispatch defaults. The same dependency-free resolver supplies
 same harness, model, and effort without copied flags. Route selection policy is
 project configuration; pool and task-class names are opaque to Herdr.
 
+Declare validation tiers in tracked `.lane.validation.json` in the canonical
+checkout (or `validation` in `.lane.json`):
+
+```json
+{
+  "fast": "npm run test:fast",
+  "promotion": "npm test",
+  "release": "npm run release:gate",
+  "environment": "toolchain-or-container-revision"
+}
+```
+
+Every field is optional. Undeclared tiers use the legacy `validate` command,
+otherwise `npm test` (`node --test` for a project with `test/` and no package.json).
+The tracked file overrides individual tiers from lane config. `LANE_VALIDATE`
+overrides commands for CLI adapters; `check --cmd` wins for that invocation.
+Workers run `lane check` (fast), settle uses `lane check --tier promotion`, and
+promote uses promotion. Workers never run the release gate; the release module
+owns that declared command. `lane config`, `record desks`, the console's Desks
+screen and project-entry policy show all three tiers. Worker copies cannot weaken
+the canonical declarations.
+
 The modern console Routes screen (`u`) edits routes, adds a model as a new named
 route, switches the primary pool, changes task selections and edits dispatch or
 always arguments. These controls save through validating record commands:
@@ -115,8 +137,24 @@ lane check
 ```
 
 The command runs configured preparation and validation, then records
-`.lane/gate.json` with the full commit, command, exit status, and timing. Re-run it
+`.lane/gate.json` with the full commit, tree, tier, command, environment fingerprint,
+exit status, log and timing. Re-run it
 after the final commit so the printed `GATE <head> exit=0` names that commit.
+Passing results live under `GIT_COMMON_DIR/lane-validation/`, keyed by the tree,
+command and environment fingerprint. Repeated checks, settle, unchanged-tree
+rebases and promotion reuse the original log. Identical tier commands share proof.
+A review-record commit changes the tree and needs a new check. Failed checks,
+malformed/old receipts and altered/missing logs are never reused. Overlapping
+checks for one key refuse with a lock diagnostic; retry after the first completes.
+Crash locks require inspection of their owner and surviving processes.
+
+The fingerprint hashes Node/Git/OS identity, process environment and preparation
+definitions without saving environment values. Coordination variables (`ORG_ACTOR`,
+`ORG_DIR`, `LANE_CONFIG`, `LANE_VALIDATE`, `LANE_WORKTREE_ROOT`) and shell cwd
+bookkeeping do not invalidate proof; checks must not use them as test inputs.
+Keep validation inputs tracked and dependencies reproducible; update `environment`
+when ignored dependencies, external tools or a container image changes. Preparation
+still runs before lookup and must leave tracked and untracked files clean.
 
 The [promotion queue](../promote/README.md) runs promotion, scoped finished-tab cleanup,
 lane closure and supervisor notices in order. `lane promote` and `lane close` share
@@ -134,9 +172,10 @@ lane promote api-change
 lane close api-change
 ```
 
-`promote` dry-runs and then performs a clean rebase onto current main, runs fresh
-validation, refuses if main moved, and fast-forwards local main. It never pushes,
-merges, or treats saved review or gate data as authority. Run one promotion at a
+`promote` dry-runs and then performs a clean rebase onto current main, obtains
+passing promotion evidence for the exact tree and environment, refuses if main
+moved, and fast-forwards local main. It never pushes, merges, or treats saved
+review or the worker's gate file as promotion authority. Run one promotion at a
 time.
 
 `close` removes the clean worktree and deletes a merged branch. An unmerged branch
@@ -153,7 +192,7 @@ metadata is marked done; metadata errors never rewrite the Git result.
 | `lane routes [--for <task-class> [--pool <pool>]]` | List routes or resolve selection policy |
 | `lane config` | Print resolved configuration values and sources |
 | `lane status` | Show lane state and overlapping files |
-| `lane check [--cmd <validate command>]` | Validate and record the current clean commit |
+| `lane check [--cmd <validate command>] [--tier fast\|promotion]` | Validate or reuse evidence for the current clean tree |
 | `lane prepare <topic>` | Run missing setup steps |
 | `lane rebase-check <topic>` | Check whether promotion can rebase the lane onto main (conflicts, or a merge commit it will not flatten) |
 | `lane promote <topic>` | Rebase, validate, and fast-forward local main |

@@ -14,6 +14,8 @@ import { readReport } from '../lib/report.mjs';
 import { entryLifecycle, worktreeDirectory } from './lifecycle.mjs';
 import { projectEntrySettings } from './settings.mjs';
 import { sandboxCommand, selectSandbox } from './confinement.mjs';
+import { resolveValidation } from '../lanes/validation.mjs';
+import { createHash } from 'node:crypto';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -194,16 +196,21 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   };
   const lane = (args, location) => {
     if (!sandboxBinary) throw new Error('a native validation sandbox is required for check and promote');
-    const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace, JSON.stringify(sharedPaths)].map(quote).join(' ');
+    const current = Object.assign({}, ...routes.files.map(file => JSON.parse(fs.readFileSync(file, 'utf8'))));
+    const settings = resolveValidation({ root: project.canonical, config: current, env: {} });
+    const tier = args[0] === 'promote' || args.includes('promotion') ? 'promotion' : 'fast';
+    const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace, JSON.stringify(sharedPaths), settings.tiers[tier].command].map(quote).join(' ');
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
       ...boundedGitEnv(), LANE_CONFIG: configFile, LANE_VALIDATE: validation,
       MONITOR_PROJECT_CONFIG: path.join(project.canonical, '.lane.json'),
+      MONITOR_VALIDATION_FINGERPRINT: createHash('sha256').update(JSON.stringify([current.prepare ?? [], settings.environment])).digest('hex'),
     });
   };
   const context = () => ({ role, canonical: project.canonical, identity: project.identity, workspace,
     branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,
     routing: initial.routing ? { parent: initial.routing.parent, question: initial.routing.question } : null,
-    suggestedRoutes: initial.routes.suggested === true, requests });
+    suggestedRoutes: initial.routes.suggested === true, requests,
+    validation: resolveValidation({ root: project.canonical, config: lifecycle, env: {} }) });
   const dispatch = (request) => {
     if (!request || typeof request !== 'object' || Object.keys(request).some((k) => !['op', 'text'].includes(k))) throw new Error('unknown request fields');
     const { op, text } = request;

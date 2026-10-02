@@ -19,6 +19,7 @@ This generic workflow supplies defaults. The project's own AGENTS.md and CLAUDE.
 Project identity: ${context.identity}; canonical checkout: ${context.canonical}; shared record: ${context.org}.
 You are a ${context.role}. Your checkout is ${context.workspace}, branch ${context.branch}.
 Entry mode: ${context.entry?.mode ?? 'worker'}; integration branch: ${context.main ?? 'the configured integration branch'}; entry settings: ${context.entry?.source ?? 'installed defaults'}.
+${context.validation ? `Validation tiers: worker fast check = ${context.validation.tiers.fast.command}; settle/promotion check = ${context.validation.tiers.promotion.command}; release gate = ${context.validation.tiers.release.command}. Workers never run the release gate. Exact clean trees reuse passing checks with identical commands and environment fingerprints.` : ''}
 Read this checkout's existing agent instructions and project files. Work on the actual user task.
 ${context.role === 'worker' ? `Before edits, run: ${monitor} start 'one-sentence actual task'. Read the returned brief; it gives your run ID and exact report path.
 For a continuation of recorded work, inspect the record and use ${monitor} resume ITEM instead of adding another item. This creates a fresh run in your assigned checkout.

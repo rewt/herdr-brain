@@ -1,0 +1,119 @@
+// Validation declarations and evidence are independent of session metadata.
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
+import { acquireLock } from './promotion-lock.mjs';
+
+export const VALIDATION_TIERS = ['fast', 'promotion', 'release'];
+export const VALIDATION_FILE = '.lane.validation.json';
+const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+
+export function validateValidation(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
+  for (const [key, command] of Object.entries(value)) {
+    if (![...VALIDATION_TIERS, 'environment'].includes(key)) throw new Error(`unknown validation field: ${key}`);
+    if (typeof command !== 'string' || !command.trim()) throw new Error(`validation.${key} must be a nonempty string`);
+  }
+  return value;
+}
+
+// Always use the canonical project's declarations, never a worker's override.
+// A separate tracked file works even when .lane.json is shared machine config.
+export function resolveValidation({ root, config = {}, source = 'lane config', sources = {}, env = process.env } = {}) {
+  let declared = config.validation === undefined ? {} : validateValidation(config.validation);
+  const file = path.join(root, VALIDATION_FILE);
+  const declarationSources = Object.fromEntries(Object.keys(declared).map(key => [key, sources.validation ?? source]));
+  if (fs.existsSync(file)) {
+    const tracked = validateValidation(JSON.parse(fs.readFileSync(file, 'utf8')));
+    declared = { ...declared, ...tracked };
+    for (const key of Object.keys(tracked)) declarationSources[key] = file;
+  }
+  let fallback = config.validate ?? 'npm test';
+  if (config.validate === undefined && !fs.existsSync(path.join(root, 'package.json')) && fs.existsSync(path.join(root, 'test'))) fallback = 'node --test';
+  const tiers = {};
+  for (const tier of VALIDATION_TIERS) {
+    // Legacy overrides remain available to CLI/queue adapters for all tiers.
+    const command = env.LANE_VALIDATE ?? declared[tier] ?? fallback;
+    if (typeof command !== 'string' || !command.trim()) throw new Error(`validation.${tier} must be a nonempty string`);
+    tiers[tier] = { command, source: env.LANE_VALIDATE !== undefined ? 'env' : declarationSources[tier] ?? (config.validate !== undefined ? sources.validate ?? source : 'default') };
+  }
+  return { tiers, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
+}
+
+// Do not persist environment values (which may contain credentials). Hash all
+// command inputs except transport/cwd bookkeeping. Unlisted variables invalidate
+// reuse conservatively. Projects can salt ignored dependencies/container images
+// with validation.environment; lockfiles and scripts already belong to the tree.
+const bookkeeping = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'ORG_ACTOR', 'ORG_DIR', 'LANE_CONFIG', 'LANE_VALIDATE', 'LANE_WORKTREE_ROOT']);
+export function environmentFingerprint({ env = process.env, prepare = [], environment = '' } = {}) {
+  return digest({ version: 1, platform: process.platform, arch: process.arch, release: os.release(),
+    node: [process.execPath, process.version], shell: '/bin/sh',
+    git: execFileSync('git', ['--version'], { encoding: 'utf8' }).trim(), prepare, environment,
+    env: Object.entries(env).filter(([key, value]) => !bookkeeping.has(key) && value !== undefined).sort(([a], [b]) => a.localeCompare(b)) });
+}
+
+function captured(cwd, label = 'validated worktree') {
+  if (git(cwd, ['status', '--porcelain', '--untracked-files=all'])) throw new Error(`${label} is not clean`);
+  const branch = git(cwd, ['branch', '--show-current']);
+  if (!branch) throw new Error('current checkout is detached; check requires a branch');
+  return { head: git(cwd, ['rev-parse', 'HEAD']), tree: git(cwd, ['rev-parse', 'HEAD^{tree}']), branch };
+}
+function unchanged(cwd, before, label) {
+  let after;
+  try { after = captured(cwd, label); } catch (error) { throw new Error(`worktree changed during validation: ${error.message}`); }
+  if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
+}
+
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label }) {
+  const before = captured(cwd, label);
+  const fingerprint = environmentFingerprint({ env, prepare, environment });
+  // Identical commands across tiers prove the same thing. Tier names describe
+  // who runs a check; they do not force a second execution of identical inputs.
+  const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint });
+  const directory = plainDirectory(path.join(common, 'lane-validation'));
+  const receipt = path.join(directory, `${key}.json`), log = path.join(directory, `${key}.log`);
+  const release = acquireLock(path.join(directory, `${key}.lock`));
+  process.once('exit', release);
+  try {
+    let previous;
+    try { previous = JSON.parse(readPlainFile(receipt)); } catch { /* Missing/old/malformed evidence is a miss. */ }
+    if (previous?.schema === 'lane-validation/v1' && previous.key === key && previous.tree === before.tree &&
+        previous.command === command && previous.environment_fingerprint === fingerprint && previous.exit_code === 0 &&
+        previous.signal === null && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(previous.head ?? '') &&
+        VALIDATION_TIERS.includes(previous.tier) && previous.reused === false &&
+        Number.isFinite(Date.parse(previous.started_at)) && Number.isFinite(Date.parse(previous.finished_at)) &&
+        Date.parse(previous.finished_at) >= Date.parse(previous.started_at) &&
+        Number.isFinite(previous.duration_s) && previous.duration_s >= 0 && previous.log === log) {
+      let usable = false;
+      try { usable = digest(readPlainFile(log)) === previous.log_hash; } catch {}
+      if (usable) {
+        unchanged(cwd, before, label);
+        process.stdout.write(`REUSE tree=${before.tree} tier=${tier} command=${JSON.stringify(command)} log=${log}\n`);
+        return { ...previous, ...before, tier, reused: true, validated_head: previous.head };
+      }
+    }
+    const temporary = path.join(directory, `.${key}.${randomUUID()}.log`);
+    const fd = fs.openSync(temporary, 'wx', 0o600);
+    const startedAt = new Date(), started = process.hrtime.bigint();
+    let run;
+    try { run = spawnSync(command, { cwd, env, shell: '/bin/sh', stdio: ['inherit', fd, fd] }); }
+    finally { fs.closeSync(fd); }
+    const output = readPlainFile(temporary);
+    fs.renameSync(temporary, log);
+    process.stdout.write(output);
+    if (run.error) process.stderr.write(`${run.error.message}\n`);
+    const signal = run.signal ?? null;
+    const exitCode = run.status ?? (signal && os.constants.signals[signal] ? 128 + os.constants.signals[signal] : 1);
+    const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, environment_fingerprint: fingerprint,
+      exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
+      duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false };
+    // Failed, dirty or moving executions never become reusable green evidence.
+    unchanged(cwd, before, label);
+    writeFileAtomic(receipt, JSON.stringify(gate, null, 2) + '\n', 0o600);
+    return gate;
+  } finally { process.off('exit', release); release(); }
+}

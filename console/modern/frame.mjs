@@ -214,6 +214,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     paragraph(`Review: ${settings.review_route ?? deskFallback('review_route', doc.config)}`);
     paragraph(`Fix: ${settings.fix_route ?? deskFallback('fix_route', doc.config)}`);
     paragraph(`Round cap: ${settings.review_round_cap ?? 0} (${(settings.review_round_cap ?? 0) === 0 ? 'unlimited' : 'Moderate/Minor only'}) · review timeout ${settings.timeout ?? 1800}s`);
+    for (const [tier, value] of Object.entries(doc.validation?.tiers ?? {})) paragraph(`${tier === 'fast' ? 'Worker check' : tier === 'promotion' ? 'Promotion check' : 'Release gate'}: ${value.command} (${value.source})`);
   };
   if (s.settingsEdit) {
     const e = s.settingsEdit;

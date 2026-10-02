@@ -4,6 +4,8 @@ import { routesSnapshot, editProjectConfig } from '../lanes/routes-command.mjs';
 import { UserError } from '../lib/store.mjs';
 import { renderDesks } from '../lib/render.mjs';
 import { DESK_FIELDS, DESK_DEFAULTS, parseDeskValue, validateDeskSettings } from './config.mjs';
+import { resolveValidation } from '../lanes/validation.mjs';
+import path from 'node:path';
 
 export function desksSnapshot(cwd = process.cwd()) {
   const routes = routesSnapshot(cwd);
@@ -13,7 +15,11 @@ export function desksSnapshot(cwd = process.cwd()) {
     if (Object.hasOwn(layer, 'settle')) { settings = layer.settle; source = file; }
   }
   validateDeskSettings(settings, routes.config);
-  return { ...routes, settings, source, defaults: DESK_DEFAULTS };
+  const lifecycle = Object.assign({}, ...routes.files.map(file => JSON.parse(fs.readFileSync(file, 'utf8'))));
+  const sources = {};
+  for (const file of routes.files) for (const key of Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')))) sources[key] = file;
+  const validation = resolveValidation({ root: path.dirname(routes.target), config: lifecycle, sources, env: {} });
+  return { ...routes, settings, source, defaults: DESK_DEFAULTS, validation };
 }
 export function setProjectDesks(patch, unset = [], options = {}) {
   for (const key of [...Object.keys(patch), ...unset]) if (!DESK_FIELDS.includes(key)) throw new UserError(`unknown desk field: ${key}`);

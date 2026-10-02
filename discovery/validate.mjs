@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { validationTemporary } from './paths.mjs';
 import { lifetimeScope, closeScope, boundedArgs } from './lifetime.mjs';
 import { sandboxCommand } from './confinement.mjs';
-const [binary, cwd, sharedPathsJSON] = process.argv.slice(2);
+const [binary, cwd, sharedPathsJSON, declaredCommand] = process.argv.slice(2);
 try {
   const sharedPaths = JSON.parse(sharedPathsJSON);
   const file = process.env.MONITOR_PROJECT_CONFIG;
@@ -17,8 +17,8 @@ try {
   const has = (key) => Object.hasOwn(config, key);
   const source = (key) => has(key) ? `canonical ${file}` : `lane ${localFile}`;
   const prepare = has('prepare') ? config.prepare : localConfig.prepare;
-  let validate = has('validate') ? config.validate : localConfig.validate;
-  let validationSource = source('validate');
+  let validate = declaredCommand ?? (has('validate') ? config.validate : localConfig.validate);
+  let validationSource = declaredCommand !== undefined ? `canonical project validation (${file})` : source('validate');
   if (!validate && fs.existsSync(path.join(cwd, 'package.json'))) {
     if (JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).scripts?.test) { validate = 'npm test'; validationSource = `project ${path.join(cwd, 'package.json')}`; }
   }

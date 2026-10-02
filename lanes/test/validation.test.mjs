@@ -1,0 +1,145 @@
+import test from '../../test/helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { environmentFingerprint, resolveValidation, validateValidation } from '../validation.mjs';
+
+const cli = fileURLToPath(new URL('../lane.mjs', import.meta.url));
+function fixture(t, declaration = {}) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'validation-tiers-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const repo = path.join(root, 'repo'), workspace = path.join(root, 'worker'), log = path.join(root, 'checks');
+  fs.mkdirSync(repo);
+  const config = path.join(root, 'config.json'); fs.writeFileSync(config, '{}');
+  const env = { ...process.env, ORG_ACTOR: 'validation-tiers-test', LANE_CONFIG: config,
+    LANE_WORKTREE_ROOT: path.join(root, 'worktrees'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+    CHECK_LOG: log };
+  delete env.LANE_VALIDATE;
+  const run = (binary, args, cwd = repo, extra = {}) => spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 12000 });
+  const good = result => { assert.equal(result.status, 0, result.stderr + result.stdout); return result.stdout.trim(); };
+  const git = (args, cwd = repo) => good(run('git', args, cwd));
+  git(['init', '-qb', 'main']); git(['config', 'user.name', 'Validation fixture']); git(['config', 'user.email', 'validation@example.invalid']);
+  fs.writeFileSync(path.join(repo, '.gitignore'), '.lane/\n');
+  fs.writeFileSync(path.join(repo, 'work'), 'base\n');
+  fs.writeFileSync(path.join(repo, 'check.cjs'), `const fs=require('fs');fs.appendFileSync(process.env.CHECK_LOG,process.argv[2]+'\\n');if(process.env.RED)process.exit(7);if(process.env.DIRTY)fs.writeFileSync('work','dirty');if(process.env.MOVE)require('child_process').execFileSync('git',['commit','--allow-empty','-qm','Move during validation']);`);
+  if (Object.keys(declaration).length) fs.writeFileSync(path.join(repo, '.lane.validation.json'), JSON.stringify(declaration));
+  git(['add', '.']); git(['commit', '-qm', 'Create scratch project']);
+  git(['worktree', 'add', '-qb', 'lane/topic', workspace]);
+  const lane = (args, cwd = workspace, extra = {}) => run(process.execPath, [cli, ...args], cwd, extra);
+  const count = () => fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n') : [];
+  const gate = () => JSON.parse(fs.readFileSync(path.join(workspace, '.lane/gate.json'), 'utf8'));
+  return { root, repo, workspace, log, env, lane, git, good, count, gate };
+}
+
+test('defaults, legacy commands, partial tracked overrides and invalid declarations', { timeout: 20000 }, t => {
+  const f = fixture(t);
+  const defaults = resolveValidation({ root: f.repo, env: {} });
+  assert.deepEqual(Object.values(defaults.tiers).map(v => v.command), ['npm test', 'npm test', 'npm test']);
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ fast: 'node check.cjs fast', release: 'release-check' }));
+  const settings = resolveValidation({ root: f.repo, config: { validate: 'legacy-check' }, env: {} });
+  assert.equal(settings.tiers.promotion.command, 'legacy-check');
+  assert.equal(settings.tiers.fast.command, 'node check.cjs fast');
+  assert.equal(settings.tiers.fast.source, path.join(f.repo, '.lane.validation.json'));
+  const override = resolveValidation({ root: f.repo, env: { LANE_VALIDATE: 'override' } });
+  assert.ok(Object.values(override.tiers).every(v => v.command === 'override'));
+  for (const value of [null, [], { fast: '' }, { promotion: 1 }, { typo: 'true' }, { environment: false }]) assert.throws(() => validateValidation(value));
+  const explained = f.good(f.lane(['config']));
+  for (const tier of ['fast', 'promotion', 'release']) assert.match(explained, new RegExp(`validation\\.${tier}\\t`));
+  assert.match(f.lane(['check', '--tier', 'release']).stderr, /release gates are run by the release module/);
+});
+
+test('a worker check, promotion check and promotion reuse their exact commands; release never runs', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs fast', promotion: 'node check.cjs promotion', release: 'node check.cjs release' });
+  f.good(f.lane(['check'])); f.good(f.lane(['check']));
+  f.good(f.lane(['check', '--tier', 'promotion'])); f.good(f.lane(['check', '--tier', 'promotion']));
+  assert.deepEqual(f.count(), ['fast', 'promotion']);
+  const result = f.good(f.lane(['promote', 'topic'], f.repo));
+  assert.match(result, /REUSE/); assert.deepEqual(f.count(), ['fast', 'promotion']);
+  assert.equal(f.git(['rev-parse', 'main']), f.gate().head);
+  assert.equal(f.gate().tier, 'promotion');
+});
+
+test('same tree after empty commits and a clean rebase reuses validation across tiers', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs same', promotion: 'node check.cjs same' });
+  fs.writeFileSync(path.join(f.workspace, 'work'), 'worker\n');
+  f.git(['add', 'work'], f.workspace); f.git(['commit', '-qm', 'Implement worker tree'], f.workspace);
+  f.good(f.lane(['check'])); const original = f.gate();
+  f.git(['commit', '--allow-empty', '-qm', 'Integration metadata']);
+  const output = f.good(f.lane(['promote', 'topic'], f.repo));
+  assert.match(output, /rebased/); assert.match(output, /REUSE/);
+  assert.notEqual(f.gate().head, original.head); assert.equal(f.gate().tree, original.tree);
+  assert.equal(f.gate().validated_head, original.head); assert.deepEqual(f.count(), ['same']);
+});
+
+test('tree, command, environment, preparation and declared environment changes invalidate reuse', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs first' });
+  f.good(f.lane(['check']));
+  f.good(f.lane(['check'], f.workspace, { CHECK_VARIANT: 'changed' }));
+  f.good(f.lane(['check', '--cmd', 'node check.cjs second']));
+  fs.writeFileSync(path.join(f.workspace, 'work'), 'new tree'); f.git(['add', 'work'], f.workspace); f.git(['commit', '-qm', 'New tree'], f.workspace);
+  f.good(f.lane(['check']));
+  fs.writeFileSync(f.env.LANE_CONFIG, JSON.stringify({ prepare: [{ run: 'true' }] })); f.good(f.lane(['check']));
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ fast: 'node check.cjs first', environment: 'container-v2' })); f.good(f.lane(['check']));
+  assert.deepEqual(f.count(), ['first', 'first', 'second', 'first', 'first', 'first']);
+  const a = environmentFingerprint({ env: { ORG_ACTOR: 'worker', PWD: '/worker', SECRET: 'one' } });
+  assert.equal(a, environmentFingerprint({ env: { ORG_ACTOR: 'settle', PWD: '/canonical', SECRET: 'one' } }));
+  assert.notEqual(a, environmentFingerprint({ env: { SECRET: 'two' } }));
+  assert.equal(fs.readFileSync(path.join(f.workspace, '.lane/gate.json'), 'utf8').includes('SECRET'), false);
+});
+
+test('red, signal, dirty and moved-head executions never supply reusable green evidence', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs check' });
+  for (let i = 0; i < 2; i++) assert.equal(f.lane(['check'], f.workspace, { RED: '1' }).status, 7);
+  assert.deepEqual(f.count(), ['check', 'check']);
+  assert.equal(f.lane(['check', '--cmd', 'kill -9 $$']).status, 137);
+  assert.equal(f.gate().exit_code, 137);
+  assert.match(f.lane(['check'], f.workspace, { DIRTY: '1' }).stderr, /not clean/);
+  f.git(['checkout', '--', 'work'], f.workspace);
+  assert.match(f.lane(['check'], f.workspace, { MOVE: '1' }).stderr, /changed during validation/);
+  f.good(f.lane(['check'])); assert.equal(f.gate().reused, false);
+  fs.writeFileSync(path.join(f.workspace, 'work'), 'user dirt');
+  assert.match(f.lane(['check']).stderr, /not clean/);
+});
+
+test('worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs check' });
+  fs.mkdirSync(path.join(f.workspace, '.lane')); fs.writeFileSync(path.join(f.workspace, '.lane/gate.json'), JSON.stringify({ exit_code: 0 }));
+  f.good(f.lane(['check'])); const first = f.gate();
+  const receipt = path.join(f.repo, '.git/lane-validation', first.key + '.json');
+  fs.writeFileSync(receipt, JSON.stringify({ ...first, schema: 'old-gate' }));
+  f.good(f.lane(['check']));
+  fs.writeFileSync(receipt, 'broken json'); f.good(f.lane(['check']));
+  fs.writeFileSync(f.gate().log, 'different evidence'); f.good(f.lane(['check']));
+  assert.deepEqual(f.count(), ['check', 'check', 'check', 'check']);
+});
+
+test('a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs canonical', promotion: 'node check.cjs canonical' });
+  fs.writeFileSync(path.join(f.workspace, '.lane.validation.json'), JSON.stringify({ fast: 'true', promotion: 'true' }));
+  f.git(['add', '.'], f.workspace); f.git(['commit', '-qm', 'Worker override'], f.workspace);
+  f.good(f.lane(['check'])); assert.equal(f.gate().command, 'node check.cjs canonical');
+  fs.writeFileSync(path.join(f.repo, 'upstream'), 'new main file'); f.git(['add', 'upstream']); f.git(['commit', '-qm', 'Upstream tree change']);
+  f.good(f.lane(['promote', 'topic'], f.repo));
+  assert.deepEqual(f.count(), ['canonical', 'canonical']);
+});
+
+test('overlapping checks serialize evidence without running the same command twice', { timeout: 20000 }, async t => {
+  const f = fixture(t, { fast: 'node wait.cjs' });
+  const ready = path.join(f.root, 'ready'), release = path.join(f.root, 'release');
+  fs.writeFileSync(path.join(f.workspace, 'wait.cjs'), `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},'ready');let deadline=Date.now()+8000;while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);if(!fs.existsSync(${JSON.stringify(release)}))process.exit(8);`);
+  f.git(['add', 'wait.cjs'], f.workspace); f.git(['commit', '-qm', 'Bounded blocking check'], f.workspace);
+  const child = spawnChild(t, process.execPath, [cli, 'check'], { cwd: f.workspace, env: f.env });
+  const done = waitForExit(child);
+  try {
+    const deadline = Date.now() + 5000;
+    while (!fs.existsSync(ready) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(fs.existsSync(ready));
+    const second = f.lane(['check']); assert.equal(second.status, 1); assert.match(second.stderr, /locked/);
+  } finally { fs.writeFileSync(release, 'finish'); }
+  const result = await done; assert.equal(result.code, 0, result.stderr);
+  assert.match(f.good(f.lane(['check'])), /REUSE/);
+});

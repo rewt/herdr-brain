@@ -209,8 +209,12 @@ read-only exclusions for the selected record (including resolved symlink targets
 and the canonical `.lane` state, so preparation or validation cannot overwrite
 ignored shared state from the main checkout. Its dedicated validation temporary
 directory remains writable. The default check is the project's
-`npm test`, or `node --test` for a Node test directory. Unknown validation asks for
-the real project command in `.lane.json`; it never substitutes a trivial check.
+`npm test`, or `node --test` for a Node test directory. Projects can declare fast,
+promotion and release commands in tracked canonical `.lane.validation.json` (or
+`validation` in `.lane.json`). Entry tells workers the effective tiers; check uses
+fast, promote uses promotion, and workers never run release. Passing exact trees
+reuse their command/environment evidence, with original logs retained. Configure
+the real project command when these defaults do not apply.
 Installs containing Codex retain its validation provider and restrictive managed
 requirements; Claude-only installs select a host provider as described below.
 Canonical `validate` and `prepare` fields are authoritative independently; lane

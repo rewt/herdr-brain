@@ -181,7 +181,8 @@ configuration.
 key<TAB>JSON-value<TAB>source
 ```
 
-It reports `dispatch`, `main`, `prepare`, `registry`, `seams_doc`, `validate`, the
+It reports `dispatch`, `main`, `prepare`, `registry`, `seams_doc`, `validate`,
+`validation.fast`, `validation.promotion`, `validation.release`, `validation.environment`, the
 fully resolved per-repository `worktree_root`, and one `routes.<name>` row per merged
 route. Rows are sorted by key; JSON values stay on one line. Each source is `env`,
 `default`, or the absolute defining file path. A parent-derived `.worktrees` default
@@ -193,10 +194,13 @@ each TSV record remains one line with three fields.
 
 ## Check
 
-`lane check [--cmd <validate command>]` validates the current clean worktree and
-records the result against its exact commit. The command is resolved in the same
-order as promotion: `.lane.json` `validate`, otherwise `npm test`, with
-`LANE_VALIDATE` overriding either. `--cmd` overrides the command for that run and
+`lane check [--cmd <validate command>] [--tier fast|promotion]` validates the current
+clean worktree and records the result against its exact tree and current commit.
+The worker default is fast; settle and promote use promotion. The canonical
+checkout's tracked `.lane.validation.json` overrides individual commands from
+`.lane.json` `validation`. Undeclared tiers use legacy `validate`, otherwise
+`npm test` (or `node --test` with `test/` and no package.json).
+`LANE_VALIDATE` overrides every tier. `--cmd` overrides the command for that run and
 is recorded verbatim. Before validation, `check` runs the configured `prepare`
 steps in the current worktree just as `promote` does.
 
@@ -205,7 +209,7 @@ is non-empty. `lane check` writes `.lane/gate.json`; Git must ignore `.lane/`, e
 through the target repository's `.gitignore` or the operator's global excludes file,
 or the gate makes the worktree dirty and blocks the next `lane check` and
 `lane promote`. After validation, `check` atomically writes the gate file even when
-validation fails:
+validation fails, provided the worktree and branch remain unchanged:
 
 ```json
 {
@@ -230,6 +234,17 @@ uses the shell convention 128 plus that signal's number.
 Run `lane check` again after the last commit. The `GATE` line pasted into a report
 must read `exit=0 @<head7>` against the lane's current HEAD before handoff. Because
 `.lane/gate.json` is untracked, re-running the check does not dirty the worktree.
+
+The gate also names `tree`, `tier`, `environment_fingerprint`, `key`, `log` and
+`reused`. Passing evidence is stored in `GIT_COMMON_DIR/lane-validation/`, keyed by
+tree, command and fingerprint, with a content-checked log. Equal commands across
+tiers can share evidence. An unchanged-tree rebase refreshes the gate's current
+head but preserves `validated_head` and original timing; a changed tree reruns.
+Worker gate files are display evidence and never cache authority. Failed/old/
+malformed receipts, missing/modified logs and dirty or moving trees do not reuse.
+Per-key locks prevent overlapping execution; a busy check refuses and a crash
+lock requires inspection. See the [lane guide](../README.md) for environment
+inputs, ignored dependency revisions and the repository's declared tiers.
 
 ## Workspace setup
 
@@ -589,8 +604,9 @@ shared files: lane/api-change × lane/docs-change: src/client.js
 Run only one promotion at a time.
 
 Independent review and promotion authority remain the caller's responsibility;
-`promote` runs fresh validation and does not enforce a saved review verdict or
-consume a saved gate as approval. Run it from the canonical checkout on the
+`promote` obtains passing promotion evidence for the exact tree and environment,
+reusing a matching pass. It does not enforce a saved review verdict or consume a
+worker gate as approval. Run it from the canonical checkout on the
 configured integration branch.
 
 ## Close and resume

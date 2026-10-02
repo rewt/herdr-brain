@@ -191,7 +191,7 @@ function escalate(reason) {
     options: ['continue with a correction', 'change scope', 'ask the operator with these findings'] });
 }
 function validate(name) {
-  const r = call(cli('lane', '../lanes/lane.mjs'), ['check'], job.workspace);
+  const r = call(cli('lane', '../lanes/lane.mjs'), ['check', '--tier', 'promotion'], job.workspace);
   job.validation = { log: evidence(`${name}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`), exit_code: r.status, error: r.error?.message ?? null };
   save(); return !r.error && r.status === 0;
 }
@@ -440,6 +440,9 @@ function main() {
         if (stale) return escalate(stale);
         unchanged(); cleanCanonical();
         if (activeWork().length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed; inspect current work and blockers');
+        if (!validate('readiness-validation')) return escalate('Promotion validation no longer passes; inspect the current command and environment');
+        unchanged(); cleanCanonical();
+        job.result.validation = job.validation; save();
       }
       if (!opt['fix-findings']) { print(); return; }
       record(['note', id, `Supervisor requested another correction after capped review round ${job.reviewPolicy.round} (cap ${job.reviewPolicy.cap}); findings ${job.review.path}; reviewed ${job.head}`, '--decision']);

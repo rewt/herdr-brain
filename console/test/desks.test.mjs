@@ -35,6 +35,7 @@ test('desks are inspectable without setup and every confirmed setting lands thro
   await s.refresh(); await s.key('S');
   for (const cols of [80, 100, 140]) assert.match(render(s, cols), /Round cap: 0 \(unlimited\)/);
   assert.equal(fs.existsSync(f.target), false); assert.equal(fs.existsSync(path.join(f.cwd, '.org')), false);
+  for (const text of ['Worker check: npm test', 'Promotion check: npm test', 'Release gate: npm test']) assert.ok(render(s).includes(text));
   await s.activate('desks-edit');
   for (const [i, value] of ['review-codex', 'engineer-xhigh', '3', '75', 'true', 'opaque-supervisor'].entries()) await field(s, i, value);
   await s.key('', { return: true });
@@ -50,6 +51,20 @@ test('desks are inspectable without setup and every confirmed setting lands thro
   await s.activate('settings-cancel'); assert.equal(fs.readFileSync(f.target, 'utf8'), bytes);
   await s.activate('desks-edit'); await field(s, 2, ''); await save(s);
   assert.equal(Object.hasOwn(JSON.parse(fs.readFileSync(f.target)).settle, 'review_round_cap'), false); assert.match(render(s), /Round cap: 0 \(unlimited\)/);
+});
+
+test('desks show canonical tracked validation tiers without changing configuration', async t => {
+  const f = fixture(t);
+  const file = path.join(f.cwd, '.lane.validation.json');
+  fs.writeFileSync(file, JSON.stringify({ fast: 'fast-check', promotion: 'promotion-check', release: 'release-check' }));
+  f.git(['add', '.lane.validation.json']); f.git(['commit', '-qm', 'Declare validation tiers']);
+  const bytes = fs.readFileSync(file, 'utf8');
+  await f.s.refresh(); await f.s.key('S');
+  for (const cols of [80, 100, 140]) for (const command of ['fast-check', 'promotion-check', 'release-check']) assert.ok(render(f.s, cols).includes(command));
+  const snapshot = desksSnapshot(f.cwd);
+  assert.equal(snapshot.validation.tiers.fast.source, fs.realpathSync(file));
+  assert.match(f.org(['desks']), /validation.promotion: promotion-check/);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes); assert.equal(fs.existsSync(f.target), false);
 });
 
 test('stale, invalid and redirected desk edits preserve bytes; parent settings use whole-object precedence', async t => {

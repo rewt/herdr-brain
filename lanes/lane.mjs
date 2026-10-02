@@ -16,7 +16,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeFileSync,
 } from "node:fs";
-import { constants as osConstants, homedir, hostname, userInfo } from "node:os";
+import { homedir, hostname, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,7 @@ import { acquireLock } from "./promotion-lock.mjs";
 import { withPromotionGuard } from '../promote/guard.mjs';
 import { ROUTE_PRESET } from './preset.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
+import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree } from './validation.mjs';
 
 import {
   markTopicSessionsDone,
@@ -218,6 +219,9 @@ function validateDispatch(config, label, file, { route = false } = {}) {
 
 function validateConfig(config, file) {
   if (!isRecord(config)) fail(`invalid lane config ${file}: top level must be an object`);
+  if (config.validation !== undefined) {
+    try { validateValidation(config.validation); } catch (error) { fail(`invalid lane config ${file}: ${error.message}`); }
+  }
   try {
     validateRoutesConfig(config, { references: false });
   } catch (error) {
@@ -362,6 +366,10 @@ const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE }
   };
 })();
 const DEFAULT_VALIDATE = CONFIG.validate ?? "npm test";
+function validationSettings() {
+  try { return resolveValidation({ root: REPO_ROOT, config: CONFIG, sources: Object.fromEntries(CONFIG_SOURCES) }); }
+  catch (error) { fail(`invalid validation config: ${error.message}`); }
+}
 const TOOL_ROOT = dirname(fileURLToPath(import.meta.url));
 
 function fail(message) {
@@ -425,6 +433,7 @@ function routes(argv = []) {
 }
 
 function config() {
+  const validation = validationSettings();
   const rows = [
     ["always_args", CONFIG.always_args ?? {}, CONFIG_SOURCES.get("always_args") ?? "default"],
     ["authority", CONFIG.authority ?? null, CONFIG_SOURCES.get("authority") ?? "default"],
@@ -441,6 +450,8 @@ function config() {
       process.env.LANE_VALIDATE !== undefined ? "env" : (CONFIG_SOURCES.get("validate") ?? "default"),
     ],
     ["worktree_root", WORKTREE_ROOT, WORKTREE_ROOT_SOURCE],
+    ...VALIDATION_TIERS.map(tier => [`validation.${tier}`, validation.tiers[tier].command, validation.tiers[tier].source]),
+    ['validation.environment', validation.environment, validation.environment_source],
   ];
   for (const name of routeNames()) {
     rows.push([`routes.${name}`, configuredRoutes()[name], ROUTE_SOURCES.get(name)]);
@@ -2128,17 +2139,21 @@ function prepareWorktree(path, { quiet = false } = {}) {
 
 function check(args) {
   repositoryRoot({ requiredBy: "check" });
-  let command = process.env.LANE_VALIDATE ?? DEFAULT_VALIDATE;
+  let tier = 'fast', override;
   for (let index = 0; index < args.length; index += 1) {
-    if (args[index] !== "--cmd") {
+    if (!["--cmd", "--tier"].includes(args[index])) {
       fail(`usage: lane check [--cmd <validate command>] (unknown option: ${args[index]})`);
     }
     if (args[index + 1] === undefined || args[index + 1] === "") {
       fail("usage: lane check [--cmd <validate command>]");
     }
-    command = args[index + 1];
+    if (args[index] === '--tier') tier = args[index + 1];
+    else override = args[index + 1];
     index += 1;
   }
+  if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by the release module');
+  const settings = validationSettings();
+  const command = override ?? settings.tiers[tier].command;
 
   requireClean(REPO, "current worktree");
   const head = git(["rev-parse", "HEAD"]);
@@ -2146,29 +2161,15 @@ function check(args) {
   if (branch === "") fail("current checkout is detached; check requires a branch");
 
   prepareWorktree(REPO);
-  const startedAt = new Date();
-  const started = process.hrtime.bigint();
-  const run = spawnSync(command, { cwd: REPO, shell: true, stdio: "inherit" });
-  const finishedAt = new Date();
-  const durationS = Number(process.hrtime.bigint() - started) / 1_000_000_000;
-  const signal = run.signal ?? null;
-  const signalNumber = signal === null ? undefined : osConstants.signals[signal];
-  const exitCode = run.status ?? (signalNumber === undefined ? 1 : 128 + signalNumber);
-  const gate = {
-    head,
-    branch,
-    command,
-    exit_code: exitCode,
-    signal,
-    started_at: startedAt.toISOString(),
-    finished_at: finishedAt.toISOString(),
-    duration_s: durationS,
-  };
+  if (git(['rev-parse', 'HEAD']) !== head || git(['branch', '--show-current']) !== branch) fail('worktree branch or lane tip changed during preparation');
+  let gate;
+  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
+  catch (error) { fail(error.message); }
   const directory = join(REPO, ".lane");
   const path = join(directory, "gate.json");
   writeAgentFileAtomic(path, `${JSON.stringify(gate, null, 2)}\n`);
-  process.stdout.write(`GATE ${head} exit=${exitCode} (${durationS.toFixed(3)}s)\n`);
-  process.exit(exitCode);
+  process.stdout.write(`GATE ${head} exit=${gate.exit_code} (${gate.duration_s.toFixed(3)}s)\n`);
+  process.exit(gate.exit_code);
 }
 
 function withPromotionLock(operation) {
@@ -2233,11 +2234,19 @@ function promoteLocked(topic, root, options) {
   }
   prepareWorktree(path);
   guard();
-  const validate = process.env.LANE_VALIDATE ?? DEFAULT_VALIDATE;
+  const settings = validationSettings();
+  const validate = settings.tiers.promotion.command;
   process.stdout.write(`validating in ${path}: ${validate}\n`);
   const validatedHead = git(["rev-parse", branch]);
-  const run = spawnSync(validate, { cwd: path, shell: true, stdio: "inherit" });
-  if (run.status !== 0) fail(`validation failed (exit ${run.status}); nothing merged`);
+  let gate;
+  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
+  catch (error) { fail(error.message); }
+  // Promotion must also work in a project that has never run lane check and
+  // does not ignore .lane/. Its authoritative receipt already lives in Git.
+  if (tryGit(['check-ignore', '--quiet', '.lane/gate.json'], { cwd: path, silent: true }) !== undefined) {
+    writeAgentFileAtomic(join(path, '.lane', 'gate.json'), JSON.stringify(gate, null, 2) + '\n');
+  }
+  if (gate.exit_code !== 0) fail(`validation failed (exit ${gate.exit_code}); nothing merged`);
   if (git(["rev-parse", MAIN]) !== mainHead) {
     fail(`${MAIN} moved during validation; re-run promote`);
   }
@@ -2485,6 +2494,7 @@ switch (command) {
         `  status           list open lanes vs ${MAIN}\n` +
         "  check [--cmd <validate command>]\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
+        "                   --tier fast (worker default) or promotion (settle); reuse exact trees\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

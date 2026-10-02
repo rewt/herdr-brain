@@ -197,6 +197,24 @@ test('entry-only configuration preserves the portable route suggestion and pendi
   assert.equal(a.context().suggestedRoutes, true);
   assert.equal(a.context().routing.question, b.context().routing.question);
 });
+
+test('entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check', { timeout: 20000 }, t => {
+  const f = fixture(t, { main: 'trunk' });
+  const declaration = path.join(f.repo, '.lane.validation.json');
+  fs.writeFileSync(declaration, JSON.stringify({ fast: 'fast-check', promotion: 'promotion-check', release: 'release-only' }));
+  command('git', ['add', '.lane.validation.json'], f.repo); command('git', ['commit', '-qm', 'Declare entry tiers'], f.repo);
+  const sandbox = path.join(f.scratch, 'sandbox'), log = path.join(f.scratch, 'checks');
+  fs.writeFileSync(sandbox, `#!${process.execPath}\nrequire('fs').appendFileSync(${JSON.stringify(log)},process.argv.at(-1)+'\\n');process.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2),[process.execPath,'-e','']));`, { mode: 0o755 });
+  const entry = f.open({ sandboxBinary: sandbox }), current = entry.dispatch({ op: 'start', text: 'Check entry tiers' });
+  assert.equal(entry.context().validation.tiers.fast.command, 'fast-check');
+  assert.match(entryPolicy(entry.context(), product), /Workers never run the release gate/);
+  fs.mkdirSync(path.dirname(current.report), { recursive: true });
+  fs.writeFileSync(current.report, `---\nrun: ${current.run}\noutcome: done\nsummary: Checked entry tiers.\nblockers: []\nproposals: []\nartifacts: []\n---\n`);
+  entry.dispatch({ op: 'commit', text: 'Commit entry report' });
+  entry.dispatch({ op: 'check' }); assert.match(entry.dispatch({ op: 'check' }), /REUSE/);
+  entry.dispatch({ op: 'promote' });
+  assert.equal(fs.readFileSync(log, 'utf8'), 'fast-check\npromotion-check\n');
+});
 test('entry settings use canonical Git identity and do not inherit parent or worker config', (t) => {
   const f = fixture(t, { entry: { mode: 'worker', policy: 'Canonical project policy.' } });
   fs.writeFileSync(path.join(f.scratch, '.lane.json'), JSON.stringify({ entry: { enabled: false }, main: 'trunk' }));

@@ -86,7 +86,7 @@ Tracked `/project/.promote.json` may contain `to`, `delivery_attempts`,
 the promotion config's validation override. `LANE_CONFIG` retains the lane CLI's
 explicit config selection. Request overrides are saved per entry, so a subsequent
 enqueuer does not inherit the first enqueuer's gate or supervisor. With no gate
-override, lane configuration is resolved when promotion runs. `--herdr` and
+override, lane configuration's promotion tier is resolved when promotion runs. `--herdr` and
 `--lane-cli` are CLI adapter hooks for isolated tests.
 
 ## Evidence and recovery

@@ -1,5 +1,5 @@
 import test from '../../test/helpers/bounded-test.mjs';
-import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { spawnChild, waitForExit, childProcessEntry } from '../../test/helpers/child.mjs';
 import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -47,9 +47,12 @@ function fixture(t) {
   const cli = (args, cwd = repo) => {
     const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: 10000 });
     const owner = path.join(queue.directory, 'worker.lock/owner.json');
-    if (fs.existsSync(owner)) {
+    if (result.status === 0 && fs.existsSync(owner)) {
       const pid = JSON.parse(fs.readFileSync(owner, 'utf8')).pid;
-      if (!processes.has(pid)) processes.set(pid, registerProcess(pid));
+      if (!processes.has(pid)) registerProcess(pid, true, undefined, (entry) => {
+        assert.ok(entry.command.includes(CLI) && entry.command.includes(repo), 'acknowledged worker command belongs to this fixture');
+        processes.set(pid, entry);
+      });
     }
     return result;
   };
@@ -69,7 +72,7 @@ function fixture(t) {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, onCleanup: (fn) => { cleanupProcesses = fn; } };
+  return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, ownedProcess: (pid) => processes.get(pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
 
 test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
@@ -353,10 +356,11 @@ console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
 function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { if (error.code === 'ESRCH') return false; throw error; }
 }
-async function killCreated(pid) {
-  if (!pid) return;
-  try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
-  await until(() => !alive(pid));
+async function killCreated(entry) {
+  if (!entry) return;
+  const result = killProcess({ ...entry, group: false });
+  assert.equal(result.ok, true, `identity lookup failed for ${entry.pid}; no signal sent`);
+  await until(() => !alive(entry.pid));
 }
 
 test('crash during actual saved promoted phase never repeats gate or deletes the lane, even with legacy freshness', async (t) => {
@@ -364,18 +368,21 @@ test('crash during actual saved promoted phase never repeats gate or deletes the
   const gates = path.join(f.root, 'gates');
   const validate = `${process.execPath} -e 'require("fs").appendFileSync(${JSON.stringify(gates)}, "gate\\n")'`;
   const request = f.launch(['first', '--org', blocked.org, '--validate', validate]);
+  let blockedEntry;
   const stop = async () => {
     fs.writeFileSync(blocked.release, 'release');
-    await killCreated(request.worker.pid);
-    if (fs.existsSync(blocked.marker)) await killCreated(Number(fs.readFileSync(blocked.marker, 'utf8')));
+    await killCreated(f.ownedProcess(request.worker.pid));
+    await killCreated(blockedEntry);
     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
   };
   f.onCleanup(stop);
   await until(() => fs.existsSync(blocked.marker));
+  blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
+  assert.ok(blockedEntry.command.includes(f.herdr), 'birth command belongs to the created cleanup fixture');
   const saved = f.queue.load().current;
   // This is the actual checkpoint written after the real lane CLI fast-forward.
-  await killCreated(request.worker.pid);
-  await killCreated(Number(fs.readFileSync(blocked.marker, 'utf8')));
+  await killCreated(f.ownedProcess(request.worker.pid));
+  await killCreated(blockedEntry);
   fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true });
   fs.writeFileSync(blocked.release, 'release');
   assert.equal(saved.phase, 'promoted');
@@ -400,21 +407,25 @@ test('direct gate overlapping queued cleanup prevents queue and direct close fro
   const script = path.join(f.root, 'direct-gate.mjs');
   fs.writeFileSync(script, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));
 while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);\n`);
-  let direct;
+  let direct, blockedEntry, gateEntry;
   f.onCleanup(async () => {
     fs.writeFileSync(blocked.release, 'release'); fs.writeFileSync(release, 'release');
-    await killCreated(request.worker.pid);
-    await killCreated(direct?.pid);
-    for (const marker of [blocked.marker, ready]) if (fs.existsSync(marker)) await killCreated(Number(fs.readFileSync(marker, 'utf8')));
+    await killCreated(f.ownedProcess(request.worker.pid));
+    await killCreated(childProcessEntry(direct));
+    for (const entry of [blockedEntry, gateEntry]) await killCreated(entry);
     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
   });
   await until(() => fs.existsSync(blocked.marker));
+  blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
+  assert.ok(blockedEntry.command.includes(f.herdr));
   const tip = f.git(['rev-parse', 'lane/first']);
   direct = spawnChild(t, process.execPath, [LANE, 'promote', 'first'], { cwd: f.repo,
     env: { ...f.env, LANE_VALIDATE: `${process.execPath} ${script}` }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; direct.stdout.on('data', (v) => { output += v; }); direct.stderr.on('data', (v) => { output += v; });
   const exited = waitForExit(direct);
   await until(() => fs.existsSync(ready));
+  gateEntry = registerProcess(Number(fs.readFileSync(ready, 'utf8')), false);
+  assert.ok(gateEntry.command.includes(script));
   fs.writeFileSync(blocked.release, 'release');
   await until(() => f.results().length === 1);
   assert.equal(direct.exitCode, null, 'the direct gate is still in progress');

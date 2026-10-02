@@ -4,17 +4,24 @@ import { registerProcess, killProcess } from './processes.mjs';
 const children = new WeakMap();
 const processes = new WeakMap();
 
-// A separate process group lets cleanup reap fixture shells and their sleeps,
-// even after the direct child has exited. Only groups created here are killed.
-export function killChild(child) {
-  if (!child.pid) return;
-  killProcess(processes.get(child));
+export const childProcessEntry = (child) => processes.get(child);
+
+// A separate group lets cleanup reap fixture shells and their sleeps while its
+// exact leader is confirmed alive. A vanished leader never licenses a signal.
+export function killChild(child, signal = 'SIGKILL') {
+  if (!child.pid) return { ok: true, signaled: false };
+  return killProcess(processes.get(child), signal);
 }
 
 export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15_000) throw new Error('child timeout must be 1..15000ms');
   const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options, detached: process.platform !== 'win32' });
-  if (child.pid) processes.set(child, registerProcess(child.pid));
+  let rollback = false;
+  child.kill = (signal = 'SIGTERM') => {
+    const sent = killProcess({ ...processes.get(child), group: false }, signal).signaled ?? false;
+    if (sent) child.killed = true;
+    return sent;
+  };
   let stdout = '', stderr = '', timer;
   const result = new Promise((resolve, reject) => {
     child.stdout?.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
@@ -39,10 +46,23 @@ export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
     clearTimeout(timer);
     t.signal.removeEventListener('abort', abort);
     const live = child.exitCode === null && child.signalCode === null;
-    killChild(child);
+    const cleanup = killChild(child);
+    if (!cleanup.ok || cleanup.reason === 'changed') {
+      // A refused lookup must neither authorize a signal nor leave teardown
+      // awaiting an unconfirmed process forever. Its journal remains available.
+      child.stdout?.destroy(); child.stderr?.destroy(); child.unref();
+      throw new Error(`${t.name}: child cleanup unconfirmed; no signal sent to ${child.pid}`);
+    }
     await result;
-    if (live) throw new Error(`${t.name}: left child running: ${command} ${args.join(' ')}`);
+    if (live && !rollback) throw new Error(`${t.name}: left child running: ${command} ${args.join(' ')}`);
   });
+  try {
+    if (child.pid) registerProcess(child.pid, process.platform !== 'win32', undefined, (entry) => processes.set(child, entry));
+  } catch (error) {
+    rollback = true;
+    killChild(child);
+    throw error;
+  }
   return child;
 }
 

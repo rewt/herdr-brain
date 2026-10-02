@@ -162,10 +162,12 @@ test('a parent killed during ownership handoff cannot launch an unregistered nat
   const source = `import fs from 'node:fs';
 import {createEntry} from ${JSON.stringify(path.join(product, 'discovery/runtime.mjs'))};
 import {spawnNative} from ${JSON.stringify(path.join(product, 'discovery/session.mjs'))};
+import {registerProcess,killProcess} from ${JSON.stringify(path.join(product, 'test/helpers/processes.mjs'))};
+const owner=registerProcess(process.pid,false);
 const entry=createEntry(${JSON.stringify(f.options)}),context=entry.context();
 fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify(context));
 fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
-spawnNative({...entry,attachChild(){process.kill(process.pid,'SIGKILL')}},process.execPath,
+spawnNative({...entry,attachChild(){killProcess(owner)}},process.execPath,
  ['-e',${JSON.stringify(`require('fs').writeFileSync(${JSON.stringify(escaped)},'unregistered child started')`)}],{cwd:context.workspace});`;
   const owner = childProcess(t, process.execPath, ['--input-type=module', '-e', source], { cwd: f.repo });
   const result = await owner.ended; assert.equal(result.signal, 'SIGKILL');

@@ -318,12 +318,22 @@ prints the selected files.
 
 New tests should import `test/helpers/bounded-test.mjs` instead of `node:test`.
 Use `spawnChild(t, ...)` and `waitForExit(child)` from `test/helpers/child.mjs`
-for fixture processes: output and completion are captured immediately, teardown
-kills the fixture process group on success or failure, and returning with a live
-child fails the named test. Register intentionally detached fixture PIDs with
+for fixture processes: output, completion and rollback are installed before
+registration, and returning with a live child fails the named test. Register intentionally detached fixture PIDs with
 `test/helpers/processes.mjs` before assertions, so the outer watchdog can also
-clean them up when a blocked test cannot run teardown. The runner executes four
-test files at a time; all tests remain offline and make no model calls.
+clean them up when a blocked test cannot run teardown. An independent guardian
+stops registry producers before reading their final ledger. It also discovers
+detached descendants spawned just before registration; a replacement reaper
+handles unexpected guardian loss. File deadlines delegate to this cleanup so
+they cannot kill a producer in the middle of an unrecorded spawn.
+
+Every helper signal requires a fresh successful lookup matching both the owned
+start time and full command. Group signals additionally require the same live
+group leader. Failed, timed-out or incomplete lookups never authorize a signal;
+they are reported, fail cleanup, and retain the registry for inspection. A dead
+leader's historical group number is never signaled. Batch enumeration does not
+replace the immediate check before each signal. The runner executes four test
+files at a time; all tests remain offline and make no model calls.
 
 ### Legacy compatibility console
 

@@ -19,6 +19,10 @@
   It discovers the project and record; no housekeeping config is required. For
   worker checks or tasks that forbid live pane mutations, use `--once --dry-run`
   with `--state-dir "$PWD/.lane/housekeeping-preview"` instead.
+- The release acceptance harness (`acceptance/run.mjs`) runs once per release candidate, not per lane
+  (operator, 2026-10-02). In a lane, run `npm test` (and `npm run test:lanes` when `lanes/` changes);
+  never run the live harness. A lane that changes `acceptance/` itself runs its offline tests and at most
+  one `--skip-live` pass.
 - bch-cloak runs `contrib/settle-watch.mjs` from this checkout by absolute path, with `--model` and
   `--effort`. Keep that file's path, flags and behaviour until bch-cloak's release-gated switch (ENG-64).
 

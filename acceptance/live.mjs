@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import { permissionArgs, sessionEnv, policyWitness } from './security.mjs';
 import { boundaryScript, liveSocket } from './probe.mjs';
-import { HarnessLimit, ProductBoundary, isHarnessBoundary, isProductBoundary, commandFailure } from './limits.mjs';
+import { HarnessLimit, isHarnessBoundary, isProductBoundary, commandFailure } from './limits.mjs';
 import { createVerification } from './verify.mjs';
 
 export async function discovery({ root, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
@@ -75,7 +75,7 @@ export async function discovery({ root, discoveryRoots, evidence, candidate, opt
       fs.chmodSync(native, 0o755);
       run(process.execPath, [installer, '--bin', entryBin, '--codex', native], { isolatedEnv: clean });
       spec.entryBinary = path.join(entryBin, 'monitor-codex');
-      if (!fs.existsSync(spec.entryBinary)) throw new ProductBoundary('acceptance_product_boundary: candidate installer did not expose its documented monitor-codex entry');
+      if (!fs.existsSync(spec.entryBinary)) throw new Error('candidate installer did not expose its documented monitor-codex entry');
       spec.path = `${entryBin}:${spec.path}`;
       write(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
     }

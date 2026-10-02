@@ -45,3 +45,12 @@ test('cleanup failure without keep reports every existing discovery root on the 
   assert.match(line, /PENDING.*HARNESS.*retained:/);
   for (const directory of residue) assert.ok(line.includes(directory));
 });
+
+
+test('ordinary product entry and source-attribution gaps fail without a safety or harness marker', () => {
+  for (const message of ['candidate installer did not expose its documented monitor-codex entry', 'product policy must name its installed source']) {
+    const result = { id: '20', name: 'Discovery', ...classifyFailure(commandFailure(message)) };
+    assert.equal(result.status, 'FAIL'); assert.equal(result.origin, 'product');
+    assert.doesNotMatch(resultLine(result), /SAFETY|HARNESS/);
+  }
+});

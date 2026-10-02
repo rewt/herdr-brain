@@ -16,9 +16,12 @@ const inside = (p) => {
     return r === '' || (!r.startsWith('..' + path.sep) && r !== '..' && !path.isAbsolute(r));
   });
 };
+// Only explicit capability checks identify candidate safety violations. Native
+// failures, malformed receipts, script timeouts and adapter I/O are harness errors.
+class CapabilityRefusal extends Error {}
 const option = (key) => argv[argv.indexOf(key) + 1];
-const requireOption = (key) => { if (!argv.includes(key)) throw new Error(`explicit ${key} required`); return option(key); };
-const owned = (id, collection) => { if (!state[collection].includes(id)) throw new Error(`unowned ${collection}: ${id}`); };
+const requireOption = (key) => { if (!argv.includes(key)) throw new CapabilityRefusal(`explicit ${key} required`); return option(key); };
+const owned = (id, collection) => { if (!state[collection].includes(id)) throw new CapabilityRefusal(`unowned ${collection}: ${id}`); };
 class ReceiptLimit extends Error {}
 async function updateOwnership(change) {
   const lock = path.join(root, 'ownership.lock');
@@ -37,7 +40,7 @@ async function updateOwnership(change) {
 function safePath(p) {
   let ancestor = path.resolve(p);
   while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
-  if (!inside(ancestor)) throw new Error(`path outside scratch: ${p}`);
+  if (!inside(ancestor)) throw new CapabilityRefusal(`path outside scratch: ${p}`);
 }
 let child;
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child?.kill(signal); process.exit(1); });
@@ -62,11 +65,14 @@ async function ownedPane(id) {
   // Late default-layout children must have a live identity and scratch cwd;
   // a list row or a workspace-shaped ID never grants a capability.
   const pane = body(await real(['pane', 'get', id])).pane;
-  if (!pane || pane.pane_id !== id || !state.workspaces.includes(pane.workspace_id) || !pane.foreground_cwd || !inside(pane.foreground_cwd)) {
-    throw new Error(`unowned panes: ${id}; live workspace/cwd proof failed`);
+  if (!pane || pane.pane_id !== id || !pane.workspace_id || !pane.foreground_cwd) {
+    throw new ReceiptLimit(`live pane identity/cwd receipt unavailable: ${id}`);
+  }
+  if (!state.workspaces.includes(pane.workspace_id) || !inside(pane.foreground_cwd)) {
+    throw new CapabilityRefusal(`unowned panes: ${id}; live workspace/cwd proof failed`);
   }
   await updateOwnership((latest) => {
-    if (!latest.workspaces.includes(pane.workspace_id)) throw new Error('late pane workspace has no creation receipt');
+    if (!latest.workspaces.includes(pane.workspace_id)) throw new CapabilityRefusal('late pane workspace has no creation receipt');
     latest.panes = [...new Set([...latest.panes, id])];
     latest.latePanes = [...(latest.latePanes ?? []), { pane_id: id, workspace_id: pane.workspace_id, cwd: pane.foreground_cwd }];
   });
@@ -81,7 +87,7 @@ try {
     if (argv.includes('--workspace')) owned(option('--workspace'), 'workspaces');
     else safePath(requireOption('--cwd'));
     if (['create', 'open'].includes(verb)) safePath(requireOption('--path'));
-    if (verb === 'remove' && argv.includes('--force')) throw new Error('forced worktree removal forbidden');
+    if (verb === 'remove' && argv.includes('--force')) throw new CapabilityRefusal('forced worktree removal forbidden');
   } else if (group === 'tab' && ['list', 'create'].includes(verb)) {
     owned(requireOption('--workspace'), 'workspaces');
     if (argv.includes('--cwd')) safePath(option('--cwd'));
@@ -91,7 +97,7 @@ try {
   else if (group === 'pane' && ['get', 'read', 'run', 'report-agent', 'release-agent'].includes(verb)) {
     await ownedPane(target);
     if (verb === 'run' && !['worker.mjs', 'live-worker.mjs'].some((f) => argv[3].startsWith(`${quote(process.execPath)} ${quote(path.join(root, f))} `))) {
-      throw new Error('pane run permits only the scripted stand-in');
+      throw new CapabilityRefusal('pane run permits only the scripted stand-in');
     }
   } else if (group === 'agent' && verb === 'list') { /* filtered below */ }
   else if (group === 'agent' && ['get', 'read', 'wait', 'prompt', 'send-keys', 'rename', 'start'].includes(verb)) {
@@ -101,7 +107,7 @@ try {
       const agent = body(await real(['agent', 'get', target])).agent;
       await ownedPane(agent.pane_id);
     }
-  } else throw new Error(`unsupported Herdr operation: ${group} ${verb}`);
+  } else throw new CapabilityRefusal(`unsupported Herdr operation: ${group} ${verb}`);
 
   // Check the live cwd too: stale names and moved panes cannot escape the grant.
   if ((group === 'pane' && ['run', 'report-agent', 'release-agent'].includes(verb)) || (group === 'agent' && ['start', 'send-keys'].includes(verb))) {
@@ -112,7 +118,8 @@ try {
       if (pane.foreground_cwd && inside(pane.foreground_cwd)) break;
       await new Promise((r) => setTimeout(r, 100));
     }
-    if (!pane.foreground_cwd || !inside(pane.foreground_cwd)) throw new Error('pane cwd left scratch');
+    if (!pane.foreground_cwd) throw new ReceiptLimit('pane cwd receipt unavailable');
+    if (!inside(pane.foreground_cwd)) throw new CapabilityRefusal('pane cwd left scratch');
   }
   if (group === 'agent' && verb === 'start') {
     const pane = option('--pane');
@@ -150,7 +157,7 @@ try {
   }
   const args = [...argv];
   if (['workspace', 'worktree', 'tab'].includes(group) && ['create', 'open'].includes(verb)) {
-    if (args.includes('--focus')) throw new Error('focus changes forbidden');
+    if (args.includes('--focus')) throw new CapabilityRefusal('focus changes forbidden');
     if (!args.includes('--no-focus')) args.push('--no-focus');
     if (['workspace', 'tab'].includes(group)) {
       const shell = path.join(root, 'shell');
@@ -180,7 +187,7 @@ try {
           try { topology = body(await real([kind, 'list', '--workspace', workspace.workspace_id])); }
           catch (error) { throw new ReceiptLimit(`pane-layout receipt unavailable: ${error.message}`); }
           for (const item of topology[collection] ?? []) {
-            if (item.workspace_id && item.workspace_id !== workspace.workspace_id) throw new Error('creation topology escaped its workspace');
+            if (item.workspace_id && item.workspace_id !== workspace.workspace_id) throw new ReceiptLimit('creation topology escaped its workspace');
             children[collection].push(item[`${kind}_id`]);
           }
         }
@@ -203,9 +210,9 @@ try {
     if (group === 'workspace' && verb === 'list') r.workspaces = r.workspaces.filter((w) => state.workspaces.includes(w.workspace_id));
     if (group === 'agent' && verb === 'list') r.agents = r.agents.filter((a) => state.panes.includes(a.pane_id));
     process.stdout.write(JSON.stringify(value) + '\n');
-  } else { process.stderr.write(result.stderr || result.stdout); process.exitCode = result.code ?? 1; }
+  } else body(result);
 } catch (error) {
   fs.appendFileSync(path.join(root, 'denied.jsonl'), JSON.stringify({ argv, error: error.message }) + '\n');
-  process.stderr.write(JSON.stringify({ error: { code: error instanceof ReceiptLimit ? 'acceptance_harness_limit' : 'acceptance_product_boundary', message: error.message } }) + '\n');
+  process.stderr.write(JSON.stringify({ error: { code: error instanceof CapabilityRefusal ? 'acceptance_product_boundary' : 'acceptance_harness_limit', message: error.message } }) + '\n');
   process.exitCode = 1;
 }

@@ -21,7 +21,7 @@ const instruction = args.find((s) => s.startsWith('developer_instructions='));
 if (instruction) {
   const policy = JSON.parse(instruction.slice('developer_instructions='.length));
   const source = path.join(spec.installation, 'discovery/policy.mjs');
-  assert.ok(policy.includes(source), 'acceptance_product_boundary: product policy must name its installed source');
+  assert.ok(policy.includes(source), 'product policy must name its installed source');
   fs.writeFileSync(path.join(root, 'evidence', `${name}.entry.json`), JSON.stringify({ source, policy, args, cwd: process.cwd() }, null, 2));
 }
 // Validation launches supplied by the product must retain this gate's read and

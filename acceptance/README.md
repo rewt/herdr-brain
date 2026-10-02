@@ -72,7 +72,11 @@ and prerequisites, interruptions or pane-layout receipt failures are PENDING
 with `[HARNESS]` on the screen. Candidate safety violations (capability leaks,
 sandbox bypass, foreign roots, unowned targets or outside-scratch paths) are
 product FAIL with `[SAFETY]`; an installer missing its documented entry also
-fails. A boundary refusal is not automatically a harness limitation. Successful discovery still requires actual integration. An initial nested-sandbox experiment cannot establish
+fails. Only explicit adapter capability refusals carry the product-boundary marker.
+Plain native Herdr failures (including forwarded commands), malformed layout
+receipts, stand-in registration and PTY acknowledgement timeouts, and cleanup
+I/O failures remain harness errors. Cleanup still preserves a real capability
+refusal as a product failure; wrapping it must not hide its cause. Successful discovery still requires actual integration. An initial nested-sandbox experiment cannot establish
 discovery: the model must actually read the project and report token usage.
 
 After any real session starts, every harness Git operation on its project runs

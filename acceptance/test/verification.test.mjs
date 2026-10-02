@@ -71,14 +71,15 @@ test('model-controlled tests and Git filters execute only sandboxed; fsmonitor/h
 
 test('record verification and scripted answer are kernel-confined even if model output redirects .org', { skip }, (t) => {
   const { root, repo, spec, run, discoveryRoots } = fixture(t);
-  const archive = spawnSync('git', ['archive', 'lane/discovery', 'bin', 'lib', 'lanes'], { cwd: path.resolve('.'), encoding: undefined });
+  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes'], { cwd: path.resolve('.'), encoding: undefined });
   assert.equal(archive.status, 0, String(archive.stderr));
   const unpack = spawnSync('tar', ['-x', '-C', spec.installation], { input: archive.stdout }); assert.equal(unpack.status, 0, String(unpack.stderr));
   run(process.execPath, [path.join(spec.installation, 'bin/org.mjs'), 'init', path.join(repo, '.org')]);
   const verifier = createVerification(spec, { root, discoveryRoots, run });
   const parent = verifier.record(['add', 'Routing decision', '--role', 'architect']).trim().split('\n')[0];
-  const question = verifier.record(['ask', 'Configure routes?', '--parent', parent, '--category', 'other', '--wait', '--recommend', 'yes', '--why', 'A concrete sandbox regression recommendation']).trim().split('\n')[0];
+  const question = verifier.record(['ask', 'Configure routes?', '--parent', parent, '--category', 'other', '--recommend', 'yes', '--why', 'A concrete sandbox regression recommendation']).trim().split('\n')[0];
   assert.match(question, /^HUM-\d+/);
+  assert.ok(!JSON.parse(verifier.record(['status', '--json'])).items.find((item) => item.id === question).meta?.answer, 'fresh other question must await a human');
   verifier.record(['answer', question, 'yes'], { ORG_ACTOR: 'human' });
   assert.match(verifier.record(['show', question]), /yes/);
   const outside = path.join(root, 'foreign-record'); fs.mkdirSync(outside);

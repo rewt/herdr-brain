@@ -316,3 +316,28 @@ handled interruption. Sessions have a four-minute process-group deadline.
 Claude result usage includes uncached input, cache creation/read, output, model
 usage and CLI-reported cost; failed/no-auth sessions cannot pass. `--skip-live`
 leaves the live cases pending and exits nonzero.
+
+Writable exceptions undergo the same check for every provider: inspect each
+component with lstat and realpath, reject symlinks or changed inodes, and open the
+component with O_NOFOLLOW before granting access. Fixed root-owned system aliases
+such as macOS /tmp are normalized first; paths below them remain checked.
+Validation exceptions must remain inside the assigned checkout. Shared-record
+or Git targets cannot be granted directly or through a parent directory. A
+legitimate validation-temp or native request-queue exception preserves all other
+shared-state exclusions, including protected descendants. The live-probe guard's
+separate runtime paths are checked too and are unavailable to offline validation.
+Filters inspect optional temporary directories even when a dangling link makes
+existsSync return false; missing plain directories receive no extra grant.
+
+Empty classic filter settings retain identity conversion. When a driver has a
+configured command in one classic direction, its missing/empty opposite uses a
+trusted byte-copy transport rather than an empty shell. Only configured external
+commands are sandboxed, and their failures remain required failures. An
+explicitly empty process setting disables the driver, including its classic
+commands, as Git's process precedence requires; it never starts an empty protocol
+subprocess. These rules preserve binary bytes, including NUL and non-UTF8 data.
+
+Without an explicitly authorized --claude-auth file, the Claude probe does not
+launch native sessions or read authentication. Both live cases are PENDING;
+ENG-81's proof awaits the operator's answer to HUM-19. Pending cases keep the
+acceptance exit nonzero, without classifying their absence as a code failure.

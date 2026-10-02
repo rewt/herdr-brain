@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { socketFilter } from './bubblewrap.mjs';
+import { checkedDirectory, within } from './paths.mjs';
 
 export function selectSandbox(binary = 'auto', { platform = process.platform, searchPath = process.env.PATH ?? '' } = {}) {
   if (binary !== 'auto') return binary;
@@ -32,24 +33,40 @@ const toml = (value) => typeof value === 'object'
   ? `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`).join(',')}}`
   : JSON.stringify(value);
 
-export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], native = false, network = native }) {
+export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], runtimePaths = [], native = false, network = native }) {
   if (!binary) throw new Error('a native sandbox is required for main-checkout workers');
-  if (!Array.isArray(sharedPaths) || !sharedPaths.length || [...sharedPaths, ...writablePaths].some((file) => typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0'))) {
+  if (!Array.isArray(sharedPaths) || !sharedPaths.length || [...sharedPaths, ...writablePaths, ...runtimePaths].some((file) => typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0'))) {
     throw new Error('sandbox requires absolute shared-state paths from the session parent');
   }
   binary = selectSandbox(binary);
-  cwd = resolved(cwd);
+  cwd = checkedDirectory(cwd);
   const protectedInput = [path.join(cwd, '.git'), ...sharedPaths];
   const protectedPaths = [...new Set(protectedInput.flatMap((file) => [file, resolved(file)]))];
-  const writable = writablePaths.map(resolved);
+  if (runtimePaths.length && !network) throw new Error('validation cannot grant external runtime writes');
+  const workspaceWrites = writablePaths.map(checkedDirectory);
+  if (!native && workspaceWrites.some((file) => !within(cwd, file))) throw new Error('sandbox writable exception must stay within the assigned checkout');
+  const writable = [...workspaceWrites, ...runtimePaths.map(checkedDirectory)];
+  const gitPaths = [path.join(cwd, '.git'), resolved(path.join(cwd, '.git'))];
+  for (const file of writable) {
+    if (gitPaths.some((git) => within(git, file) || within(file, git)) || protectedPaths.some((protectedPath) => within(file, protectedPath)))
+      throw new Error('sandbox writable exception overlaps protected state');
+  }
   if (path.basename(binary) === 'sandbox-exec') {
     const match = (file) => `(subpath ${JSON.stringify(file)})`;
     // A single predicate makes exclusions independent of rule ordering. Queue
     // and temporary exceptions can only be supplied by the trusted parent.
     const allowed = native ? '(subpath "/")' : match(cwd);
     const excluded = `(require-not (require-any ${protectedPaths.map(match).join(' ')}))`;
+    const exceptions = writable.map((file) => {
+      // A trusted queue/temp grant can sit beneath a protected directory, but
+      // must never override protected siblings or descendants. Keep the scope
+      // predicate too, so a raced temp alias cannot grant outside-checkout IO.
+      const exclusions = protectedPaths.filter((protectedPath) => !within(resolved(protectedPath), file));
+      const scoped = !native && workspaceWrites.includes(file) ? ` ${match(cwd)}` : '';
+      return `(require-all ${match(file)}${scoped} (require-not (require-any ${exclusions.map(match).join(' ')})))`;
+    });
     const profile = `(version 1)\n(allow default)\n${network ? '' : '(deny network*)\n'}(deny file-write*)\n`
-      + `(allow file-write* (literal "/dev/null") (require-all ${allowed} ${excluded})${writable.length ? ` ${writable.map(match).join(' ')}` : ''})\n`;
+      + `(allow file-write* (literal "/dev/null") (require-all ${allowed} ${excluded})${exceptions.length ? ` ${exceptions.join(' ')}` : ''})\n`;
     return { binary, args: ['-p', profile] };
   }
   if (path.basename(binary) === 'bwrap') {
@@ -80,7 +97,7 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], n
   // Validation instead grants writes only in the workspace and disables network.
   const filesystem = { ':root': native ? 'write' : 'read', ':workspace_roots': { '.': 'write', '.git': 'read' },
     ...Object.fromEntries(sharedPaths.map((file) => [file, 'read'])),
-    ...Object.fromEntries(writablePaths.map((file) => [file, 'write'])) };
+    ...Object.fromEntries(writable.map((file) => [file, 'write'])) };
   const profile = native ? 'monitor-main-worker' : 'monitor-validation';
   return { binary, args: ['sandbox', '--permission-profile', profile, '--include-managed-config', '-C', cwd,
     '-c', `permissions.${profile}.filesystem=${toml(filesystem)}`,

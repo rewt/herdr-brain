@@ -15,15 +15,19 @@
     },
     {
       "name": "20 Real concurrent own-lane work and sandboxed fast-forward promotion",
-      "status": "FAIL",
-      "error": "session french exited 1/null: \nsession german exited 1/null: ",
-      "cause": "Native Claude result: Not logged in \u00b7 Please run /login (is_error=true)."
+      "status": "PENDING",
+      "cause": "Native Claude result: Not logged in \u00b7 Please run /login (is_error=true).",
+      "historical_status": "FAIL",
+      "reason": "Awaiting operator answer to HUM-19; no authenticated model turn completed.",
+      "historical_error": "session french exited 1/null: \nsession german exited 1/null: "
     },
     {
       "name": "21 Real routing question waits and actual operator answer applies",
-      "status": "FAIL",
-      "error": "session routing exited 1/null: ",
-      "cause": "Native Claude result: Not logged in \u00b7 Please run /login (is_error=true)."
+      "status": "PENDING",
+      "cause": "Native Claude result: Not logged in \u00b7 Please run /login (is_error=true).",
+      "historical_status": "FAIL",
+      "reason": "Awaiting operator answer to HUM-19; no authenticated model turn completed.",
+      "historical_error": "session routing exited 1/null: "
     }
   ],
   "usage": [
@@ -76,7 +80,9 @@
   "install": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-7VrdY9",
   "scratch": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-projects-u5goB0",
   "interrupted": false,
-  "credential_status": "Scratch profiles returned Not logged in; permission to extract existing Keychain credentials was not granted.",
+  "credential_status": "Live proof is PENDING until the operator answers HUM-19. R-90 accessed no credentials and ran no live Claude sessions.",
   "raw_evidence": "/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-projects-u5goB0/evidence",
-  "scope": "No real Claude model turn completed. Zero input/cache/output tokens and zero reported cost."
+  "scope": "No real Claude model turn completed. Zero input/cache/output tokens and zero reported cost.",
+  "operator_question": "HUM-19",
+  "classification_note": "Historical no-auth CLI failures establish no model proof; classify the outstanding live cases as PENDING, not code FAIL. Original observations and token counts are retained."
 }

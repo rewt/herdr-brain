@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { plainDirectory } from '../lib/files.mjs';
+import { validationTemporary } from './paths.mjs';
 import { sandboxCommand } from './confinement.mjs';
 const [binary, cwd, sharedPathsJSON] = process.argv.slice(2);
 try {
@@ -30,8 +30,7 @@ try {
   for (const { command: step, source: commandSource } of steps) {
     if (typeof step !== 'string' || !step.trim()) throw new Error('invalid validation command');
     console.log(`sandboxed command (${commandSource}): ${step}`);
-    const temporary = path.join(cwd, '.lane/validation-tmp');
-    plainDirectory(temporary);
+    const temporary = validationTemporary(cwd, { create: true });
     const sandbox = sandboxCommand(binary, cwd, { sharedPaths, writablePaths: [temporary] });
     const r = spawnSync(process.execPath, [new URL('./bounded.mjs', import.meta.url).pathname,
       sandbox.binary, ...sandbox.args, '/bin/sh', '-c', step], { cwd, stdio: 'inherit', timeout: 125_000, killSignal: 'SIGKILL',

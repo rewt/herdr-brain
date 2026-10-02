@@ -65,7 +65,7 @@ if (opt.harness === 'claude') {
   if (process.platform !== 'darwin') throw new Error('the live Claude probe currently requires the macOS filesystem guard');
   entryBinary = path.join(install, 'claude-native.mjs');
   fs.writeFileSync(entryBinary, `#!${process.execPath}\nimport {spawn} from 'node:child_process';import {sandboxCommand} from ${JSON.stringify(path.join(product, 'discovery/confinement.mjs'))};
-const guard=sandboxCommand('/usr/bin/sandbox-exec',process.cwd(),{sharedPaths:[${JSON.stringify(install)}],writablePaths:[process.env.MONITOR_REQUEST_DIR,process.env.CLAUDE_CONFIG_DIR].filter(Boolean),network:true});
+const guard=sandboxCommand('/usr/bin/sandbox-exec',process.cwd(),{sharedPaths:[${JSON.stringify(install)}],runtimePaths:[process.env.MONITOR_REQUEST_DIR,process.env.CLAUDE_CONFIG_DIR].filter(Boolean),network:true});
 const child=spawn(guard.binary,[...guard.args,${JSON.stringify(binary)},...process.argv.slice(2)],{stdio:'inherit'});
 for(const s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,()=>child.kill(s));child.on('error',e=>{console.error(e.message);process.exitCode=1});child.on('close',c=>process.exitCode=c??1);\n`, {mode:0o755});
 }
@@ -145,7 +145,14 @@ try {
     assert.match(policy, /dispatch.*ITEM/u); assert.match(policy, /watch\/watch.mjs/u); assert.match(policy, /Only a supervisor/u);
     const help = run(process.execPath, [path.join(product, 'dispatch/dispatch.mjs')], p); assert.match(help, /watch/u);
   });
-  if (opt['skip-live']) results.push({ name: '20/21 Real isolated discovery', status: 'PENDING' });
+  if (opt['skip-live'] || (opt.harness === 'claude' && !opt['claude-auth'])) {
+    const reason = opt['skip-live'] ? 'Live cases omitted by --skip-live.'
+      : 'Operator-authorized scratch authentication is absent; ENG-81 live proof awaits HUM-19.';
+    for (const name of ['20 Real concurrent own-lane work and sandboxed fast-forward promotion',
+      '21 Real routing question waits and actual operator answer applies']) {
+      results.push({ name, status: 'PENDING', reason }); console.log(`PENDING ${name}: ${reason}`);
+    }
+  }
   else {
     await check('20 Real concurrent own-lane work and sandboxed fast-forward promotion', async () => {
       const p = repo('concurrent-project'), before = git(p, ['rev-parse', 'main']);

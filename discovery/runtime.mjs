@@ -77,19 +77,37 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     for (let i = 0; i + 2 < fields.length; i += 3) {
       const [, attribute, driver] = fields.slice(i, i + 3);
       if (['unspecified', 'unset', 'set'].includes(driver)) continue;
-      if (keys.some((key) => key.startsWith(`${attribute}.${driver}.`)) && (attribute !== 'filter' || !sandboxBinary))
+      const processDisabled = attribute === 'filter' && drivers.has(`filter.${driver}.process`) && !drivers.get(`filter.${driver}.process`);
+      if (!processDisabled && keys.some((key) => key.startsWith(`${attribute}.${driver}.`) && drivers.get(key)) && (attribute !== 'filter' || !sandboxBinary))
         throw new Error(`external Git filters/drivers used by ${fields[i]} require a native validation sandbox`);
     }
     // Capture effective operator clean/smudge/process commands before disabling
     // global execution config. Every operation refreshes these trusted wrappers.
-    for (const [key, value] of drivers) if (key.startsWith('filter.')) {
+    const filterNames = new Set(keys.flatMap((key) => key.match(/^filter\.(.+)\.(?:clean|smudge|process)$/u)?.slice(1) ?? []));
+    for (const name of filterNames) {
+      const prefix = `filter.${name}.`;
+      const processDisabled = drivers.has(prefix + 'process') && !drivers.get(prefix + 'process');
+      const active = !processDisabled && ['clean', 'smudge', 'process'].some((direction) => drivers.get(prefix + direction));
+      if (!active) {
+        // Git gives an explicitly empty process precedence over classic
+        // directions: the whole driver becomes identity. Never turn it into
+        // a protocol subprocess or force required=true for a disabled driver.
+        for (const direction of ['clean', 'smudge', 'process']) if (drivers.has(prefix + direction))
+          filterConfig.set(prefix + direction, '');
+        continue;
+      }
       if (!sandboxBinary) continue;
       const provider = selectSandbox(sandboxBinary);
-      const encoded = Buffer.from(value).toString('base64');
-      filterConfig.set(key, [process.execPath, local('./git-driver.mjs'), provider, JSON.stringify(filterPaths), encoded].map(quote).join(' ')
-        + (value.includes('%f') ? ' %f' : ''));
-      const required = key.replace(/\.(clean|smudge|process)$/u, '.required');
-      filterConfig.set(required, 'true'); // a denied filter must never silently become identity
+      for (const direction of ['clean', 'smudge', 'process']) {
+        const key = prefix + direction, value = drivers.get(key) ?? '';
+        if (direction === 'process' && !value) continue;
+        const encoded = Buffer.from(value).toString('base64');
+        filterConfig.set(key, [process.execPath, local('./git-driver.mjs'), provider, JSON.stringify(filterPaths), encoded].map(quote).join(' ')
+          + (value.includes('%f') ? ' %f' : ''));
+      }
+      // Configured commands must succeed. Missing classic directions get the
+      // trusted identity transport, so this never demands a missing executable.
+      filterConfig.set(prefix + 'required', 'true');
     }
   };
   externalGit(project.canonical);

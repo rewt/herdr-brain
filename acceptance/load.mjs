@@ -1,10 +1,10 @@
 import os from 'node:os';
 
 // A one-minute average at/above CPU capacity means runnable work is competing
-// for the machine. Keep a floor for small hosts and retain all three averages.
+// for the machine. Retain all three averages alongside that capacity.
 export function createLoadMonitor({ read = () => os.loadavg(), cpus = os.availableParallelism(),
   now = Date.now, record = () => {}, intervalMs = 1000 } = {}) {
-  const threshold = Math.max(4, cpus), samples = [];
+  const threshold = Math.max(1, cpus), samples = [];
   function sample() {
     const value = { at: now(), averages: [...read()], cpus, threshold };
     samples.push(value); record(value);

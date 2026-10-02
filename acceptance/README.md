@@ -50,7 +50,7 @@ CPU capacity and the heavy-load threshold, with timestamps. It samples every
 second while the event loop is free, on every wait poll, and before/after each
 blocking child command. `summary.json` retains the run peak and each case's load
 window. Heavy load means the one-minute average is at least the available CPU
-count (with a floor of four). A report-wait or child-command timeout with heavy
+count. A report-wait or child-command timeout with heavy
 load measured during that operation is harness PENDING with the load named;
 the gate remains NOT READY until it passes on a usable machine. A candidate
 that never reports at normal load remains product FAIL. Earlier contention in

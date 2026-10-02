@@ -6,13 +6,13 @@ import { classifyFailure, commandFailure, HarnessLimit, requireSuccessfulChecks 
 import { cases, cutoverChecks, runCase } from '../cases.mjs';
 import { resultLine } from '../results.mjs';
 
-function fixture(t, averages = [28, 25, 22]) {
+function fixture(t, averages = [28, 25, 22], cpus = 18) {
   const previous = process.env.ORG_ACTOR;
   process.env.ORG_ACTOR = `eng103-${t.name}`;
   t.after(() => previous === undefined ? delete process.env.ORG_ACTOR : process.env.ORG_ACTOR = previous);
   let at = 0, current = averages;
   const samples = [];
-  const load = createLoadMonitor({ cpus: 18, read: () => current, now: () => at, record: (v) => samples.push(v) });
+  const load = createLoadMonitor({ cpus, read: () => current, now: () => at, record: (v) => samples.push(v) });
   t.after(load.stop);
   return { load, samples, set: (value) => { current = value; },
     wait: (fn = () => false) => waitUntil(fn, 'held worker report', 300, {
@@ -33,6 +33,13 @@ test('candidate that never reports at normal load remains product fail', async (
   const f = fixture(t, [2, 3, 4]);
   let error; try { await f.wait(); } catch (value) { error = value; }
   assert.deepEqual(classifyFailure(error), { status: 'FAIL', origin: 'product', detail: 'timeout: held worker report' });
+});
+
+test('heavy load is relative to capacity even on a single-CPU host', async (t) => {
+  const f = fixture(t, [2, 2, 2], 1);
+  let error; try { await f.wait(); } catch (value) { error = value; }
+  assert.equal(classifyFailure(error).status, 'PENDING');
+  assert.equal(error.load.peak.threshold, 1);
 });
 
 test('load is scoped to each wait and successful reports pass even under heavy load', async (t) => {

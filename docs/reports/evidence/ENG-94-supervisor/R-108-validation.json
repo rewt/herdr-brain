@@ -1,0 +1,121 @@
+{
+  "run": "R-108",
+  "review": "docs/reviews/supervisor-module/14f9b43-r1.md",
+  "implementation": "Preserve reopened work against promotion completion replays",
+  "baseline": {
+    "command": "npm test",
+    "tests": 622,
+    "pass": 611,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 11
+  },
+  "additional_host_baseline": {
+    "command": "ORG_ACTOR=R-108 npm test (host)",
+    "tests": 622,
+    "pass": 610,
+    "fail": 1,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 216639.719916,
+    "failures": [
+      "resolved blocker links allow recovery of only the recorded correction run"
+    ]
+  },
+  "reproduced_review_finding": {
+    "command": "node --test --test-name-pattern='late final reports|conditional record completion' supervisor/test/supervisor.test.mjs (before fix)",
+    "tests": 14,
+    "pass": 0,
+    "fail": 2,
+    "cancelled": 0,
+    "skipped": 12,
+    "todo": 0,
+    "duration_ms": 10350.467417,
+    "failures": [
+      "late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards",
+      "conditional record completion preserves newer work, unresolved and declined blockers"
+    ]
+  },
+  "supervisor": {
+    "command": "node --test supervisor/test/supervisor.test.mjs",
+    "tests": 14,
+    "pass": 14,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "duration_ms": 94142.331291,
+    "failures": []
+  },
+  "cleanup_rerun": {
+    "command": "node --test --test-name-pattern='resolved blocker links allow recovery' settle/test/record-safety.test.mjs",
+    "tests": 10,
+    "pass": 1,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 9,
+    "todo": 0,
+    "duration_ms": 8951.120041,
+    "failures": []
+  },
+  "nested_post_change": {
+    "command": "ORG_ACTOR=R-108 npm test (nested sandbox)",
+    "tests": 622,
+    "pass": 592,
+    "fail": 19,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 186449.061042,
+    "failures": [
+      "copied codex probe product validates, guards and promotes worker and routing changes offline",
+      "copied claude probe product validates, guards and promotes worker and routing changes offline",
+      "bounded commands kill descendants before they can write after a deadline",
+      "disabled clean filters preserve binary bytes across integration",
+      "disabled smudge filters preserve binary bytes across integration",
+      "disabled process filters preserve binary bytes across integration",
+      "disabled clean/smudge/process filters preserve binary bytes across integration",
+      "disabled process/clean/smudge filters preserve binary bytes across integration",
+      "disabled clean/smudge filters preserve binary bytes across integration",
+      "disabled clean/smudge filters preserve binary bytes across integration",
+      "clean-only required filters preserve the missing direction as identity",
+      "smudge-only required filters preserve the missing direction as identity",
+      "detached double-fork descendants are gone after completion; unrelated same-group processes survive",
+      "detached double-fork descendants are gone after deadline; unrelated same-group processes survive",
+      "descendants are cleaned after the JavaScript wrapper is killed",
+      "validation cannot signal an owner outside its inherited kernel boundary",
+      "canonical preparation and validation remain authoritative in both check and promote",
+      "worker mode validates and promotes to the declared integration branch",
+      "main-mode done reports require clean committed work and successful sandboxed validation"
+    ]
+  },
+  "final_post_change": {
+    "command": "ORG_ACTOR=R-108 npm test (host)",
+    "tests": 622,
+    "pass": 611,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 11,
+    "todo": 0,
+    "duration_ms": 197878.816958,
+    "failures": []
+  },
+  "cold_start": {
+    "through": 1284,
+    "size": {
+      "characters": 5937,
+      "approximate_tokens": 1485
+    },
+    "running": 4,
+    "reports": 23,
+    "waiting": 1,
+    "decisions": 384,
+    "run_item_bindings": "Matched the event fold through this sequence"
+  },
+  "dispositions": {
+    "additional_host_baseline": "One existing ENOTEMPTY watcher-cleanup hook race; focused rerun and complete host post-change suite passed.",
+    "nested_post_change": "All 19 failures refuse macOS native sandbox fixture setup with sandbox_apply: Operation not permitted; host post-change suite passed."
+  },
+  "final_lane_gate": "Follows the checked report commit; exact HEAD, command and result retained in local .lane/gate.json"
+}

@@ -1,4 +1,4 @@
-// Opt-in live reader. It never dispatches, invokes a model, or writes org/config.
+// Console effects write through validating CLI commands.
 import * as cli from '../lib/cli.mjs';
 import { readQueue, brainAct } from '../lib/brain.mjs';
 import { execFile } from 'node:child_process';
@@ -22,15 +22,16 @@ async function gitSummary(cwd) {
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
     herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, herdrRename: cli.herdrRename, orgAnswer: cli.orgAnswer,
+    orgRoutes: cli.orgRoutes, orgRouteSet: cli.orgRouteSet,
     brainAct: args => brainAct(config.brain_bin, args), gitSummary, folderPath,
     observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
-  const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, events: [], brain: { rows: [], off: true } };
+  const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, events: [], routes: null, brain: { rows: [], off: true } };
   const s = { projects: [], projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
     view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'scope', scroll: 0, outputScroll: 0,
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark',
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
-    picker: null, regionFocus: {}, outputX: 0, screenScroll: 0,
+    picker: null, routeEdit: null, regionFocus: {}, outputX: 0, screenScroll: 0,
     outputMode: 'mirror', interactive: false, terminalFrame: null, screenViewport: null, dimensions: { cols: 100, rows: 32 },
     history: [], future: [], opened: [], errors: {}, times: {}, cache: new Map(), text: '', output: null, outputError: null, outputAt: null, git: null, checkoutGit: {}, compose: null, rename: null, act: null, digits: '', digitTimer: null, chatKinds: config.chat_kinds ?? ['claude', 'codex'], message: '',
     frame: null, stopped: false, timer: null, outputTimer: null, pending: null, generation: 0, reading: false, loading: true };
@@ -98,7 +99,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     const before = route(), after = { ...before, ...next };
     if (routeKey(before) === routeKey(after)) return;
     s.history.push(before); s.future = [];
-    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, rename: null, act: null, focus: next.focus ?? 'back' });
+    Object.assign(s, { interactive: false }, next, { scroll: 0, outputScroll: 0, outputX: 0, screenScroll: 0, message: '', compose: null, rename: null, act: null, routeEdit: null, focus: next.focus ?? 'back' });
     s.output = null; s.outputError = null; s.outputAt = null; s.git = null; s.generation++;
     stopObserver(); s.terminalFrame = null; s.screenViewport = null; s.outputMode = 'mirror'; observerRetryAt = 0;
     changed();
@@ -113,8 +114,8 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
   }
   function adoptProject() {
     const cached = s.cache.get(s.projectId);
-    data.today = cached?.today ?? null; data.status = cached?.status ?? null; data.events = cached?.events ?? [];
-    for (const key of ['today', 'status', 'events']) { delete s.errors[key]; s.times[key] = cached?.times?.[key] ?? null; }
+    data.today = cached?.today ?? null; data.status = cached?.status ?? null; data.events = cached?.events ?? []; data.routes = cached?.routes ?? null;
+    for (const key of ['today', 'status', 'events', 'routes']) { delete s.errors[key]; s.times[key] = cached?.times?.[key] ?? null; }
   }
   async function readOutput() {
     // A transcript read in flight must not delay taking the terminal to type.
@@ -161,6 +162,13 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       }
       if (vanished) adoptProject();
       const p = project();
+      if (p) {
+        const id = p.id, cached = s.cache.get(id) ?? { times: {} };
+        try { const value = await d.orgRoutes(p); cached.routes = value; cached.times.routes = d.now();
+          if (s.projectId === id) { data.routes = value; delete s.errors.routes; s.times.routes = cached.times.routes; }
+        } catch (e) { if (s.projectId === id) s.errors.routes = e.message; }
+        s.cache.set(id, cached);
+      }
       if (p?.org && (selected === s.projectId || selected === null)) {
         const id = p.id, cached = s.cache.get(id) ?? { times: {} };
         await Promise.all(['today', 'status', 'events'].map(async key => {
@@ -189,6 +197,14 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     }
   }
   async function activate(id) {
+    // Editors own input and navigation, including mouse header clicks.
+    if (s.routeEdit) {
+      if (s.routeEdit.busy) return;
+      if (id === 'route-cancel') { s.routeEdit = null; changed(); }
+      else if (id === 'route-save') return routeEditKey('', { return: true });
+      else if (id.startsWith('route-field:') && !s.routeEdit.confirm) { s.routeEdit.field = Number(id.slice(12)); changed(); }
+      return;
+    }
     const m = model();
     if (id === 'home') return activate('view:overview');
     if (id === 'checkouts') { s.showCheckouts = !s.showCheckouts; s.focus = s.showCheckouts ? `space:${m.spaces[0]?.workspace_id}` : 'checkouts'; changed(); return; }
@@ -226,7 +242,25 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       if (next === s.projectId) { changed(); return; }
       navigate({ projectId: next, view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'view:overview' }); adoptProject(); return refresh();
     }
-    if (id.startsWith('view:')) { const view = id.slice(5); const first = { goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, activity: m.activity[0] && `activity:${m.activity[0].seq}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
+    if (id.startsWith('view:')) { const view = id.slice(5); const first = { control: m.needs[0] && `need:${m.needs[0].key}`, decided: m.decided[0] && `decision:${m.decided[0].key}`, asked: m.asked[0] && `asked:${m.asked[0].id}`, routes: Object.keys(m.routes?.config.routes ?? {}).sort()[0] && `route:${Object.keys(m.routes.config.routes).sort()[0]}`, goals: m.goals[0] && `item:${m.goals[0].id}`, tasks: m.tasks[0] && `item:${m.tasks[0].id}`, activity: m.activity[0] && `activity:${m.activity[0].seq}`, needs: m.needs[0] && `need:${m.needs[0].key}`, later: m.later[0] && `need:${m.later[0].key}`, parked: m.parked[0] && `need:${m.parked[0].key}`, resolved: m.resolved[0] && `need:${m.resolved[0].key}`, ended: m.ended[0] && `need:${m.ended[0].key}`, reports: m.reports[0] && `need:${m.reports[0].key}`, sessions: m.sessions[0] && `session:${m.sessions[0].pane}` }; navigate({ view, detail: null, focus: first[view] ?? id }); return; }
+    if (id.startsWith('decision:')) {
+      if (m.decided.some(n => n.key === id.slice(9))) navigate({ view: 'decision', detail: id.slice(9) });
+      return;
+    }
+    if (id.startsWith('asked:')) {
+      const question = id.slice(6), need = m.allNeeds.find(n => n.question === question);
+      if (m.asked.some(q => q.id === question && q.reportQuestion)) { navigate({ view: 'asked-detail', detail: question }); return; }
+      return activate(need ? `need:${need.key}` : `item:${question}`);
+    }
+    if (id.startsWith('route:')) {
+      const name = id.slice(6), routes = m.routes;
+      if (s.errors.routes || !routes?.editable || !Object.hasOwn(routes.config.routes ?? {}, name)) { s.message = 'Refresh project routes before editing.'; changed(); return; }
+      const r = routes.config.routes[name], defaults = routes.config.dispatch ?? {};
+      s.routeEdit = { name, project: { ...project() }, revision: routes.revision, target: routes.target, field: 0, confirm: false, busy: false,
+        original: { kind: r.kind ?? defaults.kind ?? 'claude', model: r.model ?? defaults.model ?? '', effort: r.effort ?? defaults.effort ?? '' },
+        values: [r.kind ?? defaults.kind ?? 'claude', r.model ?? defaults.model ?? '', r.effort ?? defaults.effort ?? ''] };
+      changed(); return;
+    }
     if (id.startsWith('activity:')) {
       const event = m.activity.find(event => String(event.seq) === id.slice(9));
       if (event && m.itemsById.has(event.id)) navigate({ view: 'item', detail: event.id });
@@ -413,7 +447,29 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     return s.frame;
   }
   function move(amount) { moveWithin(s, amount); changed(); }
+  async function routeEditKey(input, k) {
+    const edit = s.routeEdit;
+    if (edit.busy) return false;
+    if (k.escape) { s.routeEdit = null; changed(); return false; }
+    if (k.return) {
+      if (!edit.values.every(v => v.trim())) { s.message = 'Kind, model and effort are required.'; changed(); return false; }
+      if (!edit.confirm) { edit.confirm = true; s.message = ''; changed(); return false; }
+      edit.busy = true; changed();
+      let result;
+      try { result = await d.orgRouteSet(edit.project, { name: edit.name, kind: edit.values[0].trim(), model: edit.values[1].trim(), effort: edit.values[2].trim(), revision: edit.revision }); }
+      catch (error) { result = { ok: false, error: error.message }; }
+      if (!result.ok) { edit.busy = false; edit.confirm = false; s.message = `Route not saved: ${result.error}`; changed(); return false; }
+      s.routeEdit = null; await refresh(); s.message = `Saved ${edit.name} in project .lane.json.`; changed(); return false;
+    }
+    if (edit.confirm) { if (k.backspace) edit.confirm = false; changed(); return false; }
+    if (k.tab || k.downArrow || k.upArrow) edit.field = (edit.field + (k.shift || k.upArrow ? 2 : 1)) % 3;
+    else if (k.ctrl && input === 'u') edit.values[edit.field] = '';
+    else if (k.backspace || k.delete) edit.values[edit.field] = [...edit.values[edit.field]].slice(0, -1).join('');
+    else if (!k.ctrl && !k.meta) edit.values[edit.field] += input.replace(/[\x00-\x1f\x7f]/g, '');
+    changed(); return false;
+  }
   async function key(input, k = {}) {
+    if (s.routeEdit) return routeEditKey(input, k);
     if (s.picker) {
       const entries = pickerEntries(s);
       if (k.escape || (k.meta && k.leftArrow)) { s.focus = s.picker.returnFocus; s.picker = null; changed(); return false; }
@@ -468,14 +524,14 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
         const tabs = model().tabs.filter(t => t.workspace_id === s.space), index = tabs.findIndex(t => t.tab_id === s.tab);
         const next = tabs[(index + direction + tabs.length) % tabs.length]; if (next) { await activate(`tab:${next.tab_id}`); s.focus = `tab:${next.tab_id}`; changed(); }
       } else {
-        const views = ['overview', 'goals', 'tasks', 'activity', 'needs'], index = Math.max(0, views.indexOf(s.view));
+        const views = ['overview', 'goals', 'tasks', 'activity', 'needs', 'control'], index = Math.max(0, views.indexOf(s.view));
         const next = views[(index + direction + views.length) % views.length]; await activate(`view:${next}`); s.focus = `view:${next}`; changed();
       }
       return false;
     }
     if (s.view === 'output' && (input === 'l' || input === 'v')) return activate(input === 'l' ? 'transcript' : 'mirror');
     if (s.view === 'output' && input === 'i') return activate('interact');
-    const shortcut = { p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
+    const shortcut = { c: 'view:control', u: 'view:routes', d: 'view:decided', f: 'view:asked', p: 'scope', h: 'view:overview', g: 'view:goals', t: 'view:tasks', a: 'view:activity', s: 'view:sessions', '!': 'view:needs', r: 'refresh', o: 'go', n: 'compose', b: 'back', '?': 'view:help', D: 'appearance', w: 'checkouts' }[input];
     if (shortcut) return activate(shortcut);
     return false;
   }

@@ -88,6 +88,19 @@ export function projectRows({ model: m, state: s, project: p, width, height, now
   }
   add('content', cell('', 0, width));
 
+  // The operator's durable steering surface is visible before the work list.
+  let cx = 0; const steering = [];
+  for (const [view, label, count, fg] of [['decided', 'Decided', m.decided.length, 'teal'], ['asked', 'Asked', m.asked.length, 'blue'], ['needs', 'Waiting on you', m.needs.length, 'amber']]) {
+    const text = ` ${label} ${count} `;
+    steering.push(cell(text, cx, text.length, { id: `view:${view}`, fg, bg: 'panel', bold: true }));
+    cx += text.length + 1;
+  }
+  add('content', ...steering);
+  if (m.decided[0]) add('content', cell(` Last: ${m.decided[0].text}`, 0, width, { id: `decision:${m.decided[0].key}`, fg: 'muted' }));
+  const routeState = s.errors.routes ? 'unavailable · r retry' : m.routes?.suggested ? 'suggested defaults · confirmation pending' : m.routes ? 'project configuration' : 'not loaded';
+  add('content', cell(` Routes · ${routeState} · u open`, 0, width, { id: 'view:routes', fg: 'blue' }));
+  add('content', cell('', 0, width));
+
   // Now: the block and its open tasks, the ones a session works on first.
   const block = currentBlock(m);
   if (block) {
@@ -118,7 +131,7 @@ export function projectRows({ model: m, state: s, project: p, width, height, now
   if (m.needs.length) {
     const folded = m.resolved.length + m.reports.length + m.ended.length;
     const right = `${folded ? `${folded} folded · ` : ''}open queue ›`;
-    add('needs', cell(` needs you · ${m.needs.length}`, 0, width - right.length - 3, { fg: 'amber', bg: 'attentionBg', bold: true }),
+    add('needs', cell(` Waiting on you · ${m.needs.length}`, 0, width - right.length - 3, { fg: 'amber', bg: 'attentionBg', bold: true }),
       cell(`  ${right} `, width - right.length - 3, right.length + 3, { id: 'view:needs', fg: 'amber', bg: 'attentionBg' }));
     for (const n of m.needs.slice(0, 3)) {
       const label = n.handle ?? n.data?.tab_label ?? 'Decision', text = n.data?.digest?.question ?? n.title ?? n.headline ?? '';

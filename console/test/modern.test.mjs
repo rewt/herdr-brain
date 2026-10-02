@@ -25,6 +25,7 @@ function fixture(overrides = {}) {
   const reads = [], calls = [], panes = [];
   const deps = { identity, orgToday: async p => today(p), orgStatus: async p => ({ items: p.name === 'Alpha' ? items : [], runs: [] }), orgLog: async p => p.name === 'Alpha' ? events : [], brainQueue: async () => ({ rows: [], off: true }),
     herdrList: async what => what === 'workspace' ? workspaces : what === 'pane' ? panes : tabs, herdrAgents: async () => ({ ok: true, agents }),
+    orgRoutes: async () => ({ config: { routes: {} }, files: [], editable: false, target: '/a/.lane.json' }),
     herdrRead: async target => { reads.push(target); return { ok: true, text: `EXACT ${target.pane}\n${'output\n'.repeat(45)}` }; }, herdrGo: async target => { calls.push(target); return { ok: true }; }, gitSummary: async () => ({ branch: 'lane/alpha', changes: 2 }), ...overrides };
   const session = createModernSession({ config, deps, env: {} });
   return { session, config, deps, workspaces, tabs, agents, items, events, reads, calls, panes };
@@ -38,7 +39,9 @@ test('completed work category flags stay visible on overview and Needs you and o
   items = f.items;
   await f.session.refresh();
   assert.match(rendered(f.session), /Category review/);
-  assert.match(rendered(f.session), /Needs you 1/);
+  assert.match(rendered(f.session), /Waiting 1/);
+  await f.session.key('c');
+  assert.match(rendered(f.session), /Category flags · 1/);
   await f.session.key('!');
   const needs = rendered(f.session).replaceAll('\n', ' ');
   assert.match(needs, /Category review · 1/); assert.match(needs, /mentions keys/);
@@ -415,7 +418,7 @@ test('Needs folds session results that the org resolved, replaced, only reported
   assert.match(m.resolved.find(n => n.data.id === 'older').settled, /newer session result about ENG-1/);
   // Folded groups stay one keypress away and explain themselves.
   await session.activate('view:needs'); let text = rendered(session);
-  assert.match(text, /Needs you · 4/); assert.match(text, /Resolved 2/); assert.match(text, /Ended sessions 1/); assert.match(text, /Reports 1/);
+  assert.match(text, /Waiting on you · 4/); assert.match(text, /Resolved 2/); assert.match(text, /Ended sessions 1/); assert.match(text, /Reports 1/);
   await session.activate('view:resolved'); await session.activate(`need:${m.resolved[0].key}`); text = rendered(session);
   assert.match(text, /Folded · /);
 });

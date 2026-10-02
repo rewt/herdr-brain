@@ -3,7 +3,8 @@
 This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes
 are the project screen's prompt (a new chat, or a task under the work block),
-what the operator types into a session, session names, and Needs you answers.
+what the operator types into a session, session names, Waiting on you answers,
+and project route overrides through validating record commands.
 It runs in Ink through `console/app.mjs`; it is not the browser design preview or
 `console/proto` fixture application. Opt in per launch; the existing console
 remains the default and retains all of its operational actions.
@@ -49,11 +50,34 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 
 ## What works
 
+- The overview shows Decided, Asked and Waiting on you counts and the latest
+  recorded decision. `c` opens Control: the current waiting queue, recent
+  decisions, questions with recommendations and answer attribution, and routes.
+  `d` and `f` open the complete decision and question histories, including old
+  decision notes, run decisions, structured report fields and automatic answers.
+  Enter opens their evidence; an unanswered record question opens the existing
+  answer page. A report question with an existing record ID appears once. A
+  report-only question is labeled as evidence and does not invent a waiting item.
+- `u` opens the effective project routes, configuration sources, dispatch
+  defaults, primary pool, selection policy and always arguments. Enter on a
+  route edits kind, model and effort; Tab changes fields, Ctrl+U clears, Enter
+  reviews, and a second Enter saves through `record routes set`. Esc or Cancel
+  leaves the config unchanged. A stale review cannot overwrite a newer edit.
+  Reads and writes use the canonical Git project's routing layers; inherited
+  `LANE_CONFIG` launch overrides do not redirect project edits. The CLI preserves
+  project lifecycle fields and inherited routes and writes only the project's
+  `.lane.json`; a newly created config is ready to add and commit in Git.
+  An unconfigured project shows portable suggestions as confirmation pending;
+  its first saved edit adopts the complete preset, preserving other defaults.
+- Existing records are discovered when opening a project or folder, with no
+  console configuration required. Reading a project without a record does not
+  create one; plain folders can inspect route suggestions but need Git to save.
+
 - The project screen (`h`) opens with counts (sessions, working, blocked,
   idle, done), then the work block: an open goal marked `meta.block`
   (morning, afternoon, overnight), else the goal most current sessions are
   linked to. Its open tasks follow, the ones with a session first, with that
-  session's number. Needs you shows each item with its recommended answer.
+  session's number. Waiting on you shows each item with its recommended answer.
   Every session is then numbered, one row each, under a `checkout · count`
   heading: state, name, time in its current state (as this console saw it
   change), uptime, harness, and its task or what it is doing.
@@ -66,7 +90,7 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   (`chat_kinds`, default claude and codex) in a chosen checkout. The bar
   always shows which and where (`task → G-15`, `claude → main`); Tab and
   Up/Down change them, and one Enter starts it. `--print` never writes.
-- A Needs you item's page lists its choices with what each causes, the
+- A Waiting on you item's page lists its choices with what each causes, the
   recommended one starred, then Reply, Open the session, Save for later and
   Drop. A number (or `y` for the recommended choice) arms the answer line,
   which says exactly what will happen; Enter does it. A reply or an org
@@ -114,7 +138,7 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
   reconnect errors retain distinguishable last-good data instead of pretending
   the project is empty.
 - Current, deferred and future-stage decisions remain separately reachable.
-- Needs you holds only what still asks something open. A session result folds
+- Waiting on you holds only what still asks something open. A session result folds
   out, still readable, when its record item has closed or a newer result about the
   same item replaced it (Resolved), when it reported without asking (Reports),
   or when its session ended over a day ago and no record item holds it (Ended
@@ -126,7 +150,8 @@ means Escape. This is a read-only rendering/testing interface in modern mode.
 | --- | --- |
 | `p` | Scope dropdown; type to filter, Up/Down choose, Enter selects, Esc dismisses |
 | `h` | Project overview |
-| `g` / `t` / `a` / `s` / `!` | Goals / Tasks / Activity / Sessions / Needs you |
+| `g` / `t` / `a` / `s` / `!` | Goals / Tasks / Activity / Sessions / Waiting on you |
+| `c` / `d` / `f` / `u` | Control / Decided / Asked / Routes |
 | `Tab` / `Shift+Tab` | Change section, remembering selection within it |
 | `j` / `k`, Up / Down | Select within the current section |
 | Left / Right | Change central view, or the selected checkout's horizontal tab |
@@ -160,9 +185,9 @@ show the remaining facts in session detail.
 Typing into a session writes only to that session's terminal, and only while
 the operator is in it. The prompt bar writes `record add` through the CLI for a
 task, and `herdr tab create` / `agent start` / `agent prompt` for a chat, on the
-operator's typed text and Enter. Renaming sets only a pane label. A Needs you
+operator's typed text and Enter. Renaming sets only a pane label. A Waiting on you
 answer goes through the Brain CLI or `record answer` after the answer line says
-what it will do. There is no dispatch or model-call path; use
+what it will do. Route overrides use `record routes set` after review. There is no dispatch or model-call path; use
 `node bin/org.mjs console --project NAME` for dispatch. Nothing writes as a side effect of opening or navigating the trial.
 
 Goal/session associations use recorded run data. A title resemblance does not

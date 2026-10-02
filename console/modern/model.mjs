@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { buildBoard } from '../lib/model.mjs';
+import { findOrgDir } from '../../lib/store.mjs';
 
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const firstSentence = value => {
@@ -95,13 +96,15 @@ export function workspaceIdentity(w, identity) {
 export function catalog(configured, workspaces, identity, opened = [], agents = []) {
   const result = [...configured, ...opened].map((p) => {
     const repo = identity(p.cwd);
-    return { ...p, id: p.id ?? `configured:${p.name}`, repoKey: repo?.key, root: repo?.root ?? p.cwd, git: Boolean(repo?.git), configured: Boolean(p.org) };
+    const org = p.org ?? (p.cwd ? findOrgDir({ cwd: p.cwd, env: {} }) : null);
+    return { ...p, org, id: p.id ?? `configured:${p.name}`, repoKey: repo?.key, root: repo?.root ?? p.cwd, git: Boolean(repo?.git), configured: Boolean(org) };
   });
   const known = new Set(result.map(p => p.repoKey).filter(Boolean));
   const discover = repo => {
     if (!repo?.key || known.has(repo.key)) return;
     known.add(repo.key);
-    result.push({ id: `discovered:${repo.key}`, name: repo.name ?? path.basename(repo.root), cwd: repo.root, root: repo.root, repoKey: repo.key, git: repo.git, org: null, configured: false });
+    const org = findOrgDir({ cwd: repo.root, env: {} });
+    result.push({ id: `discovered:${repo.key}`, name: repo.name ?? path.basename(repo.root), cwd: repo.root, root: repo.root, repoKey: repo.key, git: repo.git, org, configured: Boolean(org) });
   };
   for (const w of workspaces) discover(workspaceIdentity(w, identity));
   // An agent is assigned by its own cwd, so a checkout known only from an
@@ -127,7 +130,7 @@ export function lastRecorded(status) {
 }
 
 export function projectView(project, data, identity, now = Date.now()) {
-  const empty = { lastAt: null, sessions: [], goals: [], tasks: [], activity: [], needs: [], categoryFlags: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
+  const empty = { lastAt: null, sessions: [], goals: [], tasks: [], activity: [], decided: [], asked: [], routes: data.routes ?? null, needs: [], categoryFlags: [], later: [], parked: [], resolved: [], reports: [], ended: [], allNeeds: [], elsewhere: [], spaces: [], tabs: [], items: [], itemsById: new Map() };
   if (!project) return empty;
   const spaces = data.workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey && project.repoKey);
   const spacesById = new Map(spaces.map(w => [w.workspace_id, w]));
@@ -168,7 +171,7 @@ export function projectView(project, data, identity, now = Date.now()) {
   };
   const waiting = settle(board.waiting.filter(i => i.kind !== 'fold' && (i.kind !== 'result' || ownResult(i))), itemsById,
     { live: new Set(data.agents.map(a => a.pane)), now });
-  return { ...empty, items, itemsById, board, sessions, spaces, tabs, lastAt: lastRecorded(data.status), activity: activityEntries(data.status, data.events),
+  return { ...empty, ...controlEntries(data.status), items, itemsById, board, sessions, spaces, tabs, lastAt: lastRecorded(data.status), activity: activityEntries(data.status, data.events),
     categoryFlags: (data.status?.attention ?? today?.attention ?? []).filter(a => a.kind === 'category'),
     goals: items.filter(i => i.kind === 'goal' && !i.closed),
     tasks: items.filter(i => i.kind !== 'goal' && i.role !== 'human' && !['done', 'dropped'].includes(i.status)).map(i => ({ ...i, goal: goalOf(i) })),
@@ -178,6 +181,49 @@ export function projectView(project, data, identity, now = Date.now()) {
     ended: waiting.filter(i => i.foldedIn === 'ended'), allNeeds: waiting,
     elsewhere,
   };
+}
+
+// Questions and decisions are structured record facts, never inferred from
+// narrative or session metadata. All history survives the daily Activity cutoff.
+export function controlEntries(status) {
+  const items = status?.items ?? [], runs = status?.runs ?? [];
+  const asked = items.filter(i => i.role === 'human' && i.kind !== 'goal').map(i => ({ ...i, source: i.id,
+    why: i.notes?.find(n => n.kind === 'why')?.text ?? i.created?.why,
+    answerState: i.meta?.answer != null && i.closed ? `${i.meta.answer} · ${i.meta.answered_by ?? 'unknown'}` : i.closed ? 'dropped' : 'Waiting on you',
+  })).sort((a, b) => (b.created?.seq ?? 0) - (a.created?.seq ?? 0));
+  const decided = [...items, ...runs].flatMap(i => (i.notes ?? []).filter(n => n.decision && n.kind !== 'answer').map(n => ({
+    key: `${i.id}:${n.seq}`, item: i.item ?? i.id, source: i.id, at: n.at, by: n.by ?? 'unknown', seq: n.seq,
+    text: n.summary ?? n.text, detail: n.text,
+  })));
+  const fields = value => Array.isArray(value) ? value : value == null ? [] : [value];
+  const textOf = value => typeof value === 'string' ? value : value?.text ?? value?.decision ?? value?.question;
+  for (const run of runs) {
+    const report = run.report;
+    if (!report) continue;
+    const by = run.meta?.agent ?? `run:${run.id}`;
+    for (const [index, decision] of fields(report.decisions ?? report.extra?.decisions).entries()) {
+      const text = textOf(decision);
+      if (typeof text !== 'string' || !text.trim()) continue;
+      decided.push({ key: `${run.id}:report:${index}`, item: run.item, source: run.id, by, at: report.at, seq: report.seq,
+        text, detail: [text, decision?.category ? `Category: ${decision.category}` : null, decision?.why].filter(Boolean).join('\n\n') });
+    }
+    for (const [index, question] of fields(report.questions ?? report.extra?.questions).entries()) {
+      const title = textOf(question);
+      if (typeof title !== 'string' || !title.trim() || asked.some(q => q.id === question?.id)) continue;
+      // A report entry without an actual record question is evidence, not a
+      // synthetic waiting item or something record answer can accept.
+      asked.push({ id: `${run.id}:question:${index}`, source: run.id, item: run.item, title, why: question?.why,
+        created: { by, at: report.at, seq: report.seq }, meta: { category: question?.category, recommend: question?.recommend },
+        answerState: 'In report · no record question', reportQuestion: true });
+    }
+  }
+  for (const q of asked.filter(q => q.closed && q.meta?.answer != null)) decided.push({
+    key: `${q.id}:${q.closed.seq}`, item: q.id, source: q.id, at: q.closed.at, by: q.meta.answered_by ?? 'unknown', seq: q.closed.seq,
+    text: `${q.title} → ${q.meta.answer}`, detail: q.notes?.filter(n => n.kind === 'answer').at(-1)?.text ?? q.why,
+  });
+  decided.sort((a, b) => (b.seq ?? 0) - (a.seq ?? 0));
+  asked.sort((a, b) => (b.created?.seq ?? 0) - (a.created?.seq ?? 0));
+  return { asked, decided };
 }
 
 const closedItem = item => Boolean(item && (item.closed || ['done', 'dropped'].includes(item.status)));

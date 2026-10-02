@@ -18,9 +18,9 @@ import { parseAgentList, parseTabList } from './sources.mjs';
 export const ORG_BIN = process.env.HERDR_ORG_BIN || fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 export const herdrBinary = () => process.env.HERDR_BIN_PATH || 'herdr';
 
-function run(cmd, args, { env, timeout = 15000 } = {}) {
+function run(cmd, args, { env, cwd, timeout = 15000 } = {}) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { env, timeout, maxBuffer: 64 * 1024 * 1024, encoding: 'utf8' }, (error, stdout, stderr) => {
+    execFile(cmd, args, { env, cwd, timeout, maxBuffer: 64 * 1024 * 1024, encoding: 'utf8' }, (error, stdout, stderr) => {
       resolve({ ok: !error, code: error?.code ?? 0, stdout, stderr, error });
     });
   });
@@ -56,6 +56,18 @@ export async function orgStatus(project) {
   const doc = JSON.parse(r.stdout);
   if (!Array.isArray(doc.items) || !Array.isArray(doc.runs)) throw new Error('unexpected record status output');
   return doc;
+}
+
+export async function orgRoutes(project) {
+  const r = await run(process.execPath, [ORG_BIN, 'routes', '--json'], { cwd: project.root ?? project.cwd });
+  if (!r.ok) throw new Error(firstLine(r.stderr) || 'record routes failed');
+  return JSON.parse(r.stdout);
+}
+
+export async function orgRouteSet(project, { name, kind, model, effort, revision }) {
+  const r = await run(process.execPath, [ORG_BIN, 'routes', 'set', name, `--kind=${kind}`, `--model=${model}`, `--effort=${effort}`, `--expect=${revision}`, '--json'],
+    { cwd: project.root ?? project.cwd, env: { ...process.env, ORG_ACTOR: 'human' } });
+  return r.ok ? { ok: true, routes: JSON.parse(r.stdout) } : { ok: false, error: firstLine(r.stderr) || 'record routes set failed' };
 }
 
 // The live trial reads topology separately so an unavailable source never looks

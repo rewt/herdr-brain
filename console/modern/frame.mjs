@@ -17,7 +17,7 @@ export const MODERN_PALETTES = {
 export const MODERN_PALETTE = MODERN_PALETTES.light;
 // Needs you, then the groups folded out of it; each stays one keypress away.
 export const NEED_FOLDS = [
-  { view: 'needs', list: 'needs', title: 'Needs you', label: 'Open' },
+  { view: 'needs', list: 'needs', title: 'Waiting on you', label: 'Open' },
   { view: 'resolved', list: 'resolved', title: 'Resolved in the record', label: 'Resolved', about: 'Session questions whose record item has closed, or that a newer result about the same item replaced.' },
   { view: 'ended', list: 'ended', title: 'Ended sessions', label: 'Ended sessions', about: 'Questions from sessions that ended over a day ago, with no record item recording them.' },
   { view: 'reports', list: 'reports', title: 'Session reports', label: 'Reports', about: 'Sessions that finished and reported without asking for a decision.' },
@@ -92,7 +92,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   control('refresh', 'r Refresh', 0, cols - 11, 10, 'blue');
   const space = m.spaces.find(w => w.workspace_id === s.space);
   const title = s.view === 'projects' ? 'Your projects' : s.view === 'folder' ? 'Open a folder' : s.view === 'ideas' ? 'Start with an idea' : s.view === 'output' ? space?.label ?? 'Session output' : p?.name ?? 'Start where you are';
-  const action = s.view === 'overview' && p ? 'n Start' : 'Read only';
+  const action = s.routeEdit ? 'Enter reviews / saves' : s.view === 'routes' ? 'Enter edit' : s.view === 'control' ? 'c Control' : s.view === 'overview' && p ? 'n Start' : 'Read only';
   put(2, x, title, 'bright', 'bg', true, width - action.length - 2);
   put(2, cols - action.length - 2, action, 'muted', 'bg', false, action.length);
   const errors = Object.entries(s.errors);
@@ -100,12 +100,15 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   put(5, rail, '─'.repeat(cols - rail), 'rule');
   if (s.view !== 'output') {
     let tx = x;
-    for (const [id, label] of [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['activity', 'Activity'], ['needs', `Needs you ${m.needs.length + (m.categoryFlags?.length ?? 0)}`]]) {
+    const attention = m.needs.length + (m.categoryFlags?.length ?? 0);
+    const tabs = width < 76 ? [['overview', 'Home'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['activity', 'Activity'], ['needs', `Waiting ${attention}`], ['control', 'Control']] :
+      [['overview', 'Overview'], ['goals', 'Goals'], ['tasks', 'Tasks'], ['activity', 'Activity'], ['needs', `Waiting ${attention}`], ['control', 'Control']];
+    for (const [id, label] of tabs) {
       control(`view:${id}`, label, 4, tx, label.length + 2, id === 'needs' ? 'amber' : 'fg');
       if (s.view === id || (id === 'needs' && NEED_FOLDS.some(f => f.view === s.view))) put(5, tx, '━'.repeat(label.length), 'blue', 'bg', false, label.length);
       tx += label.length + 3;
     }
-    if (width >= 70) control('checkouts', rail ? 'w Hide checkouts' : 'w Checkouts', 4, cols - 18, 16, 'muted');
+    if (tx + 18 < cols) control('checkouts', rail ? 'w Hide checkouts' : 'w Checkouts', 4, cols - 18, 16, 'muted');
   } else {
     const tabs = m.tabs.filter(t => t.workspace_id === s.space), selected = tabs.findIndex(t => t.tab_id === s.tab);
     const cell = Math.min(23, Math.max(12, Math.floor(width / Math.min(4, tabs.length || 1))));
@@ -136,7 +139,94 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const label = n.handle ?? n.data?.tab_label ?? n.session ?? n.question ?? 'Decision';
     return row(`${pad(clip(label, 16), 16)} ${n.foldedIn ? pad(when, 7) : ''}${needText(n)}${n.later ? ' · later' : ''}`, { id: `need:${n.key}`, fg: n.foldedIn ? 'fg' : 'amber' });
   };
-  if (s.view === 'projects' || (!p && s.view === 'overview')) {
+  const decisionRows = limit => {
+    const list = m.decided.slice(0, limit);
+    for (const n of list) {
+      row(`${n.source} · ${n.by} · ${n.at?.slice(0, 16).replace('T', ' ') ?? ''}`, { id: `decision:${n.key}`, fg: 'muted' });
+      for (const text of wrap(n.text, width - 2).slice(0, 2)) row(`  ${text}`, { id: `decision:${n.key}`, hitOnly: true, focusAs: `decision:${n.key}`, fg: 'teal' });
+    }
+    if (!list.length) paragraph(s.errors.status ? 'Record unavailable · r retry' : 'No decisions recorded.');
+  };
+  const askedRows = limit => {
+    for (const q of m.asked.slice(0, limit)) {
+      row(`${q.source ?? q.id} · ${q.meta?.category ?? 'no category'} · ${q.answerState}`, { id: `asked:${q.id}`, fg: q.closed ? 'muted' : 'amber' });
+      row(`  ${q.title}`, { id: `asked:${q.id}`, hitOnly: true, focusAs: `asked:${q.id}` });
+      row(`  recommended: ${q.meta?.recommend ?? 'not recorded'} · by ${q.created?.by ?? 'unknown'}`, { fg: 'muted' });
+    }
+    if (!m.asked.length) paragraph(s.errors.status ? 'Record unavailable · r retry' : 'No questions recorded.');
+  };
+  const routesRows = limit => {
+    if (!m.routes) { paragraph(s.errors.routes ? 'Routes unavailable · r retry' : 'Routes have not loaded.'); return; }
+    const r = m.routes, config = r.config;
+    paragraph(r.suggested ? 'Suggested defaults · confirmation pending. Saving an edit adopts them for this project.' : 'Project routes · Enter a route to change its kind, model or effort.');
+    if (s.errors.routes) paragraph('Showing last loaded routes; refresh before editing.', 'amber');
+    if (limit === Infinity && config.authority) paragraph(config.authority);
+    for (const file of r.files) paragraph(`Source: ${file}`);
+    const defaults = config.dispatch ?? {};
+    paragraph(`Default: ${defaults.kind ?? 'claude'} · ${defaults.model ?? 'harness default'} · ${defaults.effort ?? 'harness default'}`);
+    if (config.selection_policy?.primary_implementation_pool) paragraph(`Primary pool: ${config.selection_policy.primary_implementation_pool}`);
+    row('Route → kind · model · effort', { fg: 'muted' });
+    for (const [name, route] of Object.entries(config.routes ?? {}).sort(([a], [b]) => a.localeCompare(b)).slice(0, limit)) {
+      const id = `route:${name}`;
+      row(name, { id, fg: 'blue', bold: true });
+      for (const text of wrap(`${route.kind ?? defaults.kind ?? 'claude'} · ${route.model ?? defaults.model ?? 'harness default'} · ${route.effort ?? defaults.effort ?? 'harness default'}${route.use ? ` · ${route.use}` : ''}`, width - 2)) row(`  ${text}`, { id, hitOnly: true, focusAs: id });
+    }
+    if (limit === Infinity) {
+      row(); section('Selection policy');
+      for (const [task, choice] of Object.entries(config.selection_policy?.by_task_class ?? {})) paragraph(`${task} → ${typeof choice === 'string' ? choice : Object.entries(choice).map(([pool, name]) => `${pool}: ${name}`).join(' · ')}`, 'fg');
+      for (const [kind, args] of Object.entries(config.always_args ?? {})) paragraph(`${kind} always: ${JSON.stringify(args)}`);
+    row(); paragraph(`Edits save in ${r.target}`);
+      if (!r.editable) paragraph('Open a Git project to save a route change.', 'amber');
+    }
+  };
+  if (s.routeEdit) {
+    const e = s.routeEdit;
+    section(`${e.confirm ? 'Review route change' : 'Edit route'} · ${e.name}`);
+    if (e.confirm) {
+      for (const [i, field] of ['kind', 'model', 'effort'].entries()) paragraph(`${field}: ${e.original[field] || '(default)'} → ${e.values[i].trim()}`, 'fg');
+      paragraph(`Save for ${e.project.name} in ${e.target}`);
+      paragraph('This applies to future launches.');
+      row(e.busy ? 'Saving…' : 'Enter  Save route', { id: 'route-save', fg: 'teal' });
+    } else {
+      for (const [i, field] of ['Kind', 'Model', 'Effort'].entries()) {
+        row(`${field}: ${clip(e.values[i], Math.max(1, width - field.length - 5))}${e.field === i ? '▏' : ''}`, { id: `route-field:${i}`, bg: e.field === i ? 'selected' : 'bg', bold: e.field === i });
+      }
+      row(); paragraph('Tab / ↑↓ field · Ctrl+U clears · Enter reviews');
+      row('Enter  Review change', { id: 'route-save', fg: 'blue' });
+    }
+    row('Cancel', { id: 'route-cancel', fg: 'muted' });
+  } else if (s.view === 'control') {
+    section(`Waiting on you · ${m.needs.length}`, 'amber');
+    if (m.categoryFlags?.length) row(`Category flags · ${m.categoryFlags.length} · ! review ›`, { id: 'view:needs', fg: 'amber' });
+    m.needs.slice(0, 3).forEach(needRow); if (!m.needs.length) paragraph(s.errors.today || s.errors.brain ? 'Waiting sources unavailable · r retry' : 'Nothing waiting on you.');
+    row('! Open waiting queue ›', { id: 'view:needs', fg: 'amber' }); row();
+    section(`Decided · ${m.decided.length}`, 'teal'); decisionRows(2);
+    row('d All decisions ›', { id: 'view:decided', fg: 'teal' }); row();
+    section(`Asked · ${m.asked.length}`, 'blue'); askedRows(2);
+    row('f All questions ›', { id: 'view:asked', fg: 'blue' }); row();
+    section('Routes in effect', 'blue'); routesRows(2);
+    row('u All routes / edit ›', { id: 'view:routes', fg: 'blue' });
+  } else if (s.view === 'decided') {
+    section(`Decided · ${m.decided.length} recorded decisions`, 'teal'); decisionRows(Infinity);
+  } else if (s.view === 'asked') {
+    section(`Asked · ${m.asked.length} recorded questions`, 'blue'); askedRows(Infinity);
+  } else if (s.view === 'routes') {
+    section('Routes in effect', 'blue'); routesRows(Infinity);
+  } else if (s.view === 'asked-detail') {
+    const q = m.asked.find(q => q.id === s.detail);
+    if (!q) paragraph('This question is no longer available.');
+    else {
+      section(`${q.source} · ${q.created.by}`, 'blue'); paragraph(q.title, 'bright'); paragraph(q.why, 'fg');
+      paragraph(`Category: ${q.meta.category ?? 'not recorded'} · recommended: ${q.meta.recommend ?? 'not recorded'}`);
+      paragraph('This report entry has no record question to answer. It is not in Waiting on you.');
+      row(`Open source item ${q.item} ›`, { id: `item:${q.item}`, fg: 'blue' });
+    }
+  } else if (s.view === 'decision') {
+    const n = m.decided.find(n => n.key === s.detail);
+    if (!n) paragraph('This decision is no longer available.');
+    else { section(`${n.source} · ${n.by}`, 'teal'); paragraph(n.at); paragraph(n.text, 'fg'); row(); paragraph(n.detail, 'fg');
+      row(`Open ${n.item} ›`, { id: `item:${n.item}`, fg: 'blue' }); }
+  } else if (s.view === 'projects' || (!p && s.view === 'overview')) {
     section('Continue a project');
     for (const project of s.projects) {
       row(`${project.name} · ${project.org ? 'Connected' : 'Discovered in Herdr / opened folder'}`, { id: `project:${project.id}`, fg: 'blue' });
@@ -221,7 +311,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
   } else if (s.view === 'need') {
     // The item's own page: what is asked, why, then the choices as controls.
     const n = m.allNeeds.find(n => n.key === s.detail);
-    if (!n) paragraph('This item has left the queue. Return to Needs you for the current list.');
+    if (!n) paragraph('This item has left the queue. Return to Waiting on you for the current list.');
     else {
       const g = n.data?.digest, from = n.kind === 'result' ? `from ${n.data?.tab_label ?? n.session ?? 'a session'}` : 'record question';
       section(`${n.handle ?? n.question ?? 'Decision'} · ${from}`, 'amber');
@@ -327,7 +417,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   } else if (s.view === 'help') {
     section('Keyboard and mouse');
-    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Needs you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Needs you; n adds a task or starts a chat.', 'Writes: the start bar, answers, and what you type into a session. No model calls.']) paragraph(text, 'fg');
+    for (const text of ['Tab / Shift+Tab  Change section · Enter opens', 'j / k or Up / Down  Select within section', 'Left / Right  Change main view or checkout tab', 'p Project dropdown · type to filter · Esc dismisses', 'h Overview · g Goals · t Tasks · a Activity · s Sessions · ! Waiting on you', 'w Show/hide checkouts · native Herdr owns the sidebar', 'Esc / b / Alt+Left  Back · Alt+Right Forward', 'PageUp / PageDown or wheel  Scroll; live output switches to transcript', 'v Live screen · l Transcript · Shift+arrows pan screen locally', 'r Refresh · o Open selected native terminal · D Light/dark · q Quit', 'n Start a chat or a task from the project screen · a second Enter confirms', 'Click a session to type into it here; Ctrl+] or ‹ Back returns · i types into a watched session', 'Back restores your project, selection and scroll.', 'Answer questions from Waiting on you; n adds a task or starts a chat.', 'c Control · d Decided · f Asked · u Routes', 'Routes: Enter edits · Tab field · Ctrl+U clears · Enter reviews then saves · Esc cancels', 'Writes: the start bar, answers, project routes, and session input. No model calls.']) paragraph(text, 'fg');
   }
   const maxScroll = Math.max(0, body.length - bodyHeight); s.scroll = Math.min(s.scroll, maxScroll);
   body.forEach((cells, i) => cells.forEach(c => {
@@ -368,7 +458,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     }
   }
   const issue = errors[0] ? `${errors[0][0]}: ${errors[0][1]}` : '';
-  const hints = s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
+  const hints = s.routeEdit ? ' Tab / ↑↓ field · Ctrl+U clears · Enter reviews then saves · Esc cancels' : ['control', 'decided', 'asked', 'routes', 'decision'].includes(s.view) ? ' c Control · d Decided · f Asked · ! Waiting · u Routes · Enter opens · Esc back' : s.interactive && s.view === 'output' ? ' Typing goes to this session · Ctrl+] or click ‹ Back to return · wheel scrolls' : s.rename ? ' Name this session · Enter saves · Esc cancels · empty clears' : s.compose ? ' Enter starts · Tab task / claude / codex · ↑↓ checkout · Esc closes' : s.view === 'need' ? ' Esc back to the queue · ↑↓ and Enter choose too' : s.view === 'overview' ? ` 1-9 open session · click a name to rename · n write · p project · g goals · t tasks · ! needs${maxScroll ? '  PgDn' : ''}` : ` p scope  Tab pane  ↑↓ rows  ←→ views  Enter open  Esc back  n start${maxScroll ? '  PgDn' : ''}`;
   put(rows - 1, 0, s.message || issue || hints, issue || s.message ? 'amber' : 'muted', 'panel', false, !issue && !s.message && cols >= 100 ? cols - 24 : cols);
   if (!issue && !s.message && cols >= 100) put(rows - 1, cols - 22, `Live · ${age(s.times.agents, now)}`, 'muted', 'panel', false, 22);
   if (s.picker) {

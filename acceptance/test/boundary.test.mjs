@@ -116,6 +116,9 @@ test('creation receipts grant the only new targets and force no-focus', () => {
     assert.equal(f.call('pane', 'process-info', '--pane', 'new:p2').status, 0);
     assert.notEqual(f.call('pane', 'process-info', '--pane', 'foreign:p2').status, 0);
     assert.ok(f.calls().find((a) => a[0] === 'workspace').includes('--no-focus'));
+    const receipts = fs.readFileSync(path.join(f.root, 'evidence/focus-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    const creation = receipts.find((row) => row.type === 'end' && row.args[0] === 'workspace' && row.args[1] === 'create');
+    assert.deepEqual(creation.created, { panes: ['new:p1'], workspaces: ['new'] });
     assert.equal(f.call('workspace', 'close', 'new').status, 0);
     assert.notEqual(f.call('workspace', 'close', 'newer').status, 0);
   } finally { f.close(); }
@@ -144,6 +147,18 @@ test('agent send-keys requires an owned target and checks its live cwd', () => {
     fs.writeFileSync(path.join(f.root, 'moved-cwd'), os.tmpdir());
     assert.notEqual(f.call('agent', 'send-keys', 'own:p1', 'ctrl+u').status, 0);
     assert.equal(f.calls().filter((a) => a[0] === 'agent' && a[1] === 'send-keys').length, 1);
+  } finally { f.close(); }
+});
+
+test('named-agent mutation receipts retain the pane resolved by native identity lookup', () => {
+  const f = fixture();
+  try {
+    const reply = f.call('agent', 'send-keys', 'worker', 'Enter');
+    assert.equal(reply.status, 0, reply.stderr);
+    const receipts = fs.readFileSync(path.join(f.root, 'evidence/focus-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(receipts.length, 2);
+    assert.ok(receipts.every((row) => row.targets.panes[0] === 'own:p1'));
+    assert.ok(f.calls().some((args) => args[0] === 'agent' && args[1] === 'get' && args[2] === 'worker'));
   } finally { f.close(); }
 });
 

@@ -72,14 +72,19 @@ after monitoring starts.
 and current baselines, case, timestamps, samples, events and actual/requested
 Herdr calls. A move into a harness-owned pane or workspace fails, including late
 panes absent from the pane ledger. A change correlated with an active or recently
-completed harness/candidate call also fails and names that call. Other changes
-are recorded as external activity and re-baseline the monitor, so the operator
+completed harness/candidate call fails only when its destination is the specific
+pane or workspace that call targeted or created, and names that call. Mere time
+overlap with an unrelated call is retained in `nearbyCalls` as diagnostic context.
+Creation-result receipts retain opaque IDs before ownership registration and
+through cleanup. Other changes are recorded as external activity and re-baseline
+the monitor, so the operator
 and unrelated projects can navigate during a run. Ownership receipts are retained
 through cleanup. Missing samples, unresolved destinations or a broken subscription
 are PENDING, never proof of preserved focus. The monitor never restores focus.
 Forbidden focus attempts also produce typed receipts and fail the case even if
 the caller suppresses the refusal and exits successfully. Late observations
-correlate against the most recent completion for one second after that call ends.
+correlate against the most recent matching completion for one second after that
+call ends.
 
 On Herdr 0.8.2, `--no-focus` covers workspace/worktree/tab creation, worktree open,
 pane split/move and plugin pane open; it is not an option for agent start, pane run

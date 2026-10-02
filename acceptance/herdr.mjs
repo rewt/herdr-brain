@@ -44,14 +44,17 @@ function safePath(p) {
   if (!inside(ancestor)) throw new CapabilityRefusal(`path outside scratch: ${p}`);
 }
 let child;
+const agentPanes = new Map();
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child?.kill(signal); process.exit(1); });
 async function real(args) {
   const mutating = !['list', 'get', 'read', 'wait', 'process-info'].includes(args[1]);
   const id = `${process.pid}:${Date.now()}:${Math.random()}`;
   const focusCalls = path.join(root, 'evidence', 'focus-calls.jsonl');
-  const traceCall = (type) => {
+  const agentPane = args[0] === 'agent' ? agentPanes.get(args[2]) : undefined;
+  const targets = agentPane ? { panes: [agentPane], workspaces: [] } : undefined;
+  const traceCall = (type, extra = {}) => {
     if (mutating && fs.existsSync(path.dirname(focusCalls))) fs.appendFileSync(focusCalls,
-      JSON.stringify({ type, id, at: Date.now(), args, requested: argv }) + '\n');
+      JSON.stringify({ type, id, at: Date.now(), args, requested: argv, ...(targets ? { targets } : {}), ...extra }) + '\n');
   };
   traceCall('start');
   return await new Promise((resolve, reject) => {
@@ -64,13 +67,27 @@ async function real(args) {
     child.on('error', reject);
     child.on('close', (code) => {
       clearTimeout(timer);
-      traceCall('end');
+      let created;
+      if (code === 0 && ['workspace', 'worktree', 'tab'].includes(args[0]) && ['create', 'open'].includes(args[1])) {
+        try {
+          const result = JSON.parse(stdout).result;
+          const workspace = result.workspace ?? result.open_result?.workspace;
+          const pane = result.root_pane ?? result.open_result?.root_pane;
+          created = { panes: pane?.pane_id ? [pane.pane_id] : [], workspaces: workspace?.workspace_id ? [workspace.workspace_id] : [] };
+        } catch { /* malformed native receipts still fail at the caller boundary */ }
+      }
+      traceCall('end', created ? { created } : {});
       fs.appendFileSync(path.join(root, 'herdr.jsonl'), JSON.stringify({ args, code, stdout, stderr }) + '\n');
       resolve({ code, stdout, stderr });
     });
   });
 }
-const body = (r) => { if (r.code !== 0) throw new Error(r.stderr || r.stdout); return r.stdout.trim() ? JSON.parse(r.stdout).result : {}; };
+const body = (r) => {
+  if (r.code !== 0) throw new Error(r.stderr || r.stdout);
+  const result = r.stdout.trim() ? JSON.parse(r.stdout).result : {};
+  if (result.agent?.name && result.agent?.pane_id) agentPanes.set(result.agent.name, result.agent.pane_id);
+  return result;
+};
 async function ownedPane(id) {
   if (state.panes.includes(id)) return;
   // Late default-layout children must have a live identity and scratch cwd;
@@ -122,6 +139,7 @@ try {
     else if (state.panes.includes(target)) { /* owned pane */ }
     else {
       const agent = body(await real(['agent', 'get', target])).agent;
+      agentPanes.set(target, agent.pane_id);
       await ownedPane(agent.pane_id);
     }
   } else throw new CapabilityRefusal(`unsupported Herdr operation: ${group} ${verb}`);

@@ -13,6 +13,18 @@ function readCalls(evidence) {
   const file = path.join(evidence, 'focus-calls.jsonl');
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
 }
+function targetsDestination(call, pane, workspace) {
+  if (call.targets?.panes?.includes(pane) || call.targets?.workspaces?.includes(workspace)) return true;
+  if (call.created?.panes?.includes(pane) || call.created?.workspaces?.includes(workspace)) return true;
+  return [call.args, call.requested].some((argv) => {
+    const args = argv.slice(0, argv.includes('--') ? argv.indexOf('--') : argv.length);
+    if (['pane', 'agent'].includes(args[0]) && args[2] === pane) return true;
+    if (workspace && args[0] === 'workspace' && args[2] === workspace) return true;
+    return args.some((arg, index) =>
+      (arg === '--pane' && args[index + 1] === pane) ||
+      (workspace && arg === '--workspace' && args[index + 1] === workspace));
+  });
+}
 export function assertFocus(summary, { evidence, error } = {}) {
   const attempts = evidence ? readCalls(evidence).filter((row) => row.type === 'forbidden-focus') : summary?.forbiddenAttempts ?? [];
   if (attempts.length) {
@@ -79,18 +91,18 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
     const phaseFile = path.join(evidence, 'focus-phase.json');
     const phase = fs.existsSync(phaseFile) ? JSON.parse(fs.readFileSync(phaseFile)) : { key: 'setup' };
     const rows = readCalls(evidence);
-    const active = new Map(); let completed;
+    const active = new Map(), completed = [];
     for (const row of rows) {
       if (row.type === 'start') active.set(row.id, row);
       else if (row.type === 'end') {
         const call = active.get(row.id);
         active.delete(row.id);
-        if (call && (!completed || row.at >= completed.completedAt)) completed = { ...call, completedAt: row.at };
+        if (call && at - row.at < 1000) completed.push({ ...call, created: row.created, completedAt: row.at });
       }
     }
-    // A focus event may arrive just after the completion receipt. Keep that
-    // call as a correlation, without claiming causality for outside clients.
-    return { phase, calls: active.size ? [...active.values()] : completed && at - completed.completedAt < 1000 ? [completed] : [] };
+    // Capture temporal overlap as diagnostics. Only a matching destination
+    // establishes correlation, including one second after its call completes.
+    return { phase, nearbyCalls: [...active.values(), ...completed.sort((a, b) => b.completedAt - a.completedAt)] };
   };
   const error = (value) => {
     summary.errors.push(value.message ?? String(value));
@@ -101,21 +113,47 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
     // events cannot overtake each other while checking their workspace IDs.
     const at = Date.now(), row = { type, at, panes, ...context(at) };
     observations = observations.then(async () => {
-      if (fs.existsSync(ownership)) {
+      const retainOwnership = () => {
+        for (const receipt of readCalls(evidence)) {
+          for (const id of receipt.created?.panes ?? []) ownedPanes.add(id);
+          for (const id of receipt.created?.workspaces ?? []) ownedWorkspaces.add(id);
+        }
+        if (!fs.existsSync(ownership)) return;
         const ledger = JSON.parse(fs.readFileSync(ownership));
         for (const id of ledger.panes ?? []) ownedPanes.add(id);
         for (const id of ledger.workspaces ?? []) ownedWorkspaces.add(id);
-      }
+      };
+      retainOwnership();
+      row.calls = [];
       row.from = summary.currentBaseline;
       if (panes.length !== 1) throw new Error(`expected one focused pane, received ${JSON.stringify(panes)}`);
       if (panes[0] !== summary.currentBaseline) {
         let workspace = paneWorkspaces.get(panes[0]);
-        if (!workspace && !ownedPanes.has(panes[0]) && !row.calls.length) {
+        if (!workspace && !ownedPanes.has(panes[0]) && !row.nearbyCalls.some((call) => targetsDestination(call, panes[0]))) {
           const result = await client.request('pane.get', { pane_id: panes[0] });
           workspace = result.pane?.workspace_id;
           if (!workspace) throw new Error(`focus destination workspace unavailable: ${panes[0]}`);
           paneWorkspaces.set(panes[0], workspace);
         }
+        // Creation may emit focus before its result/ownership receipt arrives.
+        // Resolve only those already-active creation calls before classifying
+        // a new destination; uncertainty must not green a transient move.
+        const creators = row.nearbyCalls.filter((call) => call.completedAt === undefined &&
+          ['workspace', 'worktree'].includes(call.args[0]) && ['create', 'open'].includes(call.args[1]));
+        const deadline = Date.now() + 3000;
+        let receipts = readCalls(evidence);
+        while (!ownedPanes.has(panes[0]) && !ownedWorkspaces.has(workspace) && creators.some((call) =>
+          !receipts.some((receipt) => receipt.type === 'end' && receipt.id === call.id))) {
+          if (Date.now() >= deadline) throw new Error('focus destination creation receipt unavailable');
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          receipts = readCalls(evidence);
+        }
+        retainOwnership();
+        const matching = row.nearbyCalls.map((call) => ({ ...call,
+          created: receipts.find((receipt) => receipt.type === 'end' && receipt.id === call.id)?.created ?? call.created,
+        })).filter((call) => targetsDestination(call, panes[0], workspace));
+        row.calls = matching.some((call) => call.completedAt === undefined)
+          ? matching.filter((call) => call.completedAt === undefined) : matching.slice(0, 1);
         row.workspaces = workspace ? [workspace] : [];
         row.owned = ownedPanes.has(panes[0]) || ownedWorkspaces.has(workspace);
         row.classification = row.owned || row.calls.length ? 'harness' : 'external';

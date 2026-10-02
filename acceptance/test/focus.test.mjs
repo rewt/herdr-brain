@@ -144,7 +144,7 @@ test('an unlisted pane in an owned workspace fails after an external re-baseline
   assert.throws(() => assertFocus(summary), /from external:p1 to unlisted:p3.*harness-owned destination/);
 });
 
-test('a call-correlated move to a foreign pane still fails after an external re-baseline', async (t) => {
+test('external moves during unrelated active and completed calls re-baseline without failing', async (t) => {
   const { root, monitor, change } = await fixture(t);
   change(['external:p1']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
@@ -152,10 +152,88 @@ test('a call-correlated move to a foreign pane still fails after an external re-
     args: ['workspace', 'close', 'scratch'], requested: ['workspace', 'close', 'scratch'] }) + '\n');
   change(['foreign:p9']);
   spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  fs.appendFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'end', id: 'call', at: Date.now() }) + '\n');
+  change(['external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
   const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.externalChanges.length, 3);
+  assert.equal(summary.changes.length, 0);
+  assert.equal(summary.currentBaseline, 'external:p1');
+  assert.ok(summary.externalChanges.every((row) => row.calls.length === 0));
+  assert.equal(summary.externalChanges[1].nearbyCalls[0].args[2], 'scratch');
+  assert.equal(summary.externalChanges[2].nearbyCalls[0].completedAt > 0, true);
+  assert.match(assertFocus(summary), /zero harness focus changes; 3 external changes recorded/);
+});
+
+test('a move to the pane targeted by a concurrent call fails after an external re-baseline', async (t) => {
+  const { root, monitor, change } = await fixture(t);
+  change(['external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'call', at: Date.now(),
+    args: ['pane', 'run', 'foreign:p9', 'worker'], requested: ['agent', 'start', 'worker', '--pane', 'foreign:p9'] }) + '\n');
+  change(['foreign:p9', 'external:p1']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
   assert.equal(summary.externalChanges.length, 1);
+  assert.equal(summary.changes.length, 1);
   assert.equal(summary.changes[0].owned, false);
-  assert.throws(() => assertFocus(summary), /from external:p1 to foreign:p9.*workspace close scratch/);
+  assert.throws(() => assertFocus(summary), /from external:p1 to foreign:p9.*pane run foreign:p9 worker \(requested agent start worker/);
+});
+
+test('workspace destinations correlate only with their matching call despite a newer unrelated completion', async (t) => {
+  const { root, monitor, change } = await fixture(t);
+  const calls = path.join(root, 'focus-calls.jsonl');
+  const at = Date.now() - 10;
+  const call = { type: 'start', id: 'workspace-call', at,
+    args: ['worktree', 'open', '--workspace', 'foreign', '--path', '/scratch/lane'],
+    requested: ['worktree', 'open', '--workspace', 'foreign', '--path', '/scratch/lane'] };
+  fs.writeFileSync(calls, JSON.stringify(call) + '\n');
+  fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: call.id, at: at + 1 }) + '\n');
+  fs.appendFileSync(calls, JSON.stringify({ ...call, id: 'unrelated', at: at + 2,
+    args: ['workspace', 'close', 'scratch'], requested: ['workspace', 'close', 'scratch'] }) + '\n');
+  fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: 'unrelated', at: at + 3 }) + '\n');
+  change(['foreign:p9', 'operator:p7']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.changes.length, 1);
+  assert.equal(summary.changes[0].owned, false);
+  assert.equal(summary.changes[0].calls[0].id, call.id);
+  assert.throws(() => assertFocus(summary), /worktree open --workspace foreign/);
+});
+
+test('a resolved agent target receipt correlates a named call without guessing pane IDs', async (t) => {
+  const { root, monitor, change } = await fixture(t);
+  fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'named-agent', at: Date.now(),
+    args: ['agent', 'send-keys', 'worker', 'Enter'], requested: ['agent', 'send-keys', 'worker', 'Enter'],
+    targets: { panes: ['foreign:p9'], workspaces: [] } }) + '\n');
+  change(['foreign:p9', 'operator:p7']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.changes.length, 1);
+  assert.equal(summary.changes[0].owned, false);
+  assert.throws(() => assertFocus(summary), /agent send-keys worker Enter/);
+});
+
+test('a creation receipt attributes a transient move before ownership is registered', async (t) => {
+  const { root, monitor, change } = await fixture(t);
+  const calls = path.join(root, 'focus-calls.jsonl');
+  const call = { type: 'start', id: 'creation', at: Date.now(),
+    args: ['workspace', 'create', '--cwd', '/scratch/project', '--no-focus'],
+    requested: ['workspace', 'create', '--cwd', '/scratch/project'] };
+  fs.writeFileSync(calls, JSON.stringify(call) + '\n');
+  change(['unlisted:p3', 'operator:p7']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  fs.appendFileSync(calls, JSON.stringify({ type: 'end', id: call.id, at: Date.now(), created: { panes: [], workspaces: ['scratch'] } }) + '\n');
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.changes.length, 1);
+  assert.equal(summary.changes[0].owned, true);
+  assert.equal(summary.changes[0].calls[0].id, call.id);
+  assert.throws(() => assertFocus(summary), /workspace create --cwd.*requested workspace create/);
 });
 
 test('a focus event after a slow completed call names that call using its completion time', async (t) => {

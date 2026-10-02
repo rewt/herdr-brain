@@ -20,6 +20,7 @@ import { constants as osConstants, homedir, hostname, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { acquireLock } from "./promotion-lock.mjs";
 import { ROUTE_PRESET } from './preset.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 
@@ -2166,13 +2167,30 @@ function check(args) {
 }
 
 function promote(topic) {
-  repositoryRoot({ requiredBy: "promote" });
+  const root = repositoryRoot({ requiredBy: "promote" });
+  let release;
+  try { release = acquireLock(join(REPO_IDENTITY, "lane-promote.lock")); }
+  catch (error) { fail(error.message); }
+  // fail() exits; the exit handler releases ordinary refusals too. Signals leave
+  // the lock behind because a validation child may still be alive.
+  process.once("exit", release);
+  try { promoteLocked(topic, root); }
+  finally { process.off("exit", release); release(); }
+}
+
+function promoteLocked(topic, root) {
   const branch = laneBranch(topic);
   if (!branchExists(branch)) fail(`no such lane branch: ${branch}`);
   const path = worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open one before promoting`);
   requireClean(path, "lane worktree");
-  requireClean(REPO, `canonical ${MAIN} checkout`);
+  requireClean(root, `canonical ${MAIN} checkout`);
+  if (tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root }) !== MAIN) {
+    fail(`canonical checkout must be on ${MAIN}`);
+  }
+  if (tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path }) !== branch) {
+    fail(`lane worktree must be on ${branch}`);
+  }
   let mainHead = git(["rev-parse", MAIN]);
   if (git(["merge-base", MAIN, branch]) !== mainHead) {
     // A promotion elsewhere moved main. Rebasing is mechanical when the dry
@@ -2191,19 +2209,27 @@ function promote(topic) {
   prepareWorktree(path);
   const validate = process.env.LANE_VALIDATE ?? DEFAULT_VALIDATE;
   process.stdout.write(`validating in ${path}: ${validate}\n`);
+  const validatedHead = git(["rev-parse", branch]);
   const run = spawnSync(validate, { cwd: path, shell: true, stdio: "inherit" });
   if (run.status !== 0) fail(`validation failed (exit ${run.status}); nothing merged`);
   if (git(["rev-parse", MAIN]) !== mainHead) {
     fail(`${MAIN} moved during validation; re-run promote`);
   }
-  git(["merge", "--ff-only", branch]);
+  requireClean(path, "validated lane worktree");
+  requireClean(root, `canonical ${MAIN} checkout`);
+  if (git(["rev-parse", branch]) !== validatedHead || git(["rev-parse", "HEAD"], { cwd: path }) !== validatedHead ||
+      tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path }) !== branch ||
+      tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root }) !== MAIN) {
+    fail("worktree branch or lane tip changed during validation; re-run promote");
+  }
+  git(["merge", "--ff-only", branch], { cwd: root });
   process.stdout.write(
     `promoted ${branch}: ${MAIN} ${mainHead.slice(0, 7)} -> ${git(["rev-parse", "--short", MAIN])} (fast-forward)\n`,
   );
   process.stdout.write("No push performed. Close the lane with: lane close " + topic + "\n");
 }
 
-function close(topic) {
+function close(topic, { gitOnly = false } = {}) {
   repositoryRoot({ requiredBy: "close" });
   const branch = laneBranch(topic);
   if (!branchExists(branch)) fail(`no such lane branch: ${branch}`);
@@ -2215,7 +2241,7 @@ function close(topic) {
     let removed = false;
     let mismatchedMetadata = false;
     try {
-      const workspaceId = openWorkspaceIdFor(path, {
+      const workspaceId = gitOnly ? undefined : openWorkspaceIdFor(path, {
         refuseStale: false,
         onMismatch: () => { mismatchedMetadata = true; },
       });
@@ -2378,7 +2404,8 @@ switch (command) {
     break;
   case "close":
     if (topic === undefined) fail("usage: lane.mjs close <topic>");
-    close(topic);
+    if (rest.some((arg) => arg !== "--git-only")) fail("usage: lane close <topic> [--git-only]");
+    close(topic, { gitOnly: rest.includes("--git-only") });
     break;
   default:
     process.stdout.write(
@@ -2404,7 +2431,7 @@ switch (command) {
         "  check [--cmd <validate command>]\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
-        "  close <topic>    remove worktree; delete merged branch or archive-tag unmerged;\n" +
+        "  close <topic> [--git-only]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",
     );
     process.exit(1);

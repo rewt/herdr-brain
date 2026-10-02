@@ -369,3 +369,20 @@ for (const variant of ['different-script', 'different-record', 'missing-script',
     assert.equal(fs.existsSync(path.join(f.state, 'schedule.log')), false);
   });
 }
+
+
+test('promotion cleanup inspects and closes only the requested lane workspace', (t) => {
+  const f = fixture(t);
+  f.ws.push({ workspace_id: 'other', worktree: { checkout_path: f.repo, repo_root: f.repo,
+    repo_key: f.common, is_linked_worktree: false } });
+  const original = f.command;
+  f.command = (exe, args, options) => {
+    if (['tab', 'pane'].includes(args[0]) && args[1] === 'list') assert.equal(args.at(-1), 'w');
+    return original(exe, args, options);
+  };
+  f.runner().tick({ workspacePath: f.lane, resume: false });
+  assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
+  f.actions = [];
+  f.runner().tick({ workspacePath: f.root, resume: false });
+  assert.deepEqual(f.actions, []);
+});

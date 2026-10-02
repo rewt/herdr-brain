@@ -28,6 +28,7 @@ look like one project.
 | `lib/` | The dependency-free core: event storage, state folding, reports and views. |
 | `brain/` | Captures stopped session screens for the operator queue and provides commands that start or answer sessions. |
 | `console/` | The operator's terminal screen for sessions, questions and the Brain queue. |
+| `promote/` | [Ordered promotion queue](promote/README.md), detached drain, scoped cleanup and supervisor outcomes. |
 | `lanes/` | Worktree open, dispatch, review, promotion and close; to become Brain's dispatch layer. |
 | `watch/` | Waits without inference, validates a run report and delivers it to the supervisor. |
 | `supervisor/` | The settle prompt, explicit settle/continue session launchers, watcher wrapper and tab housekeeping. |

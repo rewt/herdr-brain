@@ -143,6 +143,12 @@ legacy results and restoration receipt are retained in
 `workspace-identity-cutover.json`. This proves the supervisor entry switch's
 background lookup; the remaining ENG-64 switch canaries stay independently gated.
 
+The promotion queue case uses a fresh project without lane/promotion configuration or
+a record, runs two default npm gates in FIFO order, keeps a dirty refused lane, and
+requires all three notices at the owned supervisor PTY. It retains queue and gate
+logs under the scratch evidence directory.
+
+
 Release mechanics build immutable copies with the candidate release script in a
 scratch repository/home/bin, then activate, reactivate, roll back and restore.
 They include a `before/` directory that predates the `record` launcher.

@@ -324,6 +324,49 @@ try {
     assert.ok(!fs.existsSync(job.info.workspace));
     return `${job.run}: one notice, recorded report, green fast-forward, lane removed; red/dirty gates refused`;
   });
+  await test('Unconfigured promotion queue: FIFO, notices and refusal', async () => {
+    const script = requireCandidate('promote/promote.mjs');
+    if (!supervisor) pending('owned supervisor stand-in unavailable');
+    const repo = path.join(root, 'promotion-project'); initRepo(repo);
+    write(path.join(repo, 'package.json'), JSON.stringify({ scripts: { test: 'node --test check.mjs' } }));
+    write(path.join(repo, 'check.mjs'), "import assert from 'node:assert/strict'; assert.equal(2 + 2, 4);\n");
+    git(repo, ['add', '.']); git(repo, ['commit', '-qm', 'Add default project tests']);
+    const worktrees = new Map();
+    for (const topic of ['queue-first', 'queue-second', 'queue-refusal']) {
+      const workspace = path.join(root, topic); worktrees.set(topic, workspace);
+      git(repo, ['worktree', 'add', '-b', `lane/${topic}`, workspace]);
+      write(path.join(workspace, `${topic}.txt`), topic);
+      git(workspace, ['add', '.']); git(workspace, ['commit', '-qm', topic]);
+    }
+    write(path.join(worktrees.get('queue-refusal'), 'dirty'), 'uncommitted work');
+    const extra = { ORG_DIR: '', LANE_CONFIG: '', LANE_VALIDATE: undefined, NODE_TEST_CONTEXT: undefined };
+    // No .lane.json, .promote.json, record or Herdr workspace for this project.
+    // Notices go to this run's already owned supervisor PTY via its scoped adapter.
+    const request = json(node(script, ['queue-first', 'queue-second', 'queue-refusal', '--to', supervisor.name,
+      '--delivery-attempts', '2', '--retry-seconds', '0'], { cwd: repo, extra }).stdout);
+    pids.add(request.worker.pid);
+    const queueFile = path.join(repo, '.git/promote/queue.json');
+    await until(() => JSON.parse(read(queueFile)).results.length === 3, 'ordered queue drained', 60_000);
+    await until(() => !fs.existsSync(path.join(repo, '.git/promote/worker.lock')), 'promotion worker exited');
+    pids.delete(request.worker.pid);
+    const state = JSON.parse(read(queueFile));
+    assert.deepEqual(state.results.map((r) => [r.topic, r.outcome, r.delivered]), [
+      ['queue-first', 'promoted', true], ['queue-second', 'promoted', true], ['queue-refusal', 'refused', true],
+    ]);
+    await until(() => state.results.every((r) => inbox().includes(`[promote-queue] id=${r.id} `)), 'every promotion notice reached supervisor PTY');
+    const messages = inbox().split('\n').filter(Boolean).map(JSON.parse).map((entry) => entry.line)
+      .filter((line) => line.includes('[promote-queue]'));
+    assert.deepEqual(messages.map((line) => /lane=(\S+)/.exec(line)[1]), ['queue-first', 'queue-second', 'queue-refusal']);
+    assert.ok(!fs.existsSync(worktrees.get('queue-first')) && !fs.existsSync(worktrees.get('queue-second')));
+    assert.ok(fs.existsSync(worktrees.get('queue-refusal')));
+    assert.match(state.results[2].reason, /not clean/);
+    assert.equal(git(repo, ['rev-list', '--merges', 'main']), '');
+    assert.equal(git(repo, ['status', '--porcelain']), '');
+    assert.equal(git(repo, ['remote']), '');
+    fs.copyFileSync(queueFile, path.join(evidence, 'promotion-queue.json'));
+    for (const result of state.results) fs.copyFileSync(result.log, path.join(evidence, `${result.topic}.log`));
+    return 'unconfigured project: two default npm gates promoted FIFO, lanes closed; dirty refusal kept its lane; three supervisor PTY notices';
+  });
   for (const [mode, prefix] of [['missing', 'watch-no-report'], ['invalid', 'watch-invalid-report'], ['blocked', 'watch-blocked']]) {
     await test(`Failure path: ${mode} worker`, async () => {
       const job = await dispatch(mode, `failure-${mode}`);

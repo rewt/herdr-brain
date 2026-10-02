@@ -95,6 +95,11 @@ The command runs configured preparation and validation, then records
 `.lane/gate.json` with the full commit, command, exit status, and timing. Re-run it
 after the final commit so the printed `GATE <head> exit=0` names that commit.
 
+The [promotion queue](../promote/README.md) runs promotion, scoped finished-tab cleanup,
+lane closure and supervisor notices in order. Direct `lane promote` shares its Git
+lock and refuses a simultaneous gate. `lane close --git-only` preserves Herdr
+workspaces; the queue uses it after closing only authorized finished tabs.
+
 Promote and close from the clean canonical checkout:
 
 ```sh

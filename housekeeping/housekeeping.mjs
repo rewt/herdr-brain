@@ -106,10 +106,10 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       return !fs.existsSync(wt.checkout_path) || commonAt(wt.checkout_path) === common;
     } catch { return false; }
   }
-  function observe() {
+  function observe(workspacePath) {
     const workspaces = h(['workspace', 'list']).workspaces;
     if (!Array.isArray(workspaces)) throw new Error('Herdr returned no workspaces');
-    const owned = workspaces.filter(mine);
+    const owned = workspaces.filter(mine).filter((w) => !workspacePath || canonicalPath(w.worktree.checkout_path) === canonicalPath(workspacePath));
     const tabs = [], panes = [];
     for (const w of owned) {
       const ts = h(['tab', 'list', '--workspace', w.workspace_id]).tabs;
@@ -182,15 +182,15 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     if (!interruptedComposer(invoke(herdr, ['agent', 'read', agent.pane_id, '--source', 'visible']))) return null;
     return run;
   }
-  function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {} } = {}) {
-    const snapshot = observe(); // Any failed read aborts the tick, never implies gone.
+  function tick({ cleanup = true, resume = true, dryRun = false, seen = new Set(), remember = () => {}, workspacePath } = {}) {
+    const snapshot = observe(workspacePath); // Any failed read aborts the tick, never implies gone.
     const plan = cleanup ? tidy(snapshot) : { close: [], keep: [] };
     log({ action: 'scan', close: plan.close.length, keep: plan.keep.length, dryRun });
     if (dryRun) for (const tab of plan.keep) log({ action: 'keep', ...tab });
     for (const tab of plan.close) {
       if (dryRun) { log({ action: 'would-close', ...tab }); continue; }
       // Re-read record, topology, process state and Git before every deletion.
-      if (!tidy(observe()).close.some((t) => t.tab_id === tab.tab_id)) { log({ action: 'skip-close', ...tab }); continue; }
+      if (!tidy(observe(workspacePath)).close.some((t) => t.tab_id === tab.tab_id)) { log({ action: 'skip-close', ...tab }); continue; }
       try { invoke(herdr, ['tab', 'close', tab.tab_id]); log({ action: 'closed', ...tab }); }
       catch (error) { log({ action: 'close-failed', ...tab, error: error.message }); }
     }
@@ -198,7 +198,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       const run = candidate(snapshot, agent);
       if (!run || seen.has(resumeKey(run, agent))) continue;
       if (dryRun) { log({ action: 'would-resume', run: run.id, pane: agent.pane_id }); continue; }
-      const fresh = observe();
+      const fresh = observe(workspacePath);
       const live = fresh.agents.find((a) => a.pane_id === agent.pane_id);
       if (!live || resumeKey(run, live) !== resumeKey(run, agent) || !candidate(fresh, live)) continue;
       const key = resumeKey(run, agent);
@@ -206,7 +206,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
       remember(key); seen.add(key);
       try {
         invoke(herdr, ['agent', 'send-keys', agent.pane_id, 'ctrl+e', 'ctrl+u', 'ctrl+u']);
-        const checked = observe();
+        const checked = observe(workspacePath);
         const occupant = checked.agents.find((a) => a.pane_id === agent.pane_id);
         const currentRun = occupant && matchingRun(occupant, checked.runs);
         if (!currentRun || currentRun.id !== run.id || currentRun.report || currentRun.abandoned ||

@@ -8,7 +8,7 @@ compatibility remains intact.
 The exact file list is [publication-files.tsv](adoption/publication-files.tsv):
 468 entries, each with an action, recommendation and source line references
 where applicable. [publication-history.tsv](adoption/publication-history.tsv)
-adds 705 paths requiring outgoing-history review or exclusion. Directory
+adds 704 paths requiring outgoing-history review or exclusion. Directory
 entries below cover every descendant, including
 files without a regex hit. The TSV expands them into individual paths. File
 line numbers refer to the lane's source at the audit, not future rewritten files.
@@ -43,8 +43,9 @@ text documents absent from the original current-path TSV. This added the private
 `docs/INVENTORY.md`, the production-derived review fixture, the pilot-themed memo,
 internal study/approval references in two module/prototype READMEs, and the new
 adoption review. The adopter README also needs its private audit links replaced
-before publication. Both inventories include those seven paths and this run's
-new private report. The original blob scan above is inherited evidence; this
+before publication. The current-path inventory includes those seven paths and this run's
+new private report; the historical inventory adds seven paths and updates its
+already-listed README recommendation. The original blob scan above is inherited evidence; this
 correction does not claim a fresh whole-history secret scan.
 
 The 43 remaining unlisted Markdown/text documents were inspected: the Herdr,

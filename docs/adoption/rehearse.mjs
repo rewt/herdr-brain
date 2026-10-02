@@ -172,8 +172,7 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
   // topology instead of reading or starting the operator's default server.
   const emptyHerdr = path.join(root, 'empty-herdr.cjs');
   write(emptyHerdr, `#!${process.execPath}\nconst args=process.argv.slice(2); if(args[1]!=='list'){console.error('scratch Herdr permits list only');process.exit(1);} console.log(JSON.stringify({result:{workspaces:[],tabs:[],panes:[],agents:[]}}));\n`, 0o755);
-  env.HERDR_BIN_PATH = emptyHerdr;
-  write(path.join(evidence, 'console.txt'), run(process.execPath, [path.join(active, 'console/app.mjs'), '--modern', '--folder', project, '--print', '100x34']));
+  write(path.join(evidence, 'console.txt'), run(process.execPath, [path.join(active, 'console/app.mjs'), '--modern', '--folder', project, '--print', '100x34'], project, { HERDR_BIN_PATH: emptyHerdr }));
   write(path.join(evidence, 'supervisor.txt'), run(process.execPath, [path.join(active, 'supervisor/supervisor.mjs'), 'brief']));
   run(process.execPath, [path.join(active, 'housekeeping/housekeeping.mjs'), '--once', '--dry-run', '--herdr', emptyHerdr, '--state-dir', path.join(project, '.lane/housekeeping-preview')]);
   // Separate bounded mechanical exercise for the reviewed supervisor cycle.

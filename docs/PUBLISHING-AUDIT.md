@@ -6,8 +6,10 @@ namespace change, push, release activation or publication. Existing live pilot
 compatibility remains intact.
 
 The exact file list is [publication-files.tsv](adoption/publication-files.tsv):
-459 entries, each with an action, recommendation and source line references
-where applicable. Directory entries below cover every descendant, including
+460 entries, each with an action, recommendation and source line references
+where applicable. [publication-history.tsv](adoption/publication-history.tsv)
+adds 697 paths requiring outgoing-history review or exclusion. Directory
+entries below cover every descendant, including
 files without a regex hit. The TSV expands them into individual paths. File
 line numbers refer to the lane's source at the audit, not future rewritten files.
 
@@ -23,8 +25,14 @@ credential/private-key-shaped literals. Reviewed hits as runtime code, private
 evidence, synthetic fixtures or portable system paths. Examined tracked file modes;
 there are no tracked symlinks or submodules at this base.
 
-The credential-shaped search found no key-shaped literals in the tracked tree.
-This is a bounded content audit, not a claim that Git history, private directories
+Also enumerated historical tracked names across all local refs and scanned
+2898 reachable unique blobs (about 54 MB) without printing their contents.
+The historical inventory includes previously removed raw acceptance logs,
+transcripts, ownership receipts, private pilot scripts and older folded-lanes
+reports/specs. Its counts are a snapshot of locally reachable refs, not a promise
+about future refs. The credential-shaped searches found no key-shaped literals
+in either the tracked tree or those reachable blobs.
+This is a bounded content audit, not a claim that all Git metadata, private directories
 or all possible credential formats are safe. Never copy a secret hit into public
 review evidence. Re-run on the exact proposed publication commit and outgoing
 history; concurrent work can add new paths.
@@ -95,7 +103,7 @@ is not authorization to disrupt that live caller.
   distribution allowlist or reviewed export exclusions before a distributable
   build. The entry snapshot's runtime allowlist does not sanitize the full plugin
   or release archive. Inspect the extracted archive as well as source.
-- `docs/PUBLISHING-AUDIT.md`, `docs/adoption/publication-files.tsv`, the walkthrough's
+- `docs/PUBLISHING-AUDIT.md`, `docs/adoption/publication-files.tsv`, `docs/adoption/publication-history.tsv`, the walkthrough's
   local evidence pointers and the run report are private audit evidence too.
   Retain the portable guide/rehearsal; remove local evidence and internal
   inventories from the eventual public package.

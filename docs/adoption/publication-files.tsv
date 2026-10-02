@@ -27,6 +27,7 @@ docs/ADOPTING.md	review identity	Use the actual approved publisher/plugin ID and
 docs/PUBLISHING-AUDIT.md	rewrite or exclude	Keep internal path inventory private; publish only a sanitized publication-policy derivative.	new adoption artifact
 docs/adoption/WALKTHROUGH.md	rewrite evidence	Retain the portable recipe; remove local evidence roots, timestamps and operational run context before public distribution.	new adoption artifact
 docs/adoption/publication-files.tsv	exclude	This exact private-path inventory is operational evidence; retain privately and omit from distribution.	new adoption artifact
+docs/adoption/publication-history.tsv	exclude	This exact historical private-path inventory is operational evidence; retain privately and omit from distribution.	new adoption artifact
 docs/archive/bch-cloak-pilot-2026-09-16/README.md	exclude	Keep archived pilot instructions/scripts in private archival storage; exclude from publication and release archives.	personal path / account: 4; pilot project / topology: 1,4,11
 docs/archive/bch-cloak-pilot-2026-09-16/SETTLE.md	exclude	Keep archived pilot instructions/scripts in private archival storage; exclude from publication and release archives.	personal path / account: 19,135,139,141; pilot project / topology: 1,87
 docs/archive/bch-cloak-pilot-2026-09-16/arm-watch.sh	exclude	Keep archived pilot instructions/scripts in private archival storage; exclude from publication and release archives.	personal path / account: 8,19,20; pilot project / topology: 9,16

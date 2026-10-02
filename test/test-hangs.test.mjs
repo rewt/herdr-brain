@@ -88,6 +88,15 @@ async function assertGone(pid) {
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `fixture process ${pid} survived cleanup`);
 }
 
+test('a nested bounded suite may exceed one command deadline while ordinary commands retain their bound', async t => {
+  assert.throws(() => spawnChild(t, process.execPath, ['-e', 'while(true){}'], {}, 35000), /child timeout must be 1\.\.15000ms/);
+  const f = fixture(t, () => `test('aggregate suite longer than one command',async()=>{await new Promise(resolve=>setTimeout(resolve,15500));});`);
+  const child = spawnChild(t, process.execPath, [runner, '--file-timeout=25000', '--suite-timeout=30000', f.file], {}, 35000);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /aggregate suite longer than one command/);
+});
+
 test('a late waiter receives a child result and output after close', async (t) => {
   const child = spawnChild(t, process.execPath, ['-e', "console.log('already closed')"]);
   await waitForExit(child);

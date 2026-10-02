@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { registerProcess, killProcess } from './processes.mjs';
 
 const children = new WeakMap();
 const processes = new WeakMap();
+const suiteRunner = fileURLToPath(new URL('./run.mjs', import.meta.url));
 
 export const childProcessEntry = (child) => processes.get(child);
 
@@ -14,7 +16,10 @@ export function killChild(child, signal = 'SIGKILL') {
 }
 
 export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15_000) throw new Error('child timeout must be 1..15000ms');
+  // A nested suite has its own leader, file watchdog and cancellation cleanup.
+  // Its aggregate duration can exceed one command's fifteen-second bound.
+  const maximum = command === process.execPath && args[0] === suiteRunner ? 55_000 : 15_000;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > maximum) throw new Error(`child timeout must be 1..${maximum}ms`);
   const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options, detached: false });
   let rollback = false;
   child.kill = (signal = 'SIGTERM') => {

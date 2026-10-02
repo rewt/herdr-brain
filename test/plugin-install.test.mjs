@@ -3,16 +3,23 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
 import { assertSupervisorEntry } from '../acceptance/entry.mjs';
+import { spawnChild, waitForExit, killChild } from './helpers/child.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-plugin-test-'));
-  t.after(() => { spawnSync('chmod', ['-R', 'u+w', root], { timeout: 5000 }); fs.rmSync(root, { recursive: true, force: true }); });
+  const children = new Set();
+  t.after(async () => {
+    for (const child of children) killChild(child);
+    await Promise.all([...children].map(waitForExit));
+    spawnSync('chmod', ['-R', 'u+w', root], { timeout: 5000 });
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
   const repo = path.join(root, 'source'), home = path.join(root, 'user'), nativeBin = path.join(root, 'native');
   for (const dir of [repo, home, nativeBin]) fs.mkdirSync(dir);
   for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'supervisor']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
@@ -34,7 +41,7 @@ function fixture(t) {
   fs.writeFileSync(path.join(repo, 'version'), 'second'); git('add', '.'); git('commit', '-qm', 'Second'); git('tag', 'second');
   const release = (...args) => ok('bash', [path.join(source, 'herdr/release.sh'), ...args]);
   const driver = (...args) => run(process.execPath, [path.join(source, 'herdr/entry-install.mjs'), '--product', repo, ...args]);
-  return { root, repo, home, native, env, run, ok, release, driver, receipt, bin: env.HERDR_MONITOR_ENTRY_BIN };
+  return { root, repo, home, native, env, run, ok, release, driver, receipt, children, bin: env.HERDR_MONITOR_ENTRY_BIN };
 }
 
 async function waitUntil(check, label) {
@@ -45,12 +52,12 @@ async function waitUntil(check, label) {
   }
 }
 function installChild(t, f, preload, actor) {
-  const child = spawn(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot'], {
+  const child = spawnChild(t, process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot'], {
     cwd: f.repo, env: { ...f.env, ORG_ACTOR: `${f.env.ORG_ACTOR}-${actor}` }, timeout: 15000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'],
   });
-  let output = ''; child.stdout.on('data', (part) => { output += part; }); child.stderr.on('data', (part) => { output += part; });
-  const ended = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', (status) => resolve({ status, output })); });
-  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
+  f.children.add(child);
+  const ended = waitForExit(child).then(result => ({ status: result.code, output: result.stdout + result.stderr }));
+  ended.catch(() => {});
   return { child, ended };
 }
 
@@ -95,16 +102,18 @@ for (const target of ['shell', 'adapter', 'receipt', 'absent adapter', 'unchange
   }
 }
 
-test('release tests preserve a separate installation inherited through the parent environment', { timeout: 90000 }, (t) => {
+test('release tests preserve a separate installation inherited through the parent environment', { timeout: 60000 }, async (t) => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.home, '.zshrc'), '# Parent shell\n', { mode: 0o600 });
   assert.equal(f.driver('--snapshot').status, 0);
   const files = [...fs.readdirSync(f.bin).map((name) => path.join(f.bin, name)), ...['.zshenv', '.zshrc', '.bashrc', '.bash_profile'].map((name) => path.join(f.home, name))];
   const before = files.map((file) => ({ file, content: fs.readFileSync(file), mode: fs.statSync(file).mode & 0o777 }));
   const childEnv = { ...f.env }; delete childEnv.NODE_TEST_CONTEXT;
-  const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', path.join(source, 'test/release.test.mjs')], {
-    cwd: source, env: childEnv, encoding: 'utf8', timeout: 60000,
-  });
+  const child = spawnChild(t, process.execPath, [path.join(source, 'test/helpers/run.mjs'), '--file-timeout=45000', '--suite-timeout=50000', path.join(source, 'test/release.test.mjs')], {
+    cwd: source, env: childEnv,
+  }, 55000);
+  f.children.add(child);
+  const result = await waitForExit(child);
   for (const { file, content, mode } of before) {
     assert.equal(fs.existsSync(file), true, `${file} must survive the child release suite`);
     assert.deepEqual(fs.readFileSync(file), content, file);
@@ -112,7 +121,7 @@ test('release tests preserve a separate installation inherited through the paren
   }
   assert.match(result.stdout, /# tests [1-9]\d*\n/u, 'the child must execute the release suite');
   assert.match(result.stdout, /# skipped 0\n/u, 'both release fixture paths must run');
-  assert.equal(result.status, 0, result.error?.message ?? result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(f.driver('--remove').status, 0);
 });
 

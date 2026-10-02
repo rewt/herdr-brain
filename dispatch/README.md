@@ -46,6 +46,15 @@ need a fresh worker. The session registry is never read to choose or reuse worke
 The previous run must already be reported or abandoned, even when its worker is
 idle; an open run cannot share its worker with a new fix round.
 
+Settle adds `--from-run R-previous` to bind a correction to its originating run.
+Dispatch saves this precondition and passes `--if-current-run` to record start;
+the event-log transaction refuses creation if a later sibling run exists, the
+current outcome belongs to another run, or the item is explicitly closed. A
+retry retains the saved origin. `--retry ... --from-run R-previous` may bind an
+older journal that lacks the field, or confirm the same origin, but cannot
+replace an existing origin. It adds a record precondition, preserving the saved
+work request and all route and worker recovery checks.
+
 The generated prompt names the ask, run brief, exact report path and run ID, plus
 `--extra` text. Neither input brief is patched or replaced. The worker starts
 without a work prompt; the prompt is sent only after its record is complete and

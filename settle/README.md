@@ -34,7 +34,16 @@ judgment. Already ingested reports use the record's immutable copy; subsequent
 edits to the source cannot silently replace it. Report-provided commands are
 never executed. Blocked, failed and needs-human reports are recorded and handed
 to the supervisor with their substance and recorded outcomes intact, without
-guessing a scope decision. Only a done outcome is reopened while review is pending.
+guessing a scope decision. Settle acts only on the requested run. A later run or
+an outcome belonging to another reported run receives a supervisor handoff,
+including on retries and saved readiness. Stale, unrecorded reports are retained
+as evidence without ingestion, since ingestion would replace the current outcome.
+Only that run's own done outcome is reopened while review is pending.
+Ingest and reopen use the record CLI's optional `--if-current-run R-n` guard,
+checked inside the event-log transaction, so a newer report arriving between the
+precheck and either write cannot have its outcome overwritten or cleared.
+Correction dispatch saves `--from-run R-n` and passes the same guard to record
+start, so a superseding report cannot be cleared by opening a correction run.
 
 The generated review brief explicitly budgets zero build, test, prepare, install
 and check commands. Reviewers independently inspect code, Git and the validation
@@ -56,7 +65,11 @@ panes. An unrebased lane or unresolved record blocker receives an evidence hando
 NEEDS-WORK, FAIL or red validation produce a correction brief and call dispatch
 for a new run on the same item/lane. Immediately before a new launch or incomplete
 dispatch retry, settle checks current item closure, blockers and concurrent runs;
-an operator drop or new blocker receives a handoff. A completed dispatch receipt
+an operator drop or new blocker receives a handoff. Recovery exempts only its
+recorded correction run from supersession and overlap checks. It checks unresolved
+blocker links and waiting report outcomes independently of derived active status;
+a declined question still blocks, while resolved blockers permit recovery.
+A completed dispatch receipt
 can still be adopted without launching work. A fresh worker is the default. `--reuse`
 requests dispatch's existing identity-checked stopped-worker reuse; older runs
 without occupant evidence require a fresh worker. Budgets and total runs appear

@@ -89,6 +89,14 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   const nonclaims=budget&&!acknowledgment?inherited:'None';
   const recordAction=path.join(root,'review-record-action.json');
   if(fs.existsSync(recordAction)) execFileSync(process.execPath,[process.env.SETTLE_TEST_RECORD,...JSON.parse(fs.readFileSync(recordAction,'utf8'))],{cwd:repo,env:{...process.env,ORG_DIR:path.join(repo,'.org')}});
+  const newcomer=path.join(root,'review-new-report.json');
+  if(fs.existsSync(newcomer)) {
+   const {item,outcome}=JSON.parse(fs.readFileSync(newcomer,'utf8'));
+   const record=(argv)=>execFileSync(process.execPath,[process.env.SETTLE_TEST_RECORD,...argv],{cwd:repo,env:{...process.env,ORG_DIR:path.join(repo,'.org')},encoding:'utf8'});
+   const run=record(['start',item,'--workspace',cwd]).match(/R-\\d+/)[0], report=JSON.parse(record(['show',run,'--json'])).report_path;
+   fs.writeFileSync(report,'---\\nrun: '+run+'\\noutcome: '+outcome+'\\nsummary: Newer run needs supervisor judgment.\\nblockers: ["Scope decision"]\\nproposals: []\\n---\\n');
+   record(['ingest',report]);fs.writeFileSync(path.join(root,'review-new-run'),run);
+  }
   const reviewed=fs.existsSync(path.join(root,'wrong-head'))?'0'.repeat(40):field('Reviewed commit');
   const lines=['**'+verdict+'**','Schema: lane-review/v1','Reviewed commit: '+reviewed,'Topic: '+field('Topic'),'Round: '+field('Round'),'Review ID: '+field('Review ID'),'Base branch: '+field('Base branch'),'Base commit: '+field('Base commit'),'','## Findings',findings,'','## Re-executed','~~~json','[]','~~~','','## Non-claims',nonclaims,'','## Unverified',unverified,'','## Private identifiers','~~~json','[]','~~~','','## Analysis','Scripted independent claim check.','','<!-- lane-review-complete -->',''];
   const dest=field('Private record file');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,lines.join('\\n').replaceAll('~~~',String.fromCharCode(96).repeat(3)));

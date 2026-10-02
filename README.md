@@ -531,6 +531,15 @@ The CLI refuses only what would make the record inconsistent: unknown ids, block
 cycles, a second, different report for the same run, a report whose run contradicts `--run`, and
 reports it cannot parse.
 
+Automation may add `--if-current-run R-n` to `record ingest`, `record reopen` and
+`record start`.
+The record checks this caller precondition under the event-log lock: the run must
+belong to the target item and have no later sibling run. For ingest, it must also
+match the report's run; for reopen or start, any existing outcome must belong to that run
+and the item must not be explicitly closed. An already-open item with no outcome
+remains a no-op. These optional guards prevent stale automation from overwriting
+another run's outcome; ordinary unguarded record commands retain their behavior.
+
 ## Status
 
 Derived, never stored, checked in this order:

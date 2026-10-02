@@ -193,7 +193,7 @@ test('other-item lane work and dropped items require judgment; a saved PASS rech
   assert.equal(result(g.settle(dropped)).result, 'escalate'); assert.equal(g.show(g.show(dropped).item).status, 'dropped');
   const h = fixture(t), ready = h.start(); h.commit('correct\n'); h.report(ready);
   assert.equal(result(h.settle(ready)).result, 'promotable'); h.start();
-  const r = h.settle(ready); assert.equal(r.status, 1); assert.match(r.stderr, /readiness changed/);
+  const r = result(h.settle(ready)); assert.equal(r.result, 'escalate'); assert.match(r.reason, /superseded/);
   const i = fixture(t), concurrent = i.start(); i.commit('correct\n'); i.report(concurrent);
   i.record(['start', i.show(concurrent).item, '--workspace', i.repo]);
   assert.equal(result(i.settle(concurrent)).result, 'escalate');

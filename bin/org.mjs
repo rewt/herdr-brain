@@ -10,7 +10,7 @@ import {
   UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
-  BUDGET_KEYS, attention, blockedBy, fold, isResolved, itemStatus, nextItemId, nextRunId, openRuns,
+  BUDGET_KEYS, attention, blockedBy, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
   wouldCycleBlock, wouldCycleParent,
 } from '../lib/state.mjs';
 import { readReport } from '../lib/report.mjs';
@@ -56,13 +56,14 @@ Questions for the operator
                                           budget.<key> meta.<key>) or record run metadata
                                           (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
   record close <ID> [--dropped] [--note T]
-  record reopen <ID> [--note T]
+  record reopen <ID> [--note T] [--if-current-run R-n]
 
 Runs and reports
   record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [--workspace DIR]
-          [--report PATH] [--escalation] [--meta key=value]...
+          [--report PATH] [--escalation] [--meta key=value]... [--if-current-run R-n]
   record check <report.md>                validate a report without recording anything
-  record ingest <report.md> [--run R-n]   record a report
+  record ingest <report.md> [--run R-n] [--if-current-run R-n]
+                                          record a report; optional guard checked under the log lock
   record sync                             record every report waiting at an open run's report path
   record abandon <R-n> [--note T]         give up on a run (a later report is still accepted)
   record brief <R-n>                      print the brief a run was given
@@ -152,6 +153,14 @@ function requireItem(s, id) {
   const item = s.items.get(id);
   if (!item) throw new UserError(`unknown item ${id}`);
   return item;
+}
+
+function requireCurrentRun(s, itemId, runId) {
+  const run = s.runs.get(runId);
+  if (!run) throw new UserError(`unknown run ${runId}`);
+  if (run.item !== itemId) throw new UserError(`${runId} does not belong to ${itemId}`);
+  const later = laterRuns(s, runId);
+  if (later.length) throw new UserError(`${runId} is superseded by ${later.map((r) => r.id).join(', ')}`);
 }
 
 function coerce(value) {
@@ -481,10 +490,15 @@ function close(argv) {
 }
 
 function reopen(argv) {
-  const { values, positionals } = args(argv, { note: { type: 'string' } }, { min: 1, max: 1, usage: 'record reopen <ID> [--note TEXT]' });
+  const { values, positionals } = args(argv, { note: { type: 'string' }, 'if-current-run': { type: 'string' } }, { min: 1, max: 1, usage: 'record reopen <ID> [--note TEXT] [--if-current-run R-n]' });
   const id = positionals[0];
   const { added } = mutate(openOrg(), (s) => {
     const item = requireItem(s, id);
+    if (values['if-current-run'] !== undefined) {
+      requireCurrentRun(s, id, values['if-current-run']);
+      if (item.closed) throw new UserError(`${id} is closed; conditional reopen needs supervisor judgment`);
+      if (item.outcome && item.outcome.run !== values['if-current-run']) throw new UserError(`${id} outcome does not belong to ${values['if-current-run']}`);
+    }
     if (!item.closed && !item.outcome) return { add: [] };
     return { add: [{ type: 'item.reopened', id, note: values.note ?? null }] };
   });
@@ -503,6 +517,7 @@ function start(argv) {
     report: { type: 'string' },
     escalation: { type: 'boolean' },
     serves: { type: 'string' },
+    'if-current-run': { type: 'string' },
     meta: { type: 'string', multiple: true },
   }, { min: 1, max: 1, usage: 'record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [options]' });
   const id = positionals[0];
@@ -531,6 +546,11 @@ function start(argv) {
   const ctx = openOrg();
   const { result } = mutate(ctx, (s) => {
     const item = requireItem(s, id);
+    if (values['if-current-run'] !== undefined) {
+      requireCurrentRun(s, id, values['if-current-run']);
+      if (item.closed) throw new UserError(`${id} is closed; conditional start needs supervisor judgment`);
+      if (item.outcome && item.outcome.run !== values['if-current-run']) throw new UserError(`${id} outcome does not belong to ${values['if-current-run']}`);
+    }
     if (!Object.hasOwn(meta, 'serves')) {
       const inherited = itemServes(s, id);
       if (inherited != null) meta.serves = inherited;
@@ -572,7 +592,7 @@ function start(argv) {
   return 0;
 }
 
-function ingestFile(ctx, file, runHint) {
+function ingestFile(ctx, file, runHint, currentRun) {
   const abs = path.resolve(file);
   let text;
   try {
@@ -592,6 +612,10 @@ function ingestFile(ctx, file, runHint) {
   const { result } = mutate(ctx, (s) => {
     const run = s.runs.get(runId);
     if (!run) throw new UserError(`unknown run ${runId}`);
+    if (currentRun !== undefined) {
+      if (currentRun !== runId) throw new UserError(`conditional ingest names ${currentRun}, but the report belongs to ${runId}`);
+      requireCurrentRun(s, run.item, currentRun);
+    }
     if (run.report) {
       if (run.report.sha256 === sha256) return { add: [], result: { already: true, runId } };
       throw new UserError(`${runId} already has a report (recorded ${run.report.at}); start a new run to report again`);
@@ -672,8 +696,8 @@ function printIngest(res) {
 }
 
 function ingest(argv) {
-  const { values, positionals } = args(argv, { run: { type: 'string' } }, { min: 1, max: 1, usage: 'record ingest <report.md> [--run R-n]' });
-  return printIngest(ingestFile(openOrg(), positionals[0], values.run)) ? 0 : 1;
+  const { values, positionals } = args(argv, { run: { type: 'string' }, 'if-current-run': { type: 'string' } }, { min: 1, max: 1, usage: 'record ingest <report.md> [--run R-n] [--if-current-run R-n]' });
+  return printIngest(ingestFile(openOrg(), positionals[0], values.run, values['if-current-run'])) ? 0 : 1;
 }
 
 function sync(argv) {

@@ -18,6 +18,7 @@ const { values: opt, positionals } = parseArgs({ allowPositionals: true, options
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },
+  'from-run': { type: 'string' },
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'watch-cli': { type: 'string' },
 }});
 const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [process.execPath, local(fallback)];
@@ -128,6 +129,12 @@ async function main() {
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
     job = saved;
+    if (opt['from-run'] !== undefined) {
+      if (job.fromRun && job.fromRun !== opt['from-run']) throw new Error('--from-run cannot replace the saved origin');
+      const origin = json(record(['show', opt['from-run'], '--json']));
+      if (!/^R-\d+$/.test(opt['from-run']) || origin.item !== job.item) throw new Error('--from-run must name a run on the dispatched item');
+      job.fromRun = opt['from-run'];
+    }
   } else {
     if (opt.adopt || opt.fresh || opt.resend || opt['accept-delivered'] || opt['recover-run']) throw new Error('recovery flags require --retry');
     if (positionals.length !== 1 || !opt.lane || !opt.route || !opt.brief) throw new Error('usage: dispatch.mjs ITEM --org DIR --lane TOPIC --route ROUTE --brief FILE [--report FILE] [--to AGENT] [--base REF] [--reuse R-n] [--extra TEXT] | --retry R-n|JOURNAL | --status R-n|JOURNAL');
@@ -142,6 +149,10 @@ async function main() {
     if (opt.serves) {
       const priorities = json(record(['priorities', '--json']));
       if (!priorities.priorities.some(p => p.id === opt.serves)) throw new Error(`unknown priority ${opt.serves}`);
+    }
+    if (opt['from-run'] !== undefined) {
+      const origin = json(record(['show', opt['from-run'], '--json']));
+      if (!/^R-\d+$/.test(opt['from-run']) || origin.item !== item.id) throw new Error('--from-run must name a run on the dispatched item');
     }
     if (opt.reuse) {
       const prior = json(record(['show', opt.reuse, '--json']));
@@ -158,7 +169,7 @@ async function main() {
     journal = path.join(directory, `${token}.json`);
     job = { token, repo, org, common, item: positionals[0], lane: opt.lane, route: opt.route,
       brief, report: opt.report ?? null, to: opt.to, serves: opt.serves,
-      base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null,
+      base: opt.base ?? null, extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null,
       declared: { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null },
       stage: 'open', run: null };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
@@ -204,6 +215,7 @@ async function main() {
     try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
       ...(job.serves !== undefined ? [`--serves=${job.serves}`] : []),
+      ...(job.fromRun ? ['--if-current-run', job.fromRun] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
     catch (error) { job.startRefused = error.recordRefusal === true; save(); throw error; }
     job.run = output.match(/^(R-\d+) started/m)?.[1];

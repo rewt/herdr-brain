@@ -53,7 +53,7 @@ const discoveryRoots = [];
 const env = { ...process.env };
 for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_)/.test(key)) delete env[key];
 Object.assign(env, { ACCEPTANCE_ROOT: root, TMPDIR: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
-  npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
+  ORG_ACTOR: 'release-acceptance-setup', npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
 const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value); };
 const read = (file) => fs.readFileSync(file, 'utf8');
 const json = (text) => { const v = JSON.parse(text); return v.result ?? v; };
@@ -99,6 +99,8 @@ const present = (file) => fs.existsSync(path.join(candidate, file));
 const requireCandidate = (file) => { if (!present(file)) pending(`candidate lacks ${file}`); return path.join(candidate, file); };
 async function test(definition, fn) {
   if (stopping && ![cases.cleanup.key, cases.focus.key].includes(definition.key)) throw new Pending('run interrupted');
+  const previousActor = env.ORG_ACTOR;
+  env.ORG_ACTOR = `release-acceptance-${definition.key}`;
   const window = load.begin();
   const id = String(results.length + 1).padStart(2, '0');
   logFile = path.join(evidence, `${id}.jsonl`);
@@ -112,7 +114,7 @@ async function test(definition, fn) {
     result.load = load.snapshot(window);
     result.evidence = `${id}.jsonl`;
     return result;
-  } finally { logFile = undefined; }
+  } finally { logFile = undefined; env.ORG_ACTOR = previousActor; }
 }
 async function until(fn, label, ms = 25_000) {
   return waitUntil(() => {

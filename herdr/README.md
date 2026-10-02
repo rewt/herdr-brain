@@ -67,6 +67,9 @@ installer into a scratch bin with the original installer flags, so older
 releases such as v0.1.4 do not need `--check`. It validates the complete plan's
 before-state and write access, then syncs `.monitor-recovery.json` before copying
 a new runtime or changing any adapter, shell snippet or installation receipt.
+Each destination keeps its first inspected bytes and mode for ownership checks,
+replacement planning and rollback. Changes during planning, including edits to
+otherwise unchanged destinations, refuse before a journal is published.
 Shell files stay buffers throughout reading, appending, splicing and writing;
 both shell receipts and journals encode their bytes as base64, including content
 that is not valid UTF-8. Legacy installed shell receipts remain removable and

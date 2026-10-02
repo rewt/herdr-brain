@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
+import { releaseEnvironment } from './helpers/release-environment.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function fixture(t) {
@@ -18,12 +19,12 @@ function fixture(t) {
   const native = path.join(nativeBin, 'codex'), receipt = path.join(root, 'native.json');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));\n`, { mode: 0o755 });
   fs.symlinkSync(native, path.join(nativeBin, 'claude'));
-  const env = { ...process.env, HOME: home, ZDOTDIR: home, ORG_ACTOR: `eng80-r95-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
+  const env = releaseEnvironment(process.env, { HOME: home, ZDOTDIR: home, ORG_ACTOR: `eng80-r97-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
     PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: path.join(nativeBin, 'claude'), HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
     RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', MONITOR_INSTALL_BUILD_ONLY: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
     HERDR_INTEGRATION_ID: '', HERDR_PANE_ID: '', HERDR_PLUGIN_ROOT: '', HERDR_PLUGIN_CONTEXT_JSON: '', MONITOR_RUNTIME_DIR: path.join(root, 'queue'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'), ENTRY_TEST_RECEIPT: receipt,
-    GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   const run = (file, args, cwd = repo, extra = {}) => spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 20000 });
   const ok = (file, args, cwd, extra) => { const r = run(file, args, cwd, extra); assert.equal(r.status, 0, r.error?.message ?? r.stdout + r.stderr); return r.stdout; };
   const git = (...args) => ok('git', args);
@@ -51,6 +52,68 @@ function installChild(t, f, preload, actor) {
   t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
   return { child, ended };
 }
+
+for (const target of ['shell', 'adapter', 'receipt', 'absent adapter', 'unchanged shell']) {
+  for (const edit of ['bytes', 'mode']) {
+    if (target === 'absent adapter' && edit === 'mode') continue;
+    test(`planning rejects ${edit} edits to ${target} without publishing a journal`, { timeout: 30000 }, (t) => {
+      const f = fixture(t), rc = path.join(f.home, '.zshrc');
+      fs.writeFileSync(rc, Buffer.from([35, 32, 255, 10]), { mode: 0o600 });
+      const installed = target !== 'shell';
+      if (installed) assert.equal(f.driver('--snapshot').status, 0);
+      // The unchanged-shell case exercises an idempotent install's empty diff.
+      const file = target.includes('shell') ? rc : path.join(f.bin, target === 'receipt' ? '.monitor-entry.json' : target === 'absent adapter' ? 'monitor-claude' : 'codex');
+      if (target === 'absent adapter') {
+        assert.equal(f.driver('--remove').status, 0);
+      }
+      const before = new Map([rc, ...['codex', 'monitor-codex', 'claude', 'monitor-claude', '.monitor-entry.json', '.monitor-shell.json'].map((name) => path.join(f.bin, name))]
+        .map((name) => [name, fs.existsSync(name) ? { content: fs.readFileSync(name), mode: fs.statSync(name).mode & 0o777 } : null]));
+      const runtimeRoot = path.join(f.env.HERDR_MONITOR_HOME, 'entry/runtimes');
+      const runtimes = fs.existsSync(runtimeRoot) ? fs.readdirSync(runtimeRoot) : [];
+      const evidence = path.join(f.root, 'edit-observed'), preload = path.join(f.root, 'planning-edit.cjs');
+      // A separate staged installer runs after destination ownership preflight.
+      // Change the destination from the parent just before that child starts.
+      fs.writeFileSync(preload, `const fs=require('fs'),cp=require('child_process'),spawn=cp.spawnSync;cp.spawnSync=function(command,args,...rest){if(args[0]===${JSON.stringify(path.join(f.repo, 'discovery/install.mjs'))}){${edit === 'mode' ? `fs.chmodSync(${JSON.stringify(file)},0o640);` : `fs.mkdirSync(require('path').dirname(${JSON.stringify(file)}),{recursive:true});fs.appendFileSync(${JSON.stringify(file)},Buffer.from([35,32,254,10]));`}fs.writeFileSync(${JSON.stringify(evidence)},'');}return spawn.call(this,command,args,...rest);};require('module').syncBuiltinESMExports();\n`);
+      const result = f.run(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot']);
+      assert.equal(fs.existsSync(evidence), true, 'edit must occur during staged planning');
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stderr, /machine file changed during planning/u);
+      for (const [name, original] of before) {
+        if (name === file) {
+          const content = edit === 'bytes' ? Buffer.concat([original?.content ?? Buffer.alloc(0), Buffer.from([35, 32, 254, 10])]) : original.content;
+          assert.deepEqual(fs.readFileSync(name), content, 'operator bytes survive');
+          if (edit === 'mode') assert.equal(fs.statSync(name).mode & 0o777, 0o640, 'operator mode survives');
+        } else if (original) {
+          assert.deepEqual(fs.readFileSync(name), original.content, name);
+          assert.equal(fs.statSync(name).mode & 0o777, original.mode, name);
+        } else assert.equal(fs.existsSync(name), false, name);
+      }
+      assert.equal(fs.existsSync(path.join(f.bin, '.monitor-recovery.json')), false);
+      assert.deepEqual(fs.existsSync(runtimeRoot) ? fs.readdirSync(runtimeRoot) : [], runtimes, 'no runtime is published');
+    });
+  }
+}
+
+test('release tests preserve a separate installation inherited through the parent environment', { timeout: 90000 }, (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.home, '.zshrc'), '# Parent shell\n', { mode: 0o600 });
+  assert.equal(f.driver('--snapshot').status, 0);
+  const files = [...fs.readdirSync(f.bin).map((name) => path.join(f.bin, name)), ...['.zshenv', '.zshrc', '.bashrc', '.bash_profile'].map((name) => path.join(f.home, name))];
+  const before = files.map((file) => ({ file, content: fs.readFileSync(file), mode: fs.statSync(file).mode & 0o777 }));
+  const childEnv = { ...f.env }; delete childEnv.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', path.join(source, 'test/release.test.mjs')], {
+    cwd: source, env: childEnv, encoding: 'utf8', timeout: 60000,
+  });
+  for (const { file, content, mode } of before) {
+    assert.equal(fs.existsSync(file), true, `${file} must survive the child release suite`);
+    assert.deepEqual(fs.readFileSync(file), content, file);
+    assert.equal(fs.statSync(file).mode & 0o777, mode, file);
+  }
+  assert.match(result.stdout, /# tests [1-9]\d*\n/u, 'the child must execute the release suite');
+  assert.match(result.stdout, /# skipped 0\n/u, 'both release fixture paths must run');
+  assert.equal(result.status, 0, result.error?.message ?? result.stdout + result.stderr);
+  assert.equal(f.driver('--remove').status, 0);
+});
 
 test('overlapping installs serialize before planning and retain the first runtime and complete entry', { timeout: 30000 }, async (t) => {
   const f = fixture(t), rc = path.join(f.home, '.zshrc'), original = Buffer.from([35, 32, 255, 10]);

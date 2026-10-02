@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { releaseEnvironment } from './helpers/release-environment.mjs';
 
 const SCRIPT = path.resolve(import.meta.dirname, '..', 'herdr', 'release.sh');
 const MANIFEST = path.resolve(import.meta.dirname, '..', 'herdr-plugin.toml');
@@ -14,7 +15,7 @@ const MANIFEST = path.resolve(import.meta.dirname, '..', 'herdr-plugin.toml');
 function scratch() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-test-'));
   const repo = path.join(root, 'repo');
-  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe' });
+  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe', timeout: 5000 });
   const write = (rel, text) => { fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true }); fs.writeFileSync(path.join(repo, rel), text); };
   fs.mkdirSync(repo);
   git('init', '-q');
@@ -29,6 +30,7 @@ function scratch() {
   };
   version('t1'); version('t2');
   const bin = path.join(root, 'bin'), home = path.join(root, 'home'), plist = path.join(root, 'brain.plist');
+  const userHome = path.join(root, 'user'); fs.mkdirSync(userHome);
   fs.mkdirSync(bin);
   fs.symlinkSync('/dev/checkout/bin/org.mjs', path.join(bin, 'org'));
   fs.writeFileSync(plist, `<?xml version="1.0" encoding="UTF-8"?>
@@ -40,17 +42,19 @@ function scratch() {
   // fails the way launchd does when the old service is still unloading.
   const launchctl = path.join(root, 'launchctl'), calls = path.join(root, 'launchctl.calls');
   fs.writeFileSync(launchctl, `#!/bin/sh\necho "$*" >> ${calls}\n[ "$1" = print ] && exit 1\nif [ "$1" = bootstrap ] && [ ! -e ${root}/loaded-once ]; then touch ${root}/loaded-once; echo "Bootstrap failed: 5: Input/output error" >&2; exit 5; fi\nexit 0\n`, { mode: 0o755 });
-  const env = { ...process.env, ORG_ACTOR: 'release-test-agent', HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist,
-    RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: launchctl };
-  const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env, encoding: 'utf8' });
-  const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8', env }).trim();
-  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8', env }).trim();
-  const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); };
+  const env = releaseEnvironment(process.env, { HOME: userHome, ZDOTDIR: userHome, ORG_DIR: '', ORG_ACTOR: path.basename(root),
+    HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_MONITOR_ENTRY_BIN: path.join(home, 'entry/bin'),
+    RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: launchctl });
+  const runWith = (extra, ...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 20000 });
+  const run = (...a) => runWith({}, ...a);
+  const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8', env, timeout: 5000 }).trim();
+  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8', env, timeout: 5000 }).trim();
+  const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root], { timeout: 5000 }); fs.rmSync(root, { recursive: true, force: true }); };
   const launchctlCalls = () => fs.readFileSync(calls, 'utf8').trim().split('\n');
-  return { root, home, bin, plist, run, org, record, cleanup, launchctlCalls };
+  return { root, home, bin, plist, run, runWith, org, record, cleanup, launchctlCalls };
 }
 
-test('a release is a read-only copy of a tag, never rebuilt in place, and only from a tag', () => {
+test('a release is a read-only copy of a tag, never rebuilt in place, and only from a tag', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     assert.equal(s.run('build', 't1').status, 0);
@@ -63,7 +67,7 @@ test('a release is a read-only copy of a tag, never rebuilt in place, and only f
   } finally { s.cleanup(); }
 });
 
-test('activate moves the launchers and the Brain service onto current; rollback and restore undo it', () => {
+test('activate moves the launchers and the Brain service onto current; rollback and restore undo it', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     s.run('build', 't1'); s.run('build', 't2');
@@ -87,7 +91,7 @@ test('activate moves the launchers and the Brain service onto current; rollback 
   } finally { s.cleanup(); }
 });
 
-test('an existing before directory learns that the new record launcher was absent', () => {
+test('an existing before directory learns that the new record launcher was absent', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     const before = path.join(s.home, 'before');
@@ -105,7 +109,7 @@ test('an existing before directory learns that the new record launcher was absen
   } finally { s.cleanup(); }
 });
 
-test('restore preserves a replacement at a launcher that was originally missing', () => {
+test('restore preserves a replacement at a launcher that was originally missing', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     s.run('build', 't1');
@@ -128,7 +132,7 @@ test('restore preserves a replacement at a launcher that was originally missing'
   } finally { s.cleanup(); }
 });
 
-test('a launcher that is a real file is never replaced', () => {
+test('a launcher that is a real file is never replaced', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     s.run('build', 't1');
@@ -137,7 +141,7 @@ test('a launcher that is a real file is never replaced', () => {
   } finally { s.cleanup(); }
 });
 
-test('the dev plugin is a second id pointed at a worktree', () => {
+test('the dev plugin is a second id pointed at a worktree', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     const wt = path.resolve(import.meta.dirname, '..');
@@ -151,7 +155,7 @@ test('the dev plugin is a second id pointed at a worktree', () => {
   } finally { s.cleanup(); }
 });
 
-test('activating the active release again (after a failed step) keeps its real previous release', () => {
+test('activating the active release again (after a failed step) keeps its real previous release', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     s.run('build', 't1'); s.run('build', 't2');
@@ -163,7 +167,7 @@ test('activating the active release again (after a failed step) keeps its real p
   } finally { s.cleanup(); }
 });
 
-test('the plugin is linked to the active release itself and re-linked on every switch; restore unlinks it', () => {
+test('the plugin is linked to the active release itself and re-linked on every switch; restore unlinks it', { timeout: 30000 }, () => {
   const s = scratch();
   try {
     // A fake herdr that resolves the linked path, as the real one does.
@@ -175,8 +179,7 @@ case "$2" in
   unlink) : > ${state} ;;
 esac
 `, { mode: 0o755 });
-    const run = (...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...process.env, ORG_ACTOR: 'release-test-agent', HERDR_MONITOR_REPO: path.join(s.root, 'repo'), HERDR_MONITOR_HOME: s.home,
-      HERDR_MONITOR_BIN: s.bin, HERDR_MONITOR_PLIST: s.plist, RELEASE_NO_NPM: '1', RELEASE_NO_LAUNCHD: '1', HERDR_BIN_PATH: fake }, encoding: 'utf8' });
+    const run = (...a) => s.runWith({ RELEASE_NO_HERDR: '', RELEASE_NO_LAUNCHD: '1', HERDR_BIN_PATH: fake }, ...a);
     const root = () => fs.readFileSync(state, 'utf8').trim();
     const real = t => fs.realpathSync(path.join(s.home, 'releases', t));
     run('build', 't1'); run('build', 't2');

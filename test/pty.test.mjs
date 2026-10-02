@@ -85,15 +85,18 @@ test('PTY command timeout clears its separate group, including SIGHUP handlers w
   await waitForCleanup(f.root, receipt);
   assert.ok(Date.now() - start < 8000, 'command and descendant cleanup have an independent bound');
 });
-for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'suite deadline']) {
+for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'SIGKILL shell job', 'suite deadline']) {
   test(`${kind} of the outer suite clears the independently owned PTY session`, { skip: PTY_SKIP_REASON }, async t => {
     const f = fixture(t, { block: kind !== 'normal exit' }), file = path.join(f.root, 'culprit.test.mjs');
     // The success case exits its main command while leaving a blocked background
     // descendant. The owner must audit/clean before reporting ordinary success.
+    const shellJob = kind === 'SIGKILL shell job';
+    const binary = shellJob ? '/bin/sh' : process.execPath;
+    const args = shellJob ? ['-ic', 'set -m; "$1" "$2" </dev/tty & wait', 'pty-job', process.execPath, f.program] : [f.program];
     fs.writeFileSync(file, `import test from ${JSON.stringify(boundedTest)};
 import {runPTY} from ${JSON.stringify(ptyHelper)};
 import assert from 'node:assert/strict';
-test('blocked PTY culprit',()=>{const result=runPTY(process.execPath,[${JSON.stringify(f.program)}],{timeout:5000});assert.equal(result.status,0,result.stdout+result.stderr);});`);
+test('blocked PTY culprit',()=>{const result=runPTY(${JSON.stringify(binary)},${JSON.stringify(args)},{timeout:5000});assert.equal(result.status,0,result.stdout+result.stderr);});`);
     const outer = spawnChild(t, process.execPath, [runner, ...(kind === 'suite deadline' ? ['--suite-timeout=3000'] : []), file]);
     const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
     const deadline = Date.now() + 10000;
@@ -104,8 +107,9 @@ test('blocked PTY culprit',()=>{const result=runPTY(process.execPath,[${JSON.str
       assert.equal(snapshot.value.get(receipt.pid)?.pgid, receipt.pgid);
       assert.equal(snapshot.value.get(receipt.leaf)?.pgid, receipt.pgid);
       assert.equal(snapshot.value.get(receipt.session)?.pgid, receipt.session, 'owner remains the separate session leader');
+      if (shellJob) assert.notEqual(receipt.pgid, receipt.session, 'interactive shell creates a separate job group inside the owned session');
     }
-    if (kind === 'SIGTERM' || kind === 'SIGKILL') outer.kill(kind);
+    if (kind === 'SIGTERM' || kind.startsWith('SIGKILL')) outer.kill(kind === 'SIGTERM' ? 'SIGTERM' : 'SIGKILL');
     const result = await waitForExit(outer);
     if (kind === 'normal exit') assert.equal(result.code, 0, result.stdout + result.stderr);
     if (kind === 'suite deadline') {

@@ -7,8 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { quote } from '../discovery/runtime.mjs';
-import { state, same, writable, recover, transact } from './entry-transaction.mjs';
+import { state, same, bytes, writable, recover, transact } from './entry-transaction.mjs';
 import { snapshot } from './entry-runtime.mjs';
+import { withInstallationLock } from './entry-lock.mjs';
 
 const { values } = parseArgs({ options: { product: { type: 'string' }, remove: { type: 'boolean' }, check: { type: 'boolean' }, snapshot: { type: 'boolean' }, recover: { type: 'boolean' } } });
 const product = path.resolve(values.product ?? fileURLToPath(new URL('../', import.meta.url)));
@@ -16,16 +17,19 @@ const monitorHome = process.env.HERDR_MONITOR_HOME ?? path.join(process.env.HOME
 const bin = path.resolve(process.env.HERDR_MONITOR_ENTRY_BIN ?? path.join(monitorHome, 'entry/bin'));
 const marker = path.join(bin, '.monitor-shell.json');
 const journal = path.join(bin, '.monitor-recovery.json');
+const lock = path.join(path.dirname(bin), '.monitor-install.lock');
 const runtimeRoot = path.resolve(monitorHome, 'entry/runtimes');
 const entryFile = path.join(bin, '.monitor-entry.json');
 const names = ['codex', 'monitor-codex', 'claude', 'monitor-claude'];
 const tag = '# >>> Herdr Monitor entry >>>';
 const block = `\n${tag}\nexport PATH=${quote(bin)}:"$PATH"\n# <<< Herdr Monitor entry <<<\n`;
+const blockBytes = Buffer.from(block), tagBytes = Buffer.from(tag);
 const exists = (file) => { try { fs.lstatSync(file); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } };
 function plain(file) {
   if (exists(file) && !fs.lstatSync(file).isFile()) throw new Error(`refusing non-plain machine file: ${file}`);
 }
 function read(file) { plain(file); return exists(file) ? fs.readFileSync(file, 'utf8') : ''; }
+const readBytes = (file) => state(file)?.content ?? Buffer.alloc(0);
 function stageInstaller(runtime, args) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-entry-plan-'));
   try {
@@ -75,53 +79,66 @@ function hooks() {
   return [...new Set([path.join(zhome, '.zshenv'), path.join(zhome, '.zshrc'), path.join(home, '.bashrc'), path.join(home, login)])];
 }
 try {
-  if (values.check && exists(journal)) throw new Error('pending entry recovery; run entry-install.mjs --recover first');
-  if (!values.check) recover(journal, bin, runtimeRoot);
-  if (values.recover) { console.log(`entry: recovered machine entry at ${bin}`); process.exit(0); }
-  const priorShell = exists(marker) ? JSON.parse(read(marker)) : null;
-  if (priorShell && (priorShell.bin !== bin || !Array.isArray(priorShell.hooks))) throw new Error('invalid shell installation receipt');
-  const allowedNames = ['.zshenv', '.zshrc', '.bashrc', '.bash_profile', '.bash_login', '.profile'];
-  if (priorShell?.hooks.some((r) => typeof r.file !== 'string' || !path.isAbsolute(r.file) || !allowedNames.includes(path.basename(r.file)) ||
-    typeof r.before !== 'string' || typeof r.missing !== 'boolean' || !Number.isInteger(r.mode) || r.mode < 0 || r.mode > 0o777 || r.block !== block) ||
-    (priorShell && new Set(priorShell.hooks.map((r) => r.file)).size !== priorShell.hooks.length)) throw new Error('invalid shell file receipt');
-  const priorEntry = exists(entryFile) ? JSON.parse(read(entryFile)) : null;
-  if (priorEntry && (!priorEntry.files || Object.keys(priorEntry.files).some((name) => !names.includes(name)))) throw new Error('invalid managed entry receipt');
-  for (const name of names) {
-    const current = state(path.join(bin, name)), expected = priorEntry?.files[name];
-    if (expected !== undefined && (typeof expected !== 'string' || current?.content !== expected || current.mode !== 0o755)) throw new Error(`managed file changed: ${path.join(bin, name)}`);
-    if (expected === undefined && current) throw new Error(`refusing to replace unmanaged file ${path.join(bin, name)}`);
-  }
-  // Preflight all files before any writes. In-place replacement or removal of a
-  // user-edited adapter/snippet requires resolving that edit, never overwriting it.
-  const receipts = priorShell?.hooks ?? (values.remove ? [] : hooks()).map((file) => {
-    const before = read(file);
-    if (before.includes(tag)) throw new Error(`unmanaged shell snippet at ${file}`);
-    return { file, before, missing: !exists(file), mode: exists(file) ? fs.statSync(file).mode & 0o777 : 0o644, block };
+  withInstallationLock(lock, (owner) => {
+    if (values.check && exists(journal)) throw new Error('pending entry recovery; run entry-install.mjs --recover first');
+    if (!values.check) recover(journal, bin, runtimeRoot);
+    if (values.recover) { console.log(`entry: recovered machine entry at ${bin}`); return; }
+    const priorShell = exists(marker) ? JSON.parse(read(marker)) : null;
+    if (priorShell && (priorShell.bin !== bin || !Array.isArray(priorShell.hooks) || (priorShell.version !== undefined && priorShell.version !== 2))) throw new Error('invalid shell installation receipt');
+    const allowedNames = ['.zshenv', '.zshrc', '.bashrc', '.bash_profile', '.bash_login', '.profile'];
+    if (priorShell?.hooks.some((r) => typeof r.file !== 'string' || !path.isAbsolute(r.file) || !allowedNames.includes(path.basename(r.file)) ||
+      typeof r.before !== 'string' || typeof r.block !== 'string' || typeof r.missing !== 'boolean' || !Number.isInteger(r.mode) || r.mode < 0 || r.mode > 0o777) ||
+      (priorShell && new Set(priorShell.hooks.map((r) => r.file)).size !== priorShell.hooks.length)) throw new Error('invalid shell file receipt');
+    if (priorShell) {
+      // Legacy receipts are owned JSON text; actual shell files are always read
+      // as bytes. Removal splices the current bytes, preserving later user edits.
+      for (const receipt of priorShell.hooks) {
+        receipt.before = priorShell.version === 2 ? bytes(receipt.before) : Buffer.from(receipt.before);
+        receipt.block = priorShell.version === 2 ? bytes(receipt.block) : Buffer.from(receipt.block);
+        if (!receipt.block.equals(blockBytes)) throw new Error('invalid shell snippet receipt');
+      }
+    }
+    const priorEntry = exists(entryFile) ? JSON.parse(read(entryFile)) : null;
+    if (priorEntry && (!priorEntry.files || Object.keys(priorEntry.files).some((name) => !names.includes(name)))) throw new Error('invalid managed entry receipt');
+    for (const name of names) {
+      const current = state(path.join(bin, name)), expected = priorEntry?.files[name];
+      if (expected !== undefined && (typeof expected !== 'string' || !current?.content.equals(Buffer.from(expected)) || current.mode !== 0o755)) throw new Error(`managed file changed: ${path.join(bin, name)}`);
+      if (expected === undefined && current) throw new Error(`refusing to replace unmanaged file ${path.join(bin, name)}`);
+    }
+    // Preflight all files before any writes. In-place replacement or removal of a
+    // user-edited adapter/snippet requires resolving that edit, never overwriting it.
+    const receipts = priorShell?.hooks ?? (values.remove ? [] : hooks()).map((file) => {
+      const before = readBytes(file);
+      if (before.includes(tagBytes)) throw new Error(`unmanaged shell snippet at ${file}`);
+      return { file, before, missing: !exists(file), mode: exists(file) ? fs.statSync(file).mode & 0o777 : 0o644, block: blockBytes };
+    });
+    for (const receipt of receipts) {
+      const current = readBytes(receipt.file), index = current.indexOf(receipt.block);
+      if (priorShell && (index < 0 || current.indexOf(receipt.block, index + receipt.block.length) >= 0)) throw new Error(`managed shell snippet changed: ${receipt.file}`);
+    }
+    const changes = [];
+    const change = (file, after) => {
+      const before = state(file);
+      if (!same(before, after)) changes.push({ file, before, after });
+    };
+    let runtime, entry;
+    if (!values.remove) {
+      const codex = native('codex', priorEntry), claude = native('claude', priorEntry);
+      const args = ['--codex', codex, ...(claude ? ['--claude', claude] : [])];
+      if (values.snapshot) runtime = snapshot(product, runtimeRoot, owner.token);
+      entry = stageInstaller(runtime?.directory ?? product, args);
+    }
+    for (const name of names) change(path.join(bin, name), entry?.files[name] === undefined ? null : { content: Buffer.from(entry.files[name]), mode: 0o755 });
+    change(entryFile, entry ? { content: Buffer.from(JSON.stringify(entry, null, 2) + '\n'), mode: 0o600 } : null);
+    for (const receipt of receipts) {
+      const current = readBytes(receipt.file), index = current.indexOf(receipt.block);
+      const content = values.remove ? Buffer.concat([current.subarray(0, index), current.subarray(index + receipt.block.length)]) : priorShell ? current : Buffer.concat([receipt.before, receipt.block]);
+      change(receipt.file, values.remove && receipt.missing && content.length === 0 ? null : { content, mode: receipt.mode });
+    }
+    const storedHooks = receipts.map((receipt) => ({ ...receipt, before: receipt.before.toString('base64'), block: receipt.block.toString('base64') }));
+    change(marker, values.remove ? null : { content: Buffer.from(JSON.stringify({ version: 2, bin, hooks: storedHooks }, null, 2) + '\n'), mode: 0o600 });
+    for (const { file } of changes) writable(file);
+    if (!values.check && (changes.length || runtime?.created)) transact(journal, bin, runtimeRoot, changes, runtime, owner);
+    console.log(`entry: ${values.check ? 'checked' : values.remove ? 'restored' : 'installed'} machine entry at ${bin}`);
   });
-  for (const receipt of receipts) {
-    const current = read(receipt.file);
-    if (priorShell && (current.split(receipt.block).length !== 2 || receipt.block !== block)) throw new Error(`managed shell snippet changed: ${receipt.file}`);
-  }
-  const changes = [];
-  const change = (file, after) => {
-    const before = state(file);
-    if (!same(before, after)) changes.push({ file, before, after });
-  };
-  let runtime, entry;
-  if (!values.remove) {
-    const codex = native('codex', priorEntry), claude = native('claude', priorEntry);
-    const args = ['--codex', codex, ...(claude ? ['--claude', claude] : [])];
-    if (values.snapshot) runtime = snapshot(product, runtimeRoot);
-    entry = stageInstaller(runtime?.directory ?? product, args);
-  }
-  for (const name of names) change(path.join(bin, name), entry?.files[name] === undefined ? null : { content: entry.files[name], mode: 0o755 });
-  change(entryFile, entry ? { content: JSON.stringify(entry, null, 2) + '\n', mode: 0o600 } : null);
-  for (const receipt of receipts) {
-    const content = values.remove ? read(receipt.file).replace(receipt.block, '') : priorShell ? read(receipt.file) : receipt.before + receipt.block;
-    change(receipt.file, values.remove && receipt.missing && content === '' ? null : { content, mode: receipt.mode });
-  }
-  change(marker, values.remove ? null : { content: JSON.stringify({ bin, hooks: receipts }, null, 2) + '\n', mode: 0o600 });
-  for (const { file } of changes) writable(file);
-  if (!values.check && (changes.length || runtime?.created)) transact(journal, bin, runtimeRoot, changes, runtime);
-  console.log(`entry: ${values.check ? 'checked' : values.remove ? 'restored' : 'installed'} machine entry at ${bin}`);
 } catch (error) { console.error(`entry: ${error.message}`); process.exitCode = 1; }

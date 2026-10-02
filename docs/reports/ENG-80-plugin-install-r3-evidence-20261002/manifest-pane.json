@@ -1,0 +1,24 @@
+{
+  "plugin_pane": {
+    "entrypoint": "supervisor",
+    "pane": {
+      "agent_status": "unknown",
+      "cwd": "/private/tmp/e80-native-soiOFB/home/.config/herdr/plugins/github/rewt.herdr-monitor-ea6132269c33",
+      "focused": false,
+      "foreground_cwd": "/private/tmp/e80-native-soiOFB/home/.config/herdr/plugins/github/rewt.herdr-monitor-ea6132269c33",
+      "label": "Herdr Monitor supervisor",
+      "pane_id": "w2:p2",
+      "revision": 0,
+      "scroll": {
+        "max_offset_from_bottom": 0,
+        "offset_from_bottom": 0,
+        "viewport_rows": 39
+      },
+      "tab_id": "w2:t2",
+      "terminal_id": "term_65cd7685446103",
+      "workspace_id": "w2"
+    },
+    "plugin_id": "rewt.herdr-monitor"
+  },
+  "type": "plugin_pane_opened"
+}

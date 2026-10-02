@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
 
@@ -13,12 +13,12 @@ function fixture(t) {
   t.after(() => { spawnSync('chmod', ['-R', 'u+w', root], { timeout: 5000 }); fs.rmSync(root, { recursive: true, force: true }); });
   const repo = path.join(root, 'source'), home = path.join(root, 'user'), nativeBin = path.join(root, 'native');
   for (const dir of [repo, home, nativeBin]) fs.mkdirSync(dir);
-  for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
+  for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'settle']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
   fs.copyFileSync(path.join(source, 'herdr-plugin.toml'), path.join(repo, 'herdr-plugin.toml'));
   const native = path.join(nativeBin, 'codex'), receipt = path.join(root, 'native.json');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));\n`, { mode: 0o755 });
   fs.symlinkSync(native, path.join(nativeBin, 'claude'));
-  const env = { ...process.env, HOME: home, ZDOTDIR: home, ORG_ACTOR: `eng80-r89-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
+  const env = { ...process.env, HOME: home, ZDOTDIR: home, ORG_ACTOR: `eng80-r95-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
     PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: path.join(nativeBin, 'claude'), HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
     RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', MONITOR_INSTALL_BUILD_ONLY: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
@@ -34,6 +34,176 @@ function fixture(t) {
   const driver = (...args) => run(process.execPath, [path.join(source, 'herdr/entry-install.mjs'), '--product', repo, ...args]);
   return { root, repo, home, native, env, run, ok, release, driver, receipt, bin: env.HERDR_MONITOR_ENTRY_BIN };
 }
+
+async function waitUntil(check, label) {
+  const deadline = Date.now() + 10000;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(`timed out: ${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+function installChild(t, f, preload, actor) {
+  const child = spawn(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot'], {
+    cwd: f.repo, env: { ...f.env, ORG_ACTOR: `${f.env.ORG_ACTOR}-${actor}` }, timeout: 15000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = ''; child.stdout.on('data', (part) => { output += part; }); child.stderr.on('data', (part) => { output += part; });
+  const ended = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', (status) => resolve({ status, output })); });
+  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
+  return { child, ended };
+}
+
+test('overlapping installs serialize before planning and retain the first runtime and complete entry', { timeout: 30000 }, async (t) => {
+  const f = fixture(t), rc = path.join(f.home, '.zshrc'), original = Buffer.from([35, 32, 255, 10]);
+  fs.writeFileSync(rc, original);
+  const paused = path.join(f.root, 'first-planning'), release = path.join(f.root, 'release-first'), attempted = path.join(f.root, 'second-lock-attempt'), read = path.join(f.root, 'second-state-read');
+  const first = path.join(f.root, 'first.cjs'), second = path.join(f.root, 'second.cjs');
+  fs.writeFileSync(first, `const fs=require('fs'),read=fs.readFileSync;let paused=false;fs.readFileSync=function(file,...args){const result=read.call(this,file,...args);if(file===${JSON.stringify(rc)}&&!paused){paused=true;fs.writeFileSync(${JSON.stringify(paused)},'');const end=Date.now()+10000;while(!fs.existsSync(${JSON.stringify(release)})){if(Date.now()>end)throw new Error('barrier timeout');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}}return result;};\n`);
+  const lock = path.join(path.dirname(f.bin), '.monitor-install.lock');
+  fs.writeFileSync(second, `const fs=require('fs'),read=fs.readFileSync,rename=fs.renameSync;fs.readFileSync=function(file,...args){if(${JSON.stringify([rc, path.join(f.bin, '.monitor-shell.json'), path.join(f.bin, '.monitor-entry.json')])}.includes(file))fs.writeFileSync(${JSON.stringify(read)},'');return read.call(this,file,...args);};fs.renameSync=function(from,to){if(to===${JSON.stringify(lock)})fs.writeFileSync(${JSON.stringify(attempted)},'');return rename.apply(this,arguments);};\n`);
+  const a = installChild(t, f, first, 'first');
+  await waitUntil(() => fs.existsSync(paused), 'first planner barrier');
+  const lockOwner = JSON.parse(fs.readFileSync(path.join(lock, fs.readdirSync(lock)[0])));
+  assert.equal(lockOwner.pid, a.child.pid);
+  const b = installChild(t, f, second, 'second');
+  await waitUntil(() => fs.existsSync(attempted), 'second lock attempt');
+  assert.equal(fs.existsSync(read), false, 'second install must not read shell/receipt state while first owns planning');
+  fs.writeFileSync(release, '');
+  for (const result of await Promise.all([a.ended, b.ended])) assert.equal(result.status, 0, result.output);
+  const entry = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-entry.json')));
+  for (const [name, content] of Object.entries(entry.files)) assert.deepEqual(fs.readFileSync(path.join(f.bin, name)), Buffer.from(content));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(entry.product, '.monitor-runtime-owner.json'))).token, lockOwner.token);
+  assert.equal(fs.existsSync(read), true);
+  assert.equal(fs.existsSync(lock), false);
+  assert.equal(fs.existsSync(path.join(f.bin, '.monitor-recovery.json')), false);
+  const shell = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-shell.json'))), hook = shell.hooks.find((hook) => hook.file === rc);
+  assert.deepEqual(fs.readFileSync(rc), Buffer.concat([original, Buffer.from(hook.block, 'base64')]));
+  assert.equal(f.driver('--remove').status, 0); assert.deepEqual(fs.readFileSync(rc), original);
+});
+
+test('a complete stale plan refuses before a journal and cannot roll back another successful install', { timeout: 30000 }, async (t) => {
+  const f = fixture(t), { state, transact } = await import('../herdr/entry-transaction.mjs'), { snapshot } = await import('../herdr/entry-runtime.mjs'), { withInstallationLock } = await import('../herdr/entry-lock.mjs');
+  const lock = path.join(path.dirname(f.bin), '.monitor-install.lock'), runtimes = path.join(f.env.HERDR_MONITOR_HOME, 'entry/runtimes');
+  let obsolete;
+  withInstallationLock(lock, (owner) => { obsolete = snapshot(f.repo, runtimes, owner.token); });
+  assert.equal(f.driver('--snapshot').status, 0);
+  const installed = new Map(fs.readdirSync(f.bin).map((name) => [name, fs.readFileSync(path.join(f.bin, name))]));
+  const entry = JSON.parse(installed.get('.monitor-entry.json'));
+  const beforeRuntime = fs.readFileSync(path.join(entry.product, '.monitor-runtime-owner.json'));
+  // Include an unchanged early file so validating only at each write would
+  // publish a journal before reaching the stale second file.
+  const first = path.join(f.bin, 'codex'), later = path.join(f.bin, 'monitor-codex');
+  withInstallationLock(lock, (owner) => assert.throws(() => transact(path.join(f.bin, '.monitor-recovery.json'), f.bin, runtimes,
+    [{ file: first, before: state(first), after: { content: Buffer.from('# replacement\n'), mode: 0o755 } }, { file: later, before: null, after: state(later) }], obsolete, owner), /changed during planning/u));
+  withInstallationLock(lock, (owner) => assert.throws(() => transact(path.join(f.bin, '.monitor-recovery.json'), f.bin, runtimes,
+    [], obsolete, owner), /runtime appeared during planning/u));
+  for (const [name, content] of installed) assert.deepEqual(fs.readFileSync(path.join(f.bin, name)), content);
+  assert.deepEqual(fs.readFileSync(path.join(entry.product, '.monitor-runtime-owner.json')), beforeRuntime);
+  assert.equal(fs.existsSync(path.join(f.bin, '.monitor-recovery.json')), false);
+  assert.equal(f.driver('--remove').status, 0);
+});
+
+test('runtime rollback removes only its own staging directory and preserves a foreign final runtime', { timeout: 30000 }, (t) => {
+  const f = fixture(t), runtimes = path.join(f.env.HERDR_MONITOR_HOME, 'entry/runtimes'), evidence = path.join(f.root, 'foreign-runtime'), preload = path.join(f.root, 'runtime-collision.cjs');
+  fs.writeFileSync(preload, `const fs=require('fs'),mkdir=fs.mkdirSync;let done=false;fs.mkdirSync=function(file,...args){const result=mkdir.call(this,file,...args);if(typeof file==='string'&&file.startsWith(${JSON.stringify(runtimes + '/.runtime-')})&&file.endsWith('.tmp')&&!done){done=true;const plan=JSON.parse(fs.readFileSync(${JSON.stringify(path.join(f.bin, '.monitor-recovery.json'))}));mkdir.call(this,plan.runtime.directory);fs.writeFileSync(plan.runtime.directory+'/.monitor-runtime-owner.json',JSON.stringify({token:'another-owner'}));fs.writeFileSync(plan.runtime.directory+'/foreign','retain these bytes');fs.writeFileSync(${JSON.stringify(evidence)},plan.runtime.directory);}return result;};\n`);
+  const failed = f.run(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot']);
+  assert.notEqual(failed.status, 0); assert.match(failed.stderr, /runtime appeared during planning/u);
+  const foreign = fs.readFileSync(evidence, 'utf8');
+  assert.equal(fs.readFileSync(path.join(foreign, 'foreign'), 'utf8'), 'retain these bytes');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(foreign, '.monitor-runtime-owner.json'))), { token: 'another-owner' });
+  assert.deepEqual(fs.readdirSync(runtimes), [path.basename(foreign)]);
+  assert.deepEqual(fs.readdirSync(f.bin), []);
+  assert.equal(fs.existsSync(path.join(f.home, '.zshenv')), false);
+});
+
+test('rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes', { timeout: 30000 }, (t) => {
+  const f = fixture(t), foreign = path.join(f.bin, 'monitor-claude'), evidence = path.join(f.root, 'foreign.bin'), preload = path.join(f.root, 'external-writer.cjs');
+  fs.writeFileSync(preload, `const fs=require('fs'),rename=fs.renameSync;let done=false;fs.renameSync=function(from,to){const result=rename.apply(this,arguments);if(to===${JSON.stringify(path.join(f.bin, 'codex'))}&&!done){done=true;const plan=JSON.parse(fs.readFileSync(${JSON.stringify(path.join(f.bin, '.monitor-recovery.json'))}));const bytes=Buffer.from(plan.changes.find(c=>c.file===${JSON.stringify(foreign)}).after.content,'base64');fs.writeFileSync(${JSON.stringify(foreign)},bytes,{mode:0o755});fs.writeFileSync(${JSON.stringify(evidence)},bytes);}return result;};\n`);
+  const failed = f.run(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot']);
+  assert.notEqual(failed.status, 0); assert.match(failed.stderr, /changed during installation/u);
+  assert.deepEqual(fs.readFileSync(foreign), fs.readFileSync(evidence));
+  assert.deepEqual(fs.readdirSync(f.bin), ['monitor-claude']);
+  assert.equal(fs.existsSync(path.join(f.home, '.zshenv')), false);
+});
+
+test('shell install, upgrade and restore preserve every original byte including malformed UTF-8', { timeout: 30000 }, (t) => {
+  const f = fixture(t), originals = new Map();
+  for (const [index, name] of ['.zshenv', '.zshrc', '.bashrc', '.bash_profile'].entries()) {
+    const file = path.join(f.home, name), content = Buffer.concat([Buffer.from('# operator bytes\r\n# '), Buffer.from([255, 128, 192, 175, 226, 130, 237, 160, 128, index])]);
+    originals.set(file, { content, mode: index % 2 ? 0o600 : 0o640 });
+    fs.writeFileSync(file, content, { mode: originals.get(file).mode });
+  }
+  assert.equal(f.driver('--snapshot').status, 0);
+  const receipt = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-shell.json'))); assert.equal(receipt.version, 2);
+  for (const hook of receipt.hooks) {
+    const original = originals.get(hook.file);
+    assert.deepEqual(Buffer.from(hook.before, 'base64'), original.content);
+    assert.deepEqual(fs.readFileSync(hook.file), Buffer.concat([original.content, Buffer.from(hook.block, 'base64')]));
+  }
+  f.release('build', 'first'); f.release('activate', 'first'); f.release('restore');
+  for (const [file, original] of originals) {
+    assert.deepEqual(fs.readFileSync(file), original.content, file);
+    assert.equal(fs.statSync(file).mode & 0o777, original.mode, file);
+  }
+});
+
+for (const crash of [false, true]) test(`non-UTF-8 shell bytes survive ${crash ? 'terminated-install recovery' : 'failed-write rollback'}`, { timeout: 30000 }, (t) => {
+  const f = fixture(t), before = new Map();
+  for (const name of ['.zshenv', '.zshrc', '.bashrc', '.bash_profile']) {
+    const file = path.join(f.home, name), content = Buffer.from([35, 32, 255, 192, 128, 10]);
+    before.set(file, content); fs.writeFileSync(file, content);
+  }
+  const preload = path.join(f.root, 'binary-fault.cjs');
+  fs.writeFileSync(preload, `const fs=require('fs'),rename=fs.renameSync;fs.renameSync=function(from,to){const result=rename.apply(this,arguments);if(to===${JSON.stringify(path.join(f.home, '.zshenv'))}){${crash ? 'process.exit(73)' : `fs.chmodSync(${JSON.stringify(path.join(f.home, '.bashrc'))},0o400)`};}return result;};\n`);
+  const failed = f.run(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot']);
+  assert.notEqual(failed.status, 0);
+  if (crash) {
+    assert.equal(failed.status, 73);
+    const journal = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-recovery.json'))); assert.equal(journal.version, 2);
+    assert.deepEqual(Buffer.from(journal.changes.find((change) => change.file === path.join(f.home, '.zshenv')).before.content, 'base64'), before.get(path.join(f.home, '.zshenv')));
+    assert.equal(f.driver('--recover').status, 0);
+  }
+  for (const [file, content] of before) assert.deepEqual(fs.readFileSync(file), content, file);
+  assert.deepEqual(fs.readdirSync(f.bin), []);
+  assert.equal(fs.existsSync(path.join(path.dirname(f.bin), '.monitor-install.lock')), false);
+});
+
+test('legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet', { timeout: 30000 }, (t) => {
+  const f = fixture(t); assert.equal(f.driver('--snapshot').status, 0);
+  const marker = path.join(f.bin, '.monitor-shell.json'), receipt = JSON.parse(fs.readFileSync(marker));
+  for (const hook of receipt.hooks) { hook.before = Buffer.from(hook.before, 'base64').toString('utf8'); hook.block = Buffer.from(hook.block, 'base64').toString('utf8'); }
+  delete receipt.version; fs.writeFileSync(marker, JSON.stringify(receipt) + '\n');
+  const rc = path.join(f.home, '.zshrc'), added = Buffer.from([35, 32, 255, 226, 130, 10]); fs.appendFileSync(rc, added);
+  assert.equal(f.driver('--snapshot').status, 0);
+  assert.equal(JSON.parse(fs.readFileSync(marker)).version, 2);
+  assert.equal(f.driver('--remove').status, 0); assert.deepEqual(fs.readFileSync(rc), added);
+});
+
+test('relocated installed runtime executes lane review through its bundled template dependency', { timeout: 30000 }, (t) => {
+  const f = fixture(t); f.ok('bash', [path.join(f.repo, 'herdr/install.sh')]);
+  const runtime = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-entry.json'))).product;
+  const template = path.join(runtime, 'lanes/docs/REVIEW_TEMPLATE.md');
+  assert.deepEqual(fs.readFileSync(template), fs.readFileSync(path.join(source, 'lanes/docs/REVIEW_TEMPLATE.md')));
+  fs.renameSync(f.repo, path.join(f.root, 'relocated-plugin'));
+  const project = path.join(f.root, 'project'); fs.mkdirSync(project);
+  assert.match(f.ok(process.execPath, [path.join(runtime, 'settle/settle.mjs')], project), /^settle R-n/u);
+  for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Plugin Test'], ['config', 'user.email', 'plugin@example.invalid']]) f.ok('git', args, project);
+  fs.writeFileSync(path.join(project, '.gitignore'), '.lane/\n');
+  const config = path.join(project, '.lane.json'); fs.writeFileSync(config, JSON.stringify({ main: 'main', validate: 'true', routes: {} }));
+  f.ok('git', ['add', '.'], project); f.ok('git', ['commit', '-qm', 'Project'], project);
+  const env = { LANE_CONFIG: config, LANE_WORKTREE_ROOT: path.join(f.root, 'review-lanes') };
+  const cli = path.join(runtime, 'lanes/lane.mjs'); f.ok(process.execPath, [cli, 'open', 'asset-check'], project, env);
+  // Witness the real command's template read, then stop at an offline dispatch
+  // refusal. The fake Herdr executable prevents any live pane operation.
+  fs.writeFileSync(path.join(path.dirname(f.native), 'herdr'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const evidence = path.join(f.root, 'template-read'), preload = path.join(f.root, 'template-probe.cjs');
+  const brief = path.join(f.root, 'review-brief.md'); fs.writeFileSync(brief, 'Review the scratch project. Do not run commands.\n');
+  fs.writeFileSync(preload, `const fs=require('fs'),read=fs.readFileSync;fs.readFileSync=function(file,...args){const value=read.call(this,file,...args);if(file===${JSON.stringify(template)})fs.writeFileSync(${JSON.stringify(evidence)},value);return value;};require('module').syncBuiltinESMExports();\n`);
+  const reviewed = f.run(process.execPath, ['--require', preload, cli, 'review', 'asset-check', '--round', '1', '--brief', brief, '--timeout', '10'], project, env);
+  assert.notEqual(reviewed.status, 0); assert.ok(!reviewed.stderr.includes('ENOENT'), reviewed.stderr);
+  assert.ok(fs.existsSync(evidence), reviewed.stdout + reviewed.stderr);
+  assert.deepEqual(fs.readFileSync(evidence), fs.readFileSync(template));
+  f.ok(process.execPath, [path.join(source, 'herdr/entry-install.mjs'), '--remove'], project);
+});
 
 test('release carries entry, pins final versions, rolls back and restores exact shell state', { skip: PTY_SKIP_REASON, timeout: 60000 }, (t) => {
   const f = fixture(t), original = `# User setup without final newline\nexport PATH='${path.dirname(f.native)}':"$PATH"`;
@@ -225,7 +395,7 @@ fs.renameSync=function(from,to){
   for (const name of ['codex', 'claude', 'monitor-codex', 'monitor-claude', '.monitor-entry.json', '.monitor-shell.json', '.monitor-recovery.json']) assert.equal(fs.existsSync(path.join(f.bin, name)), false, name);
   for (const name of ['.zshenv', '.zshrc', '.bash_profile']) assert.equal(fs.existsSync(path.join(f.home, name)), false, name);
   assert.equal(fs.readFileSync(bashrc, 'utf8'), '# Original bash\n');
-  assert.equal(fs.existsSync(proof.runtime), false);
+  assert.equal(fs.existsSync(proof.runtime.directory), false);
   fs.chmodSync(bashrc, 0o644); assert.equal(f.driver('--snapshot').status, 0); assert.equal(f.driver('--remove').status, 0);
 });
 
@@ -251,7 +421,7 @@ test('terminated install recovers a staged shell replacement as well as the firs
   assert.equal(f.driver('--recover').status, 0);
   assert.deepEqual(fs.readdirSync(f.home), ['monitor']);
   assert.deepEqual(fs.readdirSync(f.bin), []);
-  assert.equal(fs.existsSync(journal.runtime), false);
+  assert.equal(fs.existsSync(journal.runtime.directory), false);
 });
 
 test('edited adapters/snippets and planted symlinks refuse before activation or removal mutates state', { timeout: 30000 }, (t) => {

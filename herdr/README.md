@@ -59,16 +59,30 @@ unchanged snippet. An edited snippet/adapter or file symlink refuses preflight
 before the release pointer or removal changes. Original native CLIs stay intact.
 Immutable release copies and durable project records remain available.
 
-Entry plans all changes before writing them. It runs the selected discovery
+Entry holds one installation lock before recovery, machine-state reads, runtime
+existence checks and planning, through completion or rollback. Concurrent calls
+wait up to 30 seconds; a terminated owner's lock is reclaimed without removing
+a newer owner's lock. Entry runs the selected discovery
 installer into a scratch bin with the original installer flags, so older
-releases such as v0.1.4 do not need `--check`. It validates existing managed
-bytes and write access, then syncs `.monitor-recovery.json` before copying a new
-runtime or changing any adapter, shell snippet or installation receipt. The
-journal contains each file's prior bytes and mode; a failed write rolls back
-completed changes. After a terminated install, `node herdr/entry-install.mjs
+releases such as v0.1.4 do not need `--check`. It validates the complete plan's
+before-state and write access, then syncs `.monitor-recovery.json` before copying
+a new runtime or changing any adapter, shell snippet or installation receipt.
+Shell files stay buffers throughout reading, appending, splicing and writing;
+both shell receipts and journals encode their bytes as base64, including content
+that is not valid UTF-8. Legacy installed shell receipts remain removable and
+upgrade to the new encoding while preserving current shell bytes.
+
+The journal records each file's prior bytes and mode and durable write intent;
+a failed write rolls back only started changes. New runtime directories carry
+the transaction's ownership token, so rollback never removes another owner's
+runtime. After a terminated install, `node herdr/entry-install.mjs
 --recover` (or the next install/remove) restores the previous state. A live
-transaction or edits to files needing recovery refuse without overwriting them.
-Stable runtimes remain after successful removal, alongside retained releases.
+owner or edits to files needing recovery refuse without overwriting them. A
+pending journal from the older installer must be recovered with that original
+installer before upgrading: its text encoding and absent ownership information
+cannot establish safe recovery with this format. Stable runtimes include an
+explicit asset allowlist, including `lanes/docs/REVIEW_TEMPLATE.md`, and remain
+after successful removal, alongside retained releases.
 
 For a Herdr GitHub installation, use the manifest's **restore-entry** action,
 or `node /installed/plugin/herdr/entry-install.mjs --remove`, before uninstalling

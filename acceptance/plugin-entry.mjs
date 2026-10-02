@@ -15,14 +15,14 @@ if (process.platform !== 'darwin') throw new Error('native UI canary currently r
 const candidate = fs.realpathSync(values.candidate), binary = fs.realpathSync(values['native-codex']);
 const herdrBinary = fs.realpathSync(spawnSync('which', ['herdr'], { encoding: 'utf8' }).stdout.trim());
 const gitBinary = fs.realpathSync(spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim());
-const session = `eng80-r89-${process.pid}`;
+const session = `eng80-entry-${process.pid}`;
 // Keep the named server's Unix socket beneath macOS's short sun_path limit.
 const root = fs.mkdtempSync('/private/tmp/e80-native-');
 const evidence = path.join(root, 'evidence'); fs.mkdirSync(evidence);
 const home = path.join(root, 'home'), source = path.join(root, 'source'), project = path.join(root, 'project'), nativeBin = path.join(root, 'native-bin');
 for (const dir of [home, source, project, nativeBin]) fs.mkdirSync(dir);
 const env = { ...process.env, HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), TMPDIR: path.join(root, 'tmp'),
-  ORG_ACTOR: `eng80-r89-native-${process.pid}`, ORG_DIR: '', OPENAI_API_KEY: 'scratch-ui-no-network',
+  ORG_ACTOR: `eng80-native-${process.pid}`, ORG_DIR: '', OPENAI_API_KEY: 'scratch-ui-no-network',
   PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'),
   HERDR_MONITOR_CODEX: path.join(nativeBin, 'codex'), HERDR_MONITOR_CLAUDE: '-', HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
   HERDR_MONITOR_REPO: source, HERDR_MONITOR_PLIST: path.join(home, 'absent.plist'), RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', RELEASE_NO_NPM: '1',
@@ -58,7 +58,7 @@ let installed = false, pluginInstalled = false, server, serverLog, runtime, plug
 try {
   // Snapshot only the distribution used by entry, not local runtime state or
   // project instructions. Candidate build/activation remains real product code.
-  for (const name of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'promote', 'supervisor', 'mcp', 'console', 'herdr-plugin.toml']) {
+  for (const name of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'supervisor', 'mcp', 'console', 'herdr-plugin.toml']) {
     fs.cpSync(path.join(candidate, name), path.join(source, name), { recursive: true,
       filter: (file) => !file.split(path.sep).includes('node_modules') });
   }
@@ -68,7 +68,7 @@ try {
     ok('git', ['add', '.'], repo); ok('git', ['commit', '-qm', 'Scratch seed'], repo);
   }
   init(source); ok('git', ['tag', 'candidate'], source); init(project);
-  const before = '# Original scratch shell setup\n';
+  const before = Buffer.concat([Buffer.from('# Original scratch shell setup\n# '), Buffer.from([255, 192, 128]), Buffer.from('\n')]);
   fs.writeFileSync(path.join(home, '.zshrc'), before);
   // Transparent native transport captures the product-authored policy at the
   // real executable boundary. No replacement policy or model response exists.
@@ -118,7 +118,7 @@ const r=cp.spawnSync(${JSON.stringify(gitBinary)},args,{stdio:'inherit',env:proc
     env.ENTRY_CANARY_RECEIPT = receipt;
     // A normal scratch user shell sources the installer-created startup files.
     // This readiness marker supplies no policy and does not prepend entry PATH.
-    const readinessSnippet = `\n: > ${quote(ready)}\n`;
+    const readinessSnippet = Buffer.from(`\n: > ${quote(ready)}\n`);
     readinessSnippets.push(readinessSnippet); fs.appendFileSync(path.join(home, '.zshrc'), readinessSnippet);
     const args = ['workspace', 'create', '--cwd', project, '--label', `entry-canary-${role}-${process.pid}`, '--no-focus'];
     for (const [key, value] of Object.entries(env)) {
@@ -165,10 +165,14 @@ const r=cp.spawnSync(${JSON.stringify(gitBinary)},args,{stdio:'inherit',env:proc
   assert.equal(fs.existsSync(path.join(bin, 'codex')), false); assert.equal(fs.existsSync(path.join(bin, 'monitor-codex')), false);
   assert.equal(fs.existsSync(path.join(home, '.zshenv')), false);
   assert.equal(ok('zsh', ['-ic', 'command -v codex']).trim(), path.join(nativeBin, 'codex'));
-  let remaining = fs.readFileSync(path.join(home, '.zshrc'), 'utf8');
-  for (const snippet of readinessSnippets) remaining = remaining.replace(snippet, '');
+  let remaining = fs.readFileSync(path.join(home, '.zshrc'));
+  for (const snippet of readinessSnippets) {
+    const index = remaining.indexOf(snippet); assert.ok(index >= 0);
+    remaining = Buffer.concat([remaining.subarray(0, index), remaining.subarray(index + snippet.length)]);
+  }
   fs.writeFileSync(path.join(home, '.zshrc'), remaining);
-  assert.equal(remaining, before);
+  assert.deepEqual(remaining, before);
+  fs.writeFileSync(path.join(evidence, 'shell-restore.json'), JSON.stringify({ before: before.toString('base64'), restored: remaining.toString('base64'), byteIdentical: remaining.equals(before) }, null, 2));
   for (const name of ['.bashrc', '.bash_profile']) assert.equal(fs.existsSync(path.join(home, name)), false);
   ok(herdrBinary, ['--session', session, 'plugin', 'uninstall', 'rewt.herdr-monitor']); pluginInstalled = false;
   outcome = 'passed';

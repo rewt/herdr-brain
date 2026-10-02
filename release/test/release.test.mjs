@@ -95,6 +95,7 @@ test('publish auto policy cannot approve a release and agents cannot forge, clos
 for (const answer of ['yes', 'no']) test(`agents cannot start a run on an operator-reserved question answered ${answer}`, t => {
   const f = fixture(t, { gate: ['node', 'gate.cjs'] });
   const c = f.attempt().candidate;
+  assert.equal(c.gate.result, 'passed', fs.readFileSync(c.gate.log, 'utf8'));
   const eventFile = path.join(f.repo, '.org/events.jsonl');
   const refuseStart = () => {
     const before = fs.readFileSync(eventFile);
@@ -173,6 +174,29 @@ test('tracked declarations, preparation failure, fixed candidate tags and base o
   const result = f.attempt({ tag: 'rc-build-fail' });
   assert.equal(result.result, 'gate-failed'); assert.equal(result.candidate.gate.stage, 'prepare', result.candidate.gate.detail); assert.equal(fs.existsSync(f.count), false);
   assert.equal(f.attempt({ tag: '../bad' }).candidate.id, result.candidate.id, 'existing evidence is reused without creating another tag');
+});
+
+test('snapshot extraction gives tar an owned archive file instead of a padded stdin pipe', t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] });
+  const bin = path.join(f.root, 'tools'); fs.mkdirSync(bin);
+  const receipt = path.join(f.root, 'archive-input.json');
+  fs.writeFileSync(path.join(bin, 'tar'), `#!${process.execPath}
+const fs=require('fs'),assert=require('assert'),cp=require('child_process');
+const args=process.argv.slice(2),file=args[args.indexOf('-f')+1];
+assert.ok(args.includes('-f'));assert.ok(fs.statSync(file).isFile());
+fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({file,bytes:fs.statSync(file).size}));
+const r=cp.spawnSync('/usr/bin/tar',args,{stdio:['ignore','inherit','inherit']});process.exit(r.status??1);
+  `, { mode: 0o755 });
+  f.env.PATH = `${bin}:${f.env.PATH}`;
+  const previousPath = process.env.PATH;
+  process.env.PATH = f.env.PATH;
+  t.after(() => { process.env.PATH = previousPath; });
+  const c = f.attempt().candidate;
+  assert.equal(c.gate.result, 'passed', fs.readFileSync(c.gate.log, 'utf8'));
+  const input = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  assert.equal(input.file, `${c.snapshot}.archive.tar`); assert.ok(input.bytes > 0);
+  assert.equal(fs.existsSync(input.file), false, 'only the successfully extracted owned archive is removed');
+  assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
 });
 
 test('supervisor, discovery and console recover gate evidence and the operator decision from the record', async t => {

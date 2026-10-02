@@ -92,7 +92,13 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
       if (fs.existsSync(snapshot) || fs.existsSync(`${snapshot}.partial`)) throw new Error('snapshot already exists without a recorded gate result; inspect');
       fs.mkdirSync(`${snapshot}.partial`, { recursive: true });
       const archive = invoke('git', ['-C', project.canonical, 'archive', commit], { encoding: undefined, maxBuffer: 256 * 1024 * 1024 });
-      invoke('tar', ['-x', '-C', `${snapshot}.partial`], { input: archive });
+      // BSD tar may stop reading at the archive end markers while Node is still
+      // writing padded input, producing EPIPE despite successful extraction.
+      // Keep an owned file outside the extraction tree; never pipe the archive.
+      const archiveFile = `${snapshot}.archive.tar`;
+      fs.writeFileSync(archiveFile, archive, { flag: 'wx' });
+      invoke('tar', ['-x', '-f', archiveFile, '-C', `${snapshot}.partial`]);
+      fs.unlinkSync(archiveFile);
       fs.writeFileSync(path.join(`${snapshot}.partial`, '.release-commit'), commit + '\n');
       fs.renameSync(`${snapshot}.partial`, snapshot);
       const run = (command, stage, extra = {}) => {

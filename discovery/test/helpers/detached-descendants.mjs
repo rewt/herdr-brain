@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { runBounded } from '../../bounded.mjs';
+import { lookupProcess } from '../../../test/helpers/processes.mjs';
 
 const [root, mode] = process.argv.slice(2);
 const deadlineBinary = path.join(root, 'fixture-deadline');
@@ -50,7 +51,9 @@ if (mode === 'completion' || mode === 'deadline') {
   await delay(2700);
   assert.ok(!fs.existsSync(marker), 'native owner cleaned detached descendants after wrapper death');
 } else {
-  const pgid = Number((await import('node:child_process')).execFileSync('/bin/ps', ['-o', 'pgid=', '-p', String(process.pid)], { encoding: 'utf8', timeout: 2000 }).trim());
+  const current = lookupProcess(process.pid);
+  assert.ok(current.ok && current.value, current.error);
+  const pgid = current.value.pgid;
   const program = mode === 'early-cancel' ? `while(true){} // ${root}` : `${writeReceipt}${mode === 'blocked-leaf' ? 'while(true){}' : 'setInterval(()=>{},1000);'}`;
   const child = spawn(deadlineBinary, [process.execPath, '-e', program, String(pgid)], { detached: true, stdio: 'ignore' });
   child.unref();

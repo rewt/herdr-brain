@@ -37,11 +37,11 @@ function fixture(t, { block = true } = {}) {
 fs.writeFileSync(${JSON.stringify(leaf + '.tmp')},JSON.stringify({pid:process.pid}));
 fs.renameSync(${JSON.stringify(leaf + '.tmp')},${JSON.stringify(leaf)});while(true){} // ${root}`;
   const program = path.join(root, 'command.cjs');
-  fs.writeFileSync(program, `const fs=require('fs'),{spawn,execFileSync}=require('child_process');
+  fs.writeFileSync(program, `const fs=require('fs'),{spawn}=require('child_process');
 process.on('SIGHUP',()=>{});
 const child=spawn(process.execPath,['-e',${JSON.stringify(leafCode)}],{stdio:'ignore'});child.unref();
-const timer=setInterval(()=>{if(!fs.existsSync(${JSON.stringify(leaf)}))return;clearInterval(timer);
-const value={pid:process.pid,leaf:child.pid,session:Number(process.env.HERDR_TEST_PTY_SESSION),suite:Number(process.env.HERDR_TEST_SUITE_PID),pgid:Number(execFileSync('ps',['-o','pgid=','-p',String(process.pid)],{encoding:'utf8'})),tty:process.stdin.isTTY};
+const timer=setInterval(async()=>{if(!fs.existsSync(${JSON.stringify(leaf)}))return;clearInterval(timer);
+const value={pid:process.pid,leaf:child.pid,session:Number(process.env.HERDR_TEST_PTY_SESSION),suite:Number(process.env.HERDR_TEST_SUITE_PID),pgid:(await import(${JSON.stringify(new URL('./helpers/processes.mjs', import.meta.url).href)})).lookupProcess(process.pid).value.pgid,tty:process.stdin.isTTY};
 fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify(value));fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
 ${block ? 'while(true){}' : 'setTimeout(()=>process.exit(0),100);'}
 },10);`);

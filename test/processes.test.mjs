@@ -106,15 +106,15 @@ test('a positive current tuple immediately precedes both PID and group signals',
   assert.deepEqual(h.signals, [{ pid: 101, signal: 'SIGTERM' }, { pid: process.platform === 'win32' ? 101 : -101, signal: 'SIGKILL' }]);
 });
 
-test('ps parsing rejects failed, timed-out, truncated and incomplete snapshots before any ownership is inferred', () => {
-  const line = `${process.pid} 1 ${process.pid} S Fri Oct  2 01:00:00 2026 owned fixture\n`;
+test('process source parsing rejects failed, timed-out, truncated and incomplete snapshots before any ownership is inferred', () => {
+  const line = JSON.stringify(row(process.pid, '1700000000:123456')) + '\n';
   const good = { status: 0, signal: null, stdout: line, stderr: '' };
   assert.equal(parseProcessLookup(good).ok, true);
   for (const result of [
     { ...good, status: null, error: Error('ETIMEDOUT') },
     { ...good, status: 1 }, { ...good, signal: 'SIGKILL' },
     { ...good, stdout: line.slice(0, -1) }, { ...good, stdout: line + 'partial\n' },
-    { ...good, stdout: '101 1 101 S Fri Oct 2 01:00:00 2026 replacement\n' },
+    { ...good, stdout: JSON.stringify(row(101, '1700000000:123456')) + '\n' },
     { ...good, stdout: line + line }, { ...good, stdout: '' },
     { ...good, stderr: 'ps: permission denied' },
   ]) assert.equal(parseProcessLookup(result).ok, false);

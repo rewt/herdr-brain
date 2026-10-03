@@ -18,7 +18,7 @@ const withLoad = t => {
   os.loadavg = () => [24, 24, 24]; os.availableParallelism = () => 4;
   t.after(() => { os.loadavg = load; os.availableParallelism = capacity; });
 };
-const line = (command = 'owned fixture') => `101 1 101 S Fri Oct 2 01:00:00 2026 ${command}\n`;
+const line = (command = 'owned fixture') => JSON.stringify({ pid: 101, ppid: 1, pgid: 101, state: 'S', identity: '1700000000:123456', command }) + '\n';
 const good = command => ({ status: 0, signal: null, stdout: line(command), stderr: '' });
 const timedOut = { status: null, error: Object.assign(Error('ps timed out'), { code: 'ETIMEDOUT' }), stdout: line(), stderr: '' };
 
@@ -35,10 +35,10 @@ test('measured load expands internal allowances without shorter, infinite or ove
   assert.throws(() => loadTimeout(-1));
 });
 
-test('a loaded ps lookup receives time to answer and timeout retries back off with fresh output', t => {
+test('a loaded native lookup receives time to answer and timeout retries back off with fresh output', t => {
   withLoad(t);
   const attempts = [], pauses = [];
-  const result = lookupProcess(101, { execute: (_file, _args, options) => {
+  const result = lookupProcess(101, { platform: 'darwin', execute: (_file, _args, options) => {
     attempts.push(options.timeout);
     return options.timeout < 20000 ? timedOut : good();
   }, pause: ms => pauses.push(ms) });
@@ -47,19 +47,19 @@ test('a loaded ps lookup receives time to answer and timeout retries back off wi
   assert.deepEqual(pauses, [300]);
 });
 
-test('the default ps executor under the bounded helper scales each response allowance once', async t => {
+test('the default native executor under the bounded helper scales each response allowance once', async t => {
   const source = `import os from 'node:os';import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
 os.loadavg=()=>[24,24,24];os.availableParallelism=()=>4;
 const native=cp.spawnSync,attempts=[],commands=[];
 cp.spawnSync=(file,args,options)=>{
- if(file==='ps'){attempts.push(options.timeout);return {status:null,stdout:'',stderr:'',error:Object.assign(Error('injected ps timeout'),{code:'ETIMEDOUT'})};}
+ if(String(file).includes('process-source-')){attempts.push(options.timeout);return {status:null,stdout:'',stderr:'',error:Object.assign(Error('injected ps timeout'),{code:'ETIMEDOUT'})};}
  if(file==='command-allowance-fixture'){commands.push(options.timeout);return {status:0,stdout:'',stderr:''};}
  return native(file,args,options);
 };syncBuiltinESMExports();
 await import(${JSON.stringify(new URL('./helpers/bounded-test.mjs', import.meta.url).href)});
 const {lookupProcess}=await import(${JSON.stringify(new URL('./helpers/processes.mjs', import.meta.url).href)});
 const {commandAllowance}=await import(${JSON.stringify(new URL('./helpers/command-allowance.mjs', import.meta.url).href)});
-const lookup=lookupProcess(101,{pause:()=>{}});
+const lookup=lookupProcess(101,{platform:'darwin',pause:()=>{}});
 cp.spawnSync('command-allowance-fixture',[]);
 cp.spawnSync('command-allowance-fixture',[],{timeout:12000});
 cp.spawnSync('command-allowance-fixture',[],{timeout:180000});
@@ -125,20 +125,20 @@ test('exhausted record-lock waits preserve live, refused and initializing owners
 test('exhausted, refused and malformed lookups never authorize a signal, including after timeout', () => {
   for (const ending of [timedOut, { status: 1, stderr: 'denied', stdout: '' }, { ...good(), stdout: line().slice(0, -1) }]) {
     let attempts = 0;
-    const tracker = createProcessTracker({ readIdentity: () => lookupProcess(101, {
+    const tracker = createProcessTracker({ readIdentity: () => lookupProcess(101, { platform: 'darwin',
       execute: () => (++attempts === 1 ? timedOut : ending), allowance: ms => ms, pause: () => {},
     }), sendSignal: () => assert.fail('unconfirmed signal'), report: () => {} });
-    assert.equal(tracker.killProcess({ pid: 101, identity: 'Fri Oct 2 01:00:00 2026', command: 'owned fixture', group: true }).ok, false);
+    assert.equal(tracker.killProcess({ pid: 101, identity: '1700000000:123456', command: 'owned fixture', group: true }).ok, false);
     assert.equal(attempts, ending === timedOut ? 3 : 2);
   }
 });
 
 test('a replacement PID discovered after a retry remains unauthorized', () => {
   let attempts = 0;
-  const tracker = createProcessTracker({ readIdentity: () => lookupProcess(101, {
+  const tracker = createProcessTracker({ readIdentity: () => lookupProcess(101, { platform: 'darwin',
     execute: () => (++attempts === 1 ? timedOut : good('operator session')), allowance: ms => ms, pause: () => {},
   }), sendSignal: () => assert.fail('replacement signal'), report: () => {} });
-  assert.equal(tracker.killProcess({ pid: 101, identity: 'Fri Oct 2 01:00:00 2026', command: 'owned fixture', group: true }).reason, 'changed');
+  assert.equal(tracker.killProcess({ pid: 101, identity: '1700000000:123456', command: 'owned fixture', group: true }).reason, 'changed');
 });
 
 test('promotion validation can read Git after the old injected 15-second command deadline', { timeout: 60000 }, t => {

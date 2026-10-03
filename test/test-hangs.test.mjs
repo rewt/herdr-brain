@@ -137,11 +137,12 @@ import {syncBuiltinESMExports} from 'node:module';
 test('already completed fixture',async(t)=>{
 const child=spawnChild(t,process.execPath,['-e','console.log("complete")']);
 await waitForExit(child);
-let queries=0;const original=cp.spawnSync;
-cp.spawnSync=(command,...args)=>{if(command==='ps'){queries++;throw Error('historical PID lookup must not happen');}return original(command,...args);};
+let queries=0;const original=cp.spawnSync, originalRead=fs.readFileSync;
+fs.readFileSync=(file,...args)=>{if(String(file).startsWith('/proc/')){queries++;throw Error('historical PID lookup must not happen');}return originalRead(file,...args);};
+cp.spawnSync=(command,...args)=>{if(String(command).includes('process-source-')){queries++;throw Error('historical PID lookup must not happen');}return original(command,...args);};
 syncBuiltinESMExports();
 if(child.kill('SIGKILL'))throw Error('already completed child was signalled');
-t.after(()=>{cp.spawnSync=original;syncBuiltinESMExports();if(queries)throw Error('teardown queried a completed fixture');});
+t.after(()=>{cp.spawnSync=original;fs.readFileSync=originalRead;syncBuiltinESMExports();if(queries)throw Error('teardown queried a completed fixture');});
 });`);
   const child = runFixture(t, [f.file]);
   const result = await waitForExit(child);
@@ -258,20 +259,21 @@ await waitForExit(child);
 
 test('a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures', async (t) => {
   const f = fixture(t, root => `test('audit lookup failure',async(t)=>{
-const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(`sleep 60 >/dev/null 2>&1 & echo $! > '${root}/fixture'; exit 0`)}]);
+const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(`sleep 60 >/dev/null 2>&1 & echo $! > '${root}/fixture'; sleep 0.05; exit 0`)}]);
 fs.writeFileSync(${JSON.stringify(path.join(root, 'worker'))},String(process.ppid));
 await waitForExit(child);
 });`);
   const fault = path.join(f.root, 'audit-failure.mjs');
-  fs.writeFileSync(fault, `import cp from 'node:child_process';
+  fs.writeFileSync(fault, `import cp from 'node:child_process'; import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
-const original=cp.spawnSync;
-cp.spawnSync=(command,args,options)=>command==='ps'&&args.includes('-A')?{status:null,stdout:'',stderr:'',error:Error('injected audit timeout')}:original(command,args,options);
+const original=cp.spawnSync, originalList=fs.readdirSync;
+fs.readdirSync=(file,...args)=>{if(file==='/proc')throw Error('injected audit timeout');return originalList(file,...args);};
+cp.spawnSync=(command,args,options)=>String(command).includes('process-source-')&&!args.length?{status:null,stdout:'',stderr:'',error:Error('injected audit timeout')}:original(command,args,options);
 syncBuiltinESMExports();`);
   const child = runFixture(t, [f.file], { env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(fault)}` } });
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /process snapshot failed: injected audit timeout/);
+  assert.match(result.stderr, /process snapshot failed: process source unavailable: injected audit timeout/);
   for (const file of ['worker', 'fixture']) await assertGone(Number(fs.readFileSync(path.join(f.root, file), 'utf8')));
 });
 
@@ -279,9 +281,10 @@ test('suite cancellation clears a detached spawn frozen before its ownership loo
   const f = fixture(t, root => `import cp from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
 test('spawn before ownership lookup',(t)=>{
-const original=cp.spawnSync;
+const original=cp.spawnSync, originalRead=fs.readFileSync;
+fs.readFileSync=(file,...args)=>{const match=String(file).match(/^\\/proc\\/(\\d+)\\/stat$/);if(match){fs.writeFileSync(${JSON.stringify(path.join(root, 'spawning'))},JSON.stringify({child:Number(match[1]),file:process.pid,worker:process.ppid}));while(true){}}return originalRead(file,...args);};
 cp.spawnSync=(command,args,options)=>{
- if(command==='ps'&&args.includes('-p')){
+ if(String(command).includes('process-source-')&&args.length===1){
   fs.writeFileSync(${JSON.stringify(path.join(root, 'spawning'))},JSON.stringify({child:Number(args.at(-1)),file:process.pid,worker:process.ppid}));
   while(true) {}
  }

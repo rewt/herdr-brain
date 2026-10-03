@@ -34,8 +34,15 @@ removable lane code from acting on live panes. Workers can run `--once --dry-run
 with an isolated state directory. Installed plugin/release copies outside Git
 remain supported.
 
-The detached process is a timer, not an agent: resume every 60 seconds, cleanup
-on startup and every 600 seconds. A loop covers interruptions while watch waits,
+The detached process is a timer, not an agent: tidy finished tabs and resume every
+60 seconds, with settled-lane cleanup on startup and every 600 seconds. Every
+tick runs `supervisor/tidy-tabs.mjs` for this Git project and record, so recorded
+finished worker tabs can close while their lane remains open. It also tidies
+finished reviews, exited watchers and older finished settle sessions, keeping the
+newest finished session for reading. Tidy failures are logged as `tidy-failed`
+and do not prevent recovery or subsequent ticks. Dry-run forwards `--dry-run`
+to this pass and logs its preview without closing tabs.
+A loop covers interruptions while watch waits,
 and catches promotion/closure long after watch's final notice. Herdr events alone
 do not include Git promotion or record ingestion; a small timer avoids wiring
 several imperfect triggers together. The supervisor can start the same command;
@@ -55,9 +62,10 @@ no supervisor context is consumed after that.
 - Every agent in a tab must qualify. Unnamed/operator chats, blocked/working/unknown
   agents, running extra programs, unknown sessions and a foreground timer's own tab stay.
   A detached timer clears inherited pane/tab/workspace IDs; it has no terminal to protect.
-  Topology, processes, record and Git are reread before each close. This uses
-  `supervisor/tidy-tabs.mjs`'s shared planner in strict mode; its older standalone
-  command retains its existing behavior and is not the housekeeping entry point.
+  Topology, processes, record and Git are reread before each close. The slower
+  settled-lane cleanup uses `supervisor/tidy-tabs.mjs`'s shared planner in strict
+  mode. The separate per-tick finished-tab command retains its existing
+  report/review-verdict policy without requiring lane promotion or archival.
 - Recovery requires an open run, idle/done Codex, a current `■ Conversation
   interrupted` (or `■ Turn interrupted`) banner at the end of the visible output,
   and only SGR wheel junk (`<64` through `<67`; coordinates; `M`/`m`) in the composer.

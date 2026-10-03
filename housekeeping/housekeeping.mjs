@@ -17,6 +17,7 @@ export { readConfig } from './config.mjs';
 
 const LOCAL_RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
+const TIDY = fileURLToPath(new URL('../supervisor/tidy-tabs.mjs', import.meta.url));
 const FINISHED = new Set(['idle', 'done']);
 const canonicalPath = (file) => fs.existsSync(file) ? fs.realpathSync(file) : path.resolve(file);
 export const RESUME = 'Housekeeping: a stray terminal mouse-wheel escape interrupted this open recorded run. Continue exactly where you left off and write the requested report.';
@@ -83,6 +84,29 @@ export function matchingRun(agent, runs) {
 
 export function resumeKey(run, agent) {
   return JSON.stringify([run.id, agent.pane_id, agent.terminal_id, agent.agent_session?.value, agent.state_change_seq]);
+}
+
+// Finished sessions are independent of lane promotion and the slower cleanup
+// interval. A failed tidy is evidence for the log, never a reason to skip recovery.
+export function tidyFinishedTabs({ cwd, org, herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
+  dryRun = false, command = spawnSync, log = () => {} }) {
+  const args = [TIDY, '--cwd', cwd, '--org', org, '--herdr', herdr,
+    '--org-cli', record[0], ...record.slice(1).flatMap((arg) => ['--org-cli-arg', arg]),
+    ...(dryRun ? ['--dry-run'] : [])];
+  let output = '';
+  try {
+    const result = command(process.execPath, args, { cwd, encoding: 'utf8',
+      timeout: loadTimeout(30000), maxBuffer: 32 * 1024 * 1024 });
+    output = result.stdout?.trim() ?? '';
+    if (result.error || result.status !== 0) {
+      throw new Error((result.stderr || result.error?.message || result.stdout || `exit ${result.status}`).trim());
+    }
+    log({ action: 'tidy-tabs', output, dryRun });
+    return true;
+  } catch (error) {
+    log({ action: 'tidy-failed', error: error.message, output, dryRun });
+    return false;
+  }
 }
 
 export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
@@ -345,6 +369,8 @@ async function main() {
       try {
         config = readConfig(configFile);
         if (!config.enabled && !opt['dry-run']) { log({ action: 'disabled' }); break; }
+        tidyFinishedTabs({ cwd, org: project.org, herdr: opt.herdr, record: recordCLI,
+          dryRun: opt['dry-run'], log });
         if (!opt['dry-run']) {
           const pid = await resumeInbox(inboxPath({ org: project.org, cwd }));
           if (pid) log({ action: 'supervisor-inbox-owned', pid });

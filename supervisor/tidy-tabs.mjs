@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 const WATCHER = /^(watch|deliver) R-\d+$/;
 const SESSION_LABEL = /^(settle R-\d+|executive|plan|audit)$/;
@@ -43,7 +44,7 @@ export function planTidy(snapshot) {
     const skip = (why) => keep.push({ tab_id: tab.tab_id, label: tab.label, why });
     if (tab.tab_id === selfTab) { skip('this tab'); continue; }
     const tabPanes = panes.filter((p) => p.tab_id === tab.tab_id);
-    const tabAgents = tabPanes.map((p) => agents.find((a) => a.pane_id === p.pane_id)).filter(Boolean);
+    const tabAgents = agents.filter((a) => tabPanes.some((p) => p.pane_id === a.pane_id));
     if (!tabPanes.length) { skip('no panes observed'); continue; }
     if (tabAgents.some((a) => !a.name)) { skip('an unnamed agent (an operator chat) is here'); continue; }
     if (tabAgents.some((a) => !FINISHED.has(a.status))) { skip('an agent here is still active'); continue; }
@@ -159,12 +160,6 @@ export function isShellOnly(processInfo) {
   return fg.length > 0 && fg.every((p) => SHELLS.has(p.name) || SHELLS.has(p.argv0) || p.pid === processInfo.shell_pid);
 }
 
-function herdr(args) {
-  const r = spawnSync('herdr', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (r.status !== 0) return null;
-  try { return JSON.parse(r.stdout).result; } catch { return null; }
-}
-
 function main() {
   const { values: opt } = parseArgs({
     options: {
@@ -172,6 +167,9 @@ function main() {
       org: { type: 'string' },
       'ledger-dir': { type: 'string' },
       'keep-sessions': { type: 'string', default: '1' },
+      herdr: { type: 'string', default: 'herdr' },
+      'org-cli': { type: 'string', default: 'org' },
+      'org-cli-arg': { type: 'string', multiple: true, default: [] },
       'dry-run': { type: 'boolean', default: false },
     },
   });
@@ -179,60 +177,84 @@ function main() {
     console.error('usage: tidy-tabs.mjs --cwd CHECKOUT [--org DIR] [--ledger-dir DIR] [--keep-sessions N] [--dry-run]');
     process.exit(2);
   }
-  const checkout = path.resolve(opt.cwd);
-  const ws = herdr(['workspace', 'list']);
-  if (!ws) { console.error('tidy-tabs: herdr is not reachable; nothing closed'); process.exit(1); }
-  const mine = ws.workspaces.filter((w) => w.worktree && (
-    (!w.worktree.is_linked_worktree && path.resolve(w.worktree.checkout_path) === checkout)
-    || (w.worktree.is_linked_worktree && path.resolve(w.worktree.repo_root ?? '') === checkout)));
-  if (!mine.some((w) => !w.worktree.is_linked_worktree)) { console.error(`tidy-tabs: no Herdr workspace has ${checkout} as its checkout; nothing closed`); process.exit(1); }
-
-  const tabs = [];
-  const panes = [];
-  for (const w of mine) {
-    const lane = Boolean(w.worktree.is_linked_worktree);
-    for (const t of herdr(['tab', 'list', '--workspace', w.workspace_id])?.tabs ?? []) tabs.push({ tab_id: t.tab_id, label: t.label ?? '', workspace_id: w.workspace_id, lane });
-    for (const p of herdr(['pane', 'list', '--workspace', w.workspace_id])?.panes ?? []) {
-      const info = herdr(['pane', 'process-info', '--pane', p.pane_id])?.process_info;
-      panes.push({ pane_id: p.pane_id, tab_id: p.tab_id, shellOnly: isShellOnly(info) });
+  const checkout = fs.realpathSync(opt.cwd);
+  const invoke = (exe, args, env = process.env) => {
+    const r = spawnSync(exe, args, { cwd: checkout, encoding: 'utf8', env,
+      timeout: loadTimeout(10000), maxBuffer: 256 * 1024 * 1024 });
+    if (r.error || r.status !== 0) throw new Error(`${exe} ${args.slice(0, 2).join(' ')}: ${(r.stderr || r.error?.message || r.stdout || `exit ${r.status}`).trim()}`);
+    return r.stdout;
+  };
+  const herdr = (args) => {
+    const data = JSON.parse(invoke(opt.herdr, args));
+    if (data.error) throw new Error(JSON.stringify(data.error));
+    return data.result ?? data;
+  };
+  const array = (value, what) => {
+    if (!Array.isArray(value)) throw new Error(`incomplete ${what}`);
+    return value;
+  };
+  const commonAt = (root) => fs.realpathSync(invoke('git', ['-C', root, 'rev-parse', '--path-format=absolute', '--git-common-dir']).trim());
+  const common = commonAt(checkout);
+  function observe() {
+    const mine = array(herdr(['workspace', 'list']).workspaces, 'workspaces').filter((w) => {
+      const wt = w.worktree;
+      if (!wt?.checkout_path || !wt.repo_root || !wt.repo_key) return false;
+      try {
+        return fs.realpathSync(wt.repo_key) === common && commonAt(wt.repo_root) === common &&
+          (!fs.existsSync(wt.checkout_path) || commonAt(wt.checkout_path) === common);
+      } catch { return false; }
+    });
+    const tabs = [], panes = [];
+    for (const w of mine) {
+      for (const t of array(herdr(['tab', 'list', '--workspace', w.workspace_id]).tabs, 'tabs')) {
+        tabs.push({ ...t, label: t.label ?? '', workspace_id: w.workspace_id, lane: Boolean(w.worktree.is_linked_worktree) });
+      }
+      for (const p of array(herdr(['pane', 'list', '--workspace', w.workspace_id]).panes, 'panes')) {
+        const info = herdr(['pane', 'process-info', '--pane', p.pane_id]).process_info;
+        if (!info || !Array.isArray(info.foreground_processes)) throw new Error('incomplete process info');
+        panes.push({ ...p, shellOnly: isShellOnly(info) });
+      }
     }
-  }
-  const agents = (herdr(['agent', 'list'])?.agents ?? []).map((a) => ({ name: a.name ?? null, status: a.agent_status, pane_id: a.pane_id }));
-
-  let reportedAgents = new Set();
-  if (opt.org) {
-    const r = spawnSync('org', ['status', '--json'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, ORG_DIR: opt.org } });
-    if (r.status === 0) reportedAgents = new Set(JSON.parse(r.stdout).runs.filter((x) => x.report && x.meta?.agent).map((x) => x.meta.agent));
-    else console.error(`tidy-tabs: org status failed for ${opt.org}; lane worker tabs are left alone`);
-  }
-  const reviewedAgents = reviewedAgentsFromRecords(
-    laneSessions(checkout),
-    reviewRecords([checkout, ...mine.filter((w) => w.worktree?.is_linked_worktree).map((w) => w.worktree.checkout_path)]),
-  );
-
-  const ledgerDir = opt['ledger-dir'] ?? path.join(checkout, '.lane/supervisor');
-  const ledgers = [];
-  try {
-    for (const f of fs.readdirSync(ledgerDir)) {
-      const m = /^sessions-(\d{4}-\d{2}-\d{2})\.log$/.exec(f);
-      if (m) ledgers.push({ day: m[1], text: fs.readFileSync(path.join(ledgerDir, f), 'utf8') });
+    const agents = array(herdr(['agent', 'list']).agents, 'agents').map((a) => ({ ...a, status: a.agent_status }));
+    let reportedAgents = new Set();
+    if (opt.org) {
+      const data = JSON.parse(invoke(opt['org-cli'], [...opt['org-cli-arg'], 'status', '--json'], { ...process.env, ORG_DIR: opt.org }));
+      if (data.error) throw new Error(JSON.stringify(data.error));
+      const runs = array((data.result ?? data).runs, 'record runs');
+      // A reused worker name belongs to the newest run, including an open fix round.
+      const newest = new Map();
+      for (const run of runs) {
+        const name = run.meta?.agent;
+        if (name && (!newest.has(name) || (run.started?.seq ?? 0) >= (newest.get(name).started?.seq ?? 0))) newest.set(name, run);
+      }
+      reportedAgents = new Set([...newest].filter(([, run]) => run.report).map(([name]) => name));
     }
-  } catch { /* no ledger: sessions are ordered as unknown */ }
-
-  const { close } = planTidy({
-    tabs, panes, agents, reportedAgents, reviewedAgents,
-    sessionOrder: sessionOrderFromLedgers(ledgers),
-    selfTab: process.env.HERDR_TAB_ID ?? null,
-    keepSessions: Number(opt['keep-sessions']),
-  });
+    const reviewedAgents = reviewedAgentsFromRecords(laneSessions(checkout),
+      reviewRecords([checkout, ...mine.filter((w) => w.worktree.is_linked_worktree).map((w) => w.worktree.checkout_path)]));
+    const ledgerDir = opt['ledger-dir'] ?? path.join(checkout, '.lane/supervisor');
+    const ledgers = [];
+    try {
+      for (const f of fs.readdirSync(ledgerDir)) {
+        const m = /^sessions-(\d{4}-\d{2}-\d{2})\.log$/.exec(f);
+        if (m) ledgers.push({ day: m[1], text: fs.readFileSync(path.join(ledgerDir, f), 'utf8') });
+      }
+    } catch { /* no ledger: sessions are ordered as unknown */ }
+    return { tabs, panes, agents, reportedAgents, reviewedAgents,
+      sessionOrder: sessionOrderFromLedgers(ledgers), selfTab: process.env.HERDR_TAB_ID ?? null,
+      keepSessions: Number(opt['keep-sessions']) };
+  }
+  const { close } = planTidy(observe());
   let closed = 0;
   for (const c of close) {
     if (opt['dry-run']) { console.log(`[dry-run] would close ${c.tab_id} "${c.label}": ${c.why}`); continue; }
-    const r = spawnSync('herdr', ['tab', 'close', c.tab_id], { encoding: 'utf8' });
-    if (r.status === 0) { closed++; console.log(`closed ${c.tab_id} "${c.label}": ${c.why}`); }
-    else console.log(`could not close ${c.tab_id} "${c.label}": ${(r.stderr || r.stdout).trim().slice(0, 160)}`);
+    // Recheck all evidence before each close; a worker can resume while we scan.
+    if (!planTidy(observe()).close.some((tab) => tab.tab_id === c.tab_id)) continue;
+    try { invoke(opt.herdr, ['tab', 'close', c.tab_id]); closed++; console.log(`closed ${c.tab_id} "${c.label}": ${c.why}`); }
+    catch (error) { process.exitCode = 1; console.error(`could not close ${c.tab_id} "${c.label}": ${error.message}`); }
   }
   if (!opt['dry-run']) console.log(`tidy-tabs: closed ${closed} of ${close.length} finished tab(s) for ${path.basename(checkout)}`);
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try { main(); } catch (error) { console.error(`tidy-tabs: ${error.message}`); process.exitCode = 1; }
+}

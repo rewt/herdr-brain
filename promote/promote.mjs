@@ -275,13 +275,17 @@ export async function drain(queue) {
         }
         for (let index = batch.deliveredCount; index < batch.results.length; index++) {
           const member = batch.results[index];
-          // Persist integration before cleanup/delivery; recovery replays only
-          // guarded cleanup and idempotent record notes, never a second gate.
-          const result = finishBatchJob(member.job, member.result, queue);
+          // Complete and persist this member before its notice enters the input
+          // gate. Recovery must reuse the exact outcome bound to that notice,
+          // without repeating cleanup or promotion while the operator types.
+          const result = batch.phase === 'completed' ? member.result : finishBatchJob(member.job, member.result, queue);
+          queue.transaction(data => {
+            member.result = result; batch.phase = 'completed'; data.current = batch;
+          });
           const delivery = await deliver(member.job, result, queue);
           queue.transaction(data => {
             data.results.push({ ...member.job, ...result, ...delivery, finished: new Date().toISOString() });
-            batch.deliveredCount = index + 1; data.current = batch;
+            batch.deliveredCount = index + 1; batch.phase = 'batch-delivering'; data.current = batch;
           });
           process.stdout.write(JSON.stringify({ id: member.job.id, topic: member.job.topic, ...result, ...delivery }) + '\n');
         }

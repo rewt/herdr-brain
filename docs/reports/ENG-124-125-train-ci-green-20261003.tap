@@ -1,0 +1,118 @@
+TAP version 13
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 1 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 2760.359792
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 2 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 2916.68725
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 3 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1200.828083
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 4 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 1924.555875
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 5 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 2463.9855
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 6 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 2751.345666
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 7 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1327.598583
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 8 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 3523.038084
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 9 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 3622.259959
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 10 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 1973.939
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 11 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 3759.539208
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 12 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 1664.024708
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 13 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 1988.919375
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 14 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 1894.472833
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 15 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 3843.871
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 16 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4163.985583
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 17 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 5237.559666
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 18 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 5276.378542
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 19 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 3814.415291
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 20 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 5748.483792
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 21 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 1636.428166
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 63528.629125

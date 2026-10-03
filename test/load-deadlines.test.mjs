@@ -9,6 +9,8 @@ import { environmentFingerprint } from '../lanes/validation.mjs';
 import { HerdrClient } from '../lanes/board/herdr-client.mjs';
 import { EventEmitter } from 'node:events';
 import { waitForInboxIdle } from './helpers/inbox.mjs';
+import { initOrg, transact, withLock } from '../lib/store.mjs';
+import { spawnChild, waitForExit } from './helpers/child.mjs';
 
 process.env.ORG_ACTOR = 'load-deadlines-test';
 const withLoad = t => {
@@ -43,6 +45,81 @@ test('a loaded ps lookup receives time to answer and timeout retries back off wi
   assert.equal(result.ok, true);
   assert.deepEqual(attempts, [12000, 24000]);
   assert.deepEqual(pauses, [300]);
+});
+
+test('the default ps executor under the bounded helper scales each response allowance once', async t => {
+  const source = `import os from 'node:os';import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
+os.loadavg=()=>[24,24,24];os.availableParallelism=()=>4;
+const native=cp.spawnSync,attempts=[],commands=[];
+cp.spawnSync=(file,args,options)=>{
+ if(file==='ps'){attempts.push(options.timeout);return {status:null,stdout:'',stderr:'',error:Object.assign(Error('injected ps timeout'),{code:'ETIMEDOUT'})};}
+ if(file==='command-allowance-fixture'){commands.push(options.timeout);return {status:0,stdout:'',stderr:''};}
+ return native(file,args,options);
+};syncBuiltinESMExports();
+await import(${JSON.stringify(new URL('./helpers/bounded-test.mjs', import.meta.url).href)});
+const {lookupProcess}=await import(${JSON.stringify(new URL('./helpers/processes.mjs', import.meta.url).href)});
+const {commandAllowance}=await import(${JSON.stringify(new URL('./helpers/command-allowance.mjs', import.meta.url).href)});
+const lookup=lookupProcess(101,{pause:()=>{}});
+cp.spawnSync('command-allowance-fixture',[]);
+cp.spawnSync('command-allowance-fixture',[],{timeout:12000});
+cp.spawnSync('command-allowance-fixture',[],{timeout:180000});
+cp.spawnSync('command-allowance-fixture',[],{timeout:108000,[commandAllowance]:108000});
+console.log(JSON.stringify({lookup,attempts,commands}));`;
+  const child = spawnChild(t, process.execPath, ['--input-type=module', '-e', source],
+    { env: { ...process.env, ORG_ACTOR: 'default-ps-deadline-test' } });
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stderr);
+  const actual = JSON.parse(result.stdout);
+  assert.equal(actual.lookup.ok, false, 'exhausted lookups never become identity evidence');
+  assert.deepEqual(actual.attempts, [12000, 24000, 48000]);
+  assert.deepEqual(actual.commands, [90000, 12000, 90000, 108000]);
+});
+
+test('the record lock waits past ten seconds for a live holder under load before appending', t => {
+  withLoad(t);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'loaded-record-lock-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  initOrg(root);
+  const lock = path.join(root, 'lock');
+  fs.mkdirSync(lock); fs.writeFileSync(path.join(lock, 'pid'), String(process.pid));
+  const now = Date.now, wait = Atomics.wait, start = now();
+  let elapsed = 0;
+  try {
+    Date.now = () => start + elapsed;
+    Atomics.wait = (_view, _index, _value, milliseconds) => {
+      elapsed += milliseconds;
+      if (elapsed === 12000) fs.rmSync(lock, { recursive: true });
+    };
+    const result = transact(root, () => ({ add: [{ type: 'loaded-lock-test' }] }), { actor: 'loaded-record-lock-test' });
+    assert.equal(elapsed, 12000, 'the live owner released after the former fixed limit');
+    assert.equal(result.added.length, 1);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'events.jsonl'), 'utf8')).by, 'loaded-record-lock-test');
+    assert.equal(fs.existsSync(lock), false);
+  } finally { Date.now = now; Atomics.wait = wait; }
+});
+
+test('exhausted record-lock waits preserve live, refused and initializing owners and log bytes', t => {
+  withLoad(t);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'loaded-record-refusal-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  initOrg(root);
+  const now = Date.now, wait = Atomics.wait, kill = process.kill, start = now();
+  const lock = path.join(root, 'lock');
+  try {
+    for (const owner of ['live', 'refused', 'initializing']) {
+      fs.mkdirSync(lock);
+      if (owner !== 'initializing') fs.writeFileSync(path.join(lock, 'pid'), String(process.pid));
+      let elapsed = 0;
+      Date.now = () => start + elapsed;
+      Atomics.wait = (_view, _index, _value, milliseconds) => { elapsed += milliseconds; };
+      process.kill = owner === 'refused' ? () => { throw Object.assign(Error('denied'), { code: 'EPERM' }); } : kill;
+      assert.throws(() => withLock(root, () => assert.fail('unconfirmed record write')), /record is locked/);
+      assert.ok(elapsed > 60000 && elapsed <= 60015);
+      assert.equal(fs.existsSync(lock), true);
+      assert.equal(fs.readFileSync(path.join(root, 'events.jsonl'), 'utf8'), '');
+      Date.now = now; process.kill = kill; fs.rmSync(lock, { recursive: true });
+    }
+  } finally { Date.now = now; Atomics.wait = wait; process.kill = kill; }
 });
 
 test('exhausted, refused and malformed lookups never authorize a signal, including after timeout', () => {

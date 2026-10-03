@@ -80,13 +80,15 @@ static void interrupted(int sig) { stopped = sig; }
 static uint64_t milliseconds(void) { struct timespec now; clock_gettime(CLOCK_MONOTONIC, &now); return (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000; }
 static void pause_scan(void) { struct timespec delay = {0, 10000000}; nanosleep(&delay, NULL); }
 int main(int argc, char **argv) {
-  if (argc < 3 || getsid(0) != getpid() || !isatty(0)) {
+  if (argc < 4 || getsid(0) != getpid() || !isatty(0)) {
     fprintf(stderr, "PTY owner requires its own live terminal session\n"); return 125;
   }
   char *end; unsigned long duration = strtoul(argv[1], &end, 10);
   // The JavaScript transport passes its measured-load allowance. Keep the
   // native watchdog finite without rejecting allowances above the 15s base.
   if (*end || !duration || duration > INT32_MAX) return 125;
+  unsigned long cleanup_duration = strtoul(argv[2], &end, 10);
+  if (*end || !cleanup_duration || cleanup_duration > INT32_MAX) return 125;
   uint64_t deadline = milliseconds() + duration;
   pid_t parent = getppid();
   signal(SIGTERM, interrupted); signal(SIGINT, interrupted); signal(SIGHUP, interrupted);
@@ -97,7 +99,7 @@ int main(int argc, char **argv) {
     signal(SIGTERM, SIG_DFL); signal(SIGINT, SIG_DFL); signal(SIGHUP, SIG_DFL);
     char session[32]; snprintf(session, sizeof(session), "%ld", (long)getppid());
     if (setenv("HERDR_TEST_PTY_SESSION", session, 1)) _exit(125);
-    execvp(argv[2], &argv[2]); perror("PTY exec"); _exit(125);
+    execvp(argv[3], &argv[3]); perror("PTY exec"); _exit(125);
   }
   int status = 0, complete = 0, expired = 0;
   for (;;) {
@@ -111,7 +113,7 @@ int main(int argc, char **argv) {
   // Freeze producers before killing session members, including separate job
   // groups and grandchildren whose parent already exited. Repeat to close forks
   // that raced the first enumeration; the retained session leader is the anchor.
-  uint64_t cleanup = milliseconds() + 3000; int empty = 0, failed = 0;
+  uint64_t cleanup = milliseconds() + cleanup_duration; int empty = 0, failed = 0;
   while (empty < 3 && milliseconds() < cleanup) {
     if (sweep(SIGSTOP) < 0) { failed = 1; break; }
     int count = sweep(SIGKILL);
@@ -120,7 +122,7 @@ int main(int argc, char **argv) {
     empty = count ? 0 : empty + 1; pause_scan();
   }
   if (failed || empty < 3) { fprintf(stderr, "PTY session cleanup unconfirmed\n"); return 125; }
-  if (expired) { fprintf(stderr, "PTY command %s exceeded %lu milliseconds\n", argv[2], duration); return 124; }
+  if (expired) { fprintf(stderr, "PTY command %s exceeded %lu milliseconds\n", argv[3], duration); return 124; }
   if (stopped) return 128 + stopped;
   return complete && WIFEXITED(status) ? WEXITSTATUS(status) : complete ? 128 + WTERMSIG(status) : 125;
 }

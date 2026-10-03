@@ -5,6 +5,7 @@ import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { offlineHerdr } from './offline-herdr.mjs';
+import { commandAllowance } from './command-allowance.mjs';
 
 offlineHerdr();
 
@@ -24,7 +25,13 @@ for (const name of ['spawnSync', 'execFileSync', 'execSync']) {
   childProcess[name] = function (...args) {
     const index = name === 'execSync' ? 1 : Array.isArray(args[1]) ? 2 : 1;
     const options = args[index] ?? {};
-    args[index] = { ...options, timeout: loadTimeout(Math.min(options.timeout || COMMAND_TIMEOUT, COMMAND_TIMEOUT)), killSignal: 'SIGKILL' };
+    // Native child_process timeouts are absolute response allowances. Product
+    // code may already have scaled them; only the default test cap is a base.
+    const ceiling = options[commandAllowance] ?? loadTimeout(COMMAND_TIMEOUT);
+    if (!Number.isSafeInteger(ceiling) || ceiling < 1 || ceiling > loadTimeout(TEST_TIMEOUT))
+      throw Error('invalid compound fixture command allowance');
+    const { [commandAllowance]: _allowance, ...nativeOptions } = options;
+    args[index] = { ...nativeOptions, timeout: Math.min(options.timeout || ceiling, ceiling), killSignal: 'SIGKILL' };
     return original.apply(this, args);
   };
 }

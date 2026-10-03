@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import childProcess, { spawnSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import { ptyCommand, runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 import { createProcessTracker } from './helpers/processes.mjs';
@@ -88,6 +89,45 @@ test('PTY native owner accepts the measured-load allowance above its fifteen-sec
   const result = runPTY(process.execPath, ['-e', 'console.log(process.stdin.isTTY);process.exitCode=7']);
   assert.equal(result.status, 7, result.stdout + result.stderr);
   assert.match(result.stdout, /true/);
+});
+
+function instrumentCleanup(t, implementation) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-cleanup-delay-'));
+  const source = path.join(root, 'owner.c');
+  const original = fs.readFileSync(new URL('./helpers/pty-owner.c', import.meta.url), 'utf8');
+  // Alter only the enumeration timing/failure at the native boundary. Session
+  // membership, audit tokens/pidfds and the actual signal sweeps remain intact.
+  fs.writeFileSync(source, original.replaceAll('static int sweep(', 'static int native_sweep(')
+    .replace('static volatile sig_atomic_t stopped;', `${implementation}\nstatic volatile sig_atomic_t stopped;`));
+  const spawn = childProcess.spawnSync, load = os.loadavg, capacity = os.availableParallelism;
+  os.loadavg = () => [24, 24, 24]; os.availableParallelism = () => 4;
+  childProcess.spawnSync = (binary, args, options) => {
+    if (binary === '/usr/bin/cc' && args.at(-1).endsWith('/pty-owner.c')) args = [...args.slice(0, -1), source];
+    return spawn(binary, args, options);
+  };
+  syncBuiltinESMExports();
+  t.after(() => {
+    childProcess.spawnSync = spawn; os.loadavg = load; os.availableParallelism = capacity;
+    syncBuiltinESMExports(); fs.rmSync(root, { recursive: true, force: true });
+  });
+}
+test('PTY cleanup completes when native enumeration exceeds its former three-second allowance', { skip: PTY_SKIP_REASON }, t => {
+  instrumentCleanup(t, `static int sweep(int sig) {
+    static int delayed;
+    if (!delayed++) { struct timespec delay = {3, 300000000}; nanosleep(&delay, NULL); }
+    return native_sweep(sig);
+  }`);
+  const started = Date.now();
+  const result = runPTY(process.execPath, ['-e', 'console.log(process.stdin.isTTY);process.exitCode=7']);
+  assert.equal(result.status, 7, result.stdout + result.stderr);
+  assert.match(result.stdout, /true/);
+  assert.ok(Date.now() - started >= 3300, 'the real native cleanup crossed the former limit');
+});
+test('PTY cleanup refusal still returns unconfirmed status with a loaded allowance', { skip: PTY_SKIP_REASON }, t => {
+  instrumentCleanup(t, 'static int sweep(int sig) { (void)sig; return -1; }');
+  const result = runPTY(process.execPath, ['-e', 'process.exitCode=0']);
+  assert.equal(result.status, 125, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /PTY session cleanup unconfirmed/);
 });
 test('PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops', { skip: PTY_SKIP_REASON }, async t => {
   const f = fixture(t), start = Date.now();

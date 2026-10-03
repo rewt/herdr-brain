@@ -1,10 +1,11 @@
 // Dependency-free test transport for BSD script (Darwin) and util-linux script.
-import { loadTimeout } from '../../lib/deadline.mjs';
+import { loadFactor, loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { commandAllowance } from './command-allowance.mjs';
 
 function findScript() {
   const candidates = process.env.TEST_PTY_SCRIPT ? [process.env.TEST_PTY_SCRIPT]
@@ -25,8 +26,10 @@ export function ptyCommand(binary, args, { platform = process.platform, executab
   throw new Error(`unsupported PTY test platform: ${platform}`);
 }
 export function runPTY(binary, args, options = {}) {
-  const maximum = loadTimeout(15000);
+  const factor = loadFactor();
+  const maximum = loadTimeout(15000, factor);
   const timeout = Math.min(options.timeout || maximum, maximum);
+  const cleanupMs = loadTimeout(3000, factor);
   if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('invalid PTY timeout');
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-pty-owner-'));
   try {
@@ -36,11 +39,13 @@ export function runPTY(binary, args, options = {}) {
       encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: scratch },
     });
     if (built.error || built.status) throw Error(`PTY owner unavailable: ${built.error?.message ?? built.stderr}`);
-    const transport = ptyCommand(owner, [String(timeout), binary, ...args], { exec: true });
+    const transport = ptyCommand(owner, [String(timeout), String(cleanupMs), binary, ...args], { exec: true });
+    const responseMs = loadTimeout(timeout + cleanupMs, 1);
     // script's timeout may kill its transport first. The native owner lives in
     // the independent PTY session and still completes bounded descendant cleanup.
     return spawnSync(transport.file, transport.args, {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options, timeout, killSignal: 'SIGKILL',
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options,
+      timeout: responseMs, [commandAllowance]: responseMs, killSignal: 'SIGKILL',
     });
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 }

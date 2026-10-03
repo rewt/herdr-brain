@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: acceptance admits the exact private lane environment handoff including literal shell metacharacters
+ok 1 - acceptance admits the exact private lane environment handoff including literal shell metacharacters
+  ---
+  duration_ms: 2.451459
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: outside
+ok 2 - acceptance refuses altered lane environment handoff: outside
+  ---
+  duration_ms: 0.901375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: suffix
+ok 3 - acceptance refuses altered lane environment handoff: suffix
+  ---
+  duration_ms: 1.0655
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: cleanup
+ok 4 - acceptance refuses altered lane environment handoff: cleanup
+  ---
+  duration_ms: 1.047583
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: mode
+ok 5 - acceptance refuses altered lane environment handoff: mode
+  ---
+  duration_ms: 1.166375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: symlink
+ok 6 - acceptance refuses altered lane environment handoff: symlink
+  ---
+  duration_ms: 1.073084
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: script
+ok 7 - acceptance refuses altered lane environment handoff: script
+  ---
+  duration_ms: 0.951375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: verifier
+ok 8 - acceptance refuses altered lane environment handoff: verifier
+  ---
+  duration_ms: 0.827375
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 41.811458

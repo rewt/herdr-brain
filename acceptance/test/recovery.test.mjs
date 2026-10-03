@@ -138,7 +138,7 @@ test('a matching caller label with a foreign native path never grants recovery a
 
 test('cleanup stops and awaits a supervisor executing dispatch before reading ownership', async t => {
   const root = scratch(t), binary = path.join(root, 'fake-herdr.mjs');
-  for (const file of ['worker.mjs', 'herdr.mjs', 'receipts.mjs', 'producers.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
+  for (const file of ['worker.mjs', 'herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: [], panes: ['own:pane'], tabs: [] }));
   fs.writeFileSync(path.join(root, 'native.json'), '[]');
   fs.writeFileSync(binary, `#!${process.execPath}

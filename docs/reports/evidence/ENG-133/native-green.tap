@@ -1,0 +1,17 @@
+TAP version 13
+# scratch=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/herdr-lane-native-OCmWel/repo workspace=w2M5 pane=w2M5:p1 tabs=1
+# 10 samples plus pane_focused events over 3084ms; zero harness focus changes; 0 external changes recorded and re-baselined; wFN:pY6 -> wFN:pY6
+# Subtest: native dispatch opens a one-tab lane from a project with no Herdr workspace and preserves focus
+ok 1 - native dispatch opens a one-tab lane from a project with no Herdr workspace and preserves focus
+  ---
+  duration_ms: 3137.421792
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3175.091667

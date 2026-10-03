@@ -785,8 +785,8 @@ function openWorkspaceIdFor(path, { refuseStale = true, onMismatch, workspaces, 
 // herdr refuses `worktree create`/`open` when the CLI runs inside a linked
 // worktree ("New and open worktree actions start from the repo parent
 // workspace"), so a lane opened from another lane gets a git worktree and no
-// herdr workspace. Repair that by opening from the parent workspace explicitly,
-// retaining opaque IDs and verifying the returned path and repository identity.
+// herdr workspace. Open from the canonical parent explicitly, using its path
+// when it has no workspace yet. Retain opaque IDs and verify repository identity.
 function ensureHerdrWorkspace(path, label, workspaces, deadline) {
   // Worktree creation/opening and workspace discovery are separate Herdr
   // snapshots. Refetch here so newly visible metadata is never judged against
@@ -794,8 +794,11 @@ function ensureHerdrWorkspace(path, label, workspaces, deadline) {
   let id = openWorkspaceIdFor(path, { deadline });
   if (id !== undefined) return { workspaceId: id };
   const parent = parentWorkspaceId(workspaces);
-  if (parent === undefined) return undefined;
-  const opened = herdrJson(["worktree", "open", "--workspace", parent, "--path", path, "--label", label, "--no-focus"], { deadline });
+  const opened = herdrJson([
+    "worktree", "open",
+    ...(parent === undefined ? ["--cwd", REPO_ROOT] : ["--workspace", parent]),
+    "--path", path, "--label", label, "--no-focus",
+  ], { deadline });
   const refreshed = herdrJson(["workspace", "list"], { deadline })?.workspaces;
   id = openWorkspaceIdFor(path, { workspaces: refreshed, deadline });
   if (id === undefined) return undefined;

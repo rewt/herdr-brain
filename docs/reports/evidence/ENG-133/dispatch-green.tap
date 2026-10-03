@@ -1,0 +1,720 @@
+TAP version 13
+# Subtest: git helpers isolate the operator's global excludes file
+ok 1 - git helpers isolate the operator's global excludes file # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.561959
+  ...
+# Subtest: open creates a lane and refuses duplicate, invalid, and unresolved inputs
+ok 2 - open creates a lane and refuses duplicate, invalid, and unresolved inputs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044708
+  ...
+# Subtest: status reports distance, dirtiness, and files shared by lanes
+ok 3 - status reports distance, dirtiness, and files shared by lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033459
+  ...
+# Subtest: promote refuses a dirty lane worktree
+ok 4 - promote refuses a dirty lane worktree # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035583
+  ...
+# Subtest: promote leaves main unchanged when validation fails
+ok 5 - promote leaves main unchanged when validation fails # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037542
+  ...
+# Subtest: promote rebases a clean lane behind main and fast-forwards
+ok 6 - promote rebases a clean lane behind main and fast-forwards # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027458
+  ...
+# Subtest: promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes
+ok 7 - promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.071416
+  ...
+# Subtest: promote accepts a gitignored session registry in the canonical checkout
+ok 8 - promote accepts a gitignored session registry in the canonical checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03075
+  ...
+# Subtest: promote refuses a conflicting rebase and names the file
+ok 9 - promote refuses a conflicting rebase and names the file # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.116292
+  ...
+# Subtest: promote refuses when main moves during validation
+ok 10 - promote refuses when main moves during validation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.085542
+  ...
+# Subtest: close deletes a merged branch
+ok 11 - close deletes a merged branch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038167
+  ...
+# Subtest: close retires a background workspace without worktree.remove and preserves the archive
+ok 12 - close retires a background workspace without worktree.remove and preserves the archive # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.063208
+  ...
+# Subtest: close refuses a dirty worktree
+ok 13 - close refuses a dirty worktree # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033333
+  ...
+# Subtest: close preserves a locked worktree and its workspace when Git removal refuses
+ok 14 - close preserves a locked worktree and its workspace when Git removal refuses # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026541
+  ...
+# Subtest: rebase-check exits zero when clean and one with files on conflict
+ok 15 - rebase-check exits zero when clean and one with files on conflict # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055417
+  ...
+# Subtest: rebase-check and status refuse a merge-bearing lane only when it is behind main
+ok 16 - rebase-check and status refuse a merge-bearing lane only when it is behind main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060291
+  ...
+# Subtest: prepare runs needed steps and skips steps whose unless path exists
+ok 17 - prepare runs needed steps and skips steps whose unless path exists # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034917
+  ...
+# Subtest: check records configured validation against the current HEAD
+ok 18 - check records configured validation against the current HEAD # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.11325
+  ...
+# Subtest: check honors LANE_VALIDATE and --cmd precedence and returns a failed gate exit
+ok 19 - check honors LANE_VALIDATE and --cmd precedence and returns a failed gate exit # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067417
+  ...
+# Subtest: check defaults to npm test and refuses a dirty current worktree
+ok 20 - check defaults to npm test and refuses a dirty current worktree # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0285
+  ...
+# Subtest: check runs configured prepare steps before validation
+ok 21 - check runs configured prepare steps before validation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049583
+  ...
+# Subtest: check records signal termination using the shell exit convention
+ok 22 - check records signal termination using the shell exit convention # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037667
+  ...
+# Subtest: check refuses a detached HEAD without replacing an existing gate
+ok 23 - check refuses a detached HEAD without replacing an existing gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038917
+  ...
+# Subtest: check rejects unknown options and missing or empty --cmd values
+ok 24 - check rejects unknown options and missing or empty --cmd values # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042834
+  ...
+# Subtest: routes prints configured routes with resolved dispatch defaults
+ok 25 - routes prints configured routes with resolved dispatch defaults # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026458
+  ...
+# Subtest: named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call
+ok 26 - named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024958
+  ...
+# Subtest: always_args sees the canonical model and effort that dispatch emits
+ok 27 - always_args sees the canonical model and effort that dispatch emits # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031834
+  ...
+# Subtest: always_args rejects a non-object value
+ok 28 - always_args rejects a non-object value # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019541
+  ...
+# Subtest: always_args rejects a list whose first token is not an option
+ok 29 - always_args rejects a list whose first token is not an option # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021334
+  ...
+# Subtest: config attributes always_args to the file that supplied it
+ok 30 - config attributes always_args to the file that supplied it # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019291
+  ...
+# Subtest: config layers the nearest parent and canonical repository with attributed replacement semantics
+ok 31 - config layers the nearest parent and canonical repository with attributed replacement semantics # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0185
+  ...
+# Subtest: config escapes route names so every TSV record remains one line with three fields
+ok 32 - config escapes route names so every TSV record remains one line with three fields # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.070333
+  ...
+# Subtest: worktree roots honor parent-relative, parent-default, legacy, and caller-relative environment precedence
+ok 33 - worktree roots honor parent-relative, parent-default, legacy, and caller-relative environment precedence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066666
+  ...
+# Subtest: home is a configuration discovery boundary
+ok 34 - home is a configuration discovery boundary # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022584
+  ...
+# Subtest: LANE_CONFIG selects one caller-relative file and bypasses discovered layers
+ok 35 - LANE_CONFIG selects one caller-relative file and bypasses discovered layers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.352459
+  ...
+# Subtest: linked invocations use canonical repository config for explanation, check, and promote
+ok 36 - linked invocations use canonical repository config for explanation, check, and promote # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038834
+  ...
+# Subtest: bare repositories with only linked worktrees allow reads and refuse mutations clearly
+ok 37 - bare repositories with only linked worktrees allow reads and refuse mutations clearly # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027917
+  ...
+# Subtest: same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities
+ok 38 - same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022708
+  ...
+# Subtest: long Unicode workspace labels retain graphemes and fragments within 64 code points
+ok 39 - long Unicode workspace labels retain graphemes and fragments within 64 code points # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020208
+  ...
+# Subtest: open refuses symlink escapes and destinations inside repository checkouts before mutation
+ok 40 - open refuses symlink escapes and destinations inside repository checkouts before mutation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019
+  ...
+# Subtest: registered paths are rejected when their on-disk repository identity changes
+ok 41 - registered paths are rejected when their on-disk repository identity changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018625
+  ...
+# Subtest: a missing registered worktree names git worktree prune
+ok 42 - a missing registered worktree names git worktree prune # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01825
+  ...
+# Subtest: stale Herdr checkout metadata is not used for dispatch or close
+ok 43 - stale Herdr checkout metadata is not used for dispatch or close # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018042
+  ...
+# Subtest: linked invocation creates labeled children under the canonical repository workspace
+ok 44 - linked invocation creates labeled children under the canonical repository workspace # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019375
+  ...
+# Subtest: open refreshes Herdr workspaces after a failed create before accepting fallback metadata
+ok 45 - open refreshes Herdr workspaces after a failed create before accepting fallback metadata # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018167
+  ...
+# Subtest: dispatch refreshes Herdr workspaces before accepting newly visible metadata
+ok 46 - dispatch refreshes Herdr workspaces before accepting newly visible metadata
+  ---
+  duration_ms: 626.74825
+  ...
+# Subtest: dispatch opens a single agent tab in the initial pane and keeps fix rounds background
+ok 47 - dispatch opens a single agent tab in the initial pane and keeps fix rounds background
+  ---
+  duration_ms: 1251.718208
+  ...
+# Subtest: dispatch opens a one-tab lane without a project workspace (linked caller: false)
+ok 48 - dispatch opens a one-tab lane without a project workspace (linked caller: false)
+  ---
+  duration_ms: 946.780542
+  ...
+# Subtest: dispatch opens a one-tab lane without a project workspace (linked caller: true)
+ok 49 - dispatch opens a one-tab lane without a project workspace (linked caller: true)
+  ---
+  duration_ms: 1044.040417
+  ...
+# Subtest: dispatch retains the recorded session after a rejected final rename without replay
+ok 50 - dispatch retains the recorded session after a rejected final rename without replay
+  ---
+  duration_ms: 935.076166
+  ...
+# Subtest: dispatch uses the pane POSIX shell despite SHELL=fish (rc child: false)
+ok 51 - dispatch uses the pane POSIX shell despite SHELL=fish (rc child: false)
+  ---
+  duration_ms: 951.384833
+  ...
+# Subtest: dispatch uses the pane POSIX shell despite SHELL=fish (rc child: true)
+ok 52 - dispatch uses the pane POSIX shell despite SHELL=fish (rc child: true)
+  ---
+  duration_ms: 959.827375
+  ...
+# Subtest: dispatch leaves earlier and concurrently opened workspace shells untouched
+ok 53 - dispatch leaves earlier and concurrently opened workspace shells untouched
+  ---
+  duration_ms: 1173.924459
+  ...
+# Subtest: dispatch retains initial tabs on environment and agent cwd failures
+ok 54 - dispatch retains initial tabs on environment and agent cwd failures
+  ---
+  duration_ms: 35018.634042
+  ...
+# Subtest: dispatch waits for shell readiness beyond five seconds
+ok 55 - dispatch waits for shell readiness beyond five seconds
+  ---
+  duration_ms: 6698.423917
+  ...
+# Subtest: dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish
+ok 56 - dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish
+  ---
+  duration_ms: 662.472541
+  ...
+# Subtest: dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu
+ok 57 - dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu
+  ---
+  duration_ms: 614.446333
+  ...
+# Subtest: dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks
+ok 58 - dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043083
+  ...
+# Subtest: dispatch persists immutable occupant evidence as display-only optional metadata
+ok 59 - dispatch persists immutable occupant evidence as display-only optional metadata # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020042
+  ...
+# Subtest: dispatch does not write a claim when the prompted occupant is replaced
+ok 60 - dispatch does not write a claim when the prompted occupant is replaced # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016458
+  ...
+# Subtest: one exported Herdr socket-path helper supplies the Herdr client and dispatch records
+ok 61 - one exported Herdr socket-path helper supplies the Herdr client and dispatch records # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014333
+  ...
+# Subtest: dispatch refuses unsafe registries and unreadable briefs before every Herdr call
+ok 62 - dispatch refuses unsafe registries and unreadable briefs before every Herdr call # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014125
+  ...
+# Subtest: dispatch checks tracked registry state in the canonical checkout from a lane
+ok 63 - dispatch checks tracked registry state in the canonical checkout from a lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012792
+  ...
+# Subtest: dispatch reports repository containment before an external symlink
+ok 64 - dispatch reports repository containment before an external symlink # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013541
+  ...
+# Subtest: dispatch symlink refusal names the repository-local correction
+ok 65 - dispatch symlink refusal names the repository-local correction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017375
+  ...
+# Subtest: dispatch unwritable-sidecar refusal names both corrections
+ok 66 - dispatch unwritable-sidecar refusal names both corrections # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026792
+  ...
+# Subtest: dispatch writes no record on cwd, start, or prompt failure and reports post-prompt persistence as partial success
+ok 67 - dispatch writes no record on cwd, start, or prompt failure and reports post-prompt persistence as partial success # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01475
+  ...
+# Subtest: independent record writes and simultaneous done markers retain all sessions
+ok 68 - independent record writes and simultaneous done markers retain all sessions # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013084
+  ...
+# Subtest: registry reads legacy arrays, sidecar records, done markers, and localized malformed entries
+ok 69 - registry reads legacy arrays, sidecar records, done markers, and localized malformed entries # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013209
+  ...
+# Subtest: session completion refuses unignored and external registry writes
+ok 70 - session completion refuses unignored and external registry writes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01425
+  ...
+# Subtest: close warns and succeeds when registry policy refuses automated metadata
+ok 71 - close warns and succeeds when registry policy refuses automated metadata # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018834
+  ...
+# Subtest: close marks exact repository topic sessions done only after git close succeeds
+ok 72 - close marks exact repository topic sessions done only after git close succeeds # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015792
+  ...
+# Subtest: failed archive and post-close metadata writes preserve honest completion state
+ok 73 - failed archive and post-close metadata writes preserve honest completion state # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014625
+  ...
+# Subtest: git-only close with no registry creates no metadata store
+ok 74 - git-only close with no registry creates no metadata store # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01625
+  ...
+# Subtest: a repository with a separate git directory retains its canonical checkout identity
+ok 75 - a repository with a separate git directory retains its canonical checkout identity # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014583
+  ...
+# Subtest: selected malformed, unreadable, and wrongly typed config files fail before mutation
+ok 76 - selected malformed, unreadable, and wrongly typed config files fail before mutation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014125
+  ...
+# Subtest: open refuses ordinary and foreign-worktree destinations without creating branches
+ok 77 - open refuses ordinary and foreign-worktree destinations without creating branches # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012833
+  ...
+# Subtest: registered legacy lane paths remain authoritative after worktree_root changes
+ok 78 - registered legacy lane paths remain authoritative after worktree_root changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013833
+  ...
+# Subtest: dispatch rejects an unknown route before checking Herdr
+ok 79 - dispatch rejects an unknown route before checking Herdr # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012708
+  ...
+# Subtest: review requires explicit source, round, route, and bounded unique flags with exit 2
+ok 80 - review requires explicit source, round, route, and bounded unique flags with exit 2 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027458
+  ...
+# Subtest: review dispatches once and publishes all canonical verdicts after private validation
+ok 81 - review dispatches once and publishes all canonical verdicts after private validation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015708
+  ...
+# Subtest: review accepts a routing snapshot without replacing project lifecycle configuration
+ok 82 - review accepts a routing snapshot without replacing project lifecycle configuration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014042
+  ...
+# Subtest: review settles a completed private record before validating its final bytes
+ok 83 - review settles a completed private record before validating its final bytes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014583
+  ...
+# Subtest: review preserves a final finding immediately before the next section heading
+ok 84 - review preserves a final finding immediately before the next section heading # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013625
+  ...
+# Subtest: review completion admits representative validator-accepted record boundaries
+ok 85 - review completion admits representative validator-accepted record boundaries # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012291
+  ...
+# Subtest: review preserves finding entries across the blank-line matrix
+ok 86 - review preserves finding entries across the blank-line matrix # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016416
+  ...
+# Subtest: review keeps malformed findings public on Codex and alternate routes without private sections
+ok 87 - review keeps malformed findings public on Codex and alternate routes without private sections # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013042
+  ...
+# Subtest: review projects repository-relative finding locations containing spaces
+ok 88 - review projects repository-relative finding locations containing spaces # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012042
+  ...
+# Subtest: review sanitizes deterministic aliases and path forms in a bounded public projection
+ok 89 - review sanitizes deterministic aliases and path forms in a bounded public projection # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012125
+  ...
+# Subtest: review redacts syntax-shaped slash prose while retaining alias safeguards
+ok 90 - review redacts syntax-shaped slash prose while retaining alias safeguards # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012916
+  ...
+# Subtest: review redacts an absolute path inside a regex-like character class
+ok 91 - review redacts an absolute path inside a regex-like character class # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012666
+  ...
+# Subtest: review sanitizes a flag-attached absolute path in finding prose
+ok 92 - review sanitizes a flag-attached absolute path in finding prose # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016875
+  ...
+# Subtest: review sanitizes a flag-attached absolute path in finding location
+ok 93 - review sanitizes a flag-attached absolute path in finding location # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012959
+  ...
+# Subtest: review sanitizes a flag-attached absolute path in command string
+ok 94 - review sanitizes a flag-attached absolute path in command string # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01425
+  ...
+# Subtest: review sanitizes a delimiter-prefixed flag-attached absolute path in backtick-quoted finding prose
+ok 95 - review sanitizes a delimiter-prefixed flag-attached absolute path in backtick-quoted finding prose # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.014125
+  ...
+# Subtest: review sanitizes a delimiter-prefixed flag-attached absolute path in assigned command string
+ok 96 - review sanitizes a delimiter-prefixed flag-attached absolute path in assigned command string # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01325
+  ...
+# Subtest: review sanitizes a delimiter-prefixed flag-attached absolute path in double-quoted finding location
+ok 97 - review sanitizes a delimiter-prefixed flag-attached absolute path in double-quoted finding location # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013334
+  ...
+# Subtest: review redacts a forward-separator UNC path
+ok 98 - review redacts a forward-separator UNC path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013541
+  ...
+# Subtest: review redacts a hosted file URL
+ok 99 - review redacts a hosted file URL # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013125
+  ...
+# Subtest: review refuses an escaped absolute path in finding prose
+ok 100 - review refuses an escaped absolute path in finding prose # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.011959
+  ...
+# Subtest: review refuses an escaped absolute path in finding location
+ok 101 - review refuses an escaped absolute path in finding location # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012875
+  ...
+# Subtest: review refuses an escaped absolute path in command string
+ok 102 - review refuses an escaped absolute path in command string # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017042
+  ...
+# Subtest: review refuses a relative-looking protected location embedding an absolute path
+ok 103 - review refuses a relative-looking protected location embedding an absolute path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013375
+  ...
+# Subtest: review refuses a two-segment flag-letter path in a protected location
+ok 104 - review refuses a two-segment flag-letter path in a protected location # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012458
+  ...
+# Subtest: review refuses a deeper path with a flag-letter second segment in a protected location
+ok 105 - review refuses a deeper path with a flag-letter second segment in a protected location # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012792
+  ...
+# Subtest: review refuses a drive path with a flag-letter segment in a protected location
+ok 106 - review refuses a drive path with a flag-letter segment in a protected location # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.011625
+  ...
+# Subtest: review preserves a command-substitution delimiter after file URL redaction
+ok 107 - review preserves a command-substitution delimiter after file URL redaction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.011417
+  ...
+# Subtest: review refuses a closing-parenthesis file URL residue that the base matcher fully redacted
+ok 108 - review refuses a closing-parenthesis file URL residue that the base matcher fully redacted # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012208
+  ...
+# Subtest: review publishes a standalone closing delimiter after file URL redaction
+ok 109 - review publishes a standalone closing delimiter after file URL redaction # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012292
+  ...
+# Subtest: review refuses a spaced-path continuation after a closing parenthesis
+ok 110 - review refuses a spaced-path continuation after a closing parenthesis # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012791
+  ...
+# Subtest: review refuses a spaced-path continuation after a closing quote
+ok 111 - review refuses a spaced-path continuation after a closing quote # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012708
+  ...
+# Subtest: review refuses a spaced-path continuation after a closing bracket
+ok 112 - review refuses a spaced-path continuation after a closing bracket # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03175
+  ...
+# Subtest: review refuses a spaced-path continuation after any greater-than terminator
+ok 113 - review refuses a spaced-path continuation after any greater-than terminator # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01275
+  ...
+# Subtest: review refuses a spaced-path continuation after any colon terminator
+ok 114 - review refuses a spaced-path continuation after any colon terminator # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013417
+  ...
+# Subtest: review refuses a spaced-path continuation after any less-than terminator
+ok 115 - review refuses a spaced-path continuation after any less-than terminator # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.011875
+  ...
+# Subtest: review refuses a spaced-path continuation after any opening-bracket terminator
+ok 116 - review refuses a spaced-path continuation after any opening-bracket terminator # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.011375
+  ...
+# Subtest: review refuses a spaced-path continuation after any closing-brace terminator
+ok 117 - review refuses a spaced-path continuation after any closing-brace terminator # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012709
+  ...
+# Subtest: review refuses a spaced-path continuation after any arbitrary punctuation run
+ok 118 - review refuses a spaced-path continuation after any arbitrary punctuation run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013209
+  ...
+# Subtest: review refuses a spaced-path continuation with an embedded absolute-path match
+ok 119 - review refuses a spaced-path continuation with an embedded absolute-path match # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013042
+  ...
+# Subtest: review refuses a parenthesized file URL residue
+ok 120 - review refuses a parenthesized file URL residue # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013125
+  ...
+# Subtest: review sanitization preserves unrelated words and fails closed on ambiguous or unsafe payloads
+ok 121 - review sanitization preserves unrelated words and fails closed on ambiguous or unsafe payloads # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012709
+  ...
+# Subtest: review projects command syntax verbatim while escaping the same characters in prose
+ok 122 - review projects command syntax verbatim while escaping the same characters in prose # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012208
+  ...
+# Subtest: review escapes prose punctuation after sanitizing the unescaped payload
+ok 123 - review escapes prose punctuation after sanitizing the unescaped payload # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01425
+  ...
+# Subtest: review refuses an opening parenthesis after a concrete path match
+ok 124 - review refuses an opening parenthesis after a concrete path match # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013583
+  ...
+# Subtest: review projects every finding from the sanitized production PASS fixture
+ok 125 - review projects every finding from the sanitized production PASS fixture # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013584
+  ...
+# Subtest: review refuses a finding description containing a declared private identifier
+ok 126 - review refuses a finding description containing a declared private identifier # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015084
+  ...
+# Subtest: review allows private-only heading text inside a verbatim command
+ok 127 - review allows private-only heading text inside a verbatim command # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012833
+  ...
+# Subtest: review publishes exclusively, leaves normal clean-tree commands refusing, and blocks the occupied round
+ok 128 - review publishes exclusively, leaves normal clean-tree commands refusing, and blocks the occupied round # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012916
+  ...
+# Subtest: review late-publication mutation exits 2 and retains both evidence files
+ok 129 - review late-publication mutation exits 2 and retains both evidence files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012542
+  ...
+# Subtest: review renders OpenSpec, supplemental literal input, gate, and captured commit metadata
+ok 130 - review renders OpenSpec, supplemental literal input, gate, and captured commit metadata # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.011709
+  ...
+# Subtest: review keeps uppercase brace tokens literal in briefs and tracked source files
+ok 131 - review keeps uppercase brace tokens literal in briefs and tracked source files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044458
+  ...
+# Subtest: review accepts negated test-pass limits but still refuses affirmative prose claims
+ok 132 - review accepts negated test-pass limits but still refuses affirmative prose claims # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022458
+  ...
+# Subtest: review refuses malformed private evidence, incomplete output, timeout, and lane mutation
+ok 133 - review refuses malformed private evidence, incomplete output, timeout, and lane mutation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016833
+  ...
+# Subtest: review sends malformed completed endings to schema validation without waiting for timeout
+ok 134 - review sends malformed completed endings to schema validation without waiting for timeout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015167
+  ...
+# Subtest: review contains unexpected errors when the target disappears after dispatch
+ok 135 - review contains unexpected errors when the target disappears after dispatch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01375
+  ...
+# Subtest: review unexpected failure after publication warns about retained public evidence
+ok 136 - review unexpected failure after publication warns about retained public evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013875
+  ...
+# Subtest: review interruption exits 2 without a verdict or follow-up lifecycle action
+ok 137 - review interruption exits 2 without a verdict or follow-up lifecycle action # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013875
+  ...
+# Subtest: review reference describes the shipped public path and protected-location policy
+ok 138 - review reference describes the shipped public path and protected-location policy # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012416
+  ...
+# Subtest: review preflight requires ignored private and trackable absent public paths
+ok 139 - review preflight requires ignored private and trackable absent public paths # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013333
+  ...
+# Subtest: usage exits one with no command and with an unknown command
+ok 140 - usage exits one with no command and with an unknown command # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.012625
+  ...
+# Subtest: status exits quietly when a downstream reader closes stdout
+ok 141 - status exits quietly when a downstream reader closes stdout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013333
+  ...
+# Subtest: verify-agent mismatch control uses a fake Herdr
+ok 142 - verify-agent mismatch control uses a fake Herdr # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.013584
+  ...
+1..142
+# tests 142
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 130
+# todo 0
+# duration_ms 50943.728167

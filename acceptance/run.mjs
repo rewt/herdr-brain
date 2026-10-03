@@ -336,7 +336,7 @@ try {
     if (focusError) throw focusError;
     const binary = run('which', ['herdr']).stdout.trim();
     write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
-    for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
+    for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs', 'environment.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     write(path.join(bin, 'herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'herdr.mjs'))} "$@"\n`); fs.chmodSync(path.join(bin, 'herdr'), 0o755);
     for (const name of ['codex', 'claude', 'ai', 'cmem-domain', 'launchctl']) {

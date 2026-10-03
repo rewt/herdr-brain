@@ -113,6 +113,10 @@ its reported cwd by real path, sends the brief, and only then records session
 metadata. A persistence failure after delivery is reported as partial success and
 never replays the prompt.
 
+Dispatch opens from the canonical project's workspace when one exists, or from
+its canonical checkout path when none is open. Both paths use `--no-focus` and
+verify the resulting repository identity.
+
 If `dispatch` opens the Herdr workspace itself, it uses that invocation's initial
 tab and pane, sources the route environment and entry bypass from a private 0600
 temporary file, verifies the exported values before starting, deletes the file,

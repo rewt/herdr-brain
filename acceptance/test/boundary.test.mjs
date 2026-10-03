@@ -283,3 +283,31 @@ test('native transport pins the original socket when copied HOME changes', () =>
     assert.equal(fs.readFileSync(path.join(f.root, 'socket-receipt'), 'utf8'), state.socketPath);
   } finally { f.close(); }
 });
+
+test('final tab rename is allowed only for receipt-owned tabs', () => {
+  const f = fixture();
+  try {
+    const reply = f.call('tab', 'rename', 'own:t1', 'agent:topic');
+    assert.equal(reply.status, 0, reply.stderr);
+    assert.notEqual(f.call('tab', 'rename', 'foreign:t1', 'agent:topic').status, 0);
+    assert.equal(f.calls().filter(args => args[0] === 'tab' && args[1] === 'rename').length, 1);
+  } finally { f.close(); }
+});
+
+test('private lane environment preparation reaches only an owned pane with a live scratch cwd', () => {
+  const f = fixture();
+  try {
+    const dir = fs.mkdtempSync(path.join(f.root, 'herdr-lane-env-'));
+    const file = path.join(dir, 'prepare.sh'), verifier = path.join(dir, 'verify.sh');
+    const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
+    fs.writeFileSync(file, `set +x\nexport 'MONITOR_ENTRY_BYPASS=1' || return\ncommand /bin/sh ${quote(verifier)}\n`, { mode: 0o600 });
+    fs.writeFileSync(verifier, `[ "\${MONITOR_ENTRY_BYPASS+x}" = x ] && [ "$MONITOR_ENTRY_BYPASS" = '1' ] && printf '\\n%s\\n' 'lane-env-${'a'.repeat(48)}'\n`, { mode: 0o600 });
+    const command = ` . ${quote(file)} 2>/dev/null; command rm -f -- ${quote(file)} ${quote(verifier)}`;
+    const reply = f.call('pane', 'run', 'own:p1', command);
+    assert.equal(reply.status, 0, reply.stderr);
+    assert.notEqual(f.call('pane', 'run', 'foreign:p1', command).status, 0);
+    fs.writeFileSync(path.join(f.root, 'moved-cwd'), os.tmpdir());
+    assert.notEqual(f.call('pane', 'run', 'own:p1', command).status, 0);
+    assert.equal(f.calls().filter(args => args[1] === 'run').length, 1);
+  } finally { f.close(); }
+});

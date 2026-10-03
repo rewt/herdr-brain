@@ -280,7 +280,7 @@ const workspace = (id, label, path, linked, repoKey = process.env.FAKE_HERDR_REP
 if (args[0] === "workspace" && args[1] === "list") {
   state.workspaceLists = (state.workspaceLists || 0) + 1;
   save();
-  const workspaces = [workspace("w-parent", "repository", process.env.FAKE_HERDR_REPO_ROOT, false)];
+  const workspaces = process.env.FAKE_HERDR_NO_PARENT === "1" ? [] : [workspace("w-parent", "repository", process.env.FAKE_HERDR_REPO_ROOT, false)];
   if (process.env.FAKE_HERDR_CALLER_PATH) {
     workspaces.push(workspace("w-caller", "caller-lane", process.env.FAKE_HERDR_CALLER_PATH, true));
   }
@@ -328,6 +328,7 @@ if (args[0] === "workspace" && args[1] === "list") {
   }
   process.exit(1);
 } else if (args[0] === "worktree" && args[1] === "open") {
+  if (process.env.FAKE_HERDR_NO_PARENT === "1" && (args.includes("--workspace") || args[args.indexOf("--cwd") + 1] !== process.env.FAKE_HERDR_REPO_ROOT)) process.exit(2);
   const alreadyOpen = state.opened || process.env.FAKE_HERDR_OPEN_RACE === "1";
   if (process.env.FAKE_HERDR_NO_REPAIR !== "1") {
     state.opened = true;
@@ -354,13 +355,16 @@ if (args[0] === "workspace" && args[1] === "list") {
     root_pane: { pane_id: "w-lane:p2", tab_id: "w-lane:t2", workspace_id: "w-lane" },
   });
 } else if (args[0] === "pane" && args[1] === "process-info") {
-  result("cli:pane:process-info", { process_info: { shell_pid: 123456789,
-    foreground_processes: [{ pid: 123456789, name: process.env.SHELL.split('/').pop() }] } });
+  const shellPid = Number(process.env.FAKE_HERDR_SHELL_PID || 123456789);
+  result("cli:pane:process-info", { process_info: { shell_pid: shellPid,
+    foreground_processes: process.env.FAKE_HERDR_RC_CHILD === "1" ? [{ pid: 987654321, name: "rc-child" }] :
+      [{ pid: shellPid, name: process.env.FAKE_HERDR_PANE_SHELL || "zsh" }] } });
 } else if (args[0] === "pane" && args[1] === "get") {
   result("cli:pane:get", { type: "pane_get", pane: {
     pane_id: args[2], foreground_cwd: process.env.FAKE_HERDR_LANE_PATH,
   } });
 } else if (args[0] === "tab" && args[1] === "rename") {
+  if (process.env.FAKE_HERDR_RENAME_FAIL === "1") process.exit(3);
   state.initialLabel = args[3];
   state.renamedAfterStart = Boolean(state.agent);
   state.renamedAfterVerification = (state.environmentReads || 0) > 2;
@@ -2008,6 +2012,83 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
   } finally { fixture.cleanup(); }
 });
 
+for (const linkedCaller of [false, true]) test(`dispatch opens a one-tab lane without a project workspace (linked caller: ${linkedCaller})`, async () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const topic = "no-parent", path = lanePath(fixture, topic);
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: `lane/${topic}` });
+    fixture.env.FAKE_HERDR_NO_PARENT = "1";
+    assert.equal(lane(fixture, ["open", topic, "--git-only"]).status, 0);
+    if (linkedCaller) assert.equal(lane(fixture, ["open", "caller", "--git-only"]).status, 0);
+    const caller = linkedCaller ? lanePath(fixture, "caller") : fixture.repo;
+    const run = lane(fixture, ["dispatch", topic, "--json", "Implement this"], { cwd: caller });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(JSON.parse(run.stdout).pane, "w-lane:p1");
+    const calls = fake.calls();
+    assert.deepEqual(calls.find(args => args[0] === "worktree" && args[1] === "open"),
+      ["worktree", "open", "--cwd", fixture.repo, "--path", path, "--label", fake.state().label, "--no-focus"]);
+    assert.match(fake.state().label, /:lane-no-parent$/);
+    assert.equal(calls.filter(args => args[0] === "agent" && args[1] === "start").length, 1);
+    assert.equal(calls.filter(args => args[0] === "agent" && args[1] === "prompt").length, 1);
+    assert.ok(!calls.some(args => args[1] === "create" || args[1] === "focus" || args.includes("--focus")));
+    assert.equal(fake.state().initialLabel, `agent:${topic}`);
+    assert.equal(fake.state().tabCount || 1, 1);
+    const { loadRegistry } = await registryApi();
+    assert.equal(loadRegistry(fixture.repo).sessions.length, 1);
+  } finally { fixture.cleanup(); }
+});
+
+test("dispatch retains the recorded session after a rejected final rename without replay", async () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, "rename-refused");
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/rename-refused" });
+    fixture.env.FAKE_HERDR_RENAME_FAIL = "1";
+    const run = lane(fixture, ["dispatch", "rename-refused", "Implement once"]);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /partial success: live agent .* was recorded.*could not be renamed; do not replay dispatch/);
+    const { loadRegistry } = await registryApi();
+    const sessions = loadRegistry(fixture.repo).sessions;
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].name, fake.state().agent);
+    assert.equal(sessions[0].pane, "w-lane:p1");
+    const calls = fake.calls();
+    for (const verb of ["start", "prompt", "rename"]) assert.equal(calls.filter(args => args[1] === verb).length, 1);
+    assert.equal(fake.state().initialLabel, undefined);
+    assert.ok(!calls.some(args => args[1] === "close" || args[1] === "focus" || args.includes("--focus")));
+  } finally { fixture.cleanup(); }
+});
+
+for (const rcChild of [false, true]) test(`dispatch uses the pane POSIX shell despite SHELL=fish (rc child: ${rcChild})`, async t => {
+  const fixture = makeFixture();
+  // An actual sh pid exercises /bin/ps while the foreground list contains only
+  // an rc child. Keep stdin open so the process remains alive through dispatch.
+  const shell = rcChild ? spawnChild(t, "/bin/sh", [], { stdio: ["pipe", "ignore", "ignore"] }) : undefined;
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, "pane-shell");
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/pane-shell" });
+    fixture.env.SHELL = "/opt/homebrew/bin/fish";
+    fixture.env.FAKE_HERDR_PANE_SHELL = "sh";
+    if (rcChild) {
+      fixture.env.FAKE_HERDR_RC_CHILD = "1";
+      fixture.env.FAKE_HERDR_SHELL_PID = String(shell.pid);
+    }
+    const run = lane(fixture, ["dispatch", "pane-shell", "--json"]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(JSON.parse(run.stdout).pane, "w-lane:p1");
+    assert.equal(fake.state().tabCount || 1, 1);
+    assert.equal(fake.state().renamedAfterStart, true);
+    assert.ok(!fake.calls().some(args => args[1] === "create" || args[1] === "focus" || args.includes("--focus")));
+  } finally {
+    shell?.stdin.end();
+    if (shell) await waitForExit(shell);
+    fixture.cleanup();
+  }
+});
+
 test("dispatch leaves earlier and concurrently opened workspace shells untouched", () => {
   for (const race of [false, true]) {
     const fixture = makeFixture();
@@ -2082,7 +2163,8 @@ for (const shell of ["/opt/homebrew/bin/fish", "/opt/homebrew/bin/nu"]) {
       ignoreLaneState(fixture);
       const path = openLane(fixture, "non-posix");
       const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/non-posix" });
-      fixture.env.SHELL = shell;
+      fixture.env.FAKE_HERDR_PANE_SHELL = shell;
+      fixture.env.SHELL = "/bin/zsh";
       const run = lane(fixture, ["dispatch", "non-posix", "--route", "engineer", "--json"]);
       assert.equal(run.status, 0, run.stderr);
       assert.equal(JSON.parse(run.stdout).pane, "w-lane:p2");

@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { saveCreation, creationTargets, saveCreationIntent, recoverCreations } from './receipts.mjs';
 import { registerProducer, assertProducing } from './producers.mjs';
+import { isLaneEnvironmentCommand } from './environment.mjs';
 
 const root = fs.realpathSync(process.env.ACCEPTANCE_ROOT);
 const ledger = path.join(root, 'ownership.json');
@@ -147,13 +148,14 @@ try {
   } else if (group === 'tab' && ['list', 'create'].includes(verb)) {
     owned(requireOption('--workspace'), 'workspaces');
     if (argv.includes('--cwd')) safePath(option('--cwd'));
-  } else if (group === 'tab' && ['get', 'close'].includes(verb)) owned(target, 'tabs');
+  } else if (group === 'tab' && ['get', 'close', 'rename'].includes(verb)) owned(target, 'tabs');
   else if (group === 'pane' && verb === 'list') owned(requireOption('--workspace'), 'workspaces');
   else if (group === 'pane' && verb === 'process-info') await ownedPane(requireOption('--pane'));
   else if (group === 'pane' && ['get', 'read', 'run', 'report-agent', 'release-agent'].includes(verb)) {
     await ownedPane(target);
-    if (verb === 'run' && !['worker.mjs', 'live-worker.mjs'].some((f) => argv[3].startsWith(`${quote(process.execPath)} ${quote(path.join(root, f))} `))) {
-      throw new CapabilityRefusal('pane run permits only the scripted stand-in');
+    if (verb === 'run' && !isLaneEnvironmentCommand(argv[3], root) &&
+        !['worker.mjs', 'live-worker.mjs'].some((f) => argv[3].startsWith(`${quote(process.execPath)} ${quote(path.join(root, f))} `))) {
+      throw new CapabilityRefusal('pane run permits only the scripted stand-in or private lane environment handoff');
     }
   } else if (group === 'agent' && verb === 'list') { /* filtered below */ }
   else if (group === 'agent' && ['get', 'read', 'wait', 'prompt', 'send-keys', 'rename', 'start'].includes(verb)) {

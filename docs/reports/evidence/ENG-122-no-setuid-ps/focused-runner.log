@@ -1,0 +1,326 @@
+TAP version 13
+# Subtest: Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+ok 1 - Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+  ---
+  duration_ms: 2.587916
+  ...
+# Subtest: a reused PID with identical argv and a different birth time never licenses PID or group signals
+ok 2 - a reused PID with identical argv and a different birth time never licenses PID or group signals
+  ---
+  duration_ms: 3.636917
+  ...
+# Subtest: unavailable sources refuse clearly without falling back to ps or signalling
+ok 3 - unavailable sources refuse clearly without falling back to ps or signalling
+  ---
+  duration_ms: 1.409667
+  ...
+# Subtest: Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+ok 4 - Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+  ---
+  duration_ms: 0.6305
+  ...
+# Subtest: Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+ok 5 - Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+  ---
+  duration_ms: 0.568417
+  ...
+# Subtest: identity-only reads preserve kernel births and ancestry when argv is inaccessible
+ok 6 - identity-only reads preserve kernel births and ancestry when argv is inaccessible
+  ---
+  duration_ms: 0.080166
+  ...
+# Subtest: Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+ok 7 - Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+  ---
+  duration_ms: 9.963875
+  ...
+# host sandbox strips setuid chmod; verify mode refusal on the promotion host
+# Subtest: the installed native reader returns exact unicode and multiline argv without any tools on PATH
+ok 8 - the installed native reader returns exact unicode and multiline argv without any tools on PATH
+  ---
+  duration_ms: 37.678375
+  ...
+# Subtest: live kernel reads preserve stopped states through confirmed fixture cleanup
+ok 9 - live kernel reads preserve stopped states through confirmed fixture cleanup
+  ---
+  duration_ms: 13.608917
+  ...
+# Subtest: the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute
+ok 10 - the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute # SKIP seatbelt cannot nest; run this acceptance on the unsandboxed promotion host
+  ---
+  duration_ms: 5.936958
+  ...
+# Subtest: the runner refuses before running fixtures when the native source is unavailable
+ok 11 - the runner refuses before running fixtures when the native source is unavailable
+  ---
+  duration_ms: 50.421084
+  ...
+# Subtest: receipt registration refuses absent ownership without signalling
+ok 12 - receipt registration refuses absent ownership without signalling
+  ---
+  duration_ms: 0.98475
+  ...
+# Subtest: receipt registration refuses zombie ownership without signalling
+ok 13 - receipt registration refuses zombie ownership without signalling
+  ---
+  duration_ms: 0.11075
+  ...
+# Subtest: receipt registration refuses failed ownership without signalling
+ok 14 - receipt registration refuses failed ownership without signalling
+  ---
+  duration_ms: 0.156791
+  ...
+# Subtest: receipt registration refuses incomplete ownership without signalling
+ok 15 - receipt registration refuses incomplete ownership without signalling
+  ---
+  duration_ms: 0.060208
+  ...
+# Subtest: receipt registration refuses changed leader ownership without signalling
+ok 16 - receipt registration refuses changed leader ownership without signalling
+  ---
+  duration_ms: 0.055208
+  ...
+# Subtest: receipt registration refuses nonleader ownership without signalling
+ok 17 - receipt registration refuses nonleader ownership without signalling
+  ---
+  duration_ms: 0.043
+  ...
+# Subtest: timeout individual lookup never signals an unrelated replacement (PID)
+ok 18 - timeout individual lookup never signals an unrelated replacement (PID)
+  ---
+  duration_ms: 0.130041
+  ...
+# Subtest: failed individual lookup never signals an unrelated replacement (PID)
+ok 19 - failed individual lookup never signals an unrelated replacement (PID)
+  ---
+  duration_ms: 0.04275
+  ...
+# Subtest: incomplete individual lookup never signals an unrelated replacement (PID)
+ok 20 - incomplete individual lookup never signals an unrelated replacement (PID)
+  ---
+  duration_ms: 0.180542
+  ...
+# Subtest: thrown individual lookup never signals an unrelated replacement (PID)
+ok 21 - thrown individual lookup never signals an unrelated replacement (PID)
+  ---
+  duration_ms: 0.139083
+  ...
+# Subtest: timeout individual lookup never signals an unrelated replacement (group)
+ok 22 - timeout individual lookup never signals an unrelated replacement (group)
+  ---
+  duration_ms: 0.058917
+  ...
+# Subtest: failed individual lookup never signals an unrelated replacement (group)
+ok 23 - failed individual lookup never signals an unrelated replacement (group)
+  ---
+  duration_ms: 0.084625
+  ...
+# Subtest: incomplete individual lookup never signals an unrelated replacement (group)
+ok 24 - incomplete individual lookup never signals an unrelated replacement (group)
+  ---
+  duration_ms: 0.039209
+  ...
+# Subtest: thrown individual lookup never signals an unrelated replacement (group)
+ok 25 - thrown individual lookup never signals an unrelated replacement (group)
+  ---
+  duration_ms: 0.074042
+  ...
+# Subtest: timeout audit reports failure but does not prevent fresh group teardown
+ok 26 - timeout audit reports failure but does not prevent fresh group teardown
+  ---
+  duration_ms: 0.172834
+  ...
+# Subtest: failed audit reports failure but does not prevent fresh group teardown
+ok 27 - failed audit reports failure but does not prevent fresh group teardown
+  ---
+  duration_ms: 0.116292
+  ...
+# Subtest: incomplete audit reports failure but does not prevent fresh group teardown
+ok 28 - incomplete audit reports failure but does not prevent fresh group teardown
+  ---
+  duration_ms: 0.059042
+  ...
+# Subtest: thrown audit reports failure but does not prevent fresh group teardown
+ok 29 - thrown audit reports failure but does not prevent fresh group teardown
+  ---
+  duration_ms: 0.155292
+  ...
+# Subtest: the audit reports group members whose parent exited, without hunting or signalling them
+ok 30 - the audit reports group members whose parent exited, without hunting or signalling them
+  ---
+  duration_ms: 0.373916
+  ...
+# Subtest: confirmed absence, command changes and a changed group leader never authorize historical signals
+ok 31 - confirmed absence, command changes and a changed group leader never authorize historical signals
+  ---
+  duration_ms: 0.075708
+  ...
+# Subtest: a zombie never licenses a signal even when its command has become defunct
+ok 32 - a zombie never licenses a signal even when its command has become defunct
+  ---
+  duration_ms: 0.087083
+  ...
+# Subtest: a positive current tuple immediately precedes both PID and group signals
+ok 33 - a positive current tuple immediately precedes both PID and group signals
+  ---
+  duration_ms: 0.052209
+  ...
+# Subtest: process source parsing rejects failed, timed-out, truncated and incomplete snapshots before any ownership is inferred
+ok 34 - process source parsing rejects failed, timed-out, truncated and incomplete snapshots before any ownership is inferred
+  ---
+  duration_ms: 0.181542
+  ...
+# Subtest: invalid owned identities and mismatched snapshot keys never authorize signals
+ok 35 - invalid owned identities and mismatched snapshot keys never authorize signals
+  ---
+  duration_ms: 0.057542
+  ...
+# Subtest: measured load expands internal allowances without shorter, infinite or overflowing timers
+ok 36 - measured load expands internal allowances without shorter, infinite or overflowing timers
+  ---
+  duration_ms: 1.205667
+  ...
+# Subtest: a loaded native lookup receives time to answer and timeout retries back off with fresh output
+ok 37 - a loaded native lookup receives time to answer and timeout retries back off with fresh output
+  ---
+  duration_ms: 2.126958
+  ...
+# Subtest: the default native executor under the bounded helper scales each response allowance once
+ok 38 - the default native executor under the bounded helper scales each response allowance once
+  ---
+  duration_ms: 28.3725
+  ...
+# Subtest: the record lock waits past ten seconds for a live holder under load before appending
+ok 39 - the record lock waits past ten seconds for a live holder under load before appending
+  ---
+  duration_ms: 21.702542
+  ...
+# Subtest: exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+ok 40 - exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+  ---
+  duration_ms: 160.776833
+  ...
+# Subtest: exhausted, refused and malformed lookups never authorize a signal, including after timeout
+ok 41 - exhausted, refused and malformed lookups never authorize a signal, including after timeout
+  ---
+  duration_ms: 2.068125
+  ...
+# Subtest: a replacement PID discovered after a retry remains unauthorized
+ok 42 - a replacement PID discovered after a retry remains unauthorized
+  ---
+  duration_ms: 0.674208
+  ...
+# Subtest: promotion validation can read Git after the old injected 15-second command deadline
+ok 43 - promotion validation can read Git after the old injected 15-second command deadline
+  ---
+  duration_ms: 15370.195917
+  ...
+# Subtest: slow Herdr transport responds within a loaded allowance; refusals stay refusals
+ok 44 - slow Herdr transport responds within a loaded allowance; refusals stay refusals
+  ---
+  duration_ms: 106.319084
+  ...
+# Subtest: housekeeping gives each evidence read a loaded response allowance and preserves refusals
+ok 45 - housekeeping gives each evidence read a loaded response allowance and preserves refusals
+  ---
+  duration_ms: 4.977375
+  ...
+# Subtest: queue and notice locks wait through loaded contention and never remove a live lock
+ok 46 - queue and notice locks wait through loaded contention and never remove a live lock
+  ---
+  duration_ms: 14.439875
+  ...
+# Subtest: inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+ok 47 - inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+  ---
+  duration_ms: 394.967708
+  ...
+# Subtest: owned inbox teardown allows loaded stop confirmation before clearing its processes
+ok 48 - owned inbox teardown allows loaded stop confirmation before clearing its processes
+  ---
+  duration_ms: 23.61225
+  ...
+# Subtest: owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+ok 49 - owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+  ---
+  duration_ms: 23.044416
+  ...
+# Subtest: teardown confirms the detached owner group and stops its transport first
+ok 50 - teardown confirms the detached owner group and stops its transport first
+  ---
+  duration_ms: 2.586833
+  ...
+# Subtest: teardown confirms the contained test group and stops its transport first
+ok 51 - teardown confirms the contained test group and stops its transport first
+  ---
+  duration_ms: 0.7505
+  ...
+# Subtest: a absent owner candidate never authorizes a signal
+ok 52 - a absent owner candidate never authorizes a signal
+  ---
+  duration_ms: 0.589
+  ...
+# Subtest: a zombie owner candidate never authorizes a signal
+ok 53 - a zombie owner candidate never authorizes a signal
+  ---
+  duration_ms: 0.683292
+  ...
+# Subtest: a foreign command owner candidate never authorizes a signal
+ok 54 - a foreign command owner candidate never authorizes a signal
+  ---
+  duration_ms: 0.928958
+  ...
+# Subtest: a birth change before the first signal reads as owner gone
+ok 55 - a birth change before the first signal reads as owner gone
+  ---
+  duration_ms: 0.890708
+  ...
+# Subtest: a command change before the first signal reads as owner gone
+ok 56 - a command change before the first signal reads as owner gone
+  ---
+  duration_ms: 1.07925
+  ...
+# Subtest: a replacement observed after suspension is never killed or resumed
+ok 57 - a replacement observed after suspension is never killed or resumed
+  ---
+  duration_ms: 1.059667
+  ...
+# Subtest: wrong group ownership fails closed without signalling
+ok 58 - wrong group ownership fails closed without signalling
+  ---
+  duration_ms: 1.75175
+  ...
+# Subtest: missing birth ownership fails closed without signalling
+ok 59 - missing birth ownership fails closed without signalling
+  ---
+  duration_ms: 0.922875
+  ...
+# Subtest: failed snapshot ownership fails closed without signalling
+ok 60 - failed snapshot ownership fails closed without signalling
+  ---
+  duration_ms: 0.544208
+  ...
+# Subtest: failed signal lookup ownership fails closed without signalling
+ok 61 - failed signal lookup ownership fails closed without signalling
+  ---
+  duration_ms: 0.572833
+  ...
+# Subtest: invalid argv ownership fails closed without signalling
+ok 62 - invalid argv ownership fails closed without signalling
+  ---
+  duration_ms: 0.513
+  ...
+# Subtest: a transport outside the confirmed owner group retains evidence and resumes the owner
+ok 63 - a transport outside the confirmed owner group retains evidence and resumes the owner
+  ---
+  duration_ms: 0.613625
+  ...
+1..63
+# tests 63
+# suites 0
+# pass 62
+# fail 0
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 16188.596292

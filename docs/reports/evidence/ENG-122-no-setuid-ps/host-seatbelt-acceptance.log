@@ -1,0 +1,95 @@
+TAP version 13
+# Subtest: slot ownership records exact kernel births and refuses same-second PID reuse
+ok 1 - slot ownership records exact kernel births and refuses same-second PID reuse
+  ---
+  duration_ms: 19.321417
+  ...
+# Subtest: slot accepts the existing UTC/C holder schema and preserves live ambiguous legacy records
+ok 2 - slot accepts the existing UTC/C holder schema and preserves live ambiguous legacy records
+  ---
+  duration_ms: 4.192833
+  ...
+# Subtest: Linux legacy timestamps use kernel boot seconds and validated clock ticks
+ok 3 - Linux legacy timestamps use kernel boot seconds and validated clock ticks
+  ---
+  duration_ms: 0.346541
+  ...
+# Subtest: Linux slot births distinguish identical start ticks across reboots
+ok 4 - Linux slot births distinguish identical start ticks across reboots
+  ---
+  duration_ms: 0.147375
+  ...
+# Subtest: a missing source refuses a fresh slot before creating a lock or starting its command
+ok 5 - a missing source refuses a fresh slot before creating a lock or starting its command
+  ---
+  duration_ms: 23.880208
+  ...
+# Subtest: slot exclusion and token-free nesting work inside seatbelt without setuid ps
+ok 6 - slot exclusion and token-free nesting work inside seatbelt without setuid ps
+  ---
+  duration_ms: 106.062667
+  ...
+# Subtest: Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+ok 7 - Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+  ---
+  duration_ms: 2.456333
+  ...
+# Subtest: a reused PID with identical argv and a different birth time never licenses PID or group signals
+ok 8 - a reused PID with identical argv and a different birth time never licenses PID or group signals
+  ---
+  duration_ms: 2.750292
+  ...
+# Subtest: unavailable sources refuse clearly without falling back to ps or signalling
+ok 9 - unavailable sources refuse clearly without falling back to ps or signalling
+  ---
+  duration_ms: 0.712666
+  ...
+# Subtest: Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+ok 10 - Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+  ---
+  duration_ms: 0.414084
+  ...
+# Subtest: Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+ok 11 - Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+  ---
+  duration_ms: 0.364375
+  ...
+# Subtest: identity-only reads preserve kernel births and ancestry when argv is inaccessible
+ok 12 - identity-only reads preserve kernel births and ancestry when argv is inaccessible
+  ---
+  duration_ms: 0.063333
+  ...
+# Subtest: Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+ok 13 - Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+  ---
+  duration_ms: 8.692125
+  ...
+# Subtest: the installed native reader returns exact unicode and multiline argv without any tools on PATH
+ok 14 - the installed native reader returns exact unicode and multiline argv without any tools on PATH
+  ---
+  duration_ms: 35.075916
+  ...
+# Subtest: live kernel reads preserve stopped states through confirmed fixture cleanup
+ok 15 - live kernel reads preserve stopped states through confirmed fixture cleanup
+  ---
+  duration_ms: 11.908125
+  ...
+# Subtest: the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute
+ok 16 - the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute
+  ---
+  duration_ms: 105.531542
+  ...
+# Subtest: the runner refuses before running fixtures when the native source is unavailable
+ok 17 - the runner refuses before running fixtures when the native source is unavailable
+  ---
+  duration_ms: 48.812875
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 247.447083

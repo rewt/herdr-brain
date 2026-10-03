@@ -1,0 +1,175 @@
+TAP version 13
+# Subtest: real detached fixture cleanup survives an assertion failure
+ok 1 - real detached fixture cleanup survives an assertion failure
+  ---
+  duration_ms: 6346.174917
+  ...
+# Subtest: SIGTERM cleanup bounds genuinely detached fixtures outside the suite group
+ok 2 - SIGTERM cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 17474.961708
+  ...
+# Subtest: SIGKILL cleanup bounds genuinely detached fixtures outside the suite group
+ok 3 - SIGKILL cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6436.072833
+  ...
+# Subtest: SIGKILL-before-receipt cleanup bounds genuinely detached fixtures outside the suite group
+ok 4 - SIGKILL-before-receipt cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6423.883583
+  ...
+# Subtest: blocked cleanup bounds genuinely detached fixtures outside the suite group
+ok 5 - blocked cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6452.103875
+  ...
+# Subtest: compound fixture scenarios have an explicit aggregate bound and owned cleanup
+ok 6 - compound fixture scenarios have an explicit aggregate bound and owned cleanup
+  ---
+  duration_ms: 71.369875
+  ...
+# Subtest: a nested bounded suite may exceed one command deadline while ordinary commands retain their bound
+ok 7 - a nested bounded suite may exceed one command deadline while ordinary commands retain their bound
+  ---
+  duration_ms: 15603.901584
+  ...
+# Subtest: a late waiter receives a child result and output after close
+ok 8 - a late waiter receives a child result and output after close
+  ---
+  duration_ms: 19.36475
+  ...
+# Subtest: a completed fixture never looks up or signals its historical PID during teardown
+ok 9 - a completed fixture never looks up or signals its historical PID during teardown
+  ---
+  duration_ms: 117.952125
+  ...
+# Subtest: leak names the failed test and reaps its fixture child and grandchild
+ok 10 - leak names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 617.181917
+  ...
+# Subtest: assertion names the failed test and reaps its fixture child and grandchild
+ok 11 - assertion names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 612.175042
+  ...
+# Subtest: test timeout names the failed test and reaps its fixture child and grandchild
+ok 12 - test timeout names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 1108.136708
+  ...
+# Subtest: child timeout names the failed test and reaps its fixture child and grandchild
+ok 13 - child timeout names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 1119.618958
+  ...
+# Subtest: file watchdog bounds a blocked event loop and clears the fixture group
+ok 14 - file watchdog bounds a blocked event loop and clears the fixture group
+  ---
+  duration_ms: 3062.093959
+  ...
+# Subtest: suite watchdog bounds a blocked event loop and clears the fixture group
+ok 15 - suite watchdog bounds a blocked event loop and clears the fixture group
+  ---
+  duration_ms: 3030.616458
+  ...
+# Subtest: SIGTERM of an outer runner reaps every nested worker and blocked fixture descendant
+ok 16 - SIGTERM of an outer runner reaps every nested worker and blocked fixture descendant
+  ---
+  duration_ms: 223.86025
+  ...
+# Subtest: SIGKILL of an outer runner reaps every nested worker and blocked fixture descendant
+ok 17 - SIGKILL of an outer runner reaps every nested worker and blocked fixture descendant
+  ---
+  duration_ms: 202.384875
+  ...
+# Subtest: a leader exiting before its redirected background child fails the suite and leaves no survivor
+ok 18 - a leader exiting before its redirected background child fails the suite and leaves no survivor
+  ---
+  duration_ms: 103.821917
+  ...
+# Subtest: a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures
+ok 19 - a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures
+  ---
+  duration_ms: 152.480083
+  ...
+# Subtest: suite cancellation clears a detached spawn frozen before its ownership lookup
+ok 20 - suite cancellation clears a detached spawn frozen before its ownership lookup
+  ---
+  duration_ms: 2531.209708
+  ...
+# Subtest: fixture environment overrides cannot detach a grandchild from the suite group
+ok 21 - fixture environment overrides cannot detach a grandchild from the suite group
+  ---
+  duration_ms: 144.839583
+  ...
+# Subtest: a fresh signal confirms the same owned birth tuple across caller timezone changes
+ok 22 - a fresh signal confirms the same owned birth tuple across caller timezone changes
+  ---
+  duration_ms: 5.863
+  ...
+# Subtest: PTY transport uses native BSD arguments and shell-safe util-linux arguments
+ok 23 - PTY transport uses native BSD arguments and shell-safe util-linux arguments
+  ---
+  duration_ms: 23.996042
+  ...
+# Subtest: PTY completion retains TTY, arguments, output and exit status
+ok 24 - PTY completion retains TTY, arguments, output and exit status
+  ---
+  duration_ms: 296.723791
+  ...
+# Subtest: PTY native owner accepts the measured-load allowance above its fifteen-second base
+ok 25 - PTY native owner accepts the measured-load allowance above its fifteen-second base
+  ---
+  duration_ms: 238.218792
+  ...
+# Subtest: PTY cleanup completes when native enumeration exceeds its former three-second allowance
+ok 26 - PTY cleanup completes when native enumeration exceeds its former three-second allowance
+  ---
+  duration_ms: 3529.139375
+  ...
+# Subtest: PTY cleanup refusal still returns unconfirmed status with a loaded allowance
+ok 27 - PTY cleanup refusal still returns unconfirmed status with a loaded allowance
+  ---
+  duration_ms: 195.875666
+  ...
+# Subtest: PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops
+ok 28 - PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops
+  ---
+  duration_ms: 1741.322667
+  ...
+# Subtest: normal exit of the outer suite clears the independently owned PTY session
+ok 29 - normal exit of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 520.145166
+  ...
+# Subtest: SIGTERM of the outer suite clears the independently owned PTY session
+ok 30 - SIGTERM of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 437.996541
+  ...
+# Subtest: SIGKILL of the outer suite clears the independently owned PTY session
+ok 31 - SIGKILL of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 413.609542
+  ...
+# Subtest: SIGKILL shell job of the outer suite clears the independently owned PTY session
+ok 32 - SIGKILL shell job of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 434.587959
+  ...
+# Subtest: suite deadline of the outer suite clears the independently owned PTY session
+ok 33 - suite deadline of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 3119.788334
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 71893.550417

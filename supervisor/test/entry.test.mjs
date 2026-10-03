@@ -9,9 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { gitProject } from '../../lib/project.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
+import { sessionEnvironment, sessionHookArguments } from '../session-hooks.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const deadPid = 2147483647;
-const exec = (file, args, cwd, env = {}, input) => spawnSync(file, args, { cwd, env: { ...process.env, ORG_ACTOR: 'entry-test', ...env }, input, encoding: 'utf8', timeout: 15000 });
+const exec = (file, args, cwd, env = {}, input) => {
+  const inherited = { ...process.env };
+  for (const key of Object.keys(inherited)) if (/^MONITOR_(SESSION_ROLE|ENTRY_BYPASS|SUPERVISOR_)|^HERDR_(PANE_ID|AGENT_NAME)$/.test(key)) delete inherited[key];
+  return spawnSync(file, args, { cwd, env: { ...inherited, ORG_ACTOR: 'entry-test', ...env }, input, encoding: 'utf8', timeout: 15000 });
+};
 const good = r => { assert.equal(r.status, 0, r.stderr || r.error?.message); return r.stdout.trim(); };
 function fixture(t) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-entry-')));
@@ -34,6 +39,80 @@ function fixture(t) {
   return { root: scratch, repo, org, project, binding, record, git, start };
 }
 const load = () => import('../entry.mjs');
+test('durable supervisor pane binding survives native restore, clear and compact without adapter env', t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+  fs.symlinkSync(path.join(root, 'supervisor'), path.join(f.repo, 'supervisor'), 'dir');
+  sessionEnvironment({ role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org }, root,
+    { HERDR_PANE_ID: 'wHD:pR', HERDR_AGENT_NAME: 'project-supervisor' });
+  const hook = path.join(root, 'supervisor/session-start.mjs');
+  for (const source of ['resume', 'clear', 'compact']) {
+    for (const kind of ['claude', 'codex']) {
+      const config = JSON.parse(fs.readFileSync(path.join(root, kind === 'claude' ? '.claude/settings.json' : '.codex/hooks.json')));
+      const command = config.hooks.SessionStart.flatMap(g => g.hooks).find(h => h.command.includes('session-start.mjs')).command;
+      const r = exec('/bin/sh', ['-c', command], f.repo, { HERDR_PANE_ID: 'wHD:pR', CLAUDE_PROJECT_DIR: f.repo },
+        JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: `new-${source}` }));
+      good(r); assert.match(r.stdout, /Supervisor cold start/, `${kind} ${source}`);
+    }
+  }
+  const lane = path.join(f.root, 'lane'); f.git(['worktree', 'add', '-qb', 'lane/restore', lane]);
+  for (const [cwd, env] of [[f.repo, { HERDR_PANE_ID: 'wHD:pOther' }], [lane, { HERDR_PANE_ID: 'wHD:pR' }],
+    [f.repo, { HERDR_PANE_ID: 'wHD:pR', MONITOR_SESSION_ROLE: 'worker' }],
+    [f.repo, { HERDR_PANE_ID: 'wHD:pR', MONITOR_ENTRY_BYPASS: '1' }]]) {
+    const r = exec(process.execPath, [hook], cwd, env, JSON.stringify({ cwd, hook_event_name: 'SessionStart', source: 'resume' }));
+    good(r); assert.doesNotMatch(r.stdout, /Supervisor cold start/);
+  }
+  sessionEnvironment({ role: 'worker', canonical: f.repo, identity: f.project.identity, org: f.org }, root, { HERDR_PANE_ID: 'wHD:pR' });
+  const revoked = exec(process.execPath, [hook], f.repo, { HERDR_PANE_ID: 'wHD:pR' },
+    JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
+  good(revoked); assert.doesNotMatch(revoked.stdout, /Supervisor cold start/);
+});
+
+for (const kind of ['claude', 'codex']) test(`${kind} adapter reuses the project SessionStart entry exactly once`, t => {
+  const f = fixture(t), directory = path.join(f.repo, `.${kind}`);
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+  fs.mkdirSync(directory);
+  const name = kind === 'claude' ? 'settings.json' : 'hooks.json';
+  const project = JSON.parse(fs.readFileSync(path.join(root, `.${kind}/${name}`)));
+  fs.writeFileSync(path.join(directory, name), JSON.stringify(project));
+  const context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
+  assert.deepEqual(sessionHookArguments(kind, context, root), [], 'project hook must not gain a second adapter hook');
+  for (const source of ['startup', 'resume', 'clear', 'compact']) {
+    const hooks = project.hooks.SessionStart.filter(g => !g.matcher || new RegExp(g.matcher).test(source))
+      .flatMap(g => g.hooks).filter(h => h.command.includes('session-start.mjs'));
+    assert.equal(hooks.length, 1);
+    const r = exec('/bin/sh', ['-c', hooks[0].command], root,
+      { ...f.binding, CLAUDE_PROJECT_DIR: root, MONITOR_SUPERVISOR_ENTRY: path.join(root, 'supervisor/session-start.mjs') },
+      JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: 'single-entry' }));
+    // Paused housekeeping keeps this integration test entirely foreground.
+    good(r); assert.equal((r.stdout.match(/Supervisor cold start/g) ?? []).length, 1);
+    assert.doesNotMatch(r.stdout, /session may continue/);
+  }
+});
+
+test('re-armed watcher uses its recorded dispatch recipient before the supervisor fallback', async t => {
+  const f = fixture(t), run = f.start('receipt recipient'), fallback = f.start('fallback recipient');
+  fs.mkdirSync(path.join(f.org, 'dispatch'));
+  const journal = path.join(f.org, 'dispatch', 'request-token.json');
+  fs.writeFileSync(journal, JSON.stringify({ run, org: f.org, repo: f.repo, common: f.project.identity, workspace: f.repo, to: 'supervisor-another-project' }));
+  f.record(['set', run, `dispatch_journal=${journal}`]);
+  const fake = fakeCommands(f), { enterSupervisor } = await load();
+  enterSupervisor({ cwd: f.repo, org: f.org, role: 'supervisor', to: 'supervisor-fallback', command: fake.command, output: () => {} });
+  const recipient = id => { const args = fake.calls.find(a => a[0].endsWith('watch.mjs') && a[1] === id); return args[args.indexOf('--to') + 1]; };
+  assert.equal(recipient(run), 'supervisor-another-project');
+  assert.equal(recipient(fallback), 'supervisor-fallback');
+  const absent = f.start('missing dispatch receipt');
+  f.record(['set', absent, `dispatch_journal=${path.join(f.org, 'dispatch', 'gone.json')}`]);
+  enterSupervisor({ cwd: f.repo, org: f.org, role: 'supervisor', to: 'supervisor-fallback', command: fake.command, output: () => {} });
+  assert.equal(recipient(absent), 'supervisor-fallback');
+});
+
+test('adapter exports its known supervisor agent identity', t => {
+  const f = fixture(t), context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
+  assert.equal(sessionEnvironment({ ...context, agent: 'supervisor-project' }, root, {}).MONITOR_SUPERVISOR_AGENT, 'supervisor-project');
+  assert.equal(sessionEnvironment(context, root, { HERDR_AGENT_NAME: 'supervisor-project' }).MONITOR_SUPERVISOR_AGENT, 'supervisor-project');
+  assert.equal(sessionEnvironment({ ...context, role: 'worker' }, root, { MONITOR_SUPERVISOR_AGENT: 'inherited' }).MONITOR_SUPERVISOR_AGENT, '');
+});
 function fakeCommands(f) {
   const calls = [];
   let watching = new Set();
@@ -167,7 +246,7 @@ for (const kind of ['claude', 'codex']) for (const role of ['supervisor', 'worke
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
   fs.writeFileSync(fake, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({args:process.argv.slice(2),role:process.env.MONITOR_SESSION_ROLE,bypass:process.env.MONITOR_ENTRY_BYPASS,repo:process.env.MONITOR_SUPERVISOR_REPO,identity:process.env.MONITOR_SUPERVISOR_IDENTITY,org:process.env.MONITOR_SUPERVISOR_ORG,entry:process.env.MONITOR_SUPERVISOR_ENTRY}));\n`, { mode: 0o755 });
   const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--role', role,
-    '--binary', fake, '--validator', fake, '--runtime-dir', path.join(f.root, 'runtime'), '--worktree-root', path.join(f.root, 'worktrees'), '--', '--model', 'opaque-model'], f.repo, { ...f.binding });
+    '--binary', fake, '--validator', fake, '--runtime-dir', path.join(f.root, 'runtime'), '--worktree-root', path.join(f.root, 'worktrees'), '--', '--model', 'opaque-model'], f.repo, { ...f.binding, HERDR_PANE_ID: 'wTest:pSupervisor' });
   good(r); const native = JSON.parse(fs.readFileSync(receipt)); assert.equal(native.role, role); assert.ok(native.args.includes('opaque-model'));
   assert.equal(native.bypass, role === 'supervisor' ? '0' : '1');
   if (role === 'supervisor') {
@@ -175,6 +254,9 @@ for (const kind of ['claude', 'codex']) for (const role of ['supervisor', 'worke
     assert.equal(native.entry, path.join(root, 'supervisor/session-start.mjs'));
     const hook = kind === 'claude' ? JSON.parse(native.args[native.args.indexOf('--settings') + 1]).hooks.SessionStart[0] : native.args.find(a => a.startsWith('hooks.SessionStart='));
     assert.match(JSON.stringify(hook), /startup.*resume.*clear.*compact/); assert.match(JSON.stringify(hook), /session-start.mjs/);
+    const resumed = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo, { HERDR_PANE_ID: 'wTest:pSupervisor' },
+      JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
+    good(resumed); assert.match(resumed.stdout, /Supervisor cold start/);
   } else {
     assert.equal(native.repo, ''); assert.equal(native.identity, ''); assert.equal(native.entry, '');
     assert.ok(!native.args.some(a => a.includes('hooks.SessionStart='))); assert.ok(!native.args.includes('--settings'));

@@ -38,7 +38,7 @@ export function inspectEntryLocks(project, report) {
   }
 }
 
-export function enterSupervisor({ cwd = process.cwd(), org, role, to = 'supervisor-herdr',
+export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr',
   command = spawnSync, output = text => process.stdout.write(text) } = {}) {
   const report = text => output(sanitizeTerminal(text));
   const attempt = (name, task) => { try { return task(); } catch (e) { report(`Supervisor entry ${name}: ${e.message}; session may continue.\n`); } };
@@ -81,7 +81,17 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = 'supervis
       if (current.report || current.abandoned || current.workspace !== run.workspace || current.meta.agent !== run.agent) return;
       if (gitProject(current.workspace).identity !== project.identity) throw new Error('run repository binding changed');
       if (current.meta.watcher_pid != null && !dead(Number(current.meta.watcher_pid))) return;
-      const watched = JSON.parse(call(local('../watch/watch.mjs'), [run.run, '--org', org, '--to', to,
+      let recipient = to;
+      if (current.meta.dispatch_journal) {
+        let receipt;
+        try { receipt = JSON.parse(fs.readFileSync(current.meta.dispatch_journal, 'utf8')); }
+        catch (e) { if (e.code !== 'ENOENT') throw e; }
+        if (receipt) {
+          if (receipt.run !== run.run || typeof receipt.to !== 'string' || !receipt.to.trim()) throw new Error('dispatch recipient receipt is invalid; inspect');
+          recipient = receipt.to;
+        }
+      }
+      const watched = JSON.parse(call(local('../watch/watch.mjs'), [run.run, '--org', org, '--to', recipient,
         '--cwd', project.canonical, '--detach', '--log', path.join(org, 'dispatch', `${run.run}.watch.log`)]));
       if (watched.run !== run.run || typeof watched.log !== 'string' || dead(watched.pid)) throw new Error('watcher startup receipt is invalid or owner died; inspect before retry');
       call(local('../bin/org.mjs'), ['set', run.run, `watcher_pid=${watched.pid}`, `watcher_log=${watched.log}`]);

@@ -1,0 +1,195 @@
+TAP version 13
+# Subtest: durable supervisor pane binding survives native restore, clear and compact without adapter env
+ok 1 - durable supervisor pane binding survives native restore, clear and compact without adapter env
+  ---
+  duration_ms: 1328.960209
+  ...
+# Subtest: claude adapter reuses the project SessionStart entry exactly once
+ok 2 - claude adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 765.972375
+  ...
+# Subtest: codex adapter reuses the project SessionStart entry exactly once
+ok 3 - codex adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 773.937625
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 4 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 860.583375
+  ...
+# Subtest: adapter exports its known supervisor agent identity
+ok 5 - adapter exports its known supervisor agent identity
+  ---
+  duration_ms: 78.592917
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 6 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 229.469
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 7 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 696.013375
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 8 - entry respects {"enabled":false}
+  ---
+  duration_ms: 141.621708
+  ...
+# Subtest: entry respects {"resume":false}
+ok 9 - entry respects {"resume":false}
+  ---
+  duration_ms: 139.120042
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 10 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 112.532792
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 11 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 145.039625
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 12 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 299.385708
+  ...
+# Subtest: native hooks deliver the same entry on startup
+ok 13 - native hooks deliver the same entry on startup
+  ---
+  duration_ms: 419.825208
+  ...
+# Subtest: native hooks deliver the same entry on resume
+ok 14 - native hooks deliver the same entry on resume
+  ---
+  duration_ms: 434.848083
+  ...
+# Subtest: native hooks deliver the same entry on clear
+ok 15 - native hooks deliver the same entry on clear
+  ---
+  duration_ms: 423.874042
+  ...
+# Subtest: native hooks deliver the same entry on compact
+ok 16 - native hooks deliver the same entry on compact
+  ---
+  duration_ms: 421.398792
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 17 - hook skips or explains unmarked without blocking startup
+  ---
+  duration_ms: 121.218916
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 18 - hook skips or explains worker without blocking startup
+  ---
+  duration_ms: 98.851667
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 19 - hook skips or explains lane without blocking startup
+  ---
+  duration_ms: 137.115458
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 20 - hook skips or explains foreign without blocking startup
+  ---
+  duration_ms: 118.031625
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 21 - hook skips or explains bad-input without blocking startup
+  ---
+  duration_ms: 101.266375
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 22 - hook skips or explains missing-record without blocking startup
+  ---
+  duration_ms: 193.635042
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 23 - hook skips or explains worker-bypass without blocking startup
+  ---
+  duration_ms: 98.064375
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 24 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 249.801583
+  ...
+# Subtest: claude adapter binds supervisor and supplies native hooks only to supervisors
+ok 25 - claude adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 685.366083
+  ...
+# Subtest: claude adapter binds worker and supplies native hooks only to supervisors
+ok 26 - claude adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 620.20275
+  ...
+# Subtest: codex adapter binds supervisor and supplies native hooks only to supervisors
+ok 27 - codex adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 691.451666
+  ...
+# Subtest: codex adapter binds worker and supplies native hooks only to supervisors
+ok 28 - codex adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 606.399959
+  ...
+# Subtest: entry safely handles STOP
+ok 29 - entry safely handles STOP
+  ---
+  duration_ms: 254.926833
+  ...
+# Subtest: entry safely handles invalid-config
+ok 30 - entry safely handles invalid-config
+  ---
+  duration_ms: 339.528458
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 31 - entry safely handles invalid-pid
+  ---
+  duration_ms: 298.383458
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 32 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 360.608542
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 33 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 146.719583
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 34 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 145.552292
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 35 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 145.646959
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 36 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 137.271084
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 37 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 130.931125
+  ...
+1..37
+# tests 37
+# suites 0
+# pass 37
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12991.8455

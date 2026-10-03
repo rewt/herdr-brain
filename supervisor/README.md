@@ -78,21 +78,40 @@ the recovery described below; policy-only entry stays read-only.
 
 Native `SessionStart` uses [session-start.mjs](session-start.mjs) for startup,
 resume (including Herdr restore), clear and compact. Both installed launch adapters
-supply the hook and an explicit supervisor role bound to the canonical checkout,
-Git common directory and record. This repository also wires the hook in
-`.claude/settings.json` alongside the canary hook, and in `.codex/hooks.json`.
-Herdr restoration must retain the launch adapter/role environment. Previously
-launched, unmarked sessions need one relaunch through `monitor-claude --role
-supervisor` or `monitor-codex --role supervisor`; an agent name or pane label
-never grants this role. Worker adapters overwrite inherited bindings; direct
-worker/reviewer/settle launchers' existing `MONITOR_ENTRY_BYPASS=1` also skips entry.
+bind an explicit supervisor role to the canonical checkout, Git common directory
+and record. When `HERDR_PANE_ID` is present, opening the native supervisor also
+writes that binding and its notice recipient atomically to
+`.lane/supervisor/panes/<sha256-of-pane-id>.json` in the canonical checkout.
+The hook matches this explicit launch receipt using the pane id and canonical
+Git identity, then falls back to the adapter environment. Herdr preserves pane
+ids across restore, so resume, clear and compact work after the launch variables
+are lost, even when the native chat/session id changes. Record paths are retained
+in the receipt; discovery in the restored environment cannot select another record.
+This is a launch binding, separate from display-only session metadata.
+
+This repository wires the persistent hook in `.claude/settings.json` alongside
+the canary hook, and in `.codex/hooks.json`. Adapters reuse those hooks when they
+cover all four sources, avoiding a second entry from launch arguments. Projects
+without a persistent native hook still get the adapter hook for that launched
+process, but a direct native restore that loses launch arguments requires a
+project hook as well. For both Claude and Codex, a restored session with no adapter
+environment uses the durable pane receipt through the project hook. Outside Herdr,
+resume without a pane id or adapter bindings cannot recognize a supervisor.
+Previously launched, unmarked panes need one explicit supervisor adapter launch
+to create the receipt. An agent name or pane label never grants the role. Worker
+roles and `MONITOR_ENTRY_BYPASS=1` take precedence over receipts; explicitly
+opening a worker in a previously bound pane revokes its supervisor receipt.
 
 Entry prints `supervisor.mjs brief`, resumes housekeeping only when both enabled
 and resume are true, and re-arms watchers only for open, unabandoned runs without a recorded
 report with a verified project checkout and a dead or absent watcher PID. It uses
 watch's exclusive per-run lock, then records the new PID through the record CLI.
-Set `MONITOR_SUPERVISOR_AGENT` at supervisor launch to the notice recipient (default
-`supervisor-herdr`, matching watch's default). Unknown/deleted checkout bindings
+Recovered watchers use the `to` field from the run's `dispatch_journal` receipt.
+Only when that receipt is absent do they fall back to the supervisor recipient
+and then `supervisor-herdr`. Adapters export `MONITOR_SUPERVISOR_AGENT` from their
+known agent identity, an explicit setting, or `HERDR_AGENT_NAME` when supplied;
+the durable pane receipt retains it across restore. Invalid receipts print a
+diagnostic instead of silently rerouting a notice. Unknown/deleted checkout bindings
 and invalid PID evidence need inspection. STOP or a torn record permits reading
 and lock inspection only. There are no model calls, promotion/settle/release
 mutations, checkpoints, new loops or pane creation in entry.

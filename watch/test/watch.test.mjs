@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from '../../test/helpers/bounded-test.mjs';
 import { fileURLToPath } from 'node:url';
+import { waitForFile } from '../../test/helpers/file-wait.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 
 import {
@@ -64,14 +66,8 @@ function startWatcher(t, args) {
   return spawnChild(t, process.execPath, args, { env: TEST_ENV });
 }
 
-async function waitForText(file, pattern, timeoutMs = 10_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const body = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-    if (pattern.test(body)) return body;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  throw new Error(`timed out waiting for ${pattern} in ${file}`);
+function waitForText(file, pattern, timeoutMs = 10_000) {
+  return waitForFile(file, body => pattern.test(body), { timeoutMs });
 }
 
 async function requireFileWatch(t, directory) {
@@ -94,7 +90,7 @@ async function requireFileWatch(t, directory) {
     try {
       watcher = fs.watch(directory, () => finish());
       watcher.once('error', finish);
-      timer = setTimeout(() => finish(new Error('filesystem notification probe timed out')), 10_000);
+      timer = setTimeout(() => finish(new Error('filesystem notification probe timed out')), loadTimeout(10_000));
       fs.writeFileSync(probe, 'probe');
       // FSEvents registration can lag fs.watch returning under load. Keep
       // exercising the probe until the backend delivers an event or errors.
@@ -505,7 +501,7 @@ test('a capped long-running notice keeps one owned ID and payload across minutes
   const empty = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url));
   const children = [];
   const until = async (predicate) => {
-    const deadline = Date.now() + 10_000;
+    const deadline = Date.now() + loadTimeout(10_000);
     while (!predicate()) {
       if (Date.now() >= deadline) throw new Error('timed out waiting for watcher fixture');
       await new Promise((resolve) => setTimeout(resolve, 20));

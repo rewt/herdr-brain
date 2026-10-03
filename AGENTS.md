@@ -11,7 +11,10 @@
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
   and never writes `events.jsonl`. `supervisor/` supplies the read-only cold start and generic protocol,
   foreground notice/queue glue, and legacy settle launchers. Workers never invoke its cycle mutations.
-- Run `npm test` before and after a change. Tests are offline and never call a model.
+- Tests run once, before code merges into main: the promotion batch runs the full suites, like CI on a
+  pull request (operator, 2026-10-03). In a lane, ship the change with the tests that prove it and run them
+  while developing as you see fit; do not run a baseline, `npm test`, `test:promotion` or `test:lanes`.
+  Settle reviews code and runs no suite. Tests are offline and never call a model.
 - Only the project supervisor, from the canonical checkout, starts the default
   project-wide housekeeping schedule with
   `node housekeeping/housekeeping.mjs --start` ([module guide](housekeeping/README.md)).
@@ -20,8 +23,7 @@
   worker checks or tasks that forbid live pane mutations, use `--once --dry-run`
   with `--state-dir "$PWD/.lane/housekeeping-preview"` instead.
 - The release acceptance harness (`acceptance/run.mjs`) runs once per release candidate, not per lane
-  (operator, 2026-10-02). In a lane, run `npm test` (and `npm run test:lanes` when `lanes/` changes);
-  never run the live harness. A lane that changes `acceptance/` itself runs its offline tests and at most
+  (operator, 2026-10-02); never run the live harness in a lane. A lane that changes `acceptance/` itself runs its offline tests and at most
   one `--skip-live` pass.
 - bch-cloak runs `contrib/settle-watch.mjs` from this checkout by absolute path, with `--model` and
   `--effort`. Keep that file's path, flags and behaviour until bch-cloak's release-gated switch (ENG-64).

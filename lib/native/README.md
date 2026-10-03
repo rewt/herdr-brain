@@ -1,9 +1,9 @@
 # Test process identities
 
 `../processes.mjs` uses `/proc/<pid>/stat` (kernel start ticks) and `cmdline` on
-Linux. On macOS these two bundled non-setuid executables read `proc_pidinfo`
-and `KERN_PROCARGS2`, preserving start seconds **and microseconds**. Both sources
-confirm the start identity again after reading argv. The macOS snapshot covers
+Linux. On macOS these two bundled non-setuid executables read `sysctl`
+`KERN_PROC_PID` and `KERN_PROCARGS2`, preserving start seconds **and microseconds**.
+Both sources confirm the start identity again after reading argv. The macOS snapshot covers
 the current uid, which owns every fixture and suite group. A disappeared process
 is omitted; a refused, malformed, changed or truncated read fails the lookup.
 When a live macOS process has no readable argv during exec/exit (`EINVAL`/`EIO`),
@@ -13,8 +13,10 @@ between the full argv and the bracketed name prevents a command match.
 Snapshots must include their live caller. Cleanup still confirms the exact birth
 and command immediately before signalling, and verifies group leadership.
 The host test slot uses `identityOnly` reads: start identity and ancestry come
-from kernel metadata without requiring access to another user's argv. Fixture
-cleanup continues to use full command reads.
+from `KERN_PROC_PID` kernel metadata, which unprivileged callers can read across
+uids without access to another user's argv. This lets a stale slot recover when
+its holder PID is reused by a root or other-user process. Denied identity reads
+still refuse. Fixture cleanup continues to use full command reads.
 
 The runner requires neither `ps` nor a C compiler. Unsupported platforms, missing
 or damaged bundles and denied kernel reads refuse with a process-source error;

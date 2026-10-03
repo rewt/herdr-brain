@@ -10,7 +10,7 @@ const it = (name, body) => nodeIt(name, { timeout: 30000 }, body);
 import { fileURLToPath } from "node:url";
 
 import { lookupProcess } from "../../lib/processes.mjs";
-import { acquireTestSlot, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, HELD_CODE, HOLDER_UNKNOWN_CODE, REFUSED_EXIT, TEST_SLOT_PATH, TOKEN_ENV, WAIT_ENV, RETRIED_ENV } from "../test-slot.mjs";
+import { acquireTestSlot, holderState, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, HELD_CODE, HOLDER_UNKNOWN_CODE, REFUSED_EXIT, TEST_SLOT_PATH, TOKEN_ENV, WAIT_ENV, RETRIED_ENV } from "../test-slot.mjs";
 
 const CLI = fileURLToPath(new URL("../test-slot.mjs", import.meta.url));
 const MODULE = new URL("../test-slot.mjs", import.meta.url).href;
@@ -242,11 +242,13 @@ describe("a dead holder is recovered", () => {
     for (const fields of [
       { pid: 999_999 },                                                             // exited, no group recorded
       { pid: 999_999, pgid: 999_998, groupStart: "ps-utc-c:Thu Jan  1 00:00:00 1970" },      // exited, and so has its group
-      { pid: process.pid },                                                         // pid reused: another start time
+      { pid: 1 },                                                                   // pid reused by a root-owned process: another start time
+      { pid: 999_999, pgid: 1, groupStart: "ps-utc-c:Thu Jan  1 00:00:00 1970" },           // group id reused by a root-owned process
       { pid: 999_999, pgid: process.pid, groupStart: "ps-utc-c:Thu Jan  1 00:00:00 1970" }, // group id reissued to another process
       { pid: process.pid },                                                         // this pid, from before this process started
     ]) {
       stale(fields);
+      assert.equal(holderState(readLock(s.lockPath)).state, "gone", JSON.stringify(fields));
       const slot = await acquireTestSlot("taker", { lockPath: s.lockPath, env: ENV, waitSeconds: 0 });
       assert.equal(slot.nested, false, JSON.stringify(fields));
       assert.equal(readLock(s.lockPath).token, slot.token);
@@ -380,6 +382,15 @@ describe("liveness it cannot establish is refused by name", () => {
       assert.equal(fs.readFileSync(s.lockPath, "utf8"), before);
     });
   }
+
+  it("retains a stale record for root-owned PID 1 when its identity read is denied", async () => {
+    const s = scratch();
+    fs.writeFileSync(s.lockPath, JSON.stringify({ pid: 1, token: "stale", label: "stale", processStart: "ps-utc-c:Thu Jan  1 00:00:00 1970", pgid: null }));
+    const before = fs.readFileSync(s.lockPath, "utf8");
+    const message = await takeWithFailingSource(s.lockPath, `Object.assign(new Error("process source denied"), { code: "EPERM" })`);
+    assert.match(message, /^TEST_SLOT_HOLDER_UNKNOWN:.*could not read pid 1's start time/u);
+    assert.equal(fs.readFileSync(s.lockPath, "utf8"), before);
+  });
 
   it("refuses when the source cannot list the ancestry it needs to tell a nested waiter from another run", async () => {
     const s = scratch();

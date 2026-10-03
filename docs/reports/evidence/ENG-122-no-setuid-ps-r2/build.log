@@ -1,0 +1,30 @@
+Rebuild command completed with exit 0: node lib/native/build.mjs
+Verified source and both executable hashes against the manifest; neither executable has setuid/setgid bits.
+{
+  "version": 1,
+  "sourceSha256": "311533e3693a2aa2438a4c17127970689ed515c9ab764dec60e78f66dab8e088",
+  "targets": {
+    "darwin-arm64": {
+      "sha256": "67258651ab5dcc2396bb38155b81f4d1ec8fd338064c1393b6647176a01980d9",
+      "flags": [
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra"
+      ]
+    },
+    "darwin-x64": {
+      "sha256": "86d77bec47d684d70da8cb4e97988571fc1b3427ed80084c90b259a62b28aa2a",
+      "flags": [
+        "-arch",
+        "x86_64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra"
+      ]
+    }
+  }
+}

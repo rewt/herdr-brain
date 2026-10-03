@@ -46,6 +46,9 @@ and reports both paths when the legacy bridge differs from the workspace path.
 
 Liveness uses PID and start time, never command-line patterns. Process reads use
 `lib/processes.mjs`: bundled non-setuid Darwin kernel readers or Linux `/proc`.
+Darwin identity reads use `sysctl KERN_PROC_PID`, so unprivileged callers can
+recognize holder or group PID reuse across users, including root-owned processes.
+An unreadable identity remains unknown and retains the lock.
 New records additionally pin `processBirth` and `groupBirth` at kernel precision
 (microseconds on Darwin, boot UUID plus start ticks on Linux), so same-second PID reuse is
 distinguished. The existing `processStart`/`groupStart` UTC/C strings remain for

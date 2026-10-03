@@ -106,6 +106,21 @@ test('identity-only reads preserve kernel births and ancestry when argv is inacc
   assert.equal(result.value.pgid, 101);
 });
 
+test('Darwin identity-only reads can date root-owned PID 1 from an unprivileged caller', {
+  skip: process.platform !== 'darwin' ? 'Darwin native integration' : process.getuid() === 0 && 'requires an unprivileged caller',
+}, () => {
+  const result = lookupProcess(1, { identityOnly: true });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.value?.pid, 1);
+  assert.equal(result.value.ppid, 0);
+  assert.equal(result.value.pgid, 1);
+  assert.match(result.value.identity, /^[1-9]\d*:\d+$/);
+  assert.match(result.value.command, /^\[.+\]$/);
+  const again = lookupProcess(1, { identityOnly: true });
+  assert.equal(again.ok, true, again.error);
+  assert.equal(again.value?.identity, result.value.identity);
+});
+
 test('Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution', async t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eng122-bundle-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));

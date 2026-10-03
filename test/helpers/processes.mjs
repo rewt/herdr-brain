@@ -28,7 +28,7 @@ export function parseProcessLookup(result, pid) {
 
 function lookup(pid) {
   const result = spawnSync('ps', ['-ww', '-o', fields, ...(pid ? ['-p', String(pid)] : ['-A'])], {
-    encoding: 'utf8', timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024,
+    encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024,
     env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
   });
   return parseProcessLookup(result, pid);

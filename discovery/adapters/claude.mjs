@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive } from '../launch.mjs';
+import { sessionEnvironment, sessionHookArguments } from '../../supervisor/session-hooks.mjs';
 import { spawnNative } from '../session.mjs';
 const separator = process.argv.indexOf('--');
 const { values } = parseArgs({ args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
@@ -35,8 +36,8 @@ try {
   const context = entry.context(), policy = entryPolicy(context, root);
   if (values['policy-only']) { console.log(policy); entry.close(); }
   else {
-    const child = spawnNative(entry, values.binary, [...native, '--append-system-prompt', policy, '--add-dir', context.requests], {
-      cwd: context.workspace, env: { ...process.env, ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests },
+    const child = spawnNative(entry, values.binary, [...native, ...sessionHookArguments('claude', context, root), '--append-system-prompt', policy, '--add-dir', context.requests], {
+      cwd: context.workspace, env: { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests },
     });
     const timer = setInterval(() => entry.poll(), 40);
     for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(s, () => child.kill(s));

@@ -20,6 +20,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "^(startup|resume|clear|compact)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${MONITOR_SUPERVISOR_ENTRY:-$CLAUDE_PROJECT_DIR/supervisor/session-start.mjs}\"",
+            "timeout": 30
+          }
+        ]
       }
     ]
   }

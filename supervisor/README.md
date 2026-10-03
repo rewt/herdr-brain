@@ -73,8 +73,50 @@ a new file when switching and retain the old inbox as evidence.
 Discovery's explicit supervisor entry injects [PROTOCOL.md](PROTOCOL.md) and a
 fresh cold start before the native harness launches. It works in unconfigured
 projects and populated records, without a model or a background supervisor.
-Workers receive only the existing worker policy. Entry starts no schedule and
-makes no Herdr calls.
+Workers receive only the existing worker policy. The native session hook performs
+the recovery described below; policy-only entry stays read-only.
+
+Native `SessionStart` uses [session-start.mjs](session-start.mjs) for startup,
+resume (including Herdr restore), clear and compact. Both installed launch adapters
+supply the hook and an explicit supervisor role bound to the canonical checkout,
+Git common directory and record. This repository also wires the hook in
+`.claude/settings.json` alongside the canary hook, and in `.codex/hooks.json`.
+Herdr restoration must retain the launch adapter/role environment. Previously
+launched, unmarked sessions need one relaunch through `monitor-claude --role
+supervisor` or `monitor-codex --role supervisor`; an agent name or pane label
+never grants this role. Worker adapters overwrite inherited bindings; direct
+worker/reviewer/settle launchers' existing `MONITOR_ENTRY_BYPASS=1` also skips entry.
+
+Entry prints `supervisor.mjs brief`, resumes housekeeping only when both enabled
+and resume are true, and re-arms watchers only for open, unabandoned runs without a recorded
+report with a verified project checkout and a dead or absent watcher PID. It uses
+watch's exclusive per-run lock, then records the new PID through the record CLI.
+Set `MONITOR_SUPERVISOR_AGENT` at supervisor launch to the notice recipient (default
+`supervisor-herdr`, matching watch's default). Unknown/deleted checkout bindings
+and invalid PID evidence need inspection. STOP or a torn record permits reading
+and lock inspection only. There are no model calls, promotion/settle/release
+mutations, checkpoints, new loops or pane creation in entry.
+
+The known promotion queue, supervisor receipt and settle lock locations are
+scoped by Git common-directory identity. A confirmed dead owner is reported with
+its path; entry never removes those locks. Live, inaccessible and unidentified
+owners are not called stale. Each command is bounded and the recovery commands
+share a 20-second deadline; failures print their reasons and do not reject session
+startup. A later entry can finish interrupted recovery. Repeating successful entry
+only refreshes the brief; it does not add record events or start duplicate owners.
+
+Codex CLI 0.160.0 supports the native equivalent for all four sources, including
+mid-turn compaction. Non-managed hooks require review through `/hooks`; new or
+changed definitions are skipped until trusted. This change does not bypass that
+trust. Older Codex builds without SessionStart, disabled/untrusted hooks, and
+cloud orchestration without local command hooks cannot automatically run this
+entry. Use the manual command below in those environments.
+See [official Codex hook documentation](https://learn.chatgpt.com/docs/hooks) for
+supported sources, project trust and surface limitations (checked 2026-10-03).
+
+```sh
+node /path/to/monitor/supervisor/supervisor.mjs entry --repo PROJECT --org RECORD --role supervisor --to YOUR-SUPERVISOR
+```
 
 From a project checkout, or with `--repo PROJECT --org RECORD`:
 
@@ -199,7 +241,8 @@ Mutation commands require explicit `--role supervisor` and a canonical checkout;
 this is an invocation boundary, not a credential system. Workers are instructed
 never to invoke them. STOP and a torn event-log tail refuse cycle mutations.
 Only the canonical project supervisor starts default housekeeping, separately
-with `housekeeping/housekeeping.mjs --start`. Cold entry never starts it.
+with `housekeeping/housekeeping.mjs --start`. Native session entry resumes it
+when enabled and resume are true; generating policy or a brief stays read-only.
 Settle independently rechecks the canonical STOP immediately before correction
 dispatch or incomplete-dispatch retry, including after a blocking review. It
 returns `stopped` with a handoff and retains its resumable stage and review/fix

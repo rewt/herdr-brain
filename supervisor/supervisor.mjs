@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { writeFileAtomic } from '../lib/store.mjs';
+import { enterSupervisor } from './entry.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart, briefSize, receiptDirectory } from './context.mjs';
 
@@ -34,7 +35,8 @@ export function main(argv = process.argv.slice(2)) {
   const [action = 'brief', requested] = positionals;
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
   if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
-  if (positionals.length > 2 || !['brief', 'checkpoint', 'handle', 'promote', 'release'].includes(action)) throw new Error('usage: supervisor.mjs brief [--json] | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT | release; mutations require --role supervisor');
+  if (positionals.length > 2 || !['brief', 'entry', 'checkpoint', 'handle', 'promote', 'release'].includes(action)) throw new Error('usage: supervisor.mjs brief [--json] | entry --role supervisor | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT | release; mutations require --role supervisor');
+  if (action === 'entry') { enterSupervisor({ cwd: opt.repo, org: opt.org, role: opt.role, to: opt.to }); return; }
   const doc = coldStart({ cwd: opt.repo, org: opt.org, sinceSeq: opt['since-seq'] === undefined ? undefined : Number(opt['since-seq']) });
   const project = doc.project;
   const print = (value) => process.stdout.write(JSON.stringify(value) + '\n');

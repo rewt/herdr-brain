@@ -10,6 +10,7 @@ import { prioritiesJson, itemServes } from '../lib/priorities.mjs';
 import { describeEvent, approxTokens } from '../lib/render.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { candidateRows } from '../lib/release-record.mjs';
+import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { releaseSettings } from '../release/config.mjs';
 
 export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', createHash('sha256').update(identity).digest('hex').slice(0, 20));
@@ -64,6 +65,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const facts = (r) => ({ run: r.id, item: r.item, title: state.items.get(r.item)?.title,
     route: r.meta.route ?? null, harness: r.meta.harness ?? null, model: r.meta.model ?? null,
     effort: r.meta.effort ?? null, agent: r.meta.agent ?? null, pane: r.meta.pane ?? null,
+    watcher_pid: r.meta.watcher_pid ?? null, watcher_log: r.meta.watcher_log ?? null,
     lane: r.meta.lane ?? null, workspace: r.workspace, report: r.report_path,
     serves: r.meta.serves ?? null, started: r.started.at,
     checkout_missing: missing.has(r.id), repository_binding: unknown.has(r.id) ? 'unknown' : r.workspace ? project.identity : 'record_only' });
@@ -135,15 +137,19 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   for (const i of ready) next.push({ action: 'consider_dispatch', item: i.id, serves: i.serves });
   if (!next.length) next.push({ action: running.length ? 'leave_in_flight' : waiting.length ? 'await_operator' : 'record_next_work' });
   if (!pendingCandidates.length) next.push({ action: 'consider_release_at_quiet_point' });
+  let housekeeping = null;
+  try { housekeeping = housekeepingSnapshot({ cwd, org, env }); }
+  catch (e) { recovery.push({ file: path.join(project.canonical, '.housekeeping.json'), reason: `Housekeeping: ${e.message}` }); }
   const config = readConfig(org), clock = now(env);
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
     priorities, goals, running, reports, waiting, held, ready, decisions, next, recovery,
-    approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release };
+    approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release, housekeeping };
 }
 
 export function renderColdStart(doc, { limit = 6 } = {}) {
   const out = [`Supervisor cold start · ${doc.project.canonical}`, `Record ${doc.project.org} · events through ${doc.project.through}; decisions after ${doc.project.after}`];
+  if (doc.housekeeping) out.push(`Housekeeping: ${doc.housekeeping.process}${doc.housekeeping.pid ? ` (pid ${doc.housekeeping.pid})` : ''}; enabled=${doc.housekeeping.config?.enabled ?? '?'} resume=${doc.housekeeping.config?.resume ?? '?'}${doc.housekeeping.configError ? `; ${line(doc.housekeeping.configError)}` : ''}${doc.housekeeping.warnings.length ? `; ${line(doc.housekeeping.warnings.join('; '))}` : ''}`);
   if (doc.project.stopped) out.push('STOP exists: inspect only; do not dispatch, settle or promote.');
   if (doc.project.torn_tail) out.push('Record has an incomplete final event; inspect before writes.');
   const section = (name, rows, format) => {

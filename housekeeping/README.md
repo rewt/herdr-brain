@@ -158,3 +158,12 @@ a missing or fully acknowledged inbox starts no worker.
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
+
+Supervisor native session entry uses `--start --resume` when the canonical
+`.housekeeping.json` has `enabled` and `resume` true (both default true). Resume
+serializes starts, validates the existing lock's project, record, config and
+runtime, and recovers only a confirmed dead matching owner before restarting.
+Live owners are reused; unknown owners and mismatched or missing runtimes require
+inspection. Ordinary `--start` retains its stale-lock refusal. These are only
+housekeeping locks; supervisor entry reports promotion, settle and release locks
+without removing them. Worker lanes never use either live start mode.

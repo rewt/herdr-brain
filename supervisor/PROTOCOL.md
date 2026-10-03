@@ -5,7 +5,11 @@ ordinary reversible decisions are yours within the project's recorded authority.
 Read applicable project instructions. This protocol supplies defaults and yields
 to them. No resident model or growing history is needed to keep the cycle moving.
 
-On entry, read the generated cold start. Retrieve `record show ID` only for the
+Native SessionStart invokes the same foreground entry on startup, resume, clear
+and compact: print the cold start, resume housekeeping when enabled and resume
+are true, re-arm dead watchers for open runs, and report stale cycle locks without
+deleting them. Failures print diagnostics and let the session start. On entry,
+read the generated cold start. Retrieve `record show ID` only for the
 work, question or authority you need. The brief is a bounded preview with counts;
 `brief --json` returns every row, including full decisions and goal authority.
 After reading ALL new decisions (retrieve the full list when truncated), run
@@ -81,7 +85,8 @@ nothing and requires inspection; it never blindly enqueues again.
 
 Only an explicitly entered supervisor in the canonical checkout may mutate this
 cycle or start the default housekeeping schedule with housekeeping/housekeeping.mjs
---start. Entry itself reads context and starts no schedule. Workers receive their
+--start. Entry resumes only the existing housekeeping schedule and open-run watchers;
+it never dispatches, settles, promotes or releases work. Workers receive their
 own bounded policy and never supervisor actions. The canonical
 `.lane/supervisor/STOP` prevents cycle mutations. Lanes, models, accounts, desks
 and validation come from their modules/configuration, never this protocol.

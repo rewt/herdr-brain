@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear|compact)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${MONITOR_SUPERVISOR_ENTRY:-$(git rev-parse --show-toplevel)/supervisor/session-start.mjs}\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ import { parseArgs } from 'node:util';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive } from '../launch.mjs';
+import { sessionEnvironment, sessionHookArguments } from '../../supervisor/session-hooks.mjs';
 import { spawnNative } from '../session.mjs';
 const separator = process.argv.indexOf('--');
 const adapterArgs = process.argv.slice(2, separator < 0 ? undefined : separator);
@@ -42,9 +43,9 @@ try {
     // Deliberately keep native model, effort, approvals and sandbox arguments.
     // -C belongs to entry because changing checkout changes the capability.
     if (native.some((arg) => arg.startsWith('-C') || ['--cd', '--worktree'].includes(arg) || arg.startsWith('--cd='))) throw new Error('select project with adapter --repo; native checkout overrides are not allowed');
-    const nativeArgs = ['--no-daemon', ...native, '-C', context.workspace, '--add-dir', context.requests, '-c', `developer_instructions=${JSON.stringify(policy)}`];
+    const nativeArgs = ['--no-daemon', ...native, ...sessionHookArguments('codex', context, root), '-C', context.workspace, '--add-dir', context.requests, '-c', `developer_instructions=${JSON.stringify(policy)}`];
     const child = spawnNative(entry, values.binary, nativeArgs, { cwd: context.workspace,
-      env: { ...process.env, ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests } });
+      env: { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests } });
     const timer = setInterval(() => entry.poll(), 40);
     const signal = (s) => child.kill(s);
     for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(s, () => signal(s));

@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { planTidy, isShellOnly } from '../supervisor/tidy-tabs.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
+import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { resumeInbox, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 export { readConfig } from './config.mjs';
 
@@ -249,9 +250,10 @@ async function main() {
     cwd: { type: 'string', default: process.cwd() }, org: { type: 'string' }, config: { type: 'string' },
     main: { type: 'string' }, 'state-dir': { type: 'string' },
     herdr: { type: 'string', default: 'herdr' }, 'org-cli': { type: 'string' },
-    once: { type: 'boolean' }, loop: { type: 'boolean' }, start: { type: 'boolean' }, 'dry-run': { type: 'boolean', default: false },
+    resume: { type: 'boolean' }, once: { type: 'boolean' }, loop: { type: 'boolean' }, start: { type: 'boolean' }, 'dry-run': { type: 'boolean', default: false },
   } });
   if ([opt.once, opt.loop, opt.start].filter(Boolean).length !== 1) throw new Error('usage: housekeeping.mjs (--start|--once|--loop) [--cwd PROJECT] [--org DIR] [--config FILE] [--dry-run] [--state-dir DIR]');
+  if (opt.resume && !opt.start) throw new Error('--resume requires --start');
   const project = discoverProject(opt.cwd, opt.org);
   if (!project?.org) { process.stdout.write(`${JSON.stringify({ action: project ? 'no-record' : 'no-project', cwd: project?.cwd ?? opt.cwd })}\n`); return; }
   const script = fs.realpathSync(SELF);
@@ -278,44 +280,51 @@ async function main() {
   const lock = path.join(stateDir, 'lock');
   if (opt.start) {
     if (opt['dry-run']) { log({ action: 'would-start', cwd, org: project.org }); return; }
-    if (fs.existsSync(lock)) {
-      const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
-      if (!Number.isInteger(owner.pid) || owner.pid < 1 || owner.cwd !== cwd || owner.org !== project.org || owner.config !== configFile) throw new Error('housekeeping lock belongs to a different project/record/config');
-      if (typeof owner.script !== 'string' || !Array.isArray(owner.record_cli) || !owner.record_cli.length) {
-        throw new Error(`housekeeping lock has no runtime identity; inspect ${lock} before restarting`);
+    if (opt.resume && config.resume === false) { log({ action: 'resume-disabled' }); return; }
+    const releaseStart = noticeLock(path.join(stateDir, 'start.lock'), { waitMs: 6500 });
+    try {
+      if (fs.existsSync(lock)) {
+        const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+        if (!Number.isInteger(owner.pid) || owner.pid < 1 || owner.cwd !== cwd || owner.org !== project.org || owner.config !== configFile) throw new Error('housekeeping lock belongs to a different project/record/config');
+        if (typeof owner.script !== 'string' || !Array.isArray(owner.record_cli) || !owner.record_cli.length) {
+          throw new Error(`housekeeping lock has no runtime identity; inspect ${lock} before restarting`);
+        }
+        if ([owner.script, ...owner.record_cli].some((file) => typeof file !== 'string' || !fs.existsSync(file))) {
+          throw new Error(`stale housekeeping runtime path; inspect ${lock} before restarting`);
+        }
+        if (owner.script !== script || JSON.stringify(owner.record_cli) !== JSON.stringify(recordCLI)) {
+          throw new Error(`housekeeping lock belongs to a different runtime; inspect ${lock} before restarting`);
+        }
+        try { process.kill(owner.pid, 0); log({ action: 'already-running', pid: owner.pid, state_dir: stateDir }); return; }
+        catch (error) { if (error.code !== 'ESRCH') throw error; }
+        if (!opt.resume) throw new Error(`stale housekeeping lock for pid ${owner.pid}; inspect ${lock} before removing it`);
+        // Only the validated matching runtime with a confirmed dead owner is recoverable.
+        fs.rmSync(lock, { recursive: true });
+        log({ action: 'recovered-dead-owner', pid: owner.pid, state_dir: stateDir });
       }
-      if ([owner.script, ...owner.record_cli].some((file) => typeof file !== 'string' || !fs.existsSync(file))) {
-        throw new Error(`stale housekeeping runtime path; inspect ${lock} before restarting`);
-      }
-      if (owner.script !== script || JSON.stringify(owner.record_cli) !== JSON.stringify(recordCLI)) {
-        throw new Error(`housekeeping lock belongs to a different runtime; inspect ${lock} before restarting`);
-      }
-      try { process.kill(owner.pid, 0); log({ action: 'already-running', pid: owner.pid, state_dir: stateDir }); return; }
-      catch (error) { if (error.code !== 'ESRCH') throw error; }
-      throw new Error(`stale housekeeping lock for pid ${owner.pid}; inspect ${lock} before removing it`);
-    }
-    const args = ['--cwd', cwd, '--org', project.org, '--config', configFile, '--state-dir', stateDir,
-      '--main', opt.main ?? project.main, '--herdr', opt.herdr,
-      ...(opt['org-cli'] ? ['--org-cli', recordCLI[0]] : [])];
-    const output = fs.openSync(path.join(stateDir, 'schedule.log'), 'a');
-    const child = spawn(process.execPath, [script, ...args, '--loop'], {
-      cwd, detached: true, stdio: ['ignore', output, output, 'ipc'],
-      // A detached timer owns no pane/tab. Inheriting its first worker's tab
-      // would permanently exempt that worker after it finishes.
-      env: { ...process.env, HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' },
-    });
-    fs.closeSync(output);
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { child.disconnect(); child.unref(); reject(new Error('schedule startup unconfirmed; inspect schedule.log before retrying')); }, loadTimeout(5000));
-      child.once('message', (message) => {
-        clearTimeout(timer); child.disconnect(); child.unref();
-        if (message?.ready) { log({ action: 'started', pid: child.pid, state_dir: stateDir }); resolve(); }
-        else reject(new Error('schedule startup failed'));
+      const args = ['--cwd', cwd, '--org', project.org, '--config', configFile, '--state-dir', stateDir,
+        '--main', opt.main ?? project.main, '--herdr', opt.herdr,
+        ...(opt['org-cli'] ? ['--org-cli', recordCLI[0]] : [])];
+      const output = fs.openSync(path.join(stateDir, 'schedule.log'), 'a');
+      const child = spawn(process.execPath, [script, ...args, '--loop'], {
+        cwd, detached: true, stdio: ['ignore', output, output, 'ipc'],
+        // A detached timer owns no pane/tab. Inheriting its first worker's tab
+        // would permanently exempt that worker after it finishes.
+        env: { ...process.env, HERDR_PANE_ID: '', HERDR_TAB_ID: '', HERDR_WORKSPACE_ID: '' },
       });
-      child.once('error', (error) => { clearTimeout(timer); reject(error); });
-      child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`schedule exited ${code}; inspect schedule.log`)); });
-    });
-    return;
+      fs.closeSync(output);
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { child.disconnect(); child.unref(); reject(new Error('schedule startup unconfirmed; inspect schedule.log before retrying')); }, loadTimeout(5000));
+        child.once('message', (message) => {
+          clearTimeout(timer); child.disconnect(); child.unref();
+          if (message?.ready) { log({ action: 'started', pid: child.pid, state_dir: stateDir }); resolve(); }
+          else reject(new Error('schedule startup failed'));
+        });
+        child.once('error', (error) => { clearTimeout(timer); reject(error); });
+        child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`schedule exited ${code}; inspect schedule.log`)); });
+      });
+      return;
+    } finally { releaseStart(); }
   }
   fs.mkdirSync(lock); // Fail closed on overlap or an unrecovered crash.
   fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, cwd, org: project.org, config: configFile,

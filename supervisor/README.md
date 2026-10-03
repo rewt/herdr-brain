@@ -89,14 +89,16 @@ are lost, even when the native chat/session id changes. Record paths are retaine
 in the receipt; discovery in the restored environment cannot select another record.
 This is a launch binding, separate from display-only session metadata.
 
-This repository wires the persistent hook in `.claude/settings.json` alongside
-the canary hook, and in `.codex/hooks.json`. Adapters reuse those hooks when they
-cover all four sources, avoiding a second entry from launch arguments. Projects
-without a persistent native hook still get the adapter hook for that launched
-process, but a direct native restore that loses launch arguments requires a
-project hook as well. For both Claude and Codex, a restored session with no adapter
-environment uses the durable pane receipt through the project hook. Outside Herdr,
-resume without a pane id or adapter bindings cannot recognize a supervisor.
+This repository wires Claude's persistent hook in `.claude/settings.json` alongside
+the canary hook. The Claude adapter reuses it when it covers all four sources,
+avoiding a second entry from launch arguments. Codex receives its hook through
+the supervisor adapter's `hooks.SessionStart` launch argument; workers receive none.
+The repository must not track `.codex/hooks.json`: its interactive project-hook
+trust dialog stops unattended workers before they receive their task. Projects
+without a persistent native hook get the adapter hook for that launched process;
+a direct native restore that loses launch arguments requires manual entry.
+When a hook runs without adapter environment, it uses the durable pane receipt.
+Outside Herdr, resume without a pane id or adapter bindings cannot recognize a supervisor.
 Previously launched, unmarked panes need one explicit supervisor adapter launch
 to create the receipt. An agent name or pane label never grants the role. Worker
 roles and `MONITOR_ENTRY_BYPASS=1` take precedence over receipts; explicitly

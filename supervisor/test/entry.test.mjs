@@ -39,6 +39,22 @@ function fixture(t) {
   return { root: scratch, repo, org, project, binding, record, git, start };
 }
 const load = () => import('../entry.mjs');
+function codexLaunchHook(context) {
+  const args = sessionHookArguments('codex', context, root);
+  assert.equal(args.length, 2);
+  assert.equal(args[0], '-c');
+  assert.match(args[1], /^hooks\.SessionStart=/);
+  const command = args[1].match(/command=("(?:[^"\\]|\\.)*")/);
+  assert.ok(command, 'launch hook must supply a command');
+  return { config: args[1], command: JSON.parse(command[1]) };
+}
+
+test('repository does not track a Codex project hook that can interrupt unattended workers', () => {
+  assert.equal(good(exec('git', ['ls-files', '--', '.codex/hooks.json'], root)), '',
+    'Codex project hooks require interactive trust before an unattended worker receives its task');
+  assert.equal(fs.existsSync(path.join(root, '.codex/hooks.json')), false);
+});
+
 test('durable supervisor pane binding survives native restore, clear and compact without adapter env', t => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
@@ -48,8 +64,9 @@ test('durable supervisor pane binding survives native restore, clear and compact
   const hook = path.join(root, 'supervisor/session-start.mjs');
   for (const source of ['resume', 'clear', 'compact']) {
     for (const kind of ['claude', 'codex']) {
-      const config = JSON.parse(fs.readFileSync(path.join(root, kind === 'claude' ? '.claude/settings.json' : '.codex/hooks.json')));
-      const command = config.hooks.SessionStart.flatMap(g => g.hooks).find(h => h.command.includes('session-start.mjs')).command;
+      const command = kind === 'codex' ? codexLaunchHook({ role: 'supervisor', canonical: root }).command
+        : JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json'))).hooks.SessionStart
+          .flatMap(g => g.hooks).find(h => h.command.includes('session-start.mjs')).command;
       const r = exec('/bin/sh', ['-c', command], f.repo, { HERDR_PANE_ID: 'wHD:pR', CLAUDE_PROJECT_DIR: f.repo },
         JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: `new-${source}` }));
       good(r); assert.match(r.stdout, /Supervisor cold start/, `${kind} ${source}`);
@@ -68,15 +85,14 @@ test('durable supervisor pane binding survives native restore, clear and compact
   good(revoked); assert.doesNotMatch(revoked.stdout, /Supervisor cold start/);
 });
 
-for (const kind of ['claude', 'codex']) test(`${kind} adapter reuses the project SessionStart entry exactly once`, t => {
-  const f = fixture(t), directory = path.join(f.repo, `.${kind}`);
+test('claude adapter reuses the project SessionStart entry exactly once', t => {
+  const f = fixture(t), directory = path.join(f.repo, '.claude');
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
   fs.mkdirSync(directory);
-  const name = kind === 'claude' ? 'settings.json' : 'hooks.json';
-  const project = JSON.parse(fs.readFileSync(path.join(root, `.${kind}/${name}`)));
-  fs.writeFileSync(path.join(directory, name), JSON.stringify(project));
+  const project = JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json')));
+  fs.writeFileSync(path.join(directory, 'settings.json'), JSON.stringify(project));
   const context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
-  assert.deepEqual(sessionHookArguments(kind, context, root), [], 'project hook must not gain a second adapter hook');
+  assert.deepEqual(sessionHookArguments('claude', context, root), [], 'project hook must not gain a second adapter hook');
   for (const source of ['startup', 'resume', 'clear', 'compact']) {
     const hooks = project.hooks.SessionStart.filter(g => !g.matcher || new RegExp(g.matcher).test(source))
       .flatMap(g => g.hooks).filter(h => h.command.includes('session-start.mjs'));
@@ -85,6 +101,22 @@ for (const kind of ['claude', 'codex']) test(`${kind} adapter reuses the project
       { ...f.binding, CLAUDE_PROJECT_DIR: root, MONITOR_SUPERVISOR_ENTRY: path.join(root, 'supervisor/session-start.mjs') },
       JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: 'single-entry' }));
     // Paused housekeeping keeps this integration test entirely foreground.
+    good(r); assert.equal((r.stdout.match(/Supervisor cold start/g) ?? []).length, 1);
+    assert.doesNotMatch(r.stdout, /session may continue/);
+  }
+});
+
+test('codex supervisor adapter injects SessionStart without a project hook', t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+  const context = { role: 'supervisor', canonical: root };
+  const hook = codexLaunchHook(context);
+  assert.deepEqual(sessionHookArguments('codex', { ...context, role: 'worker' }, root), []);
+  const matcher = JSON.parse(hook.config.match(/matcher=("(?:[^"\\]|\\.)*")/)[1]);
+  for (const source of ['startup', 'resume', 'clear', 'compact']) {
+    assert.ok(new RegExp(matcher).test(source));
+    const r = exec('/bin/sh', ['-c', hook.command], f.repo, f.binding,
+      JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source, session_id: 'adapter-entry' }));
     good(r); assert.equal((r.stdout.match(/Supervisor cold start/g) ?? []).length, 1);
     assert.doesNotMatch(r.stdout, /session may continue/);
   }
@@ -198,16 +230,15 @@ test('failed cold start, housekeeping and watch print reasons and allow later re
   assert.match(output.join(''), /brief.*fixture failure/s); assert.match(output.join(''), /housekeeping.*fixture failure/s); assert.match(output.join(''), /watch.*fixture failure/s);
 });
 
-for (const source of ['startup', 'resume', 'clear', 'compact']) test(`native hooks deliver the same entry on ${source}`, t => {
+for (const source of ['startup', 'resume', 'clear', 'compact']) test(`Claude project hook delivers supervisor entry on ${source}`, t => {
   const f = fixture(t); fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  for (const config of [JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json'))), JSON.parse(fs.readFileSync(path.join(root, '.codex/hooks.json')))]) {
-    const hook = config.hooks.SessionStart.flatMap(g => !g.matcher || new RegExp(g.matcher).test(source) ? g.hooks : []).find(h => h.command.includes('session-start'));
-    assert.ok(hook, `no supervisor hook for ${source}`);
-    const input = JSON.stringify({ hook_event_name: 'SessionStart', cwd: f.repo, source, session_id: 'test' });
-    const env = { ...f.binding, CLAUDE_PROJECT_DIR: root, MONITOR_SUPERVISOR_ENTRY: path.join(root, 'supervisor/session-start.mjs') };
-    // Project hook command is evaluated from this repository, payload still binds the actual session checkout.
-    const r = exec('/bin/sh', ['-c', hook.command], root, env, input); good(r); assert.match(r.stdout, /Supervisor cold start/);
-  }
+  const config = JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json')));
+  const hook = config.hooks.SessionStart.flatMap(g => !g.matcher || new RegExp(g.matcher).test(source) ? g.hooks : []).find(h => h.command.includes('session-start'));
+  assert.ok(hook, `no supervisor hook for ${source}`);
+  const input = JSON.stringify({ hook_event_name: 'SessionStart', cwd: f.repo, source, session_id: 'test' });
+  const env = { ...f.binding, CLAUDE_PROJECT_DIR: root, MONITOR_SUPERVISOR_ENTRY: path.join(root, 'supervisor/session-start.mjs') };
+  // Project hook command is evaluated from this repository, payload still binds the actual session checkout.
+  const r = exec('/bin/sh', ['-c', hook.command], root, env, input); good(r); assert.match(r.stdout, /Supervisor cold start/);
 });
 
 for (const variant of ['unmarked', 'worker', 'lane', 'foreign', 'bad-input', 'missing-record', 'worker-bypass']) test(`hook skips or explains ${variant} without blocking startup`, t => {

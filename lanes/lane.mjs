@@ -2166,7 +2166,10 @@ function check(args) {
   if (git(['rev-parse', 'HEAD']) !== head || git(['branch', '--show-current']) !== branch) fail('worktree branch or lane tip changed during preparation');
   let gate;
   try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
-  catch (error) { fail(error.message); }
+  catch (error) {
+    if (error.exitCode === 75) process.exit(75); // validateTree already emitted its one coded line.
+    fail(error.message);
+  }
   const directory = join(REPO, ".lane");
   const path = join(directory, "gate.json");
   writeAgentFileAtomic(path, `${JSON.stringify(gate, null, 2)}\n`);
@@ -2242,7 +2245,10 @@ function promoteLocked(topic, root, options) {
   const validatedHead = git(["rev-parse", branch]);
   let gate;
   try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
-  catch (error) { fail(error.message); }
+  catch (error) {
+    if (error.exitCode === 75) process.exit(75);
+    fail(error.message);
+  }
   // Promotion must also work in a project that has never run lane check and
   // does not ignore .lane/. Its authoritative receipt already lives in Git.
   if (tryGit(['check-ignore', '--quiet', '.lane/gate.json'], { cwd: path, silent: true }) !== undefined) {

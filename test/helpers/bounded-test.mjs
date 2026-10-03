@@ -8,6 +8,11 @@ import { offlineHerdr } from './offline-herdr.mjs';
 import { commandAllowance } from './command-allowance.mjs';
 
 offlineHerdr();
+// Fixture promotions/releases never contend with the machine's real slot or
+// another test file. Every descendant inherits this test file's temporary slot.
+process.env.MONITOR_TEST_SLOT_PATH = `${process.env.HERDR_TEST_OFFLINE_ROOT}/test-slot-${process.pid}.lock`;
+process.env.MONITOR_TEST_SLOT_COMPAT_PATH = process.env.MONITOR_TEST_SLOT_PATH;
+for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_WAIT_SECONDS', 'BCH_CLOAK_TEST_SLOT_WAIT_SECONDS']) delete process.env[key];
 
 export const TEST_TIMEOUT = 60_000;
 export const COMMAND_TIMEOUT = 15_000;

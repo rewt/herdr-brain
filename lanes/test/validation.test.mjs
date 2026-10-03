@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { processStart } from '../../test-slot/lock-support.mjs';
 import { environmentFingerprint, resolveValidation, validateValidation, validationEnvironment } from '../validation.mjs';
 
 const cli = fileURLToPath(new URL('../lane.mjs', import.meta.url));
@@ -158,4 +159,49 @@ test('overlapping checks serialize evidence without running the same command twi
   } finally { fs.writeFileSync(release, 'finish'); }
   const result = await done; assert.equal(result.code, 0, result.stderr);
   assert.match(f.good(f.lane(['check'])), /REUSE/);
+});
+
+test('promotion checks in different projects serialize and a nested command uses the held slot', { timeout: 30000 }, async t => {
+  const first = fixture(t, { promotion: 'node block.cjs' });
+  const second = fixture(t, { promotion: 'node check.cjs second' });
+  const lock = path.join(first.root, 'shared.lock'), ready = path.join(first.root, 'ready'), release = path.join(first.root, 'release');
+  const slotCLI = fileURLToPath(new URL('../../test-slot/test-slot.mjs', import.meta.url));
+  fs.writeFileSync(path.join(first.workspace, 'block.cjs'), `const fs=require('fs');const r=require('child_process').spawnSync(process.execPath,[${JSON.stringify(slotCLI)},'run','nested','--',process.execPath,'-e',''],{env:process.env});if(r.status!==0)process.exit(9);fs.writeFileSync(${JSON.stringify(ready)},'nested passed');const deadline=Date.now()+10000;while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);if(!fs.existsSync(${JSON.stringify(release)}))process.exit(8);`);
+  first.git(['add', 'block.cjs'], first.workspace); first.git(['commit', '-qm', 'Bounded nested promotion gate'], first.workspace);
+  for (const f of [first, second]) Object.assign(f.env, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, MONITOR_TEST_SLOT_WAIT_SECONDS: '10' });
+  const a = spawnChild(t, process.execPath, [cli, 'check', '--tier', 'promotion'], { cwd: first.workspace, env: first.env });
+  const aDone = waitForExit(a);
+  const deadline = Date.now() + 5000;
+  while (!fs.existsSync(ready) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(fs.existsSync(ready), 'first check completed its nested command');
+  const b = spawnChild(t, process.execPath, [cli, 'check', '--tier', 'promotion'], { cwd: second.workspace, env: second.env });
+  const bDone = waitForExit(b);
+  try {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.deepEqual(second.count(), [], 'second project cannot start its tests while the first holds');
+    assert.equal(JSON.parse(fs.readFileSync(lock, 'utf8')).label, `promotion ${first.workspace}`);
+  } finally { fs.writeFileSync(release, 'finish'); }
+  for (const result of await Promise.all([aDone, bDone])) assert.equal(result.code, 0, result.stderr + result.stdout);
+  assert.deepEqual(second.count(), ['second']);
+  assert.equal(fs.existsSync(lock), false);
+});
+
+test('bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt', { timeout: 20000 }, async t => {
+  const f = fixture(t, { promotion: 'node check.cjs forbidden', fast: 'node check.cjs fast' });
+  const lock = path.join(f.root, 'bch-cloak-test-slot.lock');
+  const holder = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)'], { env: f.env });
+  // Same on-disk schema and UTC/C start identity as the existing bch-cloak slot.
+  fs.writeFileSync(lock, JSON.stringify({ pid: holder.pid, processStart: processStart(holder.pid), pgid: null, groupStart: null,
+    token: 'bch-holder', label: 'bch-cloak full gate', cwd: '/other-project', acquiredAt: new Date().toISOString() }));
+  const env = { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, MONITOR_TEST_SLOT_WAIT_SECONDS: '0', MONITOR_TEST_SLOT_TOKEN: '', BCH_CLOAK_TEST_SLOT_TOKEN: '' };
+  const result = f.lane(['check', '--tier', 'promotion'], f.workspace, env);
+  assert.equal(result.status, 75, result.stderr + result.stdout);
+  assert.match(result.stderr, /^TEST_SLOT_HELD:.*bch-cloak full gate/m);
+  assert.equal((result.stderr.match(/TEST_SLOT_HELD:/g) ?? []).length, 1);
+  assert.deepEqual(f.count(), []);
+  assert.equal(fs.existsSync(path.join(f.workspace, '.lane/gate.json')), false);
+  assert.deepEqual(fs.readdirSync(path.join(f.repo, '.git/lane-validation')).filter(name => name.endsWith('.json')), []);
+  f.good(f.lane(['check'], f.workspace, env)); // Fast checks remain available.
+  assert.deepEqual(f.count(), ['fast']);
+  holder.kill('SIGTERM'); await waitForExit(holder);
 });

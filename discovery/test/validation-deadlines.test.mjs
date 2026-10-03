@@ -36,7 +36,7 @@ test('declared promotion outlives fast owner, wrapper and client bounds with rea
   // Execute the same production stack at short wall-clock bounds. Only these
   // numeric policy constants change; sandbox construction and the native owner
   // (including lifetime markers and descendant sweeps) remain real.
-  for (const directory of ['bin', 'lib', 'lanes', 'promote', 'settle', 'housekeeping', 'discovery', 'dispatch', 'watch']) {
+  for (const directory of ['bin', 'lib', 'lanes', 'promote', 'settle', 'housekeeping', 'discovery', 'dispatch', 'watch', 'test-slot']) {
     fs.cpSync(path.join(product, directory), path.join(source, directory), { recursive: true });
   }
   const policy = path.join(source, 'discovery/deadlines.mjs');

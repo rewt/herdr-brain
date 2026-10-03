@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { processStart } from '../../test-slot/lock-support.mjs';
 import { releaseOnce, quietPoint } from '../release.mjs';
 import { releaseSettings, RELEASE_DEFAULTS } from '../config.mjs';
 import { gitProject, ignoreRuntime } from '../../lib/project.mjs';
@@ -385,4 +387,25 @@ test('a moved candidate tag cannot reuse its green evidence', t => {
   const changed = f.git(['commit-tree', c.tree, '-m', 'Different candidate identity']);
   f.git(['tag', '-f', c.tag, changed]);
   assert.throws(() => f.attempt(), /tag moved/); assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
+});
+
+
+test('a held host slot defers release before cutting or claiming a candidate', async t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] });
+  const lock = path.join(f.root, 'host-slot.lock');
+  const processHolder = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)'], { env: f.env });
+  const holder = { pid: processHolder.pid, processStart: processStart(processHolder.pid), pgid: null, groupStart: null,
+    token: 'bch-slot', label: 'bch-cloak gate', cwd: '/other-project', acquiredAt: new Date().toISOString() };
+  fs.writeFileSync(lock, JSON.stringify(holder));
+  Object.assign(f.env, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, MONITOR_TEST_SLOT_WAIT_SECONDS: '0', MONITOR_TEST_SLOT_TOKEN: '', BCH_CLOAK_TEST_SLOT_TOKEN: '' });
+  const refused = f.attempt({ tag: 'rc-after-slot' });
+  assert.equal(refused.result, 'deferred'); assert.equal(refused.exit_code, 75); assert.match(refused.reason, /^TEST_SLOT_HELD:/);
+  assert.equal(fs.existsSync(f.count), false);
+  assert.equal(f.exec('git', ['show-ref', '--verify', '--quiet', 'refs/tags/rc-after-slot']).status, 1);
+  assert.deepEqual(f.record(['releases', '--json']).candidates, []);
+  fs.rmSync(lock);
+  const result = f.attempt({ tag: 'rc-after-slot' });
+  assert.equal(result.result, 'awaiting-operator');
+  assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
+  processHolder.kill('SIGTERM'); await waitForExit(processHolder);
 });

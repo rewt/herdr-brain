@@ -22,7 +22,7 @@ function fixture(t) {
   });
   const repo = path.join(root, 'source'), home = path.join(root, 'user'), nativeBin = path.join(root, 'native');
   for (const dir of [repo, home, nativeBin]) fs.mkdirSync(dir);
-  for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'supervisor']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
+  for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'test-slot', 'supervisor']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
   fs.copyFileSync(path.join(source, 'herdr-plugin.toml'), path.join(repo, 'herdr-plugin.toml'));
   const native = path.join(nativeBin, 'codex'), receipt = path.join(root, 'native.json');
   // Install before any lane open or entry launch, including direct node --test.

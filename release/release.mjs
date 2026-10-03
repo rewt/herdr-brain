@@ -10,6 +10,7 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { releaseSettings, releaseArgv } from './config.mjs';
+import { runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -33,12 +34,21 @@ export function quietPoint(project, config, { load = os.loadavg()[0], cpus = os.
   return null;
 }
 
-export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process.env, measurement } = {}) {
+export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process.env, measurement, slotHeld = false } = {}) {
   const project = gitProject(cwd);
   if (role !== 'supervisor' || project.checkout !== project.canonical) throw new Error('release requires --role supervisor from the canonical checkout; workers never run the release gate');
   let declaration = releaseSettings(project.canonical);
   const reason = quietPoint(project, declaration.config, measurement);
   if (reason) return { result: 'deferred', reason };
+  // Own the slot before cutting or claiming a candidate. A busy host leaves no
+  // once-only gate claim behind. The worker repeats all canonical-role checks.
+  if (!slotHeld) {
+    const result = runTestSlotSync(`release ${project.canonical}`, [process.execPath, SELF, '--held-once', JSON.stringify({ cwd: project.canonical, org: org ? path.resolve(org) : undefined, role, tag, measurement })],
+      { cwd: project.canonical, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, retryTimeout: false });
+    if (result.status === REFUSED_EXIT) return { result: 'deferred', exit_code: REFUSED_EXIT, reason: result.stderr.trim() };
+    if (result.error || result.status !== 0) throw new Error(result.error?.message || result.stderr || `release wrapper exited ${result.status}`);
+    return JSON.parse(result.stdout);
+  }
   const unlock = acquireLock(path.join(project.identity, 'lane-promote.lock'));
   try {
     // Queue/load/STOP are checked again under the same lock as every promotion.
@@ -120,7 +130,7 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
         if (git(project.canonical, ['rev-parse', `refs/tags/${tag}^{commit}`]) !== commit) throw new Error('candidate tag moved before release command');
         const fd = fs.openSync(log, 'a');
         let r;
-        try { r = spawnSync(command[0], command.slice(1), { cwd: snapshot, env: { ...recordEnv, ...extra }, stdio: ['ignore', fd, fd] }); }
+        try { r = runTestSlotSync(`release ${stage} ${candidate.id}`, command, { cwd: snapshot, env: { ...recordEnv, ...extra }, stdio: ['ignore', fd, fd], retryTimeout: stage === 'gate' }); }
         finally { fs.closeSync(fd); }
         gate.exit_code = r.status; gate.signal = r.signal;
         if (r.signal) gate.result = 'interrupted';
@@ -141,6 +151,11 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
 }
 
 export function main(argv = process.argv.slice(2)) {
+  if (argv[0] === '--held-once' && argv.length === 2) {
+    const options = JSON.parse(argv[1]);
+    process.stdout.write(JSON.stringify(releaseOnce({ ...options, slotHeld: true })) + '\n');
+    return;
+  }
   const { values: opt, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
     once: { type: 'boolean' }, tag: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'skip-live': { type: 'boolean' },
@@ -171,7 +186,11 @@ export function main(argv = process.argv.slice(2)) {
     for (const key of Object.keys(env)) if (/^(HERDR_MONITOR_|HERDR_(PANE|TAB|WORKSPACE|SOCKET)|ACCEPTANCE_|LANE_)/.test(key)) delete env[key];
     const result = releaseOnce({ cwd: repo, role: 'supervisor', tag: opt.tag, env });
     process.stdout.write(JSON.stringify({ ...result, preview: root, source_commit: commit, preview_max_load_per_cpu: settings.max_load_per_cpu }) + '\n');
-  } else process.stdout.write(JSON.stringify(releaseOnce({ cwd: opt.repo, org: opt.org, role: opt.role, tag: opt.tag })) + '\n');
+  } else {
+    const result = releaseOnce({ cwd: opt.repo, org: opt.org, role: opt.role, tag: opt.tag });
+    if (result.exit_code === REFUSED_EXIT) { process.stderr.write(result.reason + '\n'); process.exitCode = REFUSED_EXIT; }
+    else process.stdout.write(JSON.stringify(result) + '\n');
+  }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
   try { main(); } catch (error) { process.stderr.write(`release: ${error.message}\n`); process.exitCode = 1; }

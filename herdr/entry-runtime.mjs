@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { syncDirectory } from './entry-transaction.mjs';
 
-const modules = ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'supervisor', 'brain', 'contrib'];
+const modules = ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'test-slot', 'supervisor', 'brain', 'contrib'];
 const omit = new Set(['node_modules', 'test', 'tests', 'docs', '.git', '.org', '.lane']);
 // Data read by bundled commands belongs to the distribution even under docs/.
 const assets = ['package.json', 'lanes/docs/REVIEW_TEMPLATE.md'];

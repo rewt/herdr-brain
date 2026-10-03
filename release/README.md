@@ -140,3 +140,10 @@ decisions, record compatibility, discovery, supervisor and console integration.
 Its complete file list runs in three bounded phases to keep the copied-entry
 probes isolated and avoid one aggregate six-minute timeout. Fixture, file and
 suite watchdogs remain unchanged; failures stop validation immediately.
+
+The release cycle takes the [host test slot](../test-slot/README.md) before
+cutting or claiming a candidate, and keeps it through preparation and the gate.
+A busy or unknown holder defers release without consuming its once-only gate
+claim. Its CLI emits the coded refusal and exits 75. Only a recognized gate
+timeout under measured load retries once within the held slot; preparation,
+candidate creation, claim and interrupted-release recovery never replay.

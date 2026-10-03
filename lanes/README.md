@@ -211,3 +211,11 @@ messages. Use [the brief template](docs/BRIEF_TEMPLATE.md) when dispatching work
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
+
+Promotion validation takes the [host test slot](../test-slot/README.md), shared
+with other projects and bch-cloak. Set its paths and wait budget at the workspace
+boundary. Exit 75 is a slot refusal and supplies no failed validation receipt;
+retry or queue when the holder finishes. A recognized timeout under measured
+load retries once inside the same held slot before it counts as a failure.
+Slot tokens, paths and wait budgets are coordination fields excluded from the
+evidence fingerprint. Tests must not treat those values as validation inputs.

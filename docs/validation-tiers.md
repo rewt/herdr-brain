@@ -75,3 +75,11 @@ and runs the real entry, request client and native descendant owner, proving a
 longer declared command succeeds only with the promotion lifetime while late
 descendant writes remain impossible. Sandbox transport is scripted in that test;
 existing host-provider confinement tests retain their explicit applicability.
+
+Promotion commands now hold the [host test slot](../test-slot/README.md), including
+when invoked directly through `npm run test:promotion`. Release holds it before
+its candidate claim. `npm test` also runs the slot's isolated process-group
+regressions before its existing bounded core and cycle batches. Slot refusal is
+exit 75, not failed test evidence; recognized timeouts under measured load retry
+once in the held slot. Workspace paths and wait/token fields do not change the
+validation fingerprint.

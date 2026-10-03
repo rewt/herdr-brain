@@ -59,6 +59,7 @@ sessions and custom shells need their own entry transport; see the guide.
 | Review and integration | [Settle](settle/README.md), [Promote](promote/README.md) |
 | Supervisor / housekeeping | [Supervisor](supervisor/README.md), [Housekeeping](housekeeping/README.md) |
 | Console | [Modern console](console/modern/README.md) |
+| Host test slot | [Test slot](test-slot/README.md) |
 | Release batching and validation | [Release](release/README.md), [Acceptance](acceptance/README.md) |
 | Intent | [North star](docs/north-star.md), [Roadmap](docs/roadmap.md) |
 

@@ -267,7 +267,15 @@ async function main() {
       if (!['idle', 'done'].includes(agent.agent_status)) throw new Error('reuse worker must be idle or done');
     } else {
       job.stage = 'launching'; save();
-      job.worker = json(lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json']));
+      const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked']);
+      const launched = JSON.parse(output);
+      if (launched.result === 'stopped') {
+        job.stage = 'worker'; save();
+        const error = new Error(launched.reason);
+        error.code = 'DISPATCH_STOPPED';
+        throw error;
+      }
+      job.worker = json(output);
     }
     job.stage = 'record-worker'; save();
   }

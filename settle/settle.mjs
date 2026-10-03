@@ -334,9 +334,16 @@ function correctionStopped() {
   if (!fs.existsSync(stop)) return false;
   return stopCorrection('Supervisor STOP appeared before correction dispatch; no new worker launched');
 }
+function checkLaunchStop() {
+  if (fs.existsSync(path.join(job.repo, '.lane/supervisor/STOP'))) {
+    const error = new Error('Supervisor STOP appeared before review; no new worker launched');
+    error.code = 'SETTLE_STOPPED';
+    throw error;
+  }
+}
 function stopCorrection(reason) {
   const handoff = evidence('handoff.md', `# Settle stopped at ${job.stage}\n\n${reason}\n\nReview and correction evidence remain in ${journal}. Inspect the stop and any dispatch journal; after STOP is cleared, resume settle with --retry. Completed dispatch receipts may be adopted without a launch.\n`);
-  // Keep fix/dispatching resumable; a complete escalation would strand it.
+  // Keep review/fix/dispatching resumable; a complete escalation would strand it.
   job.result = { result: 'stopped', run: id, item: job.item, lane: job.lane, reason, journal, handoff };
   save(); print(); return true;
 }
@@ -381,13 +388,13 @@ function fix() {
     } else {
       if (correctionStopped()) return;
       output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), ['--retry', recovery.file, '--repo', job.repo, '--org', opt.org, '--from-run', id,
-        ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])]);
+        ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])], undefined, { stdio: ['ignore', 'pipe', 'inherit'] });
     }
   } else {
     if (correctionStopped()) return;
     job.stage = 'dispatching'; save();
     if (correctionStopped()) { job.stage = 'fix'; save(); return; }
-    output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), dispatchArgs());
+    output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), dispatchArgs(), undefined, { stdio: ['ignore', 'pipe', 'inherit'] });
   }
   const receipt = JSON.parse(output);
   if (receipt.result === 'stopped') return stopCorrection(receipt.reason);
@@ -542,7 +549,11 @@ function main() {
     unchanged(); job.round++; job.stage = 'review'; save();
   }
   if (job.stage === 'review') {
-    waitForMemory({ label: 'settle review' });
+    try { waitForMemory({ label: 'settle review', check: checkLaunchStop }); }
+    catch (error) {
+      if (error.code !== 'SETTLE_STOPPED') throw error;
+      return stopCorrection(error.message);
+    }
     unchanged();
     const stale = superseded(recordState());
     if (stale) return escalate(stale);
@@ -556,8 +567,15 @@ function main() {
     job.reviewRelative = `docs/reviews/${lane}/${job.head.slice(0, 7)}-r${job.round}.md`;
     job.stage = 'reviewing'; save();
     const r = call(cli('lane', '../lanes/lane.mjs'), ['review', lane, '--round', String(job.round), '--brief', supplement,
-      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout)]);
+      '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--memory-checked']);
     job.reviewLog = evidence(`review-r${job.round}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`); save();
+    if (!r.error && r.status === 0 && r.stdout?.trim().startsWith('{')) {
+      const receipt = JSON.parse(r.stdout);
+      if (receipt.result === 'stopped') {
+        job.stage = 'review'; save();
+        return stopCorrection(receipt.reason);
+      }
+    }
     const verdict = r.stdout?.trim();
     if (r.error || !['PASS', 'NEEDS-WORK', 'FAIL'].includes(verdict) || r.status !== (verdict === 'PASS' ? 0 : 1)) throw new Error(`independent review did not complete; inspect ${job.reviewLog}`);
     unchanged({ reviewOnly: true });

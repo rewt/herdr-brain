@@ -2445,6 +2445,29 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
 }
 
 const [command, topic, ...rest] = process.argv.slice(2);
+// Parent coordinators may have already waited before saving a launch stage.
+// Always check canonical STOP, including when that redundant wait is skipped.
+function launchMemoryGate(label, alreadyChecked = false) {
+  const reason = 'Supervisor STOP appeared before lane launch; no new worker launched';
+  const check = () => {
+    if (existsSync(join(REPO_ROOT, '.lane/supervisor/STOP'))) {
+      const error = new Error(reason);
+      error.code = 'LANE_STOPPED';
+      throw error;
+    }
+  };
+  try {
+    if (alreadyChecked) check();
+    else waitForMemory({ label, check });
+    return true;
+  } catch (error) {
+    if (error.code !== 'LANE_STOPPED') throw error;
+    process.stderr.write(`${label}: ${reason}\n`);
+    process.stdout.write(`${JSON.stringify({ result: 'stopped', reason })}\n`);
+    return false;
+  }
+}
+
 switch (command) {
   case "config":
     if (topic !== undefined) fail("usage: lane config");
@@ -2488,6 +2511,7 @@ switch (command) {
       else if (rest[i] === "--env") options.env.push(rest[(i += 1)]);
       else if (rest[i] === "--arg") options.args.push(rest[(i += 1)]);
       else if (rest[i] === "--json") options.silent = true;
+      else if (rest[i] === "--memory-checked") options.memoryChecked = true;
       else positional.push(rest[i]);
     }
     if (options.route !== undefined && (options.kind !== undefined || options.model !== undefined)) {
@@ -2506,15 +2530,15 @@ switch (command) {
         promptText = positional.join(" ");
       }
     }
-    waitForMemory({ label: 'lane dispatch' });
+    if (!launchMemoryGate('lane dispatch', options.memoryChecked)) break;
     const result = dispatch(topic, promptText, options);
     if (options.silent) process.stdout.write(`${JSON.stringify(result)}\n`);
     break;
   }
   case "review":
     try {
-      waitForMemory({ label: 'lane review' });
-      await review(topic, rest);
+      if (!launchMemoryGate('lane review', rest.includes('--memory-checked'))) break;
+      await review(topic, rest.filter(arg => arg !== '--memory-checked'));
     } catch {
       process.stderr.write(
         "lane review: unexpected failure; private evidence may have been retained and a public record " +

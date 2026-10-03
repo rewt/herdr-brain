@@ -144,5 +144,6 @@ Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
 
 Direct and queued promotions [wait for memory pressure to clear](../docs/reference/memory-gate.md)
-before validation and before the final fast-forward. Queued waits are visible in
-the job log; they do not produce a refused result.
+once before acquiring the promotion lock and starting validation, then finish
+the fast-forward without another memory wait. Queued waits are visible in the
+job log; they do not produce a refused result.

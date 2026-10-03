@@ -26,7 +26,16 @@ Dispatch checks the canonical project's `.lane/supervisor/STOP` at both waits,
 including after a clearing sample, and returns `result: stopped` without opening
 a lane or launching a worker at that stage. The request remains resumable with
 `--retry` after STOP clears. Settle retains its correction stage and returns its
-existing stopped handoff when dispatch stops during a wait.
+existing stopped handoff when dispatch stops during a wait. Correction dispatch
+stderr is inherited by settle so both new requests and retries show wait reasons
+as they happen. Settle review waits also check STOP and retain the review stage.
+
+Coordinated `lane dispatch` and `lane review` receive `--memory-checked`: the
+parent owns the visible wait before recording a launch attempt, so there is no
+second pressure sample after entering `launching` or `reviewing`. Both lane
+commands still check canonical STOP before launch and return a stopped receipt;
+the parent restores `worker` or `review` so ordinary retry remains safe. Direct
+lane commands keep their own visible memory wait and check STOP throughout it.
 
 The release `--once` operation returns `result: deferred` with the memory reason,
 as it already does for load. The supervisor retries at the next quiet point;

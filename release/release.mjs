@@ -11,6 +11,7 @@ import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { releaseSettings, releaseArgv } from './config.mjs';
 import { runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
+import { readMemory, memoryReason } from '../lib/memory.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -21,9 +22,11 @@ const invoke = (command, args, options = {}) => {
 };
 const git = (cwd, args) => invoke('git', ['-C', cwd, ...args]).trim();
 
-export function quietPoint(project, config, { load = os.loadavg()[0], cpus = os.availableParallelism() } = {}) {
+export function quietPoint(project, config, { load = os.loadavg()[0], cpus = os.availableParallelism(), memory = readMemory() } = {}) {
   if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) return 'supervisor STOP exists';
   if (!Number.isFinite(load) || !Number.isFinite(cpus) || cpus < 1 || load / cpus > config.max_load_per_cpu) return `load ${load} / ${cpus} CPUs exceeds ${config.max_load_per_cpu}`;
+  const pressure = memoryReason(memory);
+  if (pressure) return pressure;
   const queueFile = path.join(project.identity, 'promote/queue.json');
   if (fs.existsSync(queueFile)) {
     const queue = JSON.parse(fs.readFileSync(queueFile, 'utf8'));
@@ -38,7 +41,13 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
   const project = gitProject(cwd);
   if (role !== 'supervisor' || project.checkout !== project.canonical) throw new Error('release requires --role supervisor from the canonical checkout; workers never run the release gate');
   let declaration = releaseSettings(project.canonical);
-  const reason = quietPoint(project, declaration.config, measurement);
+  // A missing native probe is advisory, never an invented pressure signal.
+  const sample = () => {
+    const memory = measurement?.memory ?? readMemory();
+    if (memory.warning) process.stderr.write(`release: memory probe advisory: ${memory.warning}\n`);
+    return { ...measurement, memory };
+  };
+  const reason = quietPoint(project, declaration.config, sample());
   if (reason) return { result: 'deferred', reason };
   // Own the slot before cutting or claiming a candidate. A busy host leaves no
   // once-only gate claim behind. The worker repeats all canonical-role checks.
@@ -52,7 +61,7 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
   const unlock = acquireLock(path.join(project.identity, 'lane-promote.lock'));
   try {
     // Queue/load/STOP are checked again under the same lock as every promotion.
-    const lockedReason = quietPoint(project, declaration.config, measurement);
+    const lockedReason = quietPoint(project, declaration.config, sample());
     if (lockedReason && lockedReason !== 'promotion or release holds the project lock') return { result: 'deferred', reason: lockedReason };
     if (git(project.canonical, ['symbolic-ref', '--short', 'HEAD']) !== declaration.config.base) throw new Error('canonical checkout must be on the declared release base');
     if (git(project.canonical, ['status', '--porcelain', '--untracked-files=normal'])) throw new Error('release requires a clean canonical worktree');

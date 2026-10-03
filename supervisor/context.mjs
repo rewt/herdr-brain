@@ -12,12 +12,13 @@ import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { candidateRows } from '../lib/release-record.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { releaseSettings } from '../release/config.mjs';
+import { readMemory, memoryReason, processUsage } from '../lib/memory.mjs';
 
 export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', createHash('sha256').update(identity).digest('hex').slice(0, 20));
 const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const line = (value, length = 160) => sanitizeTerminal(String(value ?? '')).replace(/\s+/g, ' ').trim().slice(0, length);
 
-export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env } = {}) {
+export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), processes = processUsage() } = {}) {
   const project = gitProject(cwd);
   org = org ? path.resolve(org) : findOrgDir({ cwd, env });
   if (!org) throw new Error('no record discovered; enter through discovery first');
@@ -144,7 +145,8 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
     priorities, goals, running, reports, waiting, held, ready, decisions, next, recovery,
-    approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release, housekeeping };
+    approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release, housekeeping,
+    host: { memory, reason: memoryReason(memory), processes } };
 }
 
 export function renderColdStart(doc, { limit = 6 } = {}) {
@@ -160,6 +162,17 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
       if (rows.length > limit) out.push(`  +${rows.length - limit} more; use brief --json for the full list.`);
     }
   };
+  if (doc.host) {
+    const { memory, reason, processes } = doc.host;
+    const mib = value => value == null ? 'unknown' : `${Math.floor(value / 1024 ** 2)} MiB`;
+    out.push(`Host memory: available ${mib(memory.available)} / ${mib(memory.total)}; swap ${mib(memory.swap_used)}; ${reason ?? 'no measured pressure'}.`);
+    if (reason) out.push('Wait before dispatch, review, promotion or release; recheck when memory clears.');
+    if (memory.warning) out.push(`Memory probe advisory: ${line(memory.warning)}`);
+    if (processes.warning) out.push(`Process probe advisory: ${line(processes.warning)}`);
+    const processLine = p => `PID ${p.pid} parent ${p.ppid} · RSS ${mib(p.rss_bytes)} · CPU ${p.cpu_percent}% · ${line(p.command, 180)}`;
+    section('Largest memory consumers (read-only host evidence)', processes.by_memory, processLine);
+    section('Largest CPU consumers (read-only host evidence)', processes.by_cpu, processLine);
+  }
   section('Operator priorities', doc.priorities, (p) => `${p.rank}. ${p.id} ${line(p.title, 80)}`);
   section('Running (record; no live pane inference)', doc.running, (r) => `${r.run} ${r.item} ${line(r.title, 65)} · ${r.route ?? '?'} / ${r.harness ?? '?'} / ${r.model ?? '?'} / ${r.effort ?? '?'} · lane ${r.lane ?? '?'} · ${r.agent ?? '?'}${r.pane ? ` @${r.pane}` : ''}${r.checkout_missing ? ' · checkout missing; inspect record' : r.report_file_present ? ' · file awaits final watch notice' : ''}${r.repository_binding === 'unknown' ? ' · repository binding unknown' : ''}`);
   section('Reports and settlement', doc.reports.slice().reverse(), (r) => `${r.run} ${r.item} · ${r.outcome ?? 'file; stop unconfirmed'} · ${r.promotion ? `promotion ${r.promotion.phase}` : r.settlement?.result ?? (r.recorded ? 'no settle receipt' : 'awaits final watch notice')}${r.checkout_missing ? ' · checkout missing; inspect disposition' : ''} · ${line(r.headline ?? r.settlement?.reason ?? r.title, 100)}${r.settlement?.handoff ? ` · ${r.settlement.handoff}` : ''}`);

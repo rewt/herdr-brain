@@ -8,6 +8,29 @@ import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 const journal = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
+test('settle retains the review stage under simulated memory pressure and launches once after it clears', async t => {
+  const f = fixture(t), run = f.start();
+  f.commit('correct\n'); f.report(run);
+  const file = path.join(f.root, 'memory.json'), healthy = { available: 8 * 1024 ** 3, swap_used: 0 };
+  fs.writeFileSync(file, JSON.stringify({ ...healthy, swap_used: 1024 ** 2 }));
+  f.env.TEST_MEMORY_FILE = file;
+  const pending = f.concurrent(run);
+  let stderr = '';
+  pending.child.stderr.on('data', data => { stderr += data; });
+  try {
+    const end = Date.now() + 10000;
+    while (!stderr.includes('settle review: waiting') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.match(stderr, /settle review: waiting; memory pressure: swap/);
+    assert.equal(journal(f, run).stage, 'review');
+    assert.equal(f.calls().some(args => args[1] === 'start'), false);
+  } finally { fs.writeFileSync(file, JSON.stringify(healthy)); }
+  await pending.done;
+  assert.equal(pending.child.exitCode, 0, stderr);
+  assert.match(stderr, /cleared; proceeding/);
+  assert.equal(journal(f, run).result.result, 'promotable');
+  assert.equal(f.calls().filter(args => args[1] === 'start').length, 1);
+});
+
 test('fixture teardown waits for a concurrent child to finish writing before removing its directory', async (t) => {
   let release;
   t.after(() => fs.writeFileSync(release, 'teardown started'));

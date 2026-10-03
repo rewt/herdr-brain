@@ -12,6 +12,7 @@
 // (see README).
 
 import { loadTimeout } from '../lib/deadline.mjs';
+import { waitForMemory } from '../lib/memory.mjs';
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -2282,6 +2283,7 @@ function withPromotionLock(operation) {
 
 function promote(topic, options = {}) {
   const root = repositoryRoot({ requiredBy: "promote" });
+  waitForMemory({ label: 'lane promote' });
   return withPromotionLock(() => promoteLocked(topic, root, options));
 }
 
@@ -2347,6 +2349,7 @@ function promoteLocked(topic, root, options) {
     writeAgentFileAtomic(join(path, '.lane', 'gate.json'), JSON.stringify(gate, null, 2) + '\n');
   }
   if (gate.exit_code !== 0) fail(`validation failed (exit ${gate.exit_code}); nothing merged`);
+  waitForMemory({ label: 'lane fast-forward' });
   if (git(["rev-parse", MAIN]) !== mainHead) {
     fail(`${MAIN} moved during validation; re-run promote`);
   }
@@ -2502,12 +2505,14 @@ switch (command) {
         promptText = positional.join(" ");
       }
     }
+    waitForMemory({ label: 'lane dispatch' });
     const result = dispatch(topic, promptText, options);
     if (options.silent) process.stdout.write(`${JSON.stringify(result)}\n`);
     break;
   }
   case "review":
     try {
+      waitForMemory({ label: 'lane review' });
       await review(topic, rest);
     } catch {
       process.stderr.write(

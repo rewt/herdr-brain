@@ -147,6 +147,23 @@ function fixture(t, { realWatch = false, preload } = {}) {
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
+test('dispatch waits under simulated swap pressure before opening a lane and resumes the same request', async t => {
+  const f = fixture(t), memory = path.join(f.root, 'memory.json');
+  fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 1024 ** 2 }));
+  const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], { TEST_MEMORY_FILE: memory });
+  let stderr = '';
+  pending.child.stderr.on('data', data => { stderr += data; });
+  const end = Date.now() + 10000;
+  while (!stderr.includes('waiting; memory pressure') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.match(stderr, /swap in use 1 MiB/);
+  assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'open'), false);
+  const journal = f.jobs()[0]; assert.equal(JSON.parse(fs.readFileSync(journal)).stage, 'open');
+  fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+  await pending.done;
+  assert.equal(pending.child.exitCode, 0, stderr);
+  assert.match(stderr, /cleared; proceeding/);
+  assert.equal(f.jobs().length, 1); assert.equal(promptCalls(f).length, 1);
+});
 test('dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work', t => {
   const f = fixture(t);
   f.rec(['priorities', 'add', 'Adoption', '--why=Useful to people'], { ORG_ACTOR: 'human' });

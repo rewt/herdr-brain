@@ -17,7 +17,7 @@ A project without a working npm gate must declare its actual gate. No model,
 background loop, live pane operation, push or automatic ship is involved.
 Workers never invoke this cycle or its gate. Discovery names the gate at entry.
 
-The command defers under load, STOP, a promotion lock, a pending/current promotion
+The command defers under load, [memory pressure](../docs/reference/memory-gate.md), STOP, a promotion lock, a pending/current promotion
 queue, or an earlier undecided candidate. It requires a clean canonical checkout
 on the declared base. It holds the **same** Git-common-directory lock as direct
 and queued promotions and lane closure through snapshot, build and gate execution.

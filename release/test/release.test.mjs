@@ -35,10 +35,23 @@ function fixture(t, config) {
   const project = gitProject(repo); ignoreRuntime(project);
   const org = (args, extra) => ok(process.execPath, [path.join(ROOT, 'bin/org.mjs'), ...args], repo, extra);
   const record = (args, extra) => JSON.parse(org(args, extra));
-  const attempt = opts => releaseOnce({ cwd: repo, role: 'supervisor', env, measurement: { load: 0, cpus: 1 }, ...opts });
+  const attempt = opts => releaseOnce({ cwd: repo, role: 'supervisor', env, measurement: { load: 0, cpus: 1, memory: { total: 16 * 1024 ** 3, available: 8 * 1024 ** 3, swap_used: 0 } }, ...opts });
   const commit = (name = 'promotion') => { fs.writeFileSync(path.join(repo, name), name); git(['add', name]); git(['commit', '-qm', name]); return git(['rev-parse', 'HEAD']); };
   return { root, repo, env, exec, ok, git, project, org, record, attempt, commit, count };
 }
+
+test('release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared', t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] });
+  for (const memory of [{ total: 16 * 1024 ** 3, available: 8 * 1024 ** 3, swap_used: 1024 },
+    { total: 16 * 1024 ** 3, available: 128 * 1024 ** 2, swap_used: 0 }]) {
+    const r = f.attempt({ measurement: { load: 0, cpus: 1, memory } });
+    assert.equal(r.result, 'deferred'); assert.match(r.reason, /memory pressure/);
+    assert.equal(fs.existsSync(f.count), false); assert.equal(f.git(['tag']), '');
+    assert.equal(fs.existsSync(path.join(f.repo, '.org/events.jsonl')), false);
+  }
+  assert.equal(f.attempt().result, 'awaiting-operator');
+  assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
+});
 
 test('unconfigured release uses npm test, initializes its record and never executes ship', t => {
   const f = fixture(t);

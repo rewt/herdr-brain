@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { findOrgDir } from '../lib/store.mjs';
+import { waitForMemory } from '../lib/memory.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -186,6 +187,7 @@ async function main() {
     job.run = run.id; job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
+    waitForMemory({ label: 'dispatch' });
     if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : []), '--git-only']);
     job.workspace = fs.realpathSync(worktree());
     // prepare validates that the registered lane is owned by this repository.
@@ -242,6 +244,7 @@ async function main() {
     }
   }
   if (job.stage === 'worker') {
+    waitForMemory({ label: 'dispatch worker' });
     if (job.reuse) {
       const prior = json(record(['show', job.reuse, '--json']));
       if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');

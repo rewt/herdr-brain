@@ -4,6 +4,7 @@
 import childProcess, { ChildProcess } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import './memory-fixture.mjs';
 
 const runner = fileURLToPath(new URL('./run.mjs', import.meta.url));
 const policy = fileURLToPath(import.meta.url);

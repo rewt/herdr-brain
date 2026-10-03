@@ -87,6 +87,27 @@ function fixture(t) {
   return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, ownedProcess: (pid) => processes.get(pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
 
+test('queued promotion waits before validation under low-memory pressure and proceeds when cleared', async t => {
+  const f = fixture(t), workspace = f.lane('memory-wait'), before = f.git(['rev-parse', 'main']);
+  const file = path.join(f.root, 'memory.json');
+  const healthy = { available: 8 * 1024 ** 3, swap_used: 0 };
+  fs.writeFileSync(file, JSON.stringify({ ...healthy, available: 128 * 1024 ** 2 }));
+  f.env.TEST_MEMORY_FILE = file;
+  f.onCleanup(async () => { fs.writeFileSync(file, JSON.stringify(healthy)); });
+  const launched = f.launch(['memory-wait']);
+  const log = path.join(f.queue.directory, `${launched.jobs[0].id}.log`);
+  await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure'));
+  assert.match(fs.readFileSync(log, 'utf8'), /available memory 128 MiB/);
+  assert.doesNotMatch(fs.readFileSync(log, 'utf8'), /validating in/);
+  assert.equal(f.git(['rev-parse', 'main']), before); assert.ok(fs.existsSync(workspace));
+  assert.equal(f.results().length, 0);
+  fs.writeFileSync(file, JSON.stringify(healthy));
+  await until(() => f.results().length === 1);
+  assert.equal(f.results()[0].outcome, 'promoted', f.results()[0].reason);
+  assert.match(fs.readFileSync(log, 'utf8'), /cleared; proceeding/);
+  assert.equal(fs.existsSync(workspace), false);
+});
+
 test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
   const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
   const launched = f.launch(['first', 'second']); assert.ok(launched.worker.ready);

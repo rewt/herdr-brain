@@ -95,7 +95,7 @@ STOP appearing during review prevents correction dispatch and returns a resumabl
 and correction evidence are retained. Pending or uncertain promotions still need
 inspection rather than a retry.
 
-Promotions batch into releases. At a quiet point (low load, no current/pending
+Promotions batch into releases. At a quiet point (low load, no [memory pressure](../docs/reference/memory-gate.md), no current/pending
 promotion), run `release --role supervisor`. The release module reads the tracked
 project declaration or defaults, pins a clean integration commit with a candidate
 tag, builds a snapshot and runs the declared release gate once. Workers run fast

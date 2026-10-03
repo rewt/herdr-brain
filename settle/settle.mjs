@@ -15,6 +15,7 @@ import { laterRuns, releases } from '../lib/state.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, readRoutesConfig, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { validateDeskSettings } from './config.mjs';
 import { acquire } from './lock.mjs';
+import { waitForMemory } from '../lib/memory.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -538,6 +539,7 @@ function main() {
     unchanged(); job.round++; job.stage = 'review'; save();
   }
   if (job.stage === 'review') {
+    waitForMemory({ label: 'settle review' });
     unchanged();
     const stale = superseded(recordState());
     if (stale) return escalate(stale);

@@ -289,3 +289,6 @@ validation in project config, machine paths/accounts in machine installation.
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
+
+Cold-start briefs show [host memory pressure and process usage](../docs/reference/memory-gate.md),
+including the largest memory and CPU consumers, as read-only diagnostic evidence.

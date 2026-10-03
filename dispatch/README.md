@@ -137,3 +137,6 @@ path, supervisor target, route, brief/report paths and optional base.
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
+
+Dispatch also [waits for memory pressure to clear](../docs/reference/memory-gate.md)
+before opening a lane or launching a worker, retaining the same durable request.

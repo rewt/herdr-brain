@@ -12,6 +12,19 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 process.env.ORG_ACTOR = 'supervisor-test-reader';
 const invoke = (f, args, cwd = f.repo) => f.exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), ...args], cwd, { ORG_DIR: f.org });
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
+test('cold start surfaces host pressure and memory/CPU process evidence without changing record status', t => {
+  const f = fixture(t), before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const row = { pid: 321, ppid: 123, rss_bytes: 1024 ** 3, cpu_percent: 99, command: 'node test/pty-leaf.mjs' };
+  const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env,
+    memory: { total: 16 * 1024 ** 3, available: 8 * 1024 ** 3, swap_used: 1024 ** 2, warning: 'probe detail' },
+    processes: { by_memory: [row], by_cpu: [row] } });
+  assert.match(doc.host.reason, /swap in use/);
+  const text = renderColdStart(doc);
+  assert.match(text, /Wait before dispatch, review, promotion or release/);
+  assert.match(text, /PID 321 parent 123.*RSS 1024 MiB.*CPU 99%.*pty-leaf/);
+  assert.match(text, /Memory probe advisory: probe detail/);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+});
 
 test('handle returns capped findings and promotion records explicit acceptance with exact heads', { timeout: 45000 }, (t) => {
   const f = fixture(t, { actor: 'supervisor-cap-acceptance-test' }), run = f.start();

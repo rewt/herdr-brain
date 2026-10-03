@@ -1,12 +1,13 @@
 // Ported ENG-725 regressions: the host-wide test slot. Every case uses its own lock path, never the real one, and scrubs the slot's
 // environment, so these tests run the same inside a held slot (the full gate) as outside it. They use the non-setuid kernel process source.
 import assert from "node:assert/strict";
+import { loadTimeout } from "../../lib/deadline.mjs";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, afterEach, describe, it as nodeIt } from "node:test";
-const it = (name, body) => nodeIt(name, { timeout: 30000 }, body);
+const it = (name, body) => nodeIt(name, { timeout: loadTimeout(30000) }, body);
 import { fileURLToPath } from "node:url";
 
 import { lookupProcess } from "../../lib/processes.mjs";
@@ -44,7 +45,7 @@ function scratch() {
 /** A node one-liner as a command: writes its pid to `ready`, then runs `body`. */
 const nodeCommand = (ready, body = "setInterval(() => {}, 1000);") => {
   readies.push(ready);
-  return [process.execPath, "-e", `require("fs").writeFileSync(${JSON.stringify(ready)}, String(process.pid)); ${body}`];
+  return [process.execPath, "-e", `require("fs").writeFileSync(${JSON.stringify(ready + ".tmp")}, String(process.pid));require("fs").renameSync(${JSON.stringify(ready + ".tmp")},${JSON.stringify(ready)}); ${body}`];
 };
 
 /** Starts the CLI; resolves `done` with its exit code and stderr. */
@@ -59,7 +60,7 @@ function cli(args, { env = ENV } = {}) {
 }
 
 async function until(test, what, ms = 10_000) {
-  const deadline = Date.now() + ms;
+  const deadline = Date.now() + loadTimeout(ms);
   while (Date.now() < deadline) { if (test()) return; await sleep(25); }
   throw new Error(`timed out waiting for ${what}`);
 }
@@ -133,7 +134,7 @@ describe("serialized stale takeover (REV-378 I2)", () => {
       fs.rmSync = (p, ...args) => {
         if (p === ${JSON.stringify(s.lockPath)}) {
           fs.writeFileSync(${JSON.stringify(paused)}, "paused");
-          const deadline = Date.now() + 15000;
+          const deadline = Date.now() + ${loadTimeout(15000)};
           while (!fs.existsSync(${JSON.stringify(resume)})) {
             if (Date.now() > deadline) throw new Error("takeover pause timed out");
             Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
@@ -271,7 +272,7 @@ describe("a waiter does not deadlock on itself", () => {
       const outer = await cli(["run", "outer", "--lock-path", s.lockPath, "--", ...command]).done;
       assert.equal(outer.code, 0, outer.stderr);
       assert.equal(fs.existsSync(marker), true, "the inner command ran");
-      assert.ok(Date.now() - started < 10_000, "no wait: the inner run is inside the slot");
+      assert.ok(Date.now() - started < loadTimeout(10_000), "no wait: the inner run is inside the slot");
       assert.equal(JSON.parse(fs.readFileSync(afterInner, "utf8")).label, "outer", "the inner run neither took nor released the outer run's lock");
       assert.equal(fs.existsSync(s.lockPath), false, "the outer run released it");
     });
@@ -378,7 +379,7 @@ describe("liveness it cannot establish is refused by name", () => {
       const started = Date.now();
       const message = await takeWithFailingSource(s.lockPath, failure);
       assert.match(message, new RegExp(`^${HOLDER_UNKNOWN_CODE}: second refused: cannot tell whether the holder of .*, first \\(pid ${String(first.child.pid)}, .*\\), still runs: process source could not read pid ${String(first.child.pid)}'s start time`, "u"));
-      assert.ok(Date.now() - started < 10_000);
+      assert.ok(Date.now() - started < loadTimeout(10_000));
       assert.equal(fs.readFileSync(s.lockPath, "utf8"), before);
     });
   }

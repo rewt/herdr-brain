@@ -1,3 +1,4 @@
+import { loadTimeout } from '../lib/deadline.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -57,7 +58,7 @@ return child;};require('node:module').syncBuiltinESMExports();`);
     if (module === 'promote') args = [local('../promote/promote.mjs'), 'topic', '--repo', repo, '--org', root];
     if (module === 'housekeeping') args = [installRuntime(repo), '--start', '--cwd', repo, '--org', root,
       '--state-dir', path.join(root, 'state'), '--org-cli', '/usr/bin/true'];
-    const result = spawnSync(process.execPath, ['--require', preload, ...args], { cwd: repo, env, encoding: 'utf8', timeout: 15000 });
+    const result = spawnSync(process.execPath, ['--require', preload, ...args], { cwd: repo, env, encoding: 'utf8', timeout: loadTimeout(15000) });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(result.stdout, /123/);
     assert.equal(fs.existsSync(path.join(root, 'state/lock')), false, 'no real housekeeping loop was started');

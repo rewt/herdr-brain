@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
 import { fixture } from './fixture.mjs';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
@@ -107,9 +108,7 @@ const timer=setInterval(()=>{
  },100);
 },10);`);
   f.concurrent('teardown-proof', script);
-  const deadline = Date.now() + 5000;
-  while (!fs.existsSync(ready) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
-  assert.ok(fs.existsSync(ready), 'writer did not start');
+  await waitForFile(ready, text => text === "ready", { timeoutMs: 5000 });
   t.after(() => {
     try {
       assert.equal(fs.readFileSync(completed, 'utf8'), 'child finished before directory removal');
@@ -126,13 +125,12 @@ test('unconfigured project: report, independent claim finding, fresh fix run, re
   assert.notEqual(first.fix.run, run); assert.equal(f.show(first.fix.run).item, f.show(run).item);
   assert.equal(f.show(first.fix.run).workspace, f.workspace);
   assert.ok(f.show(run).report); assert.match(fs.readFileSync(first.review.path, 'utf8'), /Report claims correct/);
-  const inbox = path.join(f.org, 'supervisor/inbox.log'), queuedBy = Date.now() + 5000;
-  while (!fs.existsSync(inbox) && Date.now() < queuedBy) await new Promise((r) => setTimeout(r, 20));
+  const inbox = path.join(f.org, 'supervisor/inbox.log');
+  await waitForFile(inbox, text => text.endsWith('\n'), { timeoutMs: 5000 });
   assert.equal(readInbox(inbox)[0]?.state, 'pending', 'settle/dispatch correction notice is durable while the supervisor types');
   assert.ok(!f.calls().some((a) => a[1] === 'prompt' && a[3]?.includes(`[org-report] run=${first.fix.run} `)));
   fs.writeFileSync(path.join(f.root, 'supervisor-composer'), fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
-  const end = Date.now() + 8000;
-  while (!f.calls().some((a) => a[1] === 'prompt' && a[3]?.includes(`[org-report] run=${first.fix.run} `)) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+  await waitForChange([path.join(f.root, 'calls')], () => f.calls().some((a) => a[1] === 'prompt' && a[3]?.includes(`[org-report] run=${first.fix.run} `)), { timeoutMs: 8000 });
   assert.ok(f.calls().some((a) => a[3]?.includes(`[org-report] run=${first.fix.run} `)), 'real watch delivered correction report');
   const second = result(f.settle(first.fix.run)); assert.equal(second.result, 'promotable');
   assert.equal(second.review.verdict, 'PASS'); assert.equal(second.validation.executed, false);

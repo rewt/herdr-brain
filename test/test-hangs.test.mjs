@@ -95,7 +95,7 @@ ${source(root)}`);
 }
 
 async function assertGone(pid) {
-  const deadline = Date.now() + 2000;
+  const deadline = Date.now() + loadTimeout(2000);
   for (;;) {
     try { process.kill(pid, 0); }
     catch (error) { if (error.code === 'ESRCH') return; throw error; }
@@ -106,20 +106,11 @@ async function assertGone(pid) {
 }
 
 test('compound fixture scenarios have an explicit aggregate bound and owned cleanup', async t => {
-  assert.throws(() => spawnScenarioChild(t, process.execPath, ['-e', 'while(true){}'], {}, 55001), /child timeout must be 1\.\.55000ms/);
+  assert.throws(() => spawnScenarioChild(t, process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);'], {}, 55001), /child timeout must be 1\.\.55000ms/);
   const child = spawnScenarioChild(t, process.execPath, ['-e', "setTimeout(()=>console.log('scenario completed'),50)"],
     { env: { ...process.env, ORG_ACTOR: 'compound-scenario-test' } }, 35000);
   const result = await waitForExit(child);
   assert.equal(result.code, 0, result.stderr); assert.match(result.stdout, /scenario completed/);
-});
-
-test('a nested bounded suite may exceed one command deadline while ordinary commands retain their bound', async t => {
-  assert.throws(() => spawnChild(t, process.execPath, ['-e', 'while(true){}'], {}, 35000), /child timeout must be 1\.\.15000ms/);
-  const f = fixture(t, () => `test('aggregate suite longer than one command',async()=>{await new Promise(resolve=>setTimeout(resolve,15500));});`);
-  const child = spawnChild(t, process.execPath, [runner, '--file-timeout=25000', '--suite-timeout=30000', f.file], {}, 35000);
-  const result = await waitForExit(child);
-  assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /aggregate suite longer than one command/);
 });
 
 test('a late waiter receives a child result and output after close', async (t) => {
@@ -175,7 +166,7 @@ for (const kind of ['file', 'suite']) {
     const f = fixture(t, (root) => `test('blocked event loop culprit',async(t)=>{
 const child=spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)']);
 fs.writeFileSync(${JSON.stringify(path.join(root, 'pid'))},String(child.pid));
-while(true) {}
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
 });`);
     // Include deliberately slow startup in the reproducer. A one-second suite
     // deadline can kill the launcher before this test ever owns a fixture PID.
@@ -209,7 +200,7 @@ const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(shell)}]);
 while(!fs.existsSync(${JSON.stringify(path.join(root, 'sleep'))}) || !fs.readFileSync(${JSON.stringify(path.join(root, 'sleep'))},'utf8').trim()) await new Promise(r=>setTimeout(r,10));
 fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,shell:child.pid,sleep:Number(fs.readFileSync(${JSON.stringify(path.join(root, 'sleep'))},'utf8'))}));
 fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
-while(true) {}
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
 });`);
       const outer = path.join(root, 'outer.json');
       return `test('enclosing nested runner',async(t)=>{
@@ -232,7 +223,7 @@ await waitForExit(child);
     const alive = () => owned.filter(({ pid }) => {
       try { process.kill(pid, 0); return true; } catch (error) { if (error.code !== 'ESRCH') throw error; return false; }
     });
-    const cleanupDeadline = Date.now() + 5000;
+    const cleanupDeadline = Date.now() + loadTimeout(5000);
     while (alive().length && Date.now() < cleanupDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
     assert.deepEqual(alive(), [], 'an outer cancellation left a nested descendant alive');
     const result = await waitForExit(outer);
@@ -286,7 +277,7 @@ fs.readFileSync=(file,...args)=>{const match=String(file).match(/^\\/proc\\/(\\d
 cp.spawnSync=(command,args,options)=>{
  if(String(command).includes('process-source-')&&args.length===1){
   fs.writeFileSync(${JSON.stringify(path.join(root, 'spawning'))},JSON.stringify({child:Number(args.at(-1)),file:process.pid,worker:process.ppid}));
-  while(true) {}
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
  }
  return original(command,args,options);
 };

@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -23,7 +24,7 @@ function fixture(t, config) {
   const repo = path.join(root, 'project'); fs.mkdirSync(repo);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const env = { ...process.env, ORG_DIR: '', ORG_ACTOR: 'release-fixture', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', LANE_VALIDATE: undefined, LANE_CONFIG: undefined };
-  const exec = (cmd, args, cwd = repo, extra = {}) => spawnSync(cmd, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 12000 });
+  const exec = (cmd, args, cwd = repo, extra = {}) => spawnSync(cmd, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(12000) });
   const ok = (cmd, args, cwd = repo, extra) => { const r = exec(cmd, args, cwd, extra); assert.equal(r.status, 0, `${r.stderr}\n${r.stdout}`); return r.stdout.trim(); };
   const git = (args, cwd = repo) => ok('git', args, cwd);
   git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Release test']); git(['config', 'user.email', 'release@example.invalid']);

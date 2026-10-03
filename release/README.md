@@ -64,6 +64,9 @@ into the candidate's private `.release-npm-cache`, then runs `herdr/install.sh`
 with real `npm ci` in offline, build-only mode. It never installs machine entry.
 The retained `.release-build.json` names the candidate commit, both lockfile
 hashes, installed package counts and build command before acceptance starts.
+The gate first runs the offline release tier against the prepared candidate.
+Copied-product workflows and deliberate long-response regressions must pass
+before live acceptance starts; a failure stops the gate.
 The gate passes `--npm-cache` (that private copy) and, when configured, `--bch-cloak` to
 `acceptance/run.mjs`. `herdr/release.sh build` remains the operator's ship step;
 activation remains a separate operator action. The live harness belongs only

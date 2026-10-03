@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import assert from 'node:assert/strict';
@@ -33,7 +34,7 @@ test('installed supervisor entry in an untouched project satisfies the release c
   const entry = spawnSync(process.execPath, [path.join(root, 'discovery/adapters/codex.mjs'),
     '--repo', f.repo, '--binary', native, '--role', 'supervisor', '--policy-only',
     '--runtime-dir', f.options.runtimeDir, '--worktree-root', f.options.worktreeRoot],
-  { cwd: f.repo, env: { ...process.env, ORG_ACTOR: 'supervisor-entry-contract-test' }, encoding: 'utf8', timeout: 10000 });
+  { cwd: f.repo, env: { ...process.env, ORG_ACTOR: 'supervisor-entry-contract-test' }, encoding: 'utf8', timeout: loadTimeout(10000) });
   assert.equal(entry.status, 0, entry.stderr || entry.error?.message);
   assertSupervisorEntry(entry.stdout);
   assert.ok(fs.existsSync(path.join(f.repo, '.org/events.jsonl')), 'entry bootstrapped its record');

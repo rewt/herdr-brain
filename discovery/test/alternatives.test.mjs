@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -75,7 +76,7 @@ const server=net.createServer();server.on('error',()=>process.exit(0));server.li
   // outbound connection there instead of requiring a network syscall denial.
   const probe = path.basename(provider) === 'bwrap' ? script.slice(0, script.indexOf('const server='))
     + "const s=net.connect({host:'192.0.2.1',port:443});s.on('error',()=>process.exit(0));s.on('connect',()=>process.exit(7));setTimeout(()=>process.exit(0),500);" : script;
-  const r = spawnSync(sandbox.binary, [...sandbox.args, process.execPath, '-e', probe], { cwd: f.repo, encoding: 'utf8', timeout: 5000 });
+  const r = spawnSync(sandbox.binary, [...sandbox.args, process.execPath, '-e', probe], { cwd: f.repo, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(r.status, 0, r.stderr); assert.equal(fs.readFileSync(outside, 'utf8'), 'keep');
 });
 test('real filters remain functional through allocation, commit, check and fast-forward promotion', {
@@ -119,7 +120,7 @@ test('real main-mode alternative guard protects linked shared records and leaves
 for(const p of ${JSON.stringify([path.join(record, 'events'), path.join(alias, 'events'), path.join(f.repo, '.git/config')])})assert.throws(()=>fs.writeFileSync(p,'bad'));
 assert.throws(()=>fs.unlinkSync(${JSON.stringify(alias)}));
 fs.writeFileSync(${JSON.stringify(path.join(queue, 'request'))},'ok');fs.writeFileSync(${JSON.stringify(path.join(runtime, 'state'))},'ok');`;
-  const r = spawnSync(sandbox.binary, [...sandbox.args, process.execPath, '-e', script], { cwd: f.repo, encoding: 'utf8', timeout: 5000 });
+  const r = spawnSync(sandbox.binary, [...sandbox.args, process.execPath, '-e', script], { cwd: f.repo, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(r.status, 0, r.stderr);
 });
 

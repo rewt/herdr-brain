@@ -1,3 +1,4 @@
+import { loadTimeout } from '../lib/deadline.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -34,7 +35,7 @@ function fixture(t) {
   t.after(async () => {
     for (const child of children) killChild(child);
     await Promise.all([...children].map(waitForExit));
-    spawnSync('chmod', ['-R', 'u+w', root], { timeout: 5000 });
+    spawnSync('chmod', ['-R', 'u+w', root], { timeout: loadTimeout(5000) });
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
   const repo = path.join(root, 'source'), home = path.join(root, 'user'), nativeBin = path.join(root, 'native');
@@ -51,7 +52,7 @@ function fixture(t) {
     RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', MONITOR_INSTALL_BUILD_ONLY: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
     HERDR_ENV: '', HERDR_SOCKET_PATH: path.join(root, 'absent.sock'), HERDR_WORKSPACE_ID: '', HERDR_TAB_ID: '', HERDR_INTEGRATION_ID: '', HERDR_PANE_ID: '', HERDR_PLUGIN_ROOT: '', HERDR_PLUGIN_CONTEXT_JSON: '', MONITOR_RUNTIME_DIR: path.join(root, 'queue'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'), ENTRY_TEST_RECEIPT: receipt,
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
-  const run = (file, args, cwd = repo, extra = {}) => spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 20000 });
+  const run = (file, args, cwd = repo, extra = {}) => spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(20000) });
   const ok = (file, args, cwd, extra) => { const r = run(file, args, cwd, extra); assert.equal(r.status, 0, r.error?.message ?? r.stdout + r.stderr); return r.stdout; };
   const git = (...args) => ok('git', args);
   git('init', '-q', '-b', 'main'); git('config', 'user.name', 'Plugin Test'); git('config', 'user.email', 'plugin@example.invalid');
@@ -63,7 +64,7 @@ function fixture(t) {
 }
 
 async function waitUntil(check, label) {
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + loadTimeout(10000);
   while (!check()) {
     if (Date.now() > deadline) throw new Error(`timed out: ${label}`);
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -71,7 +72,7 @@ async function waitUntil(check, label) {
 }
 function installChild(t, f, preload, actor) {
   const child = spawnChild(t, process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo, '--snapshot'], {
-    cwd: f.repo, env: { ...f.env, ORG_ACTOR: `${f.env.ORG_ACTOR}-${actor}` }, timeout: 15000, killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: f.repo, env: { ...f.env, ORG_ACTOR: `${f.env.ORG_ACTOR}-${actor}` }, timeout: loadTimeout(15000), killSignal: 'SIGKILL', stdio: ['ignore', 'pipe', 'pipe'],
   });
   f.children.add(child);
   const ended = waitForExit(child).then(result => ({ status: result.code, output: result.stdout + result.stderr }));

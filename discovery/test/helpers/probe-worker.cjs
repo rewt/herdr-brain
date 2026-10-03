@@ -5,11 +5,12 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 
-module.exports = function () {
+module.exports = async function () {
   if (process.argv[2] === 'sandbox') return require('./lifetime.cjs')(process.argv.slice(2));
+  const { loadTimeout } = await import('../../../lib/deadline.mjs');
   const product = process.env.PROBE_PRODUCT;
   const invoke = (binary, args, cwd = process.cwd()) => {
-    const result = spawnSync(binary, args, { cwd, env: process.env, encoding: 'utf8', timeout: 15000, killSignal: 'SIGKILL' });
+    const result = spawnSync(binary, args, { cwd, env: process.env, encoding: 'utf8', timeout: loadTimeout(15000), killSignal: 'SIGKILL' });
     assert.ifError(result.error);
     return { ...result, output: result.stdout + result.stderr };
   };

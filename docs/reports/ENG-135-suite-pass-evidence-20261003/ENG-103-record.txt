@@ -1,0 +1,105 @@
+ENG-103  Test harness under heavy load: a stand-in worker's report timeout (cases 19-20 at load ~28) is reported as a product FAIL; timeouts caused by machine load should be harness PENDING with the load named, or the wait should scale with load, so a busy machine never fails a release
+status: done · role: engineer
+within: G-3 Herdr platform roadmap: standardize bch… → ARCH-8 Phase 3: bring bch-cloak's cycle over o…
+created: 2026-10-02 13:37 by supervisor-herdr
+closed: done 2026-10-03 10:49 by supervisor-herdr — Promoted to main at ab2ee50 (fast-forward from 3eb664a), promotion tier green after ENG-117 fixed the teardown flake. R-145 rebase accepted on direct check.
+acceptance:
+  - a timeout under measured heavy load is PENDING, not a product FAIL
+budget (advisory): runs 4/3 · children 0/4 · depth 2/3 · escalations 0/1
+
+runs:
+  R-123  codex · gpt-6.1-sol · high  started 2026-10-02 14:58 · reported done 2026-10-02 15:34
+    summary:
+      The release harness now records machine load and classifies report-wait and child-command timeouts under measured contention as harness PENDING with the load named. Normal-load report timeouts and product safety failures remain FAIL, and dependent cutover cases preserve the original classification. Offline regressions pass and a lane candidate passed all 27 release-gate cases; an earlier busy run retained one correctly labelled harness PENDING and no product failures.
+    learnings:
+      - Heavy load is a one-minute load average at or above available CPU capacity. All three load averages, CPU capacity, timestamps and the threshold are retained.
+      - Timeout decisions use the affected operation's samples, so contention in an earlier unrelated case cannot excuse a later normal-load timeout. The focus monitor spans the entire run.
+      - Sampling occurs every second while the event loop is free, on wait polls and before and after blocking child commands. There is no independent sampler during a blocking command.
+      - The project test runner supports a nine-minute suite limit and an eight-minute file limit. The default six-minute suite limit expired under this session's machine load without a reported assertion failure.
+    artifacts:
+      - Commit Classify release-gate timeouts using measured machine load
+      - Commit Give each release acceptance case its own record actor
+      - Commit Detect harness contention on small CPU hosts
+      - acceptance/load.mjs, acceptance/limits.mjs, acceptance/run.mjs and acceptance/test/load.test.mjs
+      - npm run test:acceptance passed all 89 tests before the additional single-CPU regression; the load suite subsequently passed all nine tests
+      - /private/tmp/eng103-acceptance-tests.log
+      - /private/tmp/eng103-load-tests.log
+      - /private/tmp/herdr-acceptance-to27YL/evidence/summary.json
+      - /private/tmp/herdr-acceptance-gr6K3Y/evidence/summary.json
+      - /private/tmp/eng103-release-gate.log and /private/tmp/eng103-release-gate-rerun.log
+      - Final lane validation runs npm test with supported longer bounds and the complete offline acceptance suite after this report is committed; its exact-head receipt is .lane/gate.json
+    report: /Users/rewt/development/rewt/.org/reports/R-123.md
+  R-127  codex · gpt-6.1-sol · high  started 2026-10-02 15:51 · reported done 2026-10-02 16:35
+    summary:
+      Fixed all three review findings with offline regressions: retry context preserves measured timeout evidence, delegated settle and supervisor cases use load-aware bounded commands and waits, and timeout words in successful child tests cannot conceal independent assertion failures. The post-change core suite passed with 724 passes and 11 skips; acceptance coverage passed, including all 16 new round-two tests. The single allowed skip-live pass finished with 22 PASS, zero FAIL and five PENDING, retaining measured contention and deliberate live-discovery skips. Full live acceptance was not run under the operator's updated policy.
+    learnings:
+      - Adding retry context must retain the original LoadTimeout instance and its operation-scoped samples; rebuilding from its message loses the measured classification.
+      - Delegated acceptance cases require measured fixture commands as well as measured report and queue waits; fixture cleanup must be registered before setup and awaited on failure.
+      - Typed process ETIMEDOUT establishes a child deadline. A timeout phrase in ordinary output does not; a failed TAP assertion takes precedence even if the child subsequently times out.
+      - Nested Node TAP subprocess tests must omit inherited NODE_TEST_CONTEXT to obtain an independent test runner and meaningful exit status.
+    artifacts:
+      - Commit Preserve measured timeouts throughout acceptance cases
+      - Commit Report harness timeout review fixes for R-127
+      - acceptance/commands.mjs, acceptance/limits.mjs, acceptance/run.mjs, acceptance/settle.mjs, acceptance/supervisor.mjs and acceptance/README.md
+      - acceptance/test/load-round2.test.mjs, acceptance/test/load.test.mjs and settle/test/fixture.mjs
+      - /private/tmp/eng103-r127-baseline.log
+      - /private/tmp/eng103-r127-post.log
+      - /private/tmp/eng103-r127-acceptance.log and /private/tmp/eng103-r127-targeted.log
+      - /private/tmp/eng103-r127-skip-live.log
+      - /private/tmp/herdr-acceptance-7kl5qJ/evidence/summary.json
+      - Final lane check runs npm run test:acceptance after the checked report is committed; its exact clean commit receipt is .lane/gate.json and its log is /private/tmp/eng103-r127-final-lane-check.log.
+    report: /Users/rewt/development/rewt/.org/reports/R-127.md
+  R-137  codex · gpt-6.1-sol · high  started 2026-10-02 19:55 · reported done 2026-10-02 22:44
+    summary:
+      Rebased the reviewed lane onto main and resolved the verification, settle fixture and acceptance runner conflicts while preserving both upstream lifecycle behavior and measured timeout classification. No additional implementation changes were made. The fast tier passed 140 tests; the single npm test invocation passed 661 core tests with 11 skips and all 114 cycle tests. Focused offline acceptance checks passed all 34 tests.
+    learnings:
+      - Early fixture cleanup must derive its inbox path from the already-created repository, because setup can fail before the later record-path binding is initialized.
+    artifacts:
+      - Rebased commit Classify release-gate timeouts using measured machine load
+      - Rebased commit Give each release acceptance case its own record actor
+      - Rebased commit Preserve measured timeouts throughout acceptance cases
+      - Commit Report harness-load rebase for R-137
+      - /private/tmp/eng103-r137-fast.log
+      - /private/tmp/eng103-r137-npm-test.log
+      - /private/tmp/eng103-r137-offline.log
+      - Final fast-tier lane check receipt .lane/gate.json; command output /private/tmp/eng103-r137-lane-check.log
+    report: /Users/rewt/development/rewt/.org/reports/R-137.md
+  R-145  codex · gpt-6.1-sol · high  started 2026-10-03 09:06 · open, started 6h ago
+
+history:
+  2026-10-02 13:37  added ENG-103 "Test harness under heavy load: a stand-in worker's report t…" under ARCH-8
+  2026-10-02 14:58  started R-123 on ENG-103 (codex · gpt-6.1-sol)
+  2026-10-02 14:58  note on R-123: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/4b17772c-f703-4…
+  2026-10-02 14:58  updated R-123: agent=lane-harness-load-a3c31c-007eb0, pane=w2CS:p3, worker_workspace=w2CS, terminal_id=term_65ce0f503745e1539
+  2026-10-02 14:58  note on R-123: Dispatch: worker lane-harness-load-a3c31c-007eb0 in w2CS:p3 recorded; prompt not sent
+  2026-10-02 14:58  updated R-123: watcher_pid=74912, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-123.watch.log
+  2026-10-02 14:58  note on R-123: Dispatch: watcher ready (pid 74912); prompt not sent
+  2026-10-02 14:58  note on R-123: Dispatch: prompt sent; worker lane-harness-load-a3c31c-007eb0 and watcher 74912 started
+  2026-10-02 15:34  R-123 reported done on ENG-103: The release harness now records machine load and classifies report-wait and child-command…
+  2026-10-02 15:34  reopened ENG-103: Report recorded; independent settle review pending
+  2026-10-02 15:51  started R-127 on ENG-103 (codex · gpt-6.1-sol)
+  2026-10-02 15:51  note on R-127: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/54a3bf79-18c6-4…
+  2026-10-02 15:51  updated R-127: agent=lane-harness-load-a3c31c-007eb0, pane=w2CS:p3, worker_workspace=w2CS, terminal_id=term_65ce0f503745e1539
+  2026-10-02 15:51  note on R-127: Dispatch: worker lane-harness-load-a3c31c-007eb0 in w2CS:p3 recorded; prompt not sent
+  2026-10-02 15:51  updated R-127: watcher_pid=4778, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-127.watch.log
+  2026-10-02 15:51  note on R-127: Dispatch: watcher ready (pid 4778); prompt not sent
+  2026-10-02 15:51  note on R-127: Dispatch: prompt sent; worker lane-harness-load-a3c31c-007eb0 and watcher 4778 started
+  2026-10-02 16:35  R-127 reported done on ENG-103: Fixed all three review findings with offline regressions: retry context preserves measure…
+  2026-10-02 19:55  started R-137 on ENG-103 (codex · gpt-6.1-sol)
+  2026-10-02 19:57  note on R-137: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/0c1c40aa-ebca-4…
+  2026-10-02 20:16  updated R-137: agent=lane-harness-load-a3c31c-007eb0, pane=w2CS:p3, worker_workspace=w2CS, terminal_id=term_65ce0f503745e1539
+  2026-10-02 20:18  note on R-137: Dispatch: worker lane-harness-load-a3c31c-007eb0 in w2CS:p3 recorded; prompt not sent
+  2026-10-02 20:26  note on R-137: Dispatch: incomplete at watch: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node R-137: wa…
+  2026-10-02 20:29  note on R-137: Dispatch: incomplete at watch: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node R-137: wa…
+  2026-10-02 22:31  updated R-137: watcher_pid=12590, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-137.watch.log
+  2026-10-02 22:31  note on R-137: Dispatch: watcher ready (pid 12590); prompt not sent
+  2026-10-02 22:31  note on R-137: Dispatch: prompt sent; worker lane-harness-load-a3c31c-007eb0 and watcher 12590 started
+  2026-10-02 22:44  R-137 reported done on ENG-103: Rebased the reviewed lane onto main and resolved the verification, settle fixture and acc…
+  2026-10-03 09:06  started R-145 on ENG-103 (codex · gpt-6.1-sol)
+  2026-10-03 09:06  note on R-145: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/ccc022cb-dec6-4…
+  2026-10-03 09:06  updated R-145: agent=lane-harness-load-a3c31c-0d6b51, pane=w2CS:p5, worker_workspace=w2CS, terminal_id=term_65cf027a5fa025a
+  2026-10-03 09:06  note on R-145: Dispatch: worker lane-harness-load-a3c31c-0d6b51 in w2CS:p5 recorded; prompt not sent
+  2026-10-03 09:06  updated R-145: watcher_pid=47299, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-145.watch.log
+  2026-10-03 09:06  note on R-145: Dispatch: watcher ready (pid 47299); prompt not sent
+  2026-10-03 09:06  note on R-145: Dispatch: prompt sent; worker lane-harness-load-a3c31c-0d6b51 and watcher 47299 started
+  2026-10-03 10:49  closed ENG-103 as done: Promoted to main at ab2ee50 (fast-forward from 3eb664a), promotion tier green a…

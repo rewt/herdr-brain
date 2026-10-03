@@ -1,0 +1,1648 @@
+[
+  {
+    "file": "acceptance/test/boundary.test.mjs",
+    "testNames": [
+      "native adapter pins the original socket despite an isolated HOME or caller override",
+      "foreign pane/workspace targets and symlink escapes never reach mutation APIs",
+      "model launch requests are always replaced by the scratch worker script",
+      "parent-focusing worktree removal is refused before any native mutation",
+      "the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git",
+      "creation receipts grant the only new targets and force no-focus",
+      "explicit focus, attach, zoom and creation focus flags leave typed refusal receipts",
+      "agent send-keys requires an owned target and checks its live cwd",
+      "named-agent mutation receipts retain the pane resolved by native identity lookup",
+      "late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt",
+      "non-zero native Herdr replies are harness failures through both body and forwarding paths",
+      "stand-in registration timeout is harness pending without a safety marker",
+      "scripted PTY acknowledgement timeout is harness pending without a safety marker",
+      "actual capability refusals stay product FAIL even when wrapped by cleanup",
+      "missing live pane cwd receipt is a harness limit, not a candidate capability violation",
+      "native transport pins the original socket when copied HOME changes"
+    ]
+  },
+  {
+    "file": "acceptance/test/cases.test.mjs",
+    "testNames": [
+      "inserting a case anywhere leaves every production dependency and outcome unchanged",
+      "optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement",
+      "a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures",
+      "independent product and explicit safety failures retain precedence over genuine canary limits",
+      "case keys are required and unique even when display names differ",
+      "no configured existing project skips all five compatibility bodies visibly and permits a green gate",
+      "optional compatibility never hides other failures or pending live cases",
+      "configured compatibility retains strict failures and prerequisites"
+    ]
+  },
+  {
+    "file": "acceptance/test/cleanup.test.mjs",
+    "testNames": [
+      "cleanup closes main and linked workspaces after ${mode}, including an unfurled creation receipt",
+      "failed inventory still attempts every owned receipt and audits the actual residue by ID and label",
+      "unreceipted scratch workspace is named by the raw audit without gaining closure authority",
+      "${shape} linked creation receipt survives a failed pane-layout read",
+      "cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost",
+      "a malformed journal entry does not prevent closing other receipt-owned workspaces",
+      "${signal} closes receipt-owned main and linked workspaces before emitting summary",
+      "adapter records the implicit main workspace as well as the explicit linked creation reply"
+    ]
+  },
+  {
+    "file": "acceptance/test/cutover.test.mjs",
+    "testNames": [
+      "rollback restores every file byte and executable mode",
+      "contrib cannot retire with an extra executable caller, and scans refuse symlinks",
+      "all eleven edits apply to relocated inventory scripts and refuse premise drift",
+      "retirement scans nested Python, executable extensionless and notify entry callers",
+      "installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility",
+      "installed tidy recovers a bounded tail from each log including a late older run",
+      "only unreferenced timestamped script backups qualify as historical material",
+      "executable shell case arms cannot hide contrib callers or references to historical backups",
+      "referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement"
+    ]
+  },
+  {
+    "file": "acceptance/test/focus.test.mjs",
+    "testNames": [
+      "focus sampling continues while the acceptance parent blocks and spans cleanup",
+      "native pane_focused events catch a transient change between unchanged samples and name both calls",
+      "native startup replay settles before the baseline and subsequent transient owned moves still fail",
+      "continuous operator focus starts without silence and an immediate transient harness move still fails",
+      "continuous operator activity alone passes after bounded replay",
+      "a busy stream from an unknown server never assumes the verified replay bound",
+      "owned changes need no correlated call and incomplete monitoring never passes",
+      "external sampled and transient event moves are recorded and re-baseline without failing",
+      "an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup",
+      "external moves during unrelated active and completed calls re-baseline without failing",
+      "a move to the pane targeted by a concurrent call fails after an external re-baseline",
+      "workspace destinations correlate only with their matching call despite a newer unrelated completion",
+      "a resolved agent target receipt correlates a named call without guessing pane IDs",
+      "a creation receipt attributes a transient move before ownership is registered",
+      "a focus event after a slow completed call names that call using its completion time",
+      "an unreachable read-only focus socket is an explicit harness limitation",
+      "the monitor retains forbidden attempts even when every sample remains unchanged"
+    ]
+  },
+  {
+    "file": "acceptance/test/launch.test.mjs",
+    "testNames": [
+      "native creation envelopes retain their result once and exclude failed creates and reads",
+      "a leaking refusal fails even when the separate configured workspace is unchanged",
+      "an exit-zero no-op retry fails the production busy-retry check",
+      "a refusal with no effects and one registered, prompted retry session qualify",
+      "retry requires destination, native creation, live topology, registration and exact prompt attribution",
+      "refusal also rejects topology or prompt changes without a creation receipt"
+    ]
+  },
+  {
+    "file": "acceptance/test/load-round2.test.mjs",
+    "testNames": [
+      "retry context and cutover aggregate preserve ${heavy ? 'heavy-load PENDING' : 'normal-load FAIL'}",
+      "a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure",
+      "handles ETIMEDOUT",
+      "independent product behaviour",
+      "${spec.name} bounded child timeout is ${heavy ? 'PENDING' : 'FAIL'} with its operation samples",
+      "${spec.name} report deadline is ${heavy ? 'PENDING' : 'FAIL'} with its own wait samples",
+      "${spec.name} independent child assertion failure stays FAIL under heavy load",
+      "supervisor queue deadline is ${heavy ? 'PENDING' : 'FAIL'} with queue-operation samples",
+      "delegated fixture setup timeout also cleans its owned root before returning"
+    ]
+  },
+  {
+    "file": "acceptance/test/load.test.mjs",
+    "testNames": [
+      "measured heavy-load report timeout is harness pending and names load on the screen",
+      "candidate that never reports at normal load remains product fail",
+      "heavy load is relative to capacity even on a single-CPU host",
+      "load is scoped to each wait and successful reports pass even under heavy load",
+      "a wait retains measured contention even if load falls before its deadline",
+      "bounded child command and native focus timeouts name measured heavy load",
+      "actual stalled child timeout uses the measured command window",
+      "heavy load cannot hide incorrect candidate behaviour or safety refusals",
+      "heavy-load canary timeout propagates through aggregate and retirement as harness pending"
+    ]
+  },
+  {
+    "file": "acceptance/test/probe.test.mjs",
+    "testNames": [
+      "socket premise uses the inherited endpoint and requires an actual host socket"
+    ]
+  },
+  {
+    "file": "acceptance/test/recovery.test.mjs",
+    "testNames": [
+      "${signal} drains an active ${form} and recovers its lost reply",
+      "cleanup refuses snapshots until every registered producer acknowledges stop",
+      "cleanup reconciles again when a lost-reply workspace appears after the first inventory",
+      "a matching caller label with a foreign native path never grants recovery authority",
+      "cleanup stops and awaits a supervisor executing dispatch before reading ownership",
+      "stopping an individual idle PTY worker leaves the run admission barrier open"
+    ]
+  },
+  {
+    "file": "acceptance/test/results.test.mjs",
+    "testNames": [
+      "fake product entry passing a bypass flag is refused before launch and its case reports product FAIL",
+      "candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending",
+      "cleanup failure without keep reports every existing discovery root on the actual cleanup screen line",
+      "ordinary product entry and source-attribution gaps fail without a safety or harness marker",
+      "dependent cutover/default-cycle cases preserve prerequisite causes and origins"
+    ]
+  },
+  {
+    "file": "acceptance/test/security.test.mjs",
+    "testNames": [
+      "workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets",
+      "relocation requires the expected launcher and audits every transitive copied file before use",
+      "kernel boundary denies dynamically computed external code reads and record writes",
+      "scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes",
+      "missing ripgrep is named pending before executing any candidate code",
+      "record shim rejects a changed pin and symlink escape before invoking the CLI",
+      "real session environment removes capability, identity and credential overrides",
+      "policy attribution refuses repository exposure and unwitnessed self-reports"
+    ]
+  },
+  {
+    "file": "acceptance/test/signal.test.mjs",
+    "testNames": [
+      "${signal} removes credentials before cleanup and reports cleanup failure/residue"
+    ]
+  },
+  {
+    "file": "acceptance/test/snapshot.test.mjs",
+    "testNames": [
+      "immutable release copy supports console build and contrib retirement without changing source",
+      "Git archive executable bits survive and snapshot chmod never follows symlinks",
+      "actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling",
+      "scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths",
+      "foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM",
+      "unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify",
+      "discovery setup failures use newly registered separate roots before candidate execution",
+      "session and verifier temp roots classify direct and command errors while preserving safety failures"
+    ]
+  },
+  {
+    "file": "acceptance/test/validation.test.mjs",
+    "testNames": [
+      "green",
+      "validation composition keeps product denials and refuses foreign writes and unsupported profiles",
+      "validation write exceptions reject redirected directories and protected Git or shared-state targets",
+      "only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse",
+      "actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement",
+      "gate and product boundaries"
+    ]
+  },
+  {
+    "file": "acceptance/test/verification.test.mjs",
+    "testNames": [
+      "native direct session can commit/worktree/ref but cannot write common or worktree config and hooks",
+      "model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled",
+      "execution boundary",
+      "record verification and scripted answer are kernel-confined even if model output redirects .org"
+    ]
+  },
+  {
+    "file": "brain/test/capture.test.mjs",
+    "testNames": [
+      "a real Codex final message is finished work, not stranded operator text",
+      "text typed into the Codex composer is stranded, not a final message",
+      "faint Codex composer text is placeholder chrome, not an unsent reply"
+    ]
+  },
+  {
+    "file": "brain/test/projects.test.mjs",
+    "testNames": [
+      "a folder maps to its configured checkout, linked worktree, or other",
+      "queue JSON, queue text and show name the project on every result"
+    ]
+  },
+  {
+    "file": "console/proto/autonomy.test.mjs",
+    "testNames": [
+      "relative ranking stays in its project, follows identity, and survives Back",
+      "nested task priority explains its source without changing task statuses",
+      "choice history survives changed rank and authority; reading needs no attention",
+      "authority editor owns keys and paste, cancels without Esc, reviews before commit",
+      "missing authority cannot be enabled by rank, key, or click",
+      "executive request names project, ignores browse filters, requires review, deduplicates",
+      "why-picked and authority questions link to readers with exact return paths",
+      "new screens and mouse controls fit 80, 100 and 140 columns without hiding global counts"
+    ]
+  },
+  {
+    "file": "console/proto/prototype.test.mjs",
+    "testNames": [
+      "the fixture scale and cascade never reduce the global attention count",
+      "task state words occupy one fixed column at every target width",
+      "readers fit all target dimensions and a visible focus survives every width",
+      "Enter opens detail; peek and related screens return to the exact source",
+      "number and recommendation review before changing the in-memory inbox",
+      "draft editor owns typing, has a non-Esc cancel, and preserves the draft",
+      "a draft typed in the prototype is identified as the operator's",
+      "an agent suggestion beside a null unsent reply keeps agent attribution",
+      "mouse selects without opening; disclosure opens; wheel follows its region",
+      "all sessions remain selectable and visible in every target reader and the all-scope overview",
+      "fragmented and coalesced mouse reports never become numbered answers",
+      "Enter on an open peek does not stack another peek",
+      "later can be found globally and returned to the inbox"
+    ]
+  },
+  {
+    "file": "console/proto/workflows.test.mjs",
+    "testNames": [
+      "project instruction reviews, cancels, then persists in direction and history across Back",
+      "capture loop review never grants pickup or changes STOP, questions or sessions",
+      "selected-row reply and choices retain review and return to the original list",
+      "actions menu and forwarded right click operate on the selected row",
+      "document and context tabs show evidence without taking numbered answers",
+      "decline and agent-draft shortcuts review the actual answer or text",
+      "history overrule requires a reason and preserves the original answer",
+      "working session filter preserves global needs and can be cleared with the mouse in readers",
+      "project-control editor keys are text; header clicks cannot type commands",
+      "status, editors and source readers retain usable dimensions and controls at every width"
+    ]
+  },
+  {
+    "file": "console/test/board.test.mjs",
+    "testNames": [
+      "every Herdr agent is a row in its repository group, with all six columns filled or unknown",
+      "an org run whose agent is gone stays one hour, and Herdr being down shows unknown, never gone",
+      "SESSION and DOING never show codes",
+      "groups follow their most urgent session, then name; worktrees join their main repository",
+      "refreshes keep groups and rows in place; a scope narrows what is shown",
+      "the Context of a session names where everything is",
+      "an idle agent whose org run already finished is named after that run, and a finished run never adds a row",
+      "an unregistered lane session is named from its worktree instead of a raw Herdr name",
+      "a lane review session is named from the lane session registry",
+      "choosing a repository narrows Waiting on you to what its sessions left, with org questions on the project checkout"
+    ]
+  },
+  {
+    "file": "console/test/brain.test.mjs",
+    "testNames": [
+      "a reply the operator typed but never sent outranks every other kind",
+      "a result with no digest still lands, categorized by the session state",
+      "the recommendation names the option the operator would press",
+      "a row never says \"your reply\" without saying which reply",
+      "a long reply is cut, and only its first line is used",
+      "results come before org questions, and org rows are untouched",
+      "a result title preserves run codes, commit hashes and possessive codes",
+      "no brain configured leaves the board exactly as it was",
+      "Waiting on you shows this project plus unmatched results and counts configured projects waiting elsewhere",
+      "the queue child uses the exact configuration file loaded by the console"
+    ]
+  },
+  {
+    "file": "console/test/control-plane.test.mjs",
+    "testNames": [
+      "an overflowing priority confirmation supports keyboard review at 80x20 without saving",
+      "Priorities invites the operator, groups work, reviews CLI ranks and retains stale or cancelled drafts",
+      "Priorities --print confirmation remains read only for both additions and ranks",
+      "a project with no console config discovers its record, answers and edits routes through the actual CLI",
+      "route editor owns typing and clicks, cancels, and refuses a stale review without changing disk",
+      "CLI overrides preserve inherited routes, policy and project lifecycle fields; reject malformed and redirected writes",
+      "route CLI uses the canonical Git project, ignores launch override paths, and passes model text without shell interpretation",
+      "decisions include older notes and automatic answers, retain provenance, and never mine narrative",
+      "--print stays read only even when keys confirm an answer or a route change",
+      "structured ingested report fields appear in Decided and Asked without inventing waiting questions",
+      "an org-only selection launched in another repository cannot read or edit that repository routes",
+      "route editor sends partial CLI patches and retains absent harness model and effort defaults",
+      "real answer, overrule and reopen retain each decision note with its original provenance",
+      "legacy answer summaries remain available without hiding unrelated earlier answer notes",
+      "partial route CLI edits preserve dispatch inheritance rather than pinning defaults",
+      "unchanged configured route saves do not write or pin an omitted kind",
+      "unchanged ancestor-only routes are never copied into project config",
+      "unchanged suggested presets are explicitly adopted once, then configured saves write nothing",
+      "console route display, editor and review use launch resolution for legacy route and dispatch arguments"
+    ]
+  },
+  {
+    "file": "console/test/control.test.mjs",
+    "testNames": [
+      "the controller streams frames and sends input, resize, scroll and release as Herdr commands",
+      "the controller refuses non-pane targets and reports a closed terminal once",
+      "typed input goes to the session except mouse reports and everything from Ctrl+] on",
+      "the decoder follows cursor visibility"
+    ]
+  },
+  {
+    "file": "console/test/controller.test.mjs",
+    "testNames": [
+      "Enter on a session peeks at it without leaving; g goes there; on a question it opens the summary",
+      "s opens the summary; inside it 1-3 switch tabs, keys scroll, Enter goes, Esc closes",
+      "approving from the summary or the list needs Enter to confirm, and Esc cancels",
+      "declining needs a one-line reason, then confirmation; n elsewhere says task launching comes next round",
+      "m and a right click open the row menu; its items depend on the row",
+      "a left click on a session row peeks at it; on a question it opens the summary; releases do nothing",
+      "the wheel scrolls the list, or the open summary",
+      "h swaps in the history; / and the rail choose a scope; ! and w toggle views",
+      "picking a repository that is another project\\'s checkout switches the project and keeps the scope",
+      "Escape never quits, q quits only from the list or history, and ? shows help"
+    ]
+  },
+  {
+    "file": "console/test/desks.test.mjs",
+    "testNames": [
+      "desks are inspectable without setup and every confirmed setting lands through record desks",
+      "desks show canonical tracked validation tiers without changing configuration",
+      "stale, invalid and redirected desk edits preserve bytes; parent settings use whole-object precedence",
+      "route addition, primary pool, task selection and launch settings save via validating CLI",
+      "new route confirmation resolves blank model and effort with dispatch defaults and launch arguments",
+      "generic always-arguments confirmation compares the entered kind with its captured arguments before CLI replacement",
+      "worktrees edit only their canonical project; record-only selections and plain folders cannot save",
+      "--print cannot commit new desk or route controls even after review confirmation",
+      "introducing a policy retains the implicit review route and long confirmations can be inspected before saving"
+    ]
+  },
+  {
+    "file": "console/test/frame.test.mjs",
+    "testNames": [
+      "at 140 \u00d7 40 the screen has the segment header, Waiting, grouped sessions with six columns, the launch bar and footer",
+      "at 100 columns WHERE goes; at 80 WHERE and UP go and DOING takes a second line",
+      "the rail appears only at 180 columns, and its choices are clickable",
+      "clicks map to the rows under them, including both lines of a narrow row",
+      "plain glyphs and NO_COLOR give a readable screen with no character outside ASCII",
+      "s shows the summary over a dimmed screen; tabs, scrolling and the Context codes stay inside it",
+      "the menu opens at its row; the scope and help popups list their choices",
+      "history replaces the session list; Esc or h returns",
+      "the list scrolls to the selection, shows more above and below, and the wheel moves it freely",
+      "messages and prompts take the footer; a long title never hides the reason or keys",
+      "an empty or scoped board says why nothing is shown, and a small terminal only asks for more room"
+    ]
+  },
+  {
+    "file": "console/test/housekeeping.test.mjs",
+    "testNames": [
+      "housekeeping CLI reads without writes, validates tracked overrides, pauses, resets and targets canonical Git identity",
+      "status distinguishes running, stale and malformed owners and isolates repositories sharing a record",
+      "unreadable activity, invalid config, symlinks, hardlinks and concurrent writers remain explicit and leave targets intact",
+      "console renders activity at all widths and reviews actual CLI pause and overrides, including cancellation and stale edits",
+      "housekeeping --print renders fixture and stays read only even when pause or override saves are confirmed",
+      "an unconfigured Git project can inspect defaults and save a tracked override without creating a record or schedule",
+      "console retains failed housekeeping reads with explicit stale state and prevents editing until recovery",
+      "a discovered Git project without a record opens and edits housekeeping through the real console CLI adapters",
+      "housekeeping close failures show both the actual error and planned reason in console and text CLI renders"
+    ]
+  },
+  {
+    "file": "console/test/model.test.mjs",
+    "testNames": [
+      "rows use plain language and mark records without it",
+      "stripping codes keeps the sentence readable",
+      "only codes the organization issues are stripped; real names with numbers stay",
+      "a possessive record code does not leave a broken question title",
+      "a decision summary is shown without codes, and marked when it had some",
+      "the Summary after a no says what happened to each dependent",
+      "the fallback viewer always opens a text editor, never the file itself",
+      "waiting rows keep the ranking org today gives",
+      "rows keep their places, and selection its row or nearest neighbour",
+      "no codes appear outside the Context tab, except a waiting row\\'s own id as its handle",
+      "transcripts are found by agent name across config dirs and give the last assistant text",
+      "a growing transcript is read only from where the last read stopped",
+      "the ledger, Herdr output and note paths parse",
+      "document paths follow the row kind",
+      "markdown renders headings, lists, tables and code within the width",
+      "a long title never hides the reason, its cursor or the keys",
+      "agent text cannot drive the terminal"
+    ]
+  },
+  {
+    "file": "console/test/modern.test.mjs",
+    "testNames": [
+      "completed work category flags stay visible on overview and Needs you and open the source item",
+      "project discovery uses Git identity, deduplicates worktrees, never repo basenames",
+      "live scope keeps the exact sessions, run relationships and active work only",
+      "activity keeps item lifecycle moments and item pages explain agent-created work",
+      "an answered question has one answered activity moment, not a duplicate decision",
+      "a dropped question reads as dropped, not answered",
+      "output reads the selected pane, history restores task and its keyboard focus",
+      "same-view navigation does not accumulate Back entries",
+      "split tab requires a specific agent and shell tabs do not borrow other output",
+      "source failure retains last good data with an error and cannot focus stale sessions",
+      "a disappeared agent retains its last output but cannot be focused as live",
+      "late output cannot overwrite a newer selection",
+      "scope switch during a pending refresh never leaks the previous project",
+      "frame is cell-exact and source text cannot inject terminal escapes at target sizes",
+      "mouse hits open the intended live session and Back/Forward use the same history",
+      "fresh installation reads no config into existence; goals and org are optional",
+      "opening a directory without Git creates no project files and can return to the previous scope",
+      "canonical discovery groups an actual worktree and a symlink, keeping same-named repos distinct",
+      "future-stage and deferred questions remain reachable without inflating Needs you",
+      "list shortcuts focus the first actionable item and Enter drills in",
+      "narrow lists keep work state readable and narrow sessions retain full state",
+      "output PageUp reads older lines and PageDown returns to latest",
+      "plugin/caller workspace selects its canonical project without relying on labels",
+      "appearance changes preserve navigation and unsupported preview actions have an honest handoff",
+      "Tab changes regions, arrows stay within them, and central tabs support Left/Right",
+      "scope dropdown preserves background, cancels cleanly, and same-project selection is a no-op",
+      "Herdr companion starts without a duplicate rail, but checkouts can be opened on demand",
+      "goal readers put current descendant sessions first and render acceptance as actual criteria",
+      "native observer keeps latest rows visible, pans locally, and cancels on routes and stop",
+      "observer retry rejects previous callbacks even for the same pane",
+      "goals and tasks render without a selected project instead of crashing",
+      "a discovered project whose last workspace closed falls back to a current project",
+      "Needs keeps Brain results in the checkout their session ran in, never by label alone",
+      "agents are discoverable by their own checkout even when no workspace belongs to it",
+      "o opens only the session on screen, fixed at the keypress",
+      "Needs folds session results that the org resolved, replaced, only reported, or left unowned",
+      "opening a session types into it here, and Ctrl+] or Back releases it and returns",
+      "a controller Herdr hands elsewhere drops back to watching with a way to retype",
+      "project screen: counts, the work block and its tasks, then numbered sessions under their checkout",
+      "a session number opens it, a task link opens the task, and Back restores the link",
+      "clicking a session name renames its pane label, never the agent",
+      "the prompt bar adds a task or starts a chat on one Enter, and says which before",
+      "a folder without an organization offers chats only",
+      "a Needs you item is answered from its page: choices, reply, later, and org questions",
+      "the overview says quiet when no session works and nothing was recorded for 20 minutes"
+    ]
+  },
+  {
+    "file": "console/test/names.test.mjs",
+    "testNames": [
+      "the model-name table turns IDs into words, and an unmapped ID is shown as it is",
+      "WHO comes from the org run first, then Herdr and the transcript, else says unknown",
+      "UP counts minutes, hours, then days, and says unknown without a start",
+      "DOING is at most ten words, cut at a word boundary, from the first usable source",
+      "mouse reports parse as SGR events, and anything else is not a mouse event",
+      "a worktree belongs to its main repository, and a folder outside git stands alone",
+      "plain glyphs are ASCII, and folding makes the screen\\'s own symbols ASCII"
+    ]
+  },
+  {
+    "file": "console/test/paint.test.mjs",
+    "testNames": [
+      "the painter writes only changed rows, in place, and never erases",
+      "spans become truecolor SGR and cannot smuggle control characters"
+    ]
+  },
+  {
+    "file": "console/test/session.test.mjs",
+    "testNames": [
+      "approving and declining from the console record the operator\\'s answers",
+      "Enter and a click peek at a live session; g goes; a gone one says so; Herdr down says so",
+      "go-to-session runs herdr with an argument array: the agent by name, else its tab",
+      "open suspends for an editor, a failed read keeps the last data, and the header shows the version",
+      "NO_COLOR draws plain glyphs, and a scope narrows the list and prefills nothing else",
+      "overruling from the history records the opposite answer",
+      "a text document opens from a private file that is removed afterwards",
+      "answers are passed as an argument array",
+      "a missing configuration becomes an example that must be edited",
+      "DOING for a run with no usable title comes from the work in the brief org start wrote, never its fixed opening",
+      "transcripts are looked up by name from the run\\'s start, else from local midnight",
+      "a named project switch lands on that project and keeps the repository scope"
+    ]
+  },
+  {
+    "file": "console/test/sources.test.mjs",
+    "testNames": [
+      "Claude project folders and agent-name entries keep their observed on-disk shape",
+      "Herdr agents keep their tool, title and session id; tabs keep their labels",
+      "a transcript is found by session id, in its folder or any other, and gives model, start and last message",
+      "a missing session id is not searched for again until the folders change",
+      "a transcript looked up by agent name reads only transcripts written since the lower bound",
+      "a live lane session record is found by name or transcript id; completed records are ignored"
+    ]
+  },
+  {
+    "file": "console/test/terminal.test.mjs",
+    "testNames": [
+      "observer frame preserves absolute positions, blank lines, padding and RGB harness styling",
+      "differential frames retain unaffected cells and do not mutate previously delivered grids",
+      "a differential gap or unexpected resize fails; a later full frame resynchronizes",
+      "OSC clipboard/link/image strings and terminal modes never escape into visible spans",
+      "C1 controls, bidirectional overrides, invalid UTF8 and incomplete escapes are contained",
+      "wide glyphs, combining accents and joined emoji keep their cell positions through updates",
+      "terminal styles use resets, inverse, conceal, indexed colors and colon RGB",
+      "cursor moves, erase, CR/LF and tab act on the bounded grid",
+      "invalid dimensions, colors, record formats and unsupported controls fail honestly",
+      "observer owns an exact read-only argv with closed stdin and decodes split NDJSON chunks",
+      "observer protocol failure stops its own subprocess once and suppresses later callbacks",
+      "server terminal.closed and unexpected EOF are visible; stopping never closes target panes",
+      "observer rejects non-pane targets before spawning and reports spawn errors",
+      "observer times out a silent initial connection but an idle delivered frame stays valid",
+      "a stubborn observer is killed after a bounded grace period, with no repeated cancellation",
+      "local horizontal crop preserves grapheme cells and styles, replacing clipped wide halves with spaces",
+      "native-size observer reads exact pane geometry and follows real size without cropping at console dimensions",
+      "native geometry lookup failure never falls back to a misleading cropped observer",
+      "stopping during native geometry discovery cancels only the owned query and emits no later error",
+      "an established live screen survives transient geometry failures but not persistent ones",
+      "a geometry failure before the first live screen still fails at once"
+    ]
+  },
+  {
+    "file": "console/test/waiting.test.mjs",
+    "testNames": [
+      "a dialog is answered by its own keys; a finished question by sending the chosen words",
+      "the list holds what needs you now; saved and parked items fold into one line each",
+      "each row carries only the verbs that apply to it",
+      "a number picks a choice after a confirmation that says exactly what will happen",
+      "y sends Claude\\'s draft when there is one, else takes the recommendation; n takes the no",
+      "r replies in the operator\\'s words; l saves for later at once; x asks before dropping",
+      "Enter on a fold opens it; Enter on a live result peeks; the peek keeps the verbs",
+      "the screen shows each choice under its row, Claude\\'s draft, and a click on a choice picks it",
+      "answering goes through the brain CLI, refreshes, and the peek moves to the session",
+      "d sends a question to a new session with a plain brief, on the project\\'s checkout, and notes it in org",
+      "summoned as a Herdr popup, going to a session closes the console so the session is what shows",
+      "rows read like the operator reads work: the id, a quoted gist, what is at stake, then actions",
+      "i records an instruction for the whole project where its sessions read direction first",
+      "the header says whether the loop is alive, and L turns it off or on after asking"
+    ]
+  },
+  {
+    "file": "discovery/test/acceptance.test.mjs",
+    "testNames": [
+      "copied ${harness} probe product validates, guards and promotes worker and routing changes offline",
+      "English stays"
+    ]
+  },
+  {
+    "file": "discovery/test/alternatives.test.mjs",
+    "testNames": [
+      "green",
+      "provider selection refuses automatic Linux bubblewrap and retains explicit providers",
+      "alternative profiles protect resolved Git and shared state, omit network and broad tmp grants",
+      "Claude-only scratch installation does not require or install Codex",
+      "real alternative sandbox denies outside, symlink, metadata, record, rename and network writes",
+      "real filters remain functional through allocation, commit, check and fast-forward promotion",
+      "real main-mode alternative guard protects linked shared records and leaves the native runtime writable",
+      "bounded commands kill descendants before they can write after a deadline",
+      "Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor"
+    ]
+  },
+  {
+    "file": "discovery/test/confinement.test.mjs",
+    "testNames": [
+      "shared-state sandbox paths must come from the parent as absolute exclusions",
+      "native main-mode workers and validation deny record and coordination writes (${linked ? 'linked record and event log' : 'default record'})"
+    ]
+  },
+  {
+    "file": "discovery/test/entry.test.mjs",
+    "testNames": [
+      "installed supervisor entry in an untouched project satisfies the release cold-start and notice contract offline",
+      "unrelated project has one canonical record, a real pending question and two separate lanes",
+      "capability refuses arbitrary operations, fields, changed identity and missing validation sandbox",
+      "concurrent automatic record bootstrap never truncates events or duplicates records",
+      "initialization preserves a populated record, and a supervisor has no worker Git capability",
+      "machine installer retains native flags, reaches Claude too and restores only its own files"
+    ]
+  },
+  {
+    "file": "discovery/test/lifecycle.test.mjs",
+    "testNames": [
+      "receipt publication hides a deliberately paused partial JSON write from the sweep reader",
+      "close preserves ignored .env and .lane files and explains retention",
+      "${kind} entry forwards terminal hangup and cleans its untouched lane",
+      "next entry sweeps killed untouched owners and preserves every form of work",
+      "sweep never removes a lane owned by a live parent or native child",
+      "a parent killed during ownership handoff cannot launch an unregistered native child",
+      "symlinked HOME and operator worktree-root prefixes resolve before no-follow creation"
+    ]
+  },
+  {
+    "file": "discovery/test/owner.test.mjs",
+    "testNames": [
+      "each bundled target matches its checksum, current source and native architecture",
+      "validation runs with no compiler and ignores CC, flags and TMPDIR overrides",
+      "verified owner bytes are copied into private scratch with restricted modes",
+      "staged owner preserves the installed validation transport lifetime protocol",
+      "installed runtime snapshot carries the verified owner and validates without a compiler",
+      "${name} uses only the bounded source-build fallback",
+      "unavailable bundle and ${compiler} compiler refuse project execution",
+      "owner verification rejects a checksummed binary for the wrong architecture",
+      "no compiler preserves detached descendant cleanup after ${mode}"
+    ]
+  },
+  {
+    "file": "discovery/test/review-r2.test.mjs",
+    "testNames": [
+      "project gate",
+      "all providers reject ${location} writable symlink components",
+      "sandbox grants reject redirected workspaces, queues and external runtime paths",
+      "sandbox exceptions cannot override a protected record, Git tree or nested record target",
+      "Git filter refuses a temporary symlink to ${target} before execution",
+      "disabled ${Object.keys(settings).join('/')} filters preserve binary bytes across integration",
+      "${direction}-only required filters preserve the missing direction as identity",
+      "required configured filters cannot fall back to identity after a command failure",
+      "Claude live cases stay pending without authorized authentication and never launch the native binary",
+      "retained Claude discovery evidence marks unauthenticated cases pending on HUM-19"
+    ]
+  },
+  {
+    "file": "discovery/test/review-r3.test.mjs",
+    "testNames": [
+      "${arch} seccomp denies io_uring, unknown syscalls and socket creation by default",
+      "macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary",
+      "validation cannot signal an owner outside its inherited kernel boundary",
+      "lifetime markers reject redirected scratch roots before provider construction",
+      "pending Claude probe emits Linux evidence without a platform guard (${flags.length ? 'skip-live' : 'no-auth'})",
+      "acceptance setup failure removes its installed snapshot and keeps only evidence",
+      "acceptance allocation failure removes the first temporary root",
+      "acceptance evidence directory failure still removes its installed snapshot",
+      "Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection"
+    ]
+  },
+  {
+    "file": "discovery/test/review-r4.test.mjs",
+    "testNames": [
+      "Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available",
+      "bare bubblewrap and renamed symlink aliases require experimental selection",
+      "explicit experimental selection survives repeated selection and builds the gated provider command",
+      "direct bubblewrap launcher requires opt-in before launching a provider",
+      "Linux preparation, validation and Git filters refuse default bubblewrap before executing project code",
+      "installation requires and preserves experimental selection while Codex installs keep their native default",
+      "${name} copies nonempty files and refuses a redirected temporary root after profile construction"
+    ]
+  },
+  {
+    "file": "discovery/test/review.test.mjs",
+    "testNames": [
+      "route adoption leaves planted predictable and destination symlinks untouched",
+      "plain CLI finds nested records and keeps automatic runtime files out of git status",
+      "atomic writer pins its directory when an attacker replaces the directory path",
+      "${launcher} sends a bypass that preserves its interactive native session",
+      "global-only Git identity and unused globally installed LFS survive broker commits",
+      "only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through",
+      "interactive no-identity launches warn and preserve the native session",
+      "fresh Herdr starts receive entry; explicitly assigned starts retain their bypass",
+      "canonical preparation and validation remain authoritative in both check and promote",
+      "operator-selected record ancestors, record files and report links keep working",
+      "symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution",
+      "findOrgDir stops at the filesystem root outside GIT_WORK_TREE",
+      "macOS /tmp remains a valid operator record path",
+      "close removes only untouched entry lanes, including failed setup"
+    ]
+  },
+  {
+    "file": "discovery/test/sandbox.test.mjs",
+    "testNames": [
+      "real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied",
+      "green"
+    ]
+  },
+  {
+    "file": "discovery/test/settings.test.mjs",
+    "testNames": [
+      "explicit installed adapters leave opted-out projects and native arguments untouched",
+      "automatic interactive adapters pass opted-out sessions straight through",
+      "both transports deliver project settings, integration branch and instruction precedence",
+      "main-checkout mode reaches both native harnesses without becoming a supervisor",
+      "automatic interactive entry honors the project main-checkout mode",
+      "worker mode validates and promotes to the declared integration branch",
+      "main-mode worker records and commits locally, refuses promotion and verifies its assigned branch",
+      "main-mode done reports require clean committed work and successful sandboxed validation",
+      "entry-only configuration preserves the portable route suggestion and pending operator question",
+      "entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check",
+      "undeclared entry with package metadata and a Node test directory checks and promotes without an npm script",
+      "undeclared project check",
+      "entry settings use canonical Git identity and do not inherit parent or worker config",
+      "invalid enabled settings and mismatched integration branches fail before runtime creation"
+    ]
+  },
+  {
+    "file": "discovery/test/validation-deadlines.test.mjs",
+    "testNames": [
+      "entry reserves bounded owner, wrapper, preparation and reply time for promotion",
+      "declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup"
+    ]
+  },
+  {
+    "file": "dispatch/test/dispatch.test.mjs",
+    "testNames": [
+      "${source} refuses PID reuse before registration and retains ownership across retries",
+      "dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work",
+      "one command records exact route/worker fields, arms watch before prompt, and preserves briefs",
+      "open/prepare failures keep a visible request, create no run, and retry cleanly",
+      "watch failure records a worker but never sends work; retry reuses the same worker/run",
+      "uncertain launch refuses automatic replay and requires explicit adoption",
+      "uncertain prompt refuses automatic resend; caller can authorize it after inspection",
+      "a fix round can reuse a stopped worker or start fresh; changed route is refused",
+      "retry pins routes across config edits and detects a replaced occupant",
+      "base moves a clean reused lane only by fast-forward; dirty lane is preserved",
+      "a real detached watcher acknowledges initialization and sheds supervisor pane identity",
+      "lost record start result is visible and recovered without starting a second run",
+      "live request locks refuse retries without changing the journal",
+      "explicit fresh launch and accepted delivery recover uncertain attempts",
+      "invalid route and empty brief mutate neither lane nor record",
+      "a refused record start with no matching run retries the saved request",
+      "a run ID supplied as ITEM is refused before creating a lane or journal",
+      "reuse refuses an idle worker whose previous run is still open",
+      "reuse accepts an abandoned run with the same stopped occupant",
+      "retry locks before reading its journal so another retry cannot replay stale progress",
+      "two retries cannot both take over a dead-owner lock",
+      "an unknown start outcome with no match stays conservative; multiple matches require explicit recovery",
+      "dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24"
+    ]
+  },
+  {
+    "file": "housekeeping/test/housekeeping.test.mjs",
+    "testNames": [
+      "interruption requires the current banner and an exclusively wheel-junk composer",
+      "recorded promoted workers close through the shared tidy planner",
+      "abandoned promoted workers may close",
+      "CLI-closed unmerged work is authorized by its Git archive, never a session done marker",
+      "preserves ${variant} workers/tabs",
+      "latest open fix round defeats an older reported run using the same worker name",
+      "unknown finished sessions stay; exited watcher shell tabs use tidy-tabs",
+      "never closes or resumes its own tab",
+      "an interrupted open worker resumes once, and durable attempts survive a new runner",
+      "failed prompt is logged and never replayed at the same state sequence",
+      "unrecorded disk report, human words, other harness and absent identity prevent resume",
+      "dry run reports close/resume plans and persists no attempts or live actions",
+      "fresh state or record changes prevent deletion",
+      "a run completed during the pre-input recheck receives no resume input",
+      "a record change after clearing composer suppresses the prompt",
+      "incomplete or failed reads never authorize any action",
+      "one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses",
+      "the loop rereads opt-in and shuts down with its lock removed",
+      "no configuration defaults on and project record/main are discovered from a ${target}",
+      "no record and no Git project are quiet no-ops",
+      "an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery",
+      "housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries",
+      "${runtimeKind} startup assertion failure stops a real schedule before removing a symlinked fixture",
+      "injected housekeeping startup assertion failure",
+      "${runtimeKind} start stays idempotent after a lane is removed",
+      "dry-run start leaves no timer process",
+      "old interruption with forty blank rows and a final reply is rejected within a bounded subprocess",
+      "lane code cannot ${mode} live housekeeping even with the canonical target",
+      "canonical code cannot ${mode} live housekeeping from a linked target",
+      "a record CLI override in a lane cannot pin a live schedule to removable code",
+      "linked code remains usable for isolated dry-run previews",
+      "an existing ${variant} owner never reports already-running or alters the old lock",
+      "promotion cleanup inspects and closes only the requested lane workspace"
+    ]
+  },
+  {
+    "file": "kit/bch-cloak-20261001/lane/prepare.test.mjs",
+    "testNames": [
+      "prepare rebuilds even with protocol-runtime dist present",
+      "failed preparation reports neither ready nor promoted and leaves main unchanged",
+      "promotion prepares and fast-forwards an isolated lane after its check succeeds"
+    ]
+  },
+  {
+    "file": "kit/bch-cloak-20261001/lane/routing.test.mjs",
+    "testNames": [
+      "the canonical routing table encodes the risk-tiered policy",
+      "native arguments are derived from model and effort exactly once",
+      "launch-plumbing overrides do not mutate the canonical route",
+      "unsupported and authority-colliding launch overrides fail closed",
+      "unknown routes fail closed",
+      "malformed routes fail validation",
+      "unsupported agent kinds fail validation",
+      "route listing exposes every selection criterion",
+      "supervisor launchers and runbook consume the canonical route table",
+      "supervisor wrapper validates and resolves routine and critical routes",
+      "supervisor wrapper rejects malformed canonical configuration before launch",
+      "active lane skill names routes and contains no competing policy",
+      "malformed dispatch option values fail before Herdr mutation",
+      "dispatch CLI transports permitted long native arguments but rejects attached authority collisions",
+      "CLI help requires a named route and bounds routing authority",
+      "the selection policy names only real routes and keeps reviews cross-provider",
+      "the selection policy check fires on a missing route and on a same-provider review"
+    ]
+  },
+  {
+    "file": "lanes/test/herdr-client.test.mjs",
+    "testNames": [
+      "snapshot preserves request ids and returns protocol state",
+      "pane reads use the bounded recent-unwrapped protocol shape",
+      "pane reads use a larger timeout than snapshot requests",
+      "subscriptions emit events and reconnect with bounded backoff",
+      "a subscription handshake is observable before streamed events",
+      "request responses may be split across data chunks",
+      "subscriptions parse two messages delivered in one chunk",
+      "requests reject after the configured timeout",
+      "requests reject Herdr error response bodies",
+      "close rejects a request before its reply arrives",
+      "subscribe after close does not open another socket"
+    ]
+  },
+  {
+    "file": "lanes/test/lane.test.mjs",
+    "testNames": [
+      "git helpers isolate the operator's global excludes file",
+      "open creates a lane and refuses duplicate, invalid, and unresolved inputs",
+      "status reports distance, dirtiness, and files shared by lanes",
+      "promote refuses a dirty lane worktree",
+      "promote leaves main unchanged when validation fails",
+      "promote rebases a clean lane behind main and fast-forwards",
+      "promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes",
+      "promote accepts a gitignored session registry in the canonical checkout",
+      "promote refuses a conflicting rebase and names the file",
+      "promote refuses when main moves during validation",
+      "close deletes a merged branch",
+      "close retires a background workspace without worktree.remove and preserves the archive",
+      "close refuses a dirty worktree",
+      "close preserves a locked worktree and its workspace when Git removal refuses",
+      "rebase-check exits zero when clean and one with files on conflict",
+      "rebase-check and status refuse a merge-bearing lane only when it is behind main",
+      "prepare runs needed steps and skips steps whose unless path exists",
+      "check records configured validation against the current HEAD",
+      "check honors LANE_VALIDATE and --cmd precedence and returns a failed gate exit",
+      "check defaults to npm test and refuses a dirty current worktree",
+      "check runs configured prepare steps before validation",
+      "check records signal termination using the shell exit convention",
+      "check refuses a detached HEAD without replacing an existing gate",
+      "check rejects unknown options and missing or empty --cmd values",
+      "routes prints configured routes with resolved dispatch defaults",
+      "named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call",
+      "always_args sees the canonical model and effort that dispatch emits",
+      "always_args rejects a non-object value",
+      "always_args rejects a list whose first token is not an option",
+      "config attributes always_args to the file that supplied it",
+      "config layers the nearest parent and canonical repository with attributed replacement semantics",
+      "config escapes route names so every TSV record remains one line with three fields",
+      "worktree roots honor parent-relative, parent-default, legacy, and caller-relative environment precedence",
+      "home is a configuration discovery boundary",
+      "LANE_CONFIG selects one caller-relative file and bypasses discovered layers",
+      "linked invocations use canonical repository config for explanation, check, and promote",
+      "bare repositories with only linked worktrees allow reads and refuse mutations clearly",
+      "same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities",
+      "long Unicode workspace labels retain graphemes and fragments within 64 code points",
+      "open refuses symlink escapes and destinations inside repository checkouts before mutation",
+      "registered paths are rejected when their on-disk repository identity changes",
+      "a missing registered worktree names git worktree prune",
+      "stale Herdr checkout metadata is not used for dispatch or close",
+      "linked invocation creates labeled children under the canonical repository workspace",
+      "open refreshes Herdr workspaces after a failed create before accepting fallback metadata",
+      "dispatch refreshes Herdr workspaces before accepting newly visible metadata",
+      "dispatch opens a single agent tab in the initial pane and keeps fix rounds background",
+      "dispatch leaves earlier and concurrently opened workspace shells untouched",
+      "dispatch retains initial tabs on environment and agent cwd failures",
+      "dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks",
+      "dispatch persists immutable occupant evidence as display-only optional metadata",
+      "dispatch does not write a claim when the prompted occupant is replaced",
+      "one exported Herdr socket-path helper supplies the Herdr client and dispatch records",
+      "dispatch refuses unsafe registries and unreadable briefs before every Herdr call",
+      "dispatch checks tracked registry state in the canonical checkout from a lane",
+      "dispatch reports repository containment before an external symlink",
+      "dispatch symlink refusal names the repository-local correction",
+      "dispatch unwritable-sidecar refusal names both corrections",
+      "dispatch writes no record on cwd, start, or prompt failure and reports post-prompt persistence as partial success",
+      "independent record writes and simultaneous done markers retain all sessions",
+      "registry reads legacy arrays, sidecar records, done markers, and localized malformed entries",
+      "session completion refuses unignored and external registry writes",
+      "close warns and succeeds when registry policy refuses automated metadata",
+      "close marks exact repository topic sessions done only after git close succeeds",
+      "failed archive and post-close metadata writes preserve honest completion state",
+      "git-only close with no registry creates no metadata store",
+      "a repository with a separate git directory retains its canonical checkout identity",
+      "selected malformed, unreadable, and wrongly typed config files fail before mutation",
+      "open refuses ordinary and foreign-worktree destinations without creating branches",
+      "registered legacy lane paths remain authoritative after worktree_root changes",
+      "dispatch rejects an unknown route before checking Herdr",
+      "review requires explicit source, round, route, and bounded unique flags with exit 2",
+      "review dispatches once and publishes all canonical verdicts after private validation",
+      "review accepts a routing snapshot without replacing project lifecycle configuration",
+      "review settles a completed private record before validating its final bytes",
+      "review preserves a final finding immediately before the next section heading",
+      "review completion admits representative validator-accepted record boundaries",
+      "review preserves finding entries across the blank-line matrix",
+      "review keeps malformed findings public on Codex and alternate routes without private sections",
+      "review projects repository-relative finding locations containing spaces",
+      "review sanitizes deterministic aliases and path forms in a bounded public projection",
+      "review redacts syntax-shaped slash prose while retaining alias safeguards",
+      "review redacts an absolute path inside a regex-like character class",
+      "review sanitizes a flag-attached absolute path in ",
+      "review sanitizes a delimiter-prefixed flag-attached absolute path in ",
+      "review redacts a ",
+      "review refuses an escaped absolute path in ${field}",
+      "review refuses a relative-looking protected location embedding an absolute path",
+      "review refuses a ${description} in a protected location",
+      "review preserves a command-substitution delimiter after file URL redaction",
+      "review refuses a closing-parenthesis file URL residue that the base matcher fully redacted",
+      "review publishes a standalone closing delimiter after file URL redaction",
+      "review refuses a spaced-path continuation after a ${description}",
+      "review refuses a spaced-path continuation after any ${description}",
+      "review refuses a spaced-path continuation with an embedded absolute-path match",
+      "review refuses a parenthesized file URL residue",
+      "review sanitization preserves unrelated words and fails closed on ambiguous or unsafe payloads",
+      "review projects command syntax verbatim while escaping the same characters in prose",
+      "review escapes prose punctuation after sanitizing the unescaped payload",
+      "review refuses an opening parenthesis after a concrete path match",
+      "review projects every finding from the sanitized production PASS fixture",
+      "review refuses a finding description containing a declared private identifier",
+      "review allows private-only heading text inside a verbatim command",
+      "review publishes exclusively, leaves normal clean-tree commands refusing, and blocks the occupied round",
+      "review late-publication mutation exits 2 and retains both evidence files",
+      "review renders OpenSpec, supplemental literal input, gate, and captured commit metadata",
+      "review keeps uppercase brace tokens literal in briefs and tracked source files",
+      "review accepts negated test-pass limits but still refuses affirmative prose claims",
+      "review refuses malformed private evidence, incomplete output, timeout, and lane mutation",
+      "review sends malformed completed endings to schema validation without waiting for timeout",
+      "review contains unexpected errors when the target disappears after dispatch",
+      "review unexpected failure after publication warns about retained public evidence",
+      "review interruption exits 2 without a verdict or follow-up lifecycle action",
+      "review reference describes the shipped public path and protected-location policy",
+      "review preflight requires ignored private and trackable absent public paths",
+      "usage exits one with no command and with an unknown command",
+      "status exits quietly when a downstream reader closes stdout",
+      "verify-agent mismatch control uses a fake Herdr"
+    ]
+  },
+  {
+    "file": "lanes/test/no-focus.test.mjs",
+    "testNames": [
+      "lane never moves Herdr focus when it creates or opens a workspace, worktree or tab",
+      "lane closure cannot invoke Herdr's parent-focusing worktree removal"
+    ]
+  },
+  {
+    "file": "lanes/test/routes.test.mjs",
+    "testNames": [
+      "the bch-cloak route table loads without losing project fields",
+      "one resolution supplies launch plumbing and opaque run metadata",
+      "selection policy uses opaque pool names and only names configured routes",
+      "legacy effort arguments remain readable while explicit effort is canonical",
+      "always_args omits native aliases of emitted Codex model and effort options",
+      "Codex always_args preserves unrelated config keys alongside canonical effort",
+      "Codex always_args deduplicates only the same config key across native aliases"
+    ]
+  },
+  {
+    "file": "lanes/test/validation.test.mjs",
+    "testNames": [
+      "defaults, legacy commands, partial tracked overrides and invalid declarations",
+      "a worker check, promotion check and promotion reuse their exact commands; release never runs",
+      "pane identities are absent from preparation, validation and fingerprints",
+      "same tree after empty commits and a clean rebase reuses validation across tiers",
+      "tree, command, environment, preparation and declared environment changes invalidate reuse",
+      "red, signal, dirty and moved-head executions never supply reusable green evidence",
+      "commands that start and exit 75 record failed receipts in both validation tiers",
+      "worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse",
+      "a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check",
+      "overlapping checks serialize evidence without running the same command twice",
+      "promotion checks in different projects serialize and a nested command uses the held slot",
+      "bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt"
+    ]
+  },
+  {
+    "file": "mcp/test/server.test.mjs",
+    "testNames": [
+      "stdio exposes every tool and resource and completes the record workflow offline",
+      "ready accepts omitted arguments while advertising and enforcing its strict role schema",
+      "stdio preserves CLI refusals, policy and literal arguments without partial writes",
+      "stdio discovers a new Git project from a nested linked worktree with no user setup",
+      "explicit project and record paths support relative report files and exit on EOF",
+      "CLI calls have a bound and report interrupted operations as uncertain",
+      "stdio exits on SIGTERM without a daemon and defaults to an agent actor"
+    ]
+  },
+  {
+    "file": "promote/test/promote.test.mjs",
+    "testNames": [
+      "unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate",
+      "promotion notice queues during typing and delivers after clearing without repeating promotion",
+      "queue refuses a lane changed while pending behind another job before validation or integration",
+      "expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job",
+      "expected head refuses an automatic rebase and post-preparation tip changes",
+      "a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job",
+      "${mode} refusal is delivered; lane kept; next queued lane still promotes",
+      "replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane",
+      "capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements",
+      "project override selects supervisor and duplicate pending lanes do not repeat",
+      "two concurrent enqueue commands share one drain; direct promote is excluded during its gate",
+      "enqueue during the empty-worker handoff always starts a new drain",
+      "interrupted attempt emits a notice without retrying a gate or deleting its lane",
+      "stale worker lock refuses startup while keeping the queued request",
+      "green gate that modifies its worktree is refused before fast-forward",
+      "recorded completed outcome resumes delivery without repeating promotion",
+      "queued cleanup closes the recorded finished tab and preserves operator and other lane tabs",
+      "crash during actual saved promoted phase never repeats gate or deletes the lane, even with legacy freshness",
+      "direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane",
+      "conditional close rechecks the promoted tip and base before any removal"
+    ]
+  },
+  {
+    "file": "release/test/candidate.test.mjs",
+    "testNames": [
+      "the tracked preflight checks inputs and preparation supplies configured acceptance inputs",
+      "missing input setup and missing build evidence fail before invoking acceptance",
+      "private cache copies only pinned dependency tarballs and refuses missing content",
+      "unset compatibility input is optional through the declared build and gate",
+      "real project preflight leaves invalid inputs uncut and retries the same commit",
+      "release safety checks stop the gate on failure and precede acceptance on success"
+    ]
+  },
+  {
+    "file": "release/test/release.test.mjs",
+    "testNames": [
+      "unconfigured release uses npm test, initializes its record and never executes ship",
+      "unset and missing preflight inputs remain retryable${advance ? ' after main advances' : ' on the same commit'}",
+      "a signaled preflight is retryable and malformed preflight declarations are rejected",
+      "a preflight launch error creates no candidate and can be corrected on a later commit",
+      "two real lane promotions become one tagged batch and one operator question",
+      "publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision",
+      "release replies require normalized ${answer} and leave later promotions eligible",
+      "agents cannot start a run on an operator-reserved question answered ${answer}",
+      "low load, drained promotion queue, clean base and supervisor ownership are required",
+      "red gate is durable, never repeated, and a later promotion may become a new candidate",
+      "interrupted start, duplicate record writes and older folds preserve once-only semantics",
+      "tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit",
+      "snapshot extraction gives tar an owned archive file instead of a padded stdin pipe",
+      "supervisor, discovery and console recover gate evidence and the operator decision from the record",
+      "a running gate excludes a second release and a direct promotion with the shared lock",
+      "gate result receipts are immutable and duplicate completion creates no extra operator question",
+      "preparation env is scoped and a signaled gate records interruption without a replay",
+      "scratch preview runs preparation with inherited dependency-skip switches removed",
+      "a moved candidate tag cannot reuse its green evidence",
+      "a held host slot defers release before cutting or claiming a candidate"
+    ]
+  },
+  {
+    "file": "settle/test/config.test.mjs",
+    "testNames": [
+      "a project with only settle settings and no parent routes completes independent review",
+      "relative LANE_CONFIG uses the intake file for lane validation and canonical review",
+      "review retry from another checkout retains the selected absolute config and effective routes",
+      "relative LANE_CONFIG resolves from the invoking directory even with --repo elsewhere",
+      "a review retry retains discovery when the new invocation sets LANE_CONFIG",
+      "CLI desk overrides are consumed by settle without adopting routes or losing lifecycle settings"
+    ]
+  },
+  {
+    "file": "settle/test/rebase-paths.test.mjs",
+    "testNames": [
+      "leading whitespace custom driver is refused for ${JSON.stringify(file)}",
+      "valid UTF-8 whitespace paths survive a clean automatic rebase",
+      "intermediate replay conflicts retain the complete whitespace filename",
+      "a non-round-trippable raw Git path refuses before attribute lookup or lane replacement",
+      "Git ${version} attribute capabilities allow clean rebase to promotable",
+      "Git ${version} attribute capabilities still catch intermediate custom drivers"
+    ]
+  },
+  {
+    "file": "settle/test/rebase-review.test.mjs",
+    "testNames": [
+      "content-discarding ${defaults ? 'merge.default' : ",
+      "custom attributes in an intermediate reviewed commit also refuse replay",
+      "directory-rename split conflicts report informational paths without unmerged files",
+      "a concurrent ${action} during the final record read remains intact",
+      "HEAD and index locks exclude native commits and branch switches during the ref transaction",
+      "the named-ref compare-and-swap refuses a commit after the locked identity check"
+    ]
+  },
+  {
+    "file": "settle/test/rebase-safety.test.mjs",
+    "testNames": [
+      "reviewed binary, modes, renames and same-file edits survive independent upstream edits",
+      "automatic rebase never updates other branches even when Git updateRefs is enabled",
+      "a lost lane-head update response resumes only the saved proved commit without replay or review",
+      "main moving during replay refuses lane-head replacement and keeps the reviewed lane"
+    ]
+  },
+  {
+    "file": "settle/test/rebase.test.mjs",
+    "testNames": [
+      "clean rebase preserves reviewed changes and revalidates the rebased head before readiness",
+      "conflicting reviewed diff escalates with paths and leaves the lane intact",
+      "intermediate replay conflicts escalate even when the final trees merge cleanly",
+      "a clean replay that loses reviewed content fails preservation before changing the lane",
+      "reviewed changes already present upstream survive an empty replay",
+      "post-rebase validation failure escalates without readiness or a new worker",
+      "new integration failure"
+    ]
+  },
+  {
+    "file": "settle/test/receipts.test.mjs",
+    "testNames": [
+      "ingestion receipt requires the captured recorded report before review or correction",
+      "lost successful correction start recovers through settle retry with one recorded run and one prompt",
+      "lost-start reconciliation retains closures, unresolved and declined blockers, and newer outcomes",
+      "lost-start reconciliation refuses multiple recorded matches without launching work"
+    ]
+  },
+  {
+    "file": "settle/test/record-safety.test.mjs",
+    "testNames": [
+      "settling an ingested older report preserves every newer reported outcome without review or correction",
+      "an unrecorded stale report cannot overwrite a newer outcome through ingestion",
+      "cached readiness and uncertain review retries hand off superseded runs",
+      "conditional ingest and reopen protect a newer report arriving immediately before the record write",
+      "a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work",
+      "conditional reopen preserves another run outcome and accepts an already-open no-op retry",
+      "incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt",
+      "resolved blocker links allow recovery of only the recorded correction run",
+      "correction creation cannot clear a newer outcome arriving inside the dispatch boundary",
+      "legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome"
+    ]
+  },
+  {
+    "file": "settle/test/ref-deadlines.test.mjs",
+    "testNames": [
+      "${mode} ${stage} replies preserve the ref and appropriate checkout locks",
+      "loaded transaction prepare retains a concurrent ref instead of overwriting its compare-and-swap refusal",
+      "loaded transaction refusal never removes a pre-existing HEAD or index lock"
+    ]
+  },
+  {
+    "file": "settle/test/ref-wallclock.test.mjs",
+    "testNames": [
+      "load 24 admits a ${stage} reply beyond the former fifteen-second ref-transaction deadline"
+    ]
+  },
+  {
+    "file": "settle/test/round-cap.test.mjs",
+    "testNames": [
+      "project cap counts completed reviews across fix runs and records the no-dispatch decision",
+      "a recorded item cap overrides the project and flag overrides persist on the item",
+      "explicit correction after capped findings remains resumable under STOP",
+      "zero item cap disables the project cap; worker starts without reviews do not consume rounds",
+      "cap reached still dispatches for Major, FAIL or red validation",
+      "red",
+      "cap cannot waive unverified claims or unparsed finding severity",
+      "uncertain reviewer retries retain the cap snapshot and do not consume another completed round",
+      "cached capped findings and explicit correction recheck head and current run",
+      "malformed cap config or flags are refused before review and dispatch",
+      "capped decisions recover missing or lost record responses without repeating review or writing duplicate notes"
+    ]
+  },
+  {
+    "file": "settle/test/settle.test.mjs",
+    "testNames": [
+      "fixture teardown waits for a concurrent child to finish writing before removing its directory",
+      "unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable",
+      "already ingested reports use immutable bytes and never create duplicate proposals",
+      "non-done outcomes escalate with substance without launching a reviewer or correction",
+      "inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence",
+      "discovered project settings override parent settle values and inherit a non-main integration branch",
+      "explicit configuration selects one layer and command flags override settle settings",
+      "an item dropped or blocked during NEEDS-WORK review cannot launch a correction",
+      "initial and cached readiness both require a clean canonical checkout",
+      "dirty lanes and foreign Git identities cannot be reviewed or dispatched",
+      "malformed reviews never silently retry models; inspected uncertain launches can start a new round",
+      "uncertain fix delivery recovers the dispatch journal and never starts a second correction",
+      "failed validation cannot become promotable even with an independent PASS",
+      "red gate",
+      "PASS with unverified claims and moved heads do not return promotable",
+      "same-lane contenders cannot run two independent reviews",
+      "other-item lane work and dropped items require judgment; a saved PASS rechecks the record"
+    ]
+  },
+  {
+    "file": "settle/test/teardown.test.mjs",
+    "testNames": [
+      "teardown stops a ${slow ? 'slow transport and its' : 'persistently busy'} inbox owner before deleting the record",
+      "a real detached owner stays alive through test end and stops in the after-hook",
+      "teardown treats a lock pointing at an unrelated command as gone without signalling it"
+    ]
+  },
+  {
+    "file": "settle/test/validation-tiers.test.mjs",
+    "testNames": [
+      "distinct worker, settle and queue panes reuse each tree through same-tree rebase and queued promotion",
+      "saved settle readiness rechecks command and environment without repeating review"
+    ]
+  },
+  {
+    "file": "supervisor/test/delivery.test.mjs",
+    "testNames": [
+      "${harness}: captured ANSI empty, typed and placeholder composers",
+      "compound styles, wrapped typing, and normal text identical to a placeholder remain busy",
+      "Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome",
+      "${harness}: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing",
+      "two quiet reads use the default three-second separation",
+      "typing between quiet reads restarts the confirmation window",
+      "the immediate final read catches a draft introduced after the confirmation pair",
+      "non-idle status, unknown layout and failed reads retain capped notices",
+      "cap retains FIFO; a later caller drains older notices once, with stable-id deduplication",
+      "concurrent callers serialize notices without interleaving or duplicate prompts",
+      "a definite pre-input refusal retries through the empty-composer gate",
+      "lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate",
+      "a lone capped notice delivers after its caller exits, without another enqueue or manual drain",
+      "a dead sender ${boundary} the prompt side effect replays pending intent with the same ID",
+      "torn inbox tails fail closed and preserve their bytes"
+    ]
+  },
+  {
+    "file": "supervisor/test/supervisor.test.mjs",
+    "testNames": [
+      "handle returns capped findings and promotion records explicit acceptance with exact heads",
+      "handle explicitly sends capped findings back once and adopts its saved correction",
+      "STOP arriving during review retains a resumable correction without launching another worker",
+      "supervisor binds head and run into the queue and retries confirmed refusals with history",
+      "bound promotion rechecks queued runs and record changes during validation before integration",
+      "late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards",
+      "late original and correction notices after lane removal preserve promotion guards and never replay settlement",
+      "refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt",
+      "supervisor entry and final notices carry the unconfigured cycle through actual promotion",
+      "cold start includes routes, priorities, history across midnight and a durable explicit reading cursor",
+      "ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository",
+      "workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics",
+      "non-done reports hand off substance without review; saved enqueue uncertainty never replays",
+      "full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity",
+      "conditional record completion preserves newer work, unresolved and declined blockers",
+      "a disappeared checkout retains its open record run through a dispatch identity receipt"
+    ]
+  },
+  {
+    "file": "test/approvals.test.mjs",
+    "testNames": [
+      "org ask records a question, its reason and its blocking links in one transaction",
+      "org ask refuses what would hand the operator an unusable question",
+      "answering yes releases the blocked work",
+      "a declined question keeps its dependents blocked until the work is re-planned",
+      "a decline says so truthfully for a dependent that is already running",
+      "a decline says so truthfully for a dependent that is already closed",
+      "a reply that starts with yes or no is that answer, and the rest is kept as the note",
+      "a text answer releases the blocked work like yes",
+      "an auto category answers at once and the operator can still overrule it",
+      "decision notes can carry a plain summary",
+      "reports carry an optional headline and missing ones only warn",
+      "older folds ignore the new fields",
+      "an older fold treats a \"no\" as resolved and releases the dependents"
+    ]
+  },
+  {
+    "file": "test/brain-start.test.mjs",
+    "testNames": [
+      "brain start tells org which session is acting (fake Herdr)"
+    ]
+  },
+  {
+    "file": "test/console-launch.test.mjs",
+    "testNames": [
+      "org console explains how to install the console when its dependencies are missing",
+      "org console starts the console app, which writes an example configuration on first run"
+    ]
+  },
+  {
+    "file": "test/deadline-boundaries.test.mjs",
+    "testNames": [
+      "promotion validation can read Git after the old injected 15-second command deadline",
+      "a nested bounded suite may exceed one command deadline while ordinary commands retain their bound",
+      "aggregate suite longer than one command"
+    ]
+  },
+  {
+    "file": "test/discernment.test.mjs",
+    "testNames": [
+      "auto items flag each risky signal, including case and inflections, without classifying the action",
+      "report checks cover decisions and questions, all prose, legacy extras and newer normalized fields",
+      "ask flags but still auto-answers; explicit uncertainty waits and still blocks dependent work",
+      "ingest durably flags miscategorized report fixtures, keeps outcome, and is idempotent and backwards compatible",
+      "guidance is shared in report templates and CLI question help",
+      "both console projections show category flags even with no waiting work or live sessions"
+    ]
+  },
+  {
+    "file": "test/file-wait.test.mjs",
+    "testNames": [
+      "file waits accept existing evidence and wait through an incomplete PID publication",
+      "file waits observe atomic renames and close their watcher on cancellation",
+      "file waits use a finite measured-load deadline and report the missing evidence",
+      "file waits follow newly created parent directories without polling",
+      "file waits scale their deadline once with measured load"
+    ]
+  },
+  {
+    "file": "test/flow.test.mjs",
+    "testNames": [
+      "a blocked worker decomposes its own blocker and fresh runs pick up the thread",
+      "record start resolves a named route without copied harness metadata",
+      "record start discovers canonical parent and repository routes from a linked worktree",
+      "record start discovers the nearest route config from a non-Git record root",
+      "budgets are advisory: exceeding them is surfaced, never refused",
+      "only record consistency is refused",
+      "dropping a blocker unblocks the work it was blocking",
+      "a brief shows sibling work and points at full reports",
+      "an abandoned run frees its item and a late report is not ingested",
+      "an interrupted write is ignored on read and repaired on the next write",
+      "concurrent writers never collide",
+      "log filters by time and starting closed work reopens it"
+    ]
+  },
+  {
+    "file": "test/focus.test.mjs",
+    "testNames": [
+      "both shipped plugin pane actions explicitly preserve focus at the CLI boundary"
+    ]
+  },
+  {
+    "file": "test/git-seed.test.mjs",
+    "testNames": [
+      "shared Git setup gives each fixture independent common directories, refs, indexes and objects"
+    ]
+  },
+  {
+    "file": "test/inbox.test.mjs",
+    "testNames": [
+      "teardown confirms the ${detached ? 'detached owner' : 'contained test'} group and stops its transport first",
+      "a ${gone} owner candidate never authorizes a signal",
+      "a ${changed} change before the first signal reads as owner gone",
+      "a replacement observed after suspension is never killed or resumed",
+      "${ambiguous} ownership fails closed without signalling",
+      "a transport outside the confirmed owner group retains evidence and resumes the owner"
+    ]
+  },
+  {
+    "file": "test/load-deadlines.test.mjs",
+    "testNames": [
+      "measured load expands internal allowances without shorter, infinite or overflowing timers",
+      "a loaded ps lookup receives time to answer and timeout retries back off with fresh output",
+      "the default ps executor under the bounded helper scales each response allowance once",
+      "the record lock waits past ten seconds for a live holder under load before appending",
+      "exhausted record-lock waits preserve live, refused and initializing owners and log bytes",
+      "exhausted, refused and malformed lookups never authorize a signal, including after timeout",
+      "a replacement PID discovered after a retry remains unauthorized",
+      "slow Herdr transport responds within a loaded allowance; refusals stay refusals",
+      "housekeeping gives each evidence read a loaded response allowance and preserves refusals",
+      "queue and notice locks wait through loaded contention and never remove a live lock",
+      "inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner",
+      "owned inbox teardown allows loaded ${delayed} confirmation before clearing its processes"
+    ]
+  },
+  {
+    "file": "test/mcp.test.mjs",
+    "testNames": [
+      "MCP stdio integration (install with npm --prefix mcp ci)"
+    ]
+  },
+  {
+    "file": "test/name-alias.test.mjs",
+    "testNames": [
+      "record and org are the same CLI for every command",
+      "help presents record and documents every retained compatibility name",
+      "record and org complete the same real workflow",
+      "the package installs record and the permanent org alias"
+    ]
+  },
+  {
+    "file": "test/offline-herdr.test.mjs",
+    "testNames": [
+      "offline boundary shields an inherited operator CLI, socket and pane IDs, but permits fixture fakes"
+    ]
+  },
+  {
+    "file": "test/one-watcher.test.mjs",
+    "testNames": [
+      "the supervisor arms the standalone watcher and launches settle separately",
+      "Brain remains an operator-queue capture service, not a run-report delivery path"
+    ]
+  },
+  {
+    "file": "test/open-session.test.mjs",
+    "testNames": [
+      "open-session tells org which session is acting (dry run, fake Herdr)",
+      "a codex route starts a codex session with its model, effort, route args and always_args (dry run)",
+      "open-session refuses a concurrent supervisor session instead of waiting",
+      "a run with a recorded report never opens a duplicate settle session"
+    ]
+  },
+  {
+    "file": "test/plugin-install.test.mjs",
+    "testNames": [
+      "planning rejects ${edit} edits to ${target} without publishing a journal",
+      "release tests preserve a separate installation inherited through the parent environment",
+      "overlapping installs serialize before planning and retain the first runtime and complete entry",
+      "a complete stale plan refuses before a journal and cannot roll back another successful install",
+      "runtime rollback removes only its own staging directory and preserves a foreign final runtime",
+      "rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes",
+      "shell install, upgrade and restore preserve every original byte including malformed UTF-8",
+      "non-UTF-8 shell bytes survive ${crash ? 'terminated-install recovery' : 'failed-write rollback'}",
+      "mode-only reinstallation at ${point} survives ${crash ? 'terminated-install recovery' : 'failed-write rollback'}",
+      "legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet",
+      "relocated installed runtime executes lane review through its bundled template dependency",
+      "release carries entry, pins final versions, rolls back and restores exact shell state",
+      "build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM",
+      "manifest build installs entry even when npm is skipped; restores preserve surrounding user edits",
+      "plugin build discovers native CLIs and installs default machine paths without entry overrides",
+      "Herdr build checkout can move or disappear while installed entry and restore still work",
+      "supervisor resolves the selected workspace to canonical Git instead of its plugin cwd",
+      "real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore",
+      "non-writable shell files refuse installation without adapters or partial snippets",
+      "recovery receipt precedes shell writes and ${crash ? 'recovers a terminated install' : 'rolls back a failure after the first snippet'}",
+      "rollback preserves a namespaced tag with a same-basename distractor",
+      "terminated install recovers a staged shell replacement as well as the first installed snippet",
+      "edited adapters/snippets and planted symlinks refuse before activation or removal mutates state",
+      "rolling back to a release without discovery removes entry and can roll forward again"
+    ]
+  },
+  {
+    "file": "test/priorities.test.mjs",
+    "testNames": [
+      "ingested proposals validate valid and explicitly unaligned priority links before creating work",
+      "unknown proposal alignment refuses ingestion without saving the report or appending any events",
+      "operator ranks are separate from item hints and every affected rank retains who and why",
+      "runs validate alignment, inherit declared item outcomes and allow explicitly unaligned work",
+      "agents propose waiting questions even with auto policy and cannot rank or answer for the operator"
+    ]
+  },
+  {
+    "file": "test/processes.test.mjs",
+    "testNames": [
+      "receipt registration refuses ${failure} ownership without signalling",
+      "${failure} individual lookup never signals an unrelated replacement (${group ? 'group' : 'PID'})",
+      "${failure} audit reports failure but does not prevent fresh group teardown",
+      "the audit reports group members whose parent exited, without hunting or signalling them",
+      "confirmed absence, command changes and a changed group leader never authorize historical signals",
+      "a zombie never licenses a signal even when its command has become defunct",
+      "a positive current tuple immediately precedes both PID and group signals",
+      "ps parsing rejects failed, timed-out, truncated and incomplete snapshots before any ownership is inferred",
+      "invalid owned identities and mismatched snapshot keys never authorize signals"
+    ]
+  },
+  {
+    "file": "test/pty-cache.test.mjs",
+    "testNames": [
+      "PTY fixtures compile unchanged native ownership code once and keep fault variants separate"
+    ]
+  },
+  {
+    "file": "test/pty.test.mjs",
+    "testNames": [
+      "PTY transport uses native BSD arguments and shell-safe util-linux arguments",
+      "PTY completion retains TTY, arguments, output and exit status",
+      "PTY native owner accepts the measured-load allowance above its fifteen-second base",
+      "PTY cleanup completes when native enumeration exceeds its former three-second allowance",
+      "PTY cleanup refusal still returns unconfirmed status with a loaded allowance",
+      "PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops",
+      "${kind} of the outer suite clears the independently owned PTY session",
+      "blocked PTY culprit"
+    ]
+  },
+  {
+    "file": "test/recap.test.mjs",
+    "testNames": [
+      "blocks are stretches of activity split by a two-hour quiet gap",
+      "an overnight run is one block; a long day is cut at 06, 12, 18 and 22, short pieces joining a neighbour",
+      "a write without ORG_ACTOR and without a terminal is flagged unattributed, never refused",
+      "org recap: threads from the idea, what each spawned and asked, who steered, what is pending",
+      "org recap --back steps to earlier blocks and refuses a bad count"
+    ]
+  },
+  {
+    "file": "test/release.test.mjs",
+    "testNames": [
+      "a release is a read-only copy of a tag, never rebuilt in place, and only from a tag",
+      "activate moves the launchers and the Brain service onto current; rollback and restore undo it",
+      "an existing before directory learns that the new record launcher was absent",
+      "restore preserves a replacement at a launcher that was originally missing",
+      "a launcher that is a real file is never replaced",
+      "the dev plugin is a second id pointed at a worktree",
+      "activating the active release again (after a failed step) keeps its real previous release",
+      "the plugin is linked to the active release itself and re-linked on every switch; restore unlinks it"
+    ]
+  },
+  {
+    "file": "test/report.test.mjs",
+    "testNames": [
+      "parses the envelope shapes reports use",
+      "the brief template becomes a valid report once outcome, summary and headline are filled in",
+      "accepts lenient input and keeps unknown fields",
+      "explains problems precisely instead of guessing"
+    ]
+  },
+  {
+    "file": "test/sanitization.test.mjs",
+    "testNames": [
+      "many unterminated string-control introducers sanitize independently",
+      "human-readable CLI views and generated briefs strip terminal control sequences"
+    ]
+  },
+  {
+    "file": "test/settle-watch.test.mjs",
+    "testNames": [
+      "settle-watch tells org which session is acting (dry run, fake Herdr)",
+      "a codex route starts a codex session with its model, effort, route args and always_args (dry run)"
+    ]
+  },
+  {
+    "file": "test/startup-deadlines.test.mjs",
+    "testNames": [
+      "${module} acknowledges a delayed startup at load 24, without launching real background work"
+    ]
+  },
+  {
+    "file": "test/suite.test.mjs",
+    "testNames": [
+      "npm phases preserve every file once and isolate copied-entry probes",
+      "the phased command propagates a failing suite and never starts its later phase",
+      "injected suite failure",
+      "the phased command forwards suite watchdog overrides to its bounded runner"
+    ]
+  },
+  {
+    "file": "test/test-hangs.test.mjs",
+    "testNames": [
+      "real detached fixture cleanup survives an assertion failure",
+      "${kind} cleanup bounds genuinely detached fixtures outside the suite group",
+      "real detached cancellation fixture",
+      "compound fixture scenarios have an explicit aggregate bound and owned cleanup",
+      "a late waiter receives a child result and output after close",
+      "a completed fixture never looks up or signals its historical PID during teardown",
+      "already completed fixture",
+      "${kind} names the failed test and reaps its fixture child and grandchild",
+      "${kind} watchdog bounds a blocked event loop and clears the fixture group",
+      "blocked event loop culprit",
+      "${signal} of an outer runner reaps every nested worker and blocked fixture descendant",
+      "nested blocked loop",
+      "enclosing nested runner",
+      "a leader exiting before its redirected background child fails the suite and leaves no survivor",
+      "a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures",
+      "audit lookup failure",
+      "suite cancellation clears a detached spawn frozen before its ownership lookup",
+      "spawn before ownership lookup",
+      "fixture environment overrides cannot detach a grandchild from the suite group",
+      "no escaped grandchild",
+      "a fresh signal confirms the same owned birth tuple across caller timezone changes"
+    ]
+  },
+  {
+    "file": "test/tidy-tabs.test.mjs",
+    "testNames": [
+      "closes exited watchers and old finished sessions, keeps the newest session",
+      "never closes active, unnamed or still-running tabs, or its own tab",
+      "an operator chat (unnamed agent) is kept even in a session or lane tab",
+      "closes lane worker tabs only when every worker there has a recorded report",
+      "a newer lane review verdict finishes its idle review tab, but an older verdict does not",
+      "a FAIL review record on its first nonempty line finishes an older review session",
+      "a watcher label in a lane workspace or with an agent inside is left alone",
+      "shell-only detection"
+    ]
+  },
+  {
+    "file": "test/tier-plan.test.mjs",
+    "testNames": [
+      "tier selection covers every current test once in promotion or release and excludes support modules"
+    ]
+  },
+  {
+    "file": "test/today.test.mjs",
+    "testNames": [
+      "org today --json builds the console read model deterministically",
+      "org today follows the local day of TZ",
+      "org today prints plain text with codes only in parentheses",
+      "org today --json names the latest run of each agent, finished runs included, so a front end can name idle agents",
+      "org today says which stage is open and which stage each question belongs to"
+    ]
+  },
+  {
+    "file": "test/workspace.test.mjs",
+    "testNames": [
+      "canonical background lookup uses native Git identity without publishing metadata or focus",
+      "lookup refuses foreign source identity, linked source and stale workspace metadata",
+      "lookup refuses absent, closed, linked and ambiguous canonical receipts",
+      "lookup refuses a linked caller and surfaces native failures without a guessed ID"
+    ]
+  },
+  {
+    "file": "test-slot/test/test-slot.test.mjs",
+    "testNames": [
+      "refuses ${name} with a live ${orphan ? \"orphaned command group\" : \"runner\"}",
+      "refuses a live holder's legacy environment-dependent start identity",
+      "never admits two takers when one is paused between comparing and deleting the stale record",
+      "leaves a dead holder and an abandoned takeover guard in place, then recovers after operator cleanup",
+      "refuses a second run by name, runs none of its command, and admits it once the first releases",
+      "uses the existing bch-cloak host path by default",
+      "keeps the slot while a SIGKILLed runner's command still runs, and recovers it once that group is gone",
+      "takes over a record whose process and group are gone, or whose pid now belongs to another process",
+      "runs a waiting run started inside the holder's own command at once, ${name}",
+      "runs a process that carries the holder's token inside the slot, even outside the holder's process tree",
+      "never matches a waiter by its command line: a free slot is taken at once, a held one is refused by the holder's pid",
+      "takes the slot again in the process that holds it without waiting or replacing it",
+      "queues behind a live holder and takes the slot when it is released",
+      "refuses once its wait runs out",
+      "reads its wait from the environment, and refuses a malformed one",
+      "refuses, without waiting, and leaves a live holder's lock in place when ps is ${name}",
+      "refuses when ps cannot list the ancestry it needs to tell a nested waiter from another run",
+      "refuses, and leaves the file in place, for a record that names no holder, or a live one it cannot date",
+      "forwards ${signal} to the command's group, then releases",
+      "status reports free (0), held (1) and unknown (2) without touching the lock",
+      "never reports success for an interrupted run, even when its command exits 0 on the signal",
+      "release removes only its own lock",
+      "uses the workspace path and passes it to nested commands",
+      "retries only once for ${name}",
+      "does not retry a second timeout or a signaled timeout",
+      "limits nested retrying holders to two attempts when the ${childRetries ? 'child' : 'ancestor'} initiates the retry",
+      "promotion retries only the timed-out heavy step and continues the remaining steps once",
+      "does not inherit a stale token into a dead holder record",
+      "a configured workspace path waits for the legacy slot and holds both for its entire command"
+    ]
+  },
+  {
+    "file": "watch/test/watch.test.mjs",
+    "testNames": [
+      "every terminal condition has a distinct, compact supervisor notice",
+      "spawn resolves the cwd workspace when it is run outside a Herdr pane",
+      "a valid report is checked and delivered without Herdr being present",
+      "final watch notice waits for fake operator typing, then sends once across watcher restart",
+      "a capped final watcher exits while its owned notice later delivers without another watcher",
+      "a report landing wakes the watcher without polling Herdr",
+      "a valid report also waits while the worker state is unknown",
+      "a mismatched report is invalid even when org check passes",
+      "a vanished worker delivers exited-without-report and stops",
+      "an initially idle worker is not terminal until it has worked",
+      "idle grace waits for a late report before sending a no-report notice",
+      "idle grace does not start before the worker has been seen working",
+      "idle grace notices a blocked worker immediately and keeps watching",
+      "idle, working, idle without a report delivers both stop notices",
+      "a blocked worker delivers its distinct notice",
+      "a valid report stays intermediate while blocked and is final only after idle",
+      "a refused intermediate delivery stays first in the inbox and recovers before the final report",
+      "a still-working worker delivers the long-running notice",
+      "a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts",
+      "a Herdr outage is delivered after Herdr recovers, never reported as gone"
+    ]
+  }
+]

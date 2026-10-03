@@ -105,6 +105,13 @@ export function main(argv = process.argv.slice(2)) {
     return;
   }
   const invocation = candidateCommand(stage, candidate, { skipLive: values['skip-live'] });
+  if (stage === 'gate') {
+    const checks = [process.execPath, path.join(candidate, 'test/helpers/tier.mjs'), 'release'];
+    console.log(`release offline checks: ${JSON.stringify(checks)}`);
+    const verified = spawnSync(checks[0], checks.slice(1), { cwd: candidate, env: invocation.env, stdio: 'inherit' });
+    if (verified.error) throw verified.error;
+    if (verified.status !== 0) { process.exitCode = verified.status ?? 1; return; }
+  }
   console.log(`release ${stage}: ${JSON.stringify(invocation.command)}`);
   const result = spawnSync(invocation.command[0], invocation.command.slice(1), { cwd: candidate, env: invocation.env, stdio: 'inherit' });
   if (result.error) throw result.error;

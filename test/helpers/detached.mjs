@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,7 +14,7 @@ export async function waitForDetachedCleanup(root) {
   // Include live producers, so a middle process cannot spawn an unseen leaf
   // after a fixed receipt snapshot. No PID here ever authorizes a signal.
   const executable = path.join(root, 'fixture-deadline');
-  const deadline = Date.now() + 14000; // Two six-second detached generations.
+  const deadline = Date.now() + loadTimeout(14000); // Two six-second detached generations.
   let empty = 0;
   for (;;) {
     const result = tracker.snapshot();
@@ -26,7 +27,7 @@ export async function waitForDetachedCleanup(root) {
     await new Promise(resolve => setTimeout(resolve, 20));
   }
 }
-export function spawnDetachedFixture(t, mode, suppliedRoot, timeoutMs = 15000) {
+export function spawnDetachedFixture(t, mode, suppliedRoot, timeoutMs) {
   const root = suppliedRoot ?? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-detached-'));
   const child = spawnChild(t, process.execPath, [launcher, root, mode], {}, timeoutMs);
   // Child cleanup runs first, then the independently bounded descendants finish,

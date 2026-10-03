@@ -2,6 +2,7 @@
 // transport/model execution is scripted. No routes or validation config exists.
 import fs from 'node:fs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { repositorySeed } from '../../test/helpers/git-seed.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,10 +12,11 @@ import { createProcessTracker, killProcess } from '../../test/helpers/processes.
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 const rootTool = fileURLToPath(new URL('../../', import.meta.url));
+let copyInitialRepository;
 export function fixture(t, { source = rootTool, actor = 'settle-test-agent', execute = spawnSync } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-test-')));
   const repo = path.join(root, 'project'), workspace = path.join(root, 'lane'), bin = path.join(root, 'bin');
-  fs.mkdirSync(repo); fs.mkdirSync(bin);
+  fs.mkdirSync(bin);
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, SETTLE_TEST_ROOT: root,
     HOME: path.join(root, 'home'), XDG_CONFIG_HOME: path.join(root, 'xdg'),
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
@@ -80,16 +82,31 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   };
   t.after(cleanup);
   const exec = (file, args, cwd = repo, extra = {}) => {
-    try { return execute(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 15_000 }); }
+    try { return execute(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(15_000) }); }
     finally { rememberWatchers(); }
   };
   const checked = (file, args, cwd, extra) => { const r = exec(file, args, cwd, extra); assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim(); };
   const git = (args, cwd = repo) => checked('git', args, cwd);
-  git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Settle tests']); git(['config', 'user.email', 'settle@example.invalid']);
-  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: 'node --test test.mjs' } }));
-  fs.writeFileSync(path.join(repo, 'work.txt'), 'base\n');
-  fs.writeFileSync(path.join(repo, 'test.mjs'), "import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs'; test('work is nonempty',()=>assert.ok(fs.readFileSync('work.txt','utf8').trim()));\n");
-  git(['add', '.']); git(['commit', '-qm', 'Create unconfigured project']);
+  const initializeRepository = seed => {
+    const git = args => {
+      const result = execute('git', ['-C', seed, ...args], { cwd: seed, env, encoding: 'utf8', timeout: loadTimeout(15000) });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    };
+    git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Settle tests']); git(['config', 'user.email', 'settle@example.invalid']);
+    fs.writeFileSync(path.join(seed, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: 'node --test test.mjs' } }));
+    fs.writeFileSync(path.join(seed, 'work.txt'), 'base\n');
+    fs.writeFileSync(path.join(seed, 'test.mjs'), "import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs'; test('work is nonempty',()=>assert.ok(fs.readFileSync('work.txt','utf8').trim()));\n");
+    git(['add', '.']); git(['commit', '-qm', 'Create unconfigured project']);
+  };
+  // A supplied command hook owns only this fixture's scratch tree. Do not send
+  // it shared seed operations or change the setup-failure boundary it scripts.
+  if (execute === spawnSync) {
+    copyInitialRepository ??= repositorySeed(process.env.HERDR_TEST_OFFLINE_ROOT, initializeRepository);
+    copyInitialRepository(repo);
+  } else {
+    fs.mkdirSync(repo);
+    initializeRepository(repo);
+  }
   git(['worktree', 'add', '-q', '-b', 'lane/topic', workspace]);
   const org = path.join(repo, '.org');
   env.SETTLE_TEST_RECORD = path.join(source, 'bin/org.mjs');

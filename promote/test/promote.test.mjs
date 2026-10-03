@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
 import { readInbox, inboxPath } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
 const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
 const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
@@ -19,7 +21,7 @@ if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{a
 if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
 `;
 async function until(fn) {
-  const end = Date.now() + 30000;
+  const end = Date.now() + loadTimeout(30000);
   while (Date.now() < end) { if (fn()) return; await delay(30); }
   assert.fail('timed out waiting for queue evidence');
 }
@@ -57,7 +59,7 @@ function fixture(t) {
   };
   const processes = new Map();
   const cli = (args, cwd = repo) => {
-    const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: 10000 });
+    const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: loadTimeout(10000) });
     const owner = path.join(queue.directory, 'worker.lock/owner.json');
     if (result.status === 0 && fs.existsSync(owner)) {
       const pid = JSON.parse(fs.readFileSync(owner, 'utf8')).pid;
@@ -124,7 +126,7 @@ test('queued promotion waits before validation under low-memory pressure and pro
 test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
   const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
   const launched = f.launch(['first', 'second']); assert.ok(launched.worker.ready);
-  await until(() => f.results().length === 2);
+  await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.deepEqual(f.results().map((r) => [r.topic, r.outcome, r.delivered]), [['first', 'promoted', true], ['second', 'promoted', true]]);
   assert.equal(fs.existsSync(first), false); assert.equal(fs.existsSync(second), false);
   assert.equal(f.git(['rev-list', '--merges', 'main']), '');
@@ -145,7 +147,7 @@ test('promotion notice queues during typing and delivers after clearing without 
   await until(() => fs.existsSync(inbox) && readInbox(inbox).length === 1);
   assert.deepEqual(f.messages(), []); assert.equal(f.queue.load().current.phase, 'completed');
   fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
-  await until(() => f.results().length === 1);
+  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
   assert.equal(f.messages().length, 1); assert.equal(readInbox(inbox)[0].state, 'sent');
 });
@@ -181,7 +183,7 @@ test('expected head survives CLI enqueue and succeeds exactly; a changed binding
   assert.throws(() => enqueue(f.queue, ['first', 'second'], opts), /requires one lane/);
   assert.equal(f.cli(['first', '--expected-head', 'HEAD']).status, 1);
   const request = f.launch(['first', '--expected-head', expected]); assert.equal(request.jobs[0].id, job.id);
-  await until(() => f.results().length === 1);
+  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(f.results()[0].expectedHead, expected); assert.equal(f.results()[0].tip, expected);
   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.git(['rev-parse', 'main']), expected);
 });
@@ -198,7 +200,7 @@ test('expected head refuses an automatic rebase and post-preparation tip changes
       f.env.LANE_CONFIG = config;
     }
     const base = f.git(['rev-parse', 'main']);
-    const r = spawnSync(process.execPath, [LANE, 'promote', 'first', '--expected-head', expected], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 10000 });
+    const r = spawnSync(process.execPath, [LANE, 'promote', 'first', '--expected-head', expected], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) });
     assert.equal(r.status, 1, r.stdout); assert.match(r.stderr, mode === 'rebase' ? /requires a rebase/ : /tip differs from expected head/);
     assert.doesNotMatch(r.stdout, /validating in/);
     assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(wt));
@@ -227,7 +229,7 @@ for (const mode of ['dirty', 'red', 'conflict']) test(`${mode} refusal is delive
     fs.writeFileSync(path.join(f.repo, 'shared'), 'main\n'); f.git(['add', '.']); f.git(['commit', '-qm', 'main edit']);
   }
   const before = f.git(['rev-parse', `lane/bad`]);
-  f.launch(['bad', 'good']); await until(() => f.results().length === 2);
+  f.launch(['bad', 'good']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.equal(f.results()[0].outcome, 'refused', fs.readFileSync(f.results()[0].log, 'utf8')); assert.equal(f.results()[0].delivered, true);
   assert.match(f.results()[0].reason, mode === 'dirty' ? /not clean/ : mode === 'red' ? /validation failed/ : /does not rebase cleanly/);
   assert.equal(f.git(['rev-parse', 'lane/bad']), before);
@@ -252,7 +254,7 @@ test('replay conflict after clean merge-tree preflight names the file in the not
   assert.equal(preflight.status, 0, preflight.stderr);
   assert.match(preflight.stdout, / clean\n$/);
 
-  f.launch(['bad', 'good']); await until(() => f.results().length === 2);
+  f.launch(['bad', 'good']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   const refused = f.results()[0];
   const log = fs.readFileSync(refused.log, 'utf8');
   assert.equal(refused.outcome, 'refused', log);
@@ -279,7 +281,7 @@ test('replay conflict after clean merge-tree preflight names the file in the not
 
 test('capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second'); fs.writeFileSync(path.join(f.root, 'delivery-fail'), '1');
-  f.launch(['first', 'second']); await until(() => f.results().length === 2);
+  f.launch(['first', 'second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.ok(f.results().every((r) => r.outcome === 'promoted' && r.delivered === false && r.delivery_error));
   const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
   assert.ok(fs.existsSync(`${inbox}.owner.lock`));
@@ -307,18 +309,18 @@ test('two concurrent enqueue commands share one drain; direct promote is exclude
   const marker = path.join(f.root, 'gate');
   const command = `${process.execPath} -e 'require("fs").writeFileSync(${JSON.stringify(marker)}, "ready"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1800)'`;
   f.launch(['first', '--validate', command]);
-  await until(() => fs.existsSync(marker));
+  await waitForFile(marker, () => true, { timeoutMs: 30000 });
   const direct = spawnSync(process.execPath, [LANE, 'promote', 'second'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.notEqual(direct.status, 0); assert.match(direct.stderr, /lane-promote.lock/);
-  f.launch(['second']); await until(() => f.results().length === 2);
+  f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.deepEqual(f.results().map((r) => r.topic), ['first', 'second']);
   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
 });
 
 test('enqueue during the empty-worker handoff always starts a new drain', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second');
-  f.launch(['first']); await until(() => f.results().length === 1);
-  f.launch(['second']); await until(() => f.results().length === 2);
+  f.launch(['first']); await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+  f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
 });
 
@@ -409,7 +411,7 @@ cp.spawnSync=function(cmd,args,options){
     f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
   }
   f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run]);
-  await until(() => f.results().length === 1);
+  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(f.results()[0].outcome, 'promoted');
   if (failVelocity) {
     assert.equal(fs.existsSync(failureMarker), true, 'the velocity note actually failed');
@@ -447,7 +449,8 @@ function blockCleanup(f) {
   fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const args=process.argv.slice(2);
 ${quietFake}
 if (args[0]==='workspace' && args[1]==='list') {
-  fs.writeFileSync(${JSON.stringify(marker)}, String(process.pid));
+  fs.writeFileSync(${JSON.stringify(marker + ".tmp")}, String(process.pid));
+  fs.renameSync(${JSON.stringify(marker + ".tmp")}, ${JSON.stringify(marker)});
   while (!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
 }
 if (args[0]==='agent' && args[1]==='prompt') fs.appendFileSync(${JSON.stringify(path.join(f.root, 'notices.jsonl'))},JSON.stringify(args)+'\\n');
@@ -477,7 +480,7 @@ test('crash during batch cleanup resumes without repeating the gate or trusting 
     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
   };
   f.onCleanup(stop);
-  await until(() => fs.existsSync(blocked.marker));
+  await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
   blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
   assert.ok(blockedEntry.command.includes(f.herdr), 'birth command belongs to the created cleanup fixture');
   const saved = f.queue.load().current;
@@ -506,7 +509,7 @@ test('direct gate overlapping queued cleanup prevents queue and direct close fro
   const request = f.launch(['first', '--org', blocked.org]);
   const ready = path.join(f.root, 'direct-gate-pid'); const release = path.join(f.root, 'direct-gate-release');
   const script = path.join(f.root, 'direct-gate.mjs');
-  fs.writeFileSync(script, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));
+  fs.writeFileSync(script, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready + ".tmp")},String(process.pid));fs.renameSync(${JSON.stringify(ready + ".tmp")},${JSON.stringify(ready)});
 while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);\n`);
   let direct, blockedEntry, gateEntry;
   f.onCleanup(async () => {
@@ -516,7 +519,7 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
     for (const entry of [blockedEntry, gateEntry]) await killCreated(entry);
     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
   });
-  await until(() => fs.existsSync(blocked.marker));
+  await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
   blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
   assert.ok(blockedEntry.command.includes(f.herdr));
   const tip = f.git(['rev-parse', 'lane/first']);
@@ -524,11 +527,11 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
     env: { ...f.env, LANE_VALIDATE: `${process.execPath} ${script}` }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; direct.stdout.on('data', (v) => { output += v; }); direct.stderr.on('data', (v) => { output += v; });
   const exited = waitForExit(direct);
-  await until(() => fs.existsSync(ready));
+  await waitForFile(ready, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
   gateEntry = registerProcess(Number(fs.readFileSync(ready, 'utf8')), false);
   assert.ok(gateEntry.command.includes(script));
   fs.writeFileSync(blocked.release, 'release');
-  await until(() => f.results().length === 1);
+  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(direct.exitCode, null, 'the direct gate is still in progress');
   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
   assert.match(f.results()[0].reason, /lane close:.*lane-promote.lock/);

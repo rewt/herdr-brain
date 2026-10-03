@@ -1,3 +1,4 @@
+import { loadTimeout } from '../lib/deadline.mjs';
 // herdr/release.sh: releases are immutable copies of tags, switched by one link, and the
 // launchers and Brain service can always go back to the dev checkout. Offline: a scratch
 // repository, no Herdr, no npm, and launchctl replaced by `true`.
@@ -15,7 +16,7 @@ const MANIFEST = path.resolve(import.meta.dirname, '..', 'herdr-plugin.toml');
 function scratch() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-test-'));
   const repo = path.join(root, 'repo');
-  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe', timeout: 5000 });
+  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe', timeout: loadTimeout(5000) });
   const write = (rel, text) => { fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true }); fs.writeFileSync(path.join(repo, rel), text); };
   fs.mkdirSync(repo);
   git('init', '-q');
@@ -45,11 +46,11 @@ function scratch() {
   const env = releaseEnvironment(process.env, { HOME: userHome, ZDOTDIR: userHome, ORG_DIR: '', ORG_ACTOR: path.basename(root),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: plist, HERDR_MONITOR_ENTRY_BIN: path.join(home, 'entry/bin'),
     RELEASE_NO_HERDR: '1', RELEASE_NO_NPM: '1', RELEASE_LAUNCHCTL: launchctl });
-  const runWith = (extra, ...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 20000 });
+  const runWith = (extra, ...a) => spawnSync('bash', [SCRIPT, ...a], { env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(20000) });
   const run = (...a) => runWith({}, ...a);
-  const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8', env, timeout: 5000 }).trim();
-  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8', env, timeout: 5000 }).trim();
-  const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root], { timeout: 5000 }); fs.rmSync(root, { recursive: true, force: true }); };
+  const org = () => execFileSync(process.execPath, [path.join(bin, 'org')], { encoding: 'utf8', env, timeout: loadTimeout(5000) }).trim();
+  const record = () => execFileSync(process.execPath, [path.join(bin, 'record')], { encoding: 'utf8', env, timeout: loadTimeout(5000) }).trim();
+  const cleanup = () => { execFileSync('chmod', ['-R', 'u+w', root], { timeout: loadTimeout(5000) }); fs.rmSync(root, { recursive: true, force: true }); };
   const launchctlCalls = () => fs.readFileSync(calls, 'utf8').trim().split('\n');
   return { root, home, bin, plist, run, runWith, org, record, cleanup, launchctlCalls };
 }

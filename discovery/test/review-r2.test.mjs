@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -39,7 +40,7 @@ process.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers
     options: { cwd: repo, sandboxBinary: provider, runtimeDir: path.join(scratch, 'runtime'), worktreeRoot: path.join(scratch, 'lanes') } };
 }
 const blob = (repo) => {
-  const r = spawnSync('git', ['-C', repo, 'show', 'HEAD:data.bin'], { timeout: 5000, env: process.env });
+  const r = spawnSync('git', ['-C', repo, 'show', 'HEAD:data.bin'], { timeout: loadTimeout(5000), env: process.env });
   assert.equal(r.status, 0, r.stderr.toString()); return r.stdout;
 };
 const runEntry = (f, settings) => {
@@ -98,7 +99,7 @@ for (const target of ['record', 'git']) caseTest(`Git filter refuses a temporary
   const script = `require('fs').writeFileSync(require('path').join(process.env.TMPDIR,${JSON.stringify(path.basename(sentinel))}),'unsafe')`;
   const driver = `${quote(process.execPath)} -e ${quote(script)}`;
   const r = spawnSync(process.execPath, [path.join(product, 'discovery/git-driver.mjs'), f.provider,
-    JSON.stringify([record]), Buffer.from(driver).toString('base64')], { cwd: f.repo, env: process.env, encoding: 'utf8', timeout: 5000, input: 'input bytes' });
+    JSON.stringify([record]), Buffer.from(driver).toString('base64')], { cwd: f.repo, env: process.env, encoding: 'utf8', timeout: loadTimeout(5000), input: 'input bytes' });
   assert.notEqual(r.status, 0); assert.match(r.stderr, /writable path redirected/u);
   assert.deepEqual(fs.readFileSync(sentinel), before); assert.ok(!fs.existsSync(f.audit));
 });
@@ -135,7 +136,7 @@ caseTest('Claude live cases stay pending without authorized authentication and n
   const f = fixture(t), native = path.join(f.scratch, 'fake-claude'), marker = path.join(f.scratch, 'native-called');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(marker)},'called');process.exit(1);\n`, { mode: 0o755 });
   const r = spawnSync(process.execPath, [path.join(product, 'discovery/acceptance.mjs'), '--harness', 'claude', '--binary', native], {
-    cwd: f.repo, env: process.env, encoding: 'utf8', timeout: 15000,
+    cwd: f.repo, env: process.env, encoding: 'utf8', timeout: loadTimeout(15000),
   });
   assert.equal(r.status, 1, r.stderr);
   const evidence = r.stdout.match(/^Evidence: (.+)$/mu)?.[1]; assert.ok(evidence, r.stdout);

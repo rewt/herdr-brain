@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
 
 async function until(predicate) {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + loadTimeout(5000);
   while (!predicate() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
   assert.ok(predicate(), 'fixture did not reach its transport call');
 }

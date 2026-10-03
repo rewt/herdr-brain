@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -23,7 +24,7 @@ function fixture(t) {
   return { scratch, repo, options: { cwd: repo, runtimeDir: path.join(scratch, 'runtime'), worktreeRoot: path.join(scratch, 'lanes') } };
 }
 async function waitUntil(predicate, description) {
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + loadTimeout(10000);
   while (!predicate()) {
     if (Date.now() > deadline) throw new Error(`timed out: ${description}`);
     await new Promise((resolve) => setTimeout(resolve, 10));

@@ -1,6 +1,8 @@
 // Dependency-free test transport for BSD script (Darwin) and util-linux script.
 import { loadFactor, loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
+import { offlineHerdr } from './offline-herdr.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -25,30 +27,44 @@ export function ptyCommand(binary, args, { platform = process.platform, executab
   if (platform === 'linux') return { file: executable, args: ['-q', '-e', '-c', `${exec ? 'exec ' : ''}${[binary, ...args].map(quote).join(' ')}`, '/dev/null'] };
   throw new Error(`unsupported PTY test platform: ${platform}`);
 }
+let cache;
+function nativeOwner(source) {
+  const digest = createHash('sha256').update(fs.readFileSync(source)).digest('hex');
+  if (!cache) {
+    offlineHerdr();
+    cache = fs.mkdtempSync(path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'pty-owner-'));
+    process.once('exit', () => fs.rmSync(cache, { recursive: true, force: true }));
+  }
+  const owner = path.join(cache, digest);
+  if (!fs.existsSync(owner)) {
+    const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', owner, source], {
+      encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: cache },
+    });
+    if (built.error || built.status) {
+      fs.rmSync(owner, { force: true });
+      throw Error(`PTY owner unavailable: ${built.error?.message ?? built.stderr}`);
+    }
+  }
+  return owner;
+}
 export function runPTY(binary, args, options = {}) {
+  const { ownerSource = fileURLToPath(new URL('./pty-owner.c', import.meta.url)), ...nativeOptions } = options;
   const factor = loadFactor();
   const maximum = loadTimeout(15000, factor);
-  const timeout = Math.min(options.timeout || maximum, maximum);
+  const timeout = Math.min(nativeOptions.timeout || maximum, maximum);
   const cleanupMs = loadTimeout(3000, factor);
   if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('invalid PTY timeout');
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-pty-owner-'));
-  try {
-    const owner = path.join(scratch, 'owner');
-    const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', owner,
-      fileURLToPath(new URL('./pty-owner.c', import.meta.url))], {
-      encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: scratch },
-    });
-    if (built.error || built.status) throw Error(`PTY owner unavailable: ${built.error?.message ?? built.stderr}`);
-    const transport = ptyCommand(owner, [String(timeout), String(cleanupMs), binary, ...args], { exec: true });
-    const responseMs = loadTimeout(timeout + cleanupMs, 1);
-    // script's timeout may kill its transport first. The native owner lives in
-    // the independent PTY session and still completes bounded descendant cleanup.
-    return spawnSync(transport.file, transport.args, {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options,
-      timeout: responseMs, [commandAllowance]: responseMs, killSignal: 'SIGKILL',
-    });
-  } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+  const owner = nativeOwner(ownerSource);
+  const transport = ptyCommand(owner, [String(timeout), String(cleanupMs), binary, ...args], { exec: true });
+  const responseMs = loadTimeout(timeout + cleanupMs, 1);
+  // Only compilation is shared. Every invocation retains its own native session,
+  // command deadline, cleanup window, descendant audit and signal authority.
+  return spawnSync(transport.file, transport.args, {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...nativeOptions,
+    timeout: responseMs, [commandAllowance]: responseMs, killSignal: 'SIGKILL',
+  });
 }
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv[2] === '--run') {
   const result = runPTY(process.argv[3], process.argv.slice(4));
   process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? result.error?.message ?? '');

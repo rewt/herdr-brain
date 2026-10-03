@@ -1,3 +1,4 @@
+import { loadTimeout } from '../lib/deadline.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -77,7 +78,7 @@ esac`);
     '--ledger-dir', missingRuntime, '--launcher', path.join(root, 'launcher'), '--cmem-domain', path.join(root, 'cmem')], {
     encoding: 'utf8',
     env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` },
-    timeout: 2_000,
+    timeout: loadTimeout(2_000),
   });
   assert.equal(prepared.status, 1, prepared.stdout + prepared.stderr);
   assert.equal(prepared.error, undefined);
@@ -131,7 +132,7 @@ esac`);
 
   const result = spawnSync(process.execPath, [OPEN_SESSION, '--open', '--org', path.join(root, '.org'), '--cwd', cwd,
     '--lane-config', laneConfig, '--checklist', checklist, '--ledger-dir', supervisor], {
-    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` }, timeout: 10_000,
+    encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'supervisor-test-agent', PATH: `${bin}:${process.env.PATH}` }, timeout: loadTimeout(10_000),
   });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(result.error, undefined, 'the launcher refuses promptly rather than waiting');

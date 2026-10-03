@@ -1,0 +1,9 @@
+ENG-123  Publish promotion test PID markers atomically
+status: ready · role: engineer
+within: G-3 Herdr platform roadmap: standardize bch… → ENG-120 Release gate focus monitor startup neve…
+created: 2026-10-03 11:47 by run:R-147 (proposed in R-147)
+why: The direct-gate promotion fixture waits for marker existence before reading its PID; a read during file creation produced PID zero and failed the first post-change npm test despite a passing isolated retry.
+budget (advisory): runs 0/3 · children 0/4 · depth 2/3 · escalations 0/1
+
+history:
+  2026-10-03 11:47  added ENG-123 "Publish promotion test PID markers atomically" under ENG-120 (proposed by R-147)

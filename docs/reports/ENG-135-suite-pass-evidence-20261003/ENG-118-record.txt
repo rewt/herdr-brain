@@ -1,0 +1,86 @@
+ENG-118  Host test slot, for any project: port bch-cloak's ENG-725 test slot (scripts/test-slot/test-slot.mjs: one host-wide lock, liveness by pid and start time, process-group holder, nested runs inherit, exit 75 refusal, optional wait) as a Herdr Monitor module. Promotion-tier validation and the release gate take it, so heavy suites from different lanes and projects never run at once on one machine; it also respects bch-cloak's existing /private/tmp/bch-cloak-test-slot.lock so the two projects don't overlap. Adopt bch-cloak's rule with it: a timeout under load is re-run alone once before it counts as a failure
+status: done · role: engineer · capability: tooling
+within: G-3 Herdr platform roadmap: standardize bch… → ARCH-10 Phase 5: adoption (init for a new proje…
+created: 2026-10-03 10:02 by supervisor-herdr
+closed: done 2026-10-03 14:47 by supervisor-herdr — Promoted in a stacked batch with ENG-121 (one suite run) after supervisor acceptance of R-157: promoted lane/one-tab: main 31ed0c3 -> f96cb41 (fast-forward)
+acceptance:
+  - two concurrent promotion-tier runs serialize on the slot, and a nested run inside a held slot does not wait on itself
+  - a run while bch-cloak's slot is held waits or is refused with exit 75, never runs alongside
+  - offline tests; no model calls
+budget (advisory): runs 2/3 · children 0/4 · depth 2/3 · escalations 0/1
+
+runs:
+  R-148  codex · gpt-6.1-sol · high  started 2026-10-03 11:05 · reported done 2026-10-03 12:53
+    summary:
+      Added a dependency-free host test-slot module and integrated it into promotion-tier validation, direct promotion test commands, and the release cycle. The default uses bch-cloak's existing lock; configurable workspace paths retain a legacy-lock bridge so migration cannot permit overlapping suites. Nested commands inherit the slot, unknown liveness fails closed, exit 75 remains a slot refusal, and recognized timeouts under measured load retry once within the held slot. Baseline and post-change npm tests passed, along with fast, lane, slot, and offline acceptance checks. Implementation is committed; the final lane check follows this report's checked commit.
+    learnings:
+      - MONITOR_TEST_SLOT_PATH selects the workspace lock. MONITOR_TEST_SLOT_COMPAT_PATH defaults to the existing bch-cloak lock and is acquired first; configure both to the same workspace file after legacy users migrate. These are workspace concerns, not tracked per-project declarations.
+      - Holder identity preserves bch-cloak's JSON schema and ps-utc-c start-time format. Unknown records, inaccessible process identity, and abandoned takeover guards are never evicted by age.
+      - MONITOR_TEST_SLOT_WAIT_SECONDS queues instead of immediate refusal. Monitor accepts bch-cloak's legacy wait/token variables and propagates both token names and selected paths to nested commands.
+      - Slot paths, wait budgets and tokens are coordination inputs excluded from validation fingerprints. A refusal supplies no failed validation receipt; release defers before its candidate or once-only gate claim.
+      - Installed runtime snapshots, discovery probes, plugin entry canaries, and copied validation fixtures each have distribution lists that must include test-slot. Offline fixture slots remain isolated from the actual machine lock.
+    artifacts:
+      - Branch: lane/test-slot
+      - 1eaa791: Add workspace-configurable host test slot for promotion and release
+      - 436bdf2: Include test slot in copied entry and acceptance distributions
+      - test-slot/test-slot.mjs, test-slot/lock-support.mjs, test-slot/run.mjs, test-slot/README.md
+      - test-slot/test/test-slot.test.mjs: 45 passing offline regressions
+      - lanes/validation.mjs and lanes/test/validation.test.mjs: cross-project serialization, nesting, refusal classification and receipt safety
+      - release/release.mjs and release/test/release.test.mjs: pre-claim deferral, CLI exit 75 and preserved command signals
+      - Baseline npm test: passed before existing implementation files changed; no model calls
+      - Post-change npm run test:fast: 142 passed, 0 failed
+      - Post-change npm test: slot 45 passed; copied entry 2 passed; core 698 passed and 11 skipped; cycle 151 passed; 0 failed
+      - Post-change npm run test:lanes: 162 passed, 0 failed
+      - Post-change npm run test:acceptance: 132 passed, 0 failed; offline tests only
+      - /private/tmp/eng118-verification2.log: complete post-change validation log, run under the real shared host slot
+      - Final command after this report's checked commit: ORG_ACTOR=R-148 node lanes/lane.mjs check; its receipt is .lane/gate.json
+    report: /Users/rewt/development/rewt/.org/reports/R-148.md
+  R-157  codex · gpt-6.1-sol · high  started 2026-10-03 13:18 · reported done 2026-10-03 13:52
+    summary:
+      Corrected nested timeout retries so a child or ancestor can spend the single retry allowance without stacking more attempts. Promotion now retains the host slot while npm test and the remaining heavy suites retry only their own timed-out step. Commands that start and exit 75 record failed validation receipts; only a pre-execution slot refusal omits them. Added regressions and fixed settle fixtures that accidentally discarded temporary slot paths. Focused offline checks pass; the final promotion-tier lane check follows this checked report's commit and supplies the full-suite receipt for the submitted head.
+    learnings:
+      - Containing wrappers observe TEST_SLOT_TIMEOUT_RETRY and suppress another replay. An ancestor's retry exports MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1 so descendants cannot start a third attempt; that coordination variable is excluded from validation fingerprints.
+      - runTestSlotSync supplies attempts metadata after command execution. Promotion treats exit 75 as a slot refusal only when that metadata is absent; started commands returning 75 retain failed receipts and are never reused.
+      - Retry scope is the wrapped command. npm test wraps core and cycle separately; promotion holds the slot across npm test, lanes and offline acceptance, with each heavy step owning its retry.
+      - settle/test/fixture.mjs clears MONITOR variables when resetting project inputs. It must then assign a fixture-owned temporary slot and legacy compatibility path; otherwise offline gates can contend with the actual host holder.
+    artifacts:
+      - Branch: lane/test-slot
+      - 89b1aa7: Limit nested timeout retries and retain command failure receipts
+      - 0a24570: Isolate settle fixture slots and retry npm test by heavy step
+      - test-slot/test-slot.mjs, test-slot/README.md, package.json: bounded nested retries and per-step scope
+      - lanes/validation.mjs and lanes/test/validation.test.mjs: command exit 75 produces failed receipts in fast and promotion tiers
+      - release/release.mjs: distinguish pre-execution refusal using attempts metadata
+      - test/helpers/bounded-test.mjs and settle/test/fixture.mjs: isolated fixture coordination
+      - /private/tmp/R-157-slot-native.log: 48 passing offline tests, including two-attempt nested holders and timed-out-step-only promotion retry
+      - /private/tmp/R-157-fast.log: npm run test:fast, 143 passed, zero failures
+      - /private/tmp/R-157-rebase.log: 16 rebase-path and rebase tests passed after fixture isolation
+      - Final command after this report's checked commit: ORG_ACTOR=R-157 MONITOR_TEST_SLOT_WAIT_SECONDS=600 node lanes/lane.mjs check --tier promotion
+      - /private/tmp/R-157-promotion.log and .lane/gate.json: final promotion validation evidence; the lane receipt names the final submitted head and its durable full-suite log
+    report: /Users/rewt/development/rewt/.org/reports/R-157.md
+
+history:
+  2026-10-03 10:02  added ENG-118 "Host test slot, for any project: port bch-cloak's ENG-725 t…" under G-3
+  2026-10-03 10:20  updated ENG-118: parent=ARCH-10
+  2026-10-03 11:05  started R-148 on ENG-118 (codex · gpt-6.1-sol)
+  2026-10-03 11:05  note on R-148: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/bff5fa1a-9768-4…
+  2026-10-03 11:05  updated R-148: agent=lane-test-slot-25a360-f028ca, pane=w2KF:p3, worker_workspace=w2KF, terminal_id=term_65cf1d0364c4d65
+  2026-10-03 11:05  note on R-148: Dispatch: worker lane-test-slot-25a360-f028ca in w2KF:p3 recorded; prompt not sent
+  2026-10-03 11:05  updated R-148: watcher_pid=52109, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-148.watch.log
+  2026-10-03 11:05  note on R-148: Dispatch: watcher ready (pid 52109); prompt not sent
+  2026-10-03 11:05  note on R-148: Dispatch: prompt sent; worker lane-test-slot-25a360-f028ca and watcher 52109 started
+  2026-10-03 12:53  R-148 reported done on ENG-118: Added a dependency-free host test-slot module and integrated it into promotion-tier valid…
+  2026-10-03 12:53  reopened ENG-118: Report recorded; independent settle review pending
+  2026-10-03 13:18  started R-157 on ENG-118 (codex · gpt-6.1-sol)
+  2026-10-03 13:18  note on R-157: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/77458949-5a01-4…
+  2026-10-03 13:18  updated R-157: agent=lane-test-slot-25a360-56431c, pane=w2KF:p5, worker_workspace=w2KF, terminal_id=term_65cf3ac3f96d07b
+  2026-10-03 13:18  note on R-157: Dispatch: worker lane-test-slot-25a360-56431c in w2KF:p5 recorded; prompt not sent
+  2026-10-03 13:18  updated R-157: watcher_pid=3681, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-157.watch.log
+  2026-10-03 13:18  note on R-157: Dispatch: watcher ready (pid 3681); prompt not sent
+  2026-10-03 13:18  note on R-157: Dispatch: prompt sent; worker lane-test-slot-25a360-56431c and watcher 3681 started
+  2026-10-03 13:18  decision on R-148: Settle: fix_round. Independent findings require a correction; a new run was dispatched on…
+  2026-10-03 13:52  R-157 reported done on ENG-118: Corrected nested timeout retries so a child or ancestor can spend the single retry allowa…
+  2026-10-03 13:52  reopened ENG-118: Report recorded; independent settle review pending
+  2026-10-03 13:59  updated ENG-118: meta={"settle_review_round_cap":3}
+  2026-10-03 14:11  decision on R-157: Settle: escalate. The reviewer has unverified claims; the supervisor must resolve the rem…
+  2026-10-03 14:12  decision on R-157: Settle escalated on a truncated validation log with a PASS and two Minors. Supervisor jud…
+  2026-10-03 14:47  closed ENG-118 as done: Promoted in a stacked batch with ENG-121 (one suite run) after supervisor accep…

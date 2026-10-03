@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +42,7 @@ export function createHousekeepingStarter(t, getFixture) {
     try { if (f) entry = rememberHousekeepingProcess(f, receipts); }
     finally { receipts.cleanup('SIGTERM'); }
     if (!entry) return;
-    const deadline = Date.now() + 5000;
+    const deadline = Date.now() + loadTimeout(5000);
     for (;;) {
       try { process.kill(entry.pid, 0); }
       catch (error) { if (error.code === 'ESRCH') return; throw error; }
@@ -55,7 +56,7 @@ export function createHousekeepingStarter(t, getFixture) {
   return () => {
     const f = getFixture();
     const result = spawnSync(process.execPath, [...f.args, '--start'], {
-      encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' }, timeout: 10000,
+      encoding: 'utf8', env: { ...process.env, ORG_ACTOR: 'housekeeping-test-agent' }, timeout: loadTimeout(10000),
     });
     rememberHousekeepingProcess(f, receipts);
     return result;

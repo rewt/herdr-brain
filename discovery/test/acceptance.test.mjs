@@ -1,3 +1,5 @@
+import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,13 +18,13 @@ for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
   delete env.NODE_TEST_CONTEXT; // Project node --test must start its own runner.
   Object.assign(env, { HERDR_MONITOR_FLEET: path.join(root, 'fleet'), HERDR_ORG_CONSOLE_CONFIG: path.join(root, 'console.json'), MONITOR_TEST_SLOT_PATH: path.join(root, 'test-slot.lock'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'test-slot.lock'), ORG_ACTOR: `r107-copied-${harness}-test`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   const invoke = (binary, args, cwd = root, extra = {}) => {
-    const result = spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 35000, killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
+    const result = spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(35000), [commandAllowance]: loadTimeout(35000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
     assert.ifError(result.error);
     return result;
   };
   const success = (result) => { assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim(); };
   const native = path.join(root, 'scripted-native');
-  fs.writeFileSync(native, `#!${process.execPath}\nprocess.exit(require(${JSON.stringify(path.join(source, 'discovery/test/helpers/probe-worker.cjs'))})());\n`, { mode: 0o755 });
+  fs.writeFileSync(native, `#!${process.execPath}\nrequire(${JSON.stringify(path.join(source, 'discovery/test/helpers/probe-worker.cjs'))})().then(code=>process.exit(code)).catch(error=>{console.error(error);process.exitCode=1;});\n`, { mode: 0o755 });
   // Use the probe's actual snapshot and install. Skipping live work reads no auth
   // and makes no model call; scripted sessions exercise those omitted mechanics.
   const probe = invoke(process.execPath, [path.join(source, 'discovery/acceptance.mjs'), '--harness', harness,
@@ -65,7 +67,7 @@ for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
     const workerProcess = spawnScenarioChild(t, path.join(bin, `monitor-${harness}`), ['--', 'Scripted offline task'], { cwd: repo, env: { ...env,
       PROBE_PRODUCT: product, PROBE_TASK: task, PROBE_WORKER_RECEIPT: receipt,
       MONITOR_RUNTIME_DIR: path.join(root, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'),
-    } }, 35000);
+    } });
     success(await waitForExit(workerProcess));
     const worker = JSON.parse(fs.readFileSync(receipt, 'utf8'));
     assert.equal(git('rev-parse', 'main'), worker.head);

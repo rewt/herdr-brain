@@ -10,21 +10,6 @@ function negativeControl(name) {
   if (NEGATIVE_CONTROL) assert.fail(`deliberately broken expectation: ${name}`);
 }
 
-function waitFor(predicate, timeoutMs = 1_000) {
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const timer = setInterval(() => {
-      if (predicate()) {
-        clearInterval(timer);
-        resolve();
-      } else if (Date.now() - started > timeoutMs) {
-        clearInterval(timer);
-        reject(new Error("timed out waiting for condition"));
-      }
-    }, 5);
-  });
-}
-
 class FakeSocket extends EventEmitter {
   constructor(server) {
     super();
@@ -180,10 +165,12 @@ test("subscriptions emit events and reconnect with bounded backoff", async () =>
 
   const client = new HerdrClient({ socketPath: "fake.sock", minBackoffMs: 5, maxBackoffMs: 20, connect });
   const statuses = [];
-  client.on("event", (event) => statuses.push(event.data.agent_status));
+  let completed;
+  const done = new Promise(resolve => { completed = resolve; });
+  client.on("event", (event) => { statuses.push(event.data.agent_status); if (event.data.agent_status === "done") completed(); });
   try {
     client.subscribe([{ type: "pane.agent_status_changed", pane_id: "w1:p1" }]);
-    await waitFor(() => statuses.includes("done"));
+    await done;
     assert.deepEqual(statuses.slice(0, 2), ["working", "done"]);
     assert.equal(requests.length, 2);
     assert.equal(requests[0].method, "events.subscribe");
@@ -300,7 +287,8 @@ test("close rejects a request before its reply arrives", async () => {
   negativeControl("close before Herdr reply");
 });
 
-test("subscribe after close does not open another socket", async () => {
+test("subscribe after close does not open another socket", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   let connections = 0;
   const client = new HerdrClient({
     socketPath: "fake.sock",
@@ -312,7 +300,8 @@ test("subscribe after close does not open another socket", async () => {
   try {
     client.close();
     client.subscribe([{ type: "pane.agent_status_changed", pane_id: "w1:p1" }]);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    t.mock.timers.tick(10000);
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(connections, 0);
     negativeControl("permanent Herdr client close");
   } finally {

@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,7 +22,7 @@ function fixture(t) {
   for (const executable of [bwrap, native]) fs.writeFileSync(executable, stub, { mode: 0o755 });
   return { root, repo, bin, outside, invoked, bwrap, native };
 }
-const invoke = (args, options = {}) => spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 15000, env: process.env, ...options });
+const invoke = (args, options = {}) => spawnSync(process.execPath, args, { encoding: 'utf8', timeout: loadTimeout(15000), env: process.env, ...options });
 const linuxImport = ['--import', `data:text/javascript,${encodeURIComponent("Object.defineProperty(process,'platform',{value:'linux'});")}`];
 actorTest('Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available', (t) => {
   const f = fixture(t);
@@ -95,7 +96,7 @@ for (const [name, provider] of [['macOS', process.env.MONITOR_TEST_ALTERNATIVE],
     const sentinel = path.join(f.outside, 'sentinel'), bytes = Buffer.from([0, 255, 65, 66, 0, 127]);
     fs.writeFileSync(source, bytes); fs.writeFileSync(sentinel, 'keep');
     const guard = sandboxCommand(provider, f.repo, { sharedPaths: [path.join(f.repo, '.org'), path.join(f.repo, '.lane')], writablePaths: [temp] });
-    const run = (script) => spawnSync(guard.binary, [...guard.args, process.execPath, '-e', script], { cwd: f.repo, encoding: 'utf8', timeout: 8000, env: process.env });
+    const run = (script) => spawnSync(guard.binary, [...guard.args, process.execPath, '-e', script], { cwd: f.repo, encoding: 'utf8', timeout: loadTimeout(8000), env: process.env });
     const positive = run(`const fs=require('fs');fs.copyFileSync(${JSON.stringify(source)},${JSON.stringify(copy)});fs.copyFileSync(${JSON.stringify(source)},${JSON.stringify(path.join(temp, 'copy'))});`);
     assert.equal(positive.status, 0, positive.stderr); assert.deepEqual(fs.readFileSync(copy), bytes); assert.deepEqual(fs.readFileSync(path.join(temp, 'copy')), bytes);
     fs.renameSync(temp, temp + '-original'); fs.symlinkSync(f.outside, temp);

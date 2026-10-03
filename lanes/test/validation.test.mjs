@@ -6,6 +6,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { waitForFile } from '../../test/helpers/file-wait.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { processStart } from '../../test-slot/lock-support.mjs';
 import { environmentFingerprint, resolveValidation, validateValidation, validationEnvironment } from '../validation.mjs';
 
@@ -20,7 +22,7 @@ function fixture(t, declaration = {}) {
     LANE_WORKTREE_ROOT: path.join(root, 'worktrees'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     CHECK_LOG: log };
   delete env.LANE_VALIDATE;
-  const run = (binary, args, cwd = repo, extra = {}) => spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 12000 });
+  const run = (binary, args, cwd = repo, extra = {}) => spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(12000) });
   const good = result => { assert.equal(result.status, 0, result.stderr + result.stdout); return result.stdout.trim(); };
   const git = (args, cwd = repo) => good(run('git', args, cwd));
   git(['init', '-qb', 'main']); git(['config', 'user.name', 'Validation fixture']); git(['config', 'user.email', 'validation@example.invalid']);
@@ -217,9 +219,7 @@ test('overlapping checks serialize evidence without running the same command twi
   const child = spawnChild(t, process.execPath, [cli, 'check'], { cwd: f.workspace, env: f.env });
   const done = waitForExit(child);
   try {
-    const deadline = Date.now() + 5000;
-    while (!fs.existsSync(ready) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
-    assert.ok(fs.existsSync(ready));
+    await waitForFile(ready, text => text === 'ready', { timeoutMs: 5000 });
     const second = f.lane(['check']); assert.equal(second.status, 1); assert.match(second.stderr, /locked/);
   } finally { fs.writeFileSync(release, 'finish'); }
   const result = await done; assert.equal(result.code, 0, result.stderr);
@@ -236,9 +236,7 @@ test('promotion checks in different projects serialize and a nested command uses
   for (const f of [first, second]) Object.assign(f.env, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, MONITOR_TEST_SLOT_WAIT_SECONDS: '10' });
   const a = spawnChild(t, process.execPath, [cli, 'check', '--tier', 'promotion'], { cwd: first.workspace, env: first.env });
   const aDone = waitForExit(a);
-  const deadline = Date.now() + 5000;
-  while (!fs.existsSync(ready) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
-  assert.ok(fs.existsSync(ready), 'first check completed its nested command');
+  await waitForFile(ready, text => text === 'nested passed', { timeoutMs: 5000 });
   const b = spawnChild(t, process.execPath, [cli, 'check', '--tier', 'promotion'], { cwd: second.workspace, env: second.env });
   const bDone = waitForExit(b);
   try {

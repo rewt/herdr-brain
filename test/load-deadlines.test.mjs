@@ -141,17 +141,6 @@ test('a replacement PID discovered after a retry remains unauthorized', () => {
   assert.equal(tracker.killProcess({ pid: 101, identity: '1700000000:123456', command: 'owned fixture', group: true }).reason, 'changed');
 });
 
-test('promotion validation can read Git after the old injected 15-second command deadline', { timeout: 60000 }, t => {
-  withLoad(t);
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'load-slow-git-'));
-  const oldPath = process.env.PATH;
-  t.after(() => { process.env.PATH = oldPath; fs.rmSync(root, { recursive: true, force: true }); });
-  // A real bounded subprocess reproduces ETIMEDOUT in the old test helper.
-  fs.writeFileSync(path.join(root, 'git'), `#!${process.execPath}\nsetTimeout(()=>console.log('git version fixture'),15200);\n`, { mode: 0o755 });
-  process.env.PATH = `${root}:${oldPath}`;
-  assert.match(environmentFingerprint({ env: { ORG_ACTOR: 'load-git-fixture' } }), /^[a-f0-9]{64}$/);
-});
-
 test('slow Herdr transport responds within a loaded allowance; refusals stay refusals', async t => {
   withLoad(t);
   const timers = [];

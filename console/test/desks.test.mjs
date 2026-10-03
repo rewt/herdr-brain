@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -14,11 +15,11 @@ const bin = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'console-desks-')), cwd = path.join(root, 'repo'); fs.mkdirSync(cwd);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const git = args => execFileSync('git', args, { cwd, timeout: 5000, stdio: 'pipe' });
+  const git = args => execFileSync('git', args, { cwd, timeout: loadTimeout(5000), stdio: 'pipe' });
   git(['init', '-b', 'main']); git(['config', 'user.name', 'Fixture']); git(['config', 'user.email', 'fixture@example.test']);
   fs.writeFileSync(path.join(cwd, 'README.md'), 'Fresh project\n'); git(['add', '.']); git(['commit', '-qm', 'Fresh project']);
   const env = { ...process.env, ORG_DIR: path.join(cwd, '.org'), ORG_ACTOR: 'desks-test' }; delete env.LANE_CONFIG;
-  const org = args => execFileSync(process.execPath, [bin, ...args], { cwd, env, timeout: 10000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const org = args => execFileSync(process.execPath, [bin, ...args], { cwd, env, timeout: loadTimeout(10000), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   const calls = [], s = createModernSession({ config: { projects: [{ name: 'Fresh project', cwd }] }, env: { HERDR_ENV: '1' }, deps: {
     herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }), herdrRead: async () => ({ ok: true, text: '' }), brainQueue: async () => ({ rows: [], off: true }),
     orgSettingsSet: async (...args) => { calls.push(args); return orgSettingsSet(...args); },
@@ -171,9 +172,9 @@ test('generic always-arguments confirmation compares the entered kind with its c
 
 test('worktrees edit only their canonical project; record-only selections and plain folders cannot save', async t => {
   const f = fixture(t); const wt = path.join(f.root, 'worktree'); f.git(['worktree', 'add', '-b', 'lane', wt]);
-  const r = spawnSync(process.execPath, [bin, 'desks', 'set', '--timeout=40'], { cwd: wt, env: { ...f.env, LANE_CONFIG: '/missing' }, encoding: 'utf8', timeout: 10000 });
+  const r = spawnSync(process.execPath, [bin, 'desks', 'set', '--timeout=40'], { cwd: wt, env: { ...f.env, LANE_CONFIG: '/missing' }, encoding: 'utf8', timeout: loadTimeout(10000) });
   assert.equal(r.status, 0, r.stderr); assert.equal(fs.existsSync(path.join(wt, '.lane.json')), false); assert.equal(desksSnapshot(wt).settings.timeout, 40);
-  const plain = spawnSync(process.execPath, [bin, 'desks', 'set', '--timeout=40'], { cwd: f.root, env: f.env, encoding: 'utf8', timeout: 10000 }); assert.notEqual(plain.status, 0); assert.equal(fs.existsSync(path.join(f.root, '.lane.json')), false);
+  const plain = spawnSync(process.execPath, [bin, 'desks', 'set', '--timeout=40'], { cwd: f.root, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) }); assert.notEqual(plain.status, 0); assert.equal(fs.existsSync(path.join(f.root, '.lane.json')), false);
   const result = await orgSettingsSet({ org: path.join(f.cwd, '.org') }, { patch: { timeout: 60 }, unset: [] }, desksSnapshot(f.cwd).revision); assert.equal(result.ok, false); assert.equal(desksSnapshot(f.cwd).settings.timeout, 40);
 });
 
@@ -182,7 +183,7 @@ test('--print cannot commit new desk or route controls even after review confirm
   fs.writeFileSync(config, JSON.stringify({ projects: [{ name: 'Fresh', cwd: f.cwd }] }));
   fs.writeFileSync(herdr, `#!${process.execPath}\nconsole.log(JSON.stringify({result:{agents:[],workspaces:[],tabs:[],panes:[]}}));`, { mode: 0o755 });
   for (const keys of ['S\\nreview-codex\\n\\n', 'ukkkkk\\nnew\\topaque\\n\\n']) {
-    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../app.mjs', import.meta.url)), '--modern', '--config', config, '--print', '100x40', '--keys', keys], { cwd: f.cwd, env: { ...f.env, HERDR_BIN_PATH: herdr, HERDR_ENV: '1' }, encoding: 'utf8', timeout: 10000 });
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../app.mjs', import.meta.url)), '--modern', '--config', config, '--print', '100x40', '--keys', keys], { cwd: f.cwd, env: { ...f.env, HERDR_BIN_PATH: herdr, HERDR_ENV: '1' }, encoding: 'utf8', timeout: loadTimeout(10000) });
     assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /--print does not change project settings/); assert.equal(fs.existsSync(f.target), false); assert.equal(fs.existsSync(path.join(f.cwd, '.org')), false);
   }
 });

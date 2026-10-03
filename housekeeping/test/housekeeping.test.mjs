@@ -1,3 +1,5 @@
+import { waitForChange } from '../../test/helpers/file-wait.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { configureCliFixture, installRuntime, rememberHousekeepingProcess, createHousekeepingStarter } from './helpers/cli-fixture.mjs';
@@ -264,10 +266,10 @@ else if(a[0]==='pane'&&a[1]==='read') console.log('─────────�
 else { if(a[0]==='agent'&&a[1]==='prompt') fs.writeFileSync(${JSON.stringify(path.join(f.root, 'notice.txt'))},a[3]);
 console.log(JSON.stringify({result:a[0]==='status'?{runs:[],items:[]}:a[0]==='workspace'?{workspaces:[]}:{agents:[]}})); }\n`);
   const env = { ...TEST_ENV, SUPERVISOR_INPUT_CONFIRM_SECONDS: '.02', SUPERVISOR_INPUT_POLL_SECONDS: '.01', SUPERVISOR_INPUT_WAIT_SECONDS: '0' };
-  const preview = spawnSync(process.execPath, [...f.args, '--once', '--dry-run'], { env, encoding: 'utf8', timeout: 5000 });
+  const preview = spawnSync(process.execPath, [...f.args, '--once', '--dry-run'], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(preview.status, 0, preview.stderr); assert.equal(fs.existsSync(`${inbox}.owner.lock`), false);
   assert.equal(readInbox(inbox)[0].state, 'uncertain');
-  const tick = spawnSync(process.execPath, [...f.args, '--once'], { env, encoding: 'utf8', timeout: 5000 });
+  const tick = spawnSync(process.execPath, [...f.args, '--once'], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(tick.status, 0, tick.stderr); assert.match(tick.stdout, /supervisor-inbox-owned/);
   await waitForInboxIdle(inbox);
   assert.equal(readInbox(inbox)[0].state, 'sent');
@@ -379,14 +381,7 @@ test(`${runtimeKind} start stays idempotent after a lane is removed`, async (t) 
   assert.equal(owner.record_cli.every((file) => fs.existsSync(file)), true);
   const again = start(); assert.equal(again.status, 0, again.stderr); assert.match(again.stdout, /already-running/);
   fs.writeFileSync(f.config, '{"enabled":false}');
-  await new Promise((resolve, reject) => {
-    const deadline = Date.now() + 5000;
-    const check = () => {
-      if (!fs.existsSync(lock)) return resolve();
-      if (Date.now() > deadline) return reject(new Error('detached schedule did not stop'));
-      setTimeout(check, 50);
-    }; check();
-  });
+  await waitForChange([lock], () => !fs.existsSync(lock), { timeoutMs: 5000 });
   assert.match(fs.readFileSync(path.join(f.state, 'actions.jsonl'), 'utf8'), /disabled/);
 });
 }
@@ -402,7 +397,7 @@ test('old interruption with forty blank rows and a final reply is rejected withi
   const fixtureURL = new URL('./fixtures/old-interruption.txt', import.meta.url);
   const moduleURL = new URL('../housekeeping.mjs', import.meta.url);
   const script = `import fs from 'node:fs'; import { interruptedComposer } from ${JSON.stringify(moduleURL.href)}; console.log(interruptedComposer(fs.readFileSync(${JSON.stringify(fileURLToPath(fixtureURL))}, 'utf8')));`;
-  const r = spawnSync(process.execPath, ['--input-type=module', '--eval', script], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
+  const r = spawnSync(process.execPath, ['--input-type=module', '--eval', script], { encoding: 'utf8', env: TEST_ENV, timeout: loadTimeout(2000) });
   assert.equal(r.error, undefined, r.error?.message);
   assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout.trim(), 'false');
   const feedback = screen.replace('\n›', '\nSomething went wrong? Hit /feedback to report the issue.\n\n›');
@@ -413,14 +408,14 @@ for (const mode of ['--once', '--start', '--loop']) {
   test(`lane code cannot ${mode} live housekeeping even with the canonical target`, (t) => {
     const f = cliFixture(t);
     const args = [...f.args]; args[0] = installRuntime(f.lane);
-    const r = spawnSync(process.execPath, [...args, mode], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
+    const r = spawnSync(process.execPath, [...args, mode], { encoding: 'utf8', env: TEST_ENV, timeout: loadTimeout(2000) });
     assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /code from a linked worktree/);
     assert.equal(fs.existsSync(f.state), false);
   });
   test(`canonical code cannot ${mode} live housekeeping from a linked target`, (t) => {
     const f = cliFixture(t);
     f.args[f.args.indexOf('--cwd') + 1] = f.lane;
-    const r = spawnSync(process.execPath, [...f.args, mode], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
+    const r = spawnSync(process.execPath, [...f.args, mode], { encoding: 'utf8', env: TEST_ENV, timeout: loadTimeout(2000) });
     assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /canonical project checkout/);
     assert.equal(fs.existsSync(f.state), false);
   });
@@ -430,7 +425,7 @@ test('a record CLI override in a lane cannot pin a live schedule to removable co
   const f = cliFixture(t);
   const fake = path.join(f.lane, 'record.mjs'); fs.copyFileSync(f.fake, fake); fs.chmodSync(fake, 0o755);
   f.args[f.args.indexOf('--org-cli') + 1] = fake;
-  const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
+  const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: loadTimeout(2000) });
   assert.equal(r.status, 1); assert.match(r.stderr, /code from a linked worktree/);
   assert.equal(fs.existsSync(f.state), false);
 });
@@ -456,7 +451,7 @@ for (const variant of ['different-script', 'different-record', 'missing-script',
     if (variant === 'legacy') { delete owner.script; delete owner.record_cli; }
     const original = JSON.stringify(owner);
     fs.writeFileSync(path.join(lock, 'owner.json'), original);
-    const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: 2000 });
+    const r = spawnSync(process.execPath, [...f.args, '--start'], { encoding: 'utf8', env: TEST_ENV, timeout: loadTimeout(2000) });
     assert.equal(r.status, 1); assert.doesNotMatch(r.stdout, /already-running/);
     assert.match(r.stderr, /different runtime|stale housekeeping runtime path|no runtime identity/);
     assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), original);

@@ -18,6 +18,8 @@ import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
+import { repositorySeed } from '../../test/helpers/git-seed.mjs';
+import { waitForFile } from '../../test/helpers/file-wait.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -118,20 +120,24 @@ function git(cwd, args, options = {}) {
   return typeof output === "string" ? output.trim() : "";
 }
 
+const copyInitialRepository = repositorySeed(GIT_ENV_ROOT, repo => {
+  gitExec(['init', '-b', 'main', repo], { stdio: 'ignore' });
+  writeFileSync(join(repo, 'shared.txt'), 'base\n');
+  git(repo, ['add', 'shared.txt']);
+  git(repo, ['commit', '-m', 'initial'], { stdio: 'ignore' });
+});
+
 function makeFixture(config = { main: "main", validate: "true" }, { repoParts = ["repo"] } = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "herdr-lanes-test-")));
   const repo = join(root, ...repoParts);
   const worktrees = join(root, "worktrees");
   const configPath = join(root, "lane.json");
   const bin = join(root, "bin");
-  mkdirSync(repo, { recursive: true });
+  mkdirSync(dirname(repo), { recursive: true });
+  copyInitialRepository(repo);
   mkdirSync(bin);
   symlinkSync(GIT, join(bin, "git"));
   symlinkSync(HEAD, join(bin, "head"));
-  gitExec(["init", "-b", "main", repo], { stdio: "ignore" });
-  writeFileSync(join(repo, "shared.txt"), "base\n");
-  git(repo, ["add", "shared.txt"]);
-  git(repo, ["commit", "-m", "initial"], { stdio: "ignore" });
 
   const fixture = {
     root,
@@ -186,13 +192,6 @@ function laneProcess(fixture, args, options = {}) {
   };
 }
 
-async function waitForCondition(predicate, message, timeoutMs = 2_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${message}`);
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
-  }
-}
 
 function discoveredEnv(fixture, overrides = {}) {
   const env = { ...fixture.env };
@@ -4639,10 +4638,7 @@ test("review interruption exits 2 without a verdict or follow-up lifecycle actio
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    const started = Date.now();
-    while ((!existsSync(review.fake.log) || !readFileSync(review.fake.log, "utf8").includes('["agent","prompt"')) && Date.now() - started < 5000) {
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
-    }
+    await waitForFile(review.fake.log, text => text.includes('["agent","prompt"'), { timeoutMs: 5000 });
     child.kill("SIGTERM");
     const result = await waitForExit(child);
     assert.equal(result.code, 2, `signal=${result.signal}\n${stderr}`);

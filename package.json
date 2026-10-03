@@ -5,19 +5,22 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test:fast": "node test/helpers/run.mjs test/report.test.mjs test/discernment.test.mjs test/sanitization.test.mjs brain/test/capture.test.mjs console/test/model.test.mjs console/test/modern.test.mjs console/test/frame.test.mjs console/test/paint.test.mjs console/test/names.test.mjs console/test/waiting.test.mjs console/proto/prototype.test.mjs lanes/test/routes.test.mjs lanes/test/validation.test.mjs",
+    "test:fast": "node test/helpers/tier.mjs fast",
     "test:promotion": "node test-slot/test-slot.mjs run test:promotion -- npm run test:promotion:steps",
     "test": "npm run test:slot && node test-slot/test-slot.mjs run test:core --retry-timeout-under-load -- npm run test:core && node test-slot/test-slot.mjs run test:cycle --retry-timeout-under-load -- npm run test:cycle",
-    "test:core": "node test/helpers/suite.mjs --file-timeout=480000 --suite-timeout=540000 test/*.mjs test/fixtures/*.mjs brain/test/*.test.mjs console/test/*.test.mjs console/test/fixtures/*.mjs console/proto/*.test.mjs watch/test/*.test.mjs dispatch/test/*.test.mjs housekeeping/test/*.test.mjs discovery/test/*.test.mjs promote/test/*.test.mjs",
-    "test:cycle": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 settle/test/*.test.mjs supervisor/test/*.test.mjs release/test/*.test.mjs",
-    "test:lanes": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 lanes/test/*.test.mjs",
-    "test:acceptance": "node test/helpers/run.mjs acceptance/test/*.test.mjs",
+    "test:core": "node test/helpers/tier.mjs core --file-timeout=480000 --suite-timeout=540000",
+    "test:cycle": "node test/helpers/tier.mjs cycle --file-timeout=480000 --suite-timeout=540000",
+    "test:lanes": "node test/helpers/tier.mjs lanes --file-timeout=480000 --suite-timeout=540000",
+    "test:acceptance": "node test/helpers/tier.mjs acceptance",
     "test:promotion:steps": "npm test && node test-slot/test-slot.mjs run test:lanes --retry-timeout-under-load -- npm run test:lanes && node test-slot/test-slot.mjs run test:acceptance --retry-timeout-under-load -- npm run test:acceptance",
-    "test:slot": "node --test test-slot/test/*.test.mjs"
+    "test:slot": "node --test test-slot/test/*.test.mjs",
+    "test:release": "node test-slot/test-slot.mjs run test:release --retry-timeout-under-load -- node test/helpers/tier.mjs release --file-timeout=480000 --suite-timeout=540000"
   },
   "bin": {
     "record": "./bin/org.mjs",
     "org": "./bin/org.mjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

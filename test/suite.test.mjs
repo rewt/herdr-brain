@@ -31,7 +31,7 @@ test('the phased command propagates a failing suite and never starts its later p
 test('the phased command forwards suite watchdog overrides to its bounded runner', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phased-watchdog-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  fs.writeFileSync(path.join(root, 'blocked.mjs'), 'while (true) {}');
+  fs.writeFileSync(path.join(root, 'blocked.mjs'), 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);');
   const result = await waitForExit(spawnChild(t, process.execPath, [fileURLToPath(new URL('./helpers/suite.mjs', import.meta.url)), '--fixed-deadlines', '--file-timeout=5000', '--suite-timeout=1000', 'blocked.mjs'], { cwd: root }));
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Test suite exceeded 1000ms/);

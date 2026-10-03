@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -41,7 +42,7 @@ const original=cp.spawnSync;cp.spawnSync=(binary,args,options)=>{
   const source = `import {runBounded} from ${JSON.stringify(new URL(`file://${root}/discovery/bounded.mjs`).href)};
 process.exitCode=await runBounded(${JSON.stringify(process.execPath)},['-e',${JSON.stringify(`require('fs').writeFileSync(${JSON.stringify(marker)},'ran')`)}],{timeoutMs:5000});`;
   const result = spawnSync(process.execPath, ['--import', preload, '--input-type=module', '-e', source], {
-    encoding: 'utf8', timeout: 12000, env: { ...process.env, ORG_ACTOR: process.env.ORG_ACTOR, ...extra },
+    encoding: 'utf8', timeout: loadTimeout(12000), env: { ...process.env, ORG_ACTOR: process.env.ORG_ACTOR, ...extra },
   });
   return { result, marker, calls: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse) : [] };
 }

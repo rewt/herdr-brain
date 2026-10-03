@@ -1,0 +1,10 @@
+ENG-86  Always reap watcher test children after receipt timeouts
+status: ready · role: engineer
+within: G-3 Herdr platform roadmap: standardize bch…
+created: 2026-10-01 22:46 by run:R-58 (proposed in R-58)
+why: Existing watcher receipt waits can fail under concurrent test load before reaching waitForExit, leaving mocked blocked or working children alive and preventing npm test from exiting. Register cleanup for every spawned child so a fixture failure finishes the suite and reports its error.
+budget (advisory): runs 0/3 · children 0/4 · depth 1/3 · escalations 0/1
+
+history:
+  2026-10-01 22:46  added ENG-86 "Always reap watcher test children after receipt timeouts" under ENG-82 (proposed by R-58)
+  2026-10-03 11:02  updated ENG-86: parent=G-3

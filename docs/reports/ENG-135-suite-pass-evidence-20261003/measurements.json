@@ -1,0 +1,2725 @@
+{
+  "method": "Observed Node child-process launch calls; excludes uninstrumented native/shell grandchildren. File seconds are child entry-to-exit, not summed across concurrent files.",
+  "before": {
+    "fast": {
+      "tier": "fast",
+      "started": "2026-10-03T20:15:18.491Z",
+      "wallMs": 9539,
+      "loadBefore": [
+        5.83642578125,
+        4.021484375,
+        2.87548828125
+      ],
+      "loadAfter": [
+        5.466796875,
+        4.00341796875,
+        2.88232421875
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 1186,
+        "gitInit": 15,
+        "gitWorktree": 14
+      },
+      "commands": {
+        "sh": 7,
+        "node": 118,
+        "ps": 31,
+        "git": 1001,
+        "node check.cjs fast": 2,
+        "node -e \"for(const key of ['HERDR_PANE_ID','HERDR_TAB_ID','HERDR_WORKSPACE_ID'])require('assert').equal(process.env[key],undefined);\"": 3,
+        "node check.cjs same": 2,
+        "node check.cjs first": 5,
+        "node check.cjs second": 1,
+        "true": 2,
+        "node check.cjs check": 9,
+        "kill -9 $$": 1,
+        "node check.cjs fast; exit 75": 2,
+        "node check.cjs canonical": 1,
+        "node wait.cjs": 1
+      },
+      "tap": {
+        "tests": 143,
+        "pass": 143,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 19,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "test/report.test.mjs": {
+          "launches": 0,
+          "wallMs": 17,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/discernment.test.mjs": {
+          "launches": 25,
+          "wallMs": 886,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/sanitization.test.mjs": {
+          "launches": 11,
+          "wallMs": 394,
+          "exitCodes": [
+            0
+          ]
+        },
+        "brain/test/capture.test.mjs": {
+          "launches": 0,
+          "wallMs": 14,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/model.test.mjs": {
+          "launches": 0,
+          "wallMs": 57,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/modern.test.mjs": {
+          "launches": 17,
+          "wallMs": 286,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 2,
+          "gitWorktree": 1
+        },
+        "console/test/paint.test.mjs": {
+          "launches": 0,
+          "wallMs": 14,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/frame.test.mjs": {
+          "launches": 0,
+          "wallMs": 67,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/names.test.mjs": {
+          "launches": 0,
+          "wallMs": 17,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/waiting.test.mjs": {
+          "launches": 16,
+          "wallMs": 217,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/prototype.test.mjs": {
+          "launches": 0,
+          "wallMs": 61,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/routes.test.mjs": {
+          "launches": 0,
+          "wallMs": 19,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/validation.test.mjs": {
+          "launches": 1098,
+          "wallMs": 8231,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 13,
+          "gitWorktree": 13
+        }
+      }
+    },
+    "slot": {
+      "tier": "slot",
+      "started": "2026-10-03T20:15:28.030Z",
+      "wallMs": 6665,
+      "loadBefore": [
+        5.466796875,
+        4.00341796875,
+        2.88232421875
+      ],
+      "loadAfter": [
+        5.02880859375,
+        3.9365234375,
+        2.865234375
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 369
+      },
+      "commands": {
+        "sh": 3,
+        "node": 126,
+        "ps": 240
+      },
+      "tap": {
+        "tests": 48,
+        "pass": 48,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 1,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "test-slot/test/test-slot.test.mjs": {
+          "launches": 368,
+          "wallMs": 6553,
+          "exitCodes": [
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "core": {
+      "tier": "core",
+      "started": "2026-10-03T20:15:34.695Z",
+      "wallMs": 206223,
+      "loadBefore": [
+        5.02880859375,
+        3.9365234375,
+        2.865234375
+      ],
+      "loadAfter": [
+        3.80029296875,
+        4.15380859375,
+        3.1982421875
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 21752,
+        "gitInit": 325,
+        "gitWorktree": 194,
+        "fakeHerdr": 1059,
+        "compiler": 37,
+        "pty": 33
+      },
+      "commands": {
+        "sh": 83,
+        "node": 3168,
+        "ps": 963,
+        "git": 15676,
+        "monitor-codex": 8,
+        "owner": 54,
+        "sandbox-exec": 35,
+        "discovery\"]' 'node --test'": 20,
+        "monitor-claude": 7,
+        "herdr": 1059,
+        "launcher": 5,
+        "cmem": 5,
+        "chmod": 57,
+        "org": 111,
+        "cc": 37,
+        "script": 33,
+        "bash": 118,
+        "false": 24,
+        "zsh": 3,
+        "lane": 165,
+        "watch": 27,
+        "fake.mjs": 40,
+        "record-adapter": 15,
+        "fake-native": 1,
+        "codex": 2,
+        "bwrap": 1,
+        "persona": 2,
+        "memory": 2,
+        "native": 27,
+        "node slow.cjs'": 1,
+        "discovery\"]' 'canonical-failing-check'": 1,
+        "discovery\"]' 'fast-check'": 1,
+        "prepare.mjs": 1
+      },
+      "tap": {
+        "tests": 711,
+        "pass": 700,
+        "fail": 0,
+        "skipped": 11,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 82,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "discovery/test/acceptance.test.mjs": {
+          "launches": 1350,
+          "wallMs": 15507,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 8,
+          "gitWorktree": 4
+        },
+        "test/brain-start.test.mjs": {
+          "launches": 7,
+          "wallMs": 3427,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 4
+        },
+        "test/approvals.test.mjs": {
+          "launches": 203,
+          "wallMs": 6854,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/console-launch.test.mjs": {
+          "launches": 2,
+          "wallMs": 73,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/discernment.test.mjs": {
+          "launches": 25,
+          "wallMs": 860,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/flow.test.mjs": {
+          "launches": 121,
+          "wallMs": 3034,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 1
+        },
+        "test/focus.test.mjs": {
+          "launches": 2,
+          "wallMs": 212,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/inbox.test.mjs": {
+          "launches": 0,
+          "wallMs": 25,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/load-deadlines.test.mjs": {
+          "launches": 3,
+          "wallMs": 16137,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/mcp.test.mjs": {
+          "launches": 0,
+          "wallMs": 11,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/name-alias.test.mjs": {
+          "launches": 59,
+          "wallMs": 1780,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/offline-herdr.test.mjs": {
+          "launches": 6,
+          "wallMs": 291,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 4
+        },
+        "test/one-watcher.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/open-session.test.mjs": {
+          "launches": 49,
+          "wallMs": 1404,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 2,
+          "fakeHerdr": 18
+        },
+        "test/plugin-install.test.mjs": {
+          "launches": 976,
+          "wallMs": 64420,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 51,
+          "fakeHerdr": 3,
+          "gitWorktree": 4,
+          "compiler": 2,
+          "pty": 2
+        },
+        "test/priorities.test.mjs": {
+          "launches": 74,
+          "wallMs": 2660,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/processes.test.mjs": {
+          "launches": 0,
+          "wallMs": 20,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/pty.test.mjs": {
+          "launches": 103,
+          "wallMs": 11702,
+          "exitCodes": [
+            0
+          ],
+          "compiler": 10,
+          "pty": 6
+        },
+        "test/recap.test.mjs": {
+          "launches": 33,
+          "wallMs": 1222,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/release.test.mjs": {
+          "launches": 116,
+          "wallMs": 11623,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 8
+        },
+        "test/report.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/sanitization.test.mjs": {
+          "launches": 11,
+          "wallMs": 382,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/settle-watch.test.mjs": {
+          "launches": 22,
+          "wallMs": 929,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 13
+        },
+        "test/startup-deadlines.test.mjs": {
+          "launches": 17,
+          "wallMs": 805,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 3
+        },
+        "test/suite.test.mjs": {
+          "launches": 17,
+          "wallMs": 1237,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/test-hangs.test.mjs": {
+          "launches": 645,
+          "wallMs": 74870,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/tidy-tabs.test.mjs": {
+          "launches": 0,
+          "wallMs": 19,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/today.test.mjs": {
+          "launches": 117,
+          "wallMs": 4845,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/workspace.test.mjs": {
+          "launches": 100,
+          "wallMs": 1279,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 26,
+          "gitWorktree": 1
+        },
+        "test/fixtures/state-v0.mjs": {
+          "launches": 0,
+          "wallMs": 20.45625,
+          "exitCodes": [
+            0
+          ]
+        },
+        "brain/test/capture.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "brain/test/projects.test.mjs": {
+          "launches": 3,
+          "wallMs": 97,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/board.test.mjs": {
+          "launches": 0,
+          "wallMs": 30,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/brain.test.mjs": {
+          "launches": 1,
+          "wallMs": 46,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/control-plane.test.mjs": {
+          "launches": 2188,
+          "wallMs": 24366,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 17,
+          "gitWorktree": 1,
+          "fakeHerdr": 8
+        },
+        "console/test/control.test.mjs": {
+          "launches": 0,
+          "wallMs": 22,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/controller.test.mjs": {
+          "launches": 0,
+          "wallMs": 29,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/desks.test.mjs": {
+          "launches": 1881,
+          "wallMs": 14781,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 9,
+          "gitWorktree": 1,
+          "fakeHerdr": 8
+        },
+        "console/test/frame.test.mjs": {
+          "launches": 0,
+          "wallMs": 61,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/housekeeping.test.mjs": {
+          "launches": 924,
+          "wallMs": 8974,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 10,
+          "gitWorktree": 1
+        },
+        "console/test/model.test.mjs": {
+          "launches": 0,
+          "wallMs": 66,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/modern.test.mjs": {
+          "launches": 17,
+          "wallMs": 319,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 2,
+          "gitWorktree": 1
+        },
+        "console/test/names.test.mjs": {
+          "launches": 0,
+          "wallMs": 20,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/paint.test.mjs": {
+          "launches": 0,
+          "wallMs": 15,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/session.test.mjs": {
+          "launches": 111,
+          "wallMs": 4304,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 6
+        },
+        "console/test/sources.test.mjs": {
+          "launches": 0,
+          "wallMs": 23,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/terminal.test.mjs": {
+          "launches": 0,
+          "wallMs": 48,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/waiting.test.mjs": {
+          "launches": 16,
+          "wallMs": 231,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/fixtures/board.mjs": {
+          "launches": 0,
+          "wallMs": 25.46225,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/autonomy.test.mjs": {
+          "launches": 0,
+          "wallMs": 65,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/prototype.test.mjs": {
+          "launches": 0,
+          "wallMs": 66,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/workflows.test.mjs": {
+          "launches": 0,
+          "wallMs": 80,
+          "exitCodes": [
+            0
+          ]
+        },
+        "watch/test/watch.test.mjs": {
+          "launches": 572,
+          "wallMs": 17929,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 394
+        },
+        "dispatch/test/dispatch.test.mjs": {
+          "launches": 1244,
+          "wallMs": 50780,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 24,
+          "fakeHerdr": 143,
+          "gitWorktree": 22
+        },
+        "housekeeping/test/housekeeping.test.mjs": {
+          "launches": 1100,
+          "wallMs": 16838,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 58,
+          "gitWorktree": 56
+        },
+        "discovery/test/alternatives.test.mjs": {
+          "launches": 78,
+          "wallMs": 2508,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 5,
+          "gitWorktree": 1
+        },
+        "discovery/test/confinement.test.mjs": {
+          "launches": 0,
+          "wallMs": 22,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/entry.test.mjs": {
+          "launches": 481,
+          "wallMs": 4615,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 6,
+          "gitWorktree": 5
+        },
+        "discovery/test/lifecycle.test.mjs": {
+          "launches": 1537,
+          "wallMs": 16171,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 16,
+          "gitWorktree": 30
+        },
+        "discovery/test/owner.test.mjs": {
+          "launches": 37,
+          "wallMs": 16173,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/review-r2.test.mjs": {
+          "launches": 1777,
+          "wallMs": 25739,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 21,
+          "gitWorktree": 10
+        },
+        "discovery/test/review-r3.test.mjs": {
+          "launches": 171,
+          "wallMs": 14555,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 6
+        },
+        "discovery/test/review-r4.test.mjs": {
+          "launches": 10,
+          "wallMs": 487,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/review.test.mjs": {
+          "launches": 1187,
+          "wallMs": 21478,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 15,
+          "gitWorktree": 15,
+          "fakeHerdr": 16,
+          "compiler": 21,
+          "pty": 21
+        },
+        "discovery/test/sandbox.test.mjs": {
+          "launches": 0,
+          "wallMs": 16,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/settings.test.mjs": {
+          "launches": 1367,
+          "wallMs": 16881,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 13,
+          "compiler": 4,
+          "pty": 4,
+          "gitWorktree": 7
+        },
+        "discovery/test/validation-deadlines.test.mjs": {
+          "launches": 169,
+          "wallMs": 11902,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 1
+        },
+        "promote/test/promote.test.mjs": {
+          "launches": 2741,
+          "wallMs": 34183,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 23,
+          "gitWorktree": 33,
+          "fakeHerdr": 442
+        },
+        "test/helpers.mjs": {
+          "launches": 0,
+          "wallMs": 25.876166,
+          "exitCodes": []
+        }
+      }
+    },
+    "cycle": {
+      "tier": "cycle",
+      "started": "2026-10-03T20:19:00.918Z",
+      "wallMs": 227402,
+      "loadBefore": [
+        3.80029296875,
+        4.15380859375,
+        3.1982421875
+      ],
+      "loadAfter": [
+        8.70263671875,
+        6.42822265625,
+        4.43017578125
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 35802,
+        "gitInit": 179,
+        "gitWorktree": 180,
+        "fakeHerdr": 2600
+      },
+      "commands": {
+        "sh": 295,
+        "node": 5586,
+        "ps": 785,
+        "git": 26073,
+        "herdr": 2600,
+        "which": 20,
+        "record-adapter.mjs": 328,
+        "record-race.mjs": 26,
+        "race-record.mjs": 25,
+        "watch-adapter.mjs": 4,
+        "race-dispatch.mjs": 1,
+        "legacy-record.mjs": 25,
+        "validation.cjs": 1,
+        "bash": 3,
+        "tar": 28,
+        "npm": 1,
+        "missing-release-input-check": 1
+      },
+      "tap": {
+        "tests": 157,
+        "pass": 157,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 22,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "settle/test/rebase-paths.test.mjs": {
+          "launches": 2462,
+          "wallMs": 51593,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 10,
+          "gitWorktree": 14,
+          "fakeHerdr": 120
+        },
+        "settle/test/rebase-review.test.mjs": {
+          "launches": 2913,
+          "wallMs": 61264,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 12,
+          "gitWorktree": 17,
+          "fakeHerdr": 144
+        },
+        "settle/test/rebase-safety.test.mjs": {
+          "launches": 1147,
+          "wallMs": 21446,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 4,
+          "gitWorktree": 8,
+          "fakeHerdr": 48
+        },
+        "settle/test/config.test.mjs": {
+          "launches": 1493,
+          "wallMs": 29620,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 6,
+          "gitWorktree": 6,
+          "fakeHerdr": 94
+        },
+        "settle/test/rebase.test.mjs": {
+          "launches": 1588,
+          "wallMs": 29832,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 6,
+          "gitWorktree": 11,
+          "fakeHerdr": 72
+        },
+        "settle/test/receipts.test.mjs": {
+          "launches": 2293,
+          "wallMs": 52984,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 13,
+          "gitWorktree": 13,
+          "fakeHerdr": 120
+        },
+        "settle/test/record-safety.test.mjs": {
+          "launches": 2706,
+          "wallMs": 60365,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 21,
+          "gitWorktree": 21,
+          "fakeHerdr": 171
+        },
+        "settle/test/ref-deadlines.test.mjs": {
+          "launches": 388,
+          "wallMs": 54167,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 12,
+          "gitWorktree": 12
+        },
+        "settle/test/round-cap.test.mjs": {
+          "launches": 4675,
+          "wallMs": 96778,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 19,
+          "gitWorktree": 19,
+          "fakeHerdr": 444
+        },
+        "settle/test/settle.test.mjs": {
+          "launches": 4925,
+          "wallMs": 104606,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 27,
+          "gitWorktree": 27,
+          "fakeHerdr": 392
+        },
+        "settle/test/teardown.test.mjs": {
+          "launches": 258,
+          "wallMs": 9881,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 3,
+          "gitWorktree": 3,
+          "fakeHerdr": 209
+        },
+        "settle/test/validation-tiers.test.mjs": {
+          "launches": 863,
+          "wallMs": 15065,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 2,
+          "gitWorktree": 3,
+          "fakeHerdr": 35
+        },
+        "supervisor/test/delivery.test.mjs": {
+          "launches": 402,
+          "wallMs": 16222,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 371
+        },
+        "supervisor/test/supervisor.test.mjs": {
+          "launches": 6295,
+          "wallMs": 100403,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 20,
+          "gitWorktree": 20,
+          "fakeHerdr": 380
+        },
+        "release/test/candidate.test.mjs": {
+          "launches": 169,
+          "wallMs": 3038,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1
+        },
+        "release/test/release.test.mjs": {
+          "launches": 3203,
+          "wallMs": 28264,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 23,
+          "gitWorktree": 6
+        }
+      }
+    },
+    "lanes": {
+      "tier": "lanes",
+      "started": "2026-10-03T20:22:48.321Z",
+      "wallMs": 364580,
+      "loadBefore": [
+        8.70263671875,
+        6.42822265625,
+        4.43017578125
+      ],
+      "loadAfter": [
+        2.244140625,
+        3.35986328125,
+        3.607421875
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 13130,
+        "gitInit": 232,
+        "fakeHerdr": 2419,
+        "gitWorktree": 208,
+        "compiler": 2,
+        "pty": 2
+      },
+      "commands": {
+        "sh": 20,
+        "node": 656,
+        "ps": 56,
+        "git": 9932,
+        "herdr": 2419,
+        "printf 'ran\\n' >> prepare.log; printf 'ready\\n' > ready.marker": 1,
+        "gate-pass configured": 1,
+        "gate-environment": 1,
+        "gate-override --record-verbatim": 1,
+        "npm test": 1,
+        ": > .ready.marker": 1,
+        "gate-needs-prepare": 1,
+        "kill -9 $$": 2,
+        "cc": 2,
+        "native": 2,
+        "script": 2,
+        "canonical-check": 1,
+        "mv": 1,
+        "true": 3,
+        "bash": 1,
+        "node check.cjs fast": 2,
+        "node -e \"for(const key of ['HERDR_PANE_ID','HERDR_TAB_ID','HERDR_WORKSPACE_ID'])require('assert').equal(process.env[key],undefined);\"": 3,
+        "node check.cjs same": 2,
+        "node check.cjs first": 5,
+        "node check.cjs second": 1,
+        "node check.cjs check": 9,
+        "node check.cjs fast; exit 75": 2,
+        "node check.cjs canonical": 1,
+        "node wait.cjs": 1
+      },
+      "tap": {
+        "tests": 166,
+        "pass": 166,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 11,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "lanes/test/herdr-client.test.mjs": {
+          "launches": 0,
+          "wallMs": 132,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/lane.test.mjs": {
+          "launches": 12021,
+          "wallMs": 356034,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 219,
+          "fakeHerdr": 2419,
+          "gitWorktree": 195,
+          "compiler": 2,
+          "pty": 2
+        },
+        "lanes/test/no-focus.test.mjs": {
+          "launches": 0,
+          "wallMs": 10,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/routes.test.mjs": {
+          "launches": 0,
+          "wallMs": 17,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/validation.test.mjs": {
+          "launches": 1098,
+          "wallMs": 8114,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 13,
+          "gitWorktree": 13
+        }
+      }
+    },
+    "acceptance": {
+      "tier": "acceptance",
+      "started": "2026-10-03T20:32:39.018Z",
+      "wallMs": 75024,
+      "loadBefore": [
+        5.3359375,
+        4.5654296875,
+        4.076171875
+      ],
+      "loadAfter": [
+        4.22900390625,
+        4.31982421875,
+        4.01806640625
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 4227,
+        "fakeHerdr": 645,
+        "gitInit": 21,
+        "gitWorktree": 15
+      },
+      "commands": {
+        "sh": 21,
+        "node": 725,
+        "ps": 116,
+        "herdr": 335,
+        "fake-herdr": 220,
+        "git": 2680,
+        "zsh": 4,
+        "fake-herdr.mjs": 90,
+        "sandbox-exec": 7,
+        "which": 16,
+        "chmod": 1,
+        "tar": 2,
+        "owner": 2,
+        "codex": 6,
+        "discovery\"]' 'node --test'": 2
+      },
+      "tap": {
+        "tests": 138,
+        "pass": 138,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 23,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "acceptance/test/cases.test.mjs": {
+          "launches": 0,
+          "wallMs": 30,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/boundary.test.mjs": {
+          "launches": 255,
+          "wallMs": 33919,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 208,
+          "gitInit": 1,
+          "gitWorktree": 1
+        },
+        "acceptance/test/cleanup.test.mjs": {
+          "launches": 22,
+          "wallMs": 898,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 13
+        },
+        "acceptance/test/cutover.test.mjs": {
+          "launches": 4,
+          "wallMs": 1028,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/focus.test.mjs": {
+          "launches": 80,
+          "wallMs": 17132,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/launch.test.mjs": {
+          "launches": 0,
+          "wallMs": 17,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/load-round2.test.mjs": {
+          "launches": 3259,
+          "wallMs": 55579,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 12,
+          "gitWorktree": 12,
+          "fakeHerdr": 334
+        },
+        "acceptance/test/load.test.mjs": {
+          "launches": 1,
+          "wallMs": 122,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/probe.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/recovery.test.mjs": {
+          "launches": 153,
+          "wallMs": 7256,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 90
+        },
+        "acceptance/test/results.test.mjs": {
+          "launches": 1,
+          "wallMs": 62,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/security.test.mjs": {
+          "launches": 16,
+          "wallMs": 322,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/signal.test.mjs": {
+          "launches": 6,
+          "wallMs": 64,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/snapshot.test.mjs": {
+          "launches": 5,
+          "wallMs": 74,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1
+        },
+        "acceptance/test/validation.test.mjs": {
+          "launches": 370,
+          "wallMs": 3701,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 4,
+          "gitWorktree": 2
+        },
+        "acceptance/test/verification.test.mjs": {
+          "launches": 32,
+          "wallMs": 832,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 3
+        }
+      }
+    },
+    "promotion": {
+      "wallMs": 879894,
+      "counts": {
+        "launches": 75280,
+        "gitInit": 757,
+        "gitWorktree": 597,
+        "fakeHerdr": 6723,
+        "compiler": 39,
+        "pty": 35
+      },
+      "tap": {
+        "tests": 1220,
+        "pass": 1209,
+        "skipped": 11
+      },
+      "code": 0
+    }
+  },
+  "after": {
+    "fast": {
+      "tier": "fast",
+      "started": "2026-10-03T20:51:37.284Z",
+      "wallMs": 1096,
+      "loadBefore": [
+        2.44677734375,
+        3.0732421875,
+        3.8212890625
+      ],
+      "loadAfter": [
+        2.44677734375,
+        3.0732421875,
+        3.8212890625
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 91,
+        "gitInit": 2,
+        "gitWorktree": 1
+      },
+      "commands": {
+        "sh": 1,
+        "node": 69,
+        "ps": 4,
+        "git": 17
+      },
+      "tap": {
+        "tests": 177,
+        "pass": 177,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 22,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "test/report.test.mjs": {
+          "launches": 0,
+          "wallMs": 14,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/processes.test.mjs": {
+          "launches": 0,
+          "wallMs": 20,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/sanitization.test.mjs": {
+          "launches": 11,
+          "wallMs": 408,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/tier-plan.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/discernment.test.mjs": {
+          "launches": 25,
+          "wallMs": 860,
+          "exitCodes": [
+            0
+          ]
+        },
+        "brain/test/capture.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/modern.test.mjs": {
+          "launches": 17,
+          "wallMs": 289,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 2,
+          "gitWorktree": 1
+        },
+        "console/test/model.test.mjs": {
+          "launches": 0,
+          "wallMs": 58,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/frame.test.mjs": {
+          "launches": 0,
+          "wallMs": 62,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/paint.test.mjs": {
+          "launches": 0,
+          "wallMs": 12,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/names.test.mjs": {
+          "launches": 0,
+          "wallMs": 15,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/waiting.test.mjs": {
+          "launches": 16,
+          "wallMs": 214,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/terminal.test.mjs": {
+          "launches": 0,
+          "wallMs": 45,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/routes.test.mjs": {
+          "launches": 0,
+          "wallMs": 23,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/prototype.test.mjs": {
+          "launches": 0,
+          "wallMs": 62,
+          "exitCodes": [
+            0
+          ]
+        }
+      }
+    },
+    "slot": {
+      "tier": "slot",
+      "started": "2026-10-03T20:51:38.381Z",
+      "wallMs": 6590,
+      "loadBefore": [
+        2.44677734375,
+        3.0732421875,
+        3.8212890625
+      ],
+      "loadAfter": [
+        2.25048828125,
+        3.02197265625,
+        3.798828125
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 369
+      },
+      "commands": {
+        "sh": 3,
+        "node": 126,
+        "ps": 240
+      },
+      "tap": {
+        "tests": 48,
+        "pass": 48,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 1,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "test-slot/test/test-slot.test.mjs": {
+          "launches": 368,
+          "wallMs": 6478,
+          "exitCodes": [
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "core": {
+      "tier": "core",
+      "started": "2026-10-03T20:51:44.971Z",
+      "wallMs": 135852,
+      "loadBefore": [
+        2.25048828125,
+        3.02197265625,
+        3.798828125
+      ],
+      "loadAfter": [
+        2.92529296875,
+        3.2490234375,
+        3.78662109375
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 20397,
+        "fakeHerdr": 1054,
+        "gitInit": 318,
+        "gitWorktree": 190,
+        "compiler": 18,
+        "pty": 38
+      },
+      "commands": {
+        "sh": 77,
+        "node": 3033,
+        "ps": 957,
+        "herdr": 1054,
+        "launcher": 5,
+        "cmem": 5,
+        "git": 14511,
+        "chmod": 57,
+        "org": 111,
+        "cc": 18,
+        "script": 38,
+        "bash": 118,
+        "false": 24,
+        "zsh": 3,
+        "monitor-codex": 6,
+        "lane": 165,
+        "watch": 27,
+        "monitor-claude": 5,
+        "owner": 47,
+        "fake.mjs": 40,
+        "record-adapter": 15,
+        "fake-native": 1,
+        "codex": 2,
+        "sandbox-exec": 28,
+        "discovery\"]' 'node --test'": 14,
+        "bwrap": 1,
+        "persona": 2,
+        "memory": 2,
+        "native": 27,
+        "node slow.cjs'": 1,
+        "discovery\"]' 'canonical-failing-check'": 1,
+        "prepare.mjs": 1,
+        "discovery\"]' 'fast-check'": 1
+      },
+      "tap": {
+        "tests": 712,
+        "pass": 701,
+        "fail": 0,
+        "skipped": 11,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 76,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "test/brain-start.test.mjs": {
+          "launches": 7,
+          "wallMs": 3420,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 4
+        },
+        "test/console-launch.test.mjs": {
+          "launches": 2,
+          "wallMs": 76,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/approvals.test.mjs": {
+          "launches": 203,
+          "wallMs": 7049,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/discernment.test.mjs": {
+          "launches": 25,
+          "wallMs": 871,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/file-wait.test.mjs": {
+          "launches": 0,
+          "wallMs": 51,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/flow.test.mjs": {
+          "launches": 121,
+          "wallMs": 3026,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 1
+        },
+        "test/focus.test.mjs": {
+          "launches": 2,
+          "wallMs": 198,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/git-seed.test.mjs": {
+          "launches": 14,
+          "wallMs": 142,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1
+        },
+        "test/inbox.test.mjs": {
+          "launches": 0,
+          "wallMs": 30,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/load-deadlines.test.mjs": {
+          "launches": 2,
+          "wallMs": 783,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/mcp.test.mjs": {
+          "launches": 0,
+          "wallMs": 11,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/name-alias.test.mjs": {
+          "launches": 59,
+          "wallMs": 1767,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/offline-herdr.test.mjs": {
+          "launches": 6,
+          "wallMs": 319,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 4
+        },
+        "test/one-watcher.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/open-session.test.mjs": {
+          "launches": 49,
+          "wallMs": 1341,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 2,
+          "fakeHerdr": 18
+        },
+        "test/plugin-install.test.mjs": {
+          "launches": 975,
+          "wallMs": 66591,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 51,
+          "fakeHerdr": 3,
+          "gitWorktree": 4,
+          "compiler": 1,
+          "pty": 2
+        },
+        "test/priorities.test.mjs": {
+          "launches": 74,
+          "wallMs": 2651,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/processes.test.mjs": {
+          "launches": 0,
+          "wallMs": 22,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/pty-cache.test.mjs": {
+          "launches": 8,
+          "wallMs": 1087,
+          "exitCodes": [
+            0
+          ],
+          "compiler": 3,
+          "pty": 5
+        },
+        "test/pty.test.mjs": {
+          "launches": 101,
+          "wallMs": 11548,
+          "exitCodes": [
+            0
+          ],
+          "compiler": 8,
+          "pty": 6
+        },
+        "test/recap.test.mjs": {
+          "launches": 33,
+          "wallMs": 1284,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/release.test.mjs": {
+          "launches": 116,
+          "wallMs": 11879,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 8
+        },
+        "test/report.test.mjs": {
+          "launches": 0,
+          "wallMs": 14,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/sanitization.test.mjs": {
+          "launches": 11,
+          "wallMs": 386,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/settle-watch.test.mjs": {
+          "launches": 22,
+          "wallMs": 949,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 13
+        },
+        "test/startup-deadlines.test.mjs": {
+          "launches": 17,
+          "wallMs": 944,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 3
+        },
+        "test/suite.test.mjs": {
+          "launches": 17,
+          "wallMs": 1232,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/test-hangs.test.mjs": {
+          "launches": 648,
+          "wallMs": 57800,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/tidy-tabs.test.mjs": {
+          "launches": 0,
+          "wallMs": 14,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/tier-plan.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/today.test.mjs": {
+          "launches": 117,
+          "wallMs": 4240,
+          "exitCodes": [
+            0
+          ]
+        },
+        "test/workspace.test.mjs": {
+          "launches": 100,
+          "wallMs": 719,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 26,
+          "gitWorktree": 1
+        },
+        "brain/test/capture.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "brain/test/projects.test.mjs": {
+          "launches": 3,
+          "wallMs": 92,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/board.test.mjs": {
+          "launches": 0,
+          "wallMs": 28,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/brain.test.mjs": {
+          "launches": 1,
+          "wallMs": 41,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/control-plane.test.mjs": {
+          "launches": 2188,
+          "wallMs": 24570,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 17,
+          "gitWorktree": 1,
+          "fakeHerdr": 8
+        },
+        "console/test/control.test.mjs": {
+          "launches": 0,
+          "wallMs": 21,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/controller.test.mjs": {
+          "launches": 0,
+          "wallMs": 27,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/desks.test.mjs": {
+          "launches": 1881,
+          "wallMs": 15873,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 9,
+          "gitWorktree": 1,
+          "fakeHerdr": 8
+        },
+        "console/test/frame.test.mjs": {
+          "launches": 0,
+          "wallMs": 66,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/housekeeping.test.mjs": {
+          "launches": 924,
+          "wallMs": 9226,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 10,
+          "gitWorktree": 1
+        },
+        "console/test/model.test.mjs": {
+          "launches": 0,
+          "wallMs": 54,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/modern.test.mjs": {
+          "launches": 17,
+          "wallMs": 264,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 2,
+          "gitWorktree": 1
+        },
+        "console/test/names.test.mjs": {
+          "launches": 0,
+          "wallMs": 17,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/paint.test.mjs": {
+          "launches": 0,
+          "wallMs": 12,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/session.test.mjs": {
+          "launches": 111,
+          "wallMs": 4206,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 6
+        },
+        "console/test/sources.test.mjs": {
+          "launches": 0,
+          "wallMs": 20,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/terminal.test.mjs": {
+          "launches": 0,
+          "wallMs": 44,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/test/waiting.test.mjs": {
+          "launches": 16,
+          "wallMs": 212,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/autonomy.test.mjs": {
+          "launches": 0,
+          "wallMs": 58,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/prototype.test.mjs": {
+          "launches": 0,
+          "wallMs": 58,
+          "exitCodes": [
+            0
+          ]
+        },
+        "console/proto/workflows.test.mjs": {
+          "launches": 0,
+          "wallMs": 66,
+          "exitCodes": [
+            0
+          ]
+        },
+        "watch/test/watch.test.mjs": {
+          "launches": 570,
+          "wallMs": 16694,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 391
+        },
+        "dispatch/test/dispatch.test.mjs": {
+          "launches": 1244,
+          "wallMs": 46963,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 24,
+          "fakeHerdr": 143,
+          "gitWorktree": 22
+        },
+        "housekeeping/test/housekeeping.test.mjs": {
+          "launches": 1100,
+          "wallMs": 16147,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 58,
+          "gitWorktree": 56
+        },
+        "discovery/test/alternatives.test.mjs": {
+          "launches": 78,
+          "wallMs": 2663,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 5,
+          "gitWorktree": 1
+        },
+        "discovery/test/confinement.test.mjs": {
+          "launches": 0,
+          "wallMs": 19,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/entry.test.mjs": {
+          "launches": 481,
+          "wallMs": 4186,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 6,
+          "gitWorktree": 5
+        },
+        "discovery/test/lifecycle.test.mjs": {
+          "launches": 1537,
+          "wallMs": 11948,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 16,
+          "gitWorktree": 30
+        },
+        "discovery/test/owner.test.mjs": {
+          "launches": 37,
+          "wallMs": 15119,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/review-r2.test.mjs": {
+          "launches": 1780,
+          "wallMs": 21592,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 21,
+          "gitWorktree": 10
+        },
+        "discovery/test/review-r3.test.mjs": {
+          "launches": 171,
+          "wallMs": 13802,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 6
+        },
+        "discovery/test/review-r4.test.mjs": {
+          "launches": 10,
+          "wallMs": 409,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/review.test.mjs": {
+          "launches": 1171,
+          "wallMs": 17308,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 15,
+          "gitWorktree": 15,
+          "fakeHerdr": 16,
+          "compiler": 5,
+          "pty": 21
+        },
+        "discovery/test/sandbox.test.mjs": {
+          "launches": 0,
+          "wallMs": 16,
+          "exitCodes": [
+            0
+          ]
+        },
+        "discovery/test/settings.test.mjs": {
+          "launches": 1364,
+          "wallMs": 16385,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 13,
+          "compiler": 1,
+          "pty": 4,
+          "gitWorktree": 7
+        },
+        "discovery/test/validation-deadlines.test.mjs": {
+          "launches": 169,
+          "wallMs": 11873,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 1
+        },
+        "promote/test/promote.test.mjs": {
+          "launches": 2739,
+          "wallMs": 33423,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 23,
+          "gitWorktree": 33,
+          "fakeHerdr": 440
+        }
+      }
+    },
+    "cycle": {
+      "tier": "cycle",
+      "started": "2026-10-03T20:54:00.824Z",
+      "wallMs": 200960,
+      "loadBefore": [
+        2.92529296875,
+        3.2490234375,
+        3.78662109375
+      ],
+      "loadAfter": [
+        3.06298828125,
+        3.46240234375,
+        3.78125
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 34949,
+        "gitInit": 45,
+        "gitWorktree": 177,
+        "fakeHerdr": 2519
+      },
+      "commands": {
+        "sh": 295,
+        "node": 5588,
+        "ps": 779,
+        "git": 25307,
+        "herdr": 2519,
+        "which": 17,
+        "record-adapter.mjs": 329,
+        "record-race.mjs": 26,
+        "race-record.mjs": 25,
+        "watch-adapter.mjs": 4,
+        "validation.cjs": 1,
+        "race-dispatch.mjs": 1,
+        "legacy-record.mjs": 25,
+        "bash": 3,
+        "tar": 28,
+        "npm": 1,
+        "missing-release-input-check": 1
+      },
+      "tap": {
+        "tests": 155,
+        "pass": 155,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 23,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "settle/test/config.test.mjs": {
+          "launches": 1468,
+          "wallMs": 27958,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 6,
+          "fakeHerdr": 94
+        },
+        "settle/test/rebase-review.test.mjs": {
+          "launches": 2858,
+          "wallMs": 57777,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 17,
+          "fakeHerdr": 144
+        },
+        "settle/test/rebase-safety.test.mjs": {
+          "launches": 1132,
+          "wallMs": 20097,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 8,
+          "fakeHerdr": 48
+        },
+        "settle/test/rebase-paths.test.mjs": {
+          "launches": 2417,
+          "wallMs": 48931,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 14,
+          "fakeHerdr": 120
+        },
+        "settle/test/rebase.test.mjs": {
+          "launches": 1563,
+          "wallMs": 28209,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 11,
+          "fakeHerdr": 72
+        },
+        "settle/test/receipts.test.mjs": {
+          "launches": 2235,
+          "wallMs": 50126,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 13,
+          "fakeHerdr": 120
+        },
+        "settle/test/record-safety.test.mjs": {
+          "launches": 2606,
+          "wallMs": 56017,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 21,
+          "fakeHerdr": 173
+        },
+        "settle/test/ref-deadlines.test.mjs": {
+          "launches": 268,
+          "wallMs": 6074,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 9,
+          "gitWorktree": 9
+        },
+        "settle/test/round-cap.test.mjs": {
+          "launches": 4592,
+          "wallMs": 90087,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 19,
+          "fakeHerdr": 446
+        },
+        "settle/test/settle.test.mjs": {
+          "launches": 4781,
+          "wallMs": 97930,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 27,
+          "fakeHerdr": 389
+        },
+        "settle/test/teardown.test.mjs": {
+          "launches": 190,
+          "wallMs": 6947,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 3,
+          "fakeHerdr": 151
+        },
+        "settle/test/validation-tiers.test.mjs": {
+          "launches": 858,
+          "wallMs": 12488,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 3,
+          "fakeHerdr": 35
+        },
+        "supervisor/test/delivery.test.mjs": {
+          "launches": 377,
+          "wallMs": 14574,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 347
+        },
+        "supervisor/test/supervisor.test.mjs": {
+          "launches": 6201,
+          "wallMs": 96337,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1,
+          "gitWorktree": 20,
+          "fakeHerdr": 380
+        },
+        "release/test/candidate.test.mjs": {
+          "launches": 177,
+          "wallMs": 2587,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1
+        },
+        "release/test/release.test.mjs": {
+          "launches": 3203,
+          "wallMs": 26805,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 23,
+          "gitWorktree": 6
+        }
+      }
+    },
+    "lanes": {
+      "tier": "lanes",
+      "started": "2026-10-03T20:57:21.784Z",
+      "wallMs": 342429,
+      "loadBefore": [
+        3.06298828125,
+        3.46240234375,
+        3.78125
+      ],
+      "loadAfter": [
+        1.33740234375,
+        2.05126953125,
+        2.9970703125
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 12444,
+        "gitInit": 18,
+        "gitWorktree": 208,
+        "fakeHerdr": 2374,
+        "compiler": 2,
+        "pty": 2
+      },
+      "commands": {
+        "sh": 20,
+        "node": 657,
+        "ps": 56,
+        "git": 9290,
+        "herdr": 2374,
+        "node check.cjs fast": 2,
+        "node -e \"for(const key of ['HERDR_PANE_ID','HERDR_TAB_ID','HERDR_WORKSPACE_ID'])require('assert').equal(process.env[key],undefined);\"": 3,
+        "node check.cjs same": 2,
+        "node check.cjs first": 5,
+        "node check.cjs second": 1,
+        "true": 3,
+        "node check.cjs check": 9,
+        "kill -9 $$": 2,
+        "node check.cjs fast; exit 75": 2,
+        "printf 'ran\\n' >> prepare.log; printf 'ready\\n' > ready.marker": 1,
+        "node check.cjs canonical": 1,
+        "gate-pass configured": 1,
+        "gate-environment": 1,
+        "gate-override --record-verbatim": 1,
+        "node wait.cjs": 1,
+        "npm test": 1,
+        ": > .ready.marker": 1,
+        "gate-needs-prepare": 1,
+        "cc": 2,
+        "native": 2,
+        "script": 2,
+        "canonical-check": 1,
+        "mv": 1,
+        "bash": 1
+      },
+      "tap": {
+        "tests": 166,
+        "pass": 166,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 12,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "lanes/test/no-focus.test.mjs": {
+          "launches": 0,
+          "wallMs": 11,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/lane.test.mjs": {
+          "launches": 11334,
+          "wallMs": 342215,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 5,
+          "fakeHerdr": 2374,
+          "gitWorktree": 195,
+          "compiler": 2,
+          "pty": 2
+        },
+        "lanes/test/routes.test.mjs": {
+          "launches": 0,
+          "wallMs": 18,
+          "exitCodes": [
+            0
+          ]
+        },
+        "lanes/test/validation.test.mjs": {
+          "launches": 1098,
+          "wallMs": 8003,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 13,
+          "gitWorktree": 13
+        },
+        "lanes/test/herdr-client.test.mjs": {
+          "launches": 0,
+          "wallMs": 82,
+          "exitCodes": [
+            0
+          ]
+        }
+      }
+    },
+    "acceptance": {
+      "tier": "acceptance",
+      "started": "2026-10-03T21:09:09.469Z",
+      "wallMs": 56930,
+      "loadBefore": [
+        4.12353515625,
+        3.294921875,
+        3.181640625
+      ],
+      "loadAfter": [
+        3.01025390625,
+        3.1318359375,
+        3.12744140625
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 4226,
+        "fakeHerdr": 645,
+        "gitInit": 21,
+        "gitWorktree": 15
+      },
+      "commands": {
+        "sh": 21,
+        "node": 724,
+        "ps": 116,
+        "herdr": 335,
+        "fake-herdr": 220,
+        "zsh": 4,
+        "git": 2680,
+        "fake-herdr.mjs": 90,
+        "sandbox-exec": 7,
+        "which": 16,
+        "chmod": 1,
+        "tar": 2,
+        "owner": 2,
+        "codex": 6,
+        "discovery\"]' 'node --test'": 2
+      },
+      "tap": {
+        "tests": 138,
+        "pass": 138,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 23,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "acceptance/test/cases.test.mjs": {
+          "launches": 0,
+          "wallMs": 29,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/boundary.test.mjs": {
+          "launches": 255,
+          "wallMs": 34108,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 208,
+          "gitInit": 1,
+          "gitWorktree": 1
+        },
+        "acceptance/test/cleanup.test.mjs": {
+          "launches": 22,
+          "wallMs": 1139,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 13
+        },
+        "acceptance/test/cutover.test.mjs": {
+          "launches": 4,
+          "wallMs": 1428,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/focus.test.mjs": {
+          "launches": 80,
+          "wallMs": 17208,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/launch.test.mjs": {
+          "launches": 0,
+          "wallMs": 15,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/load-round2.test.mjs": {
+          "launches": 3258,
+          "wallMs": 55183,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 12,
+          "gitWorktree": 12,
+          "fakeHerdr": 334
+        },
+        "acceptance/test/load.test.mjs": {
+          "launches": 1,
+          "wallMs": 121,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/probe.test.mjs": {
+          "launches": 0,
+          "wallMs": 13,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/recovery.test.mjs": {
+          "launches": 153,
+          "wallMs": 7186,
+          "exitCodes": [
+            0
+          ],
+          "fakeHerdr": 90
+        },
+        "acceptance/test/results.test.mjs": {
+          "launches": 1,
+          "wallMs": 55,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/security.test.mjs": {
+          "launches": 16,
+          "wallMs": 318,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/signal.test.mjs": {
+          "launches": 6,
+          "wallMs": 64,
+          "exitCodes": [
+            0
+          ]
+        },
+        "acceptance/test/snapshot.test.mjs": {
+          "launches": 5,
+          "wallMs": 71,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 1
+        },
+        "acceptance/test/validation.test.mjs": {
+          "launches": 370,
+          "wallMs": 3628,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 4,
+          "gitWorktree": 2
+        },
+        "acceptance/test/verification.test.mjs": {
+          "launches": 32,
+          "wallMs": 838,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 3
+        }
+      }
+    },
+    "release": {
+      "tier": "release",
+      "started": "2026-10-03T21:03:59.469Z",
+      "wallMs": 93371,
+      "loadBefore": [
+        1.56982421875,
+        2.03125,
+        2.9306640625
+      ],
+      "loadAfter": [
+        1.02099609375,
+        1.728515625,
+        2.72119140625
+      ],
+      "code": 0,
+      "counts": {
+        "launches": 1504,
+        "gitInit": 11,
+        "gitWorktree": 7
+      },
+      "commands": {
+        "sh": 7,
+        "ps": 30,
+        "node": 148,
+        "git": 1290,
+        "monitor-codex": 2,
+        "owner": 8,
+        "sandbox-exec": 8,
+        "discovery\"]' 'node --test'": 6,
+        "monitor-claude": 2,
+        "which": 3
+      },
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      },
+      "files": {
+        "(runner overhead)": {
+          "launches": 25,
+          "wallMs": null,
+          "exitCodes": []
+        },
+        "discovery/test/acceptance.test.mjs": {
+          "launches": 1350,
+          "wallMs": 14824,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 8,
+          "gitWorktree": 4
+        },
+        "test/deadline-boundaries.test.mjs": {
+          "launches": 9,
+          "wallMs": 31051,
+          "exitCodes": [
+            0
+          ]
+        },
+        "settle/test/ref-wallclock.test.mjs": {
+          "launches": 120,
+          "wallMs": 47009,
+          "exitCodes": [
+            0
+          ],
+          "gitInit": 3,
+          "gitWorktree": 3
+        }
+      }
+    },
+    "promotion": {
+      "wallMs": 742761,
+      "counts": {
+        "launches": 72385,
+        "fakeHerdr": 6592,
+        "gitInit": 402,
+        "gitWorktree": 590,
+        "compiler": 20,
+        "pty": 40
+      },
+      "tap": {
+        "tests": 1219,
+        "pass": 1208,
+        "skipped": 11
+      },
+      "code": 0
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { ownerIdentity } from '../../lib/process-owner.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,10 +19,10 @@ function fixture(t) {
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const cwd = path.join(scratch, 'project'); fs.mkdirSync(cwd);
   const env = { ...process.env, ORG_DIR: path.join(cwd, '.org'), ORG_ACTOR: 'housekeeping-console-test', HERDR_BIN_PATH: '/usr/bin/false', HERDR_ENV: '1' };
-  const git = args => execFileSync('git', args, { cwd, env, stdio: 'pipe', timeout: 10000 });
+  const git = args => execFileSync('git', args, { cwd, env, stdio: 'pipe', timeout: loadTimeout(10000) });
   git(['init', '-b', 'main']); git(['config', 'user.name', 'Fixture']); git(['config', 'user.email', 'fixture@example.test']);
   fs.writeFileSync(path.join(cwd, 'README.md'), 'Fixture\n'); fs.writeFileSync(path.join(cwd, '.gitignore'), '.org/\n'); git(['add', '.']); git(['commit', '-m', 'Fixture']);
-  const cli = (args, directory = cwd) => spawnSync(process.execPath, [bin, ...args], { cwd: directory, env, encoding: 'utf8', timeout: 10000 });
+  const cli = (args, directory = cwd) => spawnSync(process.execPath, [bin, ...args], { cwd: directory, env, encoding: 'utf8', timeout: loadTimeout(10000) });
   const org = (args, directory = cwd) => { const r = cli(args, directory); assert.equal(r.status, 0, r.stderr); return r.stdout; };
   org(['init']);
   const snapshot = () => JSON.parse(org(['housekeeping', '--json']));
@@ -77,7 +78,7 @@ test('housekeeping CLI reads without writes, validates tracked overrides, pauses
 test('status distinguishes running, stale and malformed owners and isolates repositories sharing a record', { timeout: 30000 }, t => {
   const f = fixture(t); f.owner(process.pid);
   assert.equal(f.snapshot().process, 'running');
-  const deadPid = Number(execFileSync(process.execPath, ['-e', 'console.log(process.pid)'], { env: f.env, encoding: 'utf8', timeout: 10000 }));
+  const deadPid = Number(execFileSync(process.execPath, ['-e', 'console.log(process.pid)'], { env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) }));
   f.owner(deadPid); assert.equal(f.snapshot().process, 'stale lock');
   fs.writeFileSync(path.join(f.lock, 'owner.json'), '{}');
   assert.equal(f.snapshot().process, 'unknown'); assert.equal(f.snapshot().editable, false);
@@ -87,7 +88,7 @@ test('status distinguishes running, stale and malformed owners and isolates repo
   own.config = path.join(f.scratch, 'other-config'); fs.writeFileSync(ownerFile, JSON.stringify(own));
   assert.equal(f.snapshot().process, 'unknown'); assert.equal(f.snapshot().editable, false);
   const other = path.join(f.scratch, 'another', 'project'); fs.mkdirSync(other, { recursive: true });
-  execFileSync('git', ['init', '-b', 'main', other], { env: f.env, stdio: 'pipe', timeout: 10000 });
+  execFileSync('git', ['init', '-b', 'main', other], { env: f.env, stdio: 'pipe', timeout: loadTimeout(10000) });
   const doc = housekeepingSnapshot({ cwd: other, org: f.env.ORG_DIR });
   assert.notEqual(doc.stateDir, f.state); assert.equal(doc.actions.length, 0); assert.equal(doc.process, 'stopped');
 });
@@ -148,7 +149,7 @@ test('housekeeping --print renders fixture and stays read only even when pause o
   const events = fs.readFileSync(path.join(f.env.ORG_DIR, 'events.jsonl'), 'utf8'), logs = fs.readFileSync(f.logFile, 'utf8');
   for (const keys of ['H', 'Hj\\n\\n', 'H\\nfalse\\n\\n']) {
     const output = execFileSync(process.execPath, [app, '--modern', '--config', config, '--print', '100x40', '--keys', keys],
-      { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 10000 });
+      { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) });
     if (keys === 'H') { assert.match(output, /Housekeeping/); assert.match(output, /Finished worker/); }
     else assert.match(output, /--print does not change housekeeping/);
     assert.equal(fs.existsSync(f.configFile), false);
@@ -161,11 +162,11 @@ test('housekeeping --print renders fixture and stays read only even when pause o
 test('an unconfigured Git project can inspect defaults and save a tracked override without creating a record or schedule', { timeout: 30000 }, t => {
   const f = fixture(t);
   fs.rmSync(f.env.ORG_DIR, { recursive: true });
-  const r = spawnSync(process.execPath, [bin, 'housekeeping', '--json'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: 10000 });
+  const r = spawnSync(process.execPath, [bin, 'housekeeping', '--json'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: loadTimeout(10000) });
   assert.equal(r.status, 0, r.stderr);
   const doc = JSON.parse(r.stdout); assert.equal(doc.process, 'no record'); assert.equal(doc.stateDir, null);
   assert.equal(fs.existsSync(f.configFile), false); assert.equal(fs.existsSync(f.env.ORG_DIR), false);
-  const write = spawnSync(process.execPath, [bin, 'housekeeping', 'set', '--resume=false'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: 10000 });
+  const write = spawnSync(process.execPath, [bin, 'housekeeping', 'set', '--resume=false'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: loadTimeout(10000) });
   assert.equal(write.status, 0, write.stderr); assert.equal(fs.existsSync(f.env.ORG_DIR), false);
   assert.deepEqual(JSON.parse(fs.readFileSync(f.configFile)), { resume: false });
   const folder = path.join(f.scratch, 'ordinary'); fs.mkdirSync(folder);
@@ -234,7 +235,7 @@ test('housekeeping close failures show both the actual error and planned reason 
   const config = path.join(f.scratch, 'failed-close-console.json');
   fs.writeFileSync(config, JSON.stringify({ projects: [{ name: 'Close failure fixture', cwd: f.cwd, org: f.env.ORG_DIR }] }));
   const output = execFileSync(process.execPath, [app, '--modern', '--config', config, '--print', '100x40', '--keys', 'H'],
-    { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 10000 });
+    { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) });
   assert.match(output, /Error: Herdr refused to close tab-failed/);
   assert.match(output, /Reason: R-9 report recorded; clean lane promoted/);
 });

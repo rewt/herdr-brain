@@ -1,5 +1,7 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { loadEvents } from '../../lib/store.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,6 +22,8 @@ function fixture(t) {
   const candidate = path.join(root, 'candidate'), cache = path.join(root, 'cache'), bch = path.join(root, 'existing project');
   fs.mkdirSync(path.join(candidate, 'herdr'), { recursive: true });
   fs.mkdirSync(path.join(candidate, 'acceptance'));
+  fs.mkdirSync(path.join(candidate, 'test/helpers'), { recursive: true });
+  fs.writeFileSync(path.join(candidate, 'test/helpers/tier.mjs'), "import assert from 'node:assert/strict';assert.equal(process.argv[2],'release');console.log('offline release checks');process.exitCode=Number(process.env.RELEASE_TEST_FAILURE||0);");
   fs.mkdirSync(path.join(cache, '_cacache/index-v5'), { recursive: true });
   fs.mkdirSync(bch);
   fs.writeFileSync(path.join(candidate, '.release-commit'), 'a'.repeat(40) + '\n');
@@ -32,7 +36,7 @@ function fixture(t) {
   }
   const env = { ...process.env, ORG_ACTOR: 'candidate-fixture', RELEASE_NPM_CACHE: cache, RELEASE_BCH_CLOAK: bch,
     RELEASE_NO_NPM: '1', npm_config_userconfig: '/dev/null' };
-  const invoke = (argv, extra = {}) => spawnSync(argv[0], argv.slice(1), { cwd: candidate, env: { ...env, ...extra }, encoding: 'utf8', timeout: 12000 });
+  const invoke = (argv, extra = {}) => spawnSync(argv[0], argv.slice(1), { cwd: candidate, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(12000) });
   return { root, candidate, cache, bch, env, invoke };
 }
 
@@ -132,7 +136,7 @@ test('real project preflight leaves invalid inputs uncut and retries the same co
     assert.equal(git(['tag']), '');
     f.env[variable] = saved;
   }
-  const events = () => fs.readFileSync(path.join(f.candidate, '.org/events.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+  const events = () => loadEvents(path.join(f.candidate, '.org')).events;
   assert.equal(events().filter(e => e.type === 'release.cut').length, 0);
   assert.equal(events().filter(e => e.type.startsWith('release.gate.')).length, 0);
   delete f.env.RELEASE_BCH_CLOAK;
@@ -144,4 +148,19 @@ test('real project preflight leaves invalid inputs uncut and retries the same co
   assert.equal(attempt().candidate.id, result.candidate.id, 'an already gated candidate is reused before machine checks');
   assert.equal(events().filter(e => e.type === 'release.gate.started').length, 1);
   assert.equal(events().filter(e => e.type === 'release.gate.finished').length, 1);
+});
+
+test('release safety checks stop the gate on failure and precede acceptance on success', t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.candidate, '.release-build.json'), JSON.stringify({ commit: 'a'.repeat(40) }));
+  const marker = path.join(f.root, 'acceptance-ran');
+  fs.writeFileSync(path.join(f.candidate, 'acceptance/run.mjs'), `import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(marker)},'ran');`);
+  const command = releaseArgv(declaration.gate, { candidate: f.candidate });
+  const refused = f.invoke(command, { RELEASE_TEST_FAILURE: '9' });
+  assert.equal(refused.status, 9, refused.stdout + refused.stderr);
+  assert.equal(fs.existsSync(marker), false, 'red offline safety evidence prevents the live gate');
+  const green = f.invoke(command);
+  assert.equal(green.status, 0, green.stdout + green.stderr);
+  assert.equal(fs.readFileSync(marker, 'utf8'), 'ran');
+  assert.equal((green.stdout.match(/offline release checks/g) ?? []).length, 1);
 });

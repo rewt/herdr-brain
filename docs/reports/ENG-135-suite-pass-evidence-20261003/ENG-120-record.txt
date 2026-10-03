@@ -1,0 +1,55 @@
+ENG-120  Release gate focus monitor startup never settles while Herdr streams pane.focused events (RC-2, 2026-10-03 11:03: 'focus subscription startup did not settle' after 5 s; 18 Herdr cases pending, zero product failures). acceptance/focus.mjs waits for 400 ms of silence to drain startup replay; steady focus events from the operator's own activity or a chatty pane block it. Startup must tell replay from live operator activity without missing a focus move the harness itself causes, and the gate must still pass while the operator uses Herdr
+status: done · role: engineer · capability: tooling
+within: G-3 Herdr platform roadmap: standardize bch…
+created: 2026-10-03 11:05 by supervisor-herdr
+closed: done 2026-10-03 12:43 by supervisor-herdr — Promoted after direct check: promoted lane/focus-startup: main 1c89f0d -> 8b15a97 (fast-forward)
+acceptance:
+  - the focus monitor starts while synthetic pane.focused events keep arriving, and still records any focus move caused by the harness
+  - offline tests plus at most one acceptance --skip-live pass; never the live harness
+budget (advisory): runs 1/3 · children 1/4 · depth 1/3 · escalations 0/1
+children:
+  ENG-123  ready       Publish promotion test PID markers atomically
+
+runs:
+  R-147  codex · gpt-6.1-sol · high  started 2026-10-03 11:05 · reported done 2026-10-03 11:47
+    summary:
+      Confirmed that retained Herdr subscription replay caused the release focus monitor's startup timeout.
+      Startup now completes after quiet polling or the verified finite replay bound, even while the operator keeps navigating.
+      Offline regressions still catch a transient harness-caused focus move immediately after readiness.
+      Baseline npm test, the complete post-change retry, fast checks and acceptance offline tests passed; no acceptance harness pass was run.
+    learnings:
+      - Two read-only subscriptions started 450 ms apart replayed the same 21-event prefix while global focus stayed unchanged; 25 consecutive events also matched the earlier release trace.
+      - Herdr 0.8.2 protocol 20 starts pane.focused subscriptions at cursor zero and retains at most 512 lifecycle events across all kinds.
+      - Candidate work starts only after focus-monitor readiness, so pre-readiness navigation can remain diagnostic without hiding a candidate focus move.
+    artifacts:
+      - Implementation commit: a480b13c53620d5d3fdbb753bdca07168eb1a55c
+      - acceptance/focus.mjs
+      - acceptance/test/focus.test.mjs
+      - acceptance/README.md
+      - docs/reports/ENG-120-focus-startup-evidence-20261003/replay-probe.json
+      - docs/reports/ENG-120-focus-startup-evidence-20261003/rc2-focus-trace.jsonl
+      - npm test baseline: passed; original post-change run: one fixture failure; complete retry: passed
+      - npm run test:fast: 140 passed
+      - npm run test:acceptance: 135 passed
+      - Focused regressions: 17 passed
+      - docs/reports/ENG-120-focus-startup-evidence-20261003/test-after-accounting.json
+      - .lane/gate.json: final configured lane check runs after the report commit
+    proposed: ENG-123
+    report: /Users/rewt/development/rewt/.org/reports/R-147.md
+
+history:
+  2026-10-03 11:05  added ENG-120 "Release gate focus monitor startup never settles while Herd…" under G-3
+  2026-10-03 11:05  started R-147 on ENG-120 (codex · gpt-6.1-sol)
+  2026-10-03 11:05  note on R-147: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/c6701964-e8f7-4…
+  2026-10-03 11:05  updated R-147: agent=lane-focus-startup-9dfb21-2b6fa8, pane=w2KE:p3, worker_workspace=w2KE, terminal_id=term_65cf1cfe1530162
+  2026-10-03 11:05  note on R-147: Dispatch: worker lane-focus-startup-9dfb21-2b6fa8 in w2KE:p3 recorded; prompt not sent
+  2026-10-03 11:05  updated R-147: watcher_pid=49646, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-147.watch.log
+  2026-10-03 11:05  note on R-147: Dispatch: watcher ready (pid 49646); prompt not sent
+  2026-10-03 11:05  note on R-147: Dispatch: prompt sent; worker lane-focus-startup-9dfb21-2b6fa8 and watcher 49646 started
+  2026-10-03 11:26  note on R-147: Worker stopped mid-run on a Codex 'Selected model is at capacity' error with its changes…
+  2026-10-03 11:46  note on R-147: Second Codex capacity stop, after the fix commit a480b13 (npm test green); prompted to fi…
+  2026-10-03 11:47  R-147 reported done on ENG-120: Confirmed that retained Herdr subscription replay caused the release focus monitor's star…
+  2026-10-03 11:47  added ENG-123 "Publish promotion test PID markers atomically" under ENG-120 (proposed by R-147)
+  2026-10-03 11:47  reopened ENG-120: Report recorded; independent settle review pending
+  2026-10-03 12:27  decision on R-147: Settle could not finish: main moved during its validation (the ARCH-17/18 memo promotions…
+  2026-10-03 12:43  closed ENG-120 as done: Promoted after direct check: promoted lane/focus-startup: main 1c89f0d -> 8b15a…

@@ -1,0 +1,13 @@
+{
+  "command": [
+    "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
+    "test/helpers/run.mjs",
+    "discovery/test/owner.test.mjs",
+    "discovery/test/review-r3.test.mjs",
+    "settle/test/teardown.test.mjs",
+    "test/test-hangs.test.mjs",
+    "discovery/test/acceptance.test.mjs"
+  ],
+  "wallMs": 57714,
+  "code": 0
+}

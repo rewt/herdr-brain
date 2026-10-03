@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -80,7 +81,7 @@ else process.exit(2);
   return { root, inbox, herdr, calls, sent, transmitted, clear, options };
 }
 async function until(fn) {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + loadTimeout(5000);
   while (!fn() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
   assert.ok(fn(), 'bounded wait for fake Herdr evidence');
 }

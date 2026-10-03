@@ -1,0 +1,58 @@
+ENG-117  Fixture inbox teardown fails when the detached inbox owner is still alive: test/helpers/inbox.mjs requires the owner to share the test's process group, but supervisor/prompt-supervisor.mjs spawns it detached (its own group), so stopFixtureInbox throws 'Cannot confirm fixture inbox owner identity' whenever the owner outlives the test (intermittent: settle/test/round-cap.test.mjs and the discovered-settings settle test, on main since ENG-112 at 8933d03; failed 3 of ~8 runs on 2026-10-03 and blocks promotions)
+status: done · role: engineer · capability: tooling
+within: G-3 Herdr platform roadmap: standardize bch… → ARCH-8 Phase 3: bring bch-cloak's cycle over o…
+created: 2026-10-03 09:49 by supervisor-herdr
+closed: done 2026-10-03 10:36 by supervisor-herdr — Promoted to main at 3eb664a (fast-forward from 22420af), promotion tier green. Review PASS; its Minor is a follow-up on ENG-95.
+acceptance:
+  - teardown confirms a live detached owner by its recorded argv, birth identity and own process group, then stops it; a pid reused by a foreign process reads as owner gone and is never signalled
+  - a regression test keeps the owner alive past test end and passes; offline only
+budget (advisory): runs 1/3 · children 0/4 · depth 2/3 · escalations 0/1
+
+runs:
+  R-146  codex · gpt-6.1-sol · high  started 2026-10-03 09:49 · reported done 2026-10-03 10:07
+    summary:
+      Confirmed that a live detached inbox owner has a different process group from
+      the test and reproduces the reported teardown refusal. Fixture teardown now
+      accepts the owner's own group, pins its birth identity and exact recorded
+      command, and checks transport children against that confirmed group.
+      Reused PIDs with a different command or birth identity are treated as gone
+      without signalling the replacement; ambiguous ownership still fails closed.
+      Added a real detached after-hook regression and identity/refusal tests.
+      Full offline validation, fast validation and three extra round-cap passes passed.
+    learnings:
+      - The bounded test runner normally forces product spawns into its suite group; a genuine detached-owner regression must use the existing fixed detached-fixture entrypoint.
+      - An inbox owner leads its own process group in ordinary execution; its transport children inherit that group, rather than the test caller's group.
+      - A terminated direct child can remain a zombie briefly before its parent reaps it; teardown and regression checks treat that state as gone.
+    artifacts:
+      - Implementation commit ec680e9e37f9132dafc539a9998961f270430335
+      - Branch lane/inbox-owner-group
+      - test/helpers/inbox.mjs
+      - test/inbox.test.mjs
+      - settle/test/teardown.test.mjs
+      - settle/test/helpers/detached-inbox.mjs
+      - npm test (baseline and after change): passed
+      - npm run test:fast: 140 passed
+      - node test/helpers/run.mjs test/inbox.test.mjs settle/test/teardown.test.mjs: 18 passed
+      - node test/helpers/run.mjs settle/test/round-cap.test.mjs: three additional passes, 10 tests each
+      - /tmp/r146-after-npm-test.log
+      - /tmp/r146-fast.log
+      - /tmp/r146-targeted.log
+      - /tmp/r146-round-cap-1.log
+      - /tmp/r146-round-cap-2.log
+      - /tmp/r146-round-cap-3.log
+    report: /Users/rewt/development/rewt/.org/reports/R-146.md
+
+history:
+  2026-10-03 09:49  added ENG-117 "Fixture inbox teardown fails when the detached inbox owner…" under ARCH-8
+  2026-10-03 09:49  started R-146 on ENG-117 (codex · gpt-6.1-sol)
+  2026-10-03 09:49  note on R-146: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/982b351b-2224-4…
+  2026-10-03 09:50  updated R-146: agent=lane-inbox-owner-g-d53d8f-3f3eaf, pane=w2KD:p3, worker_workspace=w2KD, terminal_id=term_65cf0c349611b5e
+  2026-10-03 09:50  note on R-146: Dispatch: worker lane-inbox-owner-g-d53d8f-3f3eaf in w2KD:p3 recorded; prompt not sent
+  2026-10-03 09:50  updated R-146: watcher_pid=93850, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-146.watch.log
+  2026-10-03 09:50  note on R-146: Dispatch: watcher ready (pid 93850); prompt not sent
+  2026-10-03 09:50  note on R-146: Dispatch: prompt sent; worker lane-inbox-owner-g-d53d8f-3f3eaf and watcher 93850 started
+  2026-10-03 10:07  R-146 reported done on ENG-117: Confirmed that a live detached inbox owner has a different process group from the test an…
+  2026-10-03 10:07  reopened ENG-117: Report recorded; independent settle review pending
+  2026-10-03 10:23  decision on R-146: Settle: escalate. The reviewer has unverified claims; the supervisor must resolve the rem…
+  2026-10-03 10:24  decision on R-146: Settle escalated on unverified evidence-retention claims with a PASS verdict and one Mino…
+  2026-10-03 10:36  closed ENG-117 as done: Promoted to main at 3eb664a (fast-forward from 22420af), promotion tier green.…

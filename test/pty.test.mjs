@@ -4,10 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import childProcess, { spawnSync } from 'node:child_process';
-import { syncBuiltinESMExports } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import { ptyCommand, runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
+import { waitForFile } from './helpers/file-wait.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 import { createProcessTracker } from './helpers/processes.mjs';
 
 process.env.ORG_ACTOR = 'pty-test-agent';
@@ -35,7 +36,7 @@ function fixture(t, { block = true } = {}) {
   const receipt = path.join(root, 'ready.json'), leaf = path.join(root, 'leaf.json');
   const leafCode = `const fs=require('fs');process.on('SIGHUP',()=>{});
 fs.writeFileSync(${JSON.stringify(leaf + '.tmp')},JSON.stringify({pid:process.pid}));
-fs.renameSync(${JSON.stringify(leaf + '.tmp')},${JSON.stringify(leaf)});while(true){} // ${root}`;
+fs.renameSync(${JSON.stringify(leaf + '.tmp')},${JSON.stringify(leaf)});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0); // ${root}`;
   const program = path.join(root, 'command.cjs');
   fs.writeFileSync(program, `const fs=require('fs'),{spawn}=require('child_process');
 process.on('SIGHUP',()=>{});
@@ -43,7 +44,7 @@ const child=spawn(process.execPath,['-e',${JSON.stringify(leafCode)}],{stdio:'ig
 const timer=setInterval(async()=>{if(!fs.existsSync(${JSON.stringify(leaf)}))return;clearInterval(timer);
 const value={pid:process.pid,leaf:child.pid,session:Number(process.env.HERDR_TEST_PTY_SESSION),suite:Number(process.env.HERDR_TEST_SUITE_PID),pgid:(await import(${JSON.stringify(new URL('./helpers/processes.mjs', import.meta.url).href)})).lookupProcess(process.pid).value.pgid,tty:process.stdin.isTTY};
 fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify(value));fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
-${block ? 'while(true){}' : 'setTimeout(()=>process.exit(0),100);'}
+${block ? 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);' : 'setTimeout(()=>process.exit(0),100);'}
 },10);`);
   t.after(async () => {
     // Report-only, including startup before a receipt. Native cleanup must finish
@@ -54,7 +55,7 @@ ${block ? 'while(true){}' : 'setTimeout(()=>process.exit(0),100);'}
   return { root, program, receipt };
 }
 async function waitForCleanup(root, receipt = {}) {
-  const tracker = createProcessTracker(), deadline = Date.now() + 6500;
+  const tracker = createProcessTracker(), deadline = Date.now() + loadTimeout(6500);
   const pids = [receipt.pid, receipt.leaf, receipt.session];
   const groups = [receipt.pgid, receipt.session];
   for (;;) {
@@ -99,33 +100,29 @@ function instrumentCleanup(t, implementation) {
   // membership, audit tokens/pidfds and the actual signal sweeps remain intact.
   fs.writeFileSync(source, original.replaceAll('static int sweep(', 'static int native_sweep(')
     .replace('static volatile sig_atomic_t stopped;', `${implementation}\nstatic volatile sig_atomic_t stopped;`));
-  const spawn = childProcess.spawnSync, load = os.loadavg, capacity = os.availableParallelism;
+  const load = os.loadavg, capacity = os.availableParallelism;
   os.loadavg = () => [24, 24, 24]; os.availableParallelism = () => 4;
-  childProcess.spawnSync = (binary, args, options) => {
-    if (binary === '/usr/bin/cc' && args.at(-1).endsWith('/pty-owner.c')) args = [...args.slice(0, -1), source];
-    return spawn(binary, args, options);
-  };
-  syncBuiltinESMExports();
   t.after(() => {
-    childProcess.spawnSync = spawn; os.loadavg = load; os.availableParallelism = capacity;
-    syncBuiltinESMExports(); fs.rmSync(root, { recursive: true, force: true });
+    os.loadavg = load; os.availableParallelism = capacity;
+    fs.rmSync(root, { recursive: true, force: true });
   });
+  return source;
 }
 test('PTY cleanup completes when native enumeration exceeds its former three-second allowance', { skip: PTY_SKIP_REASON }, t => {
-  instrumentCleanup(t, `static int sweep(int sig) {
+  const ownerSource = instrumentCleanup(t, `static int sweep(int sig) {
     static int delayed;
     if (!delayed++) { struct timespec delay = {3, 300000000}; nanosleep(&delay, NULL); }
     return native_sweep(sig);
   }`);
   const started = Date.now();
-  const result = runPTY(process.execPath, ['-e', 'console.log(process.stdin.isTTY);process.exitCode=7']);
+  const result = runPTY(process.execPath, ['-e', 'console.log(process.stdin.isTTY);process.exitCode=7'], { ownerSource });
   assert.equal(result.status, 7, result.stdout + result.stderr);
   assert.match(result.stdout, /true/);
   assert.ok(Date.now() - started >= 3300, 'the real native cleanup crossed the former limit');
 });
 test('PTY cleanup refusal still returns unconfirmed status with a loaded allowance', { skip: PTY_SKIP_REASON }, t => {
-  instrumentCleanup(t, 'static int sweep(int sig) { (void)sig; return -1; }');
-  const result = runPTY(process.execPath, ['-e', 'process.exitCode=0']);
+  const ownerSource = instrumentCleanup(t, 'static int sweep(int sig) { (void)sig; return -1; }');
+  const result = runPTY(process.execPath, ['-e', 'process.exitCode=0'], { ownerSource });
   assert.equal(result.status, 125, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /PTY session cleanup unconfirmed/);
 });
@@ -135,7 +132,7 @@ test('PTY command timeout clears its separate group, including SIGHUP handlers w
   assert.ok(result.error?.code === 'ETIMEDOUT' || result.status === 124, result.stdout + result.stderr);
   const receipt = readReceipt(f);
   await waitForCleanup(f.root, receipt);
-  assert.ok(Date.now() - start < 8000, 'command and descendant cleanup have an independent bound');
+  assert.ok(Date.now() - start < loadTimeout(8000), 'command and descendant cleanup have an independent bound');
 });
 for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'SIGKILL shell job', 'suite deadline']) {
   test(`${kind} of the outer suite clears the independently owned PTY session`, { skip: PTY_SKIP_REASON }, async t => {
@@ -151,8 +148,7 @@ import assert from 'node:assert/strict';
 test('blocked PTY culprit',()=>{const result=runPTY(${JSON.stringify(binary)},${JSON.stringify(args)},{timeout:5000});assert.equal(result.status,0,result.stdout+result.stderr);});`);
     const outer = spawnChild(t, process.execPath, [runner, '--fixed-deadlines', ...(kind === 'suite deadline' ? ['--suite-timeout=3000'] : []), file]);
     const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
-    const deadline = Date.now() + 10000;
-    while (!fs.existsSync(f.receipt) && Date.now() < deadline) await pause();
+    await waitForFile(f.receipt, text => text.length > 0);
     const receipt = readReceipt(f);
     if (kind !== 'normal exit') {
       const snapshot = createProcessTracker().snapshot(); assert.ok(snapshot.ok, snapshot.error);

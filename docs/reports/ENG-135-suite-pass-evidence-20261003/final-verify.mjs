@@ -1,0 +1,10 @@
+import {fileURLToPath} from 'node:url';import fs from 'node:fs';import path from 'node:path';import {spawn} from 'node:child_process';
+const directory=path.join(process.cwd(),'docs/reports/ENG-135-suite-pass-evidence-20261003');
+const measure=spawn(process.execPath,[fileURLToPath(new URL('./measure.mjs',import.meta.url)),'corrected-after','acceptance'],{stdio:'inherit'});
+const completed=await new Promise((resolve,reject)=>{measure.once('error',reject);measure.once('close',resolve);});
+if(completed)process.exit(completed);
+const evidence=JSON.parse(fs.readFileSync(path.join(directory,'corrected-after-tiers.json')));if(evidence.results[0].code)process.exit(evidence.results[0].code);
+const metrics=path.join(directory,'final-focused.jsonl'),log=path.join(directory,'final-focused.log');fs.writeFileSync(metrics,'');const fd=fs.openSync(log,'w'),start=Date.now();
+const args=['test/helpers/run.mjs','discovery/test/owner.test.mjs','discovery/test/review-r3.test.mjs','settle/test/teardown.test.mjs','test/test-hangs.test.mjs','discovery/test/acceptance.test.mjs'];
+const child=spawn(process.execPath,args,{stdio:['ignore',fd,fd],env:{...process.env,NODE_OPTIONS:`${process.env.NODE_OPTIONS||''} --require=${JSON.stringify(fileURLToPath(new URL('./measure.cjs',import.meta.url)))}`,SUITE_MEASURE_LOG:metrics,SUITE_MEASURE_ROOT:process.cwd()}});
+const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});fs.closeSync(fd);fs.writeFileSync(path.join(directory,'final-focused.json'),JSON.stringify({command:[process.execPath,...args],wallMs:Date.now()-start,code},null,2)+'\n');process.exitCode=code;

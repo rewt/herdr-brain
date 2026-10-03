@@ -1,5 +1,5 @@
 {
   "fast": "npm run test:fast",
   "promotion": "npm run test:promotion",
-  "release": "node acceptance/run.mjs --candidate \"$HERDR_RELEASE_CANDIDATE\""
+  "release": "npm run test:release && node acceptance/run.mjs --candidate \"$HERDR_RELEASE_CANDIDATE\""
 }

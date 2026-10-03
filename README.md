@@ -65,20 +65,18 @@ sessions and custom shells need their own entry transport; see the guide.
 
 ## Development
 
-Run `ORG_ACTOR=developer npm test` before and after changes. Tests are bounded,
-offline and make no model calls. `npm run test:lanes` covers the separate lane
-suite; Herdr-only checks explicitly skip when Herdr is absent. Console and MCP
-have pinned dependencies; the core, lanes and cycle modules have none.
+Ship the tests for a lane change and run its relevant files as needed. The
+promotion batch runs `npm run test:promotion` once before merging; settle reviews
+run no suite. `npm run test:fast` gives checks that finish in seconds.
+`npm run test:release` runs the offline copied-product and wall-clock checks
+before the release acceptance gate. See [test tiers](docs/reference/test-tiers.md)
+for file selection, fixture ownership and prerequisite skips.
 
-To run one file, use the same offline process containment and watchdogs as the
-suite: `ORG_ACTOR=developer node test/helpers/run.mjs test/test-hangs.test.mjs`.
-The hang regressions deliberately launch nested suites and detached processes.
-Their nested suites allow 35 seconds for startup, fixture work and cleanup, with
-30-second receipt waits and immediate diagnostics when a launcher exits early.
-Ordinary fixture commands retain their 15-second deadline. Watchdog reproducers
-allow three seconds, including an injected 1.25-second startup delay; the detached
-cancellation case also injects an eleven-second startup delay. These bounds make
-the file independent of warm suite startup while keeping every scenario finite.
+Tests stay offline and call no model. The dependency-free runner bounds tests,
+files and suites; each fixture has owned cleanup. Standalone hang regressions use
+`ORG_ACTOR=developer node test/helpers/run.mjs test/test-hangs.test.mjs` and retain
+real cancellation boundaries, finite native descendant deadlines and load-aware
+startup allowances.
 
 Develop in an isolated lane. Projects use immutable releases: merging development
 code does not activate it. See [AGENTS.md](AGENTS.md) for repository boundaries,

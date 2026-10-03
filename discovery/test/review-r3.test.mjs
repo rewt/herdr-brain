@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -88,7 +89,7 @@ function probe(t, args, preload = '') {
   const root = fixture(t), native = path.join(root, 'fake-claude'), marker = path.join(root, 'native-called');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(marker)},'unsafe');process.exit(1);`, { mode: 0o755 });
   const result = spawnSync(process.execPath, [...(preload ? ['--import', `data:text/javascript,${encodeURIComponent(preload)}`] : []),
-    path.join(product, 'discovery/acceptance.mjs'), '--harness', 'claude', '--binary', native, ...args], { encoding: 'utf8', timeout: 15000, env: process.env });
+    path.join(product, 'discovery/acceptance.mjs'), '--harness', 'claude', '--binary', native, ...args], { encoding: 'utf8', timeout: loadTimeout(15000), env: process.env });
   const evidence = result.stdout.match(/^Evidence: (.+)$/mu)?.[1];
   if (evidence) t.after(() => fs.rmSync(path.dirname(evidence), { recursive: true, force: true }));
   return { result, evidence, marker };
@@ -126,7 +127,7 @@ actorTest('acceptance evidence directory failure still removes its installed sna
 });
 actorTest('Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection', async (t) => {
   const root = fixture(t), binary = path.join(root, 'seccomp-network');
-  const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', binary, path.join(product, 'discovery/test/helpers/seccomp-network.c')], { encoding: 'utf8', timeout: 10000 });
+  const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', binary, path.join(product, 'discovery/test/helpers/seccomp-network.c')], { encoding: 'utf8', timeout: loadTimeout(10000) });
   assert.equal(built.status, 0, built.stderr);
   const { createServer } = await import('node:net');
   const socket = path.join(root, 'host.sock'), messages = [];

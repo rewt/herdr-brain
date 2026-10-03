@@ -1,3 +1,4 @@
+import { loadTimeout } from '../lib/deadline.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -37,7 +38,7 @@ esac`);
   };
   env.ORG_ACTOR = ''; // This fixture deliberately starts without an actor.
   const r = spawnSync(process.execPath, [BRAIN, 'start', '--cwd', cwd, '--name', 'brain-test-agent', '--', 'Do the work.'], {
-    encoding: 'utf8', env, timeout: 10_000,
+    encoding: 'utf8', env, timeout: loadTimeout(10_000),
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
 

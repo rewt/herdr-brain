@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { runBounded } from '../../bounded.mjs';
 import { lookupProcess } from '../../../test/helpers/processes.mjs';
+import { loadTimeout } from '../../../lib/deadline.mjs';
 
 const [root, mode] = process.argv.slice(2);
 const deadlineBinary = path.join(root, 'fixture-deadline');
@@ -20,7 +21,7 @@ const middleReceipt = path.join(root, 'middle.json');
 const middle = `const pgid=${group};require('fs').writeFileSync(${JSON.stringify(middleReceipt)},JSON.stringify({pid:process.pid,pgid,parentGroup:Number(process.argv[1])}));const c=require('child_process').spawn(${JSON.stringify(deadlineBinary)},[process.execPath,'-e',${JSON.stringify(writer)},String(pgid)],{detached:true,stdio:'ignore'});c.unref();`;
 const parent = `const pgid=${group};const c=require('child_process').spawn(${JSON.stringify(deadlineBinary)},[process.execPath,'-e',${JSON.stringify(middle)},String(pgid)],{detached:true,stdio:'ignore'});c.unref();const poll=setInterval(()=>{if(require('fs').existsSync(${JSON.stringify(receipt)})&&${mode === 'completion'})clearInterval(poll);},10);`;
 async function launched() {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + loadTimeout(5000);
   while (!fs.existsSync(receipt) && Date.now() < deadline) await delay(10);
   assert.ok(fs.existsSync(receipt), 'detached leaf actually launched');
   const rows = [JSON.parse(fs.readFileSync(receipt)), ...(fs.existsSync(middleReceipt) ? [JSON.parse(fs.readFileSync(middleReceipt))] : [])];
@@ -54,13 +55,13 @@ if (mode === 'completion' || mode === 'deadline') {
   const current = lookupProcess(process.pid);
   assert.ok(current.ok && current.value, current.error);
   const pgid = current.value.pgid;
-  const program = mode === 'early-cancel' ? `while(true){} // ${root}` : `${writeReceipt}${mode === 'blocked-leaf' ? 'while(true){}' : 'setInterval(()=>{},1000);'}`;
+  const program = mode === 'early-cancel' ? `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0); // ${root}` : `${writeReceipt}${mode === 'blocked-leaf' ? 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);' : 'setInterval(()=>{},1000);'}`;
   const child = spawn(deadlineBinary, [process.execPath, '-e', program, String(pgid)], { detached: true, stdio: 'ignore' });
   child.unref();
   fs.writeFileSync(path.join(root, 'spawned.json.tmp'), JSON.stringify({ pid: child.pid }));
   fs.renameSync(path.join(root, 'spawned.json.tmp'), path.join(root, 'spawned.json'));
   if (mode !== 'early-cancel') await launched();
   if (mode === 'failure') assert.fail('injected detached fixture assertion failure');
-  if (mode === 'blocked') { while (true) {} }
+  if (mode === 'blocked') { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0); }
   await new Promise(() => { setInterval(() => {}, 1000); });
 }

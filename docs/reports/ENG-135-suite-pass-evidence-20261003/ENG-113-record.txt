@@ -1,0 +1,144 @@
+ENG-113  The cycle under machine load: fixed internal timeouts fail real work when the shared machine is busy (2026-10-02: test-runner ps lookup at 2 s, git calls in promotion validation, dispatch's watcher startup acknowledgement; bch-cloak runs heavy work beside this project). Make every internal deadline scale with measured load or retry with backoff, failing only on a genuine non-response, without weakening any safety rule
+status: done · role: engineer
+within: G-3 Herdr platform roadmap: standardize bch… → ARCH-8 Phase 3: bring bch-cloak's cycle over o…
+created: 2026-10-02 20:33 by supervisor-herdr
+closed: done 2026-10-03 11:01 by supervisor-herdr — Promoted to main at be21690 (fast-forward from ab2ee50), promotion tier green. R-141 accepted on direct check, R-144 rebase accepted on direct check. Follow-up ENG-115.
+acceptance:
+  - dispatch, watch, settle and promotion complete at load averages above 20
+  - no safety rule (signal only confirmed processes, never-unsafe fallbacks) is relaxed
+budget (advisory): runs 6/3 · children 1/4 · depth 2/3 · escalations 0/1
+blocked by: ENG-114 (dropped)
+children:
+  ENG-114  dropped     Diagnose executable launch stalls blocking offline cycle va…
+
+runs:
+  R-138  codex · gpt-6.1-sol · xhigh  started 2026-10-02 21:32 · reported blocked 2026-10-02 22:44
+    summary:
+      Implemented load-aware response allowances throughout the maintained cycle and test runner, including timeout-only ps retries with backoff and unchanged signal authorization. The final focused load and process-safety tests passed 32/32, including a real 15.2-second Git response beyond the old 15-second cap. Broad validation remains blocked by repeated executable launch non-responses before program initialization; the lane is committed but is not ready for promotion.
+    blockers:
+      - The fast tier still fails on blank subprocess responses and ETIMEDOUT: baseline 127 passed / 13 failed, post-change 128 passed / 12 failed. A sampled owned Git fixture remained at _dyld_start with only a 96 KB footprint before program initialization. The required lane suite and affected module/cycle suites also timed out, so green validation and the complete real-watcher dispatch regression remain unverified.
+    learnings:
+      - Promotion validation Git calls have no product timeout; the bounded-test helper imposed the 15-second limit, including on org status-style commands.
+      - Response allowances sample one-minute OS load and use max(1, load / min(4, availableParallelism)); load 24 on four or more CPUs gives a sixfold allowance. Session metadata is not consulted.
+      - The ps base remains 2 seconds, scaled by measured load, with at most three timeout-only attempts using doubled allowances and backoff. Failed or partial output never authorizes a signal, and the final complete identity must immediately match the owned start time and command.
+      - Npm file/suite overrides now scale too; intentional cancellation regressions request --fixed-deadlines. Coordinator and worker share the load sample, and file concurrency falls under load.
+      - contrib/settle-watch.mjs remains byte-for-byte unchanged under the explicit compatibility boundary; its legacy 120/60-second flags are retained.
+    artifacts:
+      - Commit: Adapt cycle response deadlines and process checks to machine load (6559dce), on lane/load-robust.
+      - docs/reference/load-deadlines.md: response deadline inventory, policy-window distinctions, compatibility exception and safety contract.
+      - test/load-deadlines.test.mjs and test/startup-deadlines.test.mjs: simulated load 24, timeout backoff, PID replacement/refusal safety, real slow Git and delayed startup acknowledgements.
+      - dispatch/test/dispatch.test.mjs: real watcher configuration read delayed 11 seconds, before work prompt delivery; added but full-suite verification remains blocked.
+      - node --test test/load-deadlines.test.mjs test/processes.test.mjs: final focused run 32 passed / 0 failed; log /private/tmp/eng113-final-focused.log.
+      - npm run test:fast: post-change 128 passed / 12 failed; log /private/tmp/eng113-fast.log. Baseline 127 passed / 13 failed.
+      - npm run test:lanes: lane.test.mjs exceeded its then-current 480000ms file limit; log /private/tmp/eng113-lanes.log. The subsequent runner change scales npm file/suite overrides as well.
+      - Affected watch/housekeeping/promote/supervisor-delivery and runner teardown suite exceeded 799190ms; log /private/tmp/eng113-module-tests.log.
+      - Affected settle/supervisor/dispatch suite exceeded 905098ms; log /private/tmp/eng113-cycle-tests.log.
+      - Owned Git fixture sample: /private/tmp/eng113-git-sample.txt, taken 2026-10-02 22:08:57 CDT; all sampled frames were _dyld_start.
+      - Final handoff command: node lanes/lane.mjs check, after this report is checked and committed.
+    proposed: ENG-114
+    report: /Users/rewt/development/rewt/.org/reports/R-138.md
+  R-140  codex · gpt-6.1-sol · xhigh  started 2026-10-02 22:44 · reported done 2026-10-02 23:28
+    summary:
+      Rebased the load-aware deadline implementation onto current main and reran the previously blocked offline checks after the supervisor stopped leaked fixtures. Full validation exposed and corrected a native PTY allowance mismatch, exact-clock watchdog regressions, and a fixed inbox shutdown wait. The fast tier, complete npm suite, affected module suites and lane suite now pass; no executable launch stall recurred. The historical PTY leak needs separate fixture lifetime and cancelled-gate coverage, proposed below.
+    learnings:
+      - After the supervisor stopped five leaked fixtures, the executable launch non-response did not recur in this run's fast, full, focused or lane checks. This resolves the observed validation blocker without establishing the precise historical host cause.
+      - The JavaScript PTY helper passed a load-scaled bound while pty-owner.c rejected anything above 15000ms. The first complete core run had ten PTY failures plus one exact-clock watchdog assertion, with no launch stall. The native owner now accepts the same finite allowance, capped at Node's INT32_MAX timer bound; a simulated load-24 regression proves launch and exit status with a 90-second allowance.
+      - Deliberate one-second watchdog tests require --fixed-deadlines. The newly merged phased npm coordinator now forwards that option; normal file and suite overrides remain load-scaled.
+      - The inbox fixture teardown helper still had a fixed five-second owner wait. A full cycle rerun failed one teardown there; the owner lock had subsequently disappeared. The wait now scales with load, and its regression proves delayed shutdown plus retained ownership evidence when the deadline expires.
+      - The ps base remains two seconds with at most three timeout-only attempts and doubling allowances/backoff. At simulated load 24, lookup allowances are 12, 24 and 48 seconds, while synchronous-command and per-test limits are 90 and 360 seconds. All signal authorization still requires fresh matching start time and command; malformed, refused, exhausted and replacement-PID lookups remain non-authorizing.
+      - Current ordinary Node dispatch, discovery lifecycle and watcher fixtures inherit the retained suite group. Their cleanup is covered by the runner and fresh leader confirmation. No additional module-specific cleanup defect was reproduced in those paths. Existing detached discovery regressions already put native alarms on each detached Node generation.
+      - The PTY session is independent of the suite group. Its existing deadline, normal-exit, outer SIGTERM/SIGKILL, suite cancellation and shell-job regressions pass, but killing the native owner itself remains a distinct uncovered lifetime boundary.
+    artifacts:
+      - Commit: Adapt cycle response deadlines and process checks to machine load (bca4b1b after rebase), on lane/load-robust.
+      - Commit: Align native PTY and fixture shutdown deadlines under load (6fc0a75), on lane/load-robust.
+      - Rebase base: main cbd31c92d6039c28c863f5aff7a54f76e9f27eb9; main remained unchanged through the final pre-report checks.
+      - docs/reference/load-deadlines.md: allowance inventory, fixture ownership boundaries and historical PTY leak assessment.
+      - npm run test:fast: 140 passed, zero failures; /private/tmp/eng113-r140-fast.log.
+      - Focused load, startup, process safety, PTY, hang guard and phased-runner suites: 70 passed, zero failures; /private/tmp/eng113-r140-focused.log. The added inbox regression also passed its isolated check and the final complete suite.
+      - npm test: 814 passed, 11 existing host-specific skips, zero failures; /private/tmp/eng113-r140-npm-test-green.log. Copied-entry: 2 passed; core/modules: 677 passed and 11 skips; cycle: 135 passed.
+      - Affected watch, dispatch, housekeeping, promotion, settle and supervisor suites all reran within the complete npm core/cycle commands. The load-24 dispatch case passed with a real 11-second watcher configuration read and one work prompt; the real 15.2-second Git response and lookup refusal/replacement cases also passed.
+      - npm run test:lanes: 160 passed, zero failures or skips; /private/tmp/eng113-r140-lanes.log.
+      - Final read-only fixture audit: no live members in three captured suite groups, and no Node process invoking this lane's source; /private/tmp/eng113-r140-final-audit.json and /private/tmp/eng113-r140-final-processes.txt.
+      - Final handoff command: node lanes/lane.mjs check, after this report is checked and committed; its gate and log supply the report-inclusive final evidence.
+    proposed: ENG-115
+    report: /Users/rewt/development/rewt/.org/reports/R-140.md
+  R-141  codex · gpt-6.1-sol · xhigh  started 2026-10-02 23:48 · reported done 2026-10-03 00:14
+    summary:
+      Fixed all four Moderate review findings: load-aware record-lock contention, single scaling of native test command allowances, a separate load-aware PTY cleanup window, and delayed Git ref-transaction coverage. The fast tier and every affected suite passed, and scratch negative controls reproduced each former failure. No launch stall recurred. The independent PTY leaf lifetime boundary remains tracked by ENG-115; this round does not duplicate or close that work.
+    learnings:
+      - The record-lock contention base is ten seconds. At simulated load 24 on four CPUs it allows sixty seconds; a live holder releasing after twelve seconds now permits one correctly attributed append. The missing-PID initialization grace scales from thirty to 180 seconds with the same load sample, so the longer contention wait cannot erase a newly initializing owner. Exhausted live, EPERM-refused and initializing locks preserve the lock and event-log bytes.
+      - Native child_process timeout options are already response allowances. The bounded helper now scales its default fifteen-second command ceiling once and caps explicit options without multiplying them again. With the helper installed and the default ps executor used, load 24 produces twelve-, 24- and 48-second timeout attempts, rather than the former 72-, ninety- and ninety-second attempts. Exhaustion still supplies no identity evidence. Per-test bases continue to scale independently.
+      - The PTY helper samples command and cleanup allowances together and supplies both finite bounds to the native owner. At load 24 the fifteen-second command base becomes ninety seconds and the three-second cleanup base becomes eighteen seconds. The synchronous transport reserves their 108-second sum through an explicit compound fixture allowance, still bounded by the enclosing test cap. Native retained-session identity checks, stop/kill sweeps, three empty scans and cleanup refusal status 125 are unchanged.
+      - The native PTY regression delays its first real enumeration by 3.3 seconds, then performs the original kernel-backed sweeps and preserves command exit status seven. A separate injected enumeration refusal still returns status 125 with cleanup unconfirmed.
+      - The guarded Git replacement now has real transaction regressions at simulated load 24. Delaying each start, prepare and commit acknowledgement for 15.2 seconds independently succeeds under its ninety-second allowance, updates only the pinned lane ref, installs a clean target checkout, and releases only owned locks. Each delayed command is sent once. Exhausted and refused replies at every phase preserve refs; a post-checkout commit failure retains HEAD/index locks and reports uncertainty. Concurrent compare-and-swap refusal and pre-existing lock bytes remain protected.
+      - The original executable launch blocker did not recur. ENG-114 is closed; no new launch-stall diagnosis or follow-on item is needed. No processes matching this round's PTY, transaction or negative-control fixture paths remained in the final pre-commit process inspection.
+      - ENG-115 already tracks the fix beyond ENG-88's runner: a PTY leaf in an independent session needs its own lifetime bound and cancellation coverage when the native owner itself receives SIGKILL or cannot confirm cleanup. Expanding the owner's cleanup response window does not make a killed owner able to clean its descendants.
+    artifacts:
+      - Commit: Fix remaining load-aware lock and fixture deadline boundaries, on lane/load-robust.
+      - Rebase onto main was the first operation and reported already up to date. Main remained at subject Record final rebase onto supervisor notice delivery through the implementation commit.
+      - lib/store.mjs; test/helpers/bounded-test.mjs; test/helpers/command-allowance.mjs; test/helpers/pty.mjs; test/helpers/pty-owner.c: record, synchronous command and native cleanup fixes.
+      - test/load-deadlines.test.mjs; test/pty.test.mjs; settle/test/ref-deadlines.test.mjs: delayed-success, exhaustion and refusal regressions. docs/reference/load-deadlines.md records the updated allowance inventory.
+      - npm run test:fast before changes: 140 passed, zero failures or skips; /private/tmp/eng113-r141-fast-before.log. After changes: 140 passed, zero failures or skips; /private/tmp/eng113-r141-fast-after.log.
+      - Load, PTY, process safety and hang guard suites: 69 passed, zero failures or skips; /private/tmp/eng113-r141-helper-tests.log.
+      - Git ref deadlines, rebase safety and rebase review suites: 27 passed, zero failures or skips; /private/tmp/eng113-r141-ref-tests.log.
+      - Core record/CLI, suite, startup and copied-plugin compatibility suites: 85 passed, zero failures or skips; /private/tmp/eng113-r141-core-tests.log.
+      - Scratch-only negative controls each failed as expected with the corresponding old behavior: the fixed ten-second record wait refused the delayed holder; double scaling yielded 72000/90000/90000 milliseconds; fixed native cleanup returned 125 instead of seven; fixed ref response timeout returned one instead of zero. Evidence: /private/tmp/eng113-r141-negative-record.log, /private/tmp/eng113-r141-negative-scaling.log, /private/tmp/eng113-r141-negative-pty.log and /private/tmp/eng113-r141-negative-ref.log.
+      - This report is checked with the canonical record CLI and committed before node lanes/lane.mjs check runs as the final operation. The final lane-check result is recorded in the run's terminal output.
+    report: /Users/rewt/development/rewt/.org/reports/R-141.md
+  R-142  codex · gpt-6.1-sol · high  started 2026-10-03 09:05 · abandoned 2026-10-03 09:05 (Dispatch refused before any worker contact: reuse of R-141's worker needs the same route (engineer-xhigh). Redispatched on that route.)
+  R-143  codex · gpt-6.1-sol · xhigh  started 2026-10-03 09:05 · abandoned 2026-10-03 09:06 (Refused before any prompt: the R-141 worker pane came back under a new terminal identity after the 08:03 reboot, so reuse is unsafe. Redispatched to a fresh worker in the same lane.)
+  R-144  codex · gpt-6.1-sol · xhigh  started 2026-10-03 09:06 · open, started 6h ago
+
+notes:
+  2026-10-02 21:49 supervisor-herdr: supervisor-herdr: the stopgap lane ps-timeout (test runner ps lookup 2 s -> 10 s) failed promotion with 38 tests killed at their 15 s bound at load ~9; the longer lookup may lengthen registrations under load. Not promoted; ENG-113 should decide the test runner's ps deadline together with the rest (lane/ps-timeout kept for reference).
+  2026-10-02 22:44 supervisor-herdr: supervisor-herdr: the 'executable launch stall' blocker coincided with leaked test fixtures: an orphaned SIGHUP-ignoring PTY leaf from the failed ps-timeout gate spun a CPU core for an hour, plus four idle orphans (dispatch-test, monitor-lifecycle-test, an old lane-watch watcher). Stopped all five (bch-cloak's 19 test-slot orphans left alone). Afterwards the fast tier passes 140/140 on main (7 s) and on lane/load-robust (8 s). Continuation dispatched to finish ENG-113's checks.
+
+history:
+  2026-10-02 20:33  added ENG-113 "The cycle under machine load: fixed internal timeouts fail…" under ARCH-8
+  2026-10-02 21:32  started R-138 on ENG-113 (codex · gpt-6.1-sol)
+  2026-10-02 21:32  note on R-138: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/c1d118da-a3ed-4…
+  2026-10-02 21:38  updated R-138: agent=lane-load-robust-60dc9f-dfbba3, pane=w2KB:p2, worker_workspace=w2KB, terminal_id=term_65ce675ecf1161703
+  2026-10-02 21:39  note on R-138: Dispatch: worker lane-load-robust-60dc9f-dfbba3 in w2KB:p2 recorded; prompt not sent
+  2026-10-02 21:40  updated R-138: watcher_pid=91473, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-138.watch.log
+  2026-10-02 21:40  note on R-138: Dispatch: watcher ready (pid 91473); prompt not sent
+  2026-10-02 21:41  note on R-138: Dispatch: prompt sent; worker lane-load-robust-60dc9f-dfbba3 and watcher 91473 started
+  2026-10-02 21:49  note on ENG-113: supervisor-herdr: the stopgap lane ps-timeout (test runner ps lookup 2 s -> 10 s) failed…
+  2026-10-02 22:44  R-138 reported blocked on ENG-113: Implemented load-aware response allowances throughout the maintained cycle and test runne…
+  2026-10-02 22:44  added ENG-114 "Diagnose executable launch stalls blocking offline cycle va…" under ENG-113 (proposed by R-138)
+  2026-10-02 22:44  ENG-114 blocks ENG-113
+  2026-10-02 22:44  note on ENG-113: supervisor-herdr: the 'executable launch stall' blocker coincided with leaked test fixtur…
+  2026-10-02 22:44  started R-140 on ENG-113 (codex · gpt-6.1-sol)
+  2026-10-02 22:44  note on R-140: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/c6d71432-3362-4…
+  2026-10-02 22:44  updated R-140: agent=lane-load-robust-60dc9f-dfbba3, pane=w2KB:p2, worker_workspace=w2KB, terminal_id=term_65ce675ecf1161703
+  2026-10-02 22:44  note on R-140: Dispatch: worker lane-load-robust-60dc9f-dfbba3 in w2KB:p2 recorded; prompt not sent
+  2026-10-02 22:44  updated R-140: watcher_pid=1738, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-140.watch.log
+  2026-10-02 22:44  note on R-140: Dispatch: watcher ready (pid 1738); prompt not sent
+  2026-10-02 22:44  note on R-140: Dispatch: prompt sent; worker lane-load-robust-60dc9f-dfbba3 and watcher 1738 started
+  2026-10-02 23:28  R-140 reported done on ENG-113: Rebased the load-aware deadline implementation onto current main and reran the previously…
+  2026-10-02 23:28  added ENG-115 "Bound PTY fixture leaves independently and verify cancelled…" under ENG-113 (proposed by R-140)
+  2026-10-02 23:28  reopened ENG-113: Report recorded; independent settle review pending
+  2026-10-02 23:48  decision on R-140: Settle: escalate. Correction needs supervisor judgment: the item is blocked; resolve its…
+  2026-10-02 23:48  started R-141 on ENG-113 (codex · gpt-6.1-sol)
+  2026-10-02 23:48  note on R-141: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/aa786ac8-3608-4…
+  2026-10-02 23:48  updated R-141: agent=lane-load-robust-60dc9f-dfbba3, pane=w2KB:p2, worker_workspace=w2KB, terminal_id=term_65ce675ecf1161703
+  2026-10-02 23:48  note on R-141: Dispatch: worker lane-load-robust-60dc9f-dfbba3 in w2KB:p2 recorded; prompt not sent
+  2026-10-02 23:48  updated R-141: watcher_pid=88188, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-141.watch.log
+  2026-10-02 23:48  note on R-141: Dispatch: watcher ready (pid 88188); prompt not sent
+  2026-10-02 23:48  note on R-141: Dispatch: prompt sent; worker lane-load-robust-60dc9f-dfbba3 and watcher 88188 started
+  2026-10-03 00:14  R-141 reported done on ENG-113: Fixed all four Moderate review findings: load-aware record-lock contention, single scalin…
+  2026-10-03 09:05  started R-142 on ENG-113 (codex · gpt-6.1-sol)
+  2026-10-03 09:05  note on R-142: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/d175e07c-adb3-4…
+  2026-10-03 09:05  note on R-142: Dispatch: incomplete at worker: reuse run must match item, lane, route and declared harne…
+  2026-10-03 09:05  abandoned R-142: Dispatch refused before any worker contact: reuse of R-141's worker needs the s…
+  2026-10-03 09:05  started R-143 on ENG-113 (codex · gpt-6.1-sol)
+  2026-10-03 09:05  note on R-143: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/b6c58a97-9877-4…
+  2026-10-03 09:05  note on R-143: Dispatch: incomplete at worker: worker occupant identity changed; inspect it before recov…
+  2026-10-03 09:06  abandoned R-143: Refused before any prompt: the R-141 worker pane came back under a new terminal…
+  2026-10-03 09:06  started R-144 on ENG-113 (codex · gpt-6.1-sol)
+  2026-10-03 09:06  note on R-144: Dispatch: run started; request /Users/rewt/development/rewt/.org/dispatch/ccb67896-166c-4…
+  2026-10-03 09:06  updated R-144: agent=lane-load-robust-60dc9f-2cbbc9, pane=w2KB:p5, worker_workspace=w2KB, terminal_id=term_65cf026b4b4b559
+  2026-10-03 09:06  note on R-144: Dispatch: worker lane-load-robust-60dc9f-2cbbc9 in w2KB:p5 recorded; prompt not sent
+  2026-10-03 09:06  updated R-144: watcher_pid=45497, watcher_log=/Users/rewt/development/rewt/.org/dispatch/R-144.watch.log
+  2026-10-03 09:06  note on R-144: Dispatch: watcher ready (pid 45497); prompt not sent
+  2026-10-03 09:06  note on R-144: Dispatch: prompt sent; worker lane-load-robust-60dc9f-2cbbc9 and watcher 45497 started
+  2026-10-03 11:01  closed ENG-113 as done: Promoted to main at be21690 (fast-forward from ab2ee50), promotion tier green.…

@@ -1,0 +1,44 @@
+[
+  {
+    "log": "/private/tmp/eng118-verification.log",
+    "modified": "2026-10-03T16:27:39.339281+00:00",
+    "failures": [
+      "# Subtest: copied codex probe product validates, guards and promotes worker and routing changes offline\nnot ok 1 - copied codex probe product validates, guards and promotes worker and routing changes offline\n  ---\n  duration_ms: 94.286458\n  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/test/helpers/bounded-test.mjs:47:10'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    false !== true\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: true\n  actual: false\n  operator: 'strictEqual'\n  stack: |-\n    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/discovery/test/acceptance.test.mjs:37:10\n    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/test/helpers/bounded-test.mjs:48:42\n    AsyncLocalStorage.run (node:async_hooks:346:14)\n    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/test/helpers/bounded-test.mjs:48:29)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7",
+      "# Subtest: copied claude probe product validates, guards and promotes worker and routing changes offline\nnot ok 2 - copied claude probe product validates, guards and promotes worker and routing changes offline\n  ---\n  duration_ms: 80.900083\n  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/test/helpers/bounded-test.mjs:47:10'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    false !== true\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: true\n  actual: false\n  operator: 'strictEqual'\n  stack: |-\n    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/discovery/test/acceptance.test.mjs:37:10\n    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/test/helpers/bounded-test.mjs:48:42\n    AsyncLocalStorage.run (node:async_hooks:346:14)\n    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-test-slot/test/helpers/bounded-test.mjs:48:29)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)"
+    ]
+  },
+  {
+    "log": "/private/tmp/R-155-lanes.log",
+    "modified": "2026-10-03T17:54:49.595986+00:00",
+    "failures": [
+      "# Subtest: lanes/test/lane.test.mjs\nnot ok 2 - lanes/test/lane.test.mjs\n  ---\n  duration_ms: 781367.373041\n  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-memory-gate/lanes/test/lane.test.mjs:1:1'\n  failureType: 'testTimeoutFailure'\n  error: 'test timed out after 480000ms'\n  code: 'ERR_TEST_FAILURE'\n  ...\n# Subtest: lane never moves Herdr focus when it creates or opens a workspace, worktree or tab\nok 70 - lane never moves Herdr focus when it creates or opens a workspace, worktree or tab\n  ---\n  duration_ms: 1.203916\n  ...\n# Subtest: lane closure cannot invoke Herdr's parent-focusing worktree removal\nok 71 - lane closure cannot invoke Herdr's parent-focusing worktree removal\n  ---\n  duration_ms: 0.147\n  ...\n# Subtest: the bch-cloak route table loads without losing project fields\nok 72 - the bch-cloak route table loads without losing project fields\n  ---\n  duration_ms: 4.330917\n  ...\n# Subtest: one resolution supplies launch plumbing and opaque run metadata\nok 73 - one resolution supplies launch plumbing and opaque run metadata"
+    ]
+  },
+  {
+    "log": "/private/tmp/R-156-post-test-rerun.log",
+    "modified": "2026-10-03T18:27:21.143523+00:00",
+    "failures": [
+      "# Subtest: real project preflight leaves invalid inputs uncut and retries the same commit\nnot ok 134 - real project preflight leaves invalid inputs uncut and retries the same commit\n  ---\n  duration_ms: 555.36325\n  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gate-inputs/test/helpers/bounded-test.mjs:42:10'\n  failureType: 'testCodeFailure'\n  error: 'Unexpected end of JSON input'\n  code: 'ERR_TEST_FAILURE'\n  name: 'SyntaxError'\n  stack: |-\n    parse (<anonymous>)\n    Array.map (<anonymous>)\n    events (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gate-inputs/release/test/candidate.test.mjs:135:112)\n    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gate-inputs/release/test/candidate.test.mjs:136:16\n    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gate-inputs/test/helpers/bounded-test.mjs:43:42\n    AsyncLocalStorage.run (node:async_hooks:346:14)\n    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gate-inputs/test/helpers/bounded-test.mjs:43:29)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n  ...\n# Subtest: unconfigured release uses npm test, initializes its record and never executes ship\nok 135 - unconfigured release uses npm test, initializes its record and never executes ship\n  ---\n  duration_ms: 1003.04225\n  ..."
+    ]
+  },
+  {
+    "log": "/private/tmp/r146-after-npm-test.log",
+    "modified": "2026-10-03T15:04:49.553521+00:00",
+    "failures": []
+  },
+  {
+    "log": "/private/tmp/eng113-r144-fast-after.log",
+    "modified": "2026-10-03T14:11:08.620682+00:00",
+    "failures": []
+  },
+  {
+    "log": "/private/tmp/eng103-r145-before.log",
+    "modified": "2026-10-03T14:12:54.244204+00:00",
+    "failures": []
+  },
+  {
+    "log": "/private/tmp/R-157-promotion.log",
+    "modified": "2026-10-03T18:51:41.765401+00:00",
+    "failures": []
+  }
+]

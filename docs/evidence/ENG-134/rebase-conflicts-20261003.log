@@ -1,0 +1,115 @@
+TAP version 13
+# Subtest: SIGINT drains an active workspace and recovers its lost reply
+ok 1 - SIGINT drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 737.397584
+  ...
+# Subtest: SIGINT drains an active create-cwd and recovers its lost reply
+ok 2 - SIGINT drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 922.942
+  ...
+# Subtest: SIGINT drains an active open-cwd and recovers its lost reply
+ok 3 - SIGINT drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 893.060667
+  ...
+# Subtest: SIGINT drains an active create-workspace and recovers its lost reply
+ok 4 - SIGINT drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 657.726041
+  ...
+# Subtest: SIGINT drains an active open-workspace and recovers its lost reply
+ok 5 - SIGINT drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 633.825375
+  ...
+# Subtest: SIGTERM drains an active workspace and recovers its lost reply
+ok 6 - SIGTERM drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 673.741417
+  ...
+# Subtest: SIGTERM drains an active create-cwd and recovers its lost reply
+ok 7 - SIGTERM drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 722.136916
+  ...
+# Subtest: SIGTERM drains an active open-cwd and recovers its lost reply
+ok 8 - SIGTERM drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 670.379833
+  ...
+# Subtest: SIGTERM drains an active create-workspace and recovers its lost reply
+ok 9 - SIGTERM drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 629.573584
+  ...
+# Subtest: SIGTERM drains an active open-workspace and recovers its lost reply
+ok 10 - SIGTERM drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 848.428958
+  ...
+# Subtest: cleanup refuses snapshots until every registered producer acknowledges stop
+ok 11 - cleanup refuses snapshots until every registered producer acknowledges stop
+  ---
+  duration_ms: 72.803833
+  ...
+# Subtest: cleanup reconciles again when a lost-reply workspace appears after the first inventory
+ok 12 - cleanup reconciles again when a lost-reply workspace appears after the first inventory
+  ---
+  duration_ms: 37.384083
+  ...
+# Subtest: a matching caller label with a foreign native path never grants recovery authority
+ok 13 - a matching caller label with a foreign native path never grants recovery authority
+  ---
+  duration_ms: 18.817458
+  ...
+# Subtest: cleanup stops and awaits a supervisor executing dispatch before reading ownership
+ok 14 - cleanup stops and awaits a supervisor executing dispatch before reading ownership
+  ---
+  duration_ms: 1070.494209
+  ...
+# Subtest: stopping an individual idle PTY worker leaves the run admission barrier open
+ok 15 - stopping an individual idle PTY worker leaves the run admission barrier open
+  ---
+  duration_ms: 118.742542
+  ...
+# Subtest: ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+ok 16 - ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 1066.3715
+  ...
+# Subtest: ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+ok 17 - ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 924.295958
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 24
+ok 18 - a genuinely hung sandbox-exec reaches its finite deadline at load 24
+  ---
+  duration_ms: 302.253416
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 0
+ok 19 - a genuinely hung sandbox-exec reaches its finite deadline at load 0
+  ---
+  duration_ms: 52.772125
+  ...
+# Subtest: report polling scales once from its own operation load and stays bounded
+ok 20 - report polling scales once from its own operation load and stays bounded
+  ---
+  duration_ms: 0.335542
+  ...
+# Subtest: each command samples current load, preserves zero, and supplies a bounded default
+ok 21 - each command samples current load, preserves zero, and supplies a bounded default
+  ---
+  duration_ms: 0.290292
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8747.552541

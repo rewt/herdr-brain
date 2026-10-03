@@ -57,7 +57,13 @@ that never reports at normal load remains product FAIL. Earlier contention in
 an unrelated case cannot excuse a later timeout. Focus-monitor timeouts retain
 their existing harness classification and name the run's measured contention.
 Safety refusals and incorrect product behaviour remain FAIL at any load. Waits
-and child commands keep their fixed bounds; load never creates unlimited retries.
+and child commands scale their base allowances once at each operation using
+`lib/deadline.mjs`, with CPU capacity capped at four. Load 24 on a host with at
+least four CPUs gives a factor of six (60 seconds becomes 360 seconds). A hung
+child is forcibly killed at its finite deadline; load never creates unlimited
+retries. Command evidence records the effective `timeoutMs`. See
+[the complete deadline inventory](DEADLINES.md), including deliberate fixed
+watchdog timers and observation cadence.
 Retry context preserves the original timeout type and operation samples. The
 delegated settle and supervisor cases use the same load-aware waits for report
 and queue receipts, and measure each bounded fixture command. Ordinary child
@@ -152,7 +158,8 @@ tasks and scratch safety boundaries; they do not name lanes, record setup,
 route defaults or promotion commands. The default is the operator's lowest
 declared route, `gpt-5.6-luna` at `low`; `--discovery-model` and
 `--discovery-effort` can select another available route. The harness does not
-automatically escalate models. Each session has a 180-second runtime timeout.
+automatically escalate models. Each session has a load-adjusted 180-second
+runtime allowance followed by a load-adjusted one-second TERM-to-KILL grace.
 `discovery-usage.json` records the CLI's measured input, cached input, output and
 reasoning tokens per session. Billing rates are not inferred.
 

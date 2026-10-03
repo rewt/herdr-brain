@@ -1,5 +1,6 @@
 // Runs a real Codex session in an owned Herdr PTY. Runtime files use a scratch
 // home; the native workspace-write sandbox confines the agent's tool writes.
+import { loadTimeout } from './deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -28,13 +29,16 @@ const child = spawn(spec.entryBinary ?? spec.binary, [...(spec.entryBinary ? ['-
 producer.child(child.pid);
 child.stdout.on('data', (v) => { fs.writeSync(out, v); process.stdout.write(v); });
 child.stderr.on('data', (v) => { fs.writeSync(err, v); process.stderr.write(v); });
-const timer = setTimeout(() => child.kill('SIGTERM'), 180_000);
 let killTimer;
+const stop = () => {
+  child.kill('SIGTERM');
+  killTimer ??= setTimeout(() => child.kill('SIGKILL'), loadTimeout(1000));
+};
+const timer = setTimeout(stop, loadTimeout(180_000));
 const stopTimer = setInterval(() => {
   if (!producersStopping(root)) return;
   clearInterval(stopTimer);
-  child.kill('SIGTERM');
-  killTimer = setTimeout(() => child.kill('SIGKILL'), 1000);
+  stop();
 }, 25);
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child.kill(signal); });
 child.on('error', (e) => { fs.writeSync(err, e.message); });

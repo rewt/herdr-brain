@@ -1,5 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,7 +18,7 @@ function scratch(t) {
   return root;
 }
 const until = async predicate => {
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + loadTimeout(10_000);
   while (!predicate()) {
     if (Date.now() > deadline) throw Error('fixture did not reach active creation');
     await new Promise(resolve => setTimeout(resolve, 25));
@@ -77,10 +78,10 @@ for (const signal of ['SIGINT', 'SIGTERM']) for (const form of ['workspace', 'cr
         const result=await cleanupWorkspaces({root,evidence:root+'/evidence',native:async a=>{
           if(!fs.existsSync(root+'/completed'))throw Error('inventory preceded producer completion');
           if(fs.readdirSync(root+'/producers').some(f=>f.endsWith('.json')))throw Error('inventory preceded producer drain');
-          return JSON.parse(execFileSync(binary,a,{encoding:'utf8',timeout:10000})).result;
+          return JSON.parse(execFileSync(binary,a,{encoding:'utf8',timeout:${loadTimeout(10000)}})).result;
         }});
         if(result.errors.length)throw Error(result.errors.join(';'));
-        const denied=spawnSync(process.execPath,[${JSON.stringify(path.join(here, 'herdr.mjs'))},'workspace','create','--cwd',root],{env:{...process.env,ACCEPTANCE_ROOT:root},encoding:'utf8',timeout:10000});
+        const denied=spawnSync(process.execPath,[${JSON.stringify(path.join(here, 'herdr.mjs'))},'workspace','create','--cwd',root],{env:{...process.env,ACCEPTANCE_ROOT:root},encoding:'utf8',timeout:${loadTimeout(10000)}});
         if(denied.status===0||!denied.stderr.includes('producers stopped'))throw Error('late creation admitted');
       },summarize:s=>fs.writeFileSync(root+'/summary.json',JSON.stringify(s))});
       setInterval(()=>{},1000);
@@ -138,6 +139,7 @@ test('a matching caller label with a foreign native path never grants recovery a
 
 test('cleanup stops and awaits a supervisor executing dispatch before reading ownership', async t => {
   const root = scratch(t), binary = path.join(root, 'fake-herdr.mjs');
+  fs.copyFileSync(path.join(here, '../lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
   for (const file of ['worker.mjs', 'herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: [], panes: ['own:pane'], tabs: [] }));
   fs.writeFileSync(path.join(root, 'native.json'), '[]');
@@ -172,7 +174,7 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
     import fs from 'node:fs';
     fs.writeFileSync(${JSON.stringify(path.join(root, 'dispatch-tmpdir'))}, process.env.TMPDIR ?? '');
     import {execFileSync} from 'node:child_process';
-    execFileSync(process.execPath,[${JSON.stringify(path.join(root, 'herdr.mjs'))},'workspace','create','--cwd',${JSON.stringify(root)}],{env:{...process.env,ACCEPTANCE_ROOT:${JSON.stringify(root)}},timeout:10000});
+    execFileSync(process.execPath,[${JSON.stringify(path.join(root, 'herdr.mjs'))},'workspace','create','--cwd',${JSON.stringify(root)}],{env:{...process.env,ACCEPTANCE_ROOT:${JSON.stringify(root)}},timeout:${loadTimeout(10000)}});
     console.log('{"run":"R-1"}');
   `);
   fs.writeFileSync(path.join(root, 'default-supervisor-task.json'), JSON.stringify({ repo: root, home: root, binary: 'fake', ask: 'offline task' }));
@@ -204,6 +206,7 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
 
 test('stopping an individual idle PTY worker leaves the run admission barrier open', async t => {
   const root = scratch(t);
+  fs.copyFileSync(path.join(here, '../lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
   for (const file of ['worker.mjs', 'producers.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
   fs.writeFileSync(path.join(root, 'herdr.mjs'), "console.log('{\"result\":{}}');");
   const child = spawnChild(t, process.execPath, [path.join(root, 'worker.mjs'), root, 'worker', 'offline-worker'], {

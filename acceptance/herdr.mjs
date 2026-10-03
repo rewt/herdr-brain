@@ -2,6 +2,7 @@
 // Capability boundary for acceptance. Never forwards a target not returned by
 // creation or a verified late-pane receipt in this run. Native model sessions
 // launch only through this run's confined live worker.
+import { loadTimeout } from './deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -30,7 +31,7 @@ const owned = (id, collection) => { if (!state[collection].includes(id)) throw n
 class ReceiptLimit extends Error {}
 async function updateOwnership(change) {
   const lock = path.join(root, 'ownership.lock');
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + loadTimeout(10_000);
   for (;;) {
     try { fs.mkdirSync(lock); break; }
     catch (error) {
@@ -82,8 +83,8 @@ async function real(args) {
     const active = child;
     let killTimer;
     const timer = setTimeout(() => {
-      active.kill('SIGTERM'); killTimer = setTimeout(() => active.kill('SIGKILL'), 1000);
-    }, 35_000);
+      active.kill('SIGTERM'); killTimer = setTimeout(() => active.kill('SIGKILL'), loadTimeout(1000));
+    }, loadTimeout(35_000));
     child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', (code) => {
       clearTimeout(timer); clearTimeout(killTimer); producer.child(active.pid, false);
@@ -172,9 +173,10 @@ try {
   if ((group === 'pane' && ['run', 'report-agent', 'release-agent'].includes(verb)) || (group === 'agent' && ['start', 'send-keys'].includes(verb))) {
     const id = group === 'pane' ? target : verb === 'start' ? option('--pane') : state.panes.includes(target) ? target : body(await real(['agent', 'get', target])).agent.pane_id;
     let pane;
-    for (let attempt = 0; attempt < 50; attempt++) {
+    const deadline = Date.now() + loadTimeout(5000);
+    for (;;) {
       pane = body(await real(['pane', 'get', id])).pane;
-      if (pane.foreground_cwd && inside(pane.foreground_cwd)) break;
+      if ((pane.foreground_cwd && inside(pane.foreground_cwd)) || Date.now() >= deadline) break;
       await new Promise((r) => setTimeout(r, 100));
     }
     if (!pane.foreground_cwd) throw new ReceiptLimit('pane cwd receipt unavailable');
@@ -184,10 +186,11 @@ try {
     const pane = option('--pane');
     const command = [process.execPath, path.join(root, 'worker.mjs'), root, 'worker', target].map(quote).join(' ');
     body(await real(['pane', 'run', pane, command]));
-    for (let attempt = 0; attempt < 60; attempt++) {
+    const deadline = Date.now() + loadTimeout(6000);
+    for (;;) {
       const r = await real(['agent', 'get', pane]);
       if (r.code === 0 && body(r).agent?.agent_status === 'idle') break;
-      if (attempt === 59) throw new Error('stand-in did not register');
+      if (Date.now() >= deadline) throw new Error('stand-in did not register');
       await new Promise((r) => setTimeout(r, 100));
     }
     const r = await real(['agent', 'rename', pane, target]);
@@ -205,7 +208,8 @@ try {
       const before = fs.existsSync(receipt) ? fs.statSync(receipt).size : 0;
       body(await real(['pane', 'send-text', agent.pane_id, argv[3]]));
       body(await real(['pane', 'send-keys', agent.pane_id, 'Enter']));
-      for (let attempt = 0; attempt < 100; attempt++) {
+      const deadline = Date.now() + loadTimeout(10_000);
+      while (Date.now() < deadline) {
         if (fs.existsSync(receipt) && fs.statSync(receipt).size > before) {
           process.stdout.write('{"result":{}}\n'); process.exit(0);
         }
@@ -280,7 +284,8 @@ try {
       });
       if (pane?.pane_id && ['workspace', 'tab'].includes(group)) {
         let ready = false;
-        for (let attempt = 0; attempt < 100; attempt++) {
+        const deadline = Date.now() + loadTimeout(10_000);
+        while (Date.now() < deadline) {
           if (fs.existsSync(path.join(root, 'shell', `ready-${pane.pane_id}`))) { ready = true; break; }
           await new Promise((r) => setTimeout(r, 100));
         }

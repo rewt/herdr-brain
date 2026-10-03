@@ -1,5 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -20,7 +21,7 @@ function fixture(t) {
   const run = (command, args, options = {}) => {
     const result = spawnSync(command, args, { cwd: options.cwd ?? repo, env: options.isolatedEnv ?? { PATH: process.env.PATH,
       ORG_ACTOR: `acceptance-${t.name.replaceAll(/[^a-z0-9]/giu, '-').slice(0, 80)}`,
-      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8', timeout: 20000, input: options.input });
+      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8', timeout: loadTimeout(20000), input: options.input });
     if (options.ok !== false) assert.equal(result.status, 0, result.stderr || result.error?.message);
     return result;
   };

@@ -1,0 +1,78 @@
+{
+  "candidateCommit": "61be51b51911b1b713434071d5989585c40b5ecc",
+  "elapsedSeconds": 628,
+  "counts": {
+    "PASS": 16,
+    "FAIL": 11,
+    "PENDING": 0,
+    "SKIP": 0
+  },
+  "load": {
+    "samples": 3891,
+    "startedAt": 1791056869273,
+    "endedAt": 1791057497117,
+    "peak": {
+      "at": 1791056885841,
+      "averages": [
+        4.27490234375,
+        3.1357421875,
+        3.376953125
+      ],
+      "cpus": 18,
+      "threshold": 18
+    },
+    "heavy": false
+  },
+  "results": [
+    {
+      "id": "19",
+      "key": "cutover-switches",
+      "name": "ENG-64: every file switch and rollback",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "stable-name (stable name: startup and missing-target refusal): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; switched-canary (dispatch and arm: real canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; tidy-recovery (tidy recovery across multiple run logs): prerequisite switched-canary (dispatch and arm: real canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; copied-cleanup (copied cleanup: close done, preserve blocked and needs_human): prerequisite switched-canary (dispatch and arm: real canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; legacy-canary (rollback: real restored notify canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT",
+      "load": {
+        "samples": 95,
+        "startedAt": 1791056962752,
+        "endedAt": 1791057224970,
+        "peak": {
+          "at": 1791056962752,
+          "averages": [
+            2.1103515625,
+            2.71728515625,
+            3.1953125
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "19.jsonl"
+    },
+    {
+      "id": "20",
+      "key": "contrib-retirement",
+      "name": "ENG-64: final contrib removal and restoration",
+      "status": "FAIL",
+      "origin": "product",
+      "detail": "prerequisite cutover-switches (ENG-64: every file switch and rollback): stable-name (stable name: startup and missing-target refusal): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; switched-canary (dispatch and arm: real canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; tidy-recovery (tidy recovery across multiple run logs): prerequisite switched-canary (dispatch and arm: real canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; copied-cleanup (copied cleanup: close done, preserve blocked and needs_human): prerequisite switched-canary (dispatch and arm: real canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT; legacy-canary (rollback: real restored notify canary): sandbox-exec -f: spawnSync /usr/bin/sandbox-exec ETIMEDOUT",
+      "load": {
+        "samples": 3,
+        "startedAt": 1791057224971,
+        "endedAt": 1791057224971,
+        "peak": {
+          "at": 1791057224971,
+          "averages": [
+            1.02783203125,
+            1.94384765625,
+            2.73193359375
+          ],
+          "cpus": 18,
+          "threshold": 18
+        },
+        "heavy": false
+      },
+      "evidence": "20.jsonl"
+    }
+  ]
+}

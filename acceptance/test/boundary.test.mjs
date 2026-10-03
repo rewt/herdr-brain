@@ -1,6 +1,8 @@
 // Separate from npm test: verifies the acceptance capability boundary offline.
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { loadTimeout } from '../../lib/deadline.mjs';
+import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,7 +32,7 @@ function fixture() {
   const binary = path.join(root, 'fake-herdr');
   fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');const modeFile=${JSON.stringify(path.join(root, 'mode.json'))};const mode=fs.existsSync(modeFile)?JSON.parse(fs.readFileSync(modeFile)):{};if(mode.fail&&mode.fail.every((v,i)=>a[i]===v)){console.error(JSON.stringify({error:{code:'herdr_unavailable',message:'injected native command failure'}}));process.exit(1)}let r={};if(a[0]==='workspace'&&a[1]==='list')r={workspaces:[{workspace_id:'own',cwd:${JSON.stringify(root)}}]};if(a[0]==='pane'&&a[1]==='list')r={panes:[{pane_id:'new:p2',workspace_id:'new'}]};if(a[0]==='tab'&&a[1]==='list')r={tabs:[{tab_id:'new:t2',workspace_id:'new'}]};if(a[0]==='pane'&&a[1]==='get')r={pane:{pane_id:a[2],workspace_id:a[2].startsWith('late-own:')||a[2].startsWith('own:')?'own':a[2].startsWith('new:')?'new':'other',foreground_cwd:mode.missingCwd?undefined:fs.existsSync(${JSON.stringify(path.join(root, 'moved-cwd'))})?fs.readFileSync(${JSON.stringify(path.join(root, 'moved-cwd'))},'utf8'):${JSON.stringify(root)}}};if(a[0]==='workspace'&&a[1]==='create'){fs.mkdirSync(${JSON.stringify(path.join(root, 'shell'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(root, 'shell/ready-new:p1'))},'');}if(a[0]==='agent'&&a[1]==='get')r={agent:{pane_id:a[2]==='foreign'?'other:p1':'own:p1',agent_status:mode.registerTimeout?'working':'idle'}};if(a[0]==='workspace'&&a[1]==='create')r={workspace:{workspace_id:'new'},root_pane:{pane_id:'new:p1'},tab:{tab_id:'new:t1'}};console.log(JSON.stringify({result:r}));\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: ['own'], tabs: ['own:t1'], panes: ['own:p1'] }));
-  const call = (...args) => spawnSync(process.execPath, [guard, ...args], { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8' });
+  const call = (...args) => spawnSync(process.execPath, [guard, ...args], { [commandAllowance]: loadTimeout(45_000), env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8' });
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
   return { root, call, calls, close: () => fs.rmSync(root, { recursive: true, force: true }) };
 }

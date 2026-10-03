@@ -1,6 +1,7 @@
 // Real Git, record, lane review/check, dispatch and detached watch. Only Herdr's
 // transport/model execution is scripted. No routes or validation config exists.
 import fs from 'node:fs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import os from 'node:os';
 import path from 'node:path';
@@ -58,7 +59,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
     // Failed/unconfirmed completion retains the directory for inspection.
     await Promise.all(pending);
     for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
-    const deadline = Date.now() + 2000;
+    const deadline = Date.now() + loadTimeout(2000);
     while (watchers.size && Date.now() < deadline) {
       const current = tracker.snapshot();
       if (!current.ok) throw Error('Cannot confirm watcher shutdown');

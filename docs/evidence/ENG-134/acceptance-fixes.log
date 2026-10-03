@@ -1,0 +1,215 @@
+TAP version 13
+# Subtest: ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+ok 1 - ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 784.593333
+  ...
+# Subtest: ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+ok 2 - ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 667.940166
+  ...
+# Subtest: a genuinely hung sandbox-exec child still reaches its finite scaled deadline
+ok 3 - a genuinely hung sandbox-exec child still reaches its finite scaled deadline
+  ---
+  duration_ms: 302.937167
+  ...
+# Subtest: report polling scales once from its own operation load and stays bounded
+ok 4 - report polling scales once from its own operation load and stays bounded
+  ---
+  duration_ms: 0.468667
+  ...
+# Subtest: each command samples current load, preserves zero, and supplies a bounded default
+ok 5 - each command samples current load, preserves zero, and supplies a bounded default
+  ---
+  duration_ms: 0.24025
+  ...
+# Subtest: rollback restores every file byte and executable mode
+ok 6 - rollback restores every file byte and executable mode
+  ---
+  duration_ms: 7.823458
+  ...
+# Subtest: contrib cannot retire with an extra executable caller, and scans refuse symlinks
+ok 7 - contrib cannot retire with an extra executable caller, and scans refuse symlinks
+  ---
+  duration_ms: 3.692042
+  ...
+# Subtest: all eleven edits apply to relocated inventory scripts and refuse premise drift
+ok 8 - all eleven edits apply to relocated inventory scripts and refuse premise drift
+  ---
+  duration_ms: 5.830291
+  ...
+# Subtest: retirement scans nested Python, executable extensionless and notify entry callers
+ok 9 - retirement scans nested Python, executable extensionless and notify entry callers
+  ---
+  duration_ms: 4.26425
+  ...
+# Subtest: installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+ok 10 - installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+  ---
+  duration_ms: 822.122
+  ...
+# Subtest: installed tidy recovers a bounded tail from each log including a late older run
+ok 11 - installed tidy recovers a bounded tail from each log including a late older run
+  ---
+  duration_ms: 683.329291
+  ...
+# Subtest: only unreferenced timestamped script backups qualify as historical material
+ok 12 - only unreferenced timestamped script backups qualify as historical material
+  ---
+  duration_ms: 14.639625
+  ...
+# Subtest: executable shell case arms cannot hide contrib callers or references to historical backups
+ok 13 - executable shell case arms cannot hide contrib callers or references to historical backups
+  ---
+  duration_ms: 2.723125
+  ...
+# Subtest: referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+ok 14 - referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+  ---
+  duration_ms: 3.772459
+  ...
+# Subtest: retry context and cutover aggregate preserve heavy-load PENDING
+ok 15 - retry context and cutover aggregate preserve heavy-load PENDING
+  ---
+  duration_ms: 1.468958
+  ...
+# Subtest: retry context and cutover aggregate preserve normal-load FAIL
+ok 16 - retry context and cutover aggregate preserve normal-load FAIL
+  ---
+  duration_ms: 0.325667
+  ...
+# Subtest: a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+ok 17 - a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+  ---
+  duration_ms: 51.626667
+  ...
+# Subtest: settle bounded child timeout is PENDING with its operation samples
+ok 18 - settle bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 308.30475
+  ...
+# Subtest: settle report deadline is PENDING with its own wait samples
+ok 19 - settle report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 7203.992792
+  ...
+# Subtest: settle bounded child timeout is FAIL with its operation samples
+ok 20 - settle bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 314.111791
+  ...
+# Subtest: settle report deadline is FAIL with its own wait samples
+ok 21 - settle report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 5844.344292
+  ...
+# Subtest: settle independent child assertion failure stays FAIL under heavy load
+ok 22 - settle independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 205.049417
+  ...
+# Subtest: supervisor bounded child timeout is PENDING with its operation samples
+ok 23 - supervisor bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 838.036583
+  ...
+# Subtest: supervisor report deadline is PENDING with its own wait samples
+ok 24 - supervisor report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 8487.315625
+  ...
+# Subtest: supervisor bounded child timeout is FAIL with its operation samples
+ok 25 - supervisor bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 844.453417
+  ...
+# Subtest: supervisor report deadline is FAIL with its own wait samples
+ok 26 - supervisor report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 7130.58125
+  ...
+# Subtest: supervisor independent child assertion failure stays FAIL under heavy load
+ok 27 - supervisor independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 719.557792
+  ...
+# Subtest: supervisor queue deadline is PENDING with queue-operation samples
+ok 28 - supervisor queue deadline is PENDING with queue-operation samples
+  ---
+  duration_ms: 15155.564333
+  ...
+# Subtest: supervisor queue deadline is FAIL with queue-operation samples
+ok 29 - supervisor queue deadline is FAIL with queue-operation samples
+  ---
+  duration_ms: 14088.843208
+  ...
+# Subtest: delegated fixture setup timeout also cleans its owned root before returning
+ok 30 - delegated fixture setup timeout also cleans its owned root before returning
+  ---
+  duration_ms: 103.846625
+  ...
+# Subtest: workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+ok 31 - workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+  ---
+  duration_ms: 0.8045
+  ...
+# Subtest: relocation requires the expected launcher and audits every transitive copied file before use
+ok 32 - relocation requires the expected launcher and audits every transitive copied file before use
+  ---
+  duration_ms: 2.084708
+  ...
+# Subtest: kernel boundary denies dynamically computed external code reads and record writes
+ok 33 - kernel boundary denies dynamically computed external code reads and record writes
+  ---
+  duration_ms: 24.939042
+  ...
+# Subtest: scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+ok 34 - scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+  ---
+  duration_ms: 1.498875
+  ...
+# Subtest: missing ripgrep is named pending before executing any candidate code
+ok 35 - missing ripgrep is named pending before executing any candidate code
+  ---
+  duration_ms: 446.721167
+  ...
+# Subtest: record shim rejects a changed pin and symlink escape before invoking the CLI
+ok 36 - record shim rejects a changed pin and symlink escape before invoking the CLI
+  ---
+  duration_ms: 45.439333
+  ...
+# Subtest: real session environment removes capability, identity and credential overrides
+ok 37 - real session environment removes capability, identity and credential overrides
+  ---
+  duration_ms: 0.233583
+  ...
+# Subtest: policy attribution refuses repository exposure and unwitnessed self-reports
+ok 38 - policy attribution refuses repository exposure and unwitnessed self-reports
+  ---
+  duration_ms: 1.474709
+  ...
+# Subtest: native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+ok 39 - native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+  ---
+  duration_ms: 276.716084
+  ...
+# Subtest: model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+ok 40 - model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+  ---
+  duration_ms: 236.668541
+  ...
+# Subtest: record verification and scripted answer are kernel-confined even if model output redirects .org
+ok 41 - record verification and scripted answer are kernel-confined even if model output redirects .org
+  ---
+  duration_ms: 389.48775
+  ...
+1..41
+# tests 41
+# suites 0
+# pass 41
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 61334.93525

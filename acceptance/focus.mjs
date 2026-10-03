@@ -146,7 +146,7 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
         // a new destination; uncertainty must not green a transient move.
         const creators = row.nearbyCalls.filter((call) => call.completedAt === undefined &&
           ['workspace', 'worktree'].includes(call.args[0]) && ['create', 'open'].includes(call.args[1]));
-        const deadline = Date.now() + 3000;
+        const deadline = Date.now() + loadTimeout(3000);
         let receipts = readCalls(evidence);
         while (!ownedPanes.has(panes[0]) && !ownedWorkspaces.has(workspace) && creators.some((call) =>
           !receipts.some((receipt) => receipt.type === 'end' && receipt.id === call.id))) {
@@ -226,7 +226,7 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   try {
     const server = await client.ping();
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('focus event subscription timeout')), 3000);
+      const timeout = setTimeout(() => reject(new Error('focus event subscription timeout')), loadTimeout(3000));
       client.once('ready', () => { clearTimeout(timeout); resolve(); });
       client.subscribe([{ type: 'pane.focused' }]);
     });

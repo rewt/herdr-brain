@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Native Herdr entry canary. No inference, prompts, live install or launchd:
 // the actual Codex UI runs under a scratch-only write / no-network boundary.
+import { loadTimeout } from './deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -35,7 +36,7 @@ fs.mkdirSync(env.TMPDIR); fs.mkdirSync(env.CODEX_HOME);
 fs.mkdirSync(path.dirname(env.HERDR_CONFIG_PATH), { recursive: true }); fs.writeFileSync(env.HERDR_CONFIG_PATH, '');
 const calls = [];
 function run(file, args, cwd = root, timeout = 20000) {
-  const r = spawnSync(file, args, { cwd, env, encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024 });
+  const r = spawnSync(file, args, { cwd, env, encoding: 'utf8', timeout: loadTimeout(timeout), maxBuffer: 4 * 1024 * 1024 });
   calls.push({ file, args, status: r.status, error: r.error?.message, stdout: r.stdout, stderr: r.stderr });
   fs.writeFileSync(path.join(evidence, 'commands.json'), JSON.stringify(calls, null, 2));
   return r;
@@ -49,7 +50,7 @@ const herdr = (...args) => { const output = ok(herdrBinary, ['--session', sessio
 const herdrRun = (...args) => run(herdrBinary, ['--session', session, ...args], root, 25000);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function poll(check, label) {
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + loadTimeout(10000);
   while (Date.now() < deadline) { if (check()) return; await delay(100); }
   throw new Error(`timeout waiting for ${label}`);
 }
@@ -129,7 +130,7 @@ const r=cp.spawnSync(${JSON.stringify(gitBinary)},args,{stdio:'inherit',env:proc
     let pane = created.root_pane.pane_id;
     await poll(() => fs.existsSync(ready), 'fresh scratch shell');
     if (role === 'worker') {
-      const started = herdrRun('agent', 'start', `entry-canary-${process.pid}`, '--kind', 'codex', '--pane', pane, '--timeout', '15000', '--', '--no-alt-screen');
+      const started = herdrRun('agent', 'start', `entry-canary-${process.pid}`, '--kind', 'codex', '--pane', pane, '--timeout', String(loadTimeout(15000)), '--', '--no-alt-screen');
       await poll(() => fs.existsSync(receipt), 'native Codex entry receipt');
       assert.equal(started.status, 0, started.stdout + started.stderr);
     } else {

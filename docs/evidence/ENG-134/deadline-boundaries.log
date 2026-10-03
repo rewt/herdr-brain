@@ -1,0 +1,85 @@
+TAP version 13
+# Subtest: ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+ok 1 - ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 491.670708
+  ...
+# Subtest: ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+ok 2 - ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 401.003667
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 24
+ok 3 - a genuinely hung sandbox-exec reaches its finite deadline at load 24
+  ---
+  duration_ms: 304.256417
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 0
+ok 4 - a genuinely hung sandbox-exec reaches its finite deadline at load 0
+  ---
+  duration_ms: 53.859542
+  ...
+# Subtest: report polling scales once from its own operation load and stays bounded
+ok 5 - report polling scales once from its own operation load and stays bounded
+  ---
+  duration_ms: 0.412792
+  ...
+# Subtest: each command samples current load, preserves zero, and supplies a bounded default
+ok 6 - each command samples current load, preserves zero, and supplies a bounded default
+  ---
+  duration_ms: 0.339709
+  ...
+# Subtest: measured heavy-load report timeout is harness pending and names load on the screen
+ok 7 - measured heavy-load report timeout is harness pending and names load on the screen
+  ---
+  duration_ms: 1.272916
+  ...
+# Subtest: candidate that never reports at normal load remains product fail
+ok 8 - candidate that never reports at normal load remains product fail
+  ---
+  duration_ms: 0.758917
+  ...
+# Subtest: heavy load is relative to capacity even on a single-CPU host
+ok 9 - heavy load is relative to capacity even on a single-CPU host
+  ---
+  duration_ms: 0.285375
+  ...
+# Subtest: load is scoped to each wait and successful reports pass even under heavy load
+ok 10 - load is scoped to each wait and successful reports pass even under heavy load
+  ---
+  duration_ms: 0.266041
+  ...
+# Subtest: a wait retains measured contention even if load falls before its deadline
+ok 11 - a wait retains measured contention even if load falls before its deadline
+  ---
+  duration_ms: 0.281833
+  ...
+# Subtest: bounded child command and native focus timeouts name measured heavy load
+ok 12 - bounded child command and native focus timeouts name measured heavy load
+  ---
+  duration_ms: 0.446959
+  ...
+# Subtest: actual stalled child timeout uses the measured command window
+ok 13 - actual stalled child timeout uses the measured command window
+  ---
+  duration_ms: 103.336959
+  ...
+# Subtest: heavy load cannot hide incorrect candidate behaviour or safety refusals
+ok 14 - heavy load cannot hide incorrect candidate behaviour or safety refusals
+  ---
+  duration_ms: 0.259375
+  ...
+# Subtest: heavy-load canary timeout propagates through aggregate and retirement as harness pending
+ok 15 - heavy-load canary timeout propagates through aggregate and retirement as harness pending
+  ---
+  duration_ms: 0.511708
+  ...
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1284.289834

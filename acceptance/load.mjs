@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { loadFactor, loadTimeout } from './deadline.mjs';
 
 // A one-minute average at/above CPU capacity means runnable work is competing
 // for the machine. Retain all three averages alongside that capacity.
@@ -34,9 +35,16 @@ export function loadReason(load) {
 
 export const isTimeout = (message) => /\btimed out\b|\bETIMEDOUT\b|\btimeout:/i.test(message);
 
+// Sample once per response allowance; a hung operation cannot extend itself.
+export function responseAllowance(ms, load) {
+  if (!load) return loadTimeout(ms);
+  const sample = load.sample();
+  return loadTimeout(ms, loadFactor(sample.averages[0], sample.cpus));
+}
+
 export async function waitUntil(fn, label, ms, { load, now = Date.now,
   sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay)) } = {}) {
-  const window = load?.begin(), end = now() + ms;
+  const window = load?.begin(), end = now() + responseAllowance(ms, load);
   while (now() < end) {
     load?.sample();
     if (fn()) return;

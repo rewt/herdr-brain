@@ -1,5 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -48,7 +49,7 @@ test('a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion f
   fs.writeFileSync(script, "import test from 'node:test';import assert from 'node:assert/strict';test('handles ETIMEDOUT',()=>{});test('independent product behaviour',()=>assert.equal(1,2));");
   const window = load.begin();
   const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
-  const child = spawnSync(process.execPath, ['--test', script], { env, encoding: 'utf8', timeout: 10000 });
+  const child = spawnSync(process.execPath, ['--test', script], { env, encoding: 'utf8', timeout: loadTimeout(10000) });
   assert.equal(child.status, 1); assert.equal(child.error, undefined);
   assert.match(child.stdout, /ok 1 - handles ETIMEDOUT/);
   assert.match(child.stdout, /not ok 2 - independent product behaviour/);

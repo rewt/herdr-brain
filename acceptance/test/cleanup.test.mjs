@@ -1,5 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -70,7 +71,7 @@ for (const shape of ['direct', 'nested']) test(`${shape} linked creation receipt
   fs.writeFileSync(binary, `#!${process.execPath}\nconst a=process.argv.slice(2);if(a[0]==='workspace'&&a[1]==='list'){console.log('{"result":{"workspaces":[]}}')}else if(a[0]==='worktree'){console.log(${JSON.stringify(JSON.stringify({ result: value }))});}else{console.error('injected layout failure');process.exit(1)}\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(f.root, 'ownership.json'), JSON.stringify({ binary, workspaces: [], panes: [], tabs: [] }));
   const r = spawnSync(process.execPath, [adapter, 'worktree', 'create', '--cwd', f.root, '--path', path.join(f.root, 'linked'), '--no-focus'], {
-    env: { ...process.env, ACCEPTANCE_ROOT: f.root, ORG_ACTOR: `eng107-layout-${shape}` }, encoding: 'utf8', timeout: 15000 });
+    env: { ...process.env, ACCEPTANCE_ROOT: f.root, ORG_ACTOR: `eng107-layout-${shape}` }, encoding: 'utf8', timeout: loadTimeout(15000) });
   assert.notEqual(r.status, 0); assert.match(r.stderr, /layout receipt unavailable/);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, 'ownership.json'))).workspaces, ['linked']);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.root, 'creations.jsonl'))).targets.workspaces, ['linked']);

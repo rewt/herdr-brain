@@ -25,7 +25,8 @@ import { supervisorCase } from './supervisor.mjs';
 import { assertSupervisorEntry } from './entry.mjs';
 import { startFocusMonitor, assertFocus } from './focus.mjs';
 import { cleanupWorkspaces } from './cleanup.mjs';
-import { createLoadMonitor, waitUntil } from './load.mjs';
+import { loadAwareCommand } from './commands.mjs';
+import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
@@ -59,19 +60,19 @@ const read = (file) => fs.readFileSync(file, 'utf8');
 const json = (text) => { const v = JSON.parse(text); return v.result ?? v; };
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const pending = (reason) => { throw new Pending(reason); };
+const executeCommand = loadAwareCommand((command, args, options) => {
+  const r = spawnSync(command, args, options);
+  if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd: options.cwd, timeoutMs: options.timeout,
+    status: r.status, error: r.error?.message, stdout: options.encoding ? r.stdout : '(archive)', stderr: String(r.stderr ?? '') }) + '\n');
+  return r;
+}, load, { scratchRoots });
 function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv, duringCleanup = false } = {}) {
   if (stopping && !duringCleanup) throw new Pending('run interrupted; no further candidate commands allowed');
-  const window = load.begin();
-  const r = spawnSync(command, args, { cwd, env: isolatedEnv ?? { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
+  const r = executeCommand(command, args, { cwd, env: isolatedEnv ?? { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
     input, maxBuffer: 32 * 1024 * 1024, timeout });
-  const measuredLoad = load.snapshot(window);
-  if (logFile) fs.appendFileSync(logFile, JSON.stringify({ command, args, cwd, status: r.status, error: r.error?.message,
-    stdout: binary ? '(archive)' : r.stdout, stderr: String(r.stderr ?? '') }) + '\n');
-  if (r.error?.code === 'ETIMEDOUT' || (ok && (r.error || r.status !== 0))) {
-    const diagnostic = [r.error?.message, ((binary ? '' : String(r.stdout ?? '')) + String(r.stderr ?? '')).trim()]
-      .filter(Boolean).join('\n');
-    const message = `${path.basename(command)} ${args[0]}: ${diagnostic}`;
-    throw commandFailure(message, { scratchRoots, error: r.error, load: measuredLoad });
+  if (ok && r.status !== 0) {
+    const diagnostic = ((binary ? '' : String(r.stdout ?? '')) + String(r.stderr ?? '')).trim();
+    throw commandFailure(`${path.basename(command)} ${args[0]}: ${diagnostic}`, { scratchRoots });
   }
   return r;
 }
@@ -209,7 +210,7 @@ async function closeScope() {
       }
     }
     for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (e) { if (e.code !== 'ESRCH') errors.push(e.message); } }
-    const deadline = Date.now() + 15_000;
+    const deadline = Date.now() + responseAllowance(15_000, load);
     const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { if (e.code === 'ESRCH') return false; throw e; } };
     while ([...pids].some(alive)) {
       if (Date.now() >= deadline) throw new HarnessLimit('owned watchers did not stop; cleanup snapshots refused');
@@ -336,6 +337,7 @@ try {
     if (focusError) throw focusError;
     const binary = run('which', ['herdr']).stdout.trim();
     write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
+    fs.copyFileSync(path.join(SOURCE, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
     for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs', 'environment.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     write(path.join(bin, 'herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'herdr.mjs'))} "$@"\n`); fs.chmodSync(path.join(bin, 'herdr'), 0o755);
@@ -785,15 +787,16 @@ try {
       const receipt = { nativeDestination: native, configuredWorkspace: supervisor.workspace };
       try {
         receipt.before = snapshot();
+        const refusalAllowance = responseAllowance(10_000, load);
         const began = Date.now();
         const options = ['--launcher', persona, '--cmem-domain', path.join(root, 'bin/cmem-domain')];
         receipt.refused = execute('.lane/supervisor/continue.sh', options, { ok: false, timeout: 10_000 });
-        assert.notEqual(receipt.refused.status, 0); assert.ok(Date.now() - began < 10_000);
+        assert.notEqual(receipt.refused.status, 0); assert.ok(Date.now() - began < refusalAllowance);
         assert.ok(receipt.refused.stdout.includes(busy)); assert.match(receipt.refused.stdout, /retry.*stops/);
         receipt.afterRefusal = snapshot();
         assertLaunchRefused(receipt.before, receipt.afterRefusal);
         h('agent', 'prompt', busy, 'acceptance-state idle');
-        h('agent', 'wait', busy, '--until', 'idle', '--until', 'done', '--timeout', '10000');
+        h('agent', 'wait', busy, '--until', 'idle', '--until', 'done', '--timeout', String(responseAllowance(10_000, load)));
         h('agent', 'rename', pane, target);
         receipt.beforeRetry = snapshot();
         receipt.retried = withCommandContext('busy refusal passed; same-request retry failed',

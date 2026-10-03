@@ -1,3 +1,4 @@
+import { loadTimeout } from './deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -53,7 +54,7 @@ export function stopProducers(root) {
 }
 export async function awaitProducers(root, { timeoutMs = 120_000 } = {}) {
   const directory = path.join(root, 'producers');
-  const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + loadTimeout(timeoutMs);
   for (;;) {
     const pending = [];
     for (const entry of fs.existsSync(directory) ? fs.readdirSync(directory) : []) {

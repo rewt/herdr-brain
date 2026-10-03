@@ -1,5 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -69,7 +70,7 @@ test('missing ripgrep is named pending before executing any candidate code', () 
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     fs.writeFileSync(path.join(bin, 'which'), '#!/bin/sh\n[ "$1" != rg ] || exit 1\nexec /usr/bin/which "$@"\n', { mode: 0o755 });
     const result = spawnSync(process.execPath, [path.resolve('acceptance/run.mjs'), '--candidate', 'must-not-resolve', '--skip-live'], {
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ACCEPTANCE_TMPDIR: root }, encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ACCEPTANCE_TMPDIR: root }, encoding: 'utf8', timeout: loadTimeout(10000),
     });
     assert.equal(result.status, 1, result.stderr);
     const evidence = path.join(root, fs.readdirSync(root).find((s) => s.startsWith('herdr-acceptance-')), 'evidence');

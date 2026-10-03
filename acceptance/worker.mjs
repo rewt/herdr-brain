@@ -1,5 +1,6 @@
 // A script in a real PTY. Explicit lifecycle reports test the coordination
 // contract, not Codex/Claude screen detection. No harness executable is started.
+import { loadTimeout } from './deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -29,8 +30,8 @@ async function command(binary, args, options = {}, timeout = 90_000) {
     child.stdout.on('data', value => { stdout += value; });
     child.stderr.on('data', value => { stderr += value; });
     const timer = setTimeout(() => {
-      child.kill('SIGTERM'); killTimer = setTimeout(() => child.kill('SIGKILL'), 1000);
-    }, timeout);
+      child.kill('SIGTERM'); killTimer = setTimeout(() => child.kill('SIGKILL'), loadTimeout(1000));
+    }, loadTimeout(timeout));
     child.on('error', error => { spawnError = error; });
     child.on('close', (code, signal) => {
       clearTimeout(timer); clearTimeout(killTimer);

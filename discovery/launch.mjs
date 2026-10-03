@@ -3,6 +3,16 @@
 import { spawnSync } from 'node:child_process';
 import { gitProject } from '../lib/project.mjs';
 
+// Resume keeps the native session and its durable pane receipt. Utility and
+// headless commands must still suppress entry even when they include resume.
+export function interactiveResume({ kind, args, tty = process.stdin.isTTY && process.stdout.isTTY }) {
+  if (!tty) return false;
+  if (kind === 'claude') return args.some(arg => /^(--resume|--continue|-r|-c)(=|$)/u.test(arg)) &&
+    !args.some(arg => /^(--print|-p|--help|-h|--version|-V)(=|$)/u.test(arg) || /^(help|auth|update|install|doctor|mcp|plugin)$/u.test(arg));
+  return kind === 'codex' && args.includes('resume') &&
+    !args.some(arg => /^(exec|x|review|help|login|logout|completion|sandbox|debug|doctor|features|mcp|plugin|update|app-server|exec-server|agents|archive|delete|queue|migrate-rollouts|unarchive|cloud)$/u.test(arg) || /^(--help|-h|--version|-V)(=|$)/u.test(arg));
+}
+
 export function freshInteractive({ kind, args, cwd = process.cwd(), env = process.env, tty = process.stdin.isTTY && process.stdout.isTTY }) {
   if (!tty || env.MONITOR_ENTRY_BYPASS === '1' || env.MONITOR_REQUEST_DIR || env.HERDR_INTEGRATION_ID) return false;
   const utility = kind === 'codex'

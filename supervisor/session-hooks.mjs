@@ -6,7 +6,9 @@ import { rememberSupervisor } from './session-binding.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 // A native utility/headless invocation can inherit a supervisor's shell and
 // pane. Suppress entry for that child without revoking the interactive receipt.
-export function passthroughEnvironment(env = process.env) {
+export function passthroughEnvironment(env = process.env, { interactiveResume = false } = {}) {
+  // Preserve explicit worker/bypass guards as well as supervisor recognition.
+  if (interactiveResume) return { ...env };
   const result = { ...env, MONITOR_SESSION_ROLE: 'worker', MONITOR_ENTRY_BYPASS: '1' };
   for (const key of Object.keys(result)) if (key.startsWith('MONITOR_SUPERVISOR_')) delete result[key];
   return result;

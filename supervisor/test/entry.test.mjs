@@ -6,13 +6,20 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { ownerIdentity } from '../../lib/process-owner.mjs';
+import { ownerAlive, ownerIdentity } from '../../lib/process-owner.mjs';
+import { lookupProcess } from '../../lib/processes.mjs';
 import { housekeepingSnapshot } from '../../housekeeping/command.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
 import { sessionEnvironment, sessionHookArguments } from '../session-hooks.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const linuxBoot = '12345678-1234-4234-8234-123456789abc';
+const linuxOwner = birth => pid => pid === deadPid ? { ok: true, value: null } : lookupProcess(pid, { platform: 'linux', identityOnly: true, readFile: file => {
+  if (file === '/proc/sys/kernel/random/boot_id') return `${linuxBoot}\n`;
+  if (file === `/proc/${pid}/stat`) return `${pid} (watcher) S ${[1, pid, ...Array(16).fill(0), birth].join(' ')}\n`;
+  throw Error(`unexpected Linux identity read: ${file}`);
+} });
 const deadPid = 2147483647;
 const exec = (file, args, cwd, env = {}, input) => {
   const inherited = { ...process.env };
@@ -393,6 +400,57 @@ test('housekeeping resume replaces a reused PID without signaling the replacemen
   const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json')));
   assert.notEqual(owner.pid, process.pid); assert.equal(owner.identity, ownerIdentity(owner.pid));
   assert.doesNotThrow(() => process.kill(process.pid, 0));
+});
+
+for (const [kind, args] of [['claude', ['--resume', 'session']], ['claude', ['--continue']], ['codex', ['resume', 'session']]])
+test(`${kind} interactive ${args[0]} through automatic adapter preserves supervisor entry and worker guards`, t => {
+  const f = fixture(t), native = path.join(f.root, 'resume.cjs'), hook = path.join(root, 'supervisor/session-start.mjs');
+  const tty = path.join(f.root, 'tty.cjs');
+  fs.writeFileSync(tty, 'process.stdin.isTTY=true;process.stdout.isTTY=true;');
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+  sessionEnvironment({ role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org }, root,
+    { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
+  fs.writeFileSync(native, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');
+const r=spawnSync(process.execPath,[${JSON.stringify(hook)}],{env:process.env,
+input:JSON.stringify({cwd:process.cwd(),hook_event_name:'SessionStart',source:'resume'}),encoding:'utf8'});
+process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.status);\n`, { mode: 0o755 });
+  const adapter = [path.join(root, `discovery/adapters/${kind}.mjs`), '--auto-entry', '--repo', f.repo, '--binary', native, '--', ...args];
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  for (const extra of [{}, f.binding, { MONITOR_SESSION_ROLE: 'worker' }, { MONITOR_ENTRY_BYPASS: '1' }]) {
+    const r = exec(process.execPath, ['--require', tty, ...adapter], f.repo, { HERDR_PANE_ID: 'w:pSupervisor', ...extra });
+    good(r);
+    assert.equal(/Supervisor cold start/.test(r.stdout), extra.MONITOR_SESSION_ROLE !== 'worker' && extra.MONITOR_ENTRY_BYPASS !== '1', JSON.stringify(extra));
+  }
+  for (const headless of [false, true]) {
+    const launch = headless ? [...adapter, ...(kind === 'claude' ? ['--print'] : ['exec'])] : adapter;
+    const r = exec(process.execPath, [...(headless ? ['--require', tty] : []), ...launch], f.repo,
+      { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
+    good(r); assert.doesNotMatch(r.stdout, /Supervisor cold start/);
+  }
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
+  assert.ok(!fs.existsSync(path.join(f.org, 'housekeeping')));
+});
+
+test('Linux watcher recovery round-trips textual identities through record set and compares changed ticks', async t => {
+  const f = fixture(t), run = f.start('Linux watcher'), fake = fakeCommands(f), output = [];
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+  let readProcess = linuxOwner('12345');
+  const command = (file, args, options) => args[0].endsWith('watch.mjs')
+    ? { status: 0, stdout: JSON.stringify({ run, pid: process.pid, identity: ownerIdentity(process.pid, readProcess), log: path.join(f.root, 'watch.log') }) }
+    : fake.command(file, args, options);
+  const { enterSupervisor } = await load();
+  const enter = () => enterSupervisor({ cwd: f.repo, org: f.org, role: 'supervisor', readProcess, command, output: s => output.push(s) });
+  enter();
+  const stored = () => JSON.parse(f.record(['show', run, '--json'])).meta.watcher_identity;
+  assert.equal(typeof stored(), 'string');
+  assert.equal(stored(), ownerIdentity(process.pid, readProcess));
+  assert.equal(ownerAlive({ pid: process.pid, identity: stored() }, readProcess), true);
+  enter(); assert.equal(output.filter(s => /re-armed/.test(s)).length, 1);
+  readProcess = linuxOwner('12346');
+  assert.equal(ownerAlive({ pid: process.pid, identity: stored() }, readProcess), false);
+  enter(); assert.equal(output.filter(s => /re-armed/.test(s)).length, 2);
+  assert.equal(stored(), ownerIdentity(process.pid, readProcess));
+  assert.equal(typeof stored(), 'string');
 });
 
 for (const kind of ['claude', 'codex']) test(`${kind} nested headless launch cannot inherit supervisor recognition`, t => {

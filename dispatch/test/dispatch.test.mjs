@@ -8,6 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ownerAlive } from '../../lib/process-owner.mjs';
+import { lookupProcess } from '../../lib/processes.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -149,6 +151,36 @@ function fixture(t, { realWatch = false, preload } = {}) {
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
+test('Linux dispatch watcher receipt and journal round-trip as strings through record set', t => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-linux-identity-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const preload = path.join(scratch, 'linux.cjs'), boot = '12345678-1234-4234-8234-123456789abc';
+  fs.writeFileSync(preload, `const fs=require('node:fs'),path=require('node:path');
+if(process.argv[1]===${JSON.stringify(DISPATCH)}||path.basename(process.argv[1]||'')==='watch') {
+Object.defineProperty(process,'platform',{value:'linux'});
+const read=fs.readFileSync;
+fs.readFileSync=function(file,...args){
+if(file==='/proc/sys/kernel/random/boot_id') return ${JSON.stringify(boot + '\n')};
+const match=String(file).match(/^\\/proc\\/(\\d+)\\/stat$/);
+if(match){const pid=Number(match[1]);process.kill(pid,0);return pid+' (watcher) S '+[1,pid,...Array(16).fill(0),'12345'].join(' ')+'\\n';}
+if(file==='/proc/meminfo') return 'MemTotal: 16777216 kB\\nMemAvailable: 8388608 kB\\nSwapTotal: 0 kB\\nSwapFree: 0 kB\\n';
+return read.call(this,file,...args);};require('node:module').syncBuiltinESMExports();}
+`);
+  const f = fixture(t, { preload });
+  const r = f.start(); assert.equal(r.status, 0, r.stderr);
+  const receipt = JSON.parse(r.stdout), job = JSON.parse(fs.readFileSync(receipt.journal));
+  const identity = f.show(receipt.run).meta.watcher_identity;
+  assert.equal(typeof identity, 'string');
+  assert.equal(identity, receipt.watcher.identity);
+  assert.equal(identity, job.watcher.identity);
+  const readProcess = birth => pid => lookupProcess(pid, { platform: 'linux', identityOnly: true, readFile: file =>
+    file === '/proc/sys/kernel/random/boot_id' ? `${boot}\n` : `${pid} (watcher) S ${[1, pid, ...Array(16).fill(0), birth].join(' ')}\n` });
+  assert.equal(ownerAlive({ pid: receipt.watcher.pid, identity }, readProcess('12345')), true);
+  assert.equal(ownerAlive({ pid: receipt.watcher.pid, identity }, readProcess('12346')), false);
+  const retry = f.dispatch(['--retry', receipt.journal]); assert.equal(retry.status, 0, retry.stderr);
+  assert.equal(f.show(receipt.run).meta.watcher_identity, identity);
+  assert.equal(promptCalls(f).length, 1);
+});
 test('dispatch waits under simulated swap pressure before opening a lane and resumes the same request', async t => {
   const f = fixture(t), memory = path.join(f.root, 'memory.json');
   fs.writeFileSync(memory, JSON.stringify({ available: 2 * 1024 ** 3, swap_used: 1024 ** 3 }));

@@ -7,10 +7,12 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lookupProcess, createProcessTracker } from './helpers/processes.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
+import { ownerAlive, ownerIdentity } from '../lib/process-owner.mjs';
 
 process.env.ORG_ACTOR = 'eng122-process-source-test';
 const row = (identity = '1700000000:123456') => ({ pid: 101, ppid: 1, pgid: 101, state: 'S', identity, command: 'owned fixture' });
 const output = value => ({ status: 0, stdout: JSON.stringify(value) + '\n', stderr: '' });
+const linuxBoot = '12345678-1234-4234-8234-123456789abc';
 
 test('Darwin lookup uses a non-setuid source and preserves microsecond birth identity', () => {
   const calls = [];
@@ -50,15 +52,42 @@ function procStat(pid, birth = '12345', state = 'S') {
   // /proc stat fields 3..22; comm may contain spaces and closing parentheses.
   return `${pid} (fixture ) name) ${state} ${[1, pid, ...Array(16).fill(0), birth].join(' ')}\n`;
 }
+test('Linux durable owner distinguishes identical PID and start tick across boots and refuses unknown boots', () => {
+  let boot = '12345678-1234-4234-8234-123456789abc';
+  const readFile = file => {
+    if (file === '/proc/sys/kernel/random/boot_id') {
+      if (boot instanceof Error) throw boot;
+      return `${boot}\n`;
+    }
+    assert.equal(file, '/proc/101/stat'); return procStat(101);
+  };
+  const readProcess = pid => lookupProcess(pid, { platform: 'linux', identityOnly: true, readFile });
+  const owner = { pid: 101, identity: ownerIdentity(101, readProcess) };
+  assert.equal(ownerAlive(owner, readProcess), true);
+  boot = '87654321-4321-4321-8321-cba987654321';
+  assert.equal(ownerAlive(owner, readProcess), false, 'reboot must invalidate an identical PID/start tick');
+  for (const value of ['', 'not-a-uuid', '12345678-1234-4234-8234-123456789abc extra', Object.assign(Error('boot denied'), { code: 'EACCES' }), Object.assign(Error('boot missing'), { code: 'ENOENT' })]) {
+    boot = value;
+    assert.equal(readProcess(101).ok, false);
+    assert.throws(() => ownerAlive(owner, readProcess), /identity unavailable.*boot/i);
+  }
+});
+test('Linux legacy tick-only durable owners remain unknown while the PID exists', () => {
+  const readProcess = pid => lookupProcess(pid, { platform: 'linux', identityOnly: true, readFile: file =>
+    file === '/proc/sys/kernel/random/boot_id' ? `${linuxBoot}\n` : procStat(pid) });
+  assert.throws(() => ownerAlive({ pid: 101, identity: '12345' }, readProcess), /boot identity is missing.*inspect/);
+  assert.equal(ownerAlive({ pid: 101, identity: '12345' }, () => ({ ok: true, value: null })), false);
+});
 test('Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races', () => {
   const read = values => file => {
+    if (file === '/proc/sys/kernel/random/boot_id') return `${linuxBoot}\n`;
     if (file.endsWith('/stat')) return values.shift();
     if (file.endsWith('/cmdline')) return Buffer.from('node\0fixture\0');
     throw Error(`unexpected read ${file}`);
   };
   const result = lookupProcess(101, { platform: 'linux', readFile: read([procStat(101), procStat(101)]) });
   assert.equal(result.ok, true, result.error);
-  assert.equal(result.value.identity, '12345');
+  assert.equal(result.value.identity, `${linuxBoot}:12345`);
   assert.equal(result.value.command, 'node fixture');
   for (const values of [[procStat(101), procStat(101, '12346')], ['partial', 'partial']]) {
     assert.equal(lookupProcess(101, { platform: 'linux', readFile: read(values) }).ok, false);
@@ -71,6 +100,7 @@ test('Linux proc lookup brackets argv with a stable kernel start tick and fails 
 
 test('Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads', () => {
   const files = new Map();
+  files.set('/proc/sys/kernel/random/boot_id', `${linuxBoot}\n`);
   for (const pid of [process.pid, 101]) {
     files.set(`/proc/${pid}/stat`, procStat(pid));
     files.set(`/proc/${pid}/cmdline`, Buffer.from('owned fixture\0'));
@@ -98,10 +128,11 @@ test('Linux snapshots retain parentless group members, omit proven exits and ref
 
 test('identity-only reads preserve kernel births and ancestry when argv is inaccessible', () => {
   const result = lookupProcess(101, { platform: 'linux', identityOnly: true, readFile: file => {
+    if (file === '/proc/sys/kernel/random/boot_id') return `${linuxBoot}\n`;
     assert.ok(file.endsWith('/stat'), 'identity-only reads never need argv'); return procStat(101);
   } });
   assert.equal(result.ok, true, result.error);
-  assert.equal(result.value.identity, '12345');
+  assert.equal(result.value.identity, `${linuxBoot}:12345`);
   assert.equal(result.value.command, '[fixture ) name]');
   assert.equal(result.value.pgid, 101);
 });

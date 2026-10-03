@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
-import { freshInteractive } from '../launch.mjs';
+import { freshInteractive, interactiveResume } from '../launch.mjs';
 import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
 import { spawnNative } from '../session.mjs';
 const separator = process.argv.indexOf('--');
@@ -18,7 +18,8 @@ const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
 function passthrough() {
-  const child = spawn(values.binary, native, { stdio: 'inherit', env: passthroughEnvironment() });
+  const child = spawn(values.binary, native, { stdio: 'inherit', env: passthroughEnvironment(process.env,
+    { interactiveResume: interactiveResume({ kind: 'claude', args: native }) }) });
   child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
   child.on('close', (code) => { process.exitCode = code ?? 1; });
 }

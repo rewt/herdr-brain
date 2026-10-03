@@ -111,8 +111,9 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     const startedAt = new Date(), started = process.hrtime.bigint();
     let run;
     try {
+      // Hold one slot for the chain; only its leaf steps may spend a retry.
       run = tier === 'promotion'
-        ? runTestSlotSync(`promotion ${cwd}`, ['/bin/sh', '-c', command], { cwd, env, stdio: ['inherit', fd, fd] })
+        ? runTestSlotSync(`promotion ${cwd}`, ['/bin/sh', '-c', command], { cwd, env, retryTimeout: false, stdio: ['inherit', fd, fd] })
         : spawnSync(command, { cwd, env, shell: '/bin/sh', stdio: ['inherit', fd, fd] });
     }
     finally { fs.closeSync(fd); }

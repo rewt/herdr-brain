@@ -80,6 +80,8 @@ Promotion commands now hold the [host test slot](../test-slot/README.md), includ
 when invoked directly through `npm run test:promotion`. Release holds it before
 its candidate claim. `npm test` also runs the slot's isolated process-group
 regressions before its existing bounded core and cycle batches. Slot refusal is
-exit 75, not failed test evidence; recognized timeouts under measured load retry
-once in the held slot. Workspace paths and wait/token fields do not change the
-validation fingerprint.
+CLI exit 75 with no GATE line or failed receipt. Started commands returning 75
+are failures: lane check/promote exit 1 and preserve exit 75 in failed evidence.
+The promotion adapter holds the slot without retrying the chain. Retry-enabled
+leaf commands retry their own timeout under measured load at most once. Workspace
+paths and wait/token fields do not change the validation fingerprint.

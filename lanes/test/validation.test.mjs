@@ -127,14 +127,14 @@ test('commands that start and exit 75 record failed receipts in both validation 
   const f = fixture(t, { fast: 'node check.cjs fast; exit 75', promotion: 'node check.cjs promotion; exit 75' });
   for (const tier of ['fast', 'promotion']) {
     const result = f.lane(['check', '--tier', tier]);
-    assert.equal(result.status, 75, result.stderr + result.stdout);
+    assert.equal(result.status, 1, result.stderr + result.stdout);
     assert.match(result.stdout, /GATE .* exit=75/);
     assert.equal(f.gate().exit_code, 75);
     assert.equal(f.gate().tier, tier);
     const receipt = path.join(f.repo, '.git/lane-validation', f.gate().key + '.json');
     assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).exit_code, 75);
     const repeated = f.lane(['check', '--tier', tier]);
-    assert.equal(repeated.status, 75);
+    assert.equal(repeated.status, 1);
     assert.doesNotMatch(repeated.stdout, /REUSE/);
   }
   assert.deepEqual(f.count(), ['fast', 'fast', 'promotion', 'promotion']);
@@ -151,6 +151,53 @@ test('worker gate files, corrupt receipts and modified evidence logs cannot auth
   fs.writeFileSync(f.gate().log, 'different evidence'); f.good(f.lane(['check']));
   assert.deepEqual(f.count(), ['check', 'check', 'check', 'check']);
 });
+
+test('a started command exiting 75 is a failure in check and promote, never a slot refusal', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs fast; exit 75', promotion: 'node check.cjs promotion; exit 75' });
+  const lock = path.join(f.root, 'slot.lock');
+  Object.assign(f.env, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
+    MONITOR_TEST_SLOT_WAIT_SECONDS: '0', MONITOR_TEST_SLOT_TOKEN: '', BCH_CLOAK_TEST_SLOT_TOKEN: '' });
+  const main = f.git(['rev-parse', 'main']);
+  for (const tier of ['fast', 'promotion']) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = f.lane(['check', '--tier', tier]);
+      assert.equal(result.status, 1, result.stderr + result.stdout);
+      assert.match(result.stdout, /GATE .* exit=75/);
+      assert.doesNotMatch(result.stdout + result.stderr, /TEST_SLOT_HELD|REUSE/);
+      assert.equal(f.gate().exit_code, 75);
+      const receipt = path.join(f.repo, '.git/lane-validation', f.gate().key + '.json');
+      assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).exit_code, 75);
+    }
+  }
+  const promotion = f.lane(['promote', 'topic'], f.repo);
+  assert.equal(promotion.status, 1, promotion.stderr + promotion.stdout);
+  assert.match(promotion.stderr, /validation failed \(exit 75\); nothing merged/);
+  assert.equal(f.gate().exit_code, 75);
+  assert.equal(f.git(['rev-parse', 'main']), main);
+  assert.deepEqual(f.count(), ['fast', 'fast', 'promotion', 'promotion', 'promotion']);
+});
+
+for (const scenario of ['leaf retries', 'leaf retry exhausted', 'leaf declines', 'earlier timeout text']) {
+  test(`promotion holds the slot without replaying the chain when ${scenario}`, { timeout: 20000 }, t => {
+    const f = fixture(t, { promotion: 'node chain.cjs' });
+    const slot = fileURLToPath(new URL('../../test-slot/test-slot.mjs', import.meta.url));
+    const lock = path.join(f.root, 'slot.lock'), preload = path.join(f.root, 'load.mjs');
+    // The adapter sees high load; only the leaf's sample varies.
+    fs.writeFileSync(preload, `import os from 'node:os';os.loadavg=()=>process.argv[3]==='leaf'&&${JSON.stringify(scenario)}!=='leaf retries'&&${JSON.stringify(scenario)}!=='leaf retry exhausted'?[0,0,0]:[1000,1000,1000];`);
+    Object.assign(f.env, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
+      MONITOR_TEST_SLOT_WAIT_SECONDS: '0', MONITOR_TEST_SLOT_TOKEN: '', BCH_CLOAK_TEST_SLOT_TOKEN: '',
+      MONITOR_TEST_SLOT_TIMEOUT_RETRIED: '', NODE_OPTIONS: `--import=${preload}` });
+    fs.writeFileSync(path.join(f.workspace, 'leaf.cjs'), `const fs=require('fs');const before=fs.existsSync(process.env.CHECK_LOG)?fs.readFileSync(process.env.CHECK_LOG,'utf8'):'';fs.appendFileSync(process.env.CHECK_LOG,'leaf\\n');console.error('ETIMEDOUT');process.exit(${JSON.stringify(scenario)}==='earlier timeout text'||(before.includes('leaf')&&${JSON.stringify(scenario)}!=='leaf retry exhausted')?0:124);`);
+    fs.writeFileSync(path.join(f.workspace, 'chain.cjs'), `const fs=require('fs');fs.appendFileSync(process.env.CHECK_LOG,'chain\\n');const r=require('child_process').spawnSync(process.execPath,[${JSON.stringify(slot)},'run','leaf','--retry-timeout-under-load','--',process.execPath,'leaf.cjs'],{stdio:'inherit'});if(r.status!==0)process.exit(r.status??1);fs.appendFileSync(process.env.CHECK_LOG,'after\\n');process.exit(${JSON.stringify(scenario)}==='earlier timeout text'?7:0);`);
+    f.git(['add', '.'], f.workspace); f.git(['commit', '-qm', 'Promotion failure-path fixture'], f.workspace);
+    const result = f.lane(['check', '--tier', 'promotion']);
+    assert.equal(result.status, scenario === 'leaf retries' ? 0 : scenario !== 'earlier timeout text' ? 124 : 7, result.stderr + result.stdout);
+    assert.deepEqual(f.count(), scenario === 'leaf retries' ? ['chain', 'leaf', 'leaf', 'after'] :
+      scenario === 'leaf retry exhausted' ? ['chain', 'leaf', 'leaf'] : scenario === 'leaf declines' ? ['chain', 'leaf'] : ['chain', 'leaf', 'after']);
+    assert.equal((result.stdout.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, scenario.startsWith('leaf retr') ? 1 : 0);
+    assert.equal(fs.existsSync(lock), false);
+  });
+}
 
 test('a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check', { timeout: 20000 }, t => {
   const f = fixture(t, { fast: 'node check.cjs canonical', promotion: 'node check.cjs canonical' });
@@ -219,6 +266,12 @@ test('bch-cloak-compatible holder refuses promotion with 75 and supplies no fail
   assert.deepEqual(f.count(), []);
   assert.equal(fs.existsSync(path.join(f.workspace, '.lane/gate.json')), false);
   assert.deepEqual(fs.readdirSync(path.join(f.repo, '.git/lane-validation')).filter(name => name.endsWith('.json')), []);
+  const refusedPromotion = f.lane(['promote', 'topic'], f.repo, env);
+  assert.equal(refusedPromotion.status, 75, refusedPromotion.stderr + refusedPromotion.stdout);
+  assert.match(refusedPromotion.stderr, /^TEST_SLOT_HELD:/m);
+  assert.doesNotMatch(refusedPromotion.stdout, /GATE/);
+  assert.deepEqual(f.count(), []);
+  assert.equal(fs.existsSync(path.join(f.workspace, '.lane/gate.json')), false);
   f.good(f.lane(['check'], f.workspace, env)); // Fast checks remain available.
   assert.deepEqual(f.count(), ['fast']);
   holder.kill('SIGTERM'); await waitForExit(holder);

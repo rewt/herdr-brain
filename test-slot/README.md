@@ -38,7 +38,9 @@ or `TEST_SLOT_HOLDER_UNKNOWN` when liveness cannot be established. Neither is a
 test failure. Lane checks preserve exit 75 and write no failed gate receipt;
 release returns a deferred result without cutting or claiming a candidate (its
 CLI emits the coded refusal and exits 75). A command that starts and itself exits
-75 supplies ordinary failed validation evidence. Inspect unknown holder evidence;
+75 supplies ordinary failed validation evidence; lane check and promote exit 1
+while the receipt and check's GATE line preserve the command's exit 75. Inspect
+unknown holder evidence;
 never break a lock by age. Status exits 0 for free/gone, 1 for live, 2 for unknown,
 and reports both paths when the legacy bridge differs from the workspace path.
 
@@ -52,7 +54,9 @@ commands inherit Monitor and bch-cloak tokens, or recognize a live holder throug
 ancestry/group membership; they neither wait for themselves nor release the
 outer slot. A stale inherited token cannot authorize nesting.
 
-Promotion and release gate adapters enable `--retry-timeout-under-load`: a
+The lane promotion adapter holds the slot with timeout retry disabled, so it
+never replays a command chain, including when a leaf declines to retry. Leaf
+wrappers and the release gate command may enable `--retry-timeout-under-load`: a
 nonzero timeout (exit 124, `ETIMEDOUT`, or the Node test runner's timeout marker)
 under measured load above one per available CPU (capacity capped at four) is
 re-run once, with the slot still held. The log includes

@@ -144,6 +144,7 @@ function makeFixture(config = { main: "main", validate: "true" }, { repoParts = 
       PATH: bin,
       LANE_CONFIG: configPath,
       LANE_WORKTREE_ROOT: worktrees,
+      SHELL: "/bin/zsh",
     },
     cleanup() {
       rmSync(root, { recursive: true, force: true });
@@ -352,12 +353,18 @@ if (args[0] === "workspace" && args[1] === "list") {
     type: "tab_create", tab: { tab_id: "w-lane:t2", workspace_id: "w-lane" },
     root_pane: { pane_id: "w-lane:p2", tab_id: "w-lane:t2", workspace_id: "w-lane" },
   });
+} else if (args[0] === "pane" && args[1] === "process-info") {
+  result("cli:pane:process-info", { process_info: { shell_pid: 123456789,
+    foreground_processes: [{ pid: 123456789, name: process.env.SHELL.split('/').pop() }] } });
 } else if (args[0] === "pane" && args[1] === "get") {
   result("cli:pane:get", { type: "pane_get", pane: {
     pane_id: args[2], foreground_cwd: process.env.FAKE_HERDR_LANE_PATH,
   } });
 } else if (args[0] === "tab" && args[1] === "rename") {
-  state.initialLabel = args[3]; save();
+  state.initialLabel = args[3];
+  state.renamedAfterStart = Boolean(state.agent);
+  state.renamedAfterVerification = (state.environmentReads || 0) > 2;
+  save();
   result("cli:tab:rename", { type: "tab_info", tab: { tab_id: args[2], label: args[3] } });
 } else if (args[0] === "pane" && args[1] === "run") {
   state.environmentFile = args[3].match(/^ \\. '([^']+)'/)[1];
@@ -375,13 +382,14 @@ if (args[0] === "workspace" && args[1] === "list") {
     state.preparedEnv = JSON.parse(output.slice(split + 1));
     state.environmentOutput = output.slice(0, split + 1);
   }
+  state.environmentReadyAt = Date.now() + Number(process.env.FAKE_HERDR_ENV_DELAY || 0);
   state.prepareCommand = args[3]; save();
 } else if (args[0] === "pane" && args[1] === "read") {
   state.environmentReads = (state.environmentReads || 0) + 1; save();
   // Model terminal echo and a shell still finishing initialization. Neither
   // is proof the source command has executed.
   process.stdout.write(state.prepareCommand + "\\n" +
-    (state.environmentReads > 2 ? (state.environmentOutput || '') : ''));
+    (state.environmentReads > 2 && Date.now() >= (state.environmentReadyAt || 0) ? (state.environmentOutput || '') : ''));
 } else if (args[0] === "agent" && args[1] === "start") {
   if (process.env.FAKE_HERDR_START_FAIL === "1") process.exit(3);
   if (process.env.FAKE_ENTRY_BIN) {
@@ -1979,6 +1987,8 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
     const readIndex = calls.findLastIndex(args => args[0] === 'pane' && args[1] === 'read');
     assert.ok(readIndex > exportIndex && readIndex < startIndex);
     assert.equal(fake.state().initialLabel, 'agent:initial-pane');
+    assert.equal(fake.state().renamedAfterStart, true);
+    assert.equal(fake.state().renamedAfterVerification, true);
     assert.equal(fake.state().tabCount || 1, 1);
     const { loadRegistry } = await registryApi();
     const [metadata] = loadRegistry(fixture.repo).sessions;
@@ -2018,7 +2028,7 @@ test("dispatch leaves earlier and concurrently opened workspace shells untouched
 });
 
 test("dispatch retains initial tabs on environment and agent cwd failures", () => {
-  for (const failure of ['send', 'dropped', 'wrong', 'cwd']) {
+  for (const failure of ['send', 'dropped', 'wrong', 'start', 'cwd', 'prompt']) {
     const fixture = makeFixture();
     try {
       ignoreLaneState(fixture);
@@ -2028,17 +2038,64 @@ test("dispatch retains initial tabs on environment and agent cwd failures", () =
       if (failure === 'send') fixture.env.FAKE_HERDR_EXPORT_FAIL = "1";
       if (failure === 'dropped') fixture.env.FAKE_HERDR_EXPORT_DROP = "1";
       if (failure === 'wrong') fixture.env.FAKE_HERDR_EXPORT_WRONG = "1";
+      if (failure === 'start') fixture.env.FAKE_HERDR_START_FAIL = "1";
+      if (failure === 'prompt') fixture.env.FAKE_HERDR_PROMPT_FAIL = "1";
       const run = lane(fixture, ["dispatch", "initial-failure", "do not send"]);
       assert.equal(run.status, 1);
-      assert.match(run.stderr, /initial tab retained/u);
-      assert.ok(!fake.calls().some(args => args[1] === "close" || args[1] === "prompt" || args[1] === "focus"));
-      if (failure !== 'cwd') assert.ok(!fake.calls().some(args => args[1] === "start"));
+      assert.match(run.stderr, /initial tab retained|prompt command failed/u);
+      assert.equal(fake.state().initialLabel, undefined, 'a failed dispatch must keep the initial shell label');
+      assert.ok(!fake.calls().some(args => args[0] === 'tab' && args[1] === 'rename'));
+      assert.ok(!fake.calls().some(args => args[1] === "close" || (args[1] === "prompt" && failure !== 'prompt') || args[1] === "focus"));
+      if (['send', 'dropped', 'wrong'].includes(failure)) assert.ok(!fake.calls().some(args => args[1] === "start"));
       assert.ok(!existsSync(fake.state().environmentFile));
       assert.ok(!existsSync(dirname(fake.state().environmentFile)));
     } finally { fixture.cleanup(); }
   }
   negativeControl("failed initial-pane dispatch preserves its tab");
 });
+
+test("dispatch waits for shell readiness beyond five seconds", () => {
+  const fixture = makeFixture();
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, "slow-shell");
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/slow-shell" });
+    fixture.env.FAKE_HERDR_ENV_DELAY = "6000";
+    const preload = join(fixture.root, 'no-load.mjs');
+    writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[0,0,0];");
+    fixture.env.NODE_OPTIONS = `--import=${preload}`;
+    const run = lane(fixture, ["dispatch", "slow-shell", "--json"]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(JSON.parse(run.stdout).pane, "w-lane:p1");
+    assert.equal(fake.state().tabCount || 1, 1);
+    assert.equal(fake.state().renamedAfterVerification, true);
+    assert.ok(!fake.calls().some(args => args[1] === "focus" || args.includes("--focus")));
+  } finally { fixture.cleanup(); }
+});
+
+for (const shell of ["/opt/homebrew/bin/fish", "/opt/homebrew/bin/nu"]) {
+  test(`dispatch falls back to a separate agent tab for ${shell}`, () => {
+    const fixture = makeFixture({ main: "main", validate: "true", routes: {
+      engineer: { kind: "codex", env: ["PRIVATE_VALUE=from-route"] },
+    } });
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, "non-posix");
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/non-posix" });
+      fixture.env.SHELL = shell;
+      const run = lane(fixture, ["dispatch", "non-posix", "--route", "engineer", "--json"]);
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(JSON.parse(run.stdout).pane, "w-lane:p2");
+      assert.equal(fake.state().tabCount, 2);
+      assert.equal(fake.state().initialLabel, undefined);
+      const created = fake.calls().find(args => args[0] === "tab" && args[1] === "create");
+      assert.ok(created.includes("--no-focus"));
+      assert.ok(created.includes("PRIVATE_VALUE=from-route"));
+      assert.ok(created.includes("MONITOR_ENTRY_BYPASS=1"));
+      assert.ok(!fake.calls().some(args => args[1] === "run" || args[1] === "rename" || args[1] === "close" || args[1] === "focus" || args.includes("--focus")));
+    } finally { fixture.cleanup(); }
+  });
+}
 
 test("dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks", async () => {
   const scenarios = [

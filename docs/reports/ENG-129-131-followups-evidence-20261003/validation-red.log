@@ -1,0 +1,97 @@
+✖ a started command exiting 75 is a failure in check and promote, never a slot refusal (230.511458ms)
+✔ promotion holds the slot without replaying the chain when leaf retries (360.154792ms)
+✖ promotion holds the slot without replaying the chain when leaf declines (412.034334ms)
+✖ promotion holds the slot without replaying the chain when earlier timeout text (415.509459ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1459.879917
+
+✖ failing tests:
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ a started command exiting 75 is a failure in check and promote, never a slot refusal (230.511458ms)
+  AssertionError [ERR_ASSERTION]: GATE 6c92a5b0114b1bb96e8563725f918f523607ff8b exit=75 (0.028s)
+  
+  
+  75 !== 1
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/validation.test.mjs:164:14
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 75,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ promotion holds the slot without replaying the chain when leaf declines (412.034334ms)
+  AssertionError [ERR_ASSERTION]: ETIMEDOUT
+  TEST_SLOT_TIMEOUT_RETRY: promotion /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/validation-tiers-ACoPhC/worker: timeout under load; re-running once inside the held slot.
+  ETIMEDOUT
+  GATE 620e0e85cb3140fbeb9d8ea83ecfb323faa66ca4 exit=0 (0.211s)
+  
+  
+  0 !== 124
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/validation.test.mjs:194:12
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 124,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ promotion holds the slot without replaying the chain when earlier timeout text (415.509459ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      'chain',
+      'leaf',
+      'after',
+  +   'chain',
+  +   'leaf',
+  +   'after'
+    ]
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/validation.test.mjs:195:12
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'chain', 'leaf', 'after', 'chain', 'leaf', 'after' ],
+    expected: [ 'chain', 'leaf', 'after' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

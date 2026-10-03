@@ -1,0 +1,141 @@
+✖ dispatch opens a single agent tab in the initial pane and keeps fix rounds background (1132.534375ms)
+✖ dispatch retains initial tabs on environment and agent cwd failures (597.5645ms)
+✖ dispatch waits for shell readiness beyond five seconds (6872.196917ms)
+✖ dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish (1067.997958ms)
+✖ dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu (1099.388916ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10827.329833
+
+✖ failing tests:
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ dispatch opens a single agent tab in the initial pane and keeps fix rounds background (1132.534375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/lane.test.mjs:1990:12
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ dispatch retains initial tabs on environment and agent cwd failures (597.5645ms)
+  AssertionError [ERR_ASSERTION]: a failed dispatch must keep the initial shell label
+  + actual - expected
+  
+  + 'agent:initial-failure'
+  - undefined
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/lane.test.mjs:2046:14
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at node:internal/test_runner/test:1285:31
+      at node:internal/process/task_queues:151:7 {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'agent:initial-failure',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ dispatch waits for shell readiness beyond five seconds (6872.196917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/lane.test.mjs:2069:12
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish (1067.997958ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'w-lane:p1'
+  - 'w-lane:p2'
+             ^
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/lane.test.mjs:2086:14
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'w-lane:p1',
+    expected: 'w-lane:p2',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/helpers/bounded-test.mjs:47:10
+✖ dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu (1099.388916ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'w-lane:p1'
+  - 'w-lane:p2'
+             ^
+  
+      at file:///private/tmp/R-164-prerequisites/lanes/test/lane.test.mjs:2086:14
+      at file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:42
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+      at TestContext.<anonymous> (file:///private/tmp/R-164-prerequisites/test/helpers/bounded-test.mjs:48:29)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'w-lane:p1',
+    expected: 'w-lane:p2',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

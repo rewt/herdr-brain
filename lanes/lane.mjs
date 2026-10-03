@@ -1103,6 +1103,24 @@ function dispatchGoal(topic, promptText, briefPath) {
   return [...(selected ?? topic)].slice(0, 200).join("");
 }
 
+// Reusing the initial pane requires POSIX source/export syntax. Inspect the
+// actual shell when available, including while an rc child owns the foreground.
+// Unknown or non-POSIX shells retain their initial tab and use tab.create's env.
+function supportsInitialEnvironment(pane, deadline) {
+  const info = herdrJson(["pane", "process-info", "--pane", pane], { deadline })?.process_info;
+  const shellProcess = info?.foreground_processes?.find(item => item.pid === info.shell_pid);
+  let shell = shellProcess?.name ?? shellProcess?.argv0;
+  if (!shell && Number.isSafeInteger(info?.shell_pid) && info.shell_pid > 0) {
+    const result = spawnSync("/bin/ps", ["-p", String(info.shell_pid), "-o", "comm="], {
+      encoding: "utf8",
+      ...(deadline === undefined ? {} : { timeout: Math.max(1, deadline - Date.now()) }),
+    });
+    if (result.status === 0) shell = result.stdout.trim();
+  }
+  shell ||= process.env.SHELL;
+  return ["sh", "bash", "zsh", "dash", "ash", "ksh"].includes(basename(shell ?? "").replace(/^-/, ""));
+}
+
 function dispatch(topic, promptText, options = {}) {
   repositoryRoot({ requiredBy: "dispatch" });
   const branch = laneBranch(topic);
@@ -1123,7 +1141,8 @@ function dispatch(topic, promptText, options = {}) {
   if (workspaceId === undefined) {
     fail(`herdr shows no open workspace for ${path} and could not open one from the ${REPO_ROOT} workspace`);
   }
-  const initial = workspace.initial;
+  const initial = workspace.initial && supportsInitialEnvironment(workspace.initial.pane, options.deadline)
+    ? workspace.initial : undefined;
   let pane = initial?.pane, tabId = initial?.tabId;
   if (initial === undefined) {
     const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
@@ -1159,16 +1178,15 @@ function dispatch(topic, promptText, options = {}) {
     if (pairs.some(pair => !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes("\0"))) {
       fail("initial-pane environment requires NAME=value assignments; initial tab retained, nothing started");
     }
-    if (herdrJson(["tab", "rename", tabId, `agent:${topic}`], { deadline: options.deadline }) === undefined) {
-      fail(`could not rename initial tab ${tabId}; initial tab retained, nothing started`);
-    }
     const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
     const effective = new Map(pairs.map(pair => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]));
     const nonce = `lane-env-${randomBytes(24).toString("hex")}`;
     const directory = mkdtempSync(join(tmpdir(), "herdr-lane-env-"));
     const file = join(directory, "prepare.sh");
     const verifier = join(directory, "verify.sh");
-    const deadline = Math.min(options.deadline ?? Infinity, Date.now() + loadTimeout(5_000));
+    // The nonce proves shell readiness and exports, even while rc files finish.
+    // Share the agent-start allowance rather than imposing a separate 5 s cap.
+    const deadline = Math.min(options.deadline ?? Infinity, Date.now() + startAttempts * 500);
     let verified = false;
     try {
       const checks = [...effective].map(([key, value]) => `[ "\${${key}+x}" = x ] && [ "$${key}" = ${quote(value)} ]`).join(" && ");
@@ -1341,6 +1359,11 @@ function dispatch(topic, promptText, options = {}) {
       `partial success: ${action}, but session metadata could not be written (${error.message}); ` +
       `live agent '${agentName}' remains in workspace ${workspaceId} (pane ${pane}); do not replay dispatch`,
     );
+  }
+  // A retained failed dispatch must still look like the initial shell. Rename
+  // only after environment readiness, agent/cwd checks, delivery and recording.
+  if (initial !== undefined && herdrJson(["tab", "rename", tabId, `agent:${topic}`], { deadline: options.deadline }) === undefined) {
+    fail(`partial success: live agent '${agentName}' was recorded, but initial tab ${tabId} could not be renamed; do not replay dispatch`);
   }
   if (!options.silent) {
     process.stdout.write(
@@ -2238,7 +2261,9 @@ function check(args) {
   const path = join(directory, "gate.json");
   writeAgentFileAtomic(path, `${JSON.stringify(gate, null, 2)}\n`);
   process.stdout.write(`GATE ${head} exit=${gate.exit_code} (${gate.duration_s.toFixed(3)}s)\n`);
-  process.exit(gate.exit_code);
+  // Exit 75 is reserved for a pre-execution slot refusal. Keep the command's
+  // real code in the receipt/GATE line, but report a started exit 75 as failure.
+  process.exit(gate.exit_code === 75 ? 1 : gate.exit_code);
 }
 
 function withPromotionLock(operation) {

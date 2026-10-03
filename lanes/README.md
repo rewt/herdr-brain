@@ -117,8 +117,13 @@ If `dispatch` opens the Herdr workspace itself, it uses that invocation's initia
 tab and pane, sources the route environment and entry bypass from a private 0600
 temporary file, verifies the exported values before starting, deletes the file,
 and starts the agent through native `herdr agent start`. The workspace has one
-tab showing its agent, and operator focus stays in place. Initial tabs are retained
-on launch failures. A workspace opened earlier by `lane open`, a reused lane or a
+tab showing its agent, and operator focus stays in place. The environment nonce
+is the shell-readiness check and uses the agent-start allowance (or the remaining
+dispatch deadline), so slow rc files are not subject to a separate five-second
+cap. The initial tab is renamed only after dispatch succeeds; failures retain its
+original shell label. Non-POSIX shells such as fish and nushell retain the initial
+shell and dispatch through a separate agent tab with `--no-focus` and native env
+arguments. A workspace opened earlier by `lane open`, a reused lane or a
 fix round keeps the existing behavior: a new agent tab with `--no-focus`.
 Selecting that new background tab remains the upstream TOOL-1 follow-up.
 
@@ -227,8 +232,12 @@ Internal response waits adapt to measured machine load; see the
 
 Promotion validation takes the [host test slot](../test-slot/README.md), shared
 with other projects and bch-cloak. Set its paths and wait budget at the workspace
-boundary. Exit 75 is a slot refusal and supplies no failed validation receipt;
-retry or queue when the holder finishes. A recognized timeout under measured
-load retries once inside the same held slot before it counts as a failure.
+boundary. CLI exit 75 is a pre-execution slot refusal and supplies no GATE line
+or failed validation receipt; retry or queue when the holder finishes. A command
+that starts and exits 75 is a validation failure: check and promote exit 1,
+while the GATE line (for check) and failed receipt retain the command's exit 75.
+The promotion adapter never retries the full command chain. Retry-enabled leaf
+steps may retry their own timeout under measured load once inside the held slot;
+a leaf that declines its retry leaves the chain failed without replay.
 Slot tokens, paths and wait budgets are coordination fields excluded from the
 evidence fingerprint. Tests must not treat those values as validation inputs.

@@ -49,7 +49,7 @@ test('distinct worker, settle and queue panes reuse each tree through same-tree 
   assert.equal(f.git(['rev-parse', 'main']), result.head);
   assert.equal(f.git(['status', '--porcelain'], f.repo), '');
   assert.equal(fs.existsSync(f.workspace), false, 'queue closed only the scratch lane');
-  assert.match(fs.readFileSync(journal.validation.log, 'utf8'), /HEAD|tree/);
+  assert.equal(fs.readFileSync(journal.validation.log, 'utf8'), '', 'settle reviews code and reports without running validation');
 });
 
 test('saved settle readiness defers changed commands and environments to promotion without repeating review', { timeout: 30000 }, t => {

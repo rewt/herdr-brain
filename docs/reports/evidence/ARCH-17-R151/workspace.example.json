@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "roots": ["~/development/rewt", "~/development/bastian/bch-cloak"],
+  "projects": {
+    "herdr-brain": { "identity": "/Users/rewt/development/rewt/herdr-brain/.git",
+                     "record": "~/development/rewt/.org", "worktrees": "~/development/rewt/.worktrees/herdr-brain",
+                     "legacy": ["parent .lane.json at ~/development/rewt"] },
+    "bch-cloak":   { "identity": "/Users/rewt/development/bastian/bch-cloak/.git",
+                     "record": "~/development/bastian/.org", "worktrees": "~/.herdr/worktrees/bch-cloak",
+                     "legacy": ["kit lanes", "parent .lane.json at ~/development/bastian", "/private/tmp/bch-cloak-test-slot.lock"] }
+  },
+  "guardrails": { "lanes": { "max_workers": 6 }, "memory": { "min_free_percent": 25 } }
+}

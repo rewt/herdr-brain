@@ -1,0 +1,128 @@
+
+/Users/rewt/development/rewt/herdr-brain
+  -> {
+  name: 'herdr-brain',
+  joined: true,
+  record: '/Users/rewt/development/rewt/.org',
+  worktrees: '/Users/rewt/development/rewt/.worktrees/herdr-brain',
+  temp: {
+    natural: 'home/.herdr-monitor/p/herdr-brain/tmp/R-151',
+    chosen: 'home/.herdr-monitor/p/herdr-brain/tmp/R-151',
+    length: 43,
+    socket_room: 60
+  }
+}
+
+/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-workspace
+  -> {
+  name: 'herdr-brain',
+  joined: true,
+  record: '/Users/rewt/development/rewt/.org',
+  worktrees: '/Users/rewt/development/rewt/.worktrees/herdr-brain',
+  temp: {
+    natural: 'home/.herdr-monitor/p/herdr-brain/tmp/R-151',
+    chosen: 'home/.herdr-monitor/p/herdr-brain/tmp/R-151',
+    length: 43,
+    socket_room: 60
+  }
+}
+
+/Users/rewt/development/bastian/bch-cloak
+  -> {
+  name: 'bch-cloak',
+  joined: true,
+  record: '/Users/rewt/development/bastian/.org',
+  worktrees: '/Users/rewt/.herdr/worktrees/bch-cloak',
+  temp: {
+    natural: 'home/.herdr-monitor/p/bch-cloak/tmp/R-151',
+    chosen: 'home/.herdr-monitor/p/bch-cloak/tmp/R-151',
+    length: 41,
+    socket_room: 62
+  }
+}
+
+/Users/rewt/development/rewt/coach
+  -> {
+  name: 'coach-2cc165',
+  joined: false,
+  record: 'home/.herdr-monitor/p/coach-2cc165/record',
+  worktrees: 'home/.herdr-monitor/p/coach-2cc165/worktrees',
+  temp: {
+    natural: 'home/.herdr-monitor/p/coach-2cc165/tmp/R-151',
+    chosen: 'home/.herdr-monitor/p/coach-2cc165/tmp/R-151',
+    length: 44,
+    socket_room: 59
+  }
+}
+
+/Users/rewt/development/bastian/apnt
+  -> {
+  inside: false,
+  project: null,
+  why: 'outside every root; the operator joins it by entering it'
+}
+
+/Users/rewt/development/rewt
+  -> { inside: true, project: null, why: 'not a Git project' }
+
+bch-cloak effective guardrails: {
+ "guardrails": {
+  "lanes": {
+   "max_workers": 2,
+   "max_reviews": 1,
+   "max_promotions": 1
+  },
+  "settle": {
+   "max_sessions_per_day": 30
+  },
+  "load": {
+   "max_per_cpu": 1
+  },
+  "memory": {
+   "max_swap_used_mb": 0,
+   "min_free_percent": 25
+  },
+  "test_slot": {
+   "tiers": [
+    "promotion",
+    "release"
+   ],
+   "when_held": "wait"
+  },
+  "approvals": {
+   "reserved": [
+    "security",
+    "funds-and-chain",
+    "publish",
+    "delete-data",
+    "licensing",
+    "priorities",
+    "prover"
+   ]
+  },
+  "tmp": {
+   "max_path": 60
+  }
+ },
+ "ignored": [
+  {
+   "key": "memory.min_free_percent",
+   "value": 10,
+   "kept": 25,
+   "source": "/Users/rewt/development/bastian/bch-cloak/.lane.json",
+   "why": "would widen"
+  }
+ ]
+}
+
+leases (cap 2):
+ dead holder true
+ live holder 0 {"granted":true,"held":1,"cap":2,"file":"home/.herdr-monitor/leases/workers/herdr-brain-R-0.json"}
+ live holder 1 {"granted":true,"held":2,"cap":2,"file":"home/.herdr-monitor/leases/workers/bch-cloak-R-1.json"}
+ third {"granted":false,"held":2,"cap":2}
+
+ignored now: ["memory.min_free_percent"]
+26 herdr-brain                      natural 51 -> chosen /Users/rewt/.herdr-monitor/p/herdr-brain/tmp/R-1512 51 socket room 52
+26 some-longer-project-name-2cc165  natural 71 -> chosen /Users/rewt/.herdr-monitor/t/42868691 37 socket room 66
+45 herdr-brain                      natural 70 -> chosen /Users/firstname.lastname-long/.herdr-monitor/t/f01b7f77 56 socket room 47
+45 some-longer-project-name-2cc165  natural 90 -> chosen /Users/firstname.lastname-long/.herdr-monitor/t/42868691 56 socket room 47

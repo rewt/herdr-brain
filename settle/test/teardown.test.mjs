@@ -6,6 +6,7 @@ import { fixture } from './fixture.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { pathToFileURL } from 'node:url';
+import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
 
 async function until(predicate) {
   const deadline = Date.now() + 5000;
@@ -39,7 +40,16 @@ for (const slow of [false, true]) test(`teardown stops a ${slow ? 'slow transpor
   for (const pid of [owner, transport].filter(Boolean)) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
 });
 
-test('teardown preserves the record and refuses a lock pointing at an unrelated process', async t => {
+test('a real detached owner stays alive through test end and stops in the after-hook', async t => {
+  const { root, child } = spawnDetachedFixture(t, 'inbox');
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const owner = JSON.parse(fs.readFileSync(path.join(root, 'owner.json'), 'utf8'));
+  assert.equal(owner.pgid, owner.pid);
+  assert.equal(fs.readFileSync(path.join(root, 'teardown-complete'), 'utf8'), 'owner stopped');
+});
+
+test('teardown treats a lock pointing at an unrelated command as gone without signalling it', async t => {
   const f = fixture(t, { actor: 'settle-teardown-refusal-test' });
   const child = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
   const inbox = path.join(f.org, 'supervisor/inbox.log'), lock = `${inbox}.owner.lock`;
@@ -47,8 +57,8 @@ test('teardown preserves the record and refuses a lock pointing at an unrelated 
   fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: child.pid,
     argv: [process.execPath, path.join(f.source, 'supervisor/prompt-supervisor.mjs'), '--inbox', inbox, '--owner-worker'] }));
   try {
-    await assert.rejects(f.cleanup(), /Cannot confirm fixture inbox owner identity/);
-    assert.ok(fs.existsSync(f.root));
+    await f.cleanup();
+    assert.equal(fs.existsSync(f.root), false);
     assert.doesNotThrow(() => process.kill(child.pid, 0));
   } finally {
     fs.rmSync(lock, { recursive: true, force: true });

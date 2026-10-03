@@ -5,11 +5,15 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const [root, mode] = process.argv.slice(2);
-if (!['completion', 'deadline', 'wrapper-death', 'failure', 'blocked', 'blocked-leaf', 'early-cancel', 'hold'].includes(mode)) throw Error('unknown detached fixture');
+if (!['completion', 'deadline', 'wrapper-death', 'failure', 'blocked', 'blocked-leaf', 'early-cancel', 'hold', 'inbox'].includes(mode)) throw Error('unknown detached fixture');
 const executable = path.join(root, 'fixture-deadline');
 const source = fileURLToPath(new URL('./fixture-deadline.c', import.meta.url));
 const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', executable, source], {
   encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: root },
 });
 if (built.error || built.status) throw Error(built.error?.message ?? built.stderr);
-await import('../../discovery/test/helpers/detached-descendants.mjs');
+if (mode === 'inbox') {
+  delete process.env.NODE_TEST_CONTEXT;
+  await import('../../settle/test/helpers/detached-inbox.mjs');
+}
+else await import('../../discovery/test/helpers/detached-descendants.mjs');

@@ -19,7 +19,7 @@ export async function waitForDetachedCleanup(root) {
     const result = tracker.snapshot();
     assert.ok(result.ok, result.error);
     const live = [...result.value.values()].filter(row => !/^Z/.test(row.state) && row.command.includes(root) &&
-      (row.command.includes(executable) || row.command.includes(' -e ')));
+      (row.command.includes(executable) || row.command.includes(' -e ') || row.command.includes('--owner-worker')));
     empty = live.length ? 0 : empty + 1;
     if (empty === 3) return;
     assert.ok(Date.now() < deadline, `detached fixture survived native deadline: ${live.map(row => row.pid).join(', ')}`);

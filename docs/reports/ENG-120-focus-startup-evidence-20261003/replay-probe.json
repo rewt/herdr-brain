@@ -1,0 +1,533 @@
+{
+  "startedAt": 1791043793618,
+  "server": {
+    "type": "pong",
+    "version": "0.8.2",
+    "protocol": 20,
+    "capabilities": {
+      "live_handoff": true,
+      "detached_server_daemon": true
+    }
+  },
+  "before": "wHD:pR",
+  "after": "wHD:pR",
+  "streams": [
+    [
+      {
+        "at": 1791043793937,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY6",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794047,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY7",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794157,
+        "event": {
+          "data": {
+            "pane_id": "wFT:p1",
+            "type": "pane_focused",
+            "workspace_id": "wFT"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794267,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794374,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY7",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794483,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY6",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794587,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794695,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pK",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794798,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794900,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795001,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795108,
+        "event": {
+          "data": {
+            "pane_id": "wEN:p2",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795215,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795321,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pN",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795422,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795532,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pN",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795642,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795744,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pN",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795849,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pF",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795955,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796060,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796169,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796273,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pN",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796383,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pK",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796484,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      }
+    ],
+    [
+      {
+        "at": 1791043794385,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY6",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794495,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY7",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794599,
+        "event": {
+          "data": {
+            "pane_id": "wFT:p1",
+            "type": "pane_focused",
+            "workspace_id": "wFT"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794700,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794807,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY7",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043794910,
+        "event": {
+          "data": {
+            "pane_id": "wFN:pY6",
+            "type": "pane_focused",
+            "workspace_id": "wFN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795016,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795126,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pK",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795235,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795344,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795449,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795559,
+        "event": {
+          "data": {
+            "pane_id": "wEN:p2",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795664,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795765,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pN",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795868,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043795969,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pN",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796078,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796184,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pN",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796288,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pF",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796393,
+        "event": {
+          "data": {
+            "pane_id": "wEN:pM",
+            "type": "pane_focused",
+            "workspace_id": "wEN"
+          },
+          "event": "pane_focused"
+        }
+      },
+      {
+        "at": 1791043796500,
+        "event": {
+          "data": {
+            "pane_id": "wHD:pR",
+            "type": "pane_focused",
+            "workspace_id": "wHD"
+          },
+          "event": "pane_focused"
+        }
+      }
+    ]
+  ],
+  "errors": [],
+  "comparison": {
+    "identicalSubscriptionPrefix": true,
+    "rcOffset": 7,
+    "rcMatchingEvents": 25
+  },
+  "rcEvidence": "/private/tmp/herdr-acceptance-JN4Osm/evidence/focus-trace.jsonl"
+}

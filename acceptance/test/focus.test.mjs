@@ -8,7 +8,7 @@ import { spawnChild, waitForExit, killChild } from '../../test/helpers/child.mjs
 import { startFocusMonitor, assertFocus } from '../focus.mjs';
 import { HarnessLimit } from '../limits.mjs';
 
-async function fixture(t, { panes = [], workspaces = [], startupPanes = [] } = {}) {
+async function fixture(t, { panes = [], workspaces = [], startupPanes = [], continuousFocusMs = 0, serverVersion = '0.8.2' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-focus-'));
   const socketPath = path.join(root, 'server.sock');
   const serverFile = path.join(root, 'server.mjs');
@@ -20,11 +20,13 @@ const server=net.createServer(socket=>{let buffer='';socket.setEncoding('utf8');
 socket.on('data',chunk=>{buffer+=chunk;while(buffer.includes('\\n')){const i=buffer.indexOf('\\n'),r=JSON.parse(buffer.slice(0,i));buffer=buffer.slice(i+1);
 if(r.method==='events.subscribe'){if(JSON.stringify(r.params.subscriptions)!==JSON.stringify([{type:'pane.focused'}]))throw Error('invalid native subscription shape');subscriptions.add(socket);socket.write(JSON.stringify({id:r.id,result:{type:'subscription_started'}})+'\\n');
 ${JSON.stringify(startupPanes)}.forEach((id,i)=>setTimeout(()=>{if(!socket.destroyed)socket.write(JSON.stringify(event(id))+'\\n');},100*(i+1)));}
+else if(r.method==='ping')socket.write(JSON.stringify({id:r.id,result:{type:'pong',version:${JSON.stringify(serverVersion)},protocol:20}})+'\\n');
 else if(r.method==='pane.current'){if(JSON.stringify(r.params)!=='{}')throw Error('sampler must read global focus without caller context');socket.write(JSON.stringify({id:r.id,result:{type:'pane_current',pane:{pane_id:pane,workspace_id:workspace(pane),focused:true}}})+'\\n');}
 else if(r.method==='pane.get')socket.write(JSON.stringify({id:r.id,result:{pane:{pane_id:r.params.pane_id,workspace_id:workspace(r.params.pane_id)}}})+'\\n');
 else socket.write(JSON.stringify({id:r.id,error:{code:'forbidden',message:'monitor attempted a mutation'}})+'\\n');}});
 socket.on('close',()=>subscriptions.delete(socket));});
 server.listen(${JSON.stringify(socketPath)},()=>console.log('ready'));
+if(${continuousFocusMs})setInterval(()=>{if(!subscriptions.size)return;pane=pane==='operator:p7'?'external:p1':'operator:p7';for(const socket of subscriptions)socket.write(JSON.stringify(event(pane))+'\\n');},${continuousFocusMs || 100});
 setInterval(()=>{const file=${JSON.stringify(path.join(root, 'change'))};if(!fs.existsSync(file))return;const content=fs.readFileSync(file,'utf8');fs.unlinkSync(file);
 const change=content?JSON.parse(content):{panes:['scratch:p2','operator:p7']};
 for(const next of change.panes){pane=next;if(change.events!==false)for(const socket of subscriptions)socket.write(JSON.stringify(event(pane))+'\\n');}},10);
@@ -87,6 +89,7 @@ test('native startup replay settles before the baseline and subsequent transient
   assert.equal(summary.baseline, 'operator:p7');
   assert.equal(summary.externalChanges.length, 0);
   assert.equal(summary.startupEvents.length, 2);
+  assert.equal(summary.startupDrain.reason, 'quiet');
   assert.ok(summary.monitoringStartedAt - summary.startupEvents.at(-1).at >= 400);
   assert.equal(summary.events, 2);
   assert.equal(summary.changes.length, 1);
@@ -95,6 +98,44 @@ test('native startup replay settles before the baseline and subsequent transient
   assert.deepEqual(rows.slice(0, 2), summary.startupEvents);
   assert.ok(rows.filter((row) => row.type === 'sample').every((row) => row.panes[0] === 'operator:p7'));
   assert.throws(() => assertFocus(summary), /harness-owned destination \(scratch\)/);
+});
+
+test('continuous operator focus starts without silence and an immediate transient harness move still fails', async (t) => {
+  // More than five seconds with no quiet interval reproduces RC-2. The stream
+  // keeps running after readiness, rather than stopping to let startup pass.
+  const { root, monitor, change } = await fixture(t, { workspaces: ['scratch'], continuousFocusMs: 12 });
+  fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), JSON.stringify({ type: 'start', id: 'busy-call', at: Date.now(),
+    args: ['pane', 'run', 'scratch:p2', 'worker'], requested: ['agent', 'start', 'worker', '--pane', 'scratch:p2'] }) + '\n');
+  change(['scratch:p2', 'operator:p7']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,150)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.errors.length, 0);
+  assert.equal(summary.startupDrain.reason, 'replay-bound');
+  assert.equal(summary.startupDrain.server.version, '0.8.2');
+  assert.ok(summary.startupDrain.elapsedMs > 5000);
+  assert.ok(summary.startupEvents.length >= 512);
+  assert.ok(summary.events > 2);
+  assert.ok(summary.externalChanges.length > 0);
+  assert.equal(summary.changes.length, 1);
+  assert.equal(summary.changes[0].type, 'event');
+  assert.ok(summary.changes[0].at >= summary.monitoringStartedAt);
+  assert.equal(summary.changes[0].calls[0].id, 'busy-call');
+  assert.throws(() => assertFocus(summary), /pane run scratch:p2 worker/);
+});
+
+test('continuous operator activity alone passes after bounded replay', async (t) => {
+  const { monitor } = await fixture(t, { continuousFocusMs: 1 });
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop();
+  assert.equal(summary.startupDrain.reason, 'replay-bound');
+  assert.ok(summary.startupEvents.length >= 512);
+  assert.ok(summary.externalChanges.length > 0);
+  assert.match(assertFocus(summary), /zero harness focus changes/);
+});
+
+test('a busy stream from an unknown server never assumes the verified replay bound', async (t) => {
+  await assert.rejects(fixture(t, { continuousFocusMs: 1, serverVersion: '0.9.0' }),
+    error => error instanceof HarnessLimit && /replay bound unavailable for Herdr 0.9.0/.test(error.message));
 });
 
 test('owned changes need no correlated call and incomplete monitoring never passes', () => {

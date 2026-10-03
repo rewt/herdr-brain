@@ -1,0 +1,122 @@
+{
+  "originalCommand": "npm test",
+  "originalExitCode": 1,
+  "copiedEntry": {
+    "pass": 2,
+    "fail": 0,
+    "skip": 0
+  },
+  "coreAndModules": {
+    "pass": 697,
+    "fail": 1,
+    "skip": 11
+  },
+  "cycle": "not run: core phase returned exit 1",
+  "failure": "not ok 708 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane\n  ---\n  duration_ms: 1634.430542\n  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-focus-startup/test/helpers/bounded-test.mjs:42:10'\n  failureType: 'testCodeFailure'\n  error: 'invalid fixture pid: 0'\n  code: 'ERR_TEST_FAILURE'\n  stack: |-\n    registerProcess (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-focus-startup/test/helpers/processes.mjs:77:53)\n    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-focus-startup/promote/test/promote.test.mjs:462:15\n    async Test.run (node:internal/test_runner/test:797:9)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n",
+  "skips": [
+    {
+      "id": 16,
+      "name": "org console starts the console app, which writes an example configuration on first run",
+      "reason": "console dependencies not installed"
+    },
+    {
+      "id": 65,
+      "name": "MCP stdio integration (install with npm --prefix mcp ci)",
+      "reason": "optional MCP dependencies not installed"
+    },
+    {
+      "id": 575,
+      "name": "real alternative sandbox denies outside, symlink, metadata, record, rename and network writes",
+      "reason": "set MONITOR_TEST_ALTERNATIVE to sandbox-exec or bwrap outside a nested sandbox"
+    },
+    {
+      "id": 576,
+      "name": "real filters remain functional through allocation, commit, check and fast-forward promotion",
+      "reason": "set MONITOR_TEST_ALTERNATIVE to exercise real bounded Git filters"
+    },
+    {
+      "id": 577,
+      "name": "real main-mode alternative guard protects linked shared records and leaves the native runtime writable",
+      "reason": "set MONITOR_TEST_ALTERNATIVE for the main-mode guard regression"
+    },
+    {
+      "id": 581,
+      "name": "native main-mode workers and validation deny record and coordination writes (default record)",
+      "reason": "set MONITOR_TEST_SANDBOX to run this offline native filesystem regression"
+    },
+    {
+      "id": 582,
+      "name": "native main-mode workers and validation deny record and coordination writes (linked record and event log)",
+      "reason": "set MONITOR_TEST_SANDBOX to run this offline native filesystem regression"
+    },
+    {
+      "id": 648,
+      "name": "Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection",
+      "reason": "requires a Linux kernel with io_uring enabled"
+    },
+    {
+      "id": 655,
+      "name": "macOS copies nonempty files and refuses a redirected temporary root after profile construction",
+      "reason": "set the actual macOS/native provider for host-only applicability proof"
+    },
+    {
+      "id": 656,
+      "name": "Codex copies nonempty files and refuses a redirected temporary root after profile construction",
+      "reason": "set the actual macOS/native provider for host-only applicability proof"
+    },
+    {
+      "id": 672,
+      "name": "real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied",
+      "reason": "set MONITOR_TEST_SANDBOX to a native Codex executable for this offline sandbox check"
+    }
+  ],
+  "isolatedRetry": {
+    "command": "node test/helpers/run.mjs promote/test/promote.test.mjs",
+    "exitCode": 0,
+    "pass": 22,
+    "fail": 0,
+    "skip": 0
+  },
+  "completeRetry": {
+    "command": "npm test",
+    "exitCode": 0,
+    "phases": [
+      {
+        "name": "copied-entry",
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skip": 0,
+        "todo": 0,
+        "durationMs": 19665.008958
+      },
+      {
+        "name": "core-and-modules",
+        "tests": 709,
+        "pass": 698,
+        "fail": 0,
+        "cancelled": 0,
+        "skip": 11,
+        "todo": 0,
+        "durationMs": 303751.960875
+      },
+      {
+        "name": "cycle",
+        "tests": 150,
+        "pass": 150,
+        "fail": 0,
+        "cancelled": 0,
+        "skip": 0,
+        "todo": 0,
+        "durationMs": 751144.347334
+      }
+    ],
+    "identicalOriginalSkips": true
+  },
+  "logFiles": [
+    ".lane/test-after.log",
+    ".lane/test-promote-retry.log",
+    ".lane/test-after-retry.log"
+  ]
+}

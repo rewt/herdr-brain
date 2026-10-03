@@ -7,8 +7,14 @@ import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { HerdrClient } from '../lanes/board/herdr-client.mjs';
 import { HarnessLimit, ProductBoundary } from './limits.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 const FILE = fileURLToPath(import.meta.url);
+// Herdr 0.8.2's EventHub retains at most 512 lifecycle events (all kinds).
+// Seeing this many focus events exhausts the initial replay even if live
+// operator navigation keeps the stream busy. No candidate work precedes ready.
+const MAX_REPLAY_EVENTS = 512;
+const STARTUP_TIMEOUT_MS = 60_000;
 function readCalls(evidence) {
   const file = path.join(evidence, 'focus-calls.jsonl');
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
@@ -60,7 +66,7 @@ export async function startFocusMonitor({ socketPath, evidence, ownership = path
     const receive = (value) => { if (value.kind === kind) finish(undefined, value.summary); };
     const ended = () => finish(new HarnessLimit(`focus monitor exited early: ${stderr}`));
     const failed = (error) => finish(new HarnessLimit(`focus monitor unavailable: ${error.message}`));
-    const timer = setTimeout(() => { child.kill(); finish(new HarnessLimit(`focus monitor ${kind} timeout: ${stderr}`)); }, kind === 'ready' ? 12000 : 7000);
+    const timer = setTimeout(() => { child.kill(); finish(new HarnessLimit(`focus monitor ${kind} timeout: ${stderr}`)); }, loadTimeout(kind === 'ready' ? STARTUP_TIMEOUT_MS + 10000 : 7000));
     child.on('message', receive); child.once('exit', ended); child.once('error', failed);
   });
   const ready = await message('ready');
@@ -218,19 +224,30 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   process.on('message', (value) => { if (value.kind === 'stop') void finish(); });
   process.on('disconnect', () => { clearTimeout(timer); client.close(); process.exit(); });
   try {
+    const server = await client.ping();
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('focus event subscription timeout')), 3000);
       client.once('ready', () => { clearTimeout(timeout); resolve(); });
       client.subscribe([{ type: 'pane.focused' }]);
     });
-    // Four quiet native polling cycles drain startup replay. A busy or broken
-    // stream times out as a harness limitation; never discard events mid-run.
+    // A quiet stream takes the short path. Continuous live activity cannot
+    // extend replay beyond the retained-event bound. Verify the implementation
+    // version before using that bound; the wire protocol exposes no cursor.
     const drainingAt = Date.now();
+    const deadline = drainingAt + loadTimeout(STARTUP_TIMEOUT_MS);
+    let drainReason = 'quiet';
     lastEventAt = Math.max(lastEventAt, drainingAt);
     while (Date.now() - lastEventAt < 400) {
-      if (Date.now() - drainingAt >= 5000) throw new Error('focus subscription startup did not settle');
+      if (summary.startupEvents.length >= MAX_REPLAY_EVENTS) {
+        if (server.version !== '0.8.2' || server.protocol !== 20) throw new Error(`focus replay bound unavailable for Herdr ${server.version} protocol ${server.protocol}`);
+        drainReason = 'replay-bound';
+        break;
+      }
+      if (Date.now() >= deadline) throw new Error('focus subscription startup replay deadline exceeded');
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
+    summary.startupDrain = { reason: drainReason,
+      maxReplayEvents: MAX_REPLAY_EVENTS, server, elapsedMs: Date.now() - drainingAt };
     await sample();
     monitoring = true;
     summary.monitoringStartedAt = Date.now();

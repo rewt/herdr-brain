@@ -88,9 +88,14 @@ subscribes to `pane.focused` and handles native `pane_focused` event envelopes
 so an owned or call-correlated change restored between samples also fails.
 Herdr 0.8.2 replays retained lifecycle events when subscribing. Before candidate
 work starts, the monitor retains these as `subscription-startup` diagnostics,
-waits for four quiet 100 ms polling cycles (bounded to five seconds), then takes
-its baseline. A stream that cannot settle is PENDING. Events are never discarded
-after monitoring starts.
+then takes its baseline after either four quiet 100 ms polling cycles or at
+least 512 focus events. Herdr 0.8.2 (protocol 20) retains at most 512 lifecycle
+events across all kinds, so the latter exhausts replay even while the operator
+keeps navigating. The monitor verifies that version before using the bound;
+unknown bounds or a stream exceeding the load-adjusted 60-second startup deadline
+are PENDING. `startupDrain` records the server, completion reason and elapsed
+time. Candidate work waits for readiness, and events are never discarded after
+monitoring starts.
 `focus-trace.jsonl`, `focus-calls.jsonl` and `focus-summary.json` retain the initial
 and current baselines, case, timestamps, samples, events and actual/requested
 Herdr calls. A move into a harness-owned pane or workspace fails, including late

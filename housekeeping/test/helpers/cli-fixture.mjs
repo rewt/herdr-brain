@@ -3,19 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createReceiptTracker } from '../../../test/helpers/receipts.mjs';
+import { copyProduct } from '../../../lib/product-files.mjs';
 
 const sourceRoot = fileURLToPath(new URL('../../../', import.meta.url));
 export function installRuntime(root) {
-  for (const relative of ['housekeeping/housekeeping.mjs', 'housekeeping/config.mjs', 'supervisor/tidy-tabs.mjs',
-    'supervisor/prompt-supervisor.mjs', 'supervisor/composer.mjs', 'supervisor/notice-lock.mjs', 'lanes/promotion-lock.mjs',
-    'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs', 'lib/deadline.mjs', 'lib/process-owner.mjs',
-    'lib/processes.mjs', 'lib/process-source.c', 'lib/native/manifest.json',
-    'lib/native/process-source-darwin-arm64', 'lib/native/process-source-darwin-x64',
-    'lib/fleet.mjs', 'herdr/entry-lock.mjs']) {
-    const target = path.join(root, relative);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(path.join(sourceRoot, relative), target);
-  }
+  copyProduct(sourceRoot, root);
   return fs.realpathSync(path.join(root, 'housekeeping/housekeeping.mjs'));
 }
 export function configureCliFixture(f) {

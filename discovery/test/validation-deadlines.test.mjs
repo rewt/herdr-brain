@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { command } from '../runtime.mjs';
 import { fleetPath } from '../../lib/fleet.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { copyProduct } from '../../lib/product-files.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { FAST_VALIDATION_TIMEOUT, PROMOTION_VALIDATION_TIMEOUT, VALIDATION_WRAPPER_GRACE,
   ENTRY_COMMAND_GRACE, MAX_ENTRY_TIMEOUT, entryValidationTimeout, requestTimeout, validationTimeout, validationStepTimeout } from '../deadlines.mjs';
@@ -40,9 +41,7 @@ test('declared promotion outlives fast owner, wrapper and client bounds with rea
   // Execute the same production stack at short wall-clock bounds. Only these
   // numeric policy constants change; sandbox construction and the native owner
   // (including lifetime markers and descendant sweeps) remain real.
-  for (const directory of ['bin', 'lib', 'herdr', 'lanes', 'promote', 'settle', 'housekeeping', 'discovery', 'dispatch', 'watch', 'test-slot']) {
-    fs.cpSync(path.join(product, directory), path.join(source, directory), { recursive: true });
-  }
+  copyProduct(product, source);
   const policy = path.join(source, 'discovery/deadlines.mjs');
   const scaled = { FAST_VALIDATION_TIMEOUT: 1_000, PROMOTION_VALIDATION_TIMEOUT: 10_000,
     VALIDATION_WRAPPER_GRACE: 2_000, ENTRY_COMMAND_GRACE: 1_000, MAX_ENTRY_TIMEOUT: 20_000,

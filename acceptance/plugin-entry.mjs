@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { quote } from '../discovery/runtime.mjs';
+import { copyProduct } from '../lib/product-files.mjs';
 
 const { values } = parseArgs({ options: { candidate: { type: 'string' }, 'native-codex': { type: 'string' } } });
 if (!values.candidate || !values['native-codex']) throw new Error('usage: node acceptance/plugin-entry.mjs --candidate FINAL_PRODUCT_DIRECTORY --native-codex ABSOLUTE_NATIVE_CODEX');
@@ -59,10 +60,7 @@ let installed = false, pluginInstalled = false, server, serverLog, runtime, plug
 try {
   // Snapshot only the distribution used by entry, not local runtime state or
   // project instructions. Candidate build/activation remains real product code.
-  for (const name of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'test-slot', 'supervisor', 'mcp', 'console', 'herdr-plugin.toml']) {
-    fs.cpSync(path.join(candidate, name), path.join(source, name), { recursive: true,
-      filter: (file) => !file.split(path.sep).includes('node_modules') });
-  }
+  copyProduct(candidate, source, { includeApps: true });
   function init(repo) {
     for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Entry Canary'], ['config', 'user.email', 'canary@example.invalid']]) ok('git', args, repo);
     fs.writeFileSync(path.join(repo, 'seed.txt'), 'Pristine project\n');

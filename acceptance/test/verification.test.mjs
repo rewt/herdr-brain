@@ -8,9 +8,83 @@ import net from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { permissionArgs, sessionEnv } from '../security.mjs';
 import { createVerification, safeGitArgs } from '../verify.mjs';
+import { copyProduct } from '../../lib/product-files.mjs';
+import { snapshot } from '../../herdr/entry-runtime.mjs';
+import { copyNativeTransport } from '../transport.mjs';
+import { installRuntime } from '../../housekeeping/test/helpers/cli-fixture.mjs';
 
 const discovered = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout?.trim();
 const skip = process.platform !== 'darwin' || !discovered;
+function installProduct(installation) {
+  copyProduct(path.resolve(import.meta.dirname, '../..'), installation);
+}
+
+// Parse imports without executing CLI entrypoints, models, services or hooks.
+// Run on every platform, including machines without the native harness.
+function checkInstalledImports(installation) {
+  return spawnSync(process.execPath, ['--experimental-vm-modules', '--input-type=module', '-e', `
+    import fs from 'node:fs'; import path from 'node:path'; import assert from 'node:assert/strict';
+    import { SourceTextModule } from 'node:vm';
+    const root = process.argv[1];
+    function visit(directory) {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (['test', 'tests', 'node_modules'].includes(entry.name)) continue;
+        const file = path.join(directory, entry.name);
+        if (entry.isDirectory()) visit(file);
+        else if (entry.name.endsWith('.mjs')) {
+          const module = new SourceTextModule(fs.readFileSync(file, 'utf8'), { identifier: file });
+          for (const specifier of module.dependencySpecifiers) if (specifier.startsWith('.')) {
+            const dependency = path.resolve(path.dirname(file), specifier);
+            assert.ok(fs.existsSync(dependency), path.relative(root, file) + ' imports missing ' + path.relative(root, dependency));
+          }
+        }
+      }
+    }
+    visit(root);
+  `, installation], { encoding: 'utf8', timeout: 20000 });
+}
+
+test('installed product contains every relative module import, including fleet dependencies', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-product-imports-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const installation = path.join(root, 'installed');
+  installProduct(installation);
+  const checked = checkInstalledImports(installation);
+  assert.equal(checked.status, 0, checked.stderr || checked.error?.message);
+  const plan = snapshot(installation, path.join(root, 'runtime'), 'import-regression');
+  plan.prepare();
+  const runtime = checkInstalledImports(plan.directory);
+  assert.equal(runtime.status, 0, runtime.stderr || runtime.error?.message);
+  const plugin = path.join(root, 'plugin');
+  copyProduct(path.resolve(import.meta.dirname, '../..'), plugin, { includeApps: true });
+  const apps = checkInstalledImports(plugin);
+  assert.equal(apps.status, 0, apps.stderr || apps.error?.message);
+  // These formerly maintained partial product lists independently.
+  const transport = copyNativeTransport(path.join(root, 'native'));
+  const native = checkInstalledImports(path.resolve(path.dirname(transport), '..'));
+  assert.equal(native.status, 0, native.stderr || native.error?.message);
+  const housekeeping = path.join(root, 'housekeeping'); installRuntime(housekeeping);
+  const schedule = checkInstalledImports(housekeeping);
+  assert.equal(schedule.status, 0, schedule.stderr || schedule.error?.message);
+  // Release builders archive every tracked file without a path allowlist.
+  const git = (args) => {
+    const result = spawnSync('git', ['-C', plugin, ...args], { encoding: undefined, maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+    assert.equal(result.status, 0, String(result.stderr)); return result.stdout;
+  };
+  git(['init', '-q']); git(['add', '.']);
+  git(['-c', 'user.name=Packaging test', '-c', 'user.email=packaging@example.invalid', 'commit', '-qm', 'Product']);
+  const released = path.join(root, 'release'); fs.mkdirSync(released);
+  const unpack = spawnSync('tar', ['-x', '-C', released], { input: git(['archive', 'HEAD']) });
+  assert.equal(unpack.status, 0, String(unpack.stderr));
+  const release = checkInstalledImports(released);
+  assert.equal(release.status, 0, release.stderr || release.error?.message);
+  // Prove the check detects the packaging regression even without executing a model.
+  fs.unlinkSync(path.join(installation, 'herdr/entry-lock.mjs'));
+  const missing = checkInstalledImports(installation);
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /imports missing herdr\/entry-lock\.mjs/);
+});
 function fixture(t) {
   const previousActor = process.env.ORG_ACTOR;
   process.env.ORG_ACTOR = `acceptance-verification-${t.name}`;
@@ -78,9 +152,7 @@ test('model-controlled tests and Git filters execute only sandboxed; fsmonitor/h
 
 test('record verification and scripted answer are kernel-confined even if model output redirects .org', { skip }, (t) => {
   const { root, repo, spec, run, discoveryRoots, scratchRoots } = fixture(t);
-  const archive = spawnSync('git', ['archive', 'HEAD', 'bin', 'lib', 'lanes', 'housekeeping', 'settle', 'promote', 'release', 'test-slot', 'supervisor', 'discovery', 'dispatch', 'watch'], { cwd: path.resolve('.'), encoding: undefined, maxBuffer: 16 * 1024 * 1024 });
-  assert.equal(archive.status, 0, String(archive.stderr));
-  const unpack = spawnSync('tar', ['-x', '-C', spec.installation], { input: archive.stdout }); assert.equal(unpack.status, 0, String(unpack.stderr));
+  installProduct(spec.installation);
   run(process.execPath, [path.join(spec.installation, 'bin/org.mjs'), 'init', path.join(repo, '.org')]);
   const verifier = createVerification(spec, { root, scratchRoots, discoveryRoots, run });
   const parent = verifier.record(['add', 'Routing decision', '--role', 'architect']).trim().split('\n')[0];

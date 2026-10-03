@@ -9,6 +9,7 @@ import { HarnessLimit, isHarnessBoundary, isProductBoundary, commandFailure } fr
 import { createVerification } from './verify.mjs';
 import { createOwnedTempRoot } from './temp.mjs';
 import { copyNativeTransport } from './transport.mjs';
+import { copyProduct } from '../lib/product-files.mjs';
 
 export async function discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
   const model = opt['discovery-model'] ?? 'gpt-5.6-luna', effort = opt['discovery-effort'] ?? 'low';
@@ -16,13 +17,15 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
   const verifiers = new Map();
   const git = (repo, args) => verifiers.has(repo) ? verifiers.get(repo).git(args) : trustedGit(repo, args);
   const installation = path.join(root, 'installed-product');
-  fs.cpSync(candidate, installation, { recursive: true, filter: (file) => !['AGENTS.md', 'README.md', 'docs', 'test', 'tests', 'kit', 'acceptance', 'node_modules', '.git'].includes(path.basename(file)) });
+  copyProduct(candidate, installation, { includeApps: true });
   const bin = path.join(installation, 'entrypoints'); fs.mkdirSync(bin);
   for (const [name, target] of [['record', 'bin/org.mjs'], ['org', 'bin/org.mjs'], ['lane', 'lanes/lane.mjs']]) {
     if (!fs.existsSync(path.join(installation, target))) continue;
     write(path.join(bin, name), `#!/bin/sh\nexec '${process.execPath}' '${path.join(installation, target)}' "$@"\n`); fs.chmodSync(path.join(bin, name), 0o755);
   }
-  write(path.join(evidence, 'discovery-installation.json'), JSON.stringify({ installation, entrypoints: fs.readdirSync(bin), excluded: ['AGENTS.md', 'README.md', 'docs', 'test', 'tests', 'kit', 'acceptance', 'node_modules', '.git'], source: candidate }, null, 2));
+  write(path.join(evidence, 'discovery-installation.json'), JSON.stringify({ installation, entrypoints: fs.readdirSync(bin),
+    excluded: ['AGENTS.md', 'README.md', 'docs', 'test', 'tests', 'kit', 'acceptance', 'node_modules', '.git'],
+    bundledAssets: ['lanes/docs/REVIEW_TEMPLATE.md', 'acceptance/entry.mjs'], source: candidate }, null, 2));
   const freshProject = (label) => {
     const parent = createOwnedTempRoot('/private/tmp/herdr-discovery-', scratchRoots, discoveryRoots);
     const repo = path.join(parent, label); initRepo(repo);

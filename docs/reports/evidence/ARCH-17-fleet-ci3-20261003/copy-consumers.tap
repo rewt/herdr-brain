@@ -1,0 +1,816 @@
+TAP version 13
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 1 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 375.226083
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 2 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 829.743583
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 3 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 1243.201959
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 4 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1373.093333
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 5 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 1291.443583
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 6 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1304.601542
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 7 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 1391.34325
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 8 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1238.591167
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 9 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1233.963083
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 10 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 12644.226542
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 11 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1513.287166
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 12 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1443.331625
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 13 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 1032.545625
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 14 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1110.264542
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 15 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 2068.869208
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 16 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1258.3
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 17 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1071.440792
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 18 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1271.318709
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 19 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1369.235125
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 20 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1321.607958
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 21 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1480.103833
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 22 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1590.393416
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 23 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1478.178708
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 24 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1487.600709
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 25 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 1843.043209
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 26 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 3847.667458
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 27 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 446.543042
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 28 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1310.644417
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 29 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1441.580958
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 30 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2472.77275
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 31 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 1925.984916
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 32 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3226.68075
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 33 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 293.034333
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 34 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 2298.183041
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 35 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 3092.568625
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 36 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2343.604167
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 37 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1301.876333
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 38 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1218.151666
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 39 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 1724.104334
+  ...
+# Subtest: each bundled target matches its checksum, current source and native architecture
+ok 40 - each bundled target matches its checksum, current source and native architecture
+  ---
+  duration_ms: 4.8405
+  ...
+# Subtest: validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+ok 41 - validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+  ---
+  duration_ms: 459.110291
+  ...
+# Subtest: verified owner bytes are copied into private scratch with restricted modes
+ok 42 - verified owner bytes are copied into private scratch with restricted modes
+  ---
+  duration_ms: 3.680875
+  ...
+# Subtest: staged owner preserves the installed validation transport lifetime protocol
+ok 43 - staged owner preserves the installed validation transport lifetime protocol
+  ---
+  duration_ms: 6.54225
+  ...
+# Subtest: installed runtime snapshot carries the verified owner and validates without a compiler
+ok 44 - installed runtime snapshot carries the verified owner and validates without a compiler
+  ---
+  duration_ms: 1110.915375
+  ...
+# Subtest: missing binary uses only the bounded source-build fallback
+ok 45 - missing binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 618.898542
+  ...
+# Subtest: missing manifest uses only the bounded source-build fallback
+ok 46 - missing manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 547.359083
+  ...
+# Subtest: invalid manifest uses only the bounded source-build fallback
+ok 47 - invalid manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 579.005875
+  ...
+# Subtest: corrupt binary uses only the bounded source-build fallback
+ok 48 - corrupt binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 587.568792
+  ...
+# Subtest: stale source uses only the bounded source-build fallback
+ok 49 - stale source uses only the bounded source-build fallback
+  ---
+  duration_ms: 453.022458
+  ...
+# Subtest: symlink binary uses only the bounded source-build fallback
+ok 50 - symlink binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 554.359666
+  ...
+# Subtest: redirected bundle directory uses only the bounded source-build fallback
+ok 51 - redirected bundle directory uses only the bounded source-build fallback
+  ---
+  duration_ms: 388.802042
+  ...
+# Subtest: unavailable bundle and missing compiler refuse project execution
+ok 52 - unavailable bundle and missing compiler refuse project execution
+  ---
+  duration_ms: 65.523041
+  ...
+# Subtest: unavailable bundle and failure compiler refuse project execution
+ok 53 - unavailable bundle and failure compiler refuse project execution
+  ---
+  duration_ms: 281.0975
+  ...
+# Subtest: unavailable bundle and timeout compiler refuse project execution
+ok 54 - unavailable bundle and timeout compiler refuse project execution
+  ---
+  duration_ms: 292.611334
+  ...
+# Subtest: owner verification rejects a checksummed binary for the wrong architecture
+ok 55 - owner verification rejects a checksummed binary for the wrong architecture
+  ---
+  duration_ms: 300.395833
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after completion
+ok 56 - no compiler preserves detached descendant cleanup after completion
+  ---
+  duration_ms: 3541.030125
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after deadline
+ok 57 - no compiler preserves detached descendant cleanup after deadline
+  ---
+  duration_ms: 4738.904917
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after wrapper-death
+ok 58 - no compiler preserves detached descendant cleanup after wrapper-death
+  ---
+  duration_ms: 3310.715542
+  ...
+# Subtest: entry reserves bounded owner, wrapper, preparation and reply time for promotion
+ok 59 - entry reserves bounded owner, wrapper, preparation and reply time for promotion
+  ---
+  duration_ms: 0.931625
+  ...
+# monitor entry: keeping lane/entry-f2c50da79513 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-AC43Dl/lanes/lane-entry-f2c50da79513: a run was started in this lane
+# Subtest: declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+ok 60 - declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+  ---
+  duration_ms: 12125.841042
+  ...
+# Subtest: copied codex probe product validates, guards and promotes worker and routing changes offline
+ok 61 - copied codex probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 8916.856791
+  ...
+# Subtest: copied claude probe product validates, guards and promotes worker and routing changes offline
+ok 62 - copied claude probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 10225.82425
+  ...
+# Subtest: interruption requires the current banner and an exclusively wheel-junk composer
+ok 63 - interruption requires the current banner and an exclusively wheel-junk composer
+  ---
+  duration_ms: 0.975291
+  ...
+# Subtest: recorded promoted workers close through the shared tidy planner
+ok 64 - recorded promoted workers close through the shared tidy planner
+  ---
+  duration_ms: 187.489667
+  ...
+# Subtest: abandoned promoted workers may close
+ok 65 - abandoned promoted workers may close
+  ---
+  duration_ms: 187.3085
+  ...
+# Subtest: CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+ok 66 - CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+  ---
+  duration_ms: 156.714916
+  ...
+# Subtest: preserves open workers/tabs
+ok 67 - preserves open workers/tabs
+  ---
+  duration_ms: 114.010125
+  ...
+# Subtest: preserves unpromoted workers/tabs
+ok 68 - preserves unpromoted workers/tabs
+  ---
+  duration_ms: 122.175708
+  ...
+# Subtest: preserves dirty workers/tabs
+ok 69 - preserves dirty workers/tabs
+  ---
+  duration_ms: 137.091584
+  ...
+# Subtest: preserves blocked workers/tabs
+ok 70 - preserves blocked workers/tabs
+  ---
+  duration_ms: 112.7235
+  ...
+# Subtest: preserves working workers/tabs
+ok 71 - preserves working workers/tabs
+  ---
+  duration_ms: 120.923625
+  ...
+# Subtest: preserves unknown workers/tabs
+ok 72 - preserves unknown workers/tabs
+  ---
+  duration_ms: 123.747417
+  ...
+# Subtest: preserves unnamed workers/tabs
+ok 73 - preserves unnamed workers/tabs
+  ---
+  duration_ms: 112.985333
+  ...
+# Subtest: preserves unrecorded workers/tabs
+ok 74 - preserves unrecorded workers/tabs
+  ---
+  duration_ms: 121.8265
+  ...
+# Subtest: preserves replaced workers/tabs
+ok 75 - preserves replaced workers/tabs
+  ---
+  duration_ms: 131.172833
+  ...
+# Subtest: preserves waiting workers/tabs
+ok 76 - preserves waiting workers/tabs
+  ---
+  duration_ms: 117.923792
+  ...
+# Subtest: preserves report-blocked workers/tabs
+ok 77 - preserves report-blocked workers/tabs
+  ---
+  duration_ms: 138.372209
+  ...
+# Subtest: preserves report-needs-human workers/tabs
+ok 78 - preserves report-needs-human workers/tabs
+  ---
+  duration_ms: 133.625041
+  ...
+# Subtest: preserves new-open-run workers/tabs
+ok 79 - preserves new-open-run workers/tabs
+  ---
+  duration_ms: 150.512083
+  ...
+# Subtest: preserves declined workers/tabs
+ok 80 - preserves declined workers/tabs
+  ---
+  duration_ms: 130.490792
+  ...
+# Subtest: preserves wrong-repo workers/tabs
+ok 81 - preserves wrong-repo workers/tabs
+  ---
+  duration_ms: 124.600875
+  ...
+# Subtest: preserves mixed-pane workers/tabs
+ok 82 - preserves mixed-pane workers/tabs
+  ---
+  duration_ms: 181.729875
+  ...
+# Subtest: preserves running-shell workers/tabs
+ok 83 - preserves running-shell workers/tabs
+  ---
+  duration_ms: 204.713792
+  ...
+# Subtest: preserves session-done workers/tabs
+ok 84 - preserves session-done workers/tabs
+  ---
+  duration_ms: 169.997959
+  ...
+# Subtest: preserves review-file workers/tabs
+ok 85 - preserves review-file workers/tabs
+  ---
+  duration_ms: 137.394583
+  ...
+# Subtest: latest open fix round defeats an older reported run using the same worker name
+ok 86 - latest open fix round defeats an older reported run using the same worker name
+  ---
+  duration_ms: 126.88425
+  ...
+# Subtest: unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+ok 87 - unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+  ---
+  duration_ms: 153.548542
+  ...
+# Subtest: never closes or resumes its own tab
+ok 88 - never closes or resumes its own tab
+  ---
+  duration_ms: 160.935
+  ...
+# Subtest: an interrupted open worker resumes once, and durable attempts survive a new runner
+ok 89 - an interrupted open worker resumes once, and durable attempts survive a new runner
+  ---
+  duration_ms: 157.2945
+  ...
+# Subtest: failed prompt is logged and never replayed at the same state sequence
+ok 90 - failed prompt is logged and never replayed at the same state sequence
+  ---
+  duration_ms: 148.73675
+  ...
+# Subtest: unrecorded disk report, human words, other harness and absent identity prevent resume
+ok 91 - unrecorded disk report, human words, other harness and absent identity prevent resume
+  ---
+  duration_ms: 178.407667
+  ...
+# Subtest: dry run reports close/resume plans and persists no attempts or live actions
+ok 92 - dry run reports close/resume plans and persists no attempts or live actions
+  ---
+  duration_ms: 169.877
+  ...
+# Subtest: fresh state or record changes prevent deletion
+ok 93 - fresh state or record changes prevent deletion
+  ---
+  duration_ms: 172.938917
+  ...
+# Subtest: a run completed during the pre-input recheck receives no resume input
+ok 94 - a run completed during the pre-input recheck receives no resume input
+  ---
+  duration_ms: 142.401708
+  ...
+# Subtest: a record change after clearing composer suppresses the prompt
+ok 95 - a record change after clearing composer suppresses the prompt
+  ---
+  duration_ms: 152.64875
+  ...
+# Subtest: incomplete or failed reads never authorize any action
+ok 96 - incomplete or failed reads never authorize any action
+  ---
+  duration_ms: 207.91425
+  ...
+# Subtest: one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+ok 97 - one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+  ---
+  duration_ms: 859.240792
+  ...
+# Subtest: the loop rereads opt-in and shuts down with its lock removed
+ok 98 - the loop rereads opt-in and shuts down with its lock removed
+  ---
+  duration_ms: 1885.089083
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a canonical checkout
+ok 99 - no configuration defaults on and project record/main are discovered from a canonical checkout
+  ---
+  duration_ms: 815.098084
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a linked preview
+ok 100 - no configuration defaults on and project record/main are discovered from a linked preview
+  ---
+  duration_ms: 745.987542
+  ...
+# Subtest: no record and no Git project are quiet no-ops
+ok 101 - no record and no Git project are quiet no-ops
+  ---
+  duration_ms: 441.798334
+  ...
+# Subtest: an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+ok 102 - an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+  ---
+  duration_ms: 1294.897708
+  ...
+# Subtest: housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+ok 103 - housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+  ---
+  duration_ms: 7.941958
+  ...
+# Subtest: canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 104 - canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 986.980583
+  ...
+# Subtest: installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 105 - installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 764.236833
+  ...
+# Subtest: canonical checkout start stays idempotent after a lane is removed
+ok 106 - canonical checkout start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1883.443959
+  ...
+# Subtest: installed copy start stays idempotent after a lane is removed
+ok 107 - installed copy start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1710.779584
+  ...
+# Subtest: dry-run start leaves no timer process
+ok 108 - dry-run start leaves no timer process
+  ---
+  duration_ms: 666.165667
+  ...
+# Subtest: old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+ok 109 - old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+  ---
+  duration_ms: 25.473167
+  ...
+# Subtest: lane code cannot --once live housekeeping even with the canonical target
+ok 110 - lane code cannot --once live housekeeping even with the canonical target
+  ---
+  duration_ms: 246.449417
+  ...
+# Subtest: canonical code cannot --once live housekeeping from a linked target
+ok 111 - canonical code cannot --once live housekeeping from a linked target
+  ---
+  duration_ms: 229.854791
+  ...
+# Subtest: lane code cannot --start live housekeeping even with the canonical target
+ok 112 - lane code cannot --start live housekeeping even with the canonical target
+  ---
+  duration_ms: 849.048166
+  ...
+# Subtest: canonical code cannot --start live housekeeping from a linked target
+ok 113 - canonical code cannot --start live housekeeping from a linked target
+  ---
+  duration_ms: 225.134875
+  ...
+# Subtest: lane code cannot --loop live housekeeping even with the canonical target
+ok 114 - lane code cannot --loop live housekeeping even with the canonical target
+  ---
+  duration_ms: 236.485709
+  ...
+# Subtest: canonical code cannot --loop live housekeeping from a linked target
+ok 115 - canonical code cannot --loop live housekeeping from a linked target
+  ---
+  duration_ms: 572.971459
+  ...
+# Subtest: a record CLI override in a lane cannot pin a live schedule to removable code
+ok 116 - a record CLI override in a lane cannot pin a live schedule to removable code
+  ---
+  duration_ms: 478.987625
+  ...
+# Subtest: linked code remains usable for isolated dry-run previews
+ok 117 - linked code remains usable for isolated dry-run previews
+  ---
+  duration_ms: 476.403875
+  ...
+# Subtest: an existing different-script owner never reports already-running or alters the old lock
+ok 118 - an existing different-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 985.372542
+  ...
+# Subtest: an existing different-record owner never reports already-running or alters the old lock
+ok 119 - an existing different-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 240.339875
+  ...
+# Subtest: an existing missing-script owner never reports already-running or alters the old lock
+ok 120 - an existing missing-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 238.563875
+  ...
+# Subtest: an existing missing-record owner never reports already-running or alters the old lock
+ok 121 - an existing missing-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 396.958666
+  ...
+# Subtest: an existing legacy owner never reports already-running or alters the old lock
+ok 122 - an existing legacy owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 641.760917
+  ...
+# Subtest: promotion cleanup inspects and closes only the requested lane workspace
+ok 123 - promotion cleanup inspects and closes only the requested lane workspace
+  ---
+  duration_ms: 236.950042
+  ...
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 124 - repository does not track a Codex project hook that can interrupt unattended workers
+  ---
+  duration_ms: 6.554583
+  ...
+# Subtest: durable supervisor pane binding survives native restore, clear and compact without adapter env
+ok 125 - durable supervisor pane binding survives native restore, clear and compact without adapter env
+  ---
+  duration_ms: 2260.917791
+  ...
+# Subtest: claude adapter reuses the project SessionStart entry exactly once
+ok 126 - claude adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 1301.324667
+  ...
+# Subtest: codex supervisor adapter injects SessionStart without a project hook
+ok 127 - codex supervisor adapter injects SessionStart without a project hook
+  ---
+  duration_ms: 1453.369459
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 128 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 1216.416958
+  ...
+# Subtest: adapter exports its known supervisor agent identity
+ok 129 - adapter exports its known supervisor agent identity
+  ---
+  duration_ms: 110.1695
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 130 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 448.375708
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 131 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 1091.246375
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 132 - entry respects {"enabled":false}
+  ---
+  duration_ms: 267.160833
+  ...
+# Subtest: entry respects {"resume":false}
+ok 133 - entry respects {"resume":false}
+  ---
+  duration_ms: 243.322667
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 134 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 287.095209
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 135 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 380.294375
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 136 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 530.620875
+  ...
+# Subtest: Claude project hook delivers supervisor entry on startup
+ok 137 - Claude project hook delivers supervisor entry on startup
+  ---
+  duration_ms: 405.077208
+  ...
+# Subtest: Claude project hook delivers supervisor entry on resume
+ok 138 - Claude project hook delivers supervisor entry on resume
+  ---
+  duration_ms: 483.87825
+  ...
+# Subtest: Claude project hook delivers supervisor entry on clear
+ok 139 - Claude project hook delivers supervisor entry on clear
+  ---
+  duration_ms: 506.2635
+  ...
+# Subtest: Claude project hook delivers supervisor entry on compact
+ok 140 - Claude project hook delivers supervisor entry on compact
+  ---
+  duration_ms: 436.896583
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 141 - hook skips or explains unmarked without blocking startup
+  ---
+  duration_ms: 251.949875
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 142 - hook skips or explains worker without blocking startup
+  ---
+  duration_ms: 233.086792
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 143 - hook skips or explains lane without blocking startup
+  ---
+  duration_ms: 301.850792
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 144 - hook skips or explains foreign without blocking startup
+  ---
+  duration_ms: 154.385959
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 145 - hook skips or explains bad-input without blocking startup
+  ---
+  duration_ms: 128.845292
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 146 - hook skips or explains missing-record without blocking startup
+  ---
+  duration_ms: 351.908625
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 147 - hook skips or explains worker-bypass without blocking startup
+  ---
+  duration_ms: 128.513917
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 148 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 359.024542
+  ...
+# Subtest: claude adapter binds supervisor and supplies native hooks only to supervisors
+ok 149 - claude adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 1054.250583
+  ...
+# Subtest: claude adapter binds worker and supplies native hooks only to supervisors
+ok 150 - claude adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 803.087958
+  ...
+# Subtest: codex adapter binds supervisor and supplies native hooks only to supervisors
+ok 151 - codex adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 1022.045667
+  ...
+# Subtest: codex adapter binds worker and supplies native hooks only to supervisors
+ok 152 - codex adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 716.250625
+  ...
+# Subtest: entry safely handles STOP
+ok 153 - entry safely handles STOP
+  ---
+  duration_ms: 319.721666
+  ...
+# Subtest: entry safely handles invalid-config
+ok 154 - entry safely handles invalid-config
+  ---
+  duration_ms: 440.881333
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 155 - entry safely handles invalid-pid
+  ---
+  duration_ms: 487.809834
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 156 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 502.164916
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 157 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 304.641875
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 158 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 572.381291
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 159 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 440.318416
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 160 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 223.565792
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 161 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 580.471375
+  ...
+1..161
+# tests 161
+# suites 0
+# pass 161
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 71252.304

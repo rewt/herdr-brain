@@ -1,0 +1,107 @@
+TAP version 13
+# Subtest: installed product contains every relative module import, including fleet dependencies
+ok 1 - installed product contains every relative module import, including fleet dependencies
+  ---
+  duration_ms: 3013.859083
+  ...
+# Subtest: native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+ok 2 - native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+  ---
+  duration_ms: 338.77425
+  ...
+# Subtest: model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+ok 3 - model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+  ---
+  duration_ms: 252.819083
+  ...
+# Subtest: record verification and scripted answer are kernel-confined even if model output redirects .org
+ok 4 - record verification and scripted answer are kernel-confined even if model output redirects .org
+  ---
+  duration_ms: 428.633167
+  ...
+# monitor entry: keeping lane/entry-36e07f727bd7 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-ctUTgR/session/lanes/lane-entry-36e07f727bd7: a run was started in this lane
+# monitor entry: keeping lane/entry-95a80376278d at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-ctUTgR/session/lanes/lane-entry-95a80376278d: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 5 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 117.678167
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 6 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 114.862083
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 7 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 158.515792
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+ok 8 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 4643.744708
+  ...
+# Subtest: immutable release copy supports console build and contrib retirement without changing source
+ok 9 - immutable release copy supports console build and contrib retirement without changing source
+  ---
+  duration_ms: 7.208
+  ...
+# Subtest: Git archive executable bits survive and snapshot chmod never follows symlinks
+ok 10 - Git archive executable bits survive and snapshot chmod never follows symlinks
+  ---
+  duration_ms: 62.219166
+  ...
+# Subtest: actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+ok 11 - actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+  ---
+  duration_ms: 2.882334
+  ...
+# Subtest: scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+ok 12 - scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+  ---
+  duration_ms: 1.760583
+  ...
+# Subtest: foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+ok 13 - foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+  ---
+  duration_ms: 1.774583
+  ...
+# Subtest: unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+ok 14 - unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+  ---
+  duration_ms: 2.520958
+  ...
+# Subtest: discovery setup failures use newly registered separate roots before candidate execution
+not ok 15 - discovery setup failures use newly registered separate roots before candidate execution
+  ---
+  duration_ms: 2.054042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: "ENOENT: no such file or directory, mkdir '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-snapshot-hmfa04/primary-QFTpGk/installed-product/entrypoints'"
+  code: 'ENOENT'
+  stack: |-
+    Object.mkdirSync (node:fs:1372:26)
+    discovery (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/live.mjs:21:58)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/snapshot.test.mjs:156:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+  ...
+# Subtest: session and verifier temp roots classify direct and command errors while preserving safety failures
+ok 16 - session and verifier temp roots classify direct and command errors while preserving safety failures
+  ---
+  duration_ms: 2.223875
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 15
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5080.438

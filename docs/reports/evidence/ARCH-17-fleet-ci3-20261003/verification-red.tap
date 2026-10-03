@@ -1,0 +1,166 @@
+TAP version 13
+# Subtest: installed product contains every relative module import, including fleet dependencies
+not ok 1 - installed product contains every relative module import, including fleet dependencies
+  ---
+  duration_ms: 267.146083
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    node:internal/modules/run_main:123
+        triggerUncaughtException(
+        ^
+    
+    AssertionError [ERR_ASSERTION]: discovery/acceptance.mjs imports missing acceptance/entry.mjs
+        at visit (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/[eval1]:14:20)
+        at visit (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/[eval1]:9:34)
+        at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/[eval1]:19:5
+        at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+        at async ModuleLoader.eval (node:internal/modules/esm/loader:217:24)
+        at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '=='
+    }
+    
+    Node.js v20.19.4
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    visit (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/[eval1]:14:20)
+    visit (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/[eval1]:9:34)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/[eval1]:19:5
+    ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+    async ModuleLoader.eval (node:internal/modules/esm/loader:217:24)
+    async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/verification.test.mjs:51:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+not ok 2 - native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+  ---
+  duration_ms: 179.703458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    
+    
+    71 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    run (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/verification.test.mjs:69:38)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/verification.test.mjs:94:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+not ok 3 - model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+  ---
+  duration_ms: 69.342667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-native-mzZWuw/operator.sock'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1886:21)
+    listenInCluster (node:net:1965:12)
+    Server.listen (node:net:2084:5)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/verification.test.mjs:103:81
+    new Promise (<anonymous>)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/verification.test.mjs:103:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: record verification and scripted answer are kernel-confined even if model output redirects .org
+not ok 4 - record verification and scripted answer are kernel-confined even if model output redirects .org
+  ---
+  duration_ms: 207.340667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    node:internal/modules/esm/resolve:283
+        throw new ERR_MODULE_NOT_FOUND(
+              ^
+    
+    Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-native-DJii1E/installed/herdr/entry-lock.mjs' imported from /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-native-DJii1E/installed/lib/fleet.mjs
+        at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+        at moduleResolve (node:internal/modules/esm/resolve:952:10)
+        at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+        at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+        at #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+        at ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+        at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+        at ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+      code: 'ERR_MODULE_NOT_FOUND',
+      url: 'file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-native-DJii1E/installed/herdr/entry-lock.mjs'
+    }
+    
+    Node.js v20.19.4
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+    run (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/verification.test.mjs:69:38)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/verification.test.mjs:126:3
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 0
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 760.247708

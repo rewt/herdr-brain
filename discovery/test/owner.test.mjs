@@ -11,6 +11,7 @@ import { sandboxCommand } from '../confinement.mjs';
 import { lifetimeScope, closeScope } from '../lifetime.mjs';
 import { spawnDetachedFixture } from '../../test/helpers/detached.mjs';
 import { waitForExit } from '../../test/helpers/child.mjs';
+import { copyProduct as installProduct } from '../../lib/product-files.mjs';
 
 const product = path.resolve(import.meta.dirname, '../..');
 const host = `${process.platform}-${process.arch}`;
@@ -23,9 +24,7 @@ function fixture(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
 }
 function copyProduct(root) {
-  for (const module of ['discovery', 'lib']) fs.cpSync(path.join(product, module), path.join(root, module), {
-    recursive: true, filter: file => !['test', 'tests'].includes(path.basename(file)) && !path.basename(file).startsWith('.build-'),
-  });
+  installProduct(product, root);
 }
 function invoke(root, compiler = 'missing', extra = {}) {
   const marker = path.join(root, 'executed'), calls = path.join(root, 'compiler.jsonl');

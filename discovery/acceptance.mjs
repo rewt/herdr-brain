@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { sandboxCommand } from './confinement.mjs';
 import { fileURLToPath } from 'node:url';
 import { assertSupervisorEntry } from '../acceptance/entry.mjs';
+import { copyProduct } from '../lib/product-files.mjs';
 const source = fileURLToPath(new URL('../', import.meta.url));
 const { values: opt } = parseArgs({ options: { binary: { type: 'string' }, harness: { type: 'string', default: 'codex' },
   validator: { type: 'string' }, 'claude-auth': { type: 'string' }, model: { type: 'string' },
@@ -59,12 +60,7 @@ async function check(name, fn) {
   console.log(`${results.at(-1).status.padEnd(7)} ${name}${results.at(-1).error ? `: ${results.at(-1).error}` : ''}`);
 }
 const product = path.join(install, 'product'); fs.mkdirSync(product);
-for (const directory of ['bin', 'lib', 'herdr', 'lanes', 'dispatch', 'watch', 'housekeeping', 'settle', 'promote', 'release', 'test-slot', 'supervisor', 'discovery']) {
-  fs.cpSync(path.join(source, directory), path.join(product, directory), { recursive: true, filter: (p) => !['test', 'node_modules'].includes(path.basename(p)) });
-}
-fs.copyFileSync(path.join(source, 'package.json'), path.join(product, 'package.json'));
-fs.mkdirSync(path.join(product, 'acceptance'));
-fs.copyFileSync(path.join(source, 'acceptance/entry.mjs'), path.join(product, 'acceptance/entry.mjs'));
+copyProduct(source, product);
 const bin = path.join(install, 'bin');
 // Claude's native tools execute under a scratch-only kernel write boundary.
 // The launch wrapper supplies no workflow policy; installed entry owns that.

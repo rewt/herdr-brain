@@ -9,6 +9,7 @@ import { runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
 import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 import { spawnChild, waitForExit, killChild } from './helpers/child.mjs';
+import { copyProduct } from '../lib/product-files.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function assertNativeSupervisorEntry(native, runtime) {
@@ -38,8 +39,7 @@ function fixture(t) {
   });
   const repo = path.join(root, 'source'), home = path.join(root, 'user'), nativeBin = path.join(root, 'native');
   for (const dir of [repo, home, nativeBin]) fs.mkdirSync(dir);
-  for (const dir of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'test-slot', 'supervisor']) fs.cpSync(path.join(source, dir), path.join(repo, dir), { recursive: true });
-  fs.copyFileSync(path.join(source, 'herdr-plugin.toml'), path.join(repo, 'herdr-plugin.toml'));
+  copyProduct(source, repo);
   const native = path.join(nativeBin, 'codex'), receipt = path.join(root, 'native.json');
   // Install before any lane open or entry launch, including direct node --test.
   fs.writeFileSync(path.join(nativeBin, 'herdr'), '#!/bin/sh\necho "plugin fixture: Herdr is offline" >&2\nexit 1\n', { mode: 0o755 });
@@ -390,7 +390,7 @@ test('release carries entry, pins final versions, rolls back and restores exact 
 
 test('build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM', { timeout: 30000 }, (t) => {
   const f = fixture(t), calls = path.join(f.root, 'npm-calls.jsonl');
-  for (const module of ['console', 'mcp']) fs.cpSync(path.join(source, module), path.join(f.repo, module), { recursive: true, filter: (file) => !file.split(path.sep).includes('node_modules') });
+  copyProduct(source, f.repo, { includeApps: true });
   const npm = path.join(path.dirname(f.native), 'npm');
   fs.writeFileSync(npm, `#!${process.execPath}\nrequire('fs').appendFileSync(${JSON.stringify(calls)},JSON.stringify(process.argv.slice(2))+'\\n');\n`, { mode: 0o755 });
   const build = ['bash', [path.join(f.repo, 'herdr/install.sh')], f.repo];

@@ -1,0 +1,92 @@
+TAP version 13
+# Subtest: installed product contains every relative module import, including fleet dependencies
+ok 1 - installed product contains every relative module import, including fleet dependencies
+  ---
+  duration_ms: 1564.865167
+  ...
+# Subtest: native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+ok 2 - native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+  ---
+  duration_ms: 282.110417
+  ...
+# Subtest: model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+ok 3 - model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+  ---
+  duration_ms: 251.416
+  ...
+# Subtest: record verification and scripted answer are kernel-confined even if model output redirects .org
+ok 4 - record verification and scripted answer are kernel-confined even if model output redirects .org
+  ---
+  duration_ms: 415.807708
+  ...
+# monitor entry: keeping lane/entry-216b4a8207c1 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-iuA4pm/session/lanes/lane-entry-216b4a8207c1: a run was started in this lane
+# monitor entry: keeping lane/entry-6a9ed68191ef at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-iuA4pm/session/lanes/lane-entry-6a9ed68191ef: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 5 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 65.890083
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 6 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 156.407125
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 7 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 248.439375
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+ok 8 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 4063.442875
+  ...
+# Subtest: immutable release copy supports console build and contrib retirement without changing source
+ok 9 - immutable release copy supports console build and contrib retirement without changing source
+  ---
+  duration_ms: 6.748375
+  ...
+# Subtest: Git archive executable bits survive and snapshot chmod never follows symlinks
+ok 10 - Git archive executable bits survive and snapshot chmod never follows symlinks
+  ---
+  duration_ms: 47.048834
+  ...
+# Subtest: actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+ok 11 - actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+  ---
+  duration_ms: 3.150875
+  ...
+# Subtest: scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+ok 12 - scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+  ---
+  duration_ms: 1.948708
+  ...
+# Subtest: foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+ok 13 - foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+  ---
+  duration_ms: 2.088416
+  ...
+# Subtest: unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+ok 14 - unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+  ---
+  duration_ms: 1.970334
+  ...
+# Subtest: discovery setup failures use newly registered separate roots before candidate execution
+ok 15 - discovery setup failures use newly registered separate roots before candidate execution
+  ---
+  duration_ms: 42.101417
+  ...
+# Subtest: session and verifier temp roots classify direct and command errors while preserving safety failures
+ok 16 - session and verifier temp roots classify direct and command errors while preserving safety failures
+  ---
+  duration_ms: 2.097708
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4581.16525

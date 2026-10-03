@@ -255,6 +255,14 @@ the next review. Dirty lanes, conflicting replays, changed lane tips and changed
 record readiness refuse recovery without overwriting work or launching a worker.
 Each recapture and prior rebase receipt remains in the journal. Settles and
 promotions have no shared scheduling window.
+An uncertain review still requires `--review-again` before recapture can change
+the lane. A pending `recapture` records its target while `mainHead` retains the
+last successful base; only a proved, applied replay advances that base and adds
+the completed recapture. Preflight or replay conflicts return a terminal handoff,
+so retry cannot bypass the conflict or launch a reviewer on the unreplayed lane.
+Repeated recaptures derive the replay base from the current replayed head, keeping
+upstream history out of the lane's commit range. Fix/dispatching stages leave
+recapture to the correction run and retain dispatch's correction-run exemptions.
 An uncertain correction recovers the single matching dispatch journal. Resolve
 uncertain launch/delivery using dispatch's documented recovery flags there, then
 retry settle; it adopts a completed dispatch without starting another worker.

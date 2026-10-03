@@ -19,12 +19,14 @@ const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const singleLine = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
 
 export function queueJobs(data) {
-  const current = data.current;
-  const active = current?.jobs ? current.jobs.map(job => {
+  const members = current => current?.jobs ? current.jobs.map(job => {
     const member = current.results?.find(r => r.job.id === job.id);
     return member ? { ...job, phase: 'completed', result: member.result, ...member.result } : { ...job, phase: current.phase, batch: current.id };
   }) : current ? [current] : [];
-  return [...data.results, ...active, ...data.pending];
+  const rows = [...data.results, ...(data.interrupted ?? []).flatMap(members), ...members(data.current), ...data.pending];
+  // An interrupted notice and its eventual outcome share a request id.
+  // Keep the complete history on disk, but readers must see the latest state.
+  return [...new Map(rows.map(job => [job.id, job])).values()];
 }
 
 export function queueFor(cwd) {
@@ -182,14 +184,15 @@ function finishBatchJob(job, result, queue) {
 }
 
 export function notice(job, result) {
-  return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}`;
+  return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}${result.receipt ? ` receipt=${result.receipt}` : ''}`;
 }
 async function deliver(job, result, queue) {
   const message = notice(job, result);
+  const resumed = result.outcome !== 'interrupted' && queue.load().results.some(prior => prior.id === job.id && prior.outcome === 'interrupted');
   const { id: deliveryId, ...delivery } = await promptSupervisor(job.to, message, {
     inbox: inboxPath({ org: job.org, cwd: queue.project.canonical }),
     herdr: job.herdr, attempts: job.attempts, retrySeconds: job.retry,
-    id: `promote:${job.id}`, title: 'Promotion notice undelivered',
+    id: `promote:${job.id}${resumed ? ':complete' : ''}`, title: 'Promotion notice undelivered',
     log: (line) => process.stderr.write(line + '\n'),
   });
   return { ...delivery, delivery_id: deliveryId };
@@ -210,6 +213,7 @@ export async function drain(queue) {
   });
   if (!release) { process.send?.({ ready: true, already_running: true }); return; }
   process.send?.({ ready: true });
+  const attempted = new Set();
   try {
     for (;;) {
       const entry = queue.transaction((data) => {
@@ -218,6 +222,16 @@ export async function drain(queue) {
           // trust a persisted flag to authorize replay of an external effect.
           const job = { ...data.current };
           delete job.fresh;
+          data.current = job;
+          return { job, newlyDequeued: false };
+        }
+        // Retry each suspended batch once per drain. Another exception keeps
+        // its receipt resumable while allowing later requests to run now.
+        const resume = (data.interrupted ?? []).findIndex(batch => !attempted.has(batch.id));
+        if (resume >= 0) {
+          const [saved] = data.interrupted.splice(resume, 1);
+          const job = { ...saved, phase: 'batching' };
+          delete job.results; delete job.deliveredCount;
           data.current = job;
           return { job, newlyDequeued: false };
         }
@@ -243,9 +257,20 @@ export async function drain(queue) {
       const { job, newlyDequeued } = entry;
       if (job.jobs) {
         let batch = job;
+        attempted.add(batch.id);
         if (batch.phase === 'batching') {
-          const results = performBatch(batch, queue);
-          batch = { ...batch, phase: 'batch-delivering', results, deliveredCount: 0 };
+          try {
+            const results = performBatch(batch, queue);
+            batch = { ...batch, phase: 'batch-delivering', results, deliveredCount: 0 };
+            delete batch.error;
+          } catch (error) {
+            const directory = path.join(queue.directory, 'batches', batch.id);
+            const receipt = path.join(directory, 'train.json'), log = path.join(directory, 'train.log');
+            const results = batch.jobs.map(member => ({ job: member, result: {
+              outcome: 'interrupted', reason: 'batch interrupted; inspect the receipt and log, then resume --drain', receipt, log, batch: batch.id,
+            } }));
+            batch = { ...batch, phase: 'batch-delivering', error: error.message, results, deliveredCount: 0 };
+          }
           queue.transaction(data => { data.current = batch; });
         }
         for (let index = batch.deliveredCount; index < batch.results.length; index++) {
@@ -260,7 +285,10 @@ export async function drain(queue) {
           });
           process.stdout.write(JSON.stringify({ id: member.job.id, topic: member.job.topic, ...result, ...delivery }) + '\n');
         }
-        queue.transaction(data => { data.current = null; });
+        queue.transaction(data => {
+          if (batch.error) { data.interrupted ??= []; data.interrupted.push({ ...batch, phase: 'batching' }); }
+          data.current = null;
+        });
         continue;
       }
       let result;

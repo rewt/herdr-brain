@@ -77,7 +77,13 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
   const guards = jobs => jobs.map(job => ({ canonical, identity, ...job, expectedHead: job.sourceHead }));
   const result = (job, value) => { plan.results[job.id] = value; save(); };
   plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)]; save();
-  canonicalCheck();
+  const canonicalReady = () => {
+    try { canonicalCheck(); return true; }
+    catch (error) {
+      for (const job of plan.jobs.filter(j => !plan.results[j.id])) result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
+      plan.groups = []; save(); return false;
+    }
+  };
   // A persisted integrated checkpoint never gates or fast-forwards twice.
   const finishIntegrated = attempt => {
     if (git(['merge-base', attempt.tip, main]) !== attempt.tip) throw new Error('integrated train tip is no longer on main');
@@ -112,8 +118,12 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
   while (plan.groups.length) {
     const ids = plan.groups[0].filter(id => !plan.results[id]);
     if (!ids.length) { plan.groups.shift(); save(); continue; }
-    canonicalCheck();
+    if (!canonicalReady()) break;
     let attempt = plan.attempts.findLast(a => ['prepared', 'validated'].includes(a.phase) && JSON.stringify(a.ids) === JSON.stringify(ids));
+    if (attempt && git(['rev-parse', main]) !== attempt.base) {
+      attempt.phase = 'stale'; attempt.error = 'main moved; replan from the current integration branch'; save();
+      attempt = null;
+    }
     if (!attempt) {
       const jobs = [];
       for (const id of ids) {
@@ -165,8 +175,15 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
       attempt.phase = 'prepared'; save();
       if (!kept.length) { attempt.phase = 'complete'; save(); continue; }
     }
-    if (git(['rev-parse', main]) !== attempt.base) throw new Error('main moved during train; inspect receipt before retrying');
-    for (const job of attempt.jobs) capture(job);
+    if (git(['rev-parse', main]) !== attempt.base) {
+      attempt.phase = 'stale'; attempt.error = 'main moved during preparation; replan'; save(); continue;
+    }
+    let invalid = false;
+    for (const job of attempt.jobs) {
+      try { capture(job); }
+      catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); invalid = true; }
+    }
+    if (invalid) { attempt.phase = 'invalid'; save(); continue; }
     clean(attempt.scratch);
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch changed');
     try {
@@ -194,9 +211,11 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
       }
       save(); continue;
     }
-    canonicalCheck();
-    if (git(['rev-parse', main]) !== attempt.base) throw new Error('main moved during train validation; nothing merged');
-    let invalid = false;
+    if (!canonicalReady()) break;
+    if (git(['rev-parse', main]) !== attempt.base) {
+      attempt.phase = 'stale'; attempt.error = 'main moved during validation; replan'; save(); continue;
+    }
+    invalid = false;
     for (const job of attempt.jobs) {
       try { capture(job); }
       catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); invalid = true; }

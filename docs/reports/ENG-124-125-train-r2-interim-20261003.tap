@@ -1,0 +1,194 @@
+TAP version 13
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 1 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 2512.916333
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 2 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 2851.443125
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 3 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1135.841167
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+not ok 4 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 2848.202584
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      [
+    +   'interrupted',
+    +   'interrupted',
+        'promoted',
+        'promoted'
+      ]
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'promoted'
+    1: 'promoted'
+  actual:
+    0: 'interrupted'
+    1: 'interrupted'
+    2: 'promoted'
+    3: 'promoted'
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:98:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 5 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1248.123708
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 6 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 3811.317209
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 7 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 4448.017583
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 8 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 3396.399458
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+not ok 9 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 3357.741917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:136:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 10 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 2611.478
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 11 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 3523.015459
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 12 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2407.182875
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 13 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4114.1405
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 14 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 5301.130542
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 15 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 7125.529958
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 16 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 7528.882875
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 17 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 5785.336417
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 18 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 7873.516292
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 19 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 2211.997166
+  ...
+# Subtest: two recaptures after an applied rebase replay only lane and review commits from the same lineage
+ok 20 - two recaptures after an applied rebase replay only lane and review commits from the same lineage
+  ---
+  duration_ms: 6165.38675
+  ...
+# Subtest: uncertain review retry guards lane mutation before recapturing a moved main
+ok 21 - uncertain review retry guards lane mutation before recapturing a moved main
+  ---
+  duration_ms: 5238.833
+  ...
+# Subtest: refused recapture preflight preserves its old base and gives a terminal conflict handoff
+ok 22 - refused recapture preflight preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 2169.293292
+  ...
+# Subtest: refused recapture replay preserves its old base and gives a terminal conflict handoff
+ok 23 - refused recapture replay preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 2352.050042
+  ...
+# Subtest: a lost recapture replacement response retains the old base until the proved head is adopted
+ok 24 - a lost recapture replacement response retains the old base until the proved head is adopted
+  ---
+  duration_ms: 6487.794916
+  ...
+# Subtest: dispatching recovery after main moves exempts only its existing correction run and changed head
+ok 25 - dispatching recovery after main moves exempts only its existing correction run and changed head
+  ---
+  duration_ms: 7811.050625
+  ...
+# Subtest: a stopped fix tolerates main moving and dispatches one correction after STOP clears
+ok 26 - a stopped fix tolerates main moving and dispatches one correction after STOP clears
+  ---
+  duration_ms: 6609.261709
+  ...
+1..26
+# tests 26
+# suites 0
+# pass 24
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 74130.78525

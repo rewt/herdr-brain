@@ -96,8 +96,12 @@ unavailable input queues the message and raises a non-focusing Herdr notificatio
 with an acknowledged delivery owner, and drain before newer notices when input
 clears, even after the queue caller exits. Housekeeping restarts a dead owner.
 The queue records delivery and its inbox/notice ID separately from promotion.
-An interrupted train retains its current batch and receipt for `--drain`; its
-local error names the receipt and log, and completion notices follow recovery.
+An interrupted train delivers an `interrupted` notice for every member, naming
+the receipt and log. The queue retains its error and suspended batch for the next
+`--drain`; later pending requests continue in the same drain. Each suspended
+batch is attempted at most once per drain. Interruption notices keep the original
+`promote:REQUEST_ID` notice ID across retries; the eventual outcome uses
+`promote:REQUEST_ID:complete`, since the inbox binds each notice ID to exact content.
 Refusals and lost acknowledgements retry through the input gate; every prompt
 includes the same visible `notice-id`, making at-least-once duplicates recognisable. It never turns an undelivered success into a
 new promotion. Gates have no invented time budget.
@@ -120,7 +124,7 @@ override, lane configuration's promotion tier is resolved when promotion runs. `
 
 ## Evidence and recovery
 
-`GIT_COMMON_DIR/promote/queue.json` contains pending/current requests, results,
+`GIT_COMMON_DIR/promote/queue.json` contains pending/current and interrupted batches, results,
 notice text, delivery receipts and errors. The directory also contains `worker.log`,
 batch receipts, full train logs and per-request cleanup JSONL. Each promoted
 result includes `report_at`, `integrated_at` and `report_to_main_s` (null when no
@@ -138,7 +142,11 @@ stale lock. Never remove a live lock. A worker exit between enqueue and empty
 shutdown cannot strand the request: both transitions hold `queue.lock`.
 
 After inspection/removing stale locks, `--drain --repo /project` resumes pending
-requests. A current train resumes its saved scratch candidate and tree-keyed evidence.
+requests and suspended batches. A current train resumes its saved scratch
+candidate and tree-keyed evidence. If main moved, prepared/validated attempts are
+marked stale and rebuilt from current main. Changed, dirty or stopped lanes are
+refused individually before validation; remaining lanes continue. Dirty or
+off-main canonical checkouts produce per-member refusals before scratch work.
 Interruption before a green fast-forward leaves main untouched. Interruption
 after the fast-forward accepts only the exact planned validated tip already on
 main, and resumes bookkeeping without repeating the gate or integration.

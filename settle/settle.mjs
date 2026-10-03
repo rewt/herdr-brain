@@ -114,7 +114,7 @@ function activeWork(except = [], state = recordState()) {
 function unchanged({ reviewOnly = false, expectedHead = job.finalHead ?? job.head, movingMain = false } = {}) {
   if (common(job.repo) !== job.common || common(job.workspace) !== job.common) throw new Error('Git common-directory identity changed');
   if (head() !== expectedHead || git(['branch', '--show-current'], job.workspace) !== `lane/${job.lane}`) throw new Error('lane HEAD or branch moved; settle the new run instead');
-  if (!movingMain && git(['rev-parse', job.main], job.repo) !== job.mainHead) throw new Error('base branch moved; use --retry to recapture and rebase');
+  if (!movingMain && git(['rev-parse', job.main], job.repo) !== (job.recapture?.onto ?? job.mainHead)) throw new Error('base branch moved; use --retry to recapture and rebase');
   const status = dirty();
   const allowed = reviewOnly ? [`?? ${job.reviewRelative}`, `A  ${job.reviewRelative}`] : [''];
   if (!allowed.includes(status)) throw new Error('lane worktree changed; inspect the retained evidence');
@@ -219,8 +219,12 @@ function inheritedEvidence() {
   save();
 }
 function recaptureMain() {
+  // The correction owns the lane now and is settled under its own run. Its
+  // dispatch journal, rather than the old review, authorizes recovery.
+  if (['fix', 'dispatching'].includes(job.stage)) return;
   const current = git(['rev-parse', job.main], job.repo);
-  if (current === job.mainHead) return;
+  if (current === job.mainHead && !job.recapture) return;
+  if (job.stage === 'reviewing' && !opt['review-again']) throw new Error('review outcome is uncertain; inspect reviewer and retained evidence, then --retry --review-again after it stops');
   // Adopt only our exact prepared replacement if its response was lost.
   const expected = job.rebase?.state === 'prepared' && head() === job.rebase.to ? job.rebase.to : job.finalHead ?? job.head;
   unchanged({ movingMain: true, reviewOnly: job.stage === 'commit-review', expectedHead: expected });
@@ -229,10 +233,12 @@ function recaptureMain() {
   const reportProblem = job.stage === 'record' && !state.runs.get(id)?.report ? null : recordedReportProblem(state);
   const problem = reportProblem ?? superseded(state) ?? correctionBlocker([], state);
   if (problem) throw new Error(problem);
-  job.recaptures ??= [];
-  job.recaptures.push({ from: job.mainHead, onto: current, at: new Date().toISOString(), rebase: job.rebase ?? null });
   if (expected !== (job.finalHead ?? job.head)) job.finalHead = expected;
-  job.mainHead = current; delete job.rebase; delete job.error; save();
+  if (job.recapture?.onto !== current) {
+    job.recapture = { from: job.mainHead, onto: current, at: new Date().toISOString(), rebase: job.rebase ?? null };
+    delete job.rebase;
+  }
+  delete job.error; save();
   // A completed review stays bound to its original diff. Commit its evidence
   // first, then the usual preservation proof replays it onto the new base.
   if (job.review) {
@@ -242,14 +248,26 @@ function recaptureMain() {
   }
   job.finalHead ??= job.head;
   const reason = rebaseForPromotion();
-  if (reason) throw new Error(reason);
-  job.head = job.finalHead; delete job.finalHead;
-  job.diff = evidence('diff.patch', git(['diff', '--no-ext-diff', '--no-textconv', `${job.mainHead}...${job.head}`], job.workspace));
-  inheritedEvidence(); save();
+  if (reason) { escalate(reason); return false; }
 }
-function customMergePaths(base) {
+function completeRecapture() {
+  if (!job.recapture) return;
+  job.recaptures ??= [];
+  job.recaptures.push(job.recapture);
+  job.mainHead = job.recapture.onto;
+  delete job.recapture;
+  if (!job.review) {
+    // Publish the unreviewed source and its new base together. A crash between
+    // replay and the next reviewer must not leave a stale source/diff receipt.
+    job.head = job.finalHead; delete job.finalHead;
+    job.diff = evidence('diff.patch', git(['diff', '--no-ext-diff', '--no-textconv', `${job.mainHead}...${job.head}`], job.workspace));
+    inheritedEvidence();
+  }
+  save();
+}
+function customMergePaths(base, onto = job.recapture?.onto ?? job.mainHead) {
   const revisions = git(['rev-list', `${base}..${job.finalHead}`], job.workspace).split('\n').filter(Boolean);
-  const paths = new Set(gitNul(['diff', '--no-renames', '--name-only', '-z', base, job.mainHead], job.workspace).filter(Boolean));
+  const paths = new Set(gitNul(['diff', '--no-renames', '--name-only', '-z', base, onto], job.workspace).filter(Boolean));
   for (const revision of revisions) {
     for (const file of gitNul(['diff-tree', '--no-commit-id', '--no-renames', '--name-only', '-r', '-z', `${revision}^`, revision], job.workspace).filter(Boolean)) paths.add(file);
   }
@@ -265,7 +283,7 @@ function customMergePaths(base) {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-attributes-')));
   const index = path.join(directory, 'index'), input = Buffer.from([...paths].join('\0') + '\0', 'utf8');
   try {
-    for (const revision of [null, base, job.mainHead, ...revisions]) {
+    for (const revision of [null, base, onto, ...revisions]) {
       // --cached is available on Git 2.38/2.39. read-tree without -u populates
       // only our alternate index; the lane's real index and files stay intact.
       const options = revision ? { env: { GIT_INDEX_FILE: index } } : {};
@@ -303,6 +321,7 @@ function mergeConflictPaths(fields) {
 // Prepare in an owned detached worktree. The reviewed lane is untouched until
 // the replay's full tree equals the mechanical merge of the captured diff.
 function rebaseForPromotion() {
+  const onto = job.recapture?.onto ?? job.mainHead;
   if (job.rebase?.state === 'prepared' && head() === job.rebase.to) {
     // A lost update response adopts only the exact previously proved commit.
     unchanged({ expectedHead: job.rebase.to });
@@ -310,19 +329,21 @@ function rebaseForPromotion() {
   }
   unchanged(); cleanCanonical();
   if (job.rebase?.state === 'preparing') throw new Error(`Rebase preparation was interrupted; inspect retained scratch ${job.rebase.scratch}; the reviewed lane was not changed`);
-  if (git(['merge-base', job.mainHead, job.finalHead], job.workspace) === job.mainHead) return null;
+  if (git(['merge-base', onto, job.finalHead], job.workspace) === onto) { completeRecapture(); return null; }
   if (!job.rebase) {
-    if (git(['rev-list', '--merges', `${job.mainHead}..${job.finalHead}`], job.workspace)) return 'The lane contains merge commits; a mechanical rebase could linearize reviewed work';
-    const base = git(['merge-base', job.mainHead, job.head], job.workspace);
+    if (git(['rev-list', '--merges', `${onto}..${job.finalHead}`], job.workspace)) return 'The lane contains merge commits; a mechanical rebase could linearize reviewed work';
+    // The replay base and source must share a lineage. finalHead may already
+    // contain a previous main even though the reviewed source predates it.
+    const base = git(['merge-base', onto, job.finalHead], job.workspace);
     const drivers = customMergePaths(base);
     if (drivers.length) {
-      job.rebase = { from: job.finalHead, onto: job.mainHead, base, reviewed_commit: job.head, custom_merge_paths: drivers, state: 'refused' }; save();
+      job.rebase = { from: job.finalHead, onto, base, reviewed_commit: job.head, custom_merge_paths: drivers, state: 'refused' }; save();
       return `Custom merge drivers prevent independent reviewed-diff preservation for: ${drivers.join(', ')}; the lane is intact`;
     }
-    const merged = call(['git'], ['merge-tree', '--write-tree', '--name-only', '-z', job.mainHead, job.finalHead], job.workspace, { encoding: null });
+    const merged = call(['git'], ['merge-tree', '--write-tree', '--name-only', '-z', onto, job.finalHead], job.workspace, { encoding: null });
     const [tree, ...fields] = nulFields(merged.stdout ?? Buffer.alloc(0));
     const conflicts = merged.status === 1 ? mergeConflictPaths(fields) : [];
-    job.rebase = { from: job.finalHead, onto: job.mainHead, base, reviewed_commit: job.head,
+    job.rebase = { from: job.finalHead, onto, base, reviewed_commit: job.head,
       expected_tree: tree, conflicts, state: 'preflight',
       log: evidence('rebase-preflight.log', Buffer.concat([merged.stdout ?? Buffer.alloc(0), Buffer.from('\n'), merged.stderr ?? Buffer.alloc(0)])) }; save();
     if (merged.error || merged.status !== 0) return conflicts.length
@@ -335,7 +356,7 @@ function rebaseForPromotion() {
     try {
       const replay = call(['git'], ['rebase', '--no-fork-point', '--no-autostash', '--no-update-refs',
         '--no-rebase-merges', '--no-autosquash', '--reapply-cherry-picks', '--empty=keep',
-        '--onto', job.mainHead, base], scratch);
+        '--onto', onto, base], scratch);
       job.rebase.log = evidence('rebase.log', `${replay.stdout ?? ''}\n${replay.stderr ?? ''}`);
       if (replay.error || replay.status !== 0) {
         job.rebase.conflicts = gitNul(['diff', '--name-only', '--diff-filter=U', '-z'], scratch).filter(Boolean);
@@ -348,7 +369,7 @@ function rebaseForPromotion() {
       }
       const candidate = git(['rev-parse', 'HEAD'], scratch);
       job.rebase.actual_tree = git(['rev-parse', 'HEAD^{tree}'], scratch);
-      if (job.rebase.actual_tree !== tree || git(['merge-base', job.mainHead, candidate], scratch) !== job.mainHead) {
+      if (job.rebase.actual_tree !== tree || git(['merge-base', onto, candidate], scratch) !== onto) {
         job.rebase.state = 'refused'; save();
         return `The rebased tree does not preserve the reviewed diff; expected ${tree}, got ${job.rebase.actual_tree}; the lane is intact`;
       }
@@ -369,10 +390,11 @@ function rebaseForPromotion() {
   // before rechecking identity and performing an edit-preserving checkout.
   const replaced = call([process.execPath, local('./replace-lane-head.mjs')], [JSON.stringify({ workspace: job.workspace, repo: job.repo,
     common: job.common, branch: `refs/heads/lane/${job.lane}`, from: job.rebase.from, to: job.rebase.to,
-    main: job.main, mainHead: job.mainHead })], job.workspace);
+    main: job.main, mainHead: onto })], job.workspace);
   if (replaced.error || replaced.status !== 0) throw new Error(`Lane-head replacement refused: ${(replaced.stderr || replaced.error?.message || `exit ${replaced.status}`).trim()}`);
   job.finalHead = job.rebase.to; job.rebase.state = 'applied'; save();
   unchanged();
+  completeRecapture();
   return null;
 }
 function dispatchArgs() {
@@ -407,7 +429,7 @@ function fix() {
       .filter((x) => x.value.brief === job.fixBrief && x.value.item === job.item && x.value.common === job.common) : [];
     if (matches.length !== 1) return escalate('Fix dispatch outcome is uncertain; inspect dispatch journals before starting any worker');
     recovery = matches[0];
-  } else unchanged();
+  } else unchanged({ movingMain: true });
   // Another run is authoritative; neither display metadata nor a prior result
   // authorizes starting overlapping work on this lane/item.
   const item = show(job.item);
@@ -490,7 +512,9 @@ function main() {
     bindLaneConfig(job);
     if (!Object.hasOwn(job, 'laneConfig')) { job.laneConfig = laneConfig; save(); }
     if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
-    if (opt.retry && (job.stage !== 'complete' || ['promotable', 'promotable_with_findings'].includes(job.result?.result))) recaptureMain();
+    if (opt.retry && (job.stage !== 'complete' || ['promotable', 'promotable_with_findings'].includes(job.result?.result))) {
+      if (recaptureMain() === false) return;
+    }
     if (job.stage === 'complete') {
       recordSettlementDecision();
       if (opt['fix-findings'] && job.findingsCorrection && job.result.result === 'fix_round') { print(); return; }

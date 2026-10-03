@@ -1,0 +1,523 @@
+TAP version 13
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 1 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 3075.073583
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 2 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 3456.043
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 3 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1299.986125
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 4 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 2162.522834
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 5 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1449.742459
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 6 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 3955.128542
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 7 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 4181.21225
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 8 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 2501.531917
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 9 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 3689.31225
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 10 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 1800.293
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+not ok 11 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 306.885583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    promote: batch interrupted or refused; main only moves for a green batch; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-0cjTM6/repo/.git/promote/batches/cf61da84-4bb9-4bca-86d6-218375f33160/train.json and /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-0cjTM6/repo/.git/promote/batches/cf61da84-4bb9-4bca-86d6-218375f33160/train.log, then resume --drain
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:182:31
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+not ok 12 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 296.017208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    promote: batch interrupted or refused; main only moves for a green batch; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-ktwOGH/repo/.git/promote/batches/64d5977a-cc48-4906-abeb-5fabafe709a1/train.json and /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-ktwOGH/repo/.git/promote/batches/64d5977a-cc48-4906-abeb-5fabafe709a1/train.log, then resume --drain
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:182:31
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+not ok 13 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 1069.903875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:197:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+not ok 14 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 1406.001875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:197:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+not ok 15 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 1546.395209
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:214:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+not ok 16 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 1566.918125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:214:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+not ok 17 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 1495.990333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:214:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+not ok 18 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 1071.847917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    promote: batch interrupted or refused; main only moves for a green batch; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-2tfgR7/repo/.git/promote/batches/0d636e3d-e167-465c-8b65-2e18326cd52d/train.json and /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-2tfgR7/repo/.git/promote/batches/0d636e3d-e167-465c-8b65-2e18326cd52d/train.log, then resume --drain
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:229:31
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+not ok 19 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 210.03125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    promote: batch interrupted or refused; main only moves for a green batch; inspect /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-ldh5IB/repo/.git/promote/batches/0c9154a1-128a-4052-8feb-c85dd599b3bf/train.json and /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/train-test-ldh5IB/repo/.git/promote/batches/0c9154a1-128a-4052-8feb-c85dd599b3bf/train.log, then resume --drain
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/promote/test/train.test.mjs:245:33
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: two recaptures after an applied rebase replay only lane and review commits from the same lineage
+not ok 20 - two recaptures after an applied rebase replay only lane and review commits from the same lineage
+  ---
+  duration_ms: 5293.676916
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + 'escalate'
+    - 'promotable'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'promotable'
+  actual: 'escalate'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:25:48
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: uncertain review retry guards lane mutation before recapturing a moved main
+not ok 21 - uncertain review retry guards lane mutation before recapturing a moved main
+  ---
+  duration_ms: 2104.782291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + '08c7a74e20b6675f1ecbac7d6d753a943e883bc5'
+    - 'a047b52d7bf9879d5ffd3e2200f0545da8ff0620'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'a047b52d7bf9879d5ffd3e2200f0545da8ff0620'
+  actual: '08c7a74e20b6675f1ecbac7d6d753a943e883bc5'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:40:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: refused recapture preflight preserves its old base and gives a terminal conflict handoff
+not ok 22 - refused recapture preflight preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 1562.880292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: The reviewed diff conflicts with main; conflicts in: work.txt; the lane is intact
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:8:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:52:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: refused recapture replay preserves its old base and gives a terminal conflict handoff
+not ok 23 - refused recapture replay preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 1880.557625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: Rebase replay onto main failed; conflicts in: work.txt; the lane is intact
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:8:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:52:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: a lost recapture replacement response retains the old base until the proved head is adopted
+not ok 24 - a lost recapture replacement response retains the old base until the proved head is adopted
+  ---
+  duration_ms: 2534.945375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + '488f8929ae8ca6bb9a07fef57ae7737a3c76c42a'
+    - '279b92e9e079c3ce380e732637b7a7beaa7fe9ab'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '279b92e9e079c3ce380e732637b7a7beaa7fe9ab'
+  actual: '488f8929ae8ca6bb9a07fef57ae7737a3c76c42a'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:70:43
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: dispatching recovery after main moves exempts only its existing correction run and changed head
+not ok 25 - dispatching recovery after main moves exempts only its existing correction run and changed head
+  ---
+  duration_ms: 5896.070709
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /delivery outcome is unknown/. Input:
+
+    'settle: R-1 is superseded by R-2; settle only acts on the requested run\n'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    settle: R-1 is superseded by R-2; settle only acts on the requested run
+
+  operator: 'match'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:82:77
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a stopped fix tolerates main moving and dispatches one correction after STOP clears
+not ok 26 - a stopped fix tolerates main moving and dispatches one correction after STOP clears
+  ---
+  duration_ms: 6414.708083
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:42:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + 'e61c06a1871a73d77484af5fd22a2805993d1286'
+    - 'efbf81965b99981171c201f6d48dc4bb9c7fe03b'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'efbf81965b99981171c201f6d48dc4bb9c7fe03b'
+  actual: 'e61c06a1871a73d77484af5fd22a2805993d1286'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/settle/test/recapture.test.mjs:101:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train/test/helpers/bounded-test.mjs:43:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..26
+# tests 26
+# suites 0
+# pass 10
+# fail 16
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 36581.220667

@@ -1,0 +1,24 @@
+ 1:  94acd9d !  1:  c9add9a Add the project fleet registry and bounded discovery
+    @@ lanes/README.md: built-ins.
+     
+      ## lanes/lane.mjs ##
+     @@
+    - // (see README).
+      
+      import { loadTimeout } from '../lib/deadline.mjs';
+    + import { waitForMemory } from '../lib/memory.mjs';
+     +import { projectFleet } from '../lib/fleet.mjs';
+      import { execFileSync, spawnSync } from "node:child_process";
+      import { createHash, randomBytes } from "node:crypto";
+ 2:  4772694 =  2:  7611445 Report the fleet build and acceptance evidence
+ 3:  ed94481 =  3:  3125679 Add fleet independent review record
+ 4:  65c5f8c =  4:  43d4016 Fix fleet discovery boundaries, entry overrides, and adoption
+ 5:  0df9dac =  5:  141713f Report fleet review fixes for R-167
+ 6:  e6d7276 =  6:  1f5cfa4 Add fleet independent review record
+ 7:  97da528 =  7:  87c1f27 Fix fleet rejoin recovery and example config rejection
+ 8:  918ddbb =  8:  86b266b Report fleet rejoin fixes for R-174
+ 9:  2f80766 =  9:  2009a8e Add fleet independent review record
+10:  ec21682 = 10:  a8c719b Fix fleet dependencies and isolation in copied discovery probe
+11:  a901dbf = 11:  0c84ad8 Report ARCH-17 copied-product CI fix for R-178
+12:  c5fd0b7 = 12:  8e1db1b Fix fleet discovery dependencies and scratch fixture cleanup
+13:  261350d = 13:  21dfdb2 Report ARCH-17 fleet CI integration fix for R-183

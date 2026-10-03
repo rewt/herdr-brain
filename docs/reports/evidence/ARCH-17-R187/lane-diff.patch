@@ -1,0 +1,48 @@
+diff --git a/lanes/lane.mjs b/lanes/lane.mjs
+index 49f1164..de9e7ef 100755
+--- a/lanes/lane.mjs
++++ b/lanes/lane.mjs
+@@ -13,6 +13,7 @@
+ 
+ import { loadTimeout } from '../lib/deadline.mjs';
+ import { waitForMemory } from '../lib/memory.mjs';
++import { projectFleet } from '../lib/fleet.mjs';
+ import { execFileSync, spawnSync } from "node:child_process";
+ import { createHash, randomBytes } from "node:crypto";
+ import {
+@@ -169,6 +170,7 @@ function repositoryRoot({ requiredBy } = {}) {
+ }
+ 
+ const REPO_ROOT = repositoryRoot();
++const FLEET = (() => { try { return projectFleet(REPO_ROOT); } catch (error) { fail(error.message); } })();
+ // Configuration comes from the nearest eligible parent .lane.json followed by
+ // the canonical checkout's .lane.json. $LANE_CONFIG selects exactly one file.
+ // Every key is optional.
+@@ -303,16 +305,15 @@ function nearestParentConfig(repository) {
+ 
+ const EXPLICIT_CONFIG = process.env.LANE_CONFIG !== undefined;
+ const REPOSITORY_CONFIG_FILE = join(REPO_ROOT, ".lane.json");
+-const PARENT_CONFIG_FILE = EXPLICIT_CONFIG ? undefined : nearestParentConfig(REPO_ROOT);
++const PARENT_CONFIG_FILE = EXPLICIT_CONFIG ? undefined : FLEET.fleet ? FLEET.project?.layers[0] : nearestParentConfig(REPO_ROOT);
+ const CONFIG_LAYERS = (() => {
+   if (EXPLICIT_CONFIG) {
+     const file = resolve(CALLER_CWD, process.env.LANE_CONFIG);
+     return [{ file, config: readConfig(file, { required: true }) }];
+   }
+   const layers = [];
+-  if (PARENT_CONFIG_FILE !== undefined) {
+-    layers.push({ file: PARENT_CONFIG_FILE, config: readConfig(PARENT_CONFIG_FILE, { required: true }) });
+-  }
++  for (const file of FLEET.fleet ? FLEET.project?.layers ?? [] : [PARENT_CONFIG_FILE].filter(Boolean))
++    layers.push({ file, config: readConfig(file, { required: true }) });
+   const repository = readConfig(REPOSITORY_CONFIG_FILE);
+   if (repository !== undefined) layers.push({ file: REPOSITORY_CONFIG_FILE, config: repository });
+   return layers;
+@@ -348,6 +349,7 @@ const { path: WORKTREE_ROOT, base: WORKTREE_BASE, source: WORKTREE_ROOT_SOURCE }
+     const path = resolve(CALLER_CWD, process.env.LANE_WORKTREE_ROOT);
+     return { path, base: path, source: "env" };
+   }
++  if (FLEET.project && !EXPLICIT_CONFIG) return { path: FLEET.project.worktrees, base: FLEET.project.worktrees, source: FLEET.fleet.file };
+   if (Object.hasOwn(CONFIG, "worktree_root")) {
+     const source = CONFIG_SOURCES.get("worktree_root");
+     const base = resolve(dirname(source), CONFIG.worktree_root);

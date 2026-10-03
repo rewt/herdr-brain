@@ -1,0 +1,922 @@
+TAP version 13
+# Subtest: git helpers isolate the operator's global excludes file
+ok 1 - git helpers isolate the operator's global excludes file
+  ---
+  duration_ms: 37.802791
+  ...
+# Subtest: open creates a lane and refuses duplicate, invalid, and unresolved inputs
+ok 2 - open creates a lane and refuses duplicate, invalid, and unresolved inputs
+  ---
+  duration_ms: 273.01425
+  ...
+# Subtest: status reports distance, dirtiness, and files shared by lanes
+ok 3 - status reports distance, dirtiness, and files shared by lanes
+  ---
+  duration_ms: 413.24825
+  ...
+# Subtest: promote refuses a dirty lane worktree
+ok 4 - promote refuses a dirty lane worktree
+  ---
+  duration_ms: 199.09075
+  ...
+# Subtest: promote leaves main unchanged when validation fails
+ok 5 - promote leaves main unchanged when validation fails
+  ---
+  duration_ms: 332.641583
+  ...
+# Switched to a new branch 'merged-history-side'
+# Switched to branch 'lane/merged-history'
+# Switched to a new branch 'merged-behind-side'
+# Switched to branch 'lane/merged-behind'
+# Switched to a new branch 'merged-current-side'
+# Switched to branch 'lane/merged-current'
+# HEAD is now at b853097 ignore lane state
+# Subtest: promote waits before the lock and completes fast-forward if memory pressure appears during validation
+ok 6 - promote waits before the lock and completes fast-forward if memory pressure appears during validation
+  ---
+  duration_ms: 5395.421667
+  ...
+# Subtest: promote rebases a clean lane behind main and fast-forwards
+ok 7 - promote rebases a clean lane behind main and fast-forwards
+  ---
+  duration_ms: 421.363416
+  ...
+# Subtest: promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes
+ok 8 - promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes
+  ---
+  duration_ms: 702.985625
+  ...
+# Subtest: promote accepts a gitignored session registry in the canonical checkout
+ok 9 - promote accepts a gitignored session registry in the canonical checkout
+  ---
+  duration_ms: 363.605708
+  ...
+# Subtest: promote refuses a conflicting rebase and names the file
+ok 10 - promote refuses a conflicting rebase and names the file
+  ---
+  duration_ms: 261.687292
+  ...
+# Subtest: promote refuses when main moves during validation
+ok 11 - promote refuses when main moves during validation
+  ---
+  duration_ms: 326.257125
+  ...
+# Subtest: close deletes a merged branch
+ok 12 - close deletes a merged branch
+  ---
+  duration_ms: 435.9015
+  ...
+# Subtest: close retires a background workspace without worktree.remove and preserves the archive
+ok 13 - close retires a background workspace without worktree.remove and preserves the archive
+  ---
+  duration_ms: 452.469375
+  ...
+# Subtest: close refuses a dirty worktree
+ok 14 - close refuses a dirty worktree
+  ---
+  duration_ms: 190.829542
+  ...
+# Subtest: close preserves a locked worktree and its workspace when Git removal refuses
+ok 15 - close preserves a locked worktree and its workspace when Git removal refuses
+  ---
+  duration_ms: 524.131459
+  ...
+# Subtest: rebase-check exits zero when clean and one with files on conflict
+ok 16 - rebase-check exits zero when clean and one with files on conflict
+  ---
+  duration_ms: 369.082834
+  ...
+# Subtest: rebase-check and status refuse a merge-bearing lane only when it is behind main
+ok 17 - rebase-check and status refuse a merge-bearing lane only when it is behind main
+  ---
+  duration_ms: 562.119208
+  ...
+# Subtest: prepare runs needed steps and skips steps whose unless path exists
+ok 18 - prepare runs needed steps and skips steps whose unless path exists
+  ---
+  duration_ms: 220.106208
+  ...
+# Subtest: check records configured validation against the current HEAD
+ok 19 - check records configured validation against the current HEAD
+  ---
+  duration_ms: 385.229291
+  ...
+# Subtest: check honors LANE_VALIDATE and --cmd precedence and returns a failed gate exit
+ok 20 - check honors LANE_VALIDATE and --cmd precedence and returns a failed gate exit
+  ---
+  duration_ms: 444.139416
+  ...
+# Subtest: check defaults to npm test and refuses a dirty current worktree
+ok 21 - check defaults to npm test and refuses a dirty current worktree
+  ---
+  duration_ms: 343.848541
+  ...
+# Subtest: check runs configured prepare steps before validation
+ok 22 - check runs configured prepare steps before validation
+  ---
+  duration_ms: 291.673
+  ...
+# Subtest: check records signal termination using the shell exit convention
+ok 23 - check records signal termination using the shell exit convention
+  ---
+  duration_ms: 144.76025
+  ...
+# Subtest: check refuses a detached HEAD without replacing an existing gate
+ok 24 - check refuses a detached HEAD without replacing an existing gate
+  ---
+  duration_ms: 101.235292
+  ...
+# Subtest: check rejects unknown options and missing or empty --cmd values
+ok 25 - check rejects unknown options and missing or empty --cmd values
+  ---
+  duration_ms: 150.452
+  ...
+# Subtest: routes prints configured routes with resolved dispatch defaults
+ok 26 - routes prints configured routes with resolved dispatch defaults
+  ---
+  duration_ms: 152.495666
+  ...
+# Subtest: named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call
+ok 27 - named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call
+  ---
+  duration_ms: 5799.64375
+  ...
+# Subtest: always_args sees the canonical model and effort that dispatch emits
+ok 28 - always_args sees the canonical model and effort that dispatch emits
+  ---
+  duration_ms: 2387.953292
+  ...
+# Subtest: always_args rejects a non-object value
+ok 29 - always_args rejects a non-object value
+  ---
+  duration_ms: 64.556875
+  ...
+# Subtest: always_args rejects a list whose first token is not an option
+ok 30 - always_args rejects a list whose first token is not an option
+  ---
+  duration_ms: 67.399458
+  ...
+# Subtest: config attributes always_args to the file that supplied it
+ok 31 - config attributes always_args to the file that supplied it
+  ---
+  duration_ms: 72.179542
+  ...
+# Subtest: config layers the nearest parent and canonical repository with attributed replacement semantics
+ok 32 - config layers the nearest parent and canonical repository with attributed replacement semantics
+  ---
+  duration_ms: 182.51725
+  ...
+# Subtest: config escapes route names so every TSV record remains one line with three fields
+ok 33 - config escapes route names so every TSV record remains one line with three fields
+  ---
+  duration_ms: 98.435917
+  ...
+# Subtest: worktree roots honor parent-relative, parent-default, legacy, and caller-relative environment precedence
+ok 34 - worktree roots honor parent-relative, parent-default, legacy, and caller-relative environment precedence
+  ---
+  duration_ms: 694.223209
+  ...
+# Subtest: home is a configuration discovery boundary
+ok 35 - home is a configuration discovery boundary
+  ---
+  duration_ms: 84.876333
+  ...
+# Subtest: LANE_CONFIG selects one caller-relative file and bypasses discovered layers
+ok 36 - LANE_CONFIG selects one caller-relative file and bypasses discovered layers
+  ---
+  duration_ms: 159.84925
+  ...
+# Subtest: linked invocations use canonical repository config for explanation, check, and promote
+ok 37 - linked invocations use canonical repository config for explanation, check, and promote
+  ---
+  duration_ms: 752.622875
+  ...
+# Subtest: bare repositories with only linked worktrees allow reads and refuse mutations clearly
+ok 38 - bare repositories with only linked worktrees allow reads and refuse mutations clearly
+  ---
+  duration_ms: 249.147917
+  ...
+# Subtest: same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities
+ok 39 - same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities
+  ---
+  duration_ms: 1547.700667
+  ...
+# Subtest: long Unicode workspace labels retain graphemes and fragments within 64 code points
+ok 40 - long Unicode workspace labels retain graphemes and fragments within 64 code points
+  ---
+  duration_ms: 820.730917
+  ...
+# Subtest: open refuses symlink escapes and destinations inside repository checkouts before mutation
+ok 41 - open refuses symlink escapes and destinations inside repository checkouts before mutation
+  ---
+  duration_ms: 529.995667
+  ...
+# Subtest: registered paths are rejected when their on-disk repository identity changes
+ok 42 - registered paths are rejected when their on-disk repository identity changes
+  ---
+  duration_ms: 239.80375
+  ...
+# Subtest: a missing registered worktree names git worktree prune
+ok 43 - a missing registered worktree names git worktree prune
+  ---
+  duration_ms: 188.680625
+  ...
+# Subtest: stale Herdr checkout metadata is not used for dispatch or close
+ok 44 - stale Herdr checkout metadata is not used for dispatch or close
+  ---
+  duration_ms: 822.383875
+  ...
+# Subtest: linked invocation creates labeled children under the canonical repository workspace
+ok 45 - linked invocation creates labeled children under the canonical repository workspace
+  ---
+  duration_ms: 416.285
+  ...
+# Subtest: open refreshes Herdr workspaces after a failed create before accepting fallback metadata
+ok 46 - open refreshes Herdr workspaces after a failed create before accepting fallback metadata
+  ---
+  duration_ms: 320.164583
+  ...
+# Subtest: dispatch refreshes Herdr workspaces before accepting newly visible metadata
+ok 47 - dispatch refreshes Herdr workspaces before accepting newly visible metadata
+  ---
+  duration_ms: 614.162334
+  ...
+# Subtest: dispatch opens a single agent tab in the initial pane and keeps fix rounds background
+ok 48 - dispatch opens a single agent tab in the initial pane and keeps fix rounds background
+  ---
+  duration_ms: 1299.714958
+  ...
+# Subtest: dispatch opens a one-tab lane without a project workspace (linked caller: false)
+ok 49 - dispatch opens a one-tab lane without a project workspace (linked caller: false)
+  ---
+  duration_ms: 1012.459791
+  ...
+# Subtest: dispatch opens a one-tab lane without a project workspace (linked caller: true)
+ok 50 - dispatch opens a one-tab lane without a project workspace (linked caller: true)
+  ---
+  duration_ms: 1154.03925
+  ...
+# Subtest: dispatch retains the recorded session after a rejected final rename without replay
+ok 51 - dispatch retains the recorded session after a rejected final rename without replay
+  ---
+  duration_ms: 1062.7255
+  ...
+# Subtest: dispatch uses the pane POSIX shell despite SHELL=fish (rc child: false)
+ok 52 - dispatch uses the pane POSIX shell despite SHELL=fish (rc child: false)
+  ---
+  duration_ms: 1119.309334
+  ...
+# Subtest: dispatch uses the pane POSIX shell despite SHELL=fish (rc child: true)
+ok 53 - dispatch uses the pane POSIX shell despite SHELL=fish (rc child: true)
+  ---
+  duration_ms: 1144.952042
+  ...
+# Subtest: dispatch leaves earlier and concurrently opened workspace shells untouched
+ok 54 - dispatch leaves earlier and concurrently opened workspace shells untouched
+  ---
+  duration_ms: 1319.723834
+  ...
+# Subtest: dispatch retains initial tabs on environment and agent cwd failures
+ok 55 - dispatch retains initial tabs on environment and agent cwd failures
+  ---
+  duration_ms: 35230.450292
+  ...
+# Subtest: dispatch waits for shell readiness beyond five seconds
+ok 56 - dispatch waits for shell readiness beyond five seconds
+  ---
+  duration_ms: 6721.371375
+  ...
+# Subtest: dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish
+ok 57 - dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish
+  ---
+  duration_ms: 661.192833
+  ...
+# Subtest: dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu
+ok 58 - dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu
+  ---
+  duration_ms: 663.406833
+  ...
+# Subtest: dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks
+ok 59 - dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks
+  ---
+  duration_ms: 5645.291708
+  ...
+# Subtest: dispatch persists immutable occupant evidence as display-only optional metadata
+ok 60 - dispatch persists immutable occupant evidence as display-only optional metadata
+  ---
+  duration_ms: 585.1975
+  ...
+# Subtest: dispatch does not write a claim when the prompted occupant is replaced
+ok 61 - dispatch does not write a claim when the prompted occupant is replaced
+  ---
+  duration_ms: 596.5875
+  ...
+# Subtest: one exported Herdr socket-path helper supplies the Herdr client and dispatch records
+ok 62 - one exported Herdr socket-path helper supplies the Herdr client and dispatch records
+  ---
+  duration_ms: 1.712375
+  ...
+# Subtest: dispatch refuses unsafe registries and unreadable briefs before every Herdr call
+ok 63 - dispatch refuses unsafe registries and unreadable briefs before every Herdr call
+  ---
+  duration_ms: 1071.947083
+  ...
+# Subtest: dispatch checks tracked registry state in the canonical checkout from a lane
+ok 64 - dispatch checks tracked registry state in the canonical checkout from a lane
+  ---
+  duration_ms: 297.962708
+  ...
+# Subtest: dispatch reports repository containment before an external symlink
+ok 65 - dispatch reports repository containment before an external symlink
+  ---
+  duration_ms: 195.74175
+  ...
+# Subtest: dispatch symlink refusal names the repository-local correction
+ok 66 - dispatch symlink refusal names the repository-local correction
+  ---
+  duration_ms: 193.875791
+  ...
+# Subtest: dispatch unwritable-sidecar refusal names both corrections
+ok 67 - dispatch unwritable-sidecar refusal names both corrections
+  ---
+  duration_ms: 210.258041
+  ...
+# Subtest: dispatch writes no record on cwd, start, or prompt failure and reports post-prompt persistence as partial success
+ok 68 - dispatch writes no record on cwd, start, or prompt failure and reports post-prompt persistence as partial success
+  ---
+  duration_ms: 13639.775042
+  ...
+# Subtest: independent record writes and simultaneous done markers retain all sessions
+ok 69 - independent record writes and simultaneous done markers retain all sessions
+  ---
+  duration_ms: 69.669583
+  ...
+# Subtest: registry reads legacy arrays, sidecar records, done markers, and localized malformed entries
+ok 70 - registry reads legacy arrays, sidecar records, done markers, and localized malformed entries
+  ---
+  duration_ms: 15.35625
+  ...
+# Subtest: session completion refuses unignored and external registry writes
+ok 71 - session completion refuses unignored and external registry writes
+  ---
+  duration_ms: 44.20175
+  ...
+# Subtest: close warns and succeeds when registry policy refuses automated metadata
+ok 72 - close warns and succeeds when registry policy refuses automated metadata
+  ---
+  duration_ms: 691.377041
+  ...
+# Subtest: close marks exact repository topic sessions done only after git close succeeds
+ok 73 - close marks exact repository topic sessions done only after git close succeeds
+  ---
+  duration_ms: 1691.645833
+  ...
+# Subtest: failed archive and post-close metadata writes preserve honest completion state
+ok 74 - failed archive and post-close metadata writes preserve honest completion state
+  ---
+  duration_ms: 1578.161166
+  ...
+# Subtest: git-only close with no registry creates no metadata store
+ok 75 - git-only close with no registry creates no metadata store
+  ---
+  duration_ms: 216.117916
+  ...
+# Subtest: a repository with a separate git directory retains its canonical checkout identity
+ok 76 - a repository with a separate git directory retains its canonical checkout identity
+  ---
+  duration_ms: 138.093708
+  ...
+# Subtest: selected malformed, unreadable, and wrongly typed config files fail before mutation
+ok 77 - selected malformed, unreadable, and wrongly typed config files fail before mutation
+  ---
+  duration_ms: 307.472834
+  ...
+# Subtest: open refuses ordinary and foreign-worktree destinations without creating branches
+ok 78 - open refuses ordinary and foreign-worktree destinations without creating branches
+  ---
+  duration_ms: 261.568375
+  ...
+# Subtest: registered legacy lane paths remain authoritative after worktree_root changes
+ok 79 - registered legacy lane paths remain authoritative after worktree_root changes
+  ---
+  duration_ms: 923.226042
+  ...
+# Subtest: dispatch rejects an unknown route before checking Herdr
+ok 80 - dispatch rejects an unknown route before checking Herdr
+  ---
+  duration_ms: 244.066583
+  ...
+# Subtest: review requires explicit source, round, route, and bounded unique flags with exit 2
+ok 81 - review requires explicit source, round, route, and bounded unique flags with exit 2
+  ---
+  duration_ms: 579.711959
+  ...
+# Subtest: review dispatches once and publishes all canonical verdicts after private validation
+ok 82 - review dispatches once and publishes all canonical verdicts after private validation
+  ---
+  duration_ms: 8268.935917
+  ...
+# Subtest: review accepts a routing snapshot without replacing project lifecycle configuration
+ok 83 - review accepts a routing snapshot without replacing project lifecycle configuration
+  ---
+  duration_ms: 2749.696042
+  ...
+# Subtest: review settles a completed private record before validating its final bytes
+ok 84 - review settles a completed private record before validating its final bytes
+  ---
+  duration_ms: 3401.308792
+  ...
+# Subtest: review preserves a final finding immediately before the next section heading
+ok 85 - review preserves a final finding immediately before the next section heading
+  ---
+  duration_ms: 2711.240792
+  ...
+# Subtest: review completion admits representative validator-accepted record boundaries
+ok 86 - review completion admits representative validator-accepted record boundaries
+  ---
+  duration_ms: 13746.628292
+  ...
+# Subtest: review preserves finding entries across the blank-line matrix
+ok 87 - review preserves finding entries across the blank-line matrix
+  ---
+  duration_ms: 8243.565083
+  ...
+# Subtest: review keeps malformed findings public on Codex and alternate routes without private sections
+ok 88 - review keeps malformed findings public on Codex and alternate routes without private sections
+  ---
+  duration_ms: 16187.3085
+  ...
+# Subtest: review projects repository-relative finding locations containing spaces
+ok 89 - review projects repository-relative finding locations containing spaces
+  ---
+  duration_ms: 2695.792625
+  ...
+# Subtest: review sanitizes deterministic aliases and path forms in a bounded public projection
+ok 90 - review sanitizes deterministic aliases and path forms in a bounded public projection
+  ---
+  duration_ms: 2688.6655
+  ...
+# Subtest: review redacts syntax-shaped slash prose while retaining alias safeguards
+ok 91 - review redacts syntax-shaped slash prose while retaining alias safeguards
+  ---
+  duration_ms: 5403.305958
+  ...
+# Subtest: review redacts an absolute path inside a regex-like character class
+ok 92 - review redacts an absolute path inside a regex-like character class
+  ---
+  duration_ms: 2717.90875
+  ...
+# Subtest: review sanitizes a flag-attached absolute path in finding prose
+ok 93 - review sanitizes a flag-attached absolute path in finding prose
+  ---
+  duration_ms: 2723.807833
+  ...
+# Subtest: review sanitizes a flag-attached absolute path in finding location
+ok 94 - review sanitizes a flag-attached absolute path in finding location
+  ---
+  duration_ms: 2702.714584
+  ...
+# Subtest: review sanitizes a flag-attached absolute path in command string
+ok 95 - review sanitizes a flag-attached absolute path in command string
+  ---
+  duration_ms: 2780.279958
+  ...
+# Subtest: review sanitizes a delimiter-prefixed flag-attached absolute path in backtick-quoted finding prose
+ok 96 - review sanitizes a delimiter-prefixed flag-attached absolute path in backtick-quoted finding prose
+  ---
+  duration_ms: 2731.09975
+  ...
+# Subtest: review sanitizes a delimiter-prefixed flag-attached absolute path in assigned command string
+ok 97 - review sanitizes a delimiter-prefixed flag-attached absolute path in assigned command string
+  ---
+  duration_ms: 2699.751417
+  ...
+# Subtest: review sanitizes a delimiter-prefixed flag-attached absolute path in double-quoted finding location
+ok 98 - review sanitizes a delimiter-prefixed flag-attached absolute path in double-quoted finding location
+  ---
+  duration_ms: 2670.606125
+  ...
+# Subtest: review redacts a forward-separator UNC path
+ok 99 - review redacts a forward-separator UNC path
+  ---
+  duration_ms: 2699.63425
+  ...
+# Subtest: review redacts a hosted file URL
+ok 100 - review redacts a hosted file URL
+  ---
+  duration_ms: 2691.028125
+  ...
+# Subtest: review refuses an escaped absolute path in finding prose
+ok 101 - review refuses an escaped absolute path in finding prose
+  ---
+  duration_ms: 2661.859666
+  ...
+# Subtest: review refuses an escaped absolute path in finding location
+ok 102 - review refuses an escaped absolute path in finding location
+  ---
+  duration_ms: 2671.818791
+  ...
+# Subtest: review refuses an escaped absolute path in command string
+ok 103 - review refuses an escaped absolute path in command string
+  ---
+  duration_ms: 2666.588209
+  ...
+# Subtest: review refuses a relative-looking protected location embedding an absolute path
+ok 104 - review refuses a relative-looking protected location embedding an absolute path
+  ---
+  duration_ms: 2669.930166
+  ...
+# Subtest: review refuses a two-segment flag-letter path in a protected location
+ok 105 - review refuses a two-segment flag-letter path in a protected location
+  ---
+  duration_ms: 2673.085209
+  ...
+# Subtest: review refuses a deeper path with a flag-letter second segment in a protected location
+ok 106 - review refuses a deeper path with a flag-letter second segment in a protected location
+  ---
+  duration_ms: 2666.128834
+  ...
+# Subtest: review refuses a drive path with a flag-letter segment in a protected location
+ok 107 - review refuses a drive path with a flag-letter segment in a protected location
+  ---
+  duration_ms: 2666.580875
+  ...
+# Subtest: review preserves a command-substitution delimiter after file URL redaction
+ok 108 - review preserves a command-substitution delimiter after file URL redaction
+  ---
+  duration_ms: 2706.864583
+  ...
+# Subtest: review refuses a closing-parenthesis file URL residue that the base matcher fully redacted
+ok 109 - review refuses a closing-parenthesis file URL residue that the base matcher fully redacted
+  ---
+  duration_ms: 2676.625333
+  ...
+# Subtest: review publishes a standalone closing delimiter after file URL redaction
+ok 110 - review publishes a standalone closing delimiter after file URL redaction
+  ---
+  duration_ms: 2691.401333
+  ...
+# Subtest: review refuses a spaced-path continuation after a closing parenthesis
+ok 111 - review refuses a spaced-path continuation after a closing parenthesis
+  ---
+  duration_ms: 2642.188667
+  ...
+# Subtest: review refuses a spaced-path continuation after a closing quote
+ok 112 - review refuses a spaced-path continuation after a closing quote
+  ---
+  duration_ms: 2672.036625
+  ...
+# Subtest: review refuses a spaced-path continuation after a closing bracket
+ok 113 - review refuses a spaced-path continuation after a closing bracket
+  ---
+  duration_ms: 2678.348292
+  ...
+# Subtest: review refuses a spaced-path continuation after any greater-than terminator
+ok 114 - review refuses a spaced-path continuation after any greater-than terminator
+  ---
+  duration_ms: 2664.319375
+  ...
+# Subtest: review refuses a spaced-path continuation after any colon terminator
+ok 115 - review refuses a spaced-path continuation after any colon terminator
+  ---
+  duration_ms: 2686.9395
+  ...
+# Subtest: review refuses a spaced-path continuation after any less-than terminator
+ok 116 - review refuses a spaced-path continuation after any less-than terminator
+  ---
+  duration_ms: 2657.053541
+  ...
+# Subtest: review refuses a spaced-path continuation after any opening-bracket terminator
+ok 117 - review refuses a spaced-path continuation after any opening-bracket terminator
+  ---
+  duration_ms: 2673.150166
+  ...
+# Subtest: review refuses a spaced-path continuation after any closing-brace terminator
+ok 118 - review refuses a spaced-path continuation after any closing-brace terminator
+  ---
+  duration_ms: 2738.649167
+  ...
+# Subtest: review refuses a spaced-path continuation after any arbitrary punctuation run
+ok 119 - review refuses a spaced-path continuation after any arbitrary punctuation run
+  ---
+  duration_ms: 2753.926792
+  ...
+# Subtest: review refuses a spaced-path continuation with an embedded absolute-path match
+ok 120 - review refuses a spaced-path continuation with an embedded absolute-path match
+  ---
+  duration_ms: 2688.248042
+  ...
+# Subtest: review refuses a parenthesized file URL residue
+ok 121 - review refuses a parenthesized file URL residue
+  ---
+  duration_ms: 2680.292042
+  ...
+# Subtest: review sanitization preserves unrelated words and fails closed on ambiguous or unsafe payloads
+ok 122 - review sanitization preserves unrelated words and fails closed on ambiguous or unsafe payloads
+  ---
+  duration_ms: 48234.40175
+  ...
+# Subtest: review projects command syntax verbatim while escaping the same characters in prose
+ok 123 - review projects command syntax verbatim while escaping the same characters in prose
+  ---
+  duration_ms: 10817.6575
+  ...
+# Subtest: review escapes prose punctuation after sanitizing the unescaped payload
+ok 124 - review escapes prose punctuation after sanitizing the unescaped payload
+  ---
+  duration_ms: 2686.56875
+  ...
+# Subtest: review refuses an opening parenthesis after a concrete path match
+ok 125 - review refuses an opening parenthesis after a concrete path match
+  ---
+  duration_ms: 2671.496792
+  ...
+# Subtest: review projects every finding from the sanitized production PASS fixture
+ok 126 - review projects every finding from the sanitized production PASS fixture
+  ---
+  duration_ms: 2696.673916
+  ...
+# Subtest: review refuses a finding description containing a declared private identifier
+ok 127 - review refuses a finding description containing a declared private identifier
+  ---
+  duration_ms: 2764.902417
+  ...
+# Subtest: review allows private-only heading text inside a verbatim command
+ok 128 - review allows private-only heading text inside a verbatim command
+  ---
+  duration_ms: 2718.020625
+  ...
+# Subtest: review publishes exclusively, leaves normal clean-tree commands refusing, and blocks the occupied round
+ok 129 - review publishes exclusively, leaves normal clean-tree commands refusing, and blocks the occupied round
+  ---
+  duration_ms: 2898.871833
+  ...
+# Subtest: review late-publication mutation exits 2 and retains both evidence files
+ok 130 - review late-publication mutation exits 2 and retains both evidence files
+  ---
+  duration_ms: 2690.897792
+  ...
+# Subtest: review renders OpenSpec, supplemental literal input, gate, and captured commit metadata
+ok 131 - review renders OpenSpec, supplemental literal input, gate, and captured commit metadata
+  ---
+  duration_ms: 2763.545333
+  ...
+# Subtest: review keeps uppercase brace tokens literal in briefs and tracked source files
+ok 132 - review keeps uppercase brace tokens literal in briefs and tracked source files
+  ---
+  duration_ms: 5439.751833
+  ...
+# Subtest: review accepts negated test-pass limits but still refuses affirmative prose claims
+ok 133 - review accepts negated test-pass limits but still refuses affirmative prose claims
+  ---
+  duration_ms: 5379.663375
+  ...
+# Subtest: review refuses malformed private evidence, incomplete output, timeout, and lane mutation
+ok 134 - review refuses malformed private evidence, incomplete output, timeout, and lane mutation
+  ---
+  duration_ms: 26022.66825
+  ...
+# Subtest: review sends malformed completed endings to schema validation without waiting for timeout
+ok 135 - review sends malformed completed endings to schema validation without waiting for timeout
+  ---
+  duration_ms: 7984.242791
+  ...
+# Subtest: review contains unexpected errors when the target disappears after dispatch
+ok 136 - review contains unexpected errors when the target disappears after dispatch
+  ---
+  duration_ms: 2650.647541
+  ...
+# Subtest: review unexpected failure after publication warns about retained public evidence
+ok 137 - review unexpected failure after publication warns about retained public evidence
+  ---
+  duration_ms: 2691.9005
+  ...
+# Subtest: review interruption exits 2 without a verdict or follow-up lifecycle action
+ok 138 - review interruption exits 2 without a verdict or follow-up lifecycle action
+  ---
+  duration_ms: 859.514792
+  ...
+# Subtest: review reference describes the shipped public path and protected-location policy
+ok 139 - review reference describes the shipped public path and protected-location policy
+  ---
+  duration_ms: 0.322875
+  ...
+# Subtest: review preflight requires ignored private and trackable absent public paths
+ok 140 - review preflight requires ignored private and trackable absent public paths
+  ---
+  duration_ms: 838.5405
+  ...
+# Subtest: usage exits one with no command and with an unknown command
+ok 141 - usage exits one with no command and with an unknown command
+  ---
+  duration_ms: 151.557208
+  ...
+# Subtest: status exits quietly when a downstream reader closes stdout
+ok 142 - status exits quietly when a downstream reader closes stdout
+  ---
+  duration_ms: 146.124959
+  ...
+# Subtest: verify-agent mismatch control uses a fake Herdr
+ok 143 - verify-agent mismatch control uses a fake Herdr
+  ---
+  duration_ms: 283.684167
+  ...
+# Subtest: defaults, legacy commands, partial tracked overrides and invalid declarations
+ok 144 - defaults, legacy commands, partial tracked overrides and invalid declarations
+  ---
+  duration_ms: 188.10875
+  ...
+# Subtest: a worker check, promotion check and promotion reuse their exact commands; release never runs
+ok 145 - a worker check, promotion check and promotion reuse their exact commands; release never runs
+  ---
+  duration_ms: 844.622
+  ...
+# Subtest: pane identities are absent from preparation, validation and fingerprints
+ok 146 - pane identities are absent from preparation, validation and fingerprints
+  ---
+  duration_ms: 596.691917
+  ...
+# Subtest: same tree after empty commits and a clean rebase reuses validation across tiers
+ok 147 - same tree after empty commits and a clean rebase reuses validation across tiers
+  ---
+  duration_ms: 457.996084
+  ...
+# Subtest: tree, command, environment, preparation and declared environment changes invalidate reuse
+ok 148 - tree, command, environment, preparation and declared environment changes invalidate reuse
+  ---
+  duration_ms: 998.87425
+  ...
+# Subtest: red, signal, dirty and moved-head executions never supply reusable green evidence
+ok 149 - red, signal, dirty and moved-head executions never supply reusable green evidence
+  ---
+  duration_ms: 1004.27
+  ...
+# Subtest: commands that start and exit 75 record failed receipts in both validation tiers
+ok 150 - commands that start and exit 75 record failed receipts in both validation tiers
+  ---
+  duration_ms: 729.591
+  ...
+# Subtest: worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+ok 151 - worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+  ---
+  duration_ms: 754.832125
+  ...
+# Subtest: a started command exiting 75 is a failure in check and promote, never a slot refusal
+ok 152 - a started command exiting 75 is a failure in check and promote, never a slot refusal
+  ---
+  duration_ms: 1075.004208
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retries
+ok 153 - promotion holds the slot without replaying the chain when leaf retries
+  ---
+  duration_ms: 325.034959
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retry exhausted
+ok 154 - promotion holds the slot without replaying the chain when leaf retry exhausted
+  ---
+  duration_ms: 331.547875
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf declines
+ok 155 - promotion holds the slot without replaying the chain when leaf declines
+  ---
+  duration_ms: 308.656292
+  ...
+# Subtest: promotion holds the slot without replaying the chain when earlier timeout text
+ok 156 - promotion holds the slot without replaying the chain when earlier timeout text
+  ---
+  duration_ms: 306.759417
+  ...
+# Subtest: a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+ok 157 - a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+  ---
+  duration_ms: 532.772875
+  ...
+# Subtest: overlapping checks serialize evidence without running the same command twice
+ok 158 - overlapping checks serialize evidence without running the same command twice
+  ---
+  duration_ms: 486.118625
+  ...
+# Subtest: promotion checks in different projects serialize and a nested command uses the held slot
+ok 159 - promotion checks in different projects serialize and a nested command uses the held slot
+  ---
+  duration_ms: 782.703541
+  ...
+# Subtest: bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+ok 160 - bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+  ---
+  duration_ms: 535.119084
+  ...
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 161 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 681.035333
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 162 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 533.04625
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 163 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 969.536708
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 164 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 160.936667
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 165 - a moved default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 558.600792
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 166 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 616.067334
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 167 - explicit replacement remaps the default checkout record by its relative path
+  ---
+  duration_ms: 301.112167
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 168 - a re-clone in place can explicitly replace a missing native record
+  ---
+  duration_ms: 388.119167
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 169 - an unedited example console configuration is rejected with a fleet present
+  ---
+  duration_ms: 141.3745
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 170 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 358.714542
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 171 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 121.171167
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 172 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 301.500042
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 173 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1233.548208
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 174 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 144.118666
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 175 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 481.874333
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 176 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 63.687625
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 177 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 136.34375
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 178 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 938.022084
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 179 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 381.047791
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 180 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 137.636333
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 181 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 603.442625
+  ...
+1..181
+# tests 181
+# suites 0
+# pass 181
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 390437.331875

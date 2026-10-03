@@ -3,9 +3,28 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fixture } from './fixture.mjs';
+import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 const healthy = { available: 8 * 1024 ** 3, swap_used: 0 };
 const pressure = { available: 128 * 1024 ** 2, swap_used: 0 };
 const journal = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`)));
+
+for (const coordination of [[], ['--memory-checked']]) {
+  test(`unconfigured lane review uses the portable preset ${coordination.length ? 'after the parent memory check' : 'with its own memory check'}`, t => {
+    const f = fixture(t);
+    fs.appendFileSync(path.join(f.repo, '.git/info/exclude'), '\n.lane/\n');
+    f.commit('correct\n');
+    const r = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), 'review', 'topic',
+      '--round', '1', '--brief', path.join(f.root, 'ask with spaces.md'), ...coordination]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(r.stdout, 'PASS\n');
+    const starts = f.calls().filter(args => args[0] === 'agent' && args[1] === 'start');
+    assert.equal(starts.length, 1);
+    const route = ROUTE_PRESET.routes.review;
+    assert.equal(starts[0][starts[0].indexOf('--kind') + 1], route.kind);
+    assert.equal(starts[0][starts[0].indexOf('--model') + 1], route.model);
+    assert.equal(starts[0][starts[0].indexOf('--effort') + 1], route.effort);
+  });
+}
 
 // Inject pressure (and optionally STOP) only after the parent has waited and
 // saved its launch stage. All lane operations still use the real product CLI.

@@ -2117,7 +2117,12 @@ async function review(topic, args, memoryChecked = false) {
   if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>]");
   const options = parseReviewOptions(args);
   const branch = laneBranch(topic);
-  resolveDispatch({ route: options.route, routeConfig: options.routeConfig });
+  // Explicit route choices must fail before a memory wait. Resolve the implicit
+  // default inside dispatch as before, after reading the bundled template, using
+  // the same project configuration and portable preset fallback as dispatch.
+  if (args.includes('--route') || options.routeConfig !== undefined) {
+    resolveDispatch({ route: options.route, routeConfig: options.routeConfig });
+  }
   if (!launchMemoryGate('lane review', memoryChecked)) {
     process.exitCode = 3;
     return;

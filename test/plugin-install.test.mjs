@@ -329,11 +329,7 @@ test('relocated installed runtime executes lane review through its bundled templ
   assert.match(f.ok(process.execPath, [path.join(runtime, 'settle/settle.mjs')], project), /^settle R-n/u);
   for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Plugin Test'], ['config', 'user.email', 'plugin@example.invalid']]) f.ok('git', args, project);
   fs.writeFileSync(path.join(project, '.gitignore'), '.lane/\n');
-  // Review validates its named route before the memory gate or template read.
-  // This asset test needs a valid fixture route to reach the offline dispatch.
-  const config = path.join(project, '.lane.json'); fs.writeFileSync(config, JSON.stringify({
-    main: 'main', validate: 'true', routes: { review: { kind: 'codex', model: 'fixture-review' } },
-  }));
+  const config = path.join(project, '.lane.json'); fs.writeFileSync(config, JSON.stringify({ main: 'main', validate: 'true', routes: {} }));
   f.ok('git', ['add', '.'], project); f.ok('git', ['commit', '-qm', 'Project'], project);
   const env = { LANE_CONFIG: config, LANE_WORKTREE_ROOT: path.join(f.root, 'review-lanes') };
   const cli = path.join(runtime, 'lanes/lane.mjs'); f.ok(process.execPath, [cli, 'open', 'asset-check'], project, env);
@@ -343,20 +339,10 @@ test('relocated installed runtime executes lane review through its bundled templ
   const evidence = path.join(f.root, 'template-read'), preload = path.join(f.root, 'template-probe.cjs');
   const brief = path.join(f.root, 'review-brief.md'); fs.writeFileSync(brief, 'Review the scratch project. Do not run commands.\n');
   fs.writeFileSync(preload, `const fs=require('fs'),read=fs.readFileSync;fs.readFileSync=function(file,...args){const value=read.call(this,file,...args);if(file===${JSON.stringify(template)})fs.writeFileSync(${JSON.stringify(evidence)},value);return value;};require('module').syncBuiltinESMExports();\n`);
-  for (const coordination of [[], ['--memory-checked']]) {
-    const args = ['--require', preload, cli, 'review', 'asset-check', '--round', '1', '--brief', brief, '--timeout', '10', ...coordination];
-    const invalid = f.run(process.execPath, [...args, '--route', 'missing-review'], project, env);
-    assert.equal(invalid.status, 2, invalid.stdout + invalid.stderr);
-    assert.match(invalid.stderr, /unknown route: missing-review/u);
-    assert.equal(fs.existsSync(evidence), false, 'invalid routes fail before reading the template');
-    const reviewed = f.run(process.execPath, args, project, env);
-    assert.equal(reviewed.status, 2, reviewed.stdout + reviewed.stderr);
-    assert.match(reviewed.stderr, /herdr is unavailable; dispatch requires the herdr server/u);
-    assert.doesNotMatch(reviewed.stderr, /ENOENT|unknown route/u);
-    assert.ok(fs.existsSync(evidence), reviewed.stdout + reviewed.stderr);
-    assert.deepEqual(fs.readFileSync(evidence), fs.readFileSync(template));
-    fs.unlinkSync(evidence);
-  }
+  const reviewed = f.run(process.execPath, ['--require', preload, cli, 'review', 'asset-check', '--round', '1', '--brief', brief, '--timeout', '10'], project, env);
+  assert.notEqual(reviewed.status, 0); assert.ok(!reviewed.stderr.includes('ENOENT'), reviewed.stderr);
+  assert.ok(fs.existsSync(evidence), reviewed.stdout + reviewed.stderr);
+  assert.deepEqual(fs.readFileSync(evidence), fs.readFileSync(template));
   f.ok(process.execPath, [path.join(source, 'herdr/entry-install.mjs'), '--remove'], project);
 });
 

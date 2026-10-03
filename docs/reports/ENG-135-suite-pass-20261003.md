@@ -11,7 +11,7 @@ learnings:
   - "Observed process-launch counts independently show reduced setup work; varied machine load prevents attributing every wall-time difference to code."
   - "The native PTY executable can be cached by source bytes while each invocation retains fresh session ownership and descendant cleanup."
 artifacts:
-  - "Implementation and retained evidence commit 1db6143 on lane/suite-pass."
+  - "Implementation and retained evidence commits 1db6143 and b454abc on lane/suite-pass."
   - "docs/reference/test-tiers.md"
   - "docs/reports/ENG-135-suite-pass-evidence-20261003/inventory.md"
   - "docs/reports/ENG-135-suite-pass-evidence-20261003/measurements.json"
@@ -38,7 +38,7 @@ Promotion wall time fell **15.6%**, and observed process launches fell **3.85%**
 | Promotion total | 879.894 | 742.761 | 75,280 | 72,385 | 1208 / 11 |
 | Offline release | Previously in promotion | 93.371 | Previously in promotion | 1,504 | 7 / 0 |
 
-Fast overlaps promotion and is not added to its total. Promotion includes 1,208 passes and 11 explicit skips; release adds seven passes. Six additional meaningful checks are represented in the overall before/after totals after removing the three assertion-free support entries. Initial Git creation boundaries fell from 757 to 402 in promotion (413 including release); observed PTY compiler calls fell from 39 to 20. Fresh Git worktree additions remain 597 across promotion plus release, exactly the original count. PTY invocations increase from 35 to 40 because the cache regression adds real TTY/status checks. Live Herdr mutations and model calls remain zero.
+Fast overlaps promotion and is not added to its total. Promotion includes 1,208 passes and 11 explicit skips; release adds seven passes. Nine new behavioral checks replace three assertion-free support entries, giving six more passing entries overall. Initial Git creation boundaries fell from 757 to 402 in promotion (413 including release); observed PTY compiler calls fell from 39 to 20. Fresh Git worktree additions remain 597 across promotion plus release, exactly the original count. PTY invocations increase from 35 to 40 because the cache regression adds real TTY/status checks. Live Herdr mutations and model calls remain zero.
 
 The implementation retains the native process, Git, PTY, record and no-focus boundaries. The complete per-file coverage and cost inventory is in [inventory.md](ENG-135-suite-pass-evidence-20261003/inventory.md); machine-readable tier/file launch counts, response-load samples and TAP summaries are in [measurements.json](ENG-135-suite-pass-evidence-20261003/measurements.json). Compressed raw traces/logs, the instrumentation and the summarizer are retained alongside them.
 
@@ -71,4 +71,4 @@ The first after acceptance measurement exposed my shared-seed regression: a supp
 
 New file-wait, repository-independence, PTY-cache and tier-partition regressions were written before their helpers; the retained new-regressions-before log shows the missing-helper failures. Focused file-wait verification passed 5/5 and tier selection 1/1. The final native fixture check passed 59 tests with one explicit Linux-only skip in 57.714 seconds, including copied Codex/Claude workflows, detached cleanup, teardown and blocked-loop watchdogs. Syntax checks passed for changed JavaScript and the final diff passed git diff --check.
 
-Implementation and evidence were self-reviewed and committed as 1db6143 before this report was written. This report is checked with the canonical record CLI and committed next. The final action is ORG_ACTOR=R-170 node lanes/lane.mjs check; its .lane/gate.json receipt binds the check to the final report commit. The run stops after that check, as requested.
+Implementation and evidence were self-reviewed and committed as 1db6143 and b454abc before this report revision was written. The watcher event-wait changes were verified in the measured core tier but omitted from the initial staging list; b454abc includes those unchanged tested bytes. This report is checked with the canonical record CLI and committed next. The final action is ORG_ACTOR=R-170 node lanes/lane.mjs check; its .lane/gate.json receipt binds the check to the final report commit. The run stops after that check, as requested.

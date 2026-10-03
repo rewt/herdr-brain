@@ -186,7 +186,7 @@ async function main() {
     job.run = run.id; job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
-    if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : [])]);
+    if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : []), '--git-only']);
     job.workspace = fs.realpathSync(worktree());
     // prepare validates that the registered lane is owned by this repository.
     lane(['prepare', job.lane]);

@@ -194,7 +194,7 @@ and correction rounds with the send-back cap you just read from `org show
    whose run is already open. At most two engineering lanes may be open at
    once. Never run lanes that edit the same files at the same time; `lib/`,
    `bin/`, `console/`, and `test/` overlap often, so when in doubt run those
-   lanes one after another. Give each item a new lane with `lane open <topic>`
+   lanes one after another. Give each item a new lane with `lane open <topic> --git-only`
    and put its brief at `$WT/.lane/BRIEF-<topic>.md`, starting with one plain
    sentence. Then use `org start` with `--meta route=engineer`, `lane dispatch
    --route engineer`, `org set`, and `supervisor/arm-watch.sh` as in section 5.

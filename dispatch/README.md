@@ -36,6 +36,10 @@ It never rebases, pushes, or makes merge commits. `lane prepare` runs for both n
 and reused lanes. Git common-directory identity owns the request; no registry
 session metadata authorizes any action.
 
+New lanes use `lane open --git-only`, deferring their Herdr workspace until
+`lane dispatch` can start the worker in its initial selected tab. This leaves one
+agent tab and preserves operator focus. Existing workspaces retain their tabs.
+
 A fix round starts a new run on the same item and lane. The default starts a fresh
 worker, on the requested route. To prompt the existing stopped worker, add
 `--reuse R-previous --extra 'Read the review and fix its findings.'`. Reuse requires

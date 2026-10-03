@@ -94,7 +94,7 @@ Start Herdr in the canonical checkout, then open and dispatch one worktree per t
 cd /path/to/repository
 herdr
 
-lane open api-change
+lane open api-change --git-only
 lane dispatch api-change --route engineer @/absolute/path/to/brief.md
 lane status
 ```
@@ -103,6 +103,10 @@ lane status
 Canonical Git common-directory identity owns the lane; repository names, remotes,
 workspace labels, and author settings do not. Unsafe destinations, foreign
 repositories, symlink escapes, and mismatched registered worktrees are refused.
+Use `--git-only` before dispatch to defer Herdr workspace creation until the agent
+launch. The standard dispatch module uses this mode, including retries after
+preparation or record-start failures. Plain `lane open` still opens a shell for
+interactive work.
 
 `dispatch` verifies the lane's Herdr workspace, starts the configured agent, checks
 its reported cwd by real path, sends the brief, and only then records session
@@ -110,7 +114,8 @@ metadata. A persistence failure after delivery is reported as partial success an
 never replays the prompt.
 
 If `dispatch` opens the Herdr workspace itself, it uses that invocation's initial
-tab and pane, exports the route environment and entry bypass into the new shell,
+tab and pane, sources the route environment and entry bypass from a private 0600
+temporary file, verifies the exported values before starting, deletes the file,
 and starts the agent through native `herdr agent start`. The workspace has one
 tab showing its agent, and operator focus stays in place. Initial tabs are retained
 on launch failures. A workspace opened earlier by `lane open`, a reused lane or a
@@ -199,7 +204,7 @@ metadata is marked done; metadata errors never rewrite the Git result.
 
 | Command | Purpose |
 | --- | --- |
-| `lane open <topic> [base-ref]` | Create a lane worktree and branch |
+| `lane open <topic> [base-ref] [--git-only]` | Create a lane worktree and branch; optionally defer its Herdr workspace |
 | `lane dispatch <topic> [--route <name>] [options] [@brief \| prompt]` | Start and prompt a visible Herdr agent |
 | `lane review <topic> --round N [--brief <path>] [--route <name>] [--timeout <seconds>]` | Run one foreground independent review |
 | `lane routes [--for <task-class> [--pool <pool>]]` | List routes or resolve selection policy |

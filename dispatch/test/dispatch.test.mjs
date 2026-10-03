@@ -27,7 +27,7 @@ function git(args) { const r=spawnSync('git',args,{encoding:'utf8'}); if(r.statu
 const entry=()=>git(['worktree','list','--porcelain']).split('\\n\\n').find(x=>x.includes('branch refs/heads/lane/topic'))?.split('\\n')[0].slice(9);
 if(type==='lane') {
  if(fail===a[0]) { console.error('injected '+fail); process.exit(1); }
- if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,'lane'),a[2]??'HEAD']);
+ if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);
  if(a[0]==='prepare' && !entry()) process.exit(1);
  if(a[0]==='dispatch') {
   const n='worker-'+(Object.keys(workers).length+1), cwd=entry();
@@ -175,6 +175,7 @@ test('one command records exact route/worker fields, arms watch before prompt, a
   assert.equal(run.report_path,path.join(f.root,'lane','docs/reports/round.md'));
   assert.equal(run.meta.watcher_pid,result.watcher.pid);
   const calls=f.calls(),watch=calls.findIndex(x=>x.type==='watch'),prompt=calls.findIndex(x=>x.a[1]==='prompt');assert.ok(watch<prompt);
+  assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open','topic','--git-only']);
   assert.match(promptCalls(f)[0].a[3],new RegExp(result.run));assert.ok(promptCalls(f)[0].a[3].includes(run.brief_path));
   assert.ok(promptCalls(f)[0].a[3].includes(run.report_path));assert.match(promptCalls(f)[0].a[3],/Fix round/);
   assert.equal(fs.readFileSync(f.brief,'utf8'),before);

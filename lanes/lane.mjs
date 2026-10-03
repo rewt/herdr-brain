@@ -15,9 +15,9 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
-  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeFileSync,
+  existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync,
 } from "node:fs";
-import { homedir, hostname, userInfo } from "node:os";
+import { homedir, hostname, tmpdir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -932,7 +932,7 @@ function requireClean(path, what) {
   }
 }
 
-function open(topic, base = MAIN) {
+function open(topic, base = MAIN, { gitOnly = false } = {}) {
   repositoryRoot({ requiredBy: "open" });
   const branch = laneBranch(topic);
   if (branchExists(branch)) fail(`branch ${branch} already exists; use status/promote/close`);
@@ -941,10 +941,10 @@ function open(topic, base = MAIN) {
   }
   const path = join(WORKTREE_ROOT, `lane-${topic}`);
   assertSafeNewWorktreePath(path);
-  let workspaces = herdrJson(["workspace", "list"])?.workspaces ?? [];
+  let workspaces = gitOnly ? [] : herdrJson(["workspace", "list"])?.workspaces ?? [];
   const label = workspaceLabel(topic, path, workspaces);
   const parent = parentWorkspaceId(workspaces);
-  const herdr = spawnSync(
+  const herdr = gitOnly ? undefined : spawnSync(
     "herdr",
     [
       "worktree", "create",
@@ -955,14 +955,14 @@ function open(topic, base = MAIN) {
     ],
     { encoding: "utf8" },
   );
-  if (herdr.status !== 0 || !existsSync(path)) {
+  if (gitOnly || herdr.status !== 0 || !existsSync(path)) {
     git(["worktree", "add", "-b", branch, path, base]);
-    process.stdout.write("(herdr refused or is unavailable; created via git worktree)\n");
+    if (!gitOnly) process.stdout.write("(herdr refused or is unavailable; created via git worktree)\n");
   } else {
     workspaces = herdrJson(["workspace", "list"])?.workspaces ?? [];
   }
   assertCreatedWorktree(path, branch);
-  const workspaceId = ensureHerdrWorkspace(path, label, workspaces)?.workspaceId;
+  const workspaceId = gitOnly ? undefined : ensureHerdrWorkspace(path, label, workspaces)?.workspaceId;
   process.stdout.write(
     `lane open: ${branch}\n` +
     `  worktree: ${path}\n` +
@@ -973,7 +973,7 @@ function open(topic, base = MAIN) {
     `  base: ${git(["rev-parse", "--short", base])} (${base})\n`,
   );
   process.stdout.write(
-    workspaceId === undefined
+    gitOnly ? "  herdr workspace: deferred until dispatch\n" : workspaceId === undefined
       ? "  herdr workspace: none (herdr unavailable); dispatch will retry the repair\n"
       : `  herdr workspace: ${workspaceId}\n`,
   );
@@ -1152,24 +1152,51 @@ function dispatch(topic, promptText, options = {}) {
     fail(`pane ${pane} shell never reached ${path} (last cwd: ${paneCwd}); ${failedTab()}, nothing started`);
   }
   if (initial !== undefined) {
-    // Set the same launch environment that tab.create supplies on the reused
-    // workspace path. Quote each entire assignment as literal shell data.
+    // Keep credentials out of shell input, history and terminal scrollback.
+    // The private source file also proves the effective exported environment
+    // in a child shell; a successful pane.run alone only acknowledges input.
     const pairs = [...resolved.env, "MONITOR_ENTRY_BYPASS=1"];
     if (pairs.some(pair => !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes("\0"))) {
       fail("initial-pane environment requires NAME=value assignments; initial tab retained, nothing started");
     }
-    const exports = `export ${pairs.map(pair => `'${pair.replaceAll("'", "'\\''")}'`).join(" ")}`;
     if (herdrJson(["tab", "rename", tabId, `agent:${topic}`], { deadline: options.deadline }) === undefined) {
       fail(`could not rename initial tab ${tabId}; initial tab retained, nothing started`);
     }
-    // Native pane.run is silent on success; it is not a JSON view command.
-    const prepared = spawnSync("herdr", ["pane", "run", pane, exports], {
-      encoding: "utf8",
-      ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
-    });
-    if (prepared.status !== 0) {
-      fail(`could not prepare initial pane ${pane}; initial tab retained, nothing started`);
+    const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
+    const effective = new Map(pairs.map(pair => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]));
+    const nonce = `lane-env-${randomBytes(24).toString("hex")}`;
+    const directory = mkdtempSync(join(tmpdir(), "herdr-lane-env-"));
+    const file = join(directory, "prepare.sh");
+    const verifier = join(directory, "verify.sh");
+    const deadline = Math.min(options.deadline ?? Infinity, Date.now() + loadTimeout(5_000));
+    let verified = false;
+    try {
+      const checks = [...effective].map(([key, value]) => `[ "\${${key}+x}" = x ] && [ "$${key}" = ${quote(value)} ]`).join(" && ");
+      writeFileSync(verifier, `${checks} && printf '\\n%s\\n' ${quote(nonce)}\n`, { mode: 0o600, flag: "wx" });
+      writeFileSync(file, `set +x\nexport ${pairs.map(quote).join(" ")} || return\n` +
+        `command /bin/sh ${quote(verifier)}\n`, { mode: 0o600, flag: "wx" });
+      // Suppress source diagnostics too: an incompatible shell may print the
+      // offending assignment. Only the non-secret path enters shell history.
+      const prepared = spawnSync("herdr", ["pane", "run", pane,
+        ` . ${quote(file)} 2>/dev/null; command rm -f -- ${quote(file)} ${quote(verifier)}`], {
+        encoding: "utf8", timeout: Math.max(1, deadline - Date.now()),
+      });
+      if (prepared.status === 0) {
+        while (Date.now() < deadline) {
+          const read = spawnSync("herdr", ["pane", "read", pane, "--source", "recent-unwrapped", "--format", "text"], {
+            encoding: "utf8", timeout: Math.max(1, deadline - Date.now()),
+          });
+          if (read.status === 0 && read.stdout.split(/\r?\n/u).includes(nonce)) {
+            verified = true;
+            break;
+          }
+          sleepMs(Math.min(100, Math.max(1, deadline - Date.now())));
+        }
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
     }
+    if (!verified) fail(`could not verify initial pane environment ${pane}; initial tab retained, nothing started`);
   }
   // The stem remains readable, while repository identity and random suffixes
   // keep names distinct across equal topics and retry leftovers. Herdr limits
@@ -2394,10 +2421,14 @@ switch (command) {
   case "check":
     check([topic, ...rest].filter((argument) => argument !== undefined));
     break;
-  case "open":
-    if (topic === undefined) fail("usage: lane.mjs open <topic> [base-ref]");
-    open(topic, rest[0]);
+  case "open": {
+    const positionals = rest.filter(value => value !== "--git-only");
+    if (topic === undefined || positionals.length > 1 || positionals.some(value => value.startsWith("--"))) {
+      fail("usage: lane.mjs open <topic> [base-ref] [--git-only]");
+    }
+    open(topic, positionals[0], { gitOnly: rest.includes("--git-only") });
     break;
+  }
   case "status":
     status();
     break;

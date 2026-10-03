@@ -256,7 +256,7 @@ function writeFakeHerdr(fixture, options = {}) {
   const state = join(fixture.root, "herdr-state.json");
 const source = `#!${process.execPath}
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 const args = process.argv.slice(2);
 const log = process.env.FAKE_HERDR_LOG;
@@ -360,8 +360,28 @@ if (args[0] === "workspace" && args[1] === "list") {
   state.initialLabel = args[3]; save();
   result("cli:tab:rename", { type: "tab_info", tab: { tab_id: args[2], label: args[3] } });
 } else if (args[0] === "pane" && args[1] === "run") {
+  state.environmentFile = args[3].match(/^ \\. '([^']+)'/)[1];
+  state.environmentMode = statSync(state.environmentFile).mode & 0o777;
+  state.environmentDirectoryMode = statSync(dirname(state.environmentFile)).mode & 0o777;
+  save();
   if (process.env.FAKE_HERDR_EXPORT_FAIL === "1") process.exit(3);
-  state.exports = args[3]; save();
+  if (process.env.FAKE_HERDR_EXPORT_DROP !== "1") {
+    if (process.env.FAKE_HERDR_EXPORT_WRONG === "1") {
+      writeFileSync(state.environmentFile, readFileSync(state.environmentFile, 'utf8').replace('export ', ': '));
+    }
+    const node = ${JSON.stringify(process.execPath)};
+    const output = execFileSync('/bin/sh', ['-c', args[3] + "\\n" + "'" + node.replaceAll("'", "'\\\\''") + "' -e 'process.stdout.write(JSON.stringify(process.env))'"], { encoding: 'utf8', env: {} });
+    const split = output.lastIndexOf('\\n');
+    state.preparedEnv = JSON.parse(output.slice(split + 1));
+    state.environmentOutput = output.slice(0, split + 1);
+  }
+  state.prepareCommand = args[3]; save();
+} else if (args[0] === "pane" && args[1] === "read") {
+  state.environmentReads = (state.environmentReads || 0) + 1; save();
+  // Model terminal echo and a shell still finishing initialization. Neither
+  // is proof the source command has executed.
+  process.stdout.write(state.prepareCommand + "\\n" +
+    (state.environmentReads > 2 ? (state.environmentOutput || '') : ''));
 } else if (args[0] === "agent" && args[1] === "start") {
   if (process.env.FAKE_HERDR_START_FAIL === "1") process.exit(3);
   if (process.env.FAKE_ENTRY_BIN) {
@@ -1922,9 +1942,14 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
   } });
   try {
     ignoreLaneState(fixture);
-    const path = openLane(fixture, "initial-pane");
+    const path = lanePath(fixture, "initial-pane");
     const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/initial-pane" });
-    const first = lane(fixture, ["dispatch", "initial-pane", "--route", "engineer", "--json", "Implement this"]);
+    const opened = lane(fixture, ["open", "initial-pane", "--git-only"]);
+    assert.equal(opened.status, 0, opened.stderr);
+    assert.match(opened.stdout, /deferred until dispatch/u);
+    assert.deepEqual(fake.calls(), [], 'Git-only opening must not create a Herdr shell');
+    const extraValue = 'private-cli-credential';
+    const first = lane(fixture, ["dispatch", "initial-pane", "--route", "engineer", "--env", `NORMAL=${extraValue}`, "--json", "Implement this"]);
     assert.equal(first.status, 0, first.stderr);
     const firstResult = JSON.parse(first.stdout);
     assert.equal(firstResult.pane, "w-lane:p1");
@@ -1939,11 +1964,22 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
     assert.equal(calls[exportIndex][2], "w-lane:p1");
     assert.equal(calls[startIndex][calls[startIndex].indexOf("--pane") + 1], "w-lane:p1");
     assert.ok(calls[startIndex].includes("initial-model"));
-    const exported = JSON.parse(execFileSync("/bin/sh", ["-c",
-      `${calls[exportIndex][3]}\nexec "$1" -e 'process.stdout.write(JSON.stringify(process.env))'`,
-      "export-probe", process.execPath], { encoding: "utf8", env: {} }));
-    for (const [key, value] of Object.entries(values)) assert.equal(exported[key], value);
+    const exported = fake.state().preparedEnv;
+    for (const [key, value] of Object.entries({ ...values, NORMAL: extraValue })) assert.equal(exported[key], value);
     assert.equal(exported.MONITOR_ENTRY_BYPASS, "1");
+    assert.equal(fake.state().environmentMode, 0o600);
+    assert.equal(fake.state().environmentDirectoryMode, 0o700);
+    assert.ok(!existsSync(fake.state().environmentFile));
+    assert.ok(!existsSync(dirname(fake.state().environmentFile)));
+    const paneRuns = calls.filter(args => args[0] === 'pane' && args[1] === 'run');
+    for (const value of [...Object.values(values).filter(Boolean), extraValue]) {
+      assert.ok(!paneRuns.some(args => args.some(arg => arg.includes(value))), 'env values must not be pane input');
+    }
+    assert.equal(fake.state().environmentReads, 3);
+    const readIndex = calls.findLastIndex(args => args[0] === 'pane' && args[1] === 'read');
+    assert.ok(readIndex > exportIndex && readIndex < startIndex);
+    assert.equal(fake.state().initialLabel, 'agent:initial-pane');
+    assert.equal(fake.state().tabCount || 1, 1);
     const { loadRegistry } = await registryApi();
     const [metadata] = loadRegistry(fixture.repo).sessions;
     assert.equal(metadata.pane, "w-lane:p1");
@@ -1982,19 +2018,23 @@ test("dispatch leaves earlier and concurrently opened workspace shells untouched
 });
 
 test("dispatch retains initial tabs on environment and agent cwd failures", () => {
-  for (const mismatch of [false, true]) {
+  for (const failure of ['send', 'dropped', 'wrong', 'cwd']) {
     const fixture = makeFixture();
     try {
       ignoreLaneState(fixture);
       const path = openLane(fixture, "initial-failure");
       const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/initial-failure",
-        ...(mismatch ? { agentCwd: fixture.repo } : {}) });
-      if (!mismatch) fixture.env.FAKE_HERDR_EXPORT_FAIL = "1";
+        ...(failure === 'cwd' ? { agentCwd: fixture.repo } : {}) });
+      if (failure === 'send') fixture.env.FAKE_HERDR_EXPORT_FAIL = "1";
+      if (failure === 'dropped') fixture.env.FAKE_HERDR_EXPORT_DROP = "1";
+      if (failure === 'wrong') fixture.env.FAKE_HERDR_EXPORT_WRONG = "1";
       const run = lane(fixture, ["dispatch", "initial-failure", "do not send"]);
       assert.equal(run.status, 1);
       assert.match(run.stderr, /initial tab retained/u);
       assert.ok(!fake.calls().some(args => args[1] === "close" || args[1] === "prompt" || args[1] === "focus"));
-      if (!mismatch) assert.ok(!fake.calls().some(args => args[1] === "start"));
+      if (failure !== 'cwd') assert.ok(!fake.calls().some(args => args[1] === "start"));
+      assert.ok(!existsSync(fake.state().environmentFile));
+      assert.ok(!existsSync(dirname(fake.state().environmentFile)));
     } finally { fixture.cleanup(); }
   }
   negativeControl("failed initial-pane dispatch preserves its tab");

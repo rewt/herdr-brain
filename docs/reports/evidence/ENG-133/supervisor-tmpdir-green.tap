@@ -1,0 +1,85 @@
+TAP version 13
+# Subtest: SIGINT drains an active workspace and recovers its lost reply
+ok 1 - SIGINT drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 598.915292
+  ...
+# Subtest: SIGINT drains an active create-cwd and recovers its lost reply
+ok 2 - SIGINT drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 661.882875
+  ...
+# Subtest: SIGINT drains an active open-cwd and recovers its lost reply
+ok 3 - SIGINT drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 676.252334
+  ...
+# Subtest: SIGINT drains an active create-workspace and recovers its lost reply
+ok 4 - SIGINT drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 643.981042
+  ...
+# Subtest: SIGINT drains an active open-workspace and recovers its lost reply
+ok 5 - SIGINT drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 626.781
+  ...
+# Subtest: SIGTERM drains an active workspace and recovers its lost reply
+ok 6 - SIGTERM drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 545.899
+  ...
+# Subtest: SIGTERM drains an active create-cwd and recovers its lost reply
+ok 7 - SIGTERM drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 634.554958
+  ...
+# Subtest: SIGTERM drains an active open-cwd and recovers its lost reply
+ok 8 - SIGTERM drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 640.973292
+  ...
+# Subtest: SIGTERM drains an active create-workspace and recovers its lost reply
+ok 9 - SIGTERM drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 610.203083
+  ...
+# Subtest: SIGTERM drains an active open-workspace and recovers its lost reply
+ok 10 - SIGTERM drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 668.272667
+  ...
+# Subtest: cleanup refuses snapshots until every registered producer acknowledges stop
+ok 11 - cleanup refuses snapshots until every registered producer acknowledges stop
+  ---
+  duration_ms: 59.37
+  ...
+# Subtest: cleanup reconciles again when a lost-reply workspace appears after the first inventory
+ok 12 - cleanup reconciles again when a lost-reply workspace appears after the first inventory
+  ---
+  duration_ms: 13.448542
+  ...
+# Subtest: a matching caller label with a foreign native path never grants recovery authority
+ok 13 - a matching caller label with a foreign native path never grants recovery authority
+  ---
+  duration_ms: 9.178458
+  ...
+# Subtest: cleanup stops and awaits a supervisor executing dispatch before reading ownership
+ok 14 - cleanup stops and awaits a supervisor executing dispatch before reading ownership
+  ---
+  duration_ms: 734.905667
+  ...
+# Subtest: stopping an individual idle PTY worker leaves the run admission barrier open
+ok 15 - stopping an individual idle PTY worker leaves the run admission barrier open
+  ---
+  duration_ms: 75.325959
+  ...
+1..15
+# tests 15
+# suites 0
+# pass 15
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7236.207292

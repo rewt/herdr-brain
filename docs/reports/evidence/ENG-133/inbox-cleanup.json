@@ -1,0 +1,14 @@
+[
+  {
+    "pid": 99192,
+    "receipt": "record/supervisor/inbox.log.owner.lock/owner.json",
+    "ok": true,
+    "signaled": true
+  },
+  {
+    "pid": 74404,
+    "receipt": "promotion-project/.git/supervisor/inbox.log.owner.lock/owner.json",
+    "ok": true,
+    "signaled": true
+  }
+]

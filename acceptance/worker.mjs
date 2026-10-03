@@ -16,7 +16,9 @@ const stopTimer = setInterval(() => {
 process.once('exit', () => clearInterval(stopTimer));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { workerStopping = true; });
 const pane = process.env.HERDR_PANE_ID;
-const env = { ...process.env, ACCEPTANCE_ROOT: root };
+// A PTY inherits the server environment, not the runner's TMPDIR. Keep child
+// dispatch environment files inside the same scratch capability boundary.
+const env = { ...process.env, ACCEPTANCE_ROOT: root, TMPDIR: root };
 async function command(binary, args, options = {}, timeout = 90_000) {
   if (workerStopping) throw new Error('scripted worker stopped; no further commands allowed');
   assertProducing(root);

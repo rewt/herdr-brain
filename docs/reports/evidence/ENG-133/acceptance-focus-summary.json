@@ -1,0 +1,924 @@
+{
+  "baseline": "wFN:pY6",
+  "currentBaseline": "wFN:pY6",
+  "samples": 1150,
+  "events": 7,
+  "startupEvents": [
+    {
+      "type": "subscription-startup",
+      "at": 1791058336128,
+      "event": {
+        "data": {
+          "pane_id": "wFN:pY6",
+          "type": "pane_focused",
+          "workspace_id": "wFN"
+        },
+        "event": "pane_focused"
+      }
+    }
+  ],
+  "changes": [
+    {
+      "type": "sample",
+      "at": 1791058390228,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "event",
+      "at": 1791058390232,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058390430,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058390732,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058391042,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058391345,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058391649,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058391851,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058392157,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058392463,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058392765,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058393070,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058393378,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058393580,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058393883,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058394190,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058394393,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058394697,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058395004,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058395313,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058395617,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058395822,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058396127,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058396433,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058396740,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058397048,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058397355,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058397661,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058397963,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058398270,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058398578,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058398780,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058399087,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058399395,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058399701,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058399904,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058400209,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058400512,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058400714,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    },
+    {
+      "type": "sample",
+      "at": 1791058401018,
+      "panes": [
+        "w2M7:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M7"
+      ],
+      "owned": true,
+      "classification": "harness"
+    }
+  ],
+  "externalChanges": [
+    {
+      "type": "event",
+      "at": 1791058381908,
+      "panes": [
+        "wHD:pR"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wFN:pY6",
+      "workspaces": [
+        "wHD"
+      ],
+      "owned": false,
+      "classification": "external",
+      "rebaseline": "wHD:pR"
+    },
+    {
+      "type": "event",
+      "at": 1791058401156,
+      "panes": [
+        "w2M3:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "wHD:pR",
+      "workspaces": [
+        "w2M3"
+      ],
+      "owned": false,
+      "classification": "external",
+      "rebaseline": "w2M3:p1"
+    },
+    {
+      "type": "event",
+      "at": 1791058404242,
+      "panes": [
+        "w2M2:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "w2M3:p1",
+      "workspaces": [
+        "w2M2"
+      ],
+      "owned": false,
+      "classification": "external",
+      "rebaseline": "w2M2:p1"
+    },
+    {
+      "type": "event",
+      "at": 1791058410341,
+      "panes": [
+        "w2M3:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "w2M2:p1",
+      "workspaces": [
+        "w2M3"
+      ],
+      "owned": false,
+      "classification": "external",
+      "rebaseline": "w2M3:p1"
+    },
+    {
+      "type": "event",
+      "at": 1791058413935,
+      "panes": [
+        "w2M2:p1"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "w2M3:p1",
+      "workspaces": [
+        "w2M2"
+      ],
+      "owned": false,
+      "classification": "external",
+      "rebaseline": "w2M2:p1"
+    },
+    {
+      "type": "event",
+      "at": 1791058420214,
+      "panes": [
+        "wFN:pY6"
+      ],
+      "phase": {
+        "key": "promotion-queue",
+        "id": "07"
+      },
+      "nearbyCalls": [],
+      "calls": [],
+      "from": "w2M2:p1",
+      "workspaces": [
+        "wFN"
+      ],
+      "owned": false,
+      "classification": "external",
+      "rebaseline": "wFN:pY6"
+    }
+  ],
+  "errors": [],
+  "startedAt": 1791058335916,
+  "startupDrain": {
+    "reason": "quiet",
+    "maxReplayEvents": 512,
+    "server": {
+      "type": "pong",
+      "version": "0.8.2",
+      "protocol": 20,
+      "capabilities": {
+        "live_handoff": true,
+        "detached_server_daemon": true
+      }
+    },
+    "elapsedMs": 415
+  },
+  "monitoringStartedAt": 1791058336648,
+  "forbiddenAttempts": [],
+  "finishedAt": 1791058660521,
+  "elapsedMs": 324605
+}

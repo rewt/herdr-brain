@@ -169,6 +169,8 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
     else {fs.writeFileSync(${JSON.stringify(path.join(root, 'late-command'))},'forbidden');console.log('{}');}
   `);
   fs.writeFileSync(path.join(candidate, 'dispatch/dispatch.mjs'), `
+    import fs from 'node:fs';
+    fs.writeFileSync(${JSON.stringify(path.join(root, 'dispatch-tmpdir'))}, process.env.TMPDIR ?? '');
     import {execFileSync} from 'node:child_process';
     execFileSync(process.execPath,[${JSON.stringify(path.join(root, 'herdr.mjs'))},'workspace','create','--cwd',${JSON.stringify(root)}],{env:{...process.env,ACCEPTANCE_ROOT:${JSON.stringify(root)}},timeout:10000});
     console.log('{"run":"R-1"}');
@@ -180,6 +182,7 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
   await until(() => fs.existsSync(path.join(root, 'script-panes/own:pane')));
   child.stdin.write('acceptance-default-cycle\n');
   await until(() => fs.existsSync(path.join(root, 'active')));
+  assert.equal(fs.readFileSync(path.join(root, 'dispatch-tmpdir'), 'utf8'), root, 'supervisor dispatch must keep temporary environment files in scratch');
   const workerReceipt = fs.readdirSync(path.join(root, 'producers')).filter(file => file.endsWith('.json'))
     .map(file => JSON.parse(fs.readFileSync(path.join(root, 'producers', file))))
     .find(receipt => receipt.pid === child.pid);

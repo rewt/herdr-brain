@@ -1,0 +1,29 @@
+Release acceptance: /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-followups (325s) — 9 pass / 10 fail / 3 pending / 5 skipped — NOT READY
+PASS    01 Candidate snapshot
+PASS    02 New project: record discovers and populates
+PASS    03 New project: routes resolve without config
+PASS    04 New project: installed supervisor entry and record bootstrap
+PASS    05 Real Herdr boundary and configured fixture
+FAIL    06 Configured cycle: dispatch/report/ingest/promote/close
+FAIL    07 Unconfigured promotion queue: FIFO, notices and refusal
+FAIL    08 Failure path: missing worker
+FAIL    09 Failure path: invalid worker
+FAIL    10 Failure path: blocked worker
+FAIL    11 Fix round: same worker, fresh durable run
+FAIL    12 Watch cutover: idle grace and exclusive watcher
+FAIL    13 Housekeeping closes only eligible finished workers
+PASS    14 Scratch release build/activate/rollback/restore
+PENDING 15 Full console dependency build (offline)
+SKIP    16 Existing project: copy live calls and inventory drift — No existing project configured; supply --bch-cloak LIVE_REPO to run compatibility checks
+SKIP    17 Existing project: routing and both wrapper dry runs — No existing project configured; supply --bch-cloak LIVE_REPO to run compatibility checks
+SKIP    18 Existing project: org PATH consumers — No existing project configured; supply --bch-cloak LIVE_REPO to run compatibility checks
+SKIP    19 ENG-64: every file switch and rollback — No existing project configured; supply --bch-cloak LIVE_REPO to run compatibility checks
+SKIP    20 ENG-64: final contrib removal and restoration — No existing project configured; supply --bch-cloak LIVE_REPO to run compatibility checks
+PENDING 21 Real discovery: concurrent lanes and promotion
+PENDING 22 Real discovery: routing question waits and answer applies
+FAIL    23 New project: default supervisor dispatch/watch/ingest cycle
+PASS    24 New project: report/settle/fix/settle/promotable without config
+PASS    25 New project: fresh/history supervisor, notices, fix, promotion and record completion
+PASS    26 Cleanup and scope audit
+FAIL    27 Background work preserves operator focus
+Evidence: /private/tmp/herdr-acceptance-27pVT5/evidence (NN.jsonl; summary.json has reasons)

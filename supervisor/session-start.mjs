@@ -20,7 +20,8 @@ try {
       binding = { ...project, role: 'supervisor', org: env.MONITOR_SUPERVISOR_ORG, to: env.MONITOR_SUPERVISOR_AGENT };
       rememberSupervisor(binding, env);
     }
-    if (binding) enterSupervisor({ cwd: project.canonical, org: binding.org, role: 'supervisor', to: binding.to || env.MONITOR_SUPERVISOR_AGENT });
+    if (binding) enterSupervisor({ cwd: project.canonical, org: binding.org, role: 'supervisor',
+      to: binding.to?.trim() || env.MONITOR_SUPERVISOR_AGENT?.trim() || 'supervisor-herdr' });
   }
 } catch (e) { process.stdout.write(sanitizeTerminal(`Supervisor entry: ${e.message}; session may continue.\n`)); }
 // Never return a blocking hook output or a nonzero exit status.

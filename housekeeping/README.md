@@ -163,7 +163,10 @@ Supervisor native session entry uses `--start --resume` when the canonical
 `.housekeeping.json` has `enabled` and `resume` true (both default true). Resume
 serializes starts, validates the existing lock's project, record, config and
 runtime, and recovers only a confirmed dead matching owner before restarting.
-Live owners are reused; unknown owners and mismatched or missing runtimes require
+Owner locks retain the kernel start-time `identity` beside the PID. A reused PID
+with a different birth is a dead owner and can be recovered without signaling the
+replacement process. A present legacy PID without a birth or an unreadable
+identity requires inspection. Live owners are reused; unknown owners and mismatched or missing runtimes require
 inspection. Ordinary `--start` retains its stale-lock refusal. These are only
 housekeeping locks; supervisor entry reports promotion, settle and release locks
 without removing them. Worker lanes never use either live start mode.

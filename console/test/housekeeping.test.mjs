@@ -1,3 +1,4 @@
+import { ownerIdentity } from '../../lib/process-owner.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -40,7 +41,7 @@ function fixture(t) {
   const lock = path.join(state, 'lock');
   const owner = pid => {
     fs.mkdirSync(lock, { recursive: true });
-    fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid, cwd: fs.realpathSync(cwd), org: fs.realpathSync(env.ORG_DIR), config: configFile, script: bin, record_cli: [fs.realpathSync(process.execPath), bin] }));
+    fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid, ...(pid === process.pid ? { identity: ownerIdentity(pid) } : {}), cwd: fs.realpathSync(cwd), org: fs.realpathSync(env.ORG_DIR), config: configFile, script: bin, record_cli: [fs.realpathSync(process.execPath), bin] }));
   };
   const session = createModernSession({ config: { projects: [{ name: 'Housekeeping fixture', cwd, org: env.ORG_DIR }] }, env,
     deps: { herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }), herdrRead: async () => ({ ok: true, text: '' }), brainQueue: async () => ({ rows: [], off: true }) } });

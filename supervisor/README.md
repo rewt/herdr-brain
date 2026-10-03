@@ -103,13 +103,21 @@ Previously launched, unmarked panes need one explicit supervisor adapter launch
 to create the receipt. An agent name or pane label never grants the role. Worker
 roles and `MONITOR_ENTRY_BYPASS=1` take precedence over receipts; explicitly
 opening a worker in a previously bound pane revokes its supervisor receipt.
+Automatic adapters suppress entry in utility and headless passthrough children,
+including children launched from a supervisor shell; they retain the interactive
+pane's receipt for later resume.
 
 Entry prints `supervisor.mjs brief`, resumes housekeeping only when both enabled
 and resume are true, and re-arms watchers only for open, unabandoned runs without a recorded
-report with a verified project checkout and a dead or absent watcher PID. It uses
-watch's exclusive per-run lock, then records the new PID through the record CLI.
+report with a verified project checkout and a dead, reused or absent watcher owner.
+Housekeeping and watcher liveness compare the PID and recorded kernel start-time
+identity using the non-setuid process source. A different birth means the old
+owner is gone. Unreadable identities and present legacy PIDs without a birth are
+reported for inspection; they never authorize recovery. A missing legacy PID is
+recoverable. Entry uses watch's exclusive per-run lock, then records the new PID
+and `watcher_identity` through the record CLI.
 Recovered watchers use the `to` field from the run's `dispatch_journal` receipt.
-Only when that receipt is absent do they fall back to the supervisor recipient
+When that receipt is absent or its recipient is null, they fall back to the supervisor recipient
 and then `supervisor-herdr`. Adapters export `MONITOR_SUPERVISOR_AGENT` from their
 known agent identity, an explicit setting, or `HERDR_AGENT_NAME` when supplied;
 the durable pane receipt retains it across restore. Invalid receipts print a

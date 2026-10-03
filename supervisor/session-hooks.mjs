@@ -4,6 +4,13 @@ import fs from 'node:fs';
 import { quote } from '../discovery/runtime.mjs';
 import { rememberSupervisor } from './session-binding.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
+// A native utility/headless invocation can inherit a supervisor's shell and
+// pane. Suppress entry for that child without revoking the interactive receipt.
+export function passthroughEnvironment(env = process.env) {
+  const result = { ...env, MONITOR_SESSION_ROLE: 'worker', MONITOR_ENTRY_BYPASS: '1' };
+  for (const key of Object.keys(result)) if (key.startsWith('MONITOR_SUPERVISOR_')) delete result[key];
+  return result;
+}
 export function sessionEnvironment(context, root, env = process.env) {
   const result = { ...env, MONITOR_SESSION_ROLE: context.role, MONITOR_ENTRY_BYPASS: context.role === 'supervisor' ? '0' : '1',
     MONITOR_SUPERVISOR_REPO: context.role === 'supervisor' ? context.canonical : '',

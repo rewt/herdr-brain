@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { parseArgs } from 'node:util';
+import { ownerAlive, readOwnerProcess } from '../lib/process-owner.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, UserError } from '../lib/store.mjs';
 import { renderHousekeeping } from '../lib/render.mjs';
@@ -42,7 +43,7 @@ function actionTail(file, warnings) {
   finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
-export function housekeepingSnapshot({ cwd = process.cwd(), org, env = process.env } = {}) {
+export function housekeepingSnapshot({ cwd = process.cwd(), org, env = process.env, readProcess = readOwnerProcess } = {}) {
   const project = gitProject(cwd), target = path.join(project.canonical, '.housekeeping.json');
   safeTarget(target);
   const bytes = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : null;
@@ -68,11 +69,7 @@ export function housekeepingSnapshot({ cwd = process.cwd(), org, env = process.e
             [owner.script, ...owner.record_cli].some(file => typeof file !== 'string' || !fs.existsSync(file))) {
           throw Error('lock identity or runtime does not match this project, record and default config');
         }
-        try { process.kill(owner.pid, 0); processState = 'running'; }
-        catch (error) {
-          if (error.code === 'ESRCH') processState = 'stale lock';
-          else { processState = 'unknown'; warnings.push(`PID check unavailable: ${error.message}`); }
-        }
+        processState = ownerAlive(owner, readProcess) ? 'running' : 'stale lock';
       } catch (error) { processState = 'unknown'; editable = false; warnings.push(`Schedule unavailable: ${error.message}`); }
     }
   }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Coordination is a foreground CLI. Only watch owns a background process.
+import { ownerAlive } from '../lib/process-owner.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -297,16 +298,14 @@ async function main() {
         ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : [])]));
       save();
     } else {
-      try { process.kill(job.watcher.pid, 0); }
-      catch (error) {
-        if (error.code !== 'ESRCH') throw error;
+      if (!ownerAlive(job.watcher)) {
         job.watcher = null; save();
         throw new Error('watcher stopped; retry to re-arm it without replaying the prompt');
       }
     }
     if (!Number.isInteger(job.watcher.pid) || job.watcher.pid < 1) throw new Error('watcher returned an invalid PID');
-    process.kill(job.watcher.pid, 0);
-    record(['set', job.run, `watcher_pid=${job.watcher.pid}`, `watcher_log=${job.watcher.log}`]);
+    if (!ownerAlive(job.watcher)) throw new Error('watcher stopped before its receipt was recorded');
+    record(['set', job.run, `watcher_pid=${job.watcher.pid}`, `watcher_identity=${job.watcher.identity}`, `watcher_log=${job.watcher.log}`]);
     if (job.stage === 'watch') note(`watcher ready (pid ${job.watcher.pid}); prompt not sent`);
     if (job.stage === 'watch') { job.stage = 'prompt'; save(); }
     if (job.stage === 'prompting' && opt['accept-delivered']) {

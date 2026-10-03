@@ -6,6 +6,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ownerIdentity } from '../../lib/process-owner.mjs';
+import { housekeepingSnapshot } from '../../housekeeping/command.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
@@ -34,7 +36,7 @@ function fixture(t) {
   const start = (name, pid = deadPid) => {
     const item = record(['add', name]).split('\n')[0];
     const id = record(['start', item, '--workspace', repo, '--report', path.join(scratch, `${item}.md`)]).match(/R-\d+/)[0];
-    record(['set', id, `agent=worker-${id}`, `watcher_pid=${pid}`]); return id;
+    record(['set', id, `agent=worker-${id}`, `watcher_pid=${pid}`, ...(pid === deadPid ? [] : [`watcher_identity=${ownerIdentity(pid)}`])]); return id;
   };
   return { root: scratch, repo, org, project, binding, record, git, start };
 }
@@ -154,11 +156,11 @@ function fakeCommands(f) {
     if (args[0].endsWith('housekeeping.mjs')) {
       const state = path.join(f.org, 'housekeeping', createHash('sha256').update(f.project.identity).digest('hex'));
       fs.mkdirSync(path.join(state, 'lock'), { recursive: true });
-      fs.writeFileSync(path.join(state, 'lock/owner.json'), JSON.stringify({ pid: process.pid, cwd: f.repo, org: f.org,
+      fs.writeFileSync(path.join(state, 'lock/owner.json'), JSON.stringify({ pid: process.pid, identity: ownerIdentity(process.pid), cwd: f.repo, org: f.org,
         config: path.join(f.repo, '.housekeeping.json'), script: args[0], record_cli: [process.execPath, path.join(root, 'bin/org.mjs')] }));
       return { status: 0, stdout: '{"action":"started"}\n', stderr: '' };
     }
-    if (args[0].endsWith('watch.mjs')) { watching.add(args[1]); return { status: 0, stdout: JSON.stringify({ run: args[1], pid: process.pid, log: path.join(f.root, 'watch.log') }), stderr: '' }; }
+    if (args[0].endsWith('watch.mjs')) { watching.add(args[1]); return { status: 0, stdout: JSON.stringify({ run: args[1], pid: process.pid, identity: ownerIdentity(process.pid), log: path.join(f.root, 'watch.log') }), stderr: '' }; }
     const r = exec(file, args, f.repo, { ORG_DIR: f.org }); return r;
   };
   return { calls, command, watching };
@@ -314,7 +316,7 @@ for (const variant of ['STOP', 'invalid-config', 'invalid-pid', 'reported-during
 
 for (const variant of ['live', 'invalid', 'foreign', 'missing-runtime', 'resume-disabled']) test(`housekeeping resume preserves a ${variant} owner`, t => {
   const f = fixture(t); configureCliFixture(f); const lock = path.join(f.state, 'lock'); fs.mkdirSync(lock, { recursive: true });
-  const owner = { pid: variant === 'live' ? process.pid : deadPid, cwd: f.repo, org: f.root, config: f.config, script: f.runtime, record_cli: [f.fake] };
+  const owner = { pid: variant === 'live' ? process.pid : deadPid, identity: ownerIdentity(process.pid), cwd: f.repo, org: f.root, config: f.config, script: f.runtime, record_cli: [f.fake] };
   if (variant === 'invalid') owner.pid = 0;
   if (variant === 'foreign') owner.cwd = '/other/project';
   if (variant === 'missing-runtime') owner.script = path.join(f.root, 'missing-runtime');
@@ -324,4 +326,92 @@ for (const variant of ['live', 'invalid', 'foreign', 'missing-runtime', 'resume-
   if (['live', 'resume-disabled'].includes(variant)) good(r); else assert.equal(r.status, 1);
   assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), before);
   assert.ok(!fs.existsSync(path.join(f.state, 'schedule.log')));
+});
+
+for (const variant of ['reused', 'unreadable', 'legacy-live', 'changed-during-entry']) test(`watch recovery handles ${variant} identity without blocking entry`, async t => {
+  const f = fixture(t), run = f.start('identity recovery', process.pid), fake = fakeCommands(f), output = [];
+  const actual = ownerIdentity(process.pid);
+  if (variant === 'reused') f.record(['set', run, 'watcher_identity=old-boot']);
+  if (variant === 'legacy-live') f.record(['set', run, 'watcher_identity=']);
+  let calls = 0;
+  const readProcess = pid => {
+    if (variant === 'unreadable') return { ok: false, error: 'fixture permission denied' };
+    return { ok: true, value: { pid, identity: variant === 'changed-during-entry' && ++calls === 1 ? 'replacement' : actual, state: 'S' } };
+  };
+  const { enterSupervisor } = await load();
+  assert.doesNotThrow(() => enterSupervisor({ cwd: f.repo, org: f.org, role: 'supervisor', readProcess,
+    command: fake.command, output: s => output.push(s) }));
+  assert.equal(fake.watching.has(run), variant === 'reused');
+  if (variant === 'reused') {
+    assert.match(output.join(''), /re-armed/);
+    assert.equal(JSON.parse(f.record(['show', run, '--json'])).meta.watcher_identity, actual);
+  }
+  if (variant === 'unreadable') assert.match(output.join(''), /identity unavailable.*permission denied.*session may continue/);
+  if (variant === 'legacy-live') assert.match(output.join(''), /start-time identity is missing.*session may continue/);
+});
+
+test('empty supervisor environment and null dispatch recipient use the supervisor fallback', async t => {
+  const f = fixture(t), run = f.start('null recipient'), journal = path.join(f.root, 'receipt.json');
+  fs.writeFileSync(journal, JSON.stringify({ run, to: null }));
+  f.record(['set', run, `dispatch_journal=${journal}`]);
+  const fake = fakeCommands(f), { enterSupervisor } = await load();
+  enterSupervisor({ cwd: f.repo, org: f.org, role: 'supervisor', to: '', command: fake.command, output: () => {} });
+  const args = fake.calls.find(a => a[0].endsWith('watch.mjs'));
+  assert.equal(args[args.indexOf('--to') + 1], 'supervisor-herdr');
+});
+
+for (const variant of ['reused', 'unreadable', 'legacy-live']) test(`housekeeping snapshot reports ${variant} birth without changing the lock`, t => {
+  const f = fixture(t), state = path.join(f.org, 'housekeeping', createHash('sha256').update(f.project.identity).digest('hex'));
+  const lock = path.join(state, 'lock'); fs.mkdirSync(lock, { recursive: true });
+  const owner = { pid: process.pid, identity: 'old-boot', cwd: f.repo, org: f.org, config: path.join(f.repo, '.housekeeping.json'),
+    script: path.join(root, 'housekeeping/housekeeping.mjs'), record_cli: [process.execPath, path.join(root, 'bin/org.mjs')] };
+  if (variant === 'legacy-live') delete owner.identity;
+  const bytes = JSON.stringify(owner), file = path.join(lock, 'owner.json'); fs.writeFileSync(file, bytes);
+  const readProcess = pid => variant === 'unreadable' ? { ok: false, error: 'fixture denied' }
+    : { ok: true, value: { pid, identity: 'new-boot', state: 'S' } };
+  const snapshot = housekeepingSnapshot({ cwd: f.repo, org: f.org, readProcess });
+  assert.equal(snapshot.process, variant === 'reused' ? 'stale lock' : 'unknown');
+  if (variant !== 'reused') assert.match(snapshot.warnings.join(''), /identity/);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+});
+
+test('housekeeping resume replaces a reused PID without signaling the replacement process', async t => {
+  let f, lock;
+  t.after(async () => {
+    const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json')));
+    if (owner.pid === process.pid) return;
+    process.kill(owner.pid, 'SIGTERM');
+    for (let i = 0; i < 500 && fs.existsSync(lock); i++) await new Promise(r => setTimeout(r, 10));
+    assert.ok(!fs.existsSync(lock), 'fixture schedule must stop before removal');
+  });
+  f = fixture(t); configureCliFixture(f);
+  lock = path.join(f.state, 'lock'); fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, identity: 'prior-boot',
+    cwd: f.repo, org: f.root, config: f.config, script: f.runtime, record_cli: [f.fake] }));
+  const r = exec(process.execPath, [...f.args, '--start', '--resume'], f.repo);
+  good(r); assert.match(r.stdout, /recovered-dead-owner/);
+  const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json')));
+  assert.notEqual(owner.pid, process.pid); assert.equal(owner.identity, ownerIdentity(owner.pid));
+  assert.doesNotThrow(() => process.kill(process.pid, 0));
+});
+
+for (const kind of ['claude', 'codex']) test(`${kind} nested headless launch cannot inherit supervisor recognition`, t => {
+  const f = fixture(t), native = path.join(f.root, 'headless.cjs');
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+  sessionEnvironment({ role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org }, root,
+    { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
+  fs.writeFileSync(native, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');
+const r=spawnSync(process.execPath,[${JSON.stringify(path.join(root, 'supervisor/session-start.mjs'))}],{
+  env:process.env,input:JSON.stringify({cwd:process.cwd(),hook_event_name:'SessionStart',source:'startup'}),encoding:'utf8'});
+process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.status);\n`, { mode: 0o755 });
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--auto-entry', '--repo', f.repo,
+    '--binary', native, '--', ...(kind === 'codex' ? ['exec', 'task'] : ['--print', 'task'])], f.repo,
+    { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
+  good(r); assert.equal(r.stdout, '');
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
+  assert.ok(!fs.existsSync(path.join(f.org, 'housekeeping')));
+  const resumed = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo,
+    { HERDR_PANE_ID: 'w:pSupervisor' }, JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
+  good(resumed); assert.match(resumed.stdout, /Supervisor cold start/, 'interactive receipt remains usable');
 });

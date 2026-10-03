@@ -44,11 +44,14 @@ acknowledgements can replay the same visible `notice-id`; acknowledged notices
 are not repeated.
 
 For a detached watcher with a log, use `--detach --log /path/to/R-29.watch.log`
-instead of `--spawn`. This returns JSON with run, PID and log only after the child
+instead of `--spawn`. This returns JSON with run, PID, kernel birth `identity` and log only after the child
 has acquired the per-run lock and read its worker/report configuration. Startup
 failure exits nonzero with the log path. The child inherits no supervisor pane,
 tab or workspace identity. [Dispatch](../dispatch/README.md) uses this acknowledgement
 before sending work to its worker; this mode does not create a Herdr tab.
+The run lock stores PID and birth too, so a reused PID cannot block re-arming.
+Unreadable identities, malformed locks and present legacy PIDs without a birth
+require inspection; an absent legacy PID can be recovered.
 
 This module replaces bch-cloak's `notify-watch.sh` after that project switches
 over. It takes the proven blocking-wait and direct-prompt mechanics from

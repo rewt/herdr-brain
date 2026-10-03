@@ -4,6 +4,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ownerAlive } from '../lib/process-owner.mjs';
+import { lookupProcess } from '../lib/processes.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { coldStart, receiptDirectory } from './context.mjs';
@@ -39,7 +41,7 @@ export function inspectEntryLocks(project, report) {
 }
 
 export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr',
-  command = spawnSync, output = text => process.stdout.write(text) } = {}) {
+  command = spawnSync, readProcess, output = text => process.stdout.write(text) } = {}) {
   const report = text => output(sanitizeTerminal(text));
   const attempt = (name, task) => { try { return task(); } catch (e) { report(`Supervisor entry ${name}: ${e.message}; session may continue.\n`); } };
   // All failures are diagnostics, including discovery; entry must never veto a session.
@@ -48,6 +50,14 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
     const project = gitProject(cwd);
     if (project.checkout !== project.canonical) { report('Supervisor entry skipped: a lane checkout is never a project supervisor.\n'); return; }
     const deadline = Date.now() + 20000;
+    const readOwner = readProcess ?? (pid => lookupProcess(pid, { identityOnly: true,
+      allowance: ms => Math.min(ms, 2000), pause: () => {},
+      execute: (file, args, options) => {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) return { error: new Error('entry time limit reached') };
+        return spawnSync(file, args, { ...options, timeout: Math.min(remaining, options.timeout) });
+      },
+    }));
     const call = (file, args) => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error('entry time limit reached; inspect or repeat entry');
@@ -57,7 +67,7 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
       return r.stdout;
     };
     attempt('brief', () => report(call(local('./supervisor.mjs'), ['brief', '--repo', project.canonical, ...(org ? ['--org', org] : [])])));
-    const doc = attempt('record', () => coldStart({ cwd: project.canonical, org }));
+    const doc = attempt('record', () => coldStart({ cwd: project.canonical, org, readProcess: readOwner }));
     if (!doc) return;
     project.org = doc.project.org;
     org = project.org;
@@ -65,7 +75,7 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
     // STOP/torn record permits the cold start and lock inspection, never recovery mutations.
     if (doc.project.stopped || doc.project.torn_tail) { report('Supervisor entry recovery paused: STOP or incomplete record event; inspect.\n'); return; }
     attempt('housekeeping', () => {
-      const snapshot = housekeepingSnapshot({ cwd: project.canonical, org });
+      const snapshot = housekeepingSnapshot({ cwd: project.canonical, org, readProcess: readOwner });
       if (snapshot.configError) throw new Error(snapshot.configError);
       if (!snapshot.config.enabled || !snapshot.config.resume) { report('Supervisor entry housekeeping: disabled or resume=false.\n'); return; }
       if (snapshot.process === 'running') return;
@@ -75,26 +85,27 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
     for (const run of doc.running) attempt(`watch ${run.run}`, () => {
       // Unknown/deleted/legacy repository binding cannot authorize a new watcher.
       if (run.repository_binding !== project.identity || run.checkout_missing || !run.agent) return;
-      if (run.watcher_pid !== null && !dead(Number(run.watcher_pid))) return;
+      if (run.watcher_pid !== null && ownerAlive({ pid: Number(run.watcher_pid), identity: run.watcher_identity }, readOwner)) return;
       // The fold can change while the brief is printed or housekeeping starts.
       const current = JSON.parse(call(local('../bin/org.mjs'), ['show', run.run, '--json']));
       if (current.report || current.abandoned || current.workspace !== run.workspace || current.meta.agent !== run.agent) return;
       if (gitProject(current.workspace).identity !== project.identity) throw new Error('run repository binding changed');
-      if (current.meta.watcher_pid != null && !dead(Number(current.meta.watcher_pid))) return;
+      if (current.meta.watcher_pid != null && ownerAlive({ pid: Number(current.meta.watcher_pid), identity: current.meta.watcher_identity }, readOwner)) return;
       let recipient = to;
       if (current.meta.dispatch_journal) {
         let receipt;
         try { receipt = JSON.parse(fs.readFileSync(current.meta.dispatch_journal, 'utf8')); }
         catch (e) { if (e.code !== 'ENOENT') throw e; }
         if (receipt) {
-          if (receipt.run !== run.run || typeof receipt.to !== 'string' || !receipt.to.trim()) throw new Error('dispatch recipient receipt is invalid; inspect');
-          recipient = receipt.to;
+          if (receipt.run !== run.run || (receipt.to != null && (typeof receipt.to !== 'string' || !receipt.to.trim()))) throw new Error('dispatch recipient receipt is invalid; inspect');
+          recipient = receipt.to ?? recipient;
         }
       }
+      recipient = (typeof recipient === 'string' && recipient.trim()) || 'supervisor-herdr';
       const watched = JSON.parse(call(local('../watch/watch.mjs'), [run.run, '--org', org, '--to', recipient,
         '--cwd', project.canonical, '--detach', '--log', path.join(org, 'dispatch', `${run.run}.watch.log`)]));
-      if (watched.run !== run.run || typeof watched.log !== 'string' || dead(watched.pid)) throw new Error('watcher startup receipt is invalid or owner died; inspect before retry');
-      call(local('../bin/org.mjs'), ['set', run.run, `watcher_pid=${watched.pid}`, `watcher_log=${watched.log}`]);
+      if (watched.run !== run.run || typeof watched.log !== 'string' || !ownerAlive(watched, readOwner)) throw new Error('watcher startup receipt is invalid or owner died; inspect before retry');
+      call(local('../bin/org.mjs'), ['set', run.run, `watcher_pid=${watched.pid}`, `watcher_identity=${watched.identity}`, `watcher_log=${watched.log}`]);
       report(`Supervisor entry watch: re-armed ${run.run} (pid ${watched.pid}).\n`);
     });
   });

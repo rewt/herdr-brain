@@ -19,7 +19,7 @@ export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', 
 const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const line = (value, length = 160) => sanitizeTerminal(String(value ?? '')).replace(/\s+/g, ' ').trim().slice(0, length);
 
-export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), processes = processUsage() } = {}) {
+export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), processes = processUsage(), readProcess } = {}) {
   // Only process names and resource figures enter model context or brief JSON.
   // Project explicitly, so extra diagnostic fields such as argv stay out.
   const processRows = rows => rows.map(p => ({ pid: p.pid, ppid: p.ppid,
@@ -74,7 +74,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const facts = (r) => ({ run: r.id, item: r.item, title: state.items.get(r.item)?.title,
     route: r.meta.route ?? null, harness: r.meta.harness ?? null, model: r.meta.model ?? null,
     effort: r.meta.effort ?? null, agent: r.meta.agent ?? null, pane: r.meta.pane ?? null,
-    watcher_pid: r.meta.watcher_pid ?? null, watcher_log: r.meta.watcher_log ?? null,
+    watcher_pid: r.meta.watcher_pid ?? null, watcher_identity: r.meta.watcher_identity ?? null, watcher_log: r.meta.watcher_log ?? null,
     lane: r.meta.lane ?? null, workspace: r.workspace, report: r.report_path,
     serves: r.meta.serves ?? null, started: r.started.at,
     checkout_missing: missing.has(r.id), repository_binding: unknown.has(r.id) ? 'unknown' : r.workspace ? project.identity : 'record_only' });
@@ -147,7 +147,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   if (!next.length) next.push({ action: running.length ? 'leave_in_flight' : waiting.length ? 'await_operator' : 'record_next_work' });
   if (!pendingCandidates.length) next.push({ action: 'consider_release_at_quiet_point' });
   let housekeeping = null;
-  try { housekeeping = housekeepingSnapshot({ cwd, org, env }); }
+  try { housekeeping = housekeepingSnapshot({ cwd, org, env, readProcess }); }
   catch (e) { recovery.push({ file: path.join(project.canonical, '.housekeeping.json'), reason: `Housekeeping: ${e.message}` }); }
   const config = readConfig(org), clock = now(env);
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));

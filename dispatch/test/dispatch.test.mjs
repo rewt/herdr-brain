@@ -43,7 +43,8 @@ if(type==='lane') {
  if(fail==='watch') { console.error('injected watch');process.exit(1); }
  const child=spawn(process.execPath,['-e','setTimeout(()=>{},10000)','--',root],{stdio:'ignore'}); child.unref();
  fs.appendFileSync(path.join(root,'pids'),child.pid+'\\n');
- result({run:a[0],pid:child.pid,log:path.join(root,a[0]+'.log')});
+ const { ownerIdentity } = await import(${JSON.stringify(new URL('../../lib/process-owner.mjs', import.meta.url).href)});
+ result({run:a[0],pid:child.pid,identity:ownerIdentity(child.pid),log:path.join(root,a[0]+'.log')});
 } else {
  if(a[0]==='agent' && a[1]==='get') {
   const agent=a[2]==='supervisor-herdr'?{name:a[2]}:workers[a[2]];

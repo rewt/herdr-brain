@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Project housekeeping: a deterministic schedule, with record/Git authority.
+import { ownerAlive, ownerIdentity } from '../lib/process-owner.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -295,8 +296,7 @@ async function main() {
         if (owner.script !== script || JSON.stringify(owner.record_cli) !== JSON.stringify(recordCLI)) {
           throw new Error(`housekeeping lock belongs to a different runtime; inspect ${lock} before restarting`);
         }
-        try { process.kill(owner.pid, 0); log({ action: 'already-running', pid: owner.pid, state_dir: stateDir }); return; }
-        catch (error) { if (error.code !== 'ESRCH') throw error; }
+        if (ownerAlive(owner)) { log({ action: 'already-running', pid: owner.pid, state_dir: stateDir }); return; }
         if (!opt.resume) throw new Error(`stale housekeeping lock for pid ${owner.pid}; inspect ${lock} before removing it`);
         // Only the validated matching runtime with a confirmed dead owner is recoverable.
         fs.rmSync(lock, { recursive: true });
@@ -326,8 +326,9 @@ async function main() {
       return;
     } finally { releaseStart(); }
   }
+  const identity = ownerIdentity(process.pid);
   fs.mkdirSync(lock); // Fail closed on overlap or an unrecovered crash.
-  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, cwd, org: project.org, config: configFile,
+  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, identity, cwd, org: project.org, config: configFile,
     script, record_cli: recordCLI }));
   let stopped = false, wake;
   const stop = () => { stopped = true; wake?.(); };

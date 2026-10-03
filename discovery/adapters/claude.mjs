@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive } from '../launch.mjs';
-import { sessionEnvironment, sessionHookArguments } from '../../supervisor/session-hooks.mjs';
+import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
 import { spawnNative } from '../session.mjs';
 const separator = process.argv.indexOf('--');
 const { values } = parseArgs({ args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
@@ -18,7 +18,7 @@ const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
 function passthrough() {
-  const child = spawn(values.binary, native, { stdio: 'inherit' });
+  const child = spawn(values.binary, native, { stdio: 'inherit', env: passthroughEnvironment() });
   child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
   child.on('close', (code) => { process.exitCode = code ?? 1; });
 }

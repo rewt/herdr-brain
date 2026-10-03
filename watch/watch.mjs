@@ -3,16 +3,17 @@
 // a compact notice to a supervisor agent. Herdr's wait is server-side blocking;
 // fs.watch catches a report that lands without another agent state change.
 
+import { ownerIdentity } from '../lib/process-owner.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
 import { inboxPath, promptSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
 import {
@@ -266,6 +267,7 @@ async function detachWatcher() {
       cwd: path.resolve(opt.cwd), env, detached: true, stdio: ['ignore', fd, fd, 'ipc'],
     });
   } finally { fs.closeSync(fd); }
+  let identity;
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
@@ -275,41 +277,18 @@ async function detachWatcher() {
     child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`watcher exited during startup (${code}); inspect ${logPath}`)); });
     child.once('message', (message) => {
       if (message?.ready !== runId) return;
+      identity = message.identity;
       clearTimeout(timer);
       child.disconnect();
       child.unref();
       resolve();
     });
   });
-  process.stdout.write(`${JSON.stringify({ run: runId, pid: child.pid, log: logPath })}\n`);
+  process.stdout.write(`${JSON.stringify({ run: runId, pid: child.pid, identity, log: logPath })}\n`);
 }
 
 function acquireLock() {
-  const digest = crypto.createHash('sha256').update(`${path.resolve(opt.org)}\0${runId}`).digest('hex').slice(0, 16);
-  const lock = path.join(os.tmpdir(), `herdr-watch-${digest}.lock`);
-  let stale = false;
-  try {
-    const prior = Number(fs.readFileSync(lock, 'utf8'));
-    if (Number.isInteger(prior)) {
-      try { process.kill(prior, 0); } catch { stale = true; }
-      if (!stale) throw new Error(`another watcher (pid ${prior}) already owns ${runId}`);
-    }
-  } catch (error) {
-    if (error.message.startsWith('another watcher')) throw error;
-    stale = true;
-  }
-  if (stale) try { fs.unlinkSync(lock); } catch { /* Another process may have replaced it. */ }
-  try {
-    fs.writeFileSync(lock, String(process.pid), { flag: 'wx' });
-  } catch (error) {
-    if (error.code === 'EEXIST') throw new Error(`another watcher already owns ${runId}`);
-    throw error;
-  }
-  const release = () => {
-    try {
-      if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock);
-    } catch { /* Already released. */ }
-  };
+  const release = acquireWatcherLock({ org: opt.org, run: runId });
   process.once('exit', release);
   return release;
 }
@@ -329,7 +308,7 @@ async function watch() {
   if (!agent) throw new Error(`${runId} has no worker agent; pass --agent`);
   if (!current.report_path && !opt.report) throw new Error(`${runId} has no report path; pass --report`);
   log(`watching ${runId} (${item}): worker ${agent}, report ${reportPath}, supervisor ${opt.to}`);
-  if (process.send) process.send({ ready: runId });
+  if (process.send) process.send({ ready: runId, identity: ownerIdentity(process.pid) });
 
   let lastNotice;
   let lastUnavailableLog;

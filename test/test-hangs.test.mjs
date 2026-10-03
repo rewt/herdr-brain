@@ -11,6 +11,23 @@ import { spawnDetachedFixture, waitForDetachedCleanup } from './helpers/detached
 const helper = new URL('./helpers/bounded-test.mjs', import.meta.url).href;
 const childHelper = new URL('./helpers/child.mjs', import.meta.url).href;
 const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
+process.env.ORG_ACTOR = 'test-hangs-regression';
+
+// Nested suites include startup, native fixture preparation and group audit.
+// Give those compound scenarios their own bound; ordinary commands keep 15s.
+const launchTimeout = 30_000;
+function runFixture(t, args, options = {}) {
+  return spawnChild(t, process.execPath, [runner, ...args], options, 35_000);
+}
+async function launched(child, file) {
+  let result, failure;
+  waitForExit(child).then(value => { result = value; }, error => { failure = error; });
+  const deadline = Date.now() + launchTimeout;
+  while (!fs.existsSync(file) && !result && !failure && Date.now() < deadline)
+    await new Promise(resolve => setTimeout(resolve, 20));
+  if (failure) throw failure;
+  assert.ok(fs.existsSync(file), `fixture did not publish ${file}\n${result ? result.stdout + result.stderr : `startup exceeded ${launchTimeout}ms`}`);
+}
 
 test('real detached fixture cleanup survives an assertion failure', async (t) => {
   const { root, child } = spawnDetachedFixture(t, 'failure');
@@ -31,20 +48,19 @@ for (const kind of ['SIGTERM', 'SIGKILL', 'SIGKILL-before-receipt', 'blocked']) 
 import {waitForExit} from ${JSON.stringify(childHelper)};
 import fs from 'node:fs';
 import {spawnDetachedFixture} from ${JSON.stringify(detachedHelper)};
+${kind === 'SIGTERM' ? 'await new Promise(resolve=>setTimeout(resolve,11000));' : ''}
 test('real detached cancellation fixture',async(t)=>{
 const {child}=spawnDetachedFixture(t,${JSON.stringify(kind === 'blocked' ? 'blocked' : kind === 'SIGKILL-before-receipt' ? 'early-cancel' : kind === 'SIGKILL' ? 'blocked-leaf' : 'hold')},${JSON.stringify(root)},${kind === 'blocked' ? 3000 : 15000});
 fs.writeFileSync(${JSON.stringify(path.join(root, 'suite'))},String(process.env.HERDR_TEST_SUITE_PID));
 await waitForExit(child);
 });`);
-  const outer = spawnChild(t, process.execPath, [runner, f.file]);
+  const outer = runFixture(t, [f.file]);
   t.after(async () => {
     await waitForDetachedCleanup(root);
     fs.rmSync(root, { recursive: true, force: true });
   });
   const receiptFile = kind === 'SIGKILL-before-receipt' ? 'spawned.json' : 'leaf.json';
-  const deadline = Date.now() + 10000;
-  while (!fs.existsSync(path.join(f.root, receiptFile)) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
-  assert.ok(fs.existsSync(path.join(f.root, receiptFile)), 'detached cancellation fixture reached its launch');
+  await launched(outer, path.join(f.root, receiptFile));
   const leaf = JSON.parse(fs.readFileSync(path.join(f.root, receiptFile)));
   if (kind === 'SIGKILL-before-receipt') {
     const snapshot = createProcessTracker().snapshot();
@@ -126,7 +142,7 @@ syncBuiltinESMExports();
 if(child.kill('SIGKILL'))throw Error('already completed child was signalled');
 t.after(()=>{cp.spawnSync=original;syncBuiltinESMExports();if(queries)throw Error('teardown queried a completed fixture');});
 });`);
-  const child = spawnChild(t, process.execPath, [runner, f.file]);
+  const child = runFixture(t, [f.file]);
   const result = await waitForExit(child);
   assert.equal(result.code, 0, result.stdout + result.stderr);
 });
@@ -143,7 +159,7 @@ while(!fs.existsSync(${JSON.stringify(path.join(root, 'grandchild'))})) await ne
 ${kind === 'assertion' ? "throw Error('injected failure before waitForExit');" : kind === 'leak' ? '' : 'await waitForExit(child);'}
 });`;
     });
-    const child = spawnChild(t, process.execPath, [runner, f.file]);
+    const child = runFixture(t, [f.file]);
     const result = await waitForExit(child);
     assert.equal(result.code, 1, result.stdout + result.stderr);
     assert.ok(result.stdout.includes(name), result.stdout);
@@ -159,11 +175,17 @@ const child=spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)']);
 fs.writeFileSync(${JSON.stringify(path.join(root, 'pid'))},String(child.pid));
 while(true) {}
 });`);
-    const child = spawnChild(t, process.execPath, [runner, `--${kind}-timeout=1000`, f.file]);
+    // Include deliberately slow startup in the reproducer. A one-second suite
+    // deadline can kill the launcher before this test ever owns a fixture PID.
+    const preload = path.join(f.root, 'slow-start.mjs');
+    fs.writeFileSync(preload, `if(process.argv[1]===${JSON.stringify(f.file)}) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1250);`);
+    const child = runFixture(t, [`--${kind}-timeout=3000`, f.file], {
+      env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` },
+    });
     const result = await waitForExit(child);
     assert.equal(result.code, 1, result.stdout + result.stderr);
     assert.ok((result.stdout + result.stderr).includes(f.file), result.stdout + result.stderr);
-    assert.match(result.stdout + result.stderr, kind === 'file' ? /testTimeoutFailure/ : /Test suite exceeded 1000ms/);
+    assert.match(result.stdout + result.stderr, kind === 'file' ? /testTimeoutFailure/ : /Test suite exceeded 3000ms/);
     await assertGone(Number(fs.readFileSync(path.join(f.root, 'pid'), 'utf8')));
   });
 }
@@ -189,17 +211,15 @@ while(true) {}
 });`);
       const outer = path.join(root, 'outer.json');
       return `test('enclosing nested runner',async(t)=>{
-const child=spawnChild(t,process.execPath,[${JSON.stringify(runner)},${JSON.stringify(nested)}]);
+const child=spawnChild(t,process.execPath,[${JSON.stringify(runner)},${JSON.stringify(nested)}],{},35000);
 fs.writeFileSync(${JSON.stringify(outer + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,runner:child.pid}));
 fs.renameSync(${JSON.stringify(outer + '.tmp')},${JSON.stringify(outer)});
 await waitForExit(child);
 });`;
     });
     const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
-    const outer = spawnChild(t, process.execPath, [runner, f.file]);
-    const deadline = Date.now() + 10_000;
-    while (!fs.existsSync(path.join(f.root, 'inner.json')) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.ok(fs.existsSync(path.join(f.root, 'inner.json')), 'nested fixture never reached its blocked loop');
+    const outer = runFixture(t, [f.file]);
+    await launched(outer, path.join(f.root, 'inner.json'));
     const first = JSON.parse(fs.readFileSync(path.join(f.root, 'outer.json'), 'utf8'));
     const second = JSON.parse(fs.readFileSync(path.join(f.root, 'inner.json'), 'utf8'));
     for (const [pid, group] of [
@@ -227,7 +247,7 @@ test('a leader exiting before its redirected background child fails the suite an
 const child=spawnChild(t,'/bin/sh',['-c',${JSON.stringify(`sleep 60 >/dev/null 2>&1 & echo $! > '${root}/background'; exit 0`)}]);
 await waitForExit(child);
 });`);
-  const child = spawnChild(t, process.execPath, [runner, f.file]);
+  const child = runFixture(t, [f.file]);
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes(name), result.stdout);
@@ -247,7 +267,7 @@ import {syncBuiltinESMExports} from 'node:module';
 const original=cp.spawnSync;
 cp.spawnSync=(command,args,options)=>command==='ps'&&args.includes('-A')?{status:null,stdout:'',stderr:'',error:Error('injected audit timeout')}:original(command,args,options);
 syncBuiltinESMExports();`);
-  const child = spawnChild(t, process.execPath, [runner, f.file], { env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(fault)}` } });
+  const child = runFixture(t, [f.file], { env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(fault)}` } });
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /process snapshot failed: injected audit timeout/);
@@ -269,7 +289,7 @@ cp.spawnSync=(command,args,options)=>{
 syncBuiltinESMExports();
 spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true});
 });`);
-  const child = spawnChild(t, process.execPath, [runner, '--suite-timeout=2500', f.file]);
+  const child = runFixture(t, ['--suite-timeout=2500', f.file]);
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Test suite exceeded 2500ms/);
@@ -287,12 +307,12 @@ leaf.unref();fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify
     return `test('no escaped grandchild',async(t)=>{
 const child=spawnChild(t,process.execPath,['-e',${JSON.stringify(launcher)}],{env:{NODE_OPTIONS:'--no-warnings',PATH:process.env.PATH}});
 await waitForExit(child);
-const deadline=Date.now()+5000;
+const deadline=Date.now()+${launchTimeout};
 while(!fs.existsSync(${JSON.stringify(receipt)})&&Date.now()<deadline) await new Promise(r=>setTimeout(r,10));
 if(!fs.existsSync(${JSON.stringify(receipt)}))throw Error('grandchild receipt missing');
 });`;
   });
-  const child = spawnChild(t, process.execPath, [runner, f.file]);
+  const child = runFixture(t, [f.file]);
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Surviving fixture:.*r94-policy-leaf/);

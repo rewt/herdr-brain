@@ -256,3 +256,10 @@ CLI adapters `--org-cli`, `--lane-cli`, `--dispatch-cli`, `--watch-cli` are for
 integration tests. Offline tests use real Git, record, review schema, validation,
 dispatch and watch with scripted Herdr/model transport. No model or live pane is
 called. The supervisor's next real report remains the live canary.
+
+Run an individual offline file through the bounded runner, for example
+`ORG_ACTOR=developer node test/helpers/run.mjs settle/test/record-safety.test.mjs`.
+Fixture teardown waits for bounded senders and stops their watchers first, then
+confirms and stops the inbox owner and its current transport child before removing
+the scratch record. A busy composer or slow transport cannot keep teardown waiting
+for natural delivery. Unconfirmed ownership or shutdown preserves the directory.

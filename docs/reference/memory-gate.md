@@ -27,13 +27,16 @@ including after a clearing sample, and returns `result: stopped` without opening
 a lane or launching a worker at that stage. The request remains resumable with
 `--retry` after STOP clears. Settle retains its correction stage and returns its
 existing stopped handoff when dispatch stops during a wait. Correction dispatch
-stderr is inherited by settle so both new requests and retries show wait reasons
-as they happen. Settle review waits also check STOP and retain the review stage.
+stderr is inherited by settle and supervisor handle so both new requests and
+retries show wait reasons as they happen. Failed dispatches also emit their reason
+and request path on stdout, preserving that evidence in settle's error and handoff.
+Settle review waits also check STOP and retain the review stage.
 
 Coordinated `lane dispatch` and `lane review` receive `--memory-checked`: the
 parent owns the visible wait before recording a launch attempt, so there is no
 second pressure sample after entering `launching` or `reviewing`. Both lane
-commands still check canonical STOP before launch and return a stopped receipt;
+commands validate arguments before waiting, still check canonical STOP before
+launch and return a stopped receipt (dispatch exit 0, review exit 3);
 the parent restores `worker` or `review` so ordinary retry remains safe. Direct
 lane commands keep their own visible memory wait and check STOP throughout it.
 
@@ -47,8 +50,9 @@ cleanliness and record guards still run before integration.
 
 Supervisor `brief` and `brief --json` show the current memory measurement, reason,
 probe advisories, and the largest memory and CPU consumers. Process rows carry
-PID, parent PID, resident bytes, CPU percentage and a bounded command, so a
-fixture leaf or worker can be identified. This is read-only, machine-wide
+PID, parent PID, resident bytes, CPU percentage and command basename only, so a
+consumer can be identified without exposing process arguments or their secrets.
+This is read-only, machine-wide
 diagnostic evidence; it never authorizes signalling or infers work status.
 
 Offline fixture policy supplies healthy native memory readings, and pressure

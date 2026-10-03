@@ -2112,11 +2112,16 @@ async function waitForPrivateReview(path, deadline, interrupted, session) {
   );
 }
 
-async function review(topic, args) {
+async function review(topic, args, memoryChecked = false) {
   repositoryRoot({ requiredBy: "review" });
   if (topic === undefined) fail("usage: lane review <topic> --round N [--brief <path>] [--change <name>] [--route <name>] [--route-config <path>] [--timeout <seconds>]");
   const options = parseReviewOptions(args);
   const branch = laneBranch(topic);
+  resolveDispatch({ route: options.route, routeConfig: options.routeConfig });
+  if (!launchMemoryGate('lane review', memoryChecked)) {
+    process.exitCode = 3;
+    return;
+  }
   const path = worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open it first`);
   requireClean(path, "lane worktree");
@@ -2530,6 +2535,8 @@ switch (command) {
         promptText = positional.join(" ");
       }
     }
+    laneBranch(topic);
+    resolveDispatch(options);
     if (!launchMemoryGate('lane dispatch', options.memoryChecked)) break;
     const result = dispatch(topic, promptText, options);
     if (options.silent) process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -2537,8 +2544,7 @@ switch (command) {
   }
   case "review":
     try {
-      if (!launchMemoryGate('lane review', rest.includes('--memory-checked'))) break;
-      await review(topic, rest.filter(arg => arg !== '--memory-checked'));
+      await review(topic, rest.filter(arg => arg !== '--memory-checked'), rest.includes('--memory-checked'));
     } catch {
       process.stderr.write(
         "lane review: unexpected failure; private evidence may have been retained and a public record " +

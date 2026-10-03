@@ -292,7 +292,7 @@ even when `lane open` runs in a linked checkout.
 lane dispatch <topic> \
   [--route <name> | --kind <agent> --model <model>] \
   [--env KEY=VALUE ...] [--arg <raw-agent-argument> ...] \
-  [@brief-file | prompt text]
+  [--memory-checked] [@brief-file | prompt text]
 ```
 
 Without `--route`, values come from `dispatch`. With a route, its `kind`, `model`,
@@ -308,6 +308,15 @@ Trusted configured arguments retain legacy compatibility.
 Command-line `--env` entries append after both configured
 environment lists. The route's `use` text is descriptive and never passed to Herdr.
 List supported kinds with `herdr agent start --help`.
+
+Dispatch and review validate arguments before waiting for
+[host memory pressure](../../docs/reference/memory-gate.md) to clear. They show
+the reason on stderr while waiting and proceed automatically when pressure clears.
+Both check the canonical `.lane/supervisor/STOP` during the wait and before
+launch. STOP emits a JSON receipt with `result: stopped` and `reason`, launches
+nothing, and exits 0 for dispatch or 3 for review. Retry after STOP clears.
+`--memory-checked` is available on both commands for coordinators that already
+performed the visible wait; it skips the redundant wait but still checks STOP.
 
 `lane routes` prints each configured route, sorted by name, with its resolved kind,
 model, effort, arguments, and `use` note. It exits 1 when no routes are configured. An
@@ -523,6 +532,8 @@ The CLI creates the public file only after sanitization and the pre-publication 
 check, without replacement, staging, or committing. It then requires the same HEAD and
 branch with exactly that one new untracked file before emitting a verdict. stdout is
 exactly `PASS` with exit 0 or `NEEDS-WORK`/`FAIL` with exit 1; stderr names both files.
+Before launch, a supervisor STOP instead emits the stopped JSON receipt with exit
+3, as described under dispatch above. Review also accepts `--memory-checked`.
 Every preflight, dispatch, timeout, incomplete/oversized/invalid record, moved/dirty
 target, unverified sanitization, exclusive-write/final-integrity failure, signal, or
 pipe refusal exits exactly 2 with no verdict.

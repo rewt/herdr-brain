@@ -83,7 +83,7 @@ for (const command of ['dispatch', 'review']) {
     // entry adapter changes cwd to the linked checkout before the real CLI.
     const adapter = path.join(f.root, 'linked-lane.mjs');
     fs.writeFileSync(adapter, `process.chdir(${JSON.stringify(f.workspace)}); await import(${JSON.stringify(path.join(f.source, 'lanes/lane.mjs'))});`);
-    const pending = f.concurrent(command, adapter, ['topic', ...(command === 'dispatch' ? ['--json'] : [])]);
+    const pending = f.concurrent(command, adapter, ['topic', ...(command === 'dispatch' ? ['--json'] : ['--round', '1', '--brief', path.join(f.root, 'ask with spaces.md')])]);
     let stderr = '', stdout = '';
     pending.child.stderr.on('data', data => { stderr += data; });
     pending.child.stdout.on('data', data => { stdout += data; });
@@ -95,8 +95,25 @@ for (const command of ['dispatch', 'review']) {
       fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Stop while waiting');
       await pending.done;
     } finally { fs.writeFileSync(memory, JSON.stringify(healthy)); }
-    assert.equal(pending.child.exitCode, 0, stderr);
+    assert.equal(pending.child.exitCode, command === 'review' ? 3 : 0, stderr);
     assert.equal(JSON.parse(stdout).result, 'stopped');
     assert.equal(f.calls().filter(a => a[0] === 'agent' && a[1] === 'start').length, 0);
+  });
+}
+
+for (const [command, args, reason] of [
+  ['review', [], /--round must be/],
+  ['review', ['--round', '1', '--brief'], /missing value for --brief/],
+  ['review', ['--round', '1', '--change', 'topic', '--route', 'missing-route'], /unknown.*route/i],
+  ['dispatch', ['--route'], /--route requires a value/],
+  ['dispatch', ['--route', 'missing-route'], /unknown.*route/i],
+]) {
+  test(`lane ${command} validates ${args.join(' ') || 'missing round'} before memory wait`, t => {
+    const f = fixture(t), memory = path.join(f.root, 'memory.json');
+    fs.writeFileSync(memory, JSON.stringify(pressure)); f.env.TEST_MEMORY_FILE = memory;
+    const r = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), command, 'topic', ...args]);
+    assert.notEqual(r.status, 0); assert.notEqual(r.status, null, 'invalid arguments must not hang in memory wait');
+    assert.match(r.stderr, reason); assert.doesNotMatch(r.stderr, /waiting; memory pressure/);
+    assert.equal(f.calls().length, 0);
   });
 }

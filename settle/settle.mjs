@@ -43,7 +43,16 @@ function call(argv, args, cwd = job?.repo ?? path.resolve(opt.repo), options = {
 }
 function checked(argv, args, cwd, options) {
   const r = call(argv, args, cwd, options);
-  if (r.error || r.status !== 0) throw new Error(`${args[0]}: ${(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()}`);
+  if (r.error || r.status !== 0) {
+    let detail = r.stderr || r.stdout || r.error?.message || `exit ${r.status}`;
+    if (r.stdout?.trim().startsWith('{')) {
+      try {
+        const receipt = JSON.parse(r.stdout);
+        if (receipt.result === 'failed' && typeof receipt.reason === 'string') detail = `${receipt.reason}${receipt.journal ? `\nrequest: ${receipt.journal}` : ''}`;
+      } catch { /* Retain the original diagnostic if a child emits malformed JSON. */ }
+    }
+    throw new Error(`${args[0]}: ${detail.trim()}`);
+  }
   return r.stdout.trim();
 }
 const record = (args) => checked(cli('org', '../bin/org.mjs'), args);
@@ -569,7 +578,7 @@ function main() {
     const r = call(cli('lane', '../lanes/lane.mjs'), ['review', lane, '--round', String(job.round), '--brief', supplement,
       '--route', job.reviewRoute, '--route-config', job.routeConfig, '--timeout', String(job.timeout), '--memory-checked']);
     job.reviewLog = evidence(`review-r${job.round}.log`, `${r.stdout ?? ''}\n${r.stderr ?? ''}`); save();
-    if (!r.error && r.status === 0 && r.stdout?.trim().startsWith('{')) {
+    if (!r.error && r.status === 3 && r.stdout?.trim().startsWith('{')) {
       const receipt = JSON.parse(r.stdout);
       if (receipt.result === 'stopped') {
         job.stage = 'review'; save();

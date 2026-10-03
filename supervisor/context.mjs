@@ -19,6 +19,13 @@ const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'u
 const line = (value, length = 160) => sanitizeTerminal(String(value ?? '')).replace(/\s+/g, ' ').trim().slice(0, length);
 
 export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.env, memory = readMemory(), processes = processUsage() } = {}) {
+  // Only process names and resource figures enter model context or brief JSON.
+  // Project explicitly, so extra diagnostic fields such as argv stay out.
+  const processRows = rows => rows.map(p => ({ pid: p.pid, ppid: p.ppid,
+    rss_bytes: p.rss_bytes, cpu_percent: p.cpu_percent,
+    command: path.basename(String(p.command ?? '')) }));
+  processes = { by_memory: processRows(processes.by_memory), by_cpu: processRows(processes.by_cpu),
+    ...(processes.warning ? { warning: processes.warning } : {}) };
   const project = gitProject(cwd);
   org = org ? path.resolve(org) : findOrgDir({ cwd, env });
   if (!org) throw new Error('no record discovered; enter through discovery first');

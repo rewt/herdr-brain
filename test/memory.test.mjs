@@ -87,11 +87,12 @@ test('probe advisories are visible and caller cancellation is checked on each sa
     check: () => { if (stopped) throw Error('STOP during probe'); } }), /STOP during probe/);
 });
 
-test('process diagnostics rank memory and CPU separately and retain PID, parent and fixture command', () => {
-  const usage = processUsage({ run: () => ' 11 1 100 99.0 node test/pty-leaf.mjs\n 12 11 2048 0.5 node worker.mjs\ninvalid\n', limit: 1 });
+test('process diagnostics rank memory and CPU separately and retain PID, parent and command basename', () => {
+  const usage = processUsage({ run: () => ' 11 1 100 99.0 /usr/bin/node\n 12 11 2048 0.5 /Applications/Worker App\ninvalid\n', limit: 1 });
   assert.equal(usage.by_memory[0].pid, 12); assert.equal(usage.by_memory[0].rss_bytes, 2048 * 1024);
   assert.equal(usage.by_cpu[0].pid, 11); assert.equal(usage.by_cpu[0].ppid, 1);
-  assert.match(usage.by_cpu[0].command, /pty-leaf/);
+  assert.equal(usage.by_cpu[0].command, 'node');
+  assert.equal(usage.by_memory[0].command, 'Worker App');
   assert.match(processUsage({ run: () => { throw Error('ps unavailable'); } }).warning, /ps unavailable/);
   assert.match(processUsage({ run: () => 'invalid output' }).warning, /no process rows/);
 });

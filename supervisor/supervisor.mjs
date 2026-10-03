@@ -50,8 +50,8 @@ export function main(argv = process.argv.slice(2)) {
   if (project.stopped || project.torn_tail) throw new Error('STOP or incomplete record event: inspect before cycle mutations');
   const directory = receiptDirectory(project.org, project.identity);
   const env = { ...process.env, ORG_DIR: project.org, ORG_ACTOR: process.env.ORG_ACTOR || 'supervisor' };
-  const call = (file, args) => {
-    const r = spawnSync(process.execPath, [file, ...args], { cwd: project.canonical, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  const call = (file, args, options = {}) => {
+    const r = spawnSync(process.execPath, [file, ...args], { cwd: project.canonical, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...options });
     if (r.error || r.status !== 0) {
       if (r.stdout) process.stdout.write(r.stdout);
       throw new Error(`${path.basename(file)}: ${r.stderr || r.error?.message || `exit ${r.status}`}`);
@@ -139,7 +139,7 @@ export function main(argv = process.argv.slice(2)) {
     }
     for (const name of ['to', 'brief', 'review-route', 'fix-route', 'timeout', 'review-round-cap']) if (opt[name] !== undefined) settleArgs.push(`--${name}`, opt[name]);
     for (const name of ['retry', 'review-again', 'fix-findings']) if (opt[name]) settleArgs.push(`--${name}`);
-    const result = JSON.parse(call(settle, settleArgs));
+    const result = JSON.parse(call(settle, settleArgs, { stdio: ['ignore', 'pipe', 'inherit'] }));
     print({ ...result, next: result.result === 'promotable_with_findings' ? 'judge findings and file follow-ups; promote RUN --accept-findings --why REASON, or handle RUN --retry --fix-findings' : result.result === 'promotable' ? 'judge project authority, then supervisor promote RUN --why REASON' : result.result === 'fix_round' ? 'leave watched correction in flight' : result.result === 'stopped' ? 'inspect retained handoff; after STOP is cleared, handle RUN --retry' : 'judge compact handoff' });
     return;
   }

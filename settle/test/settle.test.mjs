@@ -267,8 +267,20 @@ test('uncertain fix delivery recovers the dispatch journal and never starts a se
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'prompt-fail'), '');
   const failed = f.settle(run); assert.equal(failed.status, 1); assert.match(failed.stderr, /uncertain delivery/);
+  const assertHandoff = (response, reason) => {
+    const job = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
+    const receipt = JSON.parse(response.stdout);
+    const dispatchDir = path.join(f.org, 'dispatch');
+    const file = fs.readdirSync(dispatchDir).find(x => x.endsWith('.json') && !x.endsWith('.routes.json'));
+    for (const text of [job.error, receipt.reason, fs.readFileSync(receipt.handoff, 'utf8')]) {
+      assert.match(text, reason);
+      assert.ok(text.includes(path.join(dispatchDir, file)), 'failure retains the dispatch request path');
+    }
+  };
+  assertHandoff(failed, /uncertain delivery/);
   const count = f.calls().filter((a) => a[1] === 'start').length;
   const retry = f.retry(run); assert.equal(retry.status, 1); assert.match(retry.stderr, /delivery outcome is unknown/);
+  assertHandoff(retry, /delivery outcome is unknown/);
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, count);
   fs.unlinkSync(path.join(f.root, 'prompt-fail'));
   const dispatchDir = path.join(f.org, 'dispatch');

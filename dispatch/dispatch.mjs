@@ -337,7 +337,12 @@ catch (error) {
   if (error.code === 'DISPATCH_STOPPED') {
     process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
       reason: error.message, stage: job.stage, journal })}\n`);
-  } else process.exitCode = 1;
+  } else {
+    // Coordinators inherit stderr for live waits; retain failure evidence on
+    // their captured stdout as well, including failures before a journal exists.
+    process.stdout.write(`${JSON.stringify({ result: 'failed', reason: error.message, journal })}\n`);
+    process.exitCode = 1;
+  }
 } finally {
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}

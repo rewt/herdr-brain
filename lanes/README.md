@@ -138,6 +138,16 @@ snapshot for this launch while retaining the lifecycle configuration's original
 paths. The [dispatch module](../dispatch/README.md) uses these options to record
 and watch the worker before prompting it in one command.
 
+Dispatch and review validate arguments before waiting for
+[host memory pressure](../docs/reference/memory-gate.md) to clear. Wait reasons
+appear on stderr as they happen; work proceeds automatically when pressure clears.
+Both check the canonical checkout's `.lane/supervisor/STOP` throughout the wait
+and before launch. STOP prints a JSON `result: stopped` receipt without launching;
+dispatch exits 0, while review exits 3 so STOP cannot be mistaken for PASS.
+After STOP clears, retry the invocation. Coordinators use `--memory-checked` on
+either command when they already own the memory wait; it skips that extra wait
+but still checks STOP before launch.
+
 Run an independent foreground review against a fixed clean commit:
 
 ```sh
@@ -146,8 +156,9 @@ lane review api-change --round 1 --brief /absolute/path/to/review-questions.md
 
 The review command uses [the packaged protocol](docs/REVIEW_TEMPLATE.md), validates
 the reviewer's private record, verifies that the lane did not move, and publishes a
-sanitized review under `docs/reviews/<topic>/`. It prints only `PASS`,
-`NEEDS-WORK`, or `FAIL` after publication succeeds.
+sanitized review under `docs/reviews/<topic>/`. After publication succeeds it
+prints `PASS` (exit 0), `NEEDS-WORK`, or `FAIL` (exit 1). A STOP before launch
+prints the stopped JSON receipt (exit 3); other failures exit 2 without a verdict.
 Malformed finding lines are preserved as sanitized literal prose marked
 `[Unparsed finding]`, so workers can read the requested revisions. Private-only
 sections are never projected; privacy and captured-target checks still apply.

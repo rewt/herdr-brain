@@ -1,0 +1,173 @@
+Command: node --test supervisor/test/entry.test.mjs
+Exit: 0
+
+TAP version 13
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 1 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 244.881833
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 2 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 729.849792
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 3 - entry respects {"enabled":false}
+  ---
+  duration_ms: 144.45125
+  ...
+# Subtest: entry respects {"resume":false}
+ok 4 - entry respects {"resume":false}
+  ---
+  duration_ms: 137.206333
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 5 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 109.763042
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 6 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 139.609292
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 7 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 289.534291
+  ...
+# Subtest: native hooks deliver the same entry on startup
+ok 8 - native hooks deliver the same entry on startup
+  ---
+  duration_ms: 427.227875
+  ...
+# Subtest: native hooks deliver the same entry on resume
+ok 9 - native hooks deliver the same entry on resume
+  ---
+  duration_ms: 423.841667
+  ...
+# Subtest: native hooks deliver the same entry on clear
+ok 10 - native hooks deliver the same entry on clear
+  ---
+  duration_ms: 437.431042
+  ...
+# Subtest: native hooks deliver the same entry on compact
+ok 11 - native hooks deliver the same entry on compact
+  ---
+  duration_ms: 451.935708
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 12 - hook skips or explains unmarked without blocking startup
+  ---
+  duration_ms: 92.108959
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 13 - hook skips or explains worker without blocking startup
+  ---
+  duration_ms: 93.599
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 14 - hook skips or explains lane without blocking startup
+  ---
+  duration_ms: 133.281208
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 15 - hook skips or explains foreign without blocking startup
+  ---
+  duration_ms: 112.685708
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 16 - hook skips or explains bad-input without blocking startup
+  ---
+  duration_ms: 102.041333
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 17 - hook skips or explains missing-record without blocking startup
+  ---
+  duration_ms: 194.404875
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 18 - hook skips or explains worker-bypass without blocking startup
+  ---
+  duration_ms: 99.287667
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 19 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 240.817083
+  ...
+# Subtest: claude adapter binds supervisor and supplies native hooks only to supervisors
+ok 20 - claude adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 513.255416
+  ...
+# Subtest: claude adapter binds worker and supplies native hooks only to supervisors
+ok 21 - claude adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 576.452916
+  ...
+# Subtest: codex adapter binds supervisor and supplies native hooks only to supervisors
+ok 22 - codex adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 484.79475
+  ...
+# Subtest: codex adapter binds worker and supplies native hooks only to supervisors
+ok 23 - codex adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 597.252875
+  ...
+# Subtest: entry safely handles STOP
+ok 24 - entry safely handles STOP
+  ---
+  duration_ms: 243.011542
+  ...
+# Subtest: entry safely handles invalid-config
+ok 25 - entry safely handles invalid-config
+  ---
+  duration_ms: 331.735166
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 26 - entry safely handles invalid-pid
+  ---
+  duration_ms: 289.131542
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 27 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 312.722084
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 28 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 141.813333
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 29 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 142.524833
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 30 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 145.257875
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 31 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 138.148667
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 32 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 132.080667
+  ...
+1..32
+# tests 32
+# suites 0
+# pass 32
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8689.579917

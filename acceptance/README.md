@@ -394,8 +394,12 @@ on the cleanup screen line regardless of keep; a failed non-keep cleanup never
 hides retained paths.
 
 `--skip-live` is for mechanics debugging: discovery becomes pending, so this
-cannot approve a release. Omitting `--bch-cloak` leaves that compatibility case
-pending; no live repository location is assumed for other projects.
+cannot approve a release. Omitting `--bch-cloak` reports the five existing-project
+compatibility cases as SKIP, with a visible reason in the screen and JSON summary.
+These skips do not block READY; all other failures and pending cases still do.
+No live repository location is assumed for other projects. Supplying the option
+keeps every existing-project copy, wrapper, PATH, switch and retirement requirement
+in force, including their prerequisites; a bad configured project is never skipped.
 
 Offline checks of the test boundary, also separate from `npm test`:
 
@@ -411,8 +415,8 @@ removed so they cannot bypass the outcome guard. `cutover-switches` executes the
 cleanup through tidy with real mutations, independently of `housekeeping`.
 Recovery retains a labelled bounded tail from every run, so a late notice in an
 older run cannot be hidden by a long newer log. Dependent cases retain prerequisite
-causes: omitted optional copies and failed Herdr fixtures remain pending rather
-than becoming product failures; missing candidate modules still fail explicitly.
+causes: failed Herdr fixtures remain pending rather than becoming product failures;
+missing candidate modules still fail explicitly.
 
 The copier archives timestamped script backups outside the executable caller tree
 only after proving they have no reference from any active source, including

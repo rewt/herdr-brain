@@ -14,19 +14,16 @@ const readJSON = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 export function releaseInputs(env = process.env) {
   const cache = path.resolve(env.RELEASE_NPM_CACHE || env.npm_config_cache || path.join(os.homedir(), '.npm'));
-  if (!fs.existsSync(path.join(cache, '_cacache/index-v5'))) throw new Error('populate RELEASE_NPM_CACHE with the pinned console/MCP dependencies; see release/README.md');
-  if (!env.RELEASE_BCH_CLOAK || !fs.statSync(path.resolve(env.RELEASE_BCH_CLOAK), { throwIfNoEntry: false })?.isDirectory()) {
+  const index = path.join(cache, '_cacache/index-v5');
+  if (!fs.statSync(index, { throwIfNoEntry: false })?.isDirectory()) throw new Error('populate RELEASE_NPM_CACHE with the pinned console/MCP dependencies; see release/README.md');
+  fs.accessSync(index, fs.constants.R_OK);
+  if (env.RELEASE_BCH_CLOAK && !fs.statSync(path.resolve(env.RELEASE_BCH_CLOAK), { throwIfNoEntry: false })?.isDirectory()) {
     throw new Error('set RELEASE_BCH_CLOAK to the existing project checkout; it is read only to acceptance');
   }
-  return { cache, bch: path.resolve(env.RELEASE_BCH_CLOAK) };
+  return { cache, bch: env.RELEASE_BCH_CLOAK ? path.resolve(env.RELEASE_BCH_CLOAK) : null };
 }
 
-export function copyDependencyCache(candidate, source) {
-  const cache = path.join(candidate, '.release-npm-cache');
-  fs.mkdirSync(cache);
-  const store = path.join(cache, '_cacache');
-  fs.cpSync(path.join(source, '_cacache/index-v5'), path.join(store, 'index-v5'), { recursive: true });
-  // Copy only pinned tarballs, never the shared cache's unrelated content.
+function* dependencyTarballs(candidate, source) {
   for (const module of MODULES) {
     const lock = readJSON(path.join(candidate, module, 'package-lock.json'));
     for (const pkg of Object.values(lock.packages ?? {})) {
@@ -40,9 +37,28 @@ export function copyDependencyCache(candidate, source) {
         if (pkg.optional) continue;
         throw new Error(`offline cache lacks ${module} dependency ${pkg.resolved}; populate RELEASE_NPM_CACHE first`);
       }
-      fs.mkdirSync(path.dirname(path.join(store, relative)), { recursive: true });
-      fs.copyFileSync(file, path.join(store, relative));
+      fs.accessSync(file, fs.constants.R_OK);
+      yield { file, relative };
     }
+  }
+}
+
+export function preflightInputs(candidate, env = process.env) {
+  const inputs = releaseInputs(env);
+  const dependencies = [...dependencyTarballs(candidate, inputs.cache)].length;
+  return { ...inputs, dependencies };
+}
+
+export function copyDependencyCache(candidate, source) {
+  const files = [...dependencyTarballs(candidate, source)];
+  const cache = path.join(candidate, '.release-npm-cache');
+  fs.mkdirSync(cache);
+  const store = path.join(cache, '_cacache');
+  fs.cpSync(path.join(source, '_cacache/index-v5'), path.join(store, 'index-v5'), { recursive: true });
+  // Copy only pinned tarballs, never the shared cache's unrelated content.
+  for (const { file, relative } of files) {
+    fs.mkdirSync(path.dirname(path.join(store, relative)), { recursive: true });
+    fs.copyFileSync(file, path.join(store, relative));
   }
   return cache;
 }
@@ -72,7 +88,7 @@ export function candidateCommand(stage, candidate, { env = process.env, skipLive
   const build = readJSON(path.join(candidate, '.release-build.json'));
   if (build.commit !== fs.readFileSync(path.join(candidate, '.release-commit'), 'utf8').trim()) throw new Error('build evidence does not name this candidate');
   return { command: [process.execPath, path.join(candidate, 'acceptance/run.mjs'), '--candidate', candidate,
-    '--npm-cache', path.join(candidate, '.release-npm-cache'), '--bch-cloak', inputs.bch, ...(skipLive ? ['--skip-live'] : [])], env };
+    '--npm-cache', path.join(candidate, '.release-npm-cache'), ...(inputs.bch ? ['--bch-cloak', inputs.bch] : []), ...(skipLive ? ['--skip-live'] : [])], env };
 }
 
 export function main(argv = process.argv.slice(2)) {
@@ -80,8 +96,14 @@ export function main(argv = process.argv.slice(2)) {
     candidate: { type: 'string' }, 'skip-live': { type: 'boolean' },
   } });
   const stage = positionals[0];
-  if (positionals.length !== 1 || !values.candidate || !['prepare', 'gate'].includes(stage) || stage === 'prepare' && values['skip-live']) throw new Error('usage: release-candidate.mjs prepare|gate --candidate DIR [--skip-live]');
+  if (positionals.length !== 1 || !values.candidate || !['preflight', 'prepare', 'gate'].includes(stage) || stage !== 'gate' && values['skip-live']) throw new Error('usage: release-candidate.mjs preflight|prepare|gate --candidate DIR [--skip-live (gate only)]');
   const candidate = path.resolve(values.candidate);
+  if (stage === 'preflight') {
+    const inputs = preflightInputs(candidate);
+    console.log(`release preflight: ${JSON.stringify(inputs)}`);
+    if (!inputs.bch) console.log('Existing-project compatibility will be skipped: RELEASE_BCH_CLOAK is not configured');
+    return;
+  }
   const invocation = candidateCommand(stage, candidate, { skipLive: values['skip-live'] });
   console.log(`release ${stage}: ${JSON.stringify(invocation.command)}`);
   const result = spawnSync(invocation.command[0], invocation.command.slice(1), { cwd: candidate, env: invocation.env, stdio: 'inherit' });

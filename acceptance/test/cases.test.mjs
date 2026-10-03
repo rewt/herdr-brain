@@ -2,17 +2,18 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import { cases, cutoverChecks, runCase } from '../cases.mjs';
 import { HarnessLimit, Pending, ProductBoundary, classifyFailure, requireSuccessfulChecks } from '../limits.mjs';
+import { gateOutcome, resultLine } from '../results.mjs';
 
 // Exercise the production catalog and executor, including the newly merged queue.
 const order = Object.values(cases).filter((definition) => definition !== cases.tools);
-async function execute(definitions, faults = {}) {
+async function execute(definitions, faults = {}, options = {}) {
   const results = [], executed = [];
   for (const definition of definitions) {
     await runCase(results, definition, () => {
       executed.push(definition.key);
       if (faults[definition.key]) throw faults[definition.key];
       return 'executed';
-    });
+    }, options);
   }
   return { results, executed };
 }
@@ -102,4 +103,37 @@ test('case keys are required and unique even when display names differ', async (
   await runCase(results, cases.copy, () => {}); // Missing prerequisite yields a visible harness limit.
   await assert.rejects(runCase(results, { ...cases.copy, name: 'Another name' }, () => {}), /duplicate case key/);
   await assert.rejects(runCase([], { name: 'No key' }, () => {}), /stable key/);
+});
+
+test('no configured existing project skips all five compatibility bodies visibly and permits a green gate', async () => {
+  const { results, executed } = await execute(order, {}, { existingProjectConfigured: false });
+  const skipped = results.filter(v => v.status === 'SKIP');
+  assert.deepEqual(skipped.map(v => v.key), [cases.copy, cases.wrappers, cases.path, cases.switches, cases.retirement].map(v => v.key));
+  for (const result of skipped) {
+    assert.ok(!executed.includes(result.key)); assert.equal(result.origin, 'optional');
+    assert.match(result.detail, /No existing project configured/);
+    assert.match(resultLine(result), /SKIP.*No existing project configured.*--bch-cloak/);
+  }
+  assert.deepEqual(gateOutcome(results), { counts: { PASS: order.length - 5, FAIL: 0, PENDING: 0, SKIP: 5 }, ready: true });
+});
+
+test('optional compatibility never hides other failures or pending live cases', async () => {
+  for (const fault of [new Error('product failed'), new HarnessLimit('live fixture unavailable'), new Pending('live checks explicitly skipped')]) {
+    const { results } = await execute(order, { [cases.fixture.key]: fault }, { existingProjectConfigured: false });
+    assert.equal(results.filter(v => v.status === 'SKIP').length, 5, 'skip precedes unavailable fixture prerequisites');
+    assert.equal(gateOutcome(results).ready, false);
+    assert.ok(results.find(v => v.key === cases.fixture.key).detail.includes(fault.message));
+  }
+});
+
+test('configured compatibility retains strict failures and prerequisites', async () => {
+  const complete = await execute(order, {}, { existingProjectConfigured: true });
+  assert.equal(complete.results.filter(v => v.status === 'SKIP').length, 0);
+  assert.ok(complete.executed.includes(cases.retirement.key));
+  for (const [key, fault] of [[cases.copy.key, new Error('configured checkout missing')], [cases.switches.key, new Error('switch failure')], [cases.fixture.key, new HarnessLimit('live fixture unavailable')]]) {
+    const { results } = await execute(order, { [key]: fault }, { existingProjectConfigured: true });
+    assert.equal(results.filter(v => v.status === 'SKIP').length, 0);
+    assert.equal(gateOutcome(results).ready, false);
+    assert.ok(results.find(v => v.key === cases.retirement.key).detail.includes(fault.message));
+  }
 });

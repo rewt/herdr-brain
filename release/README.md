@@ -33,6 +33,7 @@ file. For example:
   "base": "main",
   "max_load_per_cpu": 1,
   "gate": ["node", "scripts/release-gate.mjs", "--candidate", "{candidate}"],
+  "preflight": ["node", "scripts/release-inputs.mjs", "--repo", "{repo}"],
   "prepare": ["node", "scripts/build.mjs"],
   "prepare_env": {},
   "ship": ["node", "scripts/ship.mjs", "{tag}"],
@@ -41,8 +42,15 @@ file. For example:
 ```
 
 Commands are argument arrays, never shell text. `{tag}`, `{candidate}`, `{commit}`
-and `{repo}` substitute inside each argument. Optional `prepare` runs in the
-owned candidate snapshot before the gate; its environment overrides are scoped to
+and `{repo}` substitute inside each argument. Optional `preflight` checks machine
+inputs from the clean canonical checkout under the project lock, after cutting
+the candidate tag but before claiming the gate or creating its snapshot. It must
+be read-only; `{candidate}` names the future snapshot, which does not yet exist.
+A nonzero exit, launch error or signal returns `setup-required`, with the command,
+setup message and retained `RC-n.setup.log`. The record remains `pending-gate`
+without a gate-start/result or ship question. Correct setup and invoke the cycle
+again to gate the same tagged commit. Interrupted preflight is likewise retryable.
+Optional `prepare` runs in the owned candidate snapshot before the gate; its environment overrides are scoped to
 that command. The gate also runs in that snapshot. Project commands are trusted
 project code and must use their own scratch directories when they need mutable
 fixtures. `parent` may name an existing record item for the operator question.
@@ -54,7 +62,7 @@ into the candidate's private `.release-npm-cache`, then runs `herdr/install.sh`
 with real `npm ci` in offline, build-only mode. It never installs machine entry.
 The retained `.release-build.json` names the candidate commit, both lockfile
 hashes, installed package counts and build command before acceptance starts.
-The gate passes both `--npm-cache` (that private copy) and `--bch-cloak` to
+The gate passes `--npm-cache` (that private copy) and, when configured, `--bch-cloak` to
 `acceptance/run.mjs`. `herdr/release.sh build` remains the operator's ship step;
 activation remains a separate operator action. The live harness belongs only
 to the canonical supervisor's release cycle, never a lane's validation.
@@ -62,18 +70,23 @@ to the canonical supervisor's release cycle, never a lane's validation.
 Set these machine inputs in the invoking supervisor environment:
 
 ```sh
-export RELEASE_BCH_CLOAK=/absolute/path/to/existing/bch-cloak
 export RELEASE_NPM_CACHE=/absolute/path/to/npm-cache
+# Optional existing-project compatibility checks:
+export RELEASE_BCH_CLOAK=/absolute/path/to/existing/bch-cloak
 ```
 
-`RELEASE_BCH_CLOAK` is required and the harness reads that project only to create
+`RELEASE_BCH_CLOAK` is optional. When unset or empty, the five existing-project
+compatibility cases report SKIP with a visible reason and the remaining cases
+decide the gate. When configured, the path must exist and all compatibility
+requirements remain in force; the harness reads that project only to create
 its scratch compatibility copies. The cache defaults to `npm_config_cache`, then
 `~/.npm`; the shared source is never written by preparation or acceptance.
 Populate it with the pinned dependencies before the release cycle, for example
 by running `npm --prefix console ci --cache "$RELEASE_NPM_CACHE"` and
 `npm --prefix mcp ci --cache "$RELEASE_NPM_CACHE"` in a development checkout.
-Missing paths or pinned cache content fail preparation with setup instructions,
-instead of invoking an acceptance gate whose required inputs were omitted.
+This project's declared preflight checks the cache index, readable pinned
+tarballs and configured compatibility path without copying or building anything.
+Missing inputs return setup instructions while leaving the candidate ungated.
 
 The record stores candidate, gate-start and gate-result events through the record
 CLI. On a passing result it atomically creates one `publish` question, reserved for
@@ -90,7 +103,8 @@ gate results, logs and links to those questions.
 Repeated calls on an already gated commit return the existing result without
 another gate or question. A red build/gate retains evidence and asks no shipping
 question; a later promoted commit can form a new candidate. Gates have no invented
-timeout. Before executing anything external, the record claims the gate once.
+timeout. After preflight passes, the record claims the gate once before snapshot,
+preparation or gate execution.
 An interrupted claim without a result is an inspection handoff, never a replay.
 Crash locks fail closed: inspect owner.json and surviving children before removing
 only a stale lock. If a gate completed but recording was interrupted, recover its

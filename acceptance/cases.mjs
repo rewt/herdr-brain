@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { classifyFailure, requirePrerequisite } from './limits.mjs';
 
 const spec = (key, name, prerequisites = [], options = {}) => Object.freeze({ key, name, prerequisites: Object.freeze(prerequisites), ...options });
+const compatibility = { existingProject: true };
 export const cases = Object.freeze({
   tools: spec('required-tools', 'Required tools'),
   snapshot: spec('candidate-snapshot', 'Candidate snapshot'),
@@ -20,11 +21,11 @@ export const cases = Object.freeze({
   housekeeping: spec('housekeeping', 'Housekeeping closes only eligible finished workers', ['herdr-fixture']),
   release: spec('scratch-release', 'Scratch release build/activate/rollback/restore'),
   console: spec('console-build', 'Full console dependency build (offline)'),
-  copy: spec('existing-copy', 'Existing project: copy live calls and inventory drift', ['herdr-fixture']),
-  wrappers: spec('existing-wrappers', 'Existing project: routing and both wrapper dry runs', ['existing-copy']),
-  path: spec('org-path', 'Existing project: org PATH consumers', ['existing-copy']),
-  switches: spec('cutover-switches', 'ENG-64: every file switch and rollback', ['existing-copy']),
-  retirement: spec('contrib-retirement', 'ENG-64: final contrib removal and restoration', ['cutover-switches']),
+  copy: spec('existing-copy', 'Existing project: copy live calls and inventory drift', ['herdr-fixture'], compatibility),
+  wrappers: spec('existing-wrappers', 'Existing project: routing and both wrapper dry runs', ['existing-copy'], compatibility),
+  path: spec('org-path', 'Existing project: org PATH consumers', ['existing-copy'], compatibility),
+  switches: spec('cutover-switches', 'ENG-64: every file switch and rollback', ['existing-copy'], compatibility),
+  retirement: spec('contrib-retirement', 'ENG-64: final contrib removal and restoration', ['cutover-switches'], compatibility),
   discovery: spec('discovery-concurrent', 'Real discovery: concurrent lanes and promotion'),
   routingQuestion: spec('discovery-routing', 'Real discovery: routing question waits and answer applies'),
   defaultCycle: spec('default-cycle', 'New project: default supervisor dispatch/watch/ingest cycle', ['herdr-fixture']),
@@ -46,11 +47,17 @@ export const cutoverChecks = Object.freeze({
   legacy: spec('legacy-canary', 'rollback: real restored notify canary'),
 });
 
-export async function runCase(results, definition, fn, { scratchRoot, scratchRoots, load } = {}) {
+export async function runCase(results, definition, fn, { scratchRoot, scratchRoots, load, existingProjectConfigured = true } = {}) {
   assert.ok(definition?.key && definition?.name, 'case requires a stable key and name');
   assert.ok(!results.some((result) => result.key === definition.key), `duplicate case key: ${definition.key}`);
   const result = { id: String(results.length + 1).padStart(2, '0'), key: definition.key, name: definition.name,
     status: 'PASS', origin: 'product', detail: '' };
+  if (definition.existingProject && !existingProjectConfigured) {
+    Object.assign(result, { status: 'SKIP', origin: 'optional',
+      detail: 'No existing project configured; supply --bch-cloak LIVE_REPO to run compatibility checks' });
+    results.push(result);
+    return result;
+  }
   try {
     for (const key of definition.prerequisites) requirePrerequisite(results, key);
     result.detail = await fn() ?? '';

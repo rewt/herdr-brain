@@ -13,7 +13,7 @@ import { HarnessLimit, Pending, commandFailure, withCommandContext, requirePrere
 import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
 import { stopProducers, awaitProducers } from './producers.mjs';
 import { safeGitArgs } from './verify.mjs';
-import { retainedRoots, resultLine } from './results.mjs';
+import { retainedRoots, resultLine, gateOutcome } from './results.mjs';
 import { liveSocket } from './probe.mjs';
 import { cases, cutoverChecks, runCase } from './cases.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
@@ -111,7 +111,7 @@ async function test(definition, fn) {
   write(`${phaseFile}.tmp`, JSON.stringify({ key: definition.key, id }));
   fs.renameSync(`${phaseFile}.tmp`, phaseFile);
   try {
-    const result = await runCase(results, definition, fn, { scratchRoots,
+    const result = await runCase(results, definition, fn, { scratchRoots, existingProjectConfigured: Boolean(opt['bch-cloak']),
       load: () => load.snapshot(definition === cases.focus ? 0 : window) });
     result.load = load.snapshot(window);
     result.evidence = `${id}.jsonl`;
@@ -241,15 +241,15 @@ async function closeScope() {
 function emitSummary(interruption = {}) {
   const measuredLoad = load.snapshot(); load.stop();
   const elapsedSeconds = Math.round((Date.now() - started) / 1000);
-  const counts = Object.fromEntries(['PASS', 'FAIL', 'PENDING'].map((status) => [status, results.filter((v) => v.status === status).length]));
+  const { counts, ready } = gateOutcome(results);
   const authDirectory = path.join(root, 'codex-runtime');
-  const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, evidence, results, load: measuredLoad,
+  const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, ready, evidence, results, load: measuredLoad,
     credentialResidue: fs.existsSync(authDirectory) ? [authDirectory] : [], retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
   write(path.join(evidence, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
-  const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending — ${counts.FAIL || counts.PENDING ? 'NOT READY' : 'READY'}`,
+  const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending / ${counts.SKIP} skipped — ${ready ? 'READY' : 'NOT READY'}`,
     ...results.map((v) => resultLine(v, summary.retainedDiscoveryRoots)), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');
   write(path.join(evidence, 'screen.txt'), screen + '\n'); console.log(screen);
-  process.exitCode = counts.FAIL || counts.PENDING ? 1 : 0;
+  process.exitCode = ready ? 0 : 1;
 }
 
 function finishFocus() {
@@ -572,7 +572,6 @@ try {
   const backup = path.join(root, 'backup');
   const inventory = [];
   await test(cases.copy, () => {
-    if (!live) pending('pass --bch-cloak LIVE_REPO to check the existing installation');
     requirePrerequisite(results, cases.fixture.key);
     for (const rel of tracked) {
       const src = path.join(live, rel); const st = fs.lstatSync(src); assert.ok(st.isFile(), 'copy regular script files only');

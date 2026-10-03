@@ -12,6 +12,9 @@ threads; permission errors still refuse. Zombies are explicitly marked. A change
 between the full argv and the bracketed name prevents a command match.
 Snapshots must include their live caller. Cleanup still confirms the exact birth
 and command immediately before signalling, and verifies group leadership.
+The host test slot uses `identityOnly` reads: start identity and ancestry come
+from kernel metadata without requiring access to another user's argv. Fixture
+cleanup continues to use full command reads.
 
 The runner requires neither `ps` nor a C compiler. Unsupported platforms, missing
 or damaged bundles and denied kernel reads refuse with a process-source error;

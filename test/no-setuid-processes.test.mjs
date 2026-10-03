@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lookupProcess, createProcessTracker } from './helpers/processes.mjs';
+import { spawnChild, waitForExit } from './helpers/child.mjs';
 
 process.env.ORG_ACTOR = 'eng122-process-source-test';
 const row = (identity = '1700000000:123456') => ({ pid: 101, ppid: 1, pgid: 101, state: 'S', identity, command: 'owned fixture' });
@@ -95,6 +96,16 @@ test('Linux snapshots retain parentless group members, omit proven exits and ref
   assert.match(lookupProcess(undefined, options).error, /proc unavailable/);
 });
 
+test('identity-only reads preserve kernel births and ancestry when argv is inaccessible', () => {
+  const result = lookupProcess(101, { platform: 'linux', identityOnly: true, readFile: file => {
+    assert.ok(file.endsWith('/stat'), 'identity-only reads never need argv'); return procStat(101);
+  } });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.value.identity, '12345');
+  assert.equal(result.value.command, '[fixture ) name]');
+  assert.equal(result.value.pgid, 101);
+});
+
 test('Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution', async t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eng122-bundle-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -134,6 +145,22 @@ test('the installed native reader returns exact unicode and multiline argv witho
   assert.equal(actual.anchored, true);
   assert.match(actual.own.value.identity, /^\d+:\d+$/);
   assert.ok(actual.own.value.command.endsWith('é☃ two words line\nbreak'));
+});
+
+test('live kernel reads preserve stopped states through confirmed fixture cleanup', async t => {
+  const child = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
+  const tracker = createProcessTracker(), owned = tracker.registerProcess(child.pid);
+  assert.equal(tracker.killProcess(owned, 'SIGSTOP').signaled, true);
+  const deadline = Date.now() + 2000;
+  let current;
+  do {
+    current = lookupProcess(child.pid);
+    if (current.value?.state === 'T') break;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  } while (Date.now() < deadline);
+  assert.equal(current.value?.state, 'T', current.error);
+  assert.equal(tracker.killProcess(owned, 'SIGKILL').signaled, true);
+  await waitForExit(child);
 });
 
 test('the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute', { skip: process.platform !== 'darwin' && 'seatbelt requires macOS' }, t => {

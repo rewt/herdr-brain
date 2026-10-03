@@ -18,12 +18,19 @@ static void json_string(const char *text) {
   }
   putchar('"');
 }
+static int identity_only;
+static char *kernel_command(const struct proc_bsdinfo *info) {
+  char *command = calloc(sizeof(info->pbi_comm) + 3, 1);
+  if (command) snprintf(command, sizeof(info->pbi_comm) + 3, "[%.*s]", (int)sizeof(info->pbi_comm), info->pbi_comm);
+  return command;
+}
 static int lookup(pid_t pid) {
   struct proc_bsdinfo before, after;
   errno = 0;
   if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &before, sizeof(before)) != sizeof(before)) return gone() ? 0 : -1;
   char *command = NULL;
-  if (before.pbi_status == 5) command = strdup("<defunct>");
+  if (identity_only) command = kernel_command(&before);
+  else if (before.pbi_status == 5) command = strdup("<defunct>");
   else {
     int limit, key[] = {CTL_KERN, KERN_ARGMAX}; size_t size = sizeof(limit);
     if (sysctl(key, 2, &limit, &size, NULL, 0) || limit <= 0 || limit > 16 * 1024 * 1024) return -1;
@@ -41,8 +48,7 @@ static int lookup(pid_t pid) {
       // Like ps, retain the kernel command name when no argument vector exists
       // (e.g. during exec/exit). A denied read never receives this fallback.
       else if (error == EINVAL || error == EIO) {
-        command = calloc(sizeof(after.pbi_comm) + 3, 1);
-        if (command) snprintf(command, sizeof(after.pbi_comm) + 3, "[%.*s]", (int)sizeof(after.pbi_comm), after.pbi_comm);
+        command = kernel_command(&after);
       } else { errno = error; return -1; }
     } else {
       if (size < sizeof(int)) { free(args); return -1; }
@@ -80,6 +86,7 @@ static int lookup(pid_t pid) {
   json_string(command); puts("}"); free(command); return 1;
 }
 int main(int argc, char **argv) {
+  if (argc > 1 && !strcmp(argv[1], "--identity")) { identity_only = 1; argc--; argv++; }
   if (argc == 2) {
     char *end; long pid = strtol(argv[1], &end, 10);
     if (*end || pid < 1 || pid > INT32_MAX) return 125;

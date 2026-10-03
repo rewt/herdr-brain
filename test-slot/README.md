@@ -44,7 +44,15 @@ unknown holder evidence;
 never break a lock by age. Status exits 0 for free/gone, 1 for live, 2 for unknown,
 and reports both paths when the legacy bridge differs from the workspace path.
 
-Liveness uses PID and start time, never command-line patterns. A new holder
+Liveness uses PID and start time, never command-line patterns. Process reads use
+`lib/processes.mjs`: bundled non-setuid Darwin kernel readers or Linux `/proc`.
+New records additionally pin `processBirth` and `groupBirth` at kernel precision
+(microseconds on Darwin, boot UUID plus start ticks on Linux), so same-second PID reuse is
+distinguished. The existing `processStart`/`groupStart` UTC/C strings remain for
+bch-cloak interoperability; old records retain their original second precision.
+Linux converts legacy timestamps from `/proc/stat` and non-setuid
+`/usr/bin/getconf CLK_TCK`. Missing or denied sources refuse clearly, including
+before a new slot creates its lock. A new holder
 executes the command in its own process group and forwards INT, TERM and HUP.
 After a killed wrapper, a live command group still blocks takeover. A command
 leaving background group members retains the lock and cannot report success.
@@ -74,7 +82,7 @@ isolates other participating heavy suites, rather than stopping unrelated host
 work or relaxing any test deadline.
 
 `npm run test:slot` exercises temporary locks and owned child groups offline;
-`npm test` includes it. These tests need native `/bin/ps` and signal access and
+`npm test` includes it. These tests need kernel process reads and signal access and
 run outside the fixture policy that disables detached processes. Other offline
 fixtures receive a temporary slot per test file and never take the machine's
 real slot. No model calls or live acceptance harness are involved.

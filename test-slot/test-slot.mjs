@@ -18,20 +18,21 @@
 // pattern, so a waiter never matches itself. The holder counts as live while its
 // own process runs, or, once that is gone, while any process of its command's
 // group remains (a runner killed with SIGKILL leaves its command running). It is
-// gone only when both are known gone. When liveness cannot be established (ps
+// gone only when both are known gone. When liveness cannot be established (the kernel source
 // fails, the record is unreadable or names no holder, a signal probe fails), the
 // taker is refused with TEST_SLOT_HOLDER_UNKNOWN and the lock is left in place.
 //
 // This is an operational guard for one development host. It excludes only the
 // runs that take it; unrelated host workloads remain outside this guard.
 
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
-import { probe, processStart, processState, removeStaleLock } from "./lock-support.mjs";
+import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
+import { lookupProcess } from "../lib/processes.mjs";
 
 export const TEST_SLOT_PATH = process.platform === "darwin" ? "/private/tmp/bch-cloak-test-slot.lock" : "/tmp/bch-cloak-test-slot.lock";
 export const COMPAT_PATH_ENV = "MONITOR_TEST_SLOT_COMPAT_PATH";
@@ -53,10 +54,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * The command's process group, once the holder process is gone. A pid is never issued while a process group of that
  * id exists, so a live process with the group's id but another start time means the whole group has exited.
  */
-function groupState(pgid, leaderStart) {
+function groupState(pgid, leaderStart, leaderBirth) {
   const leader = probe(pgid);
   if (leader === true) {
-    const state = processState(pgid, leaderStart);
+    const state = processState(pgid, leaderStart, leaderBirth);
     return state.state === "live" ? { state: "live", why: `its command's group leader ${String(pgid)} still runs` } : state;
   }
   if (leader !== false) return { state: "unknown", why: `kill(${String(pgid)}, 0) failed: ${reasonOf(leader)}` };
@@ -72,21 +73,18 @@ const isHolder = (h) => h !== null && typeof h === "object" && positive(h.pid) &
 /** The recorded holder's state: "live", "gone", or "unknown" with the reason. Only "gone" permits a takeover. */
 export function holderState(holder) {
   if (!isHolder(holder)) return { state: "unknown", why: "the lock file does not name a holder process" };
-  const own = processState(holder.pid, holder.processStart);
+  const own = processState(holder.pid, holder.processStart, holder.processBirth);
   if (own.state !== "gone" || holder.pgid === null) return own;
-  return groupState(holder.pgid, holder.groupStart);
+  return groupState(holder.pgid, holder.groupStart, holder.groupBirth);
 }
 
-/** Whether this process runs inside the holder's run: it is the holder, descends from it, or shares its command's group. Throws when ps cannot say. */
+/** Whether this process runs inside the holder's run, using a complete kernel snapshot. */
 function insideHolder(holder) {
-  const table = execFileSync("/bin/ps", ["-A", "-o", "pid=", "-o", "ppid=", "-o", "pgid="], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  const rows = new Map();
-  for (const line of table.split("\n")) {
-    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s*$/u.exec(line);
-    if (match !== null) rows.set(Number(match[1]), { ppid: Number(match[2]), pgid: Number(match[3]) });
-  }
+  const result = lookupProcess(undefined, { identityOnly: true });
+  if (!result.ok) throw Error(result.error);
+  const rows = result.value;
   const own = rows.get(process.pid);
-  if (own === undefined) throw new Error("ps did not list this process");
+  if (own === undefined) throw new Error("process source did not list this process");
   if (holder.pid === process.pid) return true;
   if (holder.pgid !== null && own.pgid === holder.pgid) return true;
   const seen = new Set();
@@ -118,12 +116,13 @@ export function waitSecondsOf(env = process.env) {
  */
 export async function acquireTestSlot(label, { env = process.env, lockPath = slotPathOf(env), waitSeconds = waitSecondsOf(env), pollMs = 2_000, token = randomBytes(16).toString("hex") } = {}) {
   if (!Number.isSafeInteger(waitSeconds) || waitSeconds < 0 || !Number.isSafeInteger(pollMs) || pollMs < 1) throw new Error("invalid test slot wait/poll allowance");
-  let ownStart = null;
-  try { ownStart = processStart(process.pid); } catch { /* recorded as unknown: a later taker then refuses while this process runs */ }
+  let ownStart;
+  try { ownStart = processStartRecord(process.pid); }
+  catch (error) { throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot establish own process source identity: ${reasonOf(error)}`); }
   const started = Date.now();
   let takeovers = 0;
   for (;;) {
-    const mine = { pid: process.pid, processStart: ownStart, pgid: null, groupStart: null, token, label, cwd: process.cwd(), host: os.hostname(), acquiredAt: new Date().toISOString() };
+    const mine = { pid: process.pid, processStart: ownStart.start, processBirth: ownStart.birth, pgid: null, groupStart: null, groupBirth: null, token, label, cwd: process.cwd(), host: os.hostname(), acquiredAt: new Date().toISOString() };
     try {
       fs.writeFileSync(lockPath, `${JSON.stringify(mine)}\n`, { flag: "wx", mode: 0o644 });
       return held(lockPath, mine);
@@ -196,9 +195,9 @@ function held(lockPath, mine) {
     token: mine.token,
     holder: mine,
     /** Records the command's process group, atomically, so the slot stays live while it runs. */
-    setGroup(pgid, groupStart) {
+    setGroup(pgid, groupStart, groupBirth = null) {
       if (!ours()) throw new Error(`the test slot at ${lockPath} is no longer this run's`);
-      Object.assign(mine, { pgid, groupStart });
+      Object.assign(mine, { pgid, groupStart, groupBirth });
       const temporary = `${lockPath}.${String(process.pid)}.tmp`;
       fs.writeFileSync(temporary, `${JSON.stringify(mine)}\n`, { mode: 0o644 });
       fs.renameSync(temporary, lockPath);
@@ -308,7 +307,10 @@ async function executeCommand(argv, slot, received, captureTimeout, lockPath, co
   try {
     if (!slot.nested && proc.pid !== undefined) {
       slot.setGroup(proc.pid, null);
-      try { slot.setGroup(proc.pid, processStart(proc.pid)); } catch { /* fail closed if start identity is unavailable */ }
+      try {
+        const identity = processStartRecord(proc.pid);
+        slot.setGroup(proc.pid, identity.start, identity.birth);
+      } catch { /* fail closed if start identity is unavailable */ }
     }
     const { status, signal } = await completion;
     load = Math.max(load, os.loadavg()[0] / capacity);

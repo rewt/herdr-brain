@@ -1,7 +1,7 @@
 // Ported ENG-725 regressions: the host-wide test slot. Every case uses its own lock path, never the real one, and scrubs the slot's
-// environment, so these tests run the same inside a held slot (the full gate) as outside it. They need /bin/ps.
+// environment, so these tests run the same inside a held slot (the full gate) as outside it. They use the non-setuid kernel process source.
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,7 @@ import { after, afterEach, describe, it as nodeIt } from "node:test";
 const it = (name, body) => nodeIt(name, { timeout: 30000 }, body);
 import { fileURLToPath } from "node:url";
 
+import { lookupProcess } from "../../lib/processes.mjs";
 import { acquireTestSlot, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, HELD_CODE, HOLDER_UNKNOWN_CODE, REFUSED_EXIT, TEST_SLOT_PATH, TOKEN_ENV, WAIT_ENV, RETRIED_ENV } from "../test-slot.mjs";
 
 const CLI = fileURLToPath(new URL("../test-slot.mjs", import.meta.url));
@@ -28,7 +29,7 @@ afterEach(() => {
     let pid;
     try { pid = Number(fs.readFileSync(ready, "utf8")); } catch { continue; }
     let command = "";
-    try { command = execFileSync("/bin/ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }); } catch { continue; }
+    try { command = lookupProcess(pid).value?.command ?? ''; } catch { continue; }
     if (!command.includes(ready)) continue; // not ours: the pid has gone and been reissued
     for (const target of [-pid, pid]) { try { process.kill(target, "SIGKILL"); } catch { /* gone */ } }
   }
@@ -241,8 +242,8 @@ describe("a dead holder is recovered", () => {
     for (const fields of [
       { pid: 999_999 },                                                             // exited, no group recorded
       { pid: 999_999, pgid: 999_998, groupStart: "ps-utc-c:Thu Jan  1 00:00:00 1970" },      // exited, and so has its group
-      { pid: 1 },                                                                   // pid reused: another start time
-      { pid: 999_999, pgid: 1, groupStart: "ps-utc-c:Thu Jan  1 00:00:00 1970" },            // group id reissued to another process
+      { pid: process.pid },                                                         // pid reused: another start time
+      { pid: 999_999, pgid: process.pid, groupStart: "ps-utc-c:Thu Jan  1 00:00:00 1970" }, // group id reissued to another process
       { pid: process.pid },                                                         // this pid, from before this process started
     ]) {
       stale(fields);
@@ -343,11 +344,13 @@ describe("waiting", () => {
 });
 
 describe("liveness it cannot establish is refused by name", () => {
-  /** A separate process whose ps calls (all, or only the ancestry listing) fail with `failure`, trying to take the slot. */
-  async function takeWithFailingPs(lockPath, failure, onlyAncestry = false) {
-    const script = `import cp from "node:child_process"; import { syncBuiltinESMExports } from "node:module";
-      const real = cp.execFileSync;
-      cp.execFileSync = (file, args, options) => { if (${String(onlyAncestry)} && !args.includes("-A")) return real(file, args, options); throw ${failure}; };
+  /** A separate process whose process source calls (all, or only the ancestry listing) fail with `failure`, trying to take the slot. */
+  async function takeWithFailingSource(lockPath, failure, onlyAncestry = false) {
+    const script = `import cp from "node:child_process"; import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module";
+      const real = cp.spawnSync, read = fs.readFileSync, list = fs.readdirSync;
+      cp.spawnSync = (file, args, options) => { if (!String(file).includes('process-source-') || Number(args.at(-1)) === process.pid || (${String(onlyAncestry)} && args.at(-1) !== '--identity')) return real(file, args, options); throw ${failure}; };
+      fs.readFileSync = (file,...args) => { if (!${String(onlyAncestry)} && String(file).startsWith('/proc/') && file !== '/proc/stat' && file !== '/proc/sys/kernel/random/boot_id' && !String(file).startsWith('/proc/'+process.pid+'/')) throw ${failure}; return read(file,...args); };
+      fs.readdirSync = (file,...args) => { if(file==='/proc')throw ${failure}; return list(file,...args); };
       syncBuiltinESMExports();
       const { acquireTestSlot } = await import(${JSON.stringify(MODULE)});
       let message = null; try { await acquireTestSlot("second", { lockPath: ${JSON.stringify(lockPath)}, waitSeconds: 30 }); } catch (e) { message = e.message; }
@@ -362,27 +365,27 @@ describe("liveness it cannot establish is refused by name", () => {
   }
 
   for (const [name, failure] of [
-    ["denied (EPERM)", `Object.assign(new Error("ps denied"), { code: "EPERM" })`],
-    ["missing (ENOENT)", `Object.assign(new Error("spawnSync /bin/ps ENOENT"), { code: "ENOENT" })`],
-    ["answering that the live holder does not exist", `Object.assign(new Error("Command failed: /bin/ps"), { status: 1, stdout: "" })`],
+    ["denied (EPERM)", `Object.assign(new Error("process source denied"), { code: "EPERM" })`],
+    ["missing (ENOENT)", `Object.assign(new Error("process source ENOENT"), { code: "ENOENT" })`],
+    ["answering that the live holder does not exist", `Object.assign(new Error("process source failed"), { status: 1, stdout: "" })`],
   ]) {
-    it(`refuses, without waiting, and leaves a live holder's lock in place when ps is ${name}`, async () => {
+    it(`refuses, without waiting, and leaves a live holder's lock in place when the source is ${name}`, async () => {
       const s = scratch();
       const first = await holder(s);
       const before = fs.readFileSync(s.lockPath, "utf8");
       const started = Date.now();
-      const message = await takeWithFailingPs(s.lockPath, failure);
-      assert.match(message, new RegExp(`^${HOLDER_UNKNOWN_CODE}: second refused: cannot tell whether the holder of .*, first \\(pid ${String(first.child.pid)}, .*\\), still runs: ps could not read pid ${String(first.child.pid)}'s start time`, "u"));
+      const message = await takeWithFailingSource(s.lockPath, failure);
+      assert.match(message, new RegExp(`^${HOLDER_UNKNOWN_CODE}: second refused: cannot tell whether the holder of .*, first \\(pid ${String(first.child.pid)}, .*\\), still runs: process source could not read pid ${String(first.child.pid)}'s start time`, "u"));
       assert.ok(Date.now() - started < 10_000);
       assert.equal(fs.readFileSync(s.lockPath, "utf8"), before);
     });
   }
 
-  it("refuses when ps cannot list the ancestry it needs to tell a nested waiter from another run", async () => {
+  it("refuses when the source cannot list the ancestry it needs to tell a nested waiter from another run", async () => {
     const s = scratch();
     await holder(s);
     const before = fs.readFileSync(s.lockPath, "utf8");
-    const message = await takeWithFailingPs(s.lockPath, `Object.assign(new Error("ps denied"), { code: "EPERM" })`, true);
+    const message = await takeWithFailingSource(s.lockPath, `Object.assign(new Error("process source denied"), { code: "EPERM" })`, true);
     assert.match(message, new RegExp(`^${HOLDER_UNKNOWN_CODE}: second refused: cannot tell whether this process runs inside the live holder first `, "u"));
     assert.equal(fs.readFileSync(s.lockPath, "utf8"), before);
   });

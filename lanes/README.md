@@ -109,6 +109,14 @@ its reported cwd by real path, sends the brief, and only then records session
 metadata. A persistence failure after delivery is reported as partial success and
 never replays the prompt.
 
+If `dispatch` opens the Herdr workspace itself, it uses that invocation's initial
+tab and pane, exports the route environment and entry bypass into the new shell,
+and starts the agent through native `herdr agent start`. The workspace has one
+tab showing its agent, and operator focus stays in place. Initial tabs are retained
+on launch failures. A workspace opened earlier by `lane open`, a reused lane or a
+fix round keeps the existing behavior: a new agent tab with `--no-focus`.
+Selecting that new background tab remains the upstream TOOL-1 follow-up.
+
 `lane dispatch --json` emits the verified agent, pane, tab, workspace, cwd and
 available immutable occupant IDs as one JSON object. With no prompt operand it
 starts the worker without sending work. `--route-config FILE` selects a routing

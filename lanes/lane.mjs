@@ -792,12 +792,22 @@ function ensureHerdrWorkspace(path, label, workspaces, deadline) {
   // snapshots. Refetch here so newly visible metadata is never judged against
   // the caller's pre-creation listing.
   let id = openWorkspaceIdFor(path, { deadline });
-  if (id !== undefined) return id;
+  if (id !== undefined) return { workspaceId: id };
   const parent = parentWorkspaceId(workspaces);
   if (parent === undefined) return undefined;
-  herdrJson(["worktree", "open", "--workspace", parent, "--path", path, "--label", label, "--no-focus"], { deadline });
+  const opened = herdrJson(["worktree", "open", "--workspace", parent, "--path", path, "--label", label, "--no-focus"], { deadline });
   const refreshed = herdrJson(["workspace", "list"], { deadline })?.workspaces;
-  return openWorkspaceIdFor(path, { workspaces: refreshed, deadline });
+  id = openWorkspaceIdFor(path, { workspaces: refreshed, deadline });
+  if (id === undefined) return undefined;
+  // Only the native creation receipt authorizes initial-pane reuse. In
+  // particular, a concurrent opener's already_open receipt is not ours.
+  const initial = opened?.already_open === false && opened.workspace?.workspace_id === id &&
+    opened.tab?.workspace_id === id && opened.root_pane?.workspace_id === id &&
+    typeof opened.tab.tab_id === "string" && typeof opened.root_pane.pane_id === "string" &&
+    opened.root_pane.tab_id === opened.tab.tab_id
+    ? { pane: opened.root_pane.pane_id, tabId: opened.tab.tab_id }
+    : undefined;
+  return { workspaceId: id, initial };
 }
 
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", { granularity: "grapheme" });
@@ -952,7 +962,7 @@ function open(topic, base = MAIN) {
     workspaces = herdrJson(["workspace", "list"])?.workspaces ?? [];
   }
   assertCreatedWorktree(path, branch);
-  const workspaceId = ensureHerdrWorkspace(path, label, workspaces);
+  const workspaceId = ensureHerdrWorkspace(path, label, workspaces)?.workspaceId;
   process.stdout.write(
     `lane open: ${branch}\n` +
     `  worktree: ${path}\n` +
@@ -1108,19 +1118,29 @@ function dispatch(topic, promptText, options = {}) {
   const workspaces = herdrJson(["workspace", "list"], { deadline: options.deadline })?.workspaces;
   if (workspaces === undefined) fail("herdr is unavailable; dispatch requires the herdr server");
   const label = workspaceLabel(topic, path, workspaces);
-  const workspaceId = ensureHerdrWorkspace(path, label, workspaces, options.deadline);
+  const workspace = ensureHerdrWorkspace(path, label, workspaces, options.deadline);
+  const workspaceId = workspace?.workspaceId;
   if (workspaceId === undefined) {
     fail(`herdr shows no open workspace for ${path} and could not open one from the ${REPO_ROOT} workspace`);
   }
-  const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
-  for (const pair of resolved.env) tabArgs.push("--env", pair);
-  tabArgs.push("--env", "MONITOR_ENTRY_BYPASS=1");
-  const created = JSON.parse(execFileSync("herdr", tabArgs, {
-    encoding: "utf8",
-    ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
-  }));
-  const pane = created.result.root_pane.pane_id;
-  const tabId = created.result.tab.tab_id;
+  const initial = workspace.initial;
+  let pane = initial?.pane, tabId = initial?.tabId;
+  if (initial === undefined) {
+    const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
+    for (const pair of resolved.env) tabArgs.push("--env", pair);
+    tabArgs.push("--env", "MONITOR_ENTRY_BYPASS=1");
+    const created = JSON.parse(execFileSync("herdr", tabArgs, {
+      encoding: "utf8",
+      ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
+    }));
+    pane = created.result.root_pane.pane_id;
+    tabId = created.result.tab.tab_id;
+  }
+  const failedTab = () => {
+    if (initial !== undefined) return "initial tab retained";
+    spawnSync("herdr", ["tab", "close", tabId], { encoding: "utf8" });
+    return "tab closed";
+  };
   const cwdAttempts = loadTimeout(60), startAttempts = loadTimeout(20), readyAttempts = loadTimeout(30);
   let paneCwd;
   for (let attempt = 0; attempt < cwdAttempts && (options.deadline === undefined || Date.now() < options.deadline); attempt += 1) {
@@ -1129,8 +1149,27 @@ function dispatch(topic, promptText, options = {}) {
     sleepMs(Math.min(500, Math.max(1, (options.deadline ?? (Date.now() + 500)) - Date.now())));
   }
   if (!samePath(paneCwd, path)) {
-    spawnSync("herdr", ["tab", "close", tabId], { encoding: "utf8" });
-    fail(`pane ${pane} shell never reached ${path} (last cwd: ${paneCwd}); tab closed, nothing started`);
+    fail(`pane ${pane} shell never reached ${path} (last cwd: ${paneCwd}); ${failedTab()}, nothing started`);
+  }
+  if (initial !== undefined) {
+    // Set the same launch environment that tab.create supplies on the reused
+    // workspace path. Quote each entire assignment as literal shell data.
+    const pairs = [...resolved.env, "MONITOR_ENTRY_BYPASS=1"];
+    if (pairs.some(pair => !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes("\0"))) {
+      fail("initial-pane environment requires NAME=value assignments; initial tab retained, nothing started");
+    }
+    const exports = `export ${pairs.map(pair => `'${pair.replaceAll("'", "'\\''")}'`).join(" ")}`;
+    if (herdrJson(["tab", "rename", tabId, `agent:${topic}`], { deadline: options.deadline }) === undefined) {
+      fail(`could not rename initial tab ${tabId}; initial tab retained, nothing started`);
+    }
+    // Native pane.run is silent on success; it is not a JSON view command.
+    const prepared = spawnSync("herdr", ["pane", "run", pane, exports], {
+      encoding: "utf8",
+      ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
+    });
+    if (prepared.status !== 0) {
+      fail(`could not prepare initial pane ${pane}; initial tab retained, nothing started`);
+    }
   }
   // The stem remains readable, while repository identity and random suffixes
   // keep names distinct across equal topics and retry leftovers. Herdr limits
@@ -1191,8 +1230,7 @@ function dispatch(topic, promptText, options = {}) {
     sleepMs(Math.min(500, Math.max(1, (options.deadline ?? (Date.now() + 500)) - Date.now())));
   }
   if (!started) {
-    spawnSync("herdr", ["tab", "close", tabId], { encoding: "utf8" });
-    fail(`agent start never succeeded (tab ${tabId} closed); last error: ${lastError}`);
+    fail(`agent start never succeeded (${failedTab()}); last error: ${lastError}`);
   }
   // codex asks to trust a directory it has not seen; accept the preselected
   // "Yes, continue" — the directory is this repository's own worktree.
@@ -1208,8 +1246,7 @@ function dispatch(topic, promptText, options = {}) {
   }
   const cwdCheck = verifyAgentCwd(agentName, path, options.deadline);
   if (!cwdCheck.ok) {
-    spawnSync("herdr", ["tab", "close", tabId], { encoding: "utf8" });
-    fail(`agent '${agentName}' is running in '${cwdCheck.cwd}', not the lane worktree ${path}; tab closed, brief NOT sent`);
+    fail(`agent '${agentName}' is running in '${cwdCheck.cwd}', not the lane worktree ${path}; ${failedTab()}, brief NOT sent`);
   }
   if (promptText !== undefined && promptText.trim() !== "") {
     try {

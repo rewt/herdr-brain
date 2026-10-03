@@ -269,7 +269,8 @@ const save = () => writeFileSync(statePath, JSON.stringify(state));
 const result = (id, value) => process.stdout.write(JSON.stringify({ id, result: value }) + "\\n");
 const workspace = (id, label, path, linked, repoKey = process.env.FAKE_HERDR_REPO_KEY) => ({
   active_tab_id: id + ":t1", agent_status: "idle", focused: false, label,
-  number: 1, pane_count: 1, tab_count: 1, workspace_id: id,
+  number: 1, pane_count: id === "w-lane" ? (state.tabCount || 1) : 1,
+  tab_count: id === "w-lane" ? (state.tabCount || 1) : 1, workspace_id: id,
   worktree: {
     checkout_path: path, is_linked_worktree: linked, repo_key: repoKey,
     repo_name: process.env.FAKE_HERDR_REPO_NAME, repo_root: process.env.FAKE_HERDR_REPO_ROOT,
@@ -326,12 +327,18 @@ if (args[0] === "workspace" && args[1] === "list") {
   }
   process.exit(1);
 } else if (args[0] === "worktree" && args[1] === "open") {
+  const alreadyOpen = state.opened || process.env.FAKE_HERDR_OPEN_RACE === "1";
   if (process.env.FAKE_HERDR_NO_REPAIR !== "1") {
     state.opened = true;
     state.label = args[args.indexOf("--label") + 1];
     save();
   }
-  result("cli:worktree:open", { type: "worktree_open", workspace_id: "w-lane" });
+  result("cli:worktree:open", {
+    type: "worktree_opened", already_open: alreadyOpen,
+    workspace: workspace("w-lane", state.label, process.env.FAKE_HERDR_LANE_PATH, true),
+    tab: { tab_id: "w-lane:t1", workspace_id: "w-lane" },
+    root_pane: { pane_id: "w-lane:p1", tab_id: "w-lane:t1", workspace_id: "w-lane" },
+  });
 } else if (args[0] === "worktree" && args[1] === "remove") {
   throw new Error("worktree.remove steals focus; use workspace.close and Git removal");
 } else if (args[0] === "workspace" && args[1] === "close") {
@@ -339,14 +346,22 @@ if (args[0] === "workspace" && args[1] === "list") {
   save();
   result("cli:workspace:close", { type: "workspace_close", workspace_id: args[2] });
 } else if (args[0] === "tab" && args[1] === "create") {
+  state.tabCount = (state.tabCount || 1) + 1;
+  save();
   result("cli:tab:create", {
     type: "tab_create", tab: { tab_id: "w-lane:t2", workspace_id: "w-lane" },
     root_pane: { pane_id: "w-lane:p2", tab_id: "w-lane:t2", workspace_id: "w-lane" },
   });
 } else if (args[0] === "pane" && args[1] === "get") {
   result("cli:pane:get", { type: "pane_get", pane: {
-    pane_id: "w-lane:p2", foreground_cwd: process.env.FAKE_HERDR_LANE_PATH,
+    pane_id: args[2], foreground_cwd: process.env.FAKE_HERDR_LANE_PATH,
   } });
+} else if (args[0] === "tab" && args[1] === "rename") {
+  state.initialLabel = args[3]; save();
+  result("cli:tab:rename", { type: "tab_info", tab: { tab_id: args[2], label: args[3] } });
+} else if (args[0] === "pane" && args[1] === "run") {
+  if (process.env.FAKE_HERDR_EXPORT_FAIL === "1") process.exit(3);
+  state.exports = args[3]; save();
 } else if (args[0] === "agent" && args[1] === "start") {
   if (process.env.FAKE_HERDR_START_FAIL === "1") process.exit(3);
   if (process.env.FAKE_ENTRY_BIN) {
@@ -355,12 +370,13 @@ if (args[0] === "workspace" && args[1] === "list") {
     execFileSync(process.execPath, [${JSON.stringify(resolve(HERE, '../../test/helpers/pty.mjs'))}, '--run', binary, ...native], { cwd: process.env.FAKE_HERDR_LANE_PATH, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
   }
   state.agent = args[2];
+  state.agentPane = args[args.indexOf("--pane") + 1];
   save();
-  result("cli:agent:start", { type: "agent_start", name: state.agent, pane_id: "w-lane:p2" });
+  result("cli:agent:start", { type: "agent_start", name: state.agent, pane_id: state.agentPane });
 } else if (args[0] === "agent" && args[1] === "list") {
   result("cli:agent:list", { type: "agent_list", agents: state.agent ? [{
     agent_status: "idle", cwd: process.env.FAKE_HERDR_AGENT_CWD || process.env.FAKE_HERDR_LANE_PATH, name: state.agent,
-    pane_id: "w-lane:p2", workspace_id: "w-lane", terminal_id: "fixture-terminal-1",
+    pane_id: state.agentPane || "w-lane:p2", workspace_id: "w-lane", terminal_id: "fixture-terminal-1",
     agent_session: { agent: "codex", kind: "id", source: "herdr:codex", value: state.agentSession || "fixture-session-1" },
   }] : [] });
 } else if (args[0] === "agent" && args[1] === "read") {
@@ -1896,6 +1912,92 @@ test("dispatch refreshes Herdr workspaces before accepting newly visible metadat
   } finally {
     fixture.cleanup();
   }
+});
+
+test("dispatch opens a single agent tab in the initial pane and keeps fix rounds background", async () => {
+  const values = { NORMAL: "plain", QUOTED: "spaces ' \" $HOME $(exit 99) `exit 99`;\nsecond line", EMPTY: "" };
+  const fixture = makeFixture({ main: "main", validate: "true", routes: {
+    engineer: { kind: "codex", model: "initial-model", effort: "high",
+      env: Object.entries(values).map(([key, value]) => `${key}=${value}`) },
+  } });
+  try {
+    ignoreLaneState(fixture);
+    const path = openLane(fixture, "initial-pane");
+    const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/initial-pane" });
+    const first = lane(fixture, ["dispatch", "initial-pane", "--route", "engineer", "--json", "Implement this"]);
+    assert.equal(first.status, 0, first.stderr);
+    const firstResult = JSON.parse(first.stdout);
+    assert.equal(firstResult.pane, "w-lane:p1");
+    assert.equal(firstResult.tabId, "w-lane:t1");
+    let calls = fake.calls();
+    assert.equal(calls.filter(args => args[0] === "tab" && args[1] === "create").length, 0);
+    assert.deepEqual(calls.find(args => args[0] === "tab" && args[1] === "rename"),
+      ["tab", "rename", "w-lane:t1", "agent:initial-pane"]);
+    const exportIndex = calls.findIndex(args => args[0] === "pane" && args[1] === "run");
+    const startIndex = calls.findIndex(args => args[0] === "agent" && args[1] === "start");
+    assert.ok(exportIndex >= 0 && exportIndex < startIndex);
+    assert.equal(calls[exportIndex][2], "w-lane:p1");
+    assert.equal(calls[startIndex][calls[startIndex].indexOf("--pane") + 1], "w-lane:p1");
+    assert.ok(calls[startIndex].includes("initial-model"));
+    const exported = JSON.parse(execFileSync("/bin/sh", ["-c",
+      `${calls[exportIndex][3]}\nexec "$1" -e 'process.stdout.write(JSON.stringify(process.env))'`,
+      "export-probe", process.execPath], { encoding: "utf8", env: {} }));
+    for (const [key, value] of Object.entries(values)) assert.equal(exported[key], value);
+    assert.equal(exported.MONITOR_ENTRY_BYPASS, "1");
+    const { loadRegistry } = await registryApi();
+    const [metadata] = loadRegistry(fixture.repo).sessions;
+    assert.equal(metadata.pane, "w-lane:p1");
+    const fix = lane(fixture, ["dispatch", "initial-pane", "--route", "engineer", "--json"]);
+    assert.equal(fix.status, 0, fix.stderr);
+    assert.equal(JSON.parse(fix.stdout).tabId, "w-lane:t2");
+    calls = fake.calls();
+    assert.equal(calls.filter(args => args[0] === "worktree" && args[1] === "open").length, 1);
+    assert.equal(calls.filter(args => args[0] === "pane" && args[1] === "run").length, 1);
+    const created = calls.filter(args => args[0] === "tab" && args[1] === "create");
+    assert.equal(created.length, 1);
+    assert.ok(created[0].includes("--no-focus"));
+    assert.equal(fake.state().tabCount, 2);
+    assert.ok(!calls.some(args => args[1] === "focus" || args.includes("--focus") || args[1] === "close"));
+    negativeControl("initial-pane dispatch and reused fix round");
+  } finally { fixture.cleanup(); }
+});
+
+test("dispatch leaves earlier and concurrently opened workspace shells untouched", () => {
+  for (const race of [false, true]) {
+    const fixture = makeFixture();
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, "existing-shell");
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/existing-shell", initiallyOpened: !race });
+      if (race) fixture.env.FAKE_HERDR_OPEN_RACE = "1";
+      const run = lane(fixture, ["dispatch", "existing-shell", "--json"]);
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(JSON.parse(run.stdout).pane, "w-lane:p2");
+      const calls = fake.calls();
+      assert.ok(calls.some(args => args[0] === "tab" && args[1] === "create" && args.includes("--no-focus")));
+      assert.ok(!calls.some(args => args[1] === "run" || args[1] === "rename" || args[1] === "close" || args[1] === "focus"));
+    } finally { fixture.cleanup(); }
+  }
+  negativeControl("initial pane requires an invocation-owned creation receipt");
+});
+
+test("dispatch retains initial tabs on environment and agent cwd failures", () => {
+  for (const mismatch of [false, true]) {
+    const fixture = makeFixture();
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, "initial-failure");
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: "lane/initial-failure",
+        ...(mismatch ? { agentCwd: fixture.repo } : {}) });
+      if (!mismatch) fixture.env.FAKE_HERDR_EXPORT_FAIL = "1";
+      const run = lane(fixture, ["dispatch", "initial-failure", "do not send"]);
+      assert.equal(run.status, 1);
+      assert.match(run.stderr, /initial tab retained/u);
+      assert.ok(!fake.calls().some(args => args[1] === "close" || args[1] === "prompt" || args[1] === "focus"));
+      if (!mismatch) assert.ok(!fake.calls().some(args => args[1] === "start"));
+    } finally { fixture.cleanup(); }
+  }
+  negativeControl("failed initial-pane dispatch preserves its tab");
 });
 
 test("dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks", async () => {

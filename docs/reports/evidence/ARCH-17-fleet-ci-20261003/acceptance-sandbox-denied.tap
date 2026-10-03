@@ -1,0 +1,56 @@
+TAP version 13
+# Fixture cleanup: cannot establish ownership of PID 52489: spawnSync ps EPERM; no signal sent
+# Fixture cleanup: PID unknown has no complete owned identity; no signal sent
+# Fixture cleanup: PID unknown has no complete owned identity; no signal sent
+# Fixture cleanup: cannot establish ownership of PID 54727: spawnSync ps EPERM; no signal sent
+# Fixture cleanup: PID unknown has no complete owned identity; no signal sent
+# Fixture cleanup: PID unknown has no complete owned identity; no signal sent
+# Subtest: copied codex probe product validates, guards and promotes worker and routing changes offline
+not ok 1 - copied codex probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 819.85425
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'cannot establish ownership of PID 52489: spawnSync ps EPERM'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    registerProcess (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/processes.mjs:82:28)
+    trackedChild (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/child.mjs:87:41)
+    spawnScenarioChild (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/child.mjs:30:10)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/acceptance.test.mjs:65:27
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: copied claude probe product validates, guards and promotes worker and routing changes offline
+not ok 2 - copied claude probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 784.833292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'cannot establish ownership of PID 54727: spawnSync ps EPERM'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    registerProcess (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/processes.mjs:82:28)
+    trackedChild (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/child.mjs:87:41)
+    spawnScenarioChild (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/child.mjs:30:10)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/acceptance.test.mjs:65:27
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1636.212583

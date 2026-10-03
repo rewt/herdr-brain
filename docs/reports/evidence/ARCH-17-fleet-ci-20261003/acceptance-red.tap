@@ -1,0 +1,122 @@
+TAP version 13
+# Subtest: copied codex probe product validates, guards and promotes worker and routing changes offline
+not ok 1 - copied codex probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 98.943
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Evidence: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-projects-i533Pu/evidence
+    Installed snapshot: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-tVQyfH
+    FAIL Setup: node:internal/modules/esm/resolve:283
+        throw new ERR_MODULE_NOT_FOUND(
+              ^
+
+    Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-tVQyfH/product/herdr/entry-lock.mjs' imported from /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-tVQyfH/product/lib/fleet.mjs
+        at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+        at moduleResolve (node:internal/modules/esm/resolve:952:10)
+        at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+        at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+        at #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+        at ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+        at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+        at ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+      code: 'ERR_MODULE_NOT_FOUND',
+      url: 'file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-tVQyfH/product/herdr/entry-lock.mjs'
+    }
+
+    Node.js v20.19.4
+
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/acceptance.test.mjs:37:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: copied claude probe product validates, guards and promotes worker and routing changes offline
+not ok 2 - copied claude probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 79.629041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Evidence: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-projects-NLeI1p/evidence
+    Installed snapshot: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-LbIckN
+    FAIL Setup: node:internal/modules/esm/resolve:283
+        throw new ERR_MODULE_NOT_FOUND(
+              ^
+
+    Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-LbIckN/product/herdr/entry-lock.mjs' imported from /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-LbIckN/product/lib/fleet.mjs
+        at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+        at moduleResolve (node:internal/modules/esm/resolve:952:10)
+        at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+        at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+        at #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+        at ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+        at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+        at ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+      code: 'ERR_MODULE_NOT_FOUND',
+      url: 'file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-LbIckN/product/herdr/entry-lock.mjs'
+    }
+
+    Node.js v20.19.4
+
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/acceptance.test.mjs:37:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 215.709417

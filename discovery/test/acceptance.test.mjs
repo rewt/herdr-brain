@@ -14,7 +14,7 @@ for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|MONITOR_|GIT_|HERDR_)/u.test(key)) delete env[key];
   delete env.NODE_TEST_CONTEXT; // Project node --test must start its own runner.
-  Object.assign(env, { MONITOR_TEST_SLOT_PATH: path.join(root, 'test-slot.lock'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'test-slot.lock'), ORG_ACTOR: `r107-copied-${harness}-test`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
+  Object.assign(env, { HERDR_MONITOR_FLEET: path.join(root, 'fleet'), HERDR_ORG_CONSOLE_CONFIG: path.join(root, 'console.json'), MONITOR_TEST_SLOT_PATH: path.join(root, 'test-slot.lock'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'test-slot.lock'), ORG_ACTOR: `r107-copied-${harness}-test`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   const invoke = (binary, args, cwd = root, extra = {}) => {
     const result = spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 35000, killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
     assert.ifError(result.error);
@@ -34,12 +34,17 @@ for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
     fs.rmSync(summary.install, { recursive: true, force: true });
     fs.rmSync(summary.scratch, { recursive: true, force: true });
   });
-  assert.equal(summary.setupComplete, true);
+  assert.equal(summary.setupComplete, true, probe.stdout + probe.stderr);
   assert.equal(summary.results.filter((row) => row.status === 'FAIL').length, 0);
   assert.equal(summary.results.filter((row) => row.status === 'PENDING').length, 2);
   assert.deepEqual(summary.usage, []);
   const product = path.join(summary.install, 'product'), bin = path.join(summary.install, 'bin');
   assert.ok(!fs.existsSync(path.join(product, 'discovery/test')), 'the copied product contains no source tests');
+  assert.ok(fs.existsSync(path.join(product, 'herdr/entry-lock.mjs')), 'the copied product carries the fleet lock dependency');
+  const probeFleet = JSON.parse(fs.readFileSync(path.join(summary.scratch, 'fleet/fleet.json'), 'utf8'));
+  assert.deepEqual(Object.keys(probeFleet.projects), ['entry-project']);
+  assert.equal(probeFleet.projects['entry-project'].checkout, path.join(summary.scratch, 'entry-project'));
+  assert.ok(!fs.existsSync(env.HERDR_MONITOR_FLEET), 'the probe keeps its fleet inside its own scratch root');
   const repo = path.join(root, 'project'); fs.mkdirSync(repo);
   const git = (...args) => success(invoke('git', ['-C', repo, ...args]));
   git('init', '-q', '-b', 'main'); git('config', 'user.name', 'Copied probe test'); git('config', 'user.email', 'test@example.invalid');
@@ -68,6 +73,10 @@ for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
     assert.equal(git('rev-list', '--merges', 'main'), '');
     const state = JSON.parse(record('status', '--json'));
     assert.equal(state.runs.at(-1).report.outcome, 'done');
+    const fleet = JSON.parse(fs.readFileSync(path.join(env.HERDR_MONITOR_FLEET, 'fleet.json'), 'utf8'));
+    assert.deepEqual(Object.keys(fleet.projects), ['project']);
+    assert.equal(fleet.projects.project.checkout, repo);
+    assert.equal(fleet.projects.project.record, path.join(repo, '.org'));
     if (task === 'routes') {
       const routes = JSON.parse(fs.readFileSync(path.join(repo, '.lane.json'), 'utf8')).routes;
       assert.equal(routes.engineer.model, 'gpt-6.1-sol'); assert.equal(routes.review.model, 'opus');

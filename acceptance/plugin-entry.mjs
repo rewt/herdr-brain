@@ -58,7 +58,7 @@ let installed = false, pluginInstalled = false, server, serverLog, runtime, plug
 try {
   // Snapshot only the distribution used by entry, not local runtime state or
   // project instructions. Candidate build/activation remains real product code.
-  for (const name of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'supervisor', 'mcp', 'console', 'herdr-plugin.toml']) {
+  for (const name of ['bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch', 'settle', 'promote', 'release', 'test-slot', 'supervisor', 'mcp', 'console', 'herdr-plugin.toml']) {
     fs.cpSync(path.join(candidate, name), path.join(source, name), { recursive: true,
       filter: (file) => !file.split(path.sep).includes('node_modules') });
   }

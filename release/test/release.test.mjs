@@ -400,6 +400,8 @@ test('a held host slot defers release before cutting or claiming a candidate', a
   Object.assign(f.env, { MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, MONITOR_TEST_SLOT_WAIT_SECONDS: '0', MONITOR_TEST_SLOT_TOKEN: '', BCH_CLOAK_TEST_SLOT_TOKEN: '' });
   const refused = f.attempt({ tag: 'rc-after-slot' });
   assert.equal(refused.result, 'deferred'); assert.equal(refused.exit_code, 75); assert.match(refused.reason, /^TEST_SLOT_HELD:/);
+  const cliRefusal = f.exec(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--role', 'supervisor']);
+  assert.equal(cliRefusal.status, 75); assert.match(cliRefusal.stderr, /^TEST_SLOT_HELD:/); assert.equal(cliRefusal.stdout, '');
   assert.equal(fs.existsSync(f.count), false);
   assert.equal(f.exec('git', ['show-ref', '--verify', '--quiet', 'refs/tags/rc-after-slot']).status, 1);
   assert.deepEqual(f.record(['releases', '--json']).candidates, []);

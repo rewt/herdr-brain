@@ -14,7 +14,7 @@ for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|MONITOR_|GIT_|HERDR_)/u.test(key)) delete env[key];
   delete env.NODE_TEST_CONTEXT; // Project node --test must start its own runner.
-  Object.assign(env, { ORG_ACTOR: `r107-copied-${harness}-test`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
+  Object.assign(env, { MONITOR_TEST_SLOT_PATH: path.join(root, 'test-slot.lock'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'test-slot.lock'), ORG_ACTOR: `r107-copied-${harness}-test`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   const invoke = (binary, args, cwd = root, extra = {}) => {
     const result = spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 35000, killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
     assert.ifError(result.error);

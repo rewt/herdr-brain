@@ -32,6 +32,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => {
 });
 const cleanEnv = { ...process.env };
 for (const key of Object.keys(cleanEnv)) if (/^(ORG_|LANE_|MONITOR_|GIT_|HERDR_)/u.test(key)) delete cleanEnv[key];
+for (const key of ['MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'MONITOR_TEST_SLOT_WAIT_SECONDS', 'MONITOR_TEST_SLOT_TOKEN']) if (process.env[key] !== undefined) cleanEnv[key] = process.env[key];
 Object.assign(cleanEnv, { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
   MONITOR_WORKTREE_ROOT: path.join(scratch, 'lanes'), MONITOR_RUNTIME_DIR: path.join(scratch, 'runtime'), ORG_ACTOR: `eng81-${opt.harness}-acceptance` });
 function run(exe, args, cwd, extra = {}) {
@@ -57,7 +58,7 @@ async function check(name, fn) {
   console.log(`${results.at(-1).status.padEnd(7)} ${name}${results.at(-1).error ? `: ${results.at(-1).error}` : ''}`);
 }
 const product = path.join(install, 'product'); fs.mkdirSync(product);
-for (const directory of ['bin', 'lib', 'lanes', 'dispatch', 'watch', 'housekeeping', 'settle', 'promote', 'release', 'supervisor', 'discovery']) {
+for (const directory of ['bin', 'lib', 'lanes', 'dispatch', 'watch', 'housekeeping', 'settle', 'promote', 'release', 'test-slot', 'supervisor', 'discovery']) {
   fs.cpSync(path.join(source, directory), path.join(product, directory), { recursive: true, filter: (p) => !['test', 'node_modules'].includes(path.basename(p)) });
 }
 fs.copyFileSync(path.join(source, 'package.json'), path.join(product, 'package.json'));

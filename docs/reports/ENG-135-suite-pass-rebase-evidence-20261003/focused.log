@@ -1,0 +1,608 @@
+TAP version 13
+# Subtest: each bundled target matches its checksum, current source and native architecture
+ok 1 - each bundled target matches its checksum, current source and native architecture
+  ---
+  duration_ms: 5.207166
+  ...
+# Subtest: validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+ok 2 - validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+  ---
+  duration_ms: 305.865333
+  ...
+# Subtest: verified owner bytes are copied into private scratch with restricted modes
+ok 3 - verified owner bytes are copied into private scratch with restricted modes
+  ---
+  duration_ms: 1.996916
+  ...
+# Subtest: staged owner preserves the installed validation transport lifetime protocol
+ok 4 - staged owner preserves the installed validation transport lifetime protocol
+  ---
+  duration_ms: 3.812666
+  ...
+# Subtest: installed runtime snapshot carries the verified owner and validates without a compiler
+ok 5 - installed runtime snapshot carries the verified owner and validates without a compiler
+  ---
+  duration_ms: 965.003167
+  ...
+# Subtest: missing binary uses only the bounded source-build fallback
+ok 6 - missing binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 311.595083
+  ...
+# Subtest: missing manifest uses only the bounded source-build fallback
+ok 7 - missing manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 336.510791
+  ...
+# Subtest: invalid manifest uses only the bounded source-build fallback
+ok 8 - invalid manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 334.732333
+  ...
+# Subtest: corrupt binary uses only the bounded source-build fallback
+ok 9 - corrupt binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 305.911292
+  ...
+# Subtest: stale source uses only the bounded source-build fallback
+ok 10 - stale source uses only the bounded source-build fallback
+  ---
+  duration_ms: 348.785333
+  ...
+# Subtest: symlink binary uses only the bounded source-build fallback
+ok 11 - symlink binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 335.634291
+  ...
+# Subtest: redirected bundle directory uses only the bounded source-build fallback
+ok 12 - redirected bundle directory uses only the bounded source-build fallback
+  ---
+  duration_ms: 305.757166
+  ...
+# Subtest: unavailable bundle and missing compiler refuse project execution
+ok 13 - unavailable bundle and missing compiler refuse project execution
+  ---
+  duration_ms: 32.755166
+  ...
+# Subtest: unavailable bundle and failure compiler refuse project execution
+ok 14 - unavailable bundle and failure compiler refuse project execution
+  ---
+  duration_ms: 30.958958
+  ...
+# Subtest: unavailable bundle and timeout compiler refuse project execution
+ok 15 - unavailable bundle and timeout compiler refuse project execution
+  ---
+  duration_ms: 32.793042
+  ...
+# Subtest: owner verification rejects a checksummed binary for the wrong architecture
+ok 16 - owner verification rejects a checksummed binary for the wrong architecture
+  ---
+  duration_ms: 32.285084
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after completion
+ok 17 - no compiler preserves detached descendant cleanup after completion
+  ---
+  duration_ms: 3474.786708
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after deadline
+ok 18 - no compiler preserves detached descendant cleanup after deadline
+  ---
+  duration_ms: 4716.815959
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after wrapper-death
+ok 19 - no compiler preserves detached descendant cleanup after wrapper-death
+  ---
+  duration_ms: 3212.690833
+  ...
+# Subtest: x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 20 - x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 1.589167
+  ...
+# Subtest: arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 21 - arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 0.267125
+  ...
+# Subtest: detached double-fork descendants are gone after completion; unrelated same-group processes survive
+ok 22 - detached double-fork descendants are gone after completion; unrelated same-group processes survive
+  ---
+  duration_ms: 3365.694125
+  ...
+# Subtest: detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+ok 23 - detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+  ---
+  duration_ms: 4753.628167
+  ...
+# Subtest: descendants are cleaned after the JavaScript wrapper is killed
+ok 24 - descendants are cleaned after the JavaScript wrapper is killed
+  ---
+  duration_ms: 3185.675583
+  ...
+# validation lifetime marker is absent
+# sandbox-exec: sandbox_apply: Operation not permitted
+# Subtest: macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+ok 25 - macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+  ---
+  duration_ms: 565.001625
+  ...
+# Subtest: validation cannot signal an owner outside its inherited kernel boundary
+ok 26 - validation cannot signal an owner outside its inherited kernel boundary
+  ---
+  duration_ms: 164.339833
+  ...
+# Subtest: lifetime markers reject redirected scratch roots before provider construction
+ok 27 - lifetime markers reject redirected scratch roots before provider construction
+  ---
+  duration_ms: 2.199708
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (no-auth)
+ok 28 - pending Claude probe emits Linux evidence without a platform guard (no-auth)
+  ---
+  duration_ms: 619.929167
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (skip-live)
+ok 29 - pending Claude probe emits Linux evidence without a platform guard (skip-live)
+  ---
+  duration_ms: 625.592167
+  ...
+# Subtest: acceptance setup failure removes its installed snapshot and keeps only evidence
+ok 30 - acceptance setup failure removes its installed snapshot and keeps only evidence
+  ---
+  duration_ms: 69.404125
+  ...
+# Subtest: acceptance allocation failure removes the first temporary root
+ok 31 - acceptance allocation failure removes the first temporary root
+  ---
+  duration_ms: 22.230375
+  ...
+# Subtest: acceptance evidence directory failure still removes its installed snapshot
+ok 32 - acceptance evidence directory failure still removes its installed snapshot
+  ---
+  duration_ms: 21.90825
+  ...
+# Subtest: Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection
+ok 33 - Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection # SKIP requires a Linux kernel with io_uring enabled
+  ---
+  duration_ms: 0.03425
+  ...
+# Subtest: environment-independent holder identity (REV-378 I1)
+    # Subtest: refuses same environment control with a live runner
+    ok 1 - refuses same environment control with a live runner
+      ---
+      duration_ms: 133.394
+      ...
+    # {"environment":"same environment control","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses same environment control with a live orphaned command group
+    ok 2 - refuses same environment control with a live orphaned command group
+      ---
+      duration_ms: 133.5145
+      ...
+    # {"environment":"same environment control","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=UTC with a live runner
+    ok 3 - refuses TZ=UTC with a live runner
+      ---
+      duration_ms: 131.247583
+      ...
+    # {"environment":"TZ=UTC","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=UTC with a live orphaned command group
+    ok 4 - refuses TZ=UTC with a live orphaned command group
+      ---
+      duration_ms: 131.371958
+      ...
+    # {"environment":"TZ=UTC","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=Asia/Tokyo with a live runner
+    ok 5 - refuses TZ=Asia/Tokyo with a live runner
+      ---
+      duration_ms: 136.893125
+      ...
+    # {"environment":"TZ=Asia/Tokyo","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=Asia/Tokyo with a live orphaned command group
+    ok 6 - refuses TZ=Asia/Tokyo with a live orphaned command group
+      ---
+      duration_ms: 134.528417
+      ...
+    # {"environment":"TZ=Asia/Tokyo","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_ALL=fr_FR.UTF-8 with a live runner
+    ok 7 - refuses LC_ALL=fr_FR.UTF-8 with a live runner
+      ---
+      duration_ms: 131.32225
+      ...
+    # {"environment":"LC_ALL=fr_FR.UTF-8","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_ALL=fr_FR.UTF-8 with a live orphaned command group
+    ok 8 - refuses LC_ALL=fr_FR.UTF-8 with a live orphaned command group
+      ---
+      duration_ms: 129.80775
+      ...
+    # {"environment":"LC_ALL=fr_FR.UTF-8","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_TIME=de_DE.UTF-8 with a live runner
+    ok 9 - refuses LC_TIME=de_DE.UTF-8 with a live runner
+      ---
+      duration_ms: 131.84875
+      ...
+    # {"environment":"LC_TIME=de_DE.UTF-8","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_TIME=de_DE.UTF-8 with a live orphaned command group
+    ok 10 - refuses LC_TIME=de_DE.UTF-8 with a live orphaned command group
+      ---
+      duration_ms: 131.291125
+      ...
+    # {"environment":"LC_TIME=de_DE.UTF-8","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses a live holder's legacy environment-dependent start identity
+    ok 11 - refuses a live holder's legacy environment-dependent start identity
+      ---
+      duration_ms: 81.34725
+      ...
+    1..11
+ok 34 - environment-independent holder identity (REV-378 I1)
+  ---
+  duration_ms: 1407.340416
+  type: 'suite'
+  ...
+# Subtest: serialized stale takeover (REV-378 I2)
+    # Subtest: never admits two takers when one is paused between comparing and deleting the stale record
+    ok 1 - never admits two takers when one is paused between comparing and deleting the stale record
+      ---
+      duration_ms: 132.338208
+      ...
+    # {"paused_taker_admitted":true,"competing_taker_admitted":false,"competing_taker_raw_exit":75}
+    # Subtest: leaves a dead holder and an abandoned takeover guard in place, then recovers after operator cleanup
+    ok 2 - leaves a dead holder and an abandoned takeover guard in place, then recovers after operator cleanup
+      ---
+      duration_ms: 5.946666
+      ...
+    1..2
+ok 35 - serialized stale takeover (REV-378 I2)
+  ---
+  duration_ms: 138.360875
+  type: 'suite'
+  ...
+# Subtest: two concurrent holders are refused
+    # Subtest: refuses a second run by name, runs none of its command, and admits it once the first releases
+    ok 1 - refuses a second run by name, runs none of its command, and admits it once the first releases
+      ---
+      duration_ms: 183.017584
+      ...
+    # Subtest: uses the existing bch-cloak host path by default
+    ok 2 - uses the existing bch-cloak host path by default
+      ---
+      duration_ms: 0.101125
+      ...
+    1..2
+ok 36 - two concurrent holders are refused
+  ---
+  duration_ms: 183.222459
+  type: 'suite'
+  ...
+# Subtest: a dead holder is recovered
+    # Subtest: keeps the slot while a SIGKILLed runner's command still runs, and recovers it once that group is gone
+    ok 1 - keeps the slot while a SIGKILLed runner's command still runs, and recovers it once that group is gone
+      ---
+      duration_ms: 134.464292
+      ...
+    # Subtest: takes over a record whose process and group are gone, or whose pid now belongs to another process
+    ok 2 - takes over a record whose process and group are gone, or whose pid now belongs to another process
+      ---
+      duration_ms: 27.588458
+      ...
+    1..2
+ok 37 - a dead holder is recovered
+  ---
+  duration_ms: 162.116417
+  type: 'suite'
+  ...
+# Subtest: a waiter does not deadlock on itself
+    # Subtest: runs a waiting run started inside the holder's own command at once, with the holder's token
+    ok 1 - runs a waiting run started inside the holder's own command at once, with the holder's token
+      ---
+      duration_ms: 71.509584
+      ...
+    # Subtest: runs a waiting run started inside the holder's own command at once, with the token scrubbed from its environment
+    ok 2 - runs a waiting run started inside the holder's own command at once, with the token scrubbed from its environment
+      ---
+      duration_ms: 72.189834
+      ...
+    # Subtest: runs a process that carries the holder's token inside the slot, even outside the holder's process tree
+    ok 3 - runs a process that carries the holder's token inside the slot, even outside the holder's process tree
+      ---
+      duration_ms: 146.916833
+      ...
+    # Subtest: never matches a waiter by its command line: a free slot is taken at once, a held one is refused by the holder's pid
+    ok 4 - never matches a waiter by its command line: a free slot is taken at once, a held one is refused by the holder's pid
+      ---
+      duration_ms: 144.542333
+      ...
+    # Subtest: takes the slot again in the process that holds it without waiting or replacing it
+    ok 5 - takes the slot again in the process that holds it without waiting or replacing it
+      ---
+      duration_ms: 28.498458
+      ...
+    1..5
+ok 38 - a waiter does not deadlock on itself
+  ---
+  duration_ms: 463.799417
+  type: 'suite'
+  ...
+# Subtest: waiting
+    # Subtest: queues behind a live holder and takes the slot when it is released
+    ok 1 - queues behind a live holder and takes the slot when it is released
+      ---
+      duration_ms: 626.831584
+      ...
+    # Subtest: refuses once its wait runs out
+    ok 2 - refuses once its wait runs out
+      ---
+      duration_ms: 1114.049584
+      ...
+    # Subtest: reads its wait from the environment, and refuses a malformed one
+    ok 3 - reads its wait from the environment, and refuses a malformed one
+      ---
+      duration_ms: 75.636333
+      ...
+    1..3
+ok 39 - waiting
+  ---
+  duration_ms: 1816.647
+  type: 'suite'
+  ...
+# Subtest: liveness it cannot establish is refused by name
+    # Subtest: refuses, without waiting, and leaves a live holder's lock in place when the source is denied (EPERM)
+    ok 1 - refuses, without waiting, and leaves a live holder's lock in place when the source is denied (EPERM)
+      ---
+      duration_ms: 82.254625
+      ...
+    # Subtest: refuses, without waiting, and leaves a live holder's lock in place when the source is missing (ENOENT)
+    ok 2 - refuses, without waiting, and leaves a live holder's lock in place when the source is missing (ENOENT)
+      ---
+      duration_ms: 82.31275
+      ...
+    # Subtest: refuses, without waiting, and leaves a live holder's lock in place when the source is answering that the live holder does not exist
+    ok 3 - refuses, without waiting, and leaves a live holder's lock in place when the source is answering that the live holder does not exist
+      ---
+      duration_ms: 82.629792
+      ...
+    # Subtest: retains a stale record for root-owned PID 1 when its identity read is denied
+    ok 4 - retains a stale record for root-owned PID 1 when its identity read is denied
+      ---
+      duration_ms: 25.628
+      ...
+    # Subtest: refuses when the source cannot list the ancestry it needs to tell a nested waiter from another run
+    ok 5 - refuses when the source cannot list the ancestry it needs to tell a nested waiter from another run
+      ---
+      duration_ms: 84.979417
+      ...
+    # Subtest: refuses, and leaves the file in place, for a record that names no holder, or a live one it cannot date
+    ok 6 - refuses, and leaves the file in place, for a record that names no holder, or a live one it cannot date
+      ---
+      duration_ms: 67.447292
+      ...
+    1..6
+ok 40 - liveness it cannot establish is refused by name
+  ---
+  duration_ms: 425.428292
+  type: 'suite'
+  ...
+# Subtest: signals and release
+    # Subtest: forwards SIGINT to the command's group, then releases
+    ok 1 - forwards SIGINT to the command's group, then releases
+      ---
+      duration_ms: 59.110417
+      ...
+    # Subtest: forwards SIGTERM to the command's group, then releases
+    ok 2 - forwards SIGTERM to the command's group, then releases
+      ---
+      duration_ms: 59.054666
+      ...
+    # Subtest: forwards SIGHUP to the command's group, then releases
+    ok 3 - forwards SIGHUP to the command's group, then releases
+      ---
+      duration_ms: 59.269875
+      ...
+    # Subtest: status reports free (0), held (1) and unknown (2) without touching the lock
+    ok 4 - status reports free (0), held (1) and unknown (2) without touching the lock
+      ---
+      duration_ms: 118.855292
+      ...
+    # Subtest: never reports success for an interrupted run, even when its command exits 0 on the signal
+    ok 5 - never reports success for an interrupted run, even when its command exits 0 on the signal
+      ---
+      duration_ms: 59.828833
+      ...
+    # Subtest: release removes only its own lock
+    ok 6 - release removes only its own lock
+      ---
+      duration_ms: 2.20125
+      ...
+    1..6
+ok 41 - signals and release
+  ---
+  duration_ms: 358.466792
+  type: 'suite'
+  ...
+# Subtest: workspace configuration and timeout retry
+    # Subtest: uses the workspace path and passes it to nested commands
+    ok 1 - uses the workspace path and passes it to nested commands
+      ---
+      duration_ms: 79.01125
+      ...
+    # Subtest: retries only once for timeout under load
+    ok 2 - retries only once for timeout under load
+      ---
+      duration_ms: 60.538
+      ...
+    # Subtest: retries only once for reported Node timeout under load
+    ok 3 - retries only once for reported Node timeout under load
+      ---
+      duration_ms: 62.62125
+      ...
+    # Subtest: retries only once for timeout without load
+    ok 4 - retries only once for timeout without load
+      ---
+      duration_ms: 42.466458
+      ...
+    # Subtest: retries only once for ordinary failure under load
+    ok 5 - retries only once for ordinary failure under load
+      ---
+      duration_ms: 42.411542
+      ...
+    # Subtest: retries only once for slot refusal under load
+    ok 6 - retries only once for slot refusal under load
+      ---
+      duration_ms: 42.239125
+      ...
+    # Subtest: does not retry a second timeout or a signaled timeout
+    ok 7 - does not retry a second timeout or a signaled timeout
+      ---
+      duration_ms: 99.436958
+      ...
+    # Subtest: limits nested retrying holders to two attempts when the child initiates the retry
+    ok 8 - limits nested retrying holders to two attempts when the child initiates the retry
+      ---
+      duration_ms: 109.669416
+      ...
+    # Subtest: limits nested retrying holders to two attempts when the ancestor initiates the retry
+    ok 9 - limits nested retrying holders to two attempts when the ancestor initiates the retry
+      ---
+      duration_ms: 136.931875
+      ...
+    # Subtest: promotion retries only the timed-out heavy step and continues the remaining steps once
+    ok 10 - promotion retries only the timed-out heavy step and continues the remaining steps once
+      ---
+      duration_ms: 413.14925
+      ...
+    # Subtest: does not inherit a stale token into a dead holder record
+    ok 11 - does not inherit a stale token into a dead holder record
+      ---
+      duration_ms: 2.716292
+      ...
+    1..11
+ok 42 - workspace configuration and timeout retry
+  ---
+  duration_ms: 1091.426125
+  type: 'suite'
+  ...
+# Subtest: legacy bridge during workspace migration
+    # Subtest: a configured workspace path waits for the legacy slot and holds both for its entire command
+    ok 1 - a configured workspace path waits for the legacy slot and holds both for its entire command
+      ---
+      duration_ms: 483.728166
+      ...
+    1..1
+ok 43 - legacy bridge during workspace migration
+  ---
+  duration_ms: 483.794
+  type: 'suite'
+  ...
+# Subtest: real detached fixture cleanup survives an assertion failure
+ok 44 - real detached fixture cleanup survives an assertion failure
+  ---
+  duration_ms: 6475.265584
+  ...
+# Subtest: SIGTERM cleanup bounds genuinely detached fixtures outside the suite group
+ok 45 - SIGTERM cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 17555.018125
+  ...
+# Subtest: SIGKILL cleanup bounds genuinely detached fixtures outside the suite group
+ok 46 - SIGKILL cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6546.79825
+  ...
+# Subtest: SIGKILL-before-receipt cleanup bounds genuinely detached fixtures outside the suite group
+ok 47 - SIGKILL-before-receipt cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6563.539583
+  ...
+# Subtest: blocked cleanup bounds genuinely detached fixtures outside the suite group
+ok 48 - blocked cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6568.75675
+  ...
+# Subtest: compound fixture scenarios have an explicit aggregate bound and owned cleanup
+ok 49 - compound fixture scenarios have an explicit aggregate bound and owned cleanup
+  ---
+  duration_ms: 70.016208
+  ...
+# Subtest: a late waiter receives a child result and output after close
+ok 50 - a late waiter receives a child result and output after close
+  ---
+  duration_ms: 18.679375
+  ...
+# Subtest: a completed fixture never looks up or signals its historical PID during teardown
+ok 51 - a completed fixture never looks up or signals its historical PID during teardown
+  ---
+  duration_ms: 131.7445
+  ...
+# Subtest: leak names the failed test and reaps its fixture child and grandchild
+ok 52 - leak names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 649.424791
+  ...
+# Subtest: assertion names the failed test and reaps its fixture child and grandchild
+ok 53 - assertion names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 630.740042
+  ...
+# Subtest: test timeout names the failed test and reaps its fixture child and grandchild
+ok 54 - test timeout names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 1139.487667
+  ...
+# Subtest: child timeout names the failed test and reaps its fixture child and grandchild
+ok 55 - child timeout names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 1145.206584
+  ...
+# Subtest: file watchdog bounds a blocked event loop and clears the fixture group
+ok 56 - file watchdog bounds a blocked event loop and clears the fixture group
+  ---
+  duration_ms: 3073.195833
+  ...
+# Subtest: suite watchdog bounds a blocked event loop and clears the fixture group
+ok 57 - suite watchdog bounds a blocked event loop and clears the fixture group
+  ---
+  duration_ms: 3051.076584
+  ...
+# Subtest: SIGTERM of an outer runner reaps every nested worker and blocked fixture descendant
+ok 58 - SIGTERM of an outer runner reaps every nested worker and blocked fixture descendant
+  ---
+  duration_ms: 224.632375
+  ...
+# Subtest: SIGKILL of an outer runner reaps every nested worker and blocked fixture descendant
+ok 59 - SIGKILL of an outer runner reaps every nested worker and blocked fixture descendant
+  ---
+  duration_ms: 195.875834
+  ...
+# Subtest: a leader exiting before its redirected background child fails the suite and leaves no survivor
+ok 60 - a leader exiting before its redirected background child fails the suite and leaves no survivor
+  ---
+  duration_ms: 126.63125
+  ...
+# Subtest: a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures
+ok 61 - a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures
+  ---
+  duration_ms: 157.62675
+  ...
+# Subtest: suite cancellation clears a detached spawn frozen before its ownership lookup
+ok 62 - suite cancellation clears a detached spawn frozen before its ownership lookup
+  ---
+  duration_ms: 2532.497583
+  ...
+# Subtest: fixture environment overrides cannot detach a grandchild from the suite group
+ok 63 - fixture environment overrides cannot detach a grandchild from the suite group
+  ---
+  duration_ms: 163.915709
+  ...
+# Subtest: a fresh signal confirms the same owned birth tuple across caller timezone changes
+ok 64 - a fresh signal confirms the same owned birth tuple across caller timezone changes
+  ---
+  duration_ms: 5.763167
+  ...
+1..64
+# tests 103
+# suites 10
+# pass 102
+# fail 0
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 92185.367209

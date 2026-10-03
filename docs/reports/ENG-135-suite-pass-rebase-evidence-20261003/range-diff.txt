@@ -1,0 +1,112 @@
+1:  1db6143 ! 1:  2c6d736 Reduce suite fixture cost and define promotion and release coverage
+    @@ discovery/test/entry.test.mjs: test('installed supervisor entry in an untouched
+        assert.ok(fs.existsSync(path.join(f.repo, '.org/events.jsonl')), 'entry bootstrapped its record');
+     
+      ## discovery/test/helpers/detached-descendants.mjs ##
+    -@@ discovery/test/helpers/detached-descendants.mjs: import fs from 'node:fs';
+    - import path from 'node:path';
+    +@@ discovery/test/helpers/detached-descendants.mjs: import path from 'node:path';
+      import { spawn } from 'node:child_process';
+      import { runBounded } from '../../bounded.mjs';
+    + import { lookupProcess } from '../../../test/helpers/processes.mjs';
+     +import { loadTimeout } from '../../../lib/deadline.mjs';
+      
+      const [root, mode] = process.argv.slice(2);
+    @@ discovery/test/helpers/detached-descendants.mjs: const middleReceipt = path.join
+        assert.ok(fs.existsSync(receipt), 'detached leaf actually launched');
+        const rows = [JSON.parse(fs.readFileSync(receipt)), ...(fs.existsSync(middleReceipt) ? [JSON.parse(fs.readFileSync(middleReceipt))] : [])];
+     @@ discovery/test/helpers/detached-descendants.mjs: if (mode === 'completion' || mode === 'deadline') {
+    -   await delay(2700);
+    -   assert.ok(!fs.existsSync(marker), 'native owner cleaned detached descendants after wrapper death');
+    - } else {
+    --  const pgid = Number((await import('node:child_process')).execFileSync('/bin/ps', ['-o', 'pgid=', '-p', String(process.pid)], { encoding: 'utf8', timeout: 2000 }).trim());
+    +   const current = lookupProcess(process.pid);
+    +   assert.ok(current.ok && current.value, current.error);
+    +   const pgid = current.value.pgid;
+     -  const program = mode === 'early-cancel' ? `while(true){} // ${root}` : `${writeReceipt}${mode === 'blocked-leaf' ? 'while(true){}' : 'setInterval(()=>{},1000);'}`;
+    -+  const pgid = Number((await import('node:child_process')).execFileSync('/bin/ps', ['-o', 'pgid=', '-p', String(process.pid)], { encoding: 'utf8', timeout: loadTimeout(2000) }).trim());
+     +  const program = mode === 'early-cancel' ? `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0); // ${root}` : `${writeReceipt}${mode === 'blocked-leaf' ? 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);' : 'setInterval(()=>{},1000);'}`;
+        const child = spawn(deadlineBinary, [process.execPath, '-e', program, String(pgid)], { detached: true, stdio: 'ignore' });
+        child.unref();
+    @@ promote/test/promote.test.mjs: function fixture(t) {
+          const owner = path.join(queue.directory, 'worker.lock/owner.json');
+          if (result.status === 0 && fs.existsSync(owner)) {
+            const pid = JSON.parse(fs.readFileSync(owner, 'utf8')).pid;
+    -@@ promote/test/promote.test.mjs: function fixture(t) {
+    +@@ promote/test/promote.test.mjs: test('queued promotion waits before validation under low-memory pressure and pro
+      test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
+        const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
+        const launched = f.launch(['first', 'second']); assert.ok(launched.worker.ready);
+    @@ supervisor/test/delivery.test.mjs: else process.exit(2);
+      ## test-slot/test/test-slot.test.mjs ##
+     @@
+      // Ported ENG-725 regressions: the host-wide test slot. Every case uses its own lock path, never the real one, and scrubs the slot's
+    - // environment, so these tests run the same inside a held slot (the full gate) as outside it. They need /bin/ps.
+    + // environment, so these tests run the same inside a held slot (the full gate) as outside it. They use the non-setuid kernel process source.
+      import assert from "node:assert/strict";
+     +import { loadTimeout } from "../../lib/deadline.mjs";
+    - import { execFileSync, spawn } from "node:child_process";
+    + import { spawn } from "node:child_process";
+      import fs from "node:fs";
+      import os from "node:os";
+      import path from "node:path";
+    @@ test-slot/test/test-slot.test.mjs
+     +const it = (name, body) => nodeIt(name, { timeout: loadTimeout(30000) }, body);
+      import { fileURLToPath } from "node:url";
+      
+    - import { acquireTestSlot, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, HELD_CODE, HOLDER_UNKNOWN_CODE, REFUSED_EXIT, TEST_SLOT_PATH, TOKEN_ENV, WAIT_ENV, RETRIED_ENV } from "../test-slot.mjs";
+    + import { lookupProcess } from "../../lib/processes.mjs";
+     @@ test-slot/test/test-slot.test.mjs: function scratch() {
+      /** A node one-liner as a command: writes its pid to `ready`, then runs `body`. */
+      const nodeCommand = (ready, body = "setInterval(() => {}, 1000);") => {
+    @@ test-slot/test/test-slot.test.mjs: describe("a waiter does not deadlock on itsel
+          });
+     @@ test-slot/test/test-slot.test.mjs: describe("liveness it cannot establish is refused by name", () => {
+            const started = Date.now();
+    -       const message = await takeWithFailingPs(s.lockPath, failure);
+    -       assert.match(message, new RegExp(`^${HOLDER_UNKNOWN_CODE}: second refused: cannot tell whether the holder of .*, first \\(pid ${String(first.child.pid)}, .*\\), still runs: ps could not read pid ${String(first.child.pid)}'s start time`, "u"));
+    +       const message = await takeWithFailingSource(s.lockPath, failure);
+    +       assert.match(message, new RegExp(`^${HOLDER_UNKNOWN_CODE}: second refused: cannot tell whether the holder of .*, first \\(pid ${String(first.child.pid)}, .*\\), still runs: process source could not read pid ${String(first.child.pid)}'s start time`, "u"));
+     -      assert.ok(Date.now() - started < 10_000);
+     +      assert.ok(Date.now() - started < loadTimeout(10_000));
+            assert.equal(fs.readFileSync(s.lockPath, "utf8"), before);
+    @@ test/helpers/tier.mjs (new)
+     
+      ## test/load-deadlines.test.mjs ##
+     @@ test/load-deadlines.test.mjs: test('a replacement PID discovered after a retry remains unauthorized', () => {
+    -   assert.equal(tracker.killProcess({ pid: 101, identity: 'Fri Oct 2 01:00:00 2026', command: 'owned fixture', group: true }).reason, 'changed');
+    +   assert.equal(tracker.killProcess({ pid: 101, identity: '1700000000:123456', command: 'owned fixture', group: true }).reason, 'changed');
+      });
+      
+     -test('promotion validation can read Git after the old injected 15-second command deadline', { timeout: 60000 }, t => {
+    @@ test/pty.test.mjs: function fixture(t, { block = true } = {}) {
+     -fs.renameSync(${JSON.stringify(leaf + '.tmp')},${JSON.stringify(leaf)});while(true){} // ${root}`;
+     +fs.renameSync(${JSON.stringify(leaf + '.tmp')},${JSON.stringify(leaf)});Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0); // ${root}`;
+        const program = path.join(root, 'command.cjs');
+    -   fs.writeFileSync(program, `const fs=require('fs'),{spawn,execFileSync}=require('child_process');
+    +   fs.writeFileSync(program, `const fs=require('fs'),{spawn}=require('child_process');
+      process.on('SIGHUP',()=>{});
+     @@ test/pty.test.mjs: const child=spawn(process.execPath,['-e',${JSON.stringify(leafCode)}],{stdio:'ig
+    - const timer=setInterval(()=>{if(!fs.existsSync(${JSON.stringify(leaf)}))return;clearInterval(timer);
+    - const value={pid:process.pid,leaf:child.pid,session:Number(process.env.HERDR_TEST_PTY_SESSION),suite:Number(process.env.HERDR_TEST_SUITE_PID),pgid:Number(execFileSync('ps',['-o','pgid=','-p',String(process.pid)],{encoding:'utf8'})),tty:process.stdin.isTTY};
+    + const timer=setInterval(async()=>{if(!fs.existsSync(${JSON.stringify(leaf)}))return;clearInterval(timer);
+    + const value={pid:process.pid,leaf:child.pid,session:Number(process.env.HERDR_TEST_PTY_SESSION),suite:Number(process.env.HERDR_TEST_SUITE_PID),pgid:(await import(${JSON.stringify(new URL('./helpers/processes.mjs', import.meta.url).href)})).lookupProcess(process.pid).value.pgid,tty:process.stdin.isTTY};
+      fs.writeFileSync(${JSON.stringify(receipt + '.tmp')},JSON.stringify(value));fs.renameSync(${JSON.stringify(receipt + '.tmp')},${JSON.stringify(receipt)});
+     -${block ? 'while(true){}' : 'setTimeout(()=>process.exit(0),100);'}
+     +${block ? 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);' : 'setTimeout(()=>process.exit(0),100);'}
+    @@ test/test-hangs.test.mjs: await waitForExit(child);
+          while (alive().length && Date.now() < cleanupDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+          assert.deepEqual(alive(), [], 'an outer cancellation left a nested descendant alive');
+          const result = await waitForExit(outer);
+    -@@ test/test-hangs.test.mjs: const original=cp.spawnSync;
+    +@@ test/test-hangs.test.mjs: fs.readFileSync=(file,...args)=>{const match=String(file).match(/^\\/proc\\/(\\d
+      cp.spawnSync=(command,args,options)=>{
+    -  if(command==='ps'&&args.includes('-p')){
+    +  if(String(command).includes('process-source-')&&args.length===1){
+        fs.writeFileSync(${JSON.stringify(path.join(root, 'spawning'))},JSON.stringify({child:Number(args.at(-1)),file:process.pid,worker:process.ppid}));
+     -  while(true) {}
+     +  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
+2:  c059056 = 2:  0853fe8 Report suite measurements and retained safety coverage for R-170
+3:  b454abc = 3:  c70e17a Include verified watcher event waits in the suite pass
+4:  420c9e5 = 4:  86bde44 Finalize the checked suite pass report
+5:  24d99ff = 5:  2123353 Add suite-pass independent review record

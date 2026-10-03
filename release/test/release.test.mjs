@@ -52,22 +52,26 @@ test('unconfigured release uses npm test, initializes its record and never execu
   assert.match(f.org(['status']), /RELEASE CANDIDATES/);
 });
 
-test('unset and missing preflight inputs leave one candidate pending until setup is corrected', t => {
+for (const advance of [false, true]) test(`unset and missing preflight inputs remain retryable${advance ? ' after main advances' : ' on the same commit'}`, t => {
   const f = fixture(t, { preflight: ['node', '-e', "const fs=require('fs');if(!process.env.RELEASE_TEST_SETUP||!fs.existsSync(process.env.RELEASE_TEST_SETUP)){console.error('set RELEASE_TEST_SETUP to an existing input');process.exit(2)}"], gate: ['node', 'gate.cjs'] });
   delete f.env.RELEASE_TEST_SETUP;
   const first = f.attempt({ tag: 'rc-setup' });
   assert.equal(first.result, 'setup-required'); assert.match(first.reason, /set RELEASE_TEST_SETUP/);
+  assert.equal(first.candidate, null); assert.equal(first.commit, f.git(['rev-parse', 'HEAD']));
+  assert.equal(first.tag, 'rc-setup'); assert.match(fs.readFileSync(first.log, 'utf8'), /set RELEASE_TEST_SETUP/);
   f.env.RELEASE_TEST_SETUP = path.join(f.root, 'missing');
-  const second = f.attempt();
-  assert.equal(second.result, 'setup-required'); assert.equal(second.candidate.id, first.candidate.id);
-  const pending = f.record(['releases', '--json']).candidates;
-  assert.equal(pending.length, 1); assert.equal(pending[0].status, 'pending-gate');
-  assert.equal(pending[0].started, null); assert.equal(pending[0].gate, null);
-  assert.equal(fs.existsSync(f.count), false); assert.equal(fs.existsSync(first.candidate.snapshot), false);
+  const second = f.attempt({ tag: 'rc-setup' });
+  assert.equal(second.result, 'setup-required'); assert.equal(second.candidate, null);
+  assert.equal(f.record(['releases', '--json']).candidates.length, 0);
+  assert.equal(f.git(['tag']), ''); assert.equal(fs.existsSync(f.count), false);
+  assert.equal(fs.existsSync(path.join(f.project.identity, 'release/candidates')), false);
+  const commit = advance ? f.commit('promoted-during-setup') : first.commit;
   fs.writeFileSync(f.env.RELEASE_TEST_SETUP, 'configured');
-  const ready = f.attempt();
-  assert.equal(ready.result, 'awaiting-operator'); assert.equal(ready.candidate.id, first.candidate.id);
-  assert.equal(ready.candidate.commit, first.candidate.commit); assert.equal(ready.candidate.tag, first.candidate.tag);
+  const ready = f.attempt({ tag: 'rc-setup' });
+  assert.equal(ready.result, 'awaiting-operator'); assert.equal(ready.candidate.commit, commit);
+  assert.equal(ready.candidate.tag, first.tag); assert.equal(f.git(['rev-parse', first.tag]), commit);
+  assert.equal(f.record(['releases', '--json']).candidates.length, 1);
+  assert.equal(f.attempt().candidate.id, ready.candidate.id);
   assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
 });
 
@@ -76,15 +80,30 @@ test('a signaled preflight is retryable and malformed preflight declarations are
   delete f.env.RELEASE_TEST_SETUP;
   const first = f.attempt();
   assert.equal(first.result, 'setup-required'); assert.match(first.reason, /SIGTERM/);
-  assert.equal(first.candidate.started, undefined);
+  assert.equal(first.candidate, null); assert.equal(f.git(['tag']), '');
+  assert.equal(f.record(['releases', '--json']).candidates.length, 0);
   f.env.RELEASE_TEST_SETUP = 'ready';
-  assert.equal(f.attempt().candidate.id, first.candidate.id);
+  assert.equal(f.attempt().result, 'awaiting-operator');
   assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
   for (const preflight of ['node check.mjs', [], ['node', 1]]) {
     fs.writeFileSync(path.join(f.repo, '.release.json'), JSON.stringify({ preflight }));
     f.git(['add', '.release.json']); f.git(['commit', '-qm', 'Invalid preflight']);
     assert.throws(() => releaseSettings(f.repo), /invalid release declaration/);
   }
+});
+
+test('a preflight launch error creates no candidate and can be corrected on a later commit', t => {
+  const f = fixture(t, { preflight: ['missing-release-input-check'], gate: ['node', 'gate.cjs'] });
+  const first = f.attempt({ tag: 'rc-launch-error' });
+  assert.equal(first.result, 'setup-required'); assert.match(first.reason, /ENOENT/);
+  assert.equal(first.candidate, null); assert.equal(f.git(['tag']), '');
+  assert.equal(f.record(['releases', '--json']).candidates.length, 0);
+  assert.equal(fs.existsSync(f.count), false);
+  fs.writeFileSync(path.join(f.repo, '.release.json'), JSON.stringify({ preflight: ['node', '-e', 'process.exit(0)'], gate: ['node', 'gate.cjs'] }));
+  f.git(['add', '.release.json']); f.git(['commit', '-qm', 'Correct preflight command']);
+  const ready = f.attempt({ tag: first.tag });
+  assert.equal(ready.result, 'awaiting-operator'); assert.equal(ready.candidate.commit, f.git(['rev-parse', 'HEAD']));
+  assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
 });
 
 test('two real lane promotions become one tagged batch and one operator question', t => {

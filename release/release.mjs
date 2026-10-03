@@ -78,24 +78,25 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
     if (!existing && spawnSync('git', ['-C', project.canonical, 'show-ref', '--verify', '--quiet', `refs/tags/${tag}`]).status === 0) throw new Error('candidate tag already exists; choose a new tag');
     const payload = path.join(directory, 'receipt-input.json');
     const receipt = value => { writeFileAtomic(payload, JSON.stringify(value) + '\n'); return payload; };
+    // Machine setup is retryable, unlike a claimed build/gate. Run the tracked
+    // read-only check before recording a candidate or cutting its tag, so a
+    // setup failure cannot block a later promoted commit from being released.
+    const preflight = releaseArgv(declaration.config.preflight, values);
+    if (preflight) {
+      const log = path.join(directory, `${tag}.setup.log`);
+      const r = spawnSync(preflight[0], preflight.slice(1), { cwd: project.canonical, env: recordEnv, encoding: 'utf8' });
+      const detail = [r.stdout, r.stderr, r.error?.message, r.signal ? `preflight interrupted by ${r.signal}` : ''].filter(Boolean).join('\n').trim();
+      fs.appendFileSync(log, `${new Date().toISOString()} ${JSON.stringify(preflight)}\n${detail}\n`);
+      if (r.error || r.status !== 0) return { result: 'setup-required', candidate: existing ?? null, commit, tag, command: preflight, log,
+        reason: detail || `preflight exited ${r.status}`, next: 'correct machine setup and retry; the current release base will be cut and gated' };
+      if (git(project.canonical, ['rev-parse', 'HEAD']) !== commit || git(project.canonical, ['status', '--porcelain', '--untracked-files=normal'])) throw new Error('preflight changed the canonical checkout; inspect before claiming the gate');
+    }
     // Record before cutting the tag, so interruption can recover the exact intent.
     const candidate = existing ?? record(['release', 'cut', '--file', receipt(input)]);
     const tagExists = spawnSync('git', ['-C', project.canonical, 'show-ref', '--verify', '--quiet', `refs/tags/${tag}`]).status === 0;
     if (tagExists) {
       if (!existing || git(project.canonical, ['rev-parse', `refs/tags/${tag}^{commit}`]) !== commit) throw new Error('candidate tag already exists; inspect before any gate');
     } else git(project.canonical, ['tag', tag, commit]);
-    // Machine setup is retryable, unlike a claimed build/gate. Run the tracked
-    // read-only check on the clean canonical commit before creating a snapshot.
-    const preflight = releaseArgv(declaration.config.preflight, values);
-    if (preflight) {
-      const log = path.join(directory, `${candidate.id}.setup.log`);
-      const r = spawnSync(preflight[0], preflight.slice(1), { cwd: project.canonical, env: recordEnv, encoding: 'utf8' });
-      const detail = [r.stdout, r.stderr, r.error?.message, r.signal ? `preflight interrupted by ${r.signal}` : ''].filter(Boolean).join('\n').trim();
-      fs.appendFileSync(log, `${new Date().toISOString()} ${JSON.stringify(preflight)}\n${detail}\n`);
-      if (r.error || r.status !== 0) return { result: 'setup-required', candidate, command: preflight, log,
-        reason: detail || `preflight exited ${r.status}`, next: 'correct machine setup and retry the same ungated candidate' };
-      if (git(project.canonical, ['rev-parse', 'HEAD']) !== commit || git(project.canonical, ['status', '--porcelain', '--untracked-files=normal'])) throw new Error('preflight changed the canonical checkout; inspect before claiming the gate');
-    }
     const claimed = record(['release', 'start', candidate.id]);
     if (!claimed.started) return { result: 'inspect', candidate: claimed.candidate };
     const log = path.join(directory, `${candidate.id}.log`);

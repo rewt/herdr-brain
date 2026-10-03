@@ -111,7 +111,7 @@ test('unset compatibility input is optional through the declared build and gate'
   assert.match(gate.stdout, /optional compatibility gate/);
 });
 
-test('real project preflight leaves invalid inputs ungated and retries the same tagged commit', t => {
+test('real project preflight leaves invalid inputs uncut and retries the same commit', t => {
   const f = fixture(t);
   f.env.ORG_DIR = '';
   f.env.GIT_CONFIG_GLOBAL = '/dev/null'; f.env.GIT_CONFIG_NOSYSTEM = '1';
@@ -123,28 +123,25 @@ test('real project preflight leaves invalid inputs ungated and retries the same 
   git(['add', '.']); git(['commit', '-qm', 'Declare project input preflight']);
   const commit = git(['rev-parse', 'HEAD']);
   const attempt = () => releaseOnce({ cwd: f.candidate, env: f.env, role: 'supervisor', tag: 'rc-inputs', measurement: { load: 0, cpus: 1 } });
-  let id;
   for (const [variable, message] of [['RELEASE_NPM_CACHE', /RELEASE_NPM_CACHE/], ['RELEASE_BCH_CLOAK', /RELEASE_BCH_CLOAK/]]) {
     const saved = f.env[variable]; f.env[variable] = path.join(f.root, 'absent');
     const result = attempt();
-    id ??= result.candidate.id;
     assert.equal(result.result, 'setup-required'); assert.match(result.reason, message);
-    assert.equal(result.candidate.id, id); assert.equal(result.candidate.commit, commit);
-    assert.equal(result.candidate.started ?? null, null); assert.equal(result.candidate.gate ?? null, null);
-    assert.equal(fs.existsSync(result.candidate.snapshot), false);
+    assert.equal(result.candidate, null); assert.equal(result.commit, commit);
     assert.match(fs.readFileSync(result.log, 'utf8'), message);
-    assert.equal(git(['rev-parse', 'rc-inputs']), commit);
+    assert.equal(git(['tag']), '');
     f.env[variable] = saved;
   }
-  const events = () => fs.readFileSync(path.join(f.candidate, '.org/events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(events().filter(e => e.type === 'release.cut').length, 1);
+  const events = () => fs.readFileSync(path.join(f.candidate, '.org/events.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+  assert.equal(events().filter(e => e.type === 'release.cut').length, 0);
   assert.equal(events().filter(e => e.type.startsWith('release.gate.')).length, 0);
   delete f.env.RELEASE_BCH_CLOAK;
   const result = attempt();
   assert.equal(result.result, 'awaiting-operator', result.candidate.gate?.detail);
-  assert.equal(result.candidate.id, id); assert.equal(result.candidate.commit, commit);
+  assert.equal(result.candidate.commit, commit); assert.equal(git(['rev-parse', 'rc-inputs']), commit);
+  assert.equal(events().filter(e => e.type === 'release.cut').length, 1);
   f.env.RELEASE_NPM_CACHE = path.join(f.root, 'absent');
-  assert.equal(attempt().candidate.id, id, 'an already gated candidate is reused before machine checks');
+  assert.equal(attempt().candidate.id, result.candidate.id, 'an already gated candidate is reused before machine checks');
   assert.equal(events().filter(e => e.type === 'release.gate.started').length, 1);
   assert.equal(events().filter(e => e.type === 'release.gate.finished').length, 1);
 });

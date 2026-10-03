@@ -43,13 +43,15 @@ file. For example:
 
 Commands are argument arrays, never shell text. `{tag}`, `{candidate}`, `{commit}`
 and `{repo}` substitute inside each argument. Optional `preflight` checks machine
-inputs from the clean canonical checkout under the project lock, after cutting
-the candidate tag but before claiming the gate or creating its snapshot. It must
+inputs from the clean canonical checkout under the project lock, before recording
+the candidate, cutting its tag, claiming the gate or creating its snapshot. It must
 be read-only; `{candidate}` names the future snapshot, which does not yet exist.
 A nonzero exit, launch error or signal returns `setup-required`, with the command,
-setup message and retained `RC-n.setup.log`. The record remains `pending-gate`
-without a gate-start/result or ship question. Correct setup and invoke the cycle
-again to gate the same tagged commit. Interrupted preflight is likewise retryable.
+setup message and retained `{tag}.setup.log`. No new candidate, tag, gate-start/result
+or ship question is created. Correct setup and invoke the cycle again to cut and
+gate the current release base. If promotions have advanced the base meanwhile,
+that later commit is cut normally; setup failure leaves no candidate blocking it.
+Interrupted preflight is likewise retryable.
 Optional `prepare` runs in the owned candidate snapshot before the gate; its environment overrides are scoped to
 that command. The gate also runs in that snapshot. Project commands are trusted
 project code and must use their own scratch directories when they need mutable
@@ -86,7 +88,8 @@ by running `npm --prefix console ci --cache "$RELEASE_NPM_CACHE"` and
 `npm --prefix mcp ci --cache "$RELEASE_NPM_CACHE"` in a development checkout.
 This project's declared preflight checks the cache index, readable pinned
 tarballs and configured compatibility path without copying or building anything.
-Missing inputs return setup instructions while leaving the candidate ungated.
+Missing inputs return setup instructions without cutting a candidate or consuming
+a gate attempt.
 
 The record stores candidate, gate-start and gate-result events through the record
 CLI. On a passing result it atomically creates one `publish` question, reserved for

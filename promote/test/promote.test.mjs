@@ -95,11 +95,14 @@ test('queued promotion waits before validation under low-memory pressure and pro
   f.env.TEST_MEMORY_FILE = file;
   f.onCleanup(async () => { fs.writeFileSync(file, JSON.stringify(healthy)); });
   const launched = f.launch(['memory-wait']);
-  const log = path.join(f.queue.directory, `${launched.jobs[0].id}.log`);
+  const batch = f.queue.load().current;
+  assert.equal(batch.jobs[0].id, launched.jobs[0].id);
+  const log = path.join(f.queue.directory, 'batches', batch.id, 'train.log');
   await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure'));
   assert.match(fs.readFileSync(log, 'utf8'), /available memory 128 MiB/);
   assert.doesNotMatch(fs.readFileSync(log, 'utf8'), /validating in/);
   assert.equal(f.git(['rev-parse', 'main']), before); assert.ok(fs.existsSync(workspace));
+  assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false, 'memory waits leave the promotion lock available');
   assert.equal(f.results().length, 0);
   fs.writeFileSync(file, JSON.stringify(healthy));
   await until(() => f.results().length === 1);

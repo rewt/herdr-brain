@@ -81,6 +81,39 @@ test('a lone ready lane goes immediately with one promotion run', t => {
   assert.equal(f.queue.load().results[0].outcome, 'promoted'); assert.equal(f.runs(), 1);
 });
 
+test('STOP during a batch memory wait refuses promotion and permits retry after clearing', async t => {
+  const f = fixture(t), workspace = f.lane('stopped'); f.add('stopped');
+  const before = f.git(['rev-parse', 'main']), head = f.git(['rev-parse', 'HEAD'], workspace);
+  const memory = path.join(f.root, 'memory.json'), stop = path.join(f.repo, '.lane/supervisor/STOP');
+  const healthy = { available: 8 * 1024 ** 3, swap_used: 0 };
+  fs.writeFileSync(memory, JSON.stringify({ ...healthy, available: 128 * 1024 ** 2 }));
+  f.env.TEST_MEMORY_FILE = memory;
+  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+  const done = waitForExit(worker);
+  try {
+    await until(() => {
+      const batch = f.queue.load().current;
+      const log = batch && path.join(f.queue.directory, 'batches', batch.id, 'train.log');
+      return log && fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure');
+    });
+    assert.equal(f.runs(), 0);
+    assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false);
+    fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'stop during wait');
+    const r = await done; assert.equal(r.code, 0, r.stderr);
+    const saved = f.queue.load();
+    assert.equal(saved.results[0].outcome, 'refused');
+    assert.equal(saved.current, null); assert.equal(saved.interrupted?.length ?? 0, 0);
+    assert.match(saved.results[0].reason, /supervisor STOP exists; nothing merged/);
+    assert.equal(f.runs(), 0); assert.equal(f.git(['rev-parse', 'main']), before);
+    assert.equal(f.git(['rev-parse', 'HEAD'], workspace), head);
+    fs.unlinkSync(stop); fs.writeFileSync(memory, JSON.stringify(healthy));
+    const [retry] = f.add('stopped'); assert.notEqual(retry.id, saved.results[0].id);
+    const resumed = f.drain(); assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(f.queue.load().results.at(-1).outcome, 'promoted');
+    assert.equal(f.queue.load().results.at(-1).id, retry.id); assert.equal(f.runs(), 1);
+  } finally { fs.writeFileSync(memory, JSON.stringify(healthy)); await done; }
+});
+
 test('completed batch notices wait for empty input and deliver each lane once with one gate', async t => {
   const f = fixture(t); for (const topic of ['first', 'second']) { f.lane(topic); f.add(topic); }
   f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '10';

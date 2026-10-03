@@ -2593,6 +2593,16 @@ switch (command) {
     if (!topic || rest.length) fail('usage: lane promote-batch RECEIPT');
     const root = repositoryRoot({ requiredBy: 'promote' });
     try {
+      try {
+        waitForMemory({ label: 'lane promote', check: () => {
+          if (existsSync(join(root, '.lane/supervisor/STOP'))) {
+            throw Object.assign(new Error('supervisor STOP exists; nothing merged'), { code: 'PROMOTION_STOPPED' });
+          }
+        } });
+      } catch (error) {
+        if (error.code !== 'PROMOTION_STOPPED') throw error;
+        // Let the train's existing guards persist each member's STOP refusal.
+      }
       withPromotionLock(() => runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
         main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings() }));
     } catch (error) { fail(error.message); }

@@ -1,0 +1,106 @@
+TAP version 13
+# Subtest: defaults, legacy commands, partial tracked overrides and invalid declarations
+ok 1 - defaults, legacy commands, partial tracked overrides and invalid declarations
+  ---
+  duration_ms: 244.834875
+  ...
+# Subtest: a worker check, promotion check and promotion reuse their exact commands; release never runs
+ok 2 - a worker check, promotion check and promotion reuse their exact commands; release never runs
+  ---
+  duration_ms: 997.929917
+  ...
+# Subtest: pane identities are absent from preparation, validation and fingerprints
+ok 3 - pane identities are absent from preparation, validation and fingerprints
+  ---
+  duration_ms: 657.194458
+  ...
+# Subtest: same tree after empty commits and a clean rebase reuses validation across tiers
+ok 4 - same tree after empty commits and a clean rebase reuses validation across tiers
+  ---
+  duration_ms: 579.038208
+  ...
+# Subtest: tree, command, environment, preparation and declared environment changes invalidate reuse
+ok 5 - tree, command, environment, preparation and declared environment changes invalidate reuse
+  ---
+  duration_ms: 1043.15975
+  ...
+# Subtest: red, signal, dirty and moved-head executions never supply reusable green evidence
+ok 6 - red, signal, dirty and moved-head executions never supply reusable green evidence
+  ---
+  duration_ms: 1033.329583
+  ...
+# Subtest: commands that start and exit 75 record failed receipts in both validation tiers
+ok 7 - commands that start and exit 75 record failed receipts in both validation tiers
+  ---
+  duration_ms: 885.360333
+  ...
+# Subtest: worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+ok 8 - worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+  ---
+  duration_ms: 838.214334
+  ...
+# Subtest: a started command exiting 75 is a failure in check and promote, never a slot refusal
+ok 9 - a started command exiting 75 is a failure in check and promote, never a slot refusal
+  ---
+  duration_ms: 1117.697375
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retries
+ok 10 - promotion holds the slot without replaying the chain when leaf retries
+  ---
+  duration_ms: 327.10775
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retry exhausted
+ok 11 - promotion holds the slot without replaying the chain when leaf retry exhausted
+  ---
+  duration_ms: 345.797833
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf declines
+ok 12 - promotion holds the slot without replaying the chain when leaf declines
+  ---
+  duration_ms: 337.162292
+  ...
+# Subtest: promotion holds the slot without replaying the chain when earlier timeout text
+ok 13 - promotion holds the slot without replaying the chain when earlier timeout text
+  ---
+  duration_ms: 341.410542
+  ...
+# Subtest: a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+ok 14 - a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+  ---
+  duration_ms: 545.72825
+  ...
+# Subtest: overlapping checks serialize evidence without running the same command twice
+ok 15 - overlapping checks serialize evidence without running the same command twice
+  ---
+  duration_ms: 594.039375
+  ...
+# Subtest: promotion checks in different projects serialize and a nested command uses the held slot
+ok 16 - promotion checks in different projects serialize and a nested command uses the held slot
+  ---
+  duration_ms: 870.531625
+  ...
+# Subtest: bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+ok 17 - bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+  ---
+  duration_ms: 686.427959
+  ...
+# Subtest: cold start surfaces host pressure and memory/CPU process evidence without changing record status
+ok 18 - cold start surfaces host pressure and memory/CPU process evidence without changing record status
+  ---
+  duration_ms: 217.537375
+  ...
+# Subtest: cold start and entry policy expose command basenames and resource figures without process argv
+ok 19 - cold start and entry policy expose command basenames and resource figures without process argv
+  ---
+  duration_ms: 290.093917
+  ...
+# Subtest: supervisor handle exposes review memory wait before pressure clears
+ok 20 - supervisor handle exposes review memory wait before pressure clears
+  ---
+  duration_ms: 9234.077959
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent

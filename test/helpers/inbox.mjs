@@ -37,7 +37,7 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
   const owned = new Map([[entry.pid, entry]]);
   try {
     let current;
-    const stoppedBy = Date.now() + 5000;
+    const stoppedBy = Date.now() + loadTimeout(5000);
     for (;;) {
       current = tracker.snapshot();
       if (!current.ok) throw Error(`Cannot confirm fixture inbox children: ${file}`);
@@ -63,7 +63,7 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
     signal(entry, 'SIGCONT');
     throw error;
   }
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + loadTimeout(5000);
   while (owned.size) {
     const current = tracker.snapshot();
     if (!current.ok) throw Error(`Cannot confirm fixture inbox shutdown: ${file}`);

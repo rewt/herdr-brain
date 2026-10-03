@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnChild, spawnScenarioChild, waitForExit } from './helpers/child.mjs';
 import { killProcess, registerProcess, createProcessTracker } from './helpers/processes.mjs';
 import { spawnDetachedFixture, waitForDetachedCleanup } from './helpers/detached.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 const helper = new URL('./helpers/bounded-test.mjs', import.meta.url).href;
 const childHelper = new URL('./helpers/child.mjs', import.meta.url).href;
@@ -14,10 +15,10 @@ const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
 process.env.ORG_ACTOR = 'test-hangs-regression';
 
 // Nested suites include startup, native fixture preparation and group audit.
-// Give those compound scenarios their own bound; ordinary commands keep 15s.
-const launchTimeout = 30_000;
+// Give those compound scenarios their own load-aware base allowance.
+const launchTimeout = loadTimeout(30_000);
 function runFixture(t, args, options = {}) {
-  return spawnChild(t, process.execPath, [runner, ...args], options, 35_000);
+  return spawnScenarioChild(t, process.execPath, [runner, ...args], options);
 }
 async function launched(child, file) {
   let result, failure;
@@ -87,7 +88,7 @@ function fixture(t, source) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const file = path.join(root, 'culprit.test.mjs');
   fs.writeFileSync(file, `import test from ${JSON.stringify(helper)};
-import {spawnChild,waitForExit} from ${JSON.stringify(childHelper)};
+import {spawnChild,spawnScenarioChild,waitForExit} from ${JSON.stringify(childHelper)};
 import fs from 'node:fs';
 ${source(root)}`);
   return { root, file };
@@ -211,7 +212,7 @@ while(true) {}
 });`);
       const outer = path.join(root, 'outer.json');
       return `test('enclosing nested runner',async(t)=>{
-const child=spawnChild(t,process.execPath,[${JSON.stringify(runner)},${JSON.stringify(nested)}],{},35000);
+const child=spawnScenarioChild(t,process.execPath,[${JSON.stringify(runner)},${JSON.stringify(nested)}]);
 fs.writeFileSync(${JSON.stringify(outer + '.tmp')},JSON.stringify({file:process.pid,worker:process.ppid,runner:child.pid}));
 fs.renameSync(${JSON.stringify(outer + '.tmp')},${JSON.stringify(outer)});
 await waitForExit(child);

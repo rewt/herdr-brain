@@ -104,7 +104,10 @@ for (const stage of ['start', 'prepare', 'commit']) {
   for (const mode of ['exhausted', 'refused']) test(`${mode} ${stage} replies preserve the ref and appropriate checkout locks`, async t => {
     const f = fixture(t, stage, mode), r = await f.run();
     assert.equal(r.code, 1, r.stderr + r.stdout);
-    assert.match(r.stderr, mode === 'exhausted' ? /Git ref transaction timed out/ : new RegExp(`injected ${stage} refusal`));
+    // stderr and the refusal reply arrive independently; the product can use
+    // its stage-specific fallback before the injected stderr text is observed.
+    assert.match(r.stderr, mode === 'exhausted' ? /Git ref transaction timed out/
+      : new RegExp(`injected ${stage} refusal|Git ref transaction refused ${stage}`));
     assert.equal(f.git(['rev-parse', f.plan.branch]), f.plan.from);
     assert.equal(f.git(['rev-parse', 'main']), f.plan.mainHead);
     const uncertain = stage === 'commit';

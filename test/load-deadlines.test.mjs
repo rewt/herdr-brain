@@ -8,7 +8,7 @@ import { lookupProcess, createProcessTracker } from './helpers/processes.mjs';
 import { environmentFingerprint } from '../lanes/validation.mjs';
 import { HerdrClient } from '../lanes/board/herdr-client.mjs';
 import { EventEmitter } from 'node:events';
-import { waitForInboxIdle } from './helpers/inbox.mjs';
+import { stopFixtureInbox, waitForInboxIdle } from './helpers/inbox.mjs';
 import { initOrg, transact, withLock } from '../lib/store.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 
@@ -228,4 +228,45 @@ test('inbox fixture teardown waits through loaded owner shutdown and preserves a
   fs.mkdirSync(lock);
   await assert.rejects(waitForInboxIdle(inbox), /fixture inbox owner did not exit/);
   assert.equal(fs.existsSync(lock), true, 'an unconfirmed owner is never removed or signalled');
+});
+
+for (const delayed of ['stop', 'shutdown']) test(`owned inbox teardown allows loaded ${delayed} confirmation before clearing its processes`, async t => {
+  withLoad(t);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'loaded-owned-inbox-'));
+  const inbox = path.join(root, 'inbox.log'), lock = `${inbox}.owner.lock`, script = path.join(root, 'owner.mjs');
+  const argv = [process.execPath, script, '--inbox', inbox, '--owner-worker'];
+  fs.mkdirSync(lock);
+  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: 101, argv }));
+  const now = Date.now;
+  let elapsed = 0, phase = 'initial', reads = 0;
+  Date.now = () => elapsed;
+  t.after(() => { Date.now = now; fs.rmSync(root, { recursive: true, force: true }); });
+  const signals = [];
+  const tracker = {
+    snapshot() {
+      if (phase === delayed) elapsed += 6000;
+      reads++;
+      const rows = new Map([[process.pid, { pid: process.pid, pgid: 7 }]]);
+      if (phase !== 'shutdown' || (delayed === 'shutdown' && reads < 2)) {
+        rows.set(101, { pid: 101, pgid: 7, identity: 'owner-birth', command: argv.join(' '),
+          state: phase === 'initial' || (phase === 'stop' && delayed === 'stop' && reads < 2) ? 'S' : 'T' });
+        rows.set(102, { pid: 102, ppid: 101, pgid: 7, identity: 'child-birth', command: 'fixture transport', state: 'S' });
+      }
+      return { ok: true, value: rows };
+    },
+    killProcess(target, signal) {
+      signals.push([target.pid, target.identity, target.command, target.group, signal]);
+      if (signal === 'SIGSTOP') { phase = 'stop'; reads = 0; }
+      if (target.pid === 101 && signal === 'SIGKILL') { phase = 'shutdown'; reads = 0; }
+      return { ok: true, signaled: true };
+    },
+  };
+  await stopFixtureInbox(inbox, { script, tracker });
+  assert.equal(elapsed, 12000, 'confirmation outlasted the former five-second window');
+  assert.deepEqual(signals, [
+    [101, 'owner-birth', argv.join(' '), false, 'SIGSTOP'],
+    [102, 'child-birth', 'fixture transport', false, 'SIGKILL'],
+    [101, 'owner-birth', argv.join(' '), false, 'SIGKILL'],
+  ]);
+  assert.equal(fs.existsSync(lock), true, 'the helper leaves scratch removal to the fixture');
 });

@@ -521,13 +521,15 @@ describe('workspace configuration and timeout retry', () => {
   it('promotion retries only the timed-out heavy step and continues the remaining steps once', async () => {
     const s = scratch(), count = s.file('steps'), preload = s.file('load.mjs');
     fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
+    const scripts = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts;
     fs.writeFileSync(s.file('npm'), `#!${process.execPath}
 const fs=require('fs'),file=${JSON.stringify(count)},name=process.argv[3];
+if(process.argv[2]==='test'){const r=require('child_process').spawnSync('/bin/sh',['-c',${JSON.stringify(scripts.test)}],{stdio:'inherit'});process.exit(r.status??1);}
 const previous=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
 fs.appendFileSync(file,name+'\\n');
 process.exit(name==='test:core'&&!previous.includes('test:core')?124:0);
 `, { mode: 0o755 });
-    const steps = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts['test:promotion:steps'];
+    const steps = scripts['test:promotion:steps'];
     const done = await cli(['run', 'promotion adapter', '--lock-path', s.lockPath, '--retry-timeout-under-load',
       '--', '/bin/sh', '-c', steps], { env: { ...ENV, PATH: `${s.dir}:${ENV.PATH}`, NODE_OPTIONS: `--import=${preload}` } }).done;
     assert.equal(done.code, 0, done.stderr);

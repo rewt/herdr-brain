@@ -18,6 +18,12 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
     HOME: path.join(root, 'home'), XDG_CONFIG_HOME: path.join(root, 'xdg'),
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|MONITOR_)/.test(key) || (key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(key))) delete env[key];
+  // Reset project/session inputs without sending offline fixture gates to the
+  // real host lock. Each fixture owns its temporary slot and nested commands.
+  env.MONITOR_TEST_SLOT_PATH = path.join(root, 'test-slot.lock');
+  env.MONITOR_TEST_SLOT_COMPAT_PATH = env.MONITOR_TEST_SLOT_PATH;
+  delete env.BCH_CLOAK_TEST_SLOT_TOKEN;
+  delete env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS;
   env.ORG_ACTOR = actor;
   env.SUPERVISOR_INPUT_CONFIRM_SECONDS = '0.02';
   env.SUPERVISOR_INPUT_POLL_SECONDS = '0.02';

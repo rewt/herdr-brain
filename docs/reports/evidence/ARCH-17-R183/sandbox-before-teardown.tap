@@ -1,0 +1,21 @@
+TAP version 13
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied
+ok 1 - real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied
+  ---
+  duration_ms: 7646.196583
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7684.755708

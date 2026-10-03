@@ -12,6 +12,7 @@ import { housekeepingSnapshot } from '../../housekeeping/command.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { sessionEnvironment, sessionHookArguments } from '../session-hooks.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const linuxBoot = '12345678-1234-4234-8234-123456789abc';
@@ -29,6 +30,7 @@ const exec = (file, args, cwd, env = {}, input) => {
 const good = r => { assert.equal(r.status, 0, r.stderr || r.error?.message); return r.stdout.trim(); };
 function fixture(t) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'supervisor-entry-')));
+  fixtureFleet(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'repo'); fs.mkdirSync(repo);
   const git = args => good(exec('git', args, repo));

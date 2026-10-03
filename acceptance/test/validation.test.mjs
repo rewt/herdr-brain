@@ -102,12 +102,19 @@ test('actual native transport validates and promotes work and approved routes of
     const previous = { ...process.env };
     for (const key of Object.keys(process.env)) if (/^(ORG_|LANE_|MONITOR_|GIT_|HERDR_|ACCEPTANCE_)/u.test(key)) delete process.env[key];
     delete process.env.NODE_TEST_CONTEXT;
-    Object.assign(process.env, { TMPDIR: temp, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', OPENSSL_CONF: '/dev/null' });
+    // The native transport rejects every HERDR_ capability. Use a scratch home
+    // for default fleet/console discovery while preserving that exact boundary.
+    Object.assign(process.env, { HOME: temp, TMPDIR: temp,
+      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', OPENSSL_CONF: '/dev/null' });
     t.after(() => { for (const key of Object.keys(process.env)) delete process.env[key]; Object.assign(process.env, previous); });
     const outside = path.join(root, 'private-canary'); fs.writeFileSync(outside, 'private');
     const options = { cwd: repo, sandboxBinary: native, runtimeDir: path.join(temp, 'runtime'), worktreeRoot: spec.worktreeRoot };
     for (const taskName of ['work', 'routes']) {
       const entry = createEntry(options); entries.push(entry);
+      const fleet = JSON.parse(fs.readFileSync(path.join(temp, '.herdr-monitor/fleet.json'), 'utf8'));
+      assert.deepEqual(Object.keys(fleet.projects), ['project']);
+      assert.equal(fleet.projects.project.checkout, repo);
+      assert.equal(fleet.projects.project.record, path.join(repo, '.org'));
       const task = entry.dispatch({ op: 'start', text: `Offline ${taskName}` });
       if (taskName === 'routes') {
         command(process.execPath, [path.join(source, 'bin/org.mjs'), 'answer', entry.context().routing.question, 'yes'], repo,

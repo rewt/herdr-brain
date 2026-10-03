@@ -1,0 +1,21 @@
+TAP version 13
+# monitor entry: keeping lane/entry-8ee264b3a8de at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-sandbox-test-IYVkbO/lanes/lane-entry-8ee264b3a8de: a run was started in this lane
+# monitor entry: keeping lane/entry-24630f0476c9 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-sandbox-test-IYVkbO/lanes/lane-entry-24630f0476c9: a run was started in this lane
+# monitor entry: keeping lane/entry-f93ed7aa2dc7 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-sandbox-test-IYVkbO/lanes/lane-entry-f93ed7aa2dc7: a run was started in this lane
+# monitor entry: keeping lane/entry-0145f1ec6e79 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-sandbox-test-IYVkbO/lanes/lane-entry-0145f1ec6e79: a run was started in this lane
+# monitor entry: keeping lane/entry-425b9d25e788 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-sandbox-test-IYVkbO/lanes/lane-entry-425b9d25e788: a run was started in this lane
+# Subtest: real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied
+ok 1 - real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied
+  ---
+  duration_ms: 7857.7345
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7896.075917

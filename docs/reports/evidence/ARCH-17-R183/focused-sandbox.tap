@@ -1,0 +1,867 @@
+TAP version 13
+# Subtest: watch acknowledges a delayed startup at load 24, without launching real background work
+ok 1 - watch acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 203.63125
+  type: 'test'
+  ...
+# Subtest: promote acknowledges a delayed startup at load 24, without launching real background work
+ok 2 - promote acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 220.461958
+  type: 'test'
+  ...
+# Subtest: inbox acknowledges a delayed startup at load 24, without launching real background work
+ok 3 - inbox acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 158.697792
+  type: 'test'
+  ...
+# Subtest: housekeeping acknowledges a delayed startup at load 24, without launching real background work
+ok 4 - housekeeping acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 228.911167
+  type: 'test'
+  ...
+# Subtest: interruption requires the current banner and an exclusively wheel-junk composer
+ok 5 - interruption requires the current banner and an exclusively wheel-junk composer
+  ---
+  duration_ms: 0.983833
+  type: 'test'
+  ...
+# Subtest: recorded promoted workers close through the shared tidy planner
+ok 6 - recorded promoted workers close through the shared tidy planner
+  ---
+  duration_ms: 158.659625
+  type: 'test'
+  ...
+# Subtest: abandoned promoted workers may close
+ok 7 - abandoned promoted workers may close
+  ---
+  duration_ms: 154.294166
+  type: 'test'
+  ...
+# Subtest: CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+ok 8 - CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+  ---
+  duration_ms: 128.63925
+  type: 'test'
+  ...
+# Subtest: preserves open workers/tabs
+ok 9 - preserves open workers/tabs
+  ---
+  duration_ms: 96.783167
+  type: 'test'
+  ...
+# Subtest: preserves unpromoted workers/tabs
+ok 10 - preserves unpromoted workers/tabs
+  ---
+  duration_ms: 117.787417
+  type: 'test'
+  ...
+# Subtest: preserves dirty workers/tabs
+ok 11 - preserves dirty workers/tabs
+  ---
+  duration_ms: 114.928833
+  type: 'test'
+  ...
+# Subtest: preserves blocked workers/tabs
+ok 12 - preserves blocked workers/tabs
+  ---
+  duration_ms: 99.574875
+  type: 'test'
+  ...
+# Subtest: preserves working workers/tabs
+ok 13 - preserves working workers/tabs
+  ---
+  duration_ms: 103.131542
+  type: 'test'
+  ...
+# Subtest: preserves unknown workers/tabs
+ok 14 - preserves unknown workers/tabs
+  ---
+  duration_ms: 102.031083
+  type: 'test'
+  ...
+# Subtest: preserves unnamed workers/tabs
+ok 15 - preserves unnamed workers/tabs
+  ---
+  duration_ms: 105.494041
+  type: 'test'
+  ...
+# Subtest: preserves unrecorded workers/tabs
+ok 16 - preserves unrecorded workers/tabs
+  ---
+  duration_ms: 95.297917
+  type: 'test'
+  ...
+# Subtest: preserves replaced workers/tabs
+ok 17 - preserves replaced workers/tabs
+  ---
+  duration_ms: 102.039709
+  type: 'test'
+  ...
+# Subtest: preserves waiting workers/tabs
+ok 18 - preserves waiting workers/tabs
+  ---
+  duration_ms: 95.735
+  type: 'test'
+  ...
+# Subtest: preserves report-blocked workers/tabs
+ok 19 - preserves report-blocked workers/tabs
+  ---
+  duration_ms: 97.18475
+  type: 'test'
+  ...
+# Subtest: preserves report-needs-human workers/tabs
+ok 20 - preserves report-needs-human workers/tabs
+  ---
+  duration_ms: 95.456
+  type: 'test'
+  ...
+# Subtest: preserves new-open-run workers/tabs
+ok 21 - preserves new-open-run workers/tabs
+  ---
+  duration_ms: 106.285584
+  type: 'test'
+  ...
+# Subtest: preserves declined workers/tabs
+ok 22 - preserves declined workers/tabs
+  ---
+  duration_ms: 96.01525
+  type: 'test'
+  ...
+# Subtest: preserves wrong-repo workers/tabs
+ok 23 - preserves wrong-repo workers/tabs
+  ---
+  duration_ms: 88.0555
+  type: 'test'
+  ...
+# Subtest: preserves mixed-pane workers/tabs
+ok 24 - preserves mixed-pane workers/tabs
+  ---
+  duration_ms: 116.220292
+  type: 'test'
+  ...
+# Subtest: preserves running-shell workers/tabs
+ok 25 - preserves running-shell workers/tabs
+  ---
+  duration_ms: 119.3835
+  type: 'test'
+  ...
+# Subtest: preserves session-done workers/tabs
+ok 26 - preserves session-done workers/tabs
+  ---
+  duration_ms: 114.907958
+  type: 'test'
+  ...
+# Subtest: preserves review-file workers/tabs
+ok 27 - preserves review-file workers/tabs
+  ---
+  duration_ms: 101.882208
+  type: 'test'
+  ...
+# Subtest: latest open fix round defeats an older reported run using the same worker name
+ok 28 - latest open fix round defeats an older reported run using the same worker name
+  ---
+  duration_ms: 101.413
+  type: 'test'
+  ...
+# Subtest: unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+ok 29 - unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+  ---
+  duration_ms: 114.37975
+  type: 'test'
+  ...
+# Subtest: never closes or resumes its own tab
+ok 30 - never closes or resumes its own tab
+  ---
+  duration_ms: 138.718959
+  type: 'test'
+  ...
+# Subtest: an interrupted open worker resumes once, and durable attempts survive a new runner
+ok 31 - an interrupted open worker resumes once, and durable attempts survive a new runner
+  ---
+  duration_ms: 129.754875
+  type: 'test'
+  ...
+# Subtest: failed prompt is logged and never replayed at the same state sequence
+ok 32 - failed prompt is logged and never replayed at the same state sequence
+  ---
+  duration_ms: 126.537167
+  type: 'test'
+  ...
+# Subtest: unrecorded disk report, human words, other harness and absent identity prevent resume
+ok 33 - unrecorded disk report, human words, other harness and absent identity prevent resume
+  ---
+  duration_ms: 161.919958
+  type: 'test'
+  ...
+# Subtest: dry run reports close/resume plans and persists no attempts or live actions
+ok 34 - dry run reports close/resume plans and persists no attempts or live actions
+  ---
+  duration_ms: 150.394208
+  type: 'test'
+  ...
+# Subtest: fresh state or record changes prevent deletion
+ok 35 - fresh state or record changes prevent deletion
+  ---
+  duration_ms: 193.723667
+  type: 'test'
+  ...
+# Subtest: a run completed during the pre-input recheck receives no resume input
+ok 36 - a run completed during the pre-input recheck receives no resume input
+  ---
+  duration_ms: 111.86275
+  type: 'test'
+  ...
+# Subtest: a record change after clearing composer suppresses the prompt
+ok 37 - a record change after clearing composer suppresses the prompt
+  ---
+  duration_ms: 124.677667
+  type: 'test'
+  ...
+# Subtest: incomplete or failed reads never authorize any action
+ok 38 - incomplete or failed reads never authorize any action
+  ---
+  duration_ms: 128.277584
+  type: 'test'
+  ...
+# Subtest: one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+ok 39 - one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+  ---
+  duration_ms: 580.46125
+  type: 'test'
+  ...
+# Subtest: the loop rereads opt-in and shuts down with its lock removed
+ok 40 - the loop rereads opt-in and shuts down with its lock removed
+  ---
+  duration_ms: 1389.38925
+  type: 'test'
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a canonical checkout
+ok 41 - no configuration defaults on and project record/main are discovered from a canonical checkout
+  ---
+  duration_ms: 374.681417
+  type: 'test'
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a linked preview
+ok 42 - no configuration defaults on and project record/main are discovered from a linked preview
+  ---
+  duration_ms: 357.867833
+  type: 'test'
+  ...
+# Subtest: no record and no Git project are quiet no-ops
+ok 43 - no record and no Git project are quiet no-ops
+  ---
+  duration_ms: 219.587375
+  type: 'test'
+  ...
+# Subtest: an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+ok 44 - an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+  ---
+  duration_ms: 806.958792
+  type: 'test'
+  ...
+# Subtest: housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+ok 45 - housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+  ---
+  duration_ms: 1.405042
+  type: 'test'
+  ...
+# Subtest: canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 46 - canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 529.715417
+  type: 'test'
+  ...
+# Subtest: installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 47 - installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 522.133791
+  type: 'test'
+  ...
+# Subtest: canonical checkout start stays idempotent after a lane is removed
+ok 48 - canonical checkout start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1467.730916
+  type: 'test'
+  ...
+# Subtest: installed copy start stays idempotent after a lane is removed
+ok 49 - installed copy start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1450.596333
+  type: 'test'
+  ...
+# Subtest: dry-run start leaves no timer process
+ok 50 - dry-run start leaves no timer process
+  ---
+  duration_ms: 148.835125
+  type: 'test'
+  ...
+# Subtest: old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+ok 51 - old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+  ---
+  duration_ms: 34.069875
+  type: 'test'
+  ...
+# Subtest: lane code cannot --once live housekeeping even with the canonical target
+ok 52 - lane code cannot --once live housekeeping even with the canonical target
+  ---
+  duration_ms: 196.110625
+  type: 'test'
+  ...
+# Subtest: canonical code cannot --once live housekeeping from a linked target
+ok 53 - canonical code cannot --once live housekeeping from a linked target
+  ---
+  duration_ms: 155.029208
+  type: 'test'
+  ...
+# Subtest: lane code cannot --start live housekeeping even with the canonical target
+ok 54 - lane code cannot --start live housekeeping even with the canonical target
+  ---
+  duration_ms: 147.929333
+  type: 'test'
+  ...
+# Subtest: canonical code cannot --start live housekeeping from a linked target
+ok 55 - canonical code cannot --start live housekeeping from a linked target
+  ---
+  duration_ms: 145.266792
+  type: 'test'
+  ...
+# Subtest: lane code cannot --loop live housekeeping even with the canonical target
+ok 56 - lane code cannot --loop live housekeeping even with the canonical target
+  ---
+  duration_ms: 155.11
+  type: 'test'
+  ...
+# Subtest: canonical code cannot --loop live housekeeping from a linked target
+ok 57 - canonical code cannot --loop live housekeeping from a linked target
+  ---
+  duration_ms: 183.142542
+  type: 'test'
+  ...
+# Subtest: a record CLI override in a lane cannot pin a live schedule to removable code
+ok 58 - a record CLI override in a lane cannot pin a live schedule to removable code
+  ---
+  duration_ms: 181.496834
+  type: 'test'
+  ...
+# Subtest: linked code remains usable for isolated dry-run previews
+ok 59 - linked code remains usable for isolated dry-run previews
+  ---
+  duration_ms: 330.549375
+  type: 'test'
+  ...
+# Subtest: an existing different-script owner never reports already-running or alters the old lock
+ok 60 - an existing different-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 162.391209
+  type: 'test'
+  ...
+# Subtest: an existing different-record owner never reports already-running or alters the old lock
+ok 61 - an existing different-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 172.345
+  type: 'test'
+  ...
+# Subtest: an existing missing-script owner never reports already-running or alters the old lock
+ok 62 - an existing missing-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 160.666542
+  type: 'test'
+  ...
+# Subtest: an existing missing-record owner never reports already-running or alters the old lock
+ok 63 - an existing missing-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 191.939042
+  type: 'test'
+  ...
+# Subtest: an existing legacy owner never reports already-running or alters the old lock
+ok 64 - an existing legacy owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 192.143792
+  type: 'test'
+  ...
+# Subtest: promotion cleanup inspects and closes only the requested lane workspace
+ok 65 - promotion cleanup inspects and closes only the requested lane workspace
+  ---
+  duration_ms: 181.601666
+  type: 'test'
+  ...
+# monitor entry: keeping lane/entry-1054554adfd4 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-r1rGzY/lanes/lane-entry-1054554adfd4: a run was started in this lane
+# Subtest: entry reserves bounded owner, wrapper, preparation and reply time for promotion
+ok 66 - entry reserves bounded owner, wrapper, preparation and reply time for promotion
+  ---
+  duration_ms: 0.572042
+  type: 'test'
+  ...
+# Subtest: declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+not ok 67 - declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+  ---
+  duration_ms: 1371.792083
+  type: 'test'
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'fast owner must still enforce its shorter bound'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+  error: |-
+    prepare source: lane /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-r1rGzY/lanes/lane-entry-1054554adfd4/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-r1rGzY/repo/.lane.json)): /opt/homebrew/Cellar/node/26.4.0/bin/node slow.cjs
+    sandbox-exec: sandbox_apply: Operation not permitted
+    monitor validation: sandboxed validation exited 71
+    GATE 67d9190de35244f04d1153af5cb58a40ece127ea exit=1 (0.501s)
+  stack: |-
+    command (file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-r1rGzY/product/discovery/runtime.mjs:25:40)
+    lane (file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-r1rGzY/product/discovery/runtime.mjs:211:12)
+    Object.dispatch (file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-r1rGzY/product/discovery/runtime.mjs:288:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/validation-deadlines.test.mjs:78:29
+    getActual (node:assert:580:5)
+    strict.throws (node:assert:728:24)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/validation-deadlines.test.mjs:78:10
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  operator: 'throws'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/validation-deadlines.test.mjs:78:10
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 68 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2341.203125
+  type: 'test'
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 69 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1237.55425
+  type: 'test'
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 70 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 1740.358916
+  type: 'test'
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 71 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1370.507917
+  type: 'test'
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 72 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 469.694667
+  type: 'test'
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 73 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 1603.64
+  type: 'test'
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 74 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1887.307375
+  type: 'test'
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 75 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2017.098666
+  type: 'test'
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 76 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1877.96825
+  type: 'test'
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 77 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 1975.648083
+  type: 'test'
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 78 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 4134.421583
+  type: 'test'
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 79 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1262.752375
+  type: 'test'
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 80 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 3937.2075
+  type: 'test'
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 81 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 2442.12425
+  type: 'test'
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 82 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 709.106417
+  type: 'test'
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 83 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 272.176583
+  type: 'test'
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 84 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 340.279458
+  type: 'test'
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 85 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 676.8165
+  type: 'test'
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 86 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 3787.025209
+  type: 'test'
+  ...
+# Subtest: crash during actual saved promoted phase never repeats gate or deletes the lane, even with legacy freshness
+ok 87 - crash during actual saved promoted phase never repeats gate or deletes the lane, even with legacy freshness
+  ---
+  duration_ms: 1211.650292
+  type: 'test'
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 88 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1643.406916
+  type: 'test'
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 89 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 394.084959
+  type: 'test'
+  ...
+# Subtest: durable supervisor pane binding survives native restore, clear and compact without adapter env
+ok 90 - durable supervisor pane binding survives native restore, clear and compact without adapter env
+  ---
+  duration_ms: 1592.124417
+  type: 'test'
+  ...
+# Subtest: claude adapter reuses the project SessionStart entry exactly once
+ok 91 - claude adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 851.440084
+  type: 'test'
+  ...
+# Subtest: codex adapter reuses the project SessionStart entry exactly once
+ok 92 - codex adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 845.847875
+  type: 'test'
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 93 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 1077.197042
+  type: 'test'
+  ...
+# Subtest: adapter exports its known supervisor agent identity
+ok 94 - adapter exports its known supervisor agent identity
+  ---
+  duration_ms: 93.050167
+  type: 'test'
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 95 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 264.8255
+  type: 'test'
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 96 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 867.242541
+  type: 'test'
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 97 - entry respects {"enabled":false}
+  ---
+  duration_ms: 167.637916
+  type: 'test'
+  ...
+# Subtest: entry respects {"resume":false}
+ok 98 - entry respects {"resume":false}
+  ---
+  duration_ms: 187.014792
+  type: 'test'
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 99 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 132.41375
+  type: 'test'
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 100 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 183.259625
+  type: 'test'
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 101 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 372.295125
+  type: 'test'
+  ...
+# Subtest: native hooks deliver the same entry on startup
+ok 102 - native hooks deliver the same entry on startup
+  ---
+  duration_ms: 500.443209
+  type: 'test'
+  ...
+# Subtest: native hooks deliver the same entry on resume
+ok 103 - native hooks deliver the same entry on resume
+  ---
+  duration_ms: 523.899667
+  type: 'test'
+  ...
+# Subtest: native hooks deliver the same entry on clear
+ok 104 - native hooks deliver the same entry on clear
+  ---
+  duration_ms: 508.416041
+  type: 'test'
+  ...
+# Subtest: native hooks deliver the same entry on compact
+ok 105 - native hooks deliver the same entry on compact
+  ---
+  duration_ms: 488.247416
+  type: 'test'
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 106 - hook skips or explains unmarked without blocking startup
+  ---
+  duration_ms: 143.390959
+  type: 'test'
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 107 - hook skips or explains worker without blocking startup
+  ---
+  duration_ms: 122.433791
+  type: 'test'
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 108 - hook skips or explains lane without blocking startup
+  ---
+  duration_ms: 163.69725
+  type: 'test'
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 109 - hook skips or explains foreign without blocking startup
+  ---
+  duration_ms: 148.344084
+  type: 'test'
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 110 - hook skips or explains bad-input without blocking startup
+  ---
+  duration_ms: 132.261958
+  type: 'test'
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 111 - hook skips or explains missing-record without blocking startup
+  ---
+  duration_ms: 245.746084
+  type: 'test'
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 112 - hook skips or explains worker-bypass without blocking startup
+  ---
+  duration_ms: 164.205125
+  type: 'test'
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 113 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 341.897916
+  type: 'test'
+  ...
+# Subtest: claude adapter binds supervisor and supplies native hooks only to supervisors
+ok 114 - claude adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 836.273958
+  type: 'test'
+  ...
+# Subtest: claude adapter binds worker and supplies native hooks only to supervisors
+ok 115 - claude adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 713.753583
+  type: 'test'
+  ...
+# Subtest: codex adapter binds supervisor and supplies native hooks only to supervisors
+ok 116 - codex adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 808.279333
+  type: 'test'
+  ...
+# Subtest: codex adapter binds worker and supplies native hooks only to supervisors
+ok 117 - codex adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 752.175542
+  type: 'test'
+  ...
+# Subtest: entry safely handles STOP
+ok 118 - entry safely handles STOP
+  ---
+  duration_ms: 285.104375
+  type: 'test'
+  ...
+# Subtest: entry safely handles invalid-config
+ok 119 - entry safely handles invalid-config
+  ---
+  duration_ms: 404.785916
+  type: 'test'
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 120 - entry safely handles invalid-pid
+  ---
+  duration_ms: 343.417209
+  type: 'test'
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 121 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 389.061084
+  type: 'test'
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 122 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 183.661958
+  type: 'test'
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 123 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 205.40075
+  type: 'test'
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 124 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 176.839375
+  type: 'test'
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 125 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 166.225125
+  type: 'test'
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 126 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 199.151959
+  type: 'test'
+  ...
+# Subtest: real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied
+ok 127 - real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied # SKIP set MONITOR_TEST_SANDBOX to a native Codex executable for this offline sandbox check
+  ---
+  duration_ms: 0.303875
+  type: 'test'
+  ...
+# monitor entry: keeping lane/entry-ab5f8aae7449 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-mzKdPL/session/lanes/lane-entry-ab5f8aae7449: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 128 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 79.284334
+  type: 'test'
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 129 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 46.493166
+  type: 'test'
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 130 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 62.89875
+  type: 'test'
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+not ok 131 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 1441.231333
+  type: 'test'
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-mzKdPL/session/lanes/lane-entry-ab5f8aae7449/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-mzKdPL/project/.lane.json)): node --test
+    node:internal/modules/run_main:107
+        triggerUncaughtException(
+        ^
+
+    AssertionError [ERR_ASSERTION]: acceptance_product_boundary: product entry leaked capabilities
+        at file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-mzKdPL/transport/acceptance/native-transport.mjs:12:8
+        at ModuleJob.run (node:internal/modules/esm/module_job:447:25)
+        at async node:internal/modules/esm/loader:646:26
+        at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+
+    Node.js v26.4.0
+    monitor validation: sandboxed validation exited 1
+    GATE f5b161606b31e07d1e1c87fa6b89d2e755f95241 exit=1 (0.527s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-mzKdPL/transport/acceptance/native-transport.mjs:12:8
+    ModuleJob.run (node:internal/modules/esm/module_job:447:25)
+    async node:internal/modules/esm/loader:646:26
+    async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:25:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:211:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:288:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/acceptance/test/validation.test.mjs:139:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+  ...
+1..131
+# tests 131
+# suites 0
+# pass 128
+# fail 2
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 39644.998584

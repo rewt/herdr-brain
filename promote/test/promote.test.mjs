@@ -1,6 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit, childProcessEntry } from '../../test/helpers/child.mjs';
-import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
+import { registerProcess, killProcess, lookupProcess } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,8 +8,8 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
-import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
-import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { readInbox, inboxPath } from '../../supervisor/prompt-supervisor.mjs';
+import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 
 const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
 const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
@@ -31,6 +31,8 @@ function fixture(t) {
   delete env.NODE_TEST_CONTEXT;
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(?:DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(key)) delete env[key];
   env.ORG_ACTOR = 'promote-test-agent';
+  env.HERDR_MONITOR_FLEET = path.join(root, 'fleet');
+  env.HERDR_ORG_CONSOLE_CONFIG = path.join(root, 'console.json');
   env.SUPERVISOR_INPUT_CONFIRM_SECONDS = '0.02';
   env.SUPERVISOR_INPUT_POLL_SECONDS = '0.02';
   env.SUPERVISOR_INPUT_WAIT_SECONDS = '2';
@@ -78,11 +80,19 @@ function fixture(t) {
     try {
       await cleanupProcesses();
       await until(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')));
-      await waitForInboxIdle(path.join(repo, '.git/supervisor/inbox.log'));
+      // A record-backed notice has a different owner from the Git inbox. Stop
+      // every actual destination after senders finish and before removing files.
+      const data = queue.load();
+      const jobs = [...data.results, ...data.pending, ...(data.current ? [data.current] : [])];
+      const inboxes = new Set([path.join(repo, '.git/supervisor/inbox.log'),
+        ...jobs.map(job => job.inbox ?? inboxPath({ org: job.org, cwd: repo }))]);
+      for (const file of inboxes) await stopFixtureInbox(file, {
+        script: fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url)),
+      });
     } finally {
       for (const entry of processes.values()) killProcess(entry);
-      fs.rmSync(root, { recursive: true, force: true });
     }
+    fs.rmSync(root, { recursive: true, force: true });
   });
   return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, ownedProcess: (pid) => processes.get(pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
@@ -413,6 +423,18 @@ cp.spawnSync=function(cmd,args,options){
   assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));
   assert.ok(!actions.some((a) => ['pane','tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'));
   assert.equal(fs.existsSync(wt), false); assert.equal(fs.existsSync(other), true);
+  const inbox = path.join(org, 'supervisor/inbox.log');
+  assert.equal(f.results()[0].inbox, inbox);
+  assert.equal(readInbox(inbox)[0].state, 'pending', 'the unreadable fake supervisor retains delivery intent');
+  const pid = JSON.parse(fs.readFileSync(`${inbox}.owner.lock/owner.json`, 'utf8')).pid;
+  const owner = registerProcess(pid);
+  t.after(() => {
+    const current = lookupProcess(pid);
+    assert.ok(current.ok, current.error);
+    assert.ok(!current.value || /^Z/.test(current.value.state) || current.value.identity !== owner.identity,
+      'record inbox producer must exit before its fixture is removed');
+    assert.equal(fs.existsSync(f.root), false);
+  });
 });
 
 function blockCleanup(f) {

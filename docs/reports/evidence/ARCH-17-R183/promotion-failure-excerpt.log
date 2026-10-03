@@ -1,0 +1,167 @@
+not ok 213 - housekeeping acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 45.364458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    node:internal/modules/esm/resolve:283
+        throw new ERR_MODULE_NOT_FOUND(
+              ^
+
+    Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/loaded-startup-jCavKF/project/lib/fleet.mjs' imported from /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/loaded-startup-jCavKF/project/lib/store.mjs
+        at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+        at moduleResolve (node:internal/modules/esm/resolve:952:10)
+        at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+        at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+        at #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+        at ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+        at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+        at ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+      code: 'ERR_MODULE_NOT_FOUND',
+      url: 'file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/loaded-startup-jCavKF/project/lib/fleet.mjs'
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/startup-deadlines.test.mjs:61:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+
+not ok 578 - one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+  ---
+  duration_ms: 134.25325
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/housekeeping/test/housekeeping.test.mjs:210:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+
+not ok 579 - the loop rereads opt-in and shuts down with its lock removed
+  ---
+  duration_ms: 225.88375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    node:internal/modules/esm/resolve:283
+        throw new ERR_MODULE_NOT_FOUND(
+              ^
+
+    Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/housekeeping-JNNuPT/project/lib/fleet.mjs' imported from /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/housekeeping-JNNuPT/project/lib/store.mjs
+        at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+        at moduleResolve (node:internal/modules/esm/resolve:952:10)
+        at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+        at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+        at #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+        at ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+        at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+        at ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+      code: 'ERR_MODULE_NOT_FOUND',
+      url: 'file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/housekeeping-JNNuPT/project/lib/fleet.mjs'
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/housekeeping/test/housekeeping.test.mjs:228:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+
+not ok 720 - declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+  ---
+  duration_ms: 87.824208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: "Cannot find module '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-L2V575/product/herdr/entry-lock.mjs' imported from /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-L2V575/product/lib/fleet.mjs"
+  code: 'ERR_MODULE_NOT_FOUND'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49)
+  ...
+
+not ok 739 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 3550.56025
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'hookFailed'
+  error: "ENOTEMPTY: directory not empty, rmdir '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/promote-test-YcFrKP/record/supervisor'"
+  code: 'ENOTEMPTY'
+  stack: |-
+    Object.rmdirSync (node:fs:1215:11)
+    _rmdirSync (node:internal/fs/rimraf:262:21)
+    rimrafSync (node:internal/fs/rimraf:195:7)
+    node:internal/fs/rimraf:255:9
+    Array.forEach (<anonymous>)
+    _rmdirSync (node:internal/fs/rimraf:252:7)
+    rimrafSync (node:internal/fs/rimraf:195:7)
+    node:internal/fs/rimraf:255:9
+    Array.forEach (<anonymous>)
+    _rmdirSync (node:internal/fs/rimraf:252:7)
+  ...

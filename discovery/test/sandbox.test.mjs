@@ -4,11 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createEntry, command } from '../runtime.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { spawnSync } from 'node:child_process';
 const binary = process.env.MONITOR_TEST_SANDBOX;
 test('real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied', { skip: !binary && 'set MONITOR_TEST_SANDBOX to a native Codex executable for this offline sandbox check' }, (t) => {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-sandbox-test-'));
-  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  fixtureFleet(t, scratch);
+  const entries = [];
+  t.after(() => {
+    try { for (const entry of entries) entry.close(); }
+    finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+  });
   const repo = path.join(scratch, 'project'); fs.mkdirSync(repo);
   command('git', ['init', '-q', '-b', 'main'], repo);
   command('git', ['config', 'user.name', 'Test'], repo); command('git', ['config', 'user.email', 'test@example.invalid'], repo);
@@ -17,7 +23,12 @@ test('real native sandbox validates both lanes and promotion; outside writes and
   fs.writeFileSync(path.join(repo, 'shared.txt'), 'base\n');
   command('git', ['add', '.'], repo); command('git', ['commit', '-qm', 'Seed'], repo);
   const options = { cwd: repo, sandboxBinary: binary, runtimeDir: path.join(scratch, 'runtime'), worktreeRoot: path.join(scratch, 'lanes') };
-  const a = createEntry(options), b = createEntry(options); t.after(a.close); t.after(b.close);
+  const a = createEntry(options); entries.push(a);
+  const b = createEntry(options); entries.push(b);
+  const fleet = JSON.parse(fs.readFileSync(path.join(scratch, 'fleet/fleet.json'), 'utf8'));
+  assert.deepEqual(Object.keys(fleet.projects), ['project']);
+  assert.equal(fleet.projects.project.checkout, repo);
+  assert.equal(fleet.projects.project.record, path.join(repo, '.org'));
   for (const [entry, name] of [[a, 'a'], [b, 'b']]) {
     const task = entry.dispatch({ op: 'start', text: `Task ${name}` });
     fs.writeFileSync(path.join(task.workspace, `${name}.txt`), name);
@@ -31,7 +42,8 @@ test('real native sandbox validates both lanes and promotion; outside writes and
   }
   assert.equal(command('git', ['status', '--porcelain'], repo), '');
   assert.equal(command('git', ['rev-list', '--merges', 'main'], repo), '');
-  const c = createEntry(options), d = createEntry(options); t.after(c.close); t.after(d.close);
+  const c = createEntry(options); entries.push(c);
+  const d = createEntry(options); entries.push(d);
   for (const [entry, value] of [[c, 'left'], [d, 'right']]) {
     const task = entry.dispatch({ op: 'start', text: `Conflict ${value}` });
     fs.writeFileSync(path.join(task.workspace, 'shared.txt'), `${value}\n`);
@@ -48,7 +60,7 @@ test('real native sandbox validates both lanes and promotion; outside writes and
   d.dispatch({ op: 'continue' });
   d.dispatch({ op: 'check' }); d.dispatch({ op: 'promote' }); d.dispatch({ op: 'finish' });
   assert.equal(fs.readFileSync(path.join(repo, 'shared.txt'), 'utf8'), 'left\nright\n');
-  const e = createEntry(options); t.after(e.close);
+  const e = createEntry(options); entries.push(e);
   const task = e.dispatch({ op: 'resume', text: d.context().item });
   const record = new URL('../../bin/org.mjs', import.meta.url).pathname;
   command(process.execPath, [record, 'answer', e.context().routing.question, 'yes'], repo, { ORG_DIR: e.context().org, ORG_ACTOR: 'human' });

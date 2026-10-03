@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { command } from '../runtime.mjs';
+import { fleetPath } from '../../lib/fleet.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { FAST_VALIDATION_TIMEOUT, PROMOTION_VALIDATION_TIMEOUT, VALIDATION_WRAPPER_GRACE,
   ENTRY_COMMAND_GRACE, MAX_ENTRY_TIMEOUT, entryValidationTimeout, requestTimeout, validationTimeout, validationStepTimeout } from '../deadlines.mjs';
@@ -30,13 +32,15 @@ test('entry reserves bounded owner, wrapper, preparation and reply time for prom
 test('declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup', { timeout: 30000 }, async t => {
   process.env.ORG_ACTOR = 'entry-long-promotion-test';
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'entry-promotion-deadline-'));
+  fixtureFleet(t, scratch);
   let entry;
   t.after(() => { entry?.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
+  assert.equal(fleetPath(), path.join(scratch, 'fleet/fleet.json'), 'entry must only join this fixture fleet');
   const source = path.join(scratch, 'product'); fs.mkdirSync(source);
   // Execute the same production stack at short wall-clock bounds. Only these
   // numeric policy constants change; sandbox construction and the native owner
   // (including lifetime markers and descendant sweeps) remain real.
-  for (const directory of ['bin', 'lib', 'lanes', 'promote', 'settle', 'housekeeping', 'discovery', 'dispatch', 'watch', 'test-slot']) {
+  for (const directory of ['bin', 'lib', 'herdr', 'lanes', 'promote', 'settle', 'housekeeping', 'discovery', 'dispatch', 'watch', 'test-slot']) {
     fs.cpSync(path.join(product, directory), path.join(source, directory), { recursive: true });
   }
   const policy = path.join(source, 'discovery/deadlines.mjs');
@@ -63,6 +67,10 @@ setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(complete)},'complete
   fs.writeFileSync(sandbox, `#!${process.execPath}\nconst fs=require('fs');fs.appendFileSync(${JSON.stringify(profiles)},JSON.stringify(process.argv.slice(2))+'\\n');process.exit(require(${JSON.stringify(path.join(product, 'discovery/test/helpers/lifetime.cjs'))})(process.argv.slice(2)));`, { mode: 0o755 });
   const { createEntry } = await import(pathToFileURL(path.join(source, 'discovery/runtime.mjs')));
   entry = createEntry({ cwd: repo, sandboxBinary: sandbox, runtimeDir: path.join(scratch, 'runtime'), worktreeRoot: path.join(scratch, 'lanes') });
+  const fleet = JSON.parse(fs.readFileSync(fleetPath(), 'utf8'));
+  assert.deepEqual(Object.keys(fleet.projects), ['repo']);
+  assert.equal(fleet.projects.repo.checkout, repo);
+  assert.equal(fleet.projects.repo.record, path.join(repo, '.org'));
   const current = entry.dispatch({ op: 'start', text: 'Complete a longer declared promotion' });
   fs.mkdirSync(path.dirname(current.report), { recursive: true });
   fs.writeFileSync(current.report, `---\nrun: ${current.run}\noutcome: done\nsummary: Long promotion check completed.\nblockers: []\nproposals: []\nartifacts: []\n---\n`);

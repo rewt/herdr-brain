@@ -1,0 +1,36 @@
+TAP version 13
+# monitor entry: keeping lane/entry-fe07663ea010 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-Q2F4Co/session/lanes/lane-entry-fe07663ea010: a run was started in this lane
+# monitor entry: keeping lane/entry-4d9947e81b4f at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/acceptance-validation-Q2F4Co/session/lanes/lane-entry-4d9947e81b4f: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 1 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 38.998167
+  type: 'test'
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 2 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 36.978625
+  type: 'test'
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 3 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 37.356833
+  type: 'test'
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+ok 4 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 3593.899166
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3751.309083

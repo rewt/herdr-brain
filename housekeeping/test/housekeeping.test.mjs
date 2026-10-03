@@ -207,7 +207,8 @@ function cliFixture(t) { return configureCliFixture(fixture(t)); }
 test('one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses', (t) => {
   const f = cliFixture(t);
   const run = () => spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: TEST_ENV });
-  assert.equal(run().status, 0);
+  const first = run();
+  assert.equal(first.status, 0, first.stdout + first.stderr);
   assert.equal(fs.existsSync(path.join(f.state, 'actions.jsonl')), true);
   fs.writeFileSync(f.config, '{"enabled":false}'); assert.match(run().stdout, /disabled/);
   fs.writeFileSync(f.config, '{"enabled":"yes"}'); assert.equal(run().status, 1);

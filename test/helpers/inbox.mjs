@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createProcessTracker } from './processes.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
 // Call only after the fixture's senders/watchers have stopped. Lock metadata is
 // a candidate, not signal authority: require the exact owner argv and its own
@@ -79,7 +80,7 @@ export async function stopFixtureInbox(file, { script, tracker = createProcessTr
 // Delivery tests can let their owner finish naturally. A failed bounded wait
 // preserves evidence; settle uses explicit owned shutdown above instead.
 export async function waitForInboxIdle(file) {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + loadTimeout(5000);
   while (fs.existsSync(`${file}.owner.lock`) && Date.now() < deadline)
     await new Promise((resolve) => setTimeout(resolve, 20));
   if (fs.existsSync(`${file}.owner.lock`)) throw new Error(`fixture inbox owner did not exit: ${file}`);

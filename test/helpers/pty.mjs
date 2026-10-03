@@ -25,7 +25,8 @@ export function ptyCommand(binary, args, { platform = process.platform, executab
   throw new Error(`unsupported PTY test platform: ${platform}`);
 }
 export function runPTY(binary, args, options = {}) {
-  const timeout = Math.min(options.timeout || loadTimeout(15000), loadTimeout(15000));
+  const maximum = loadTimeout(15000);
+  const timeout = Math.min(options.timeout || maximum, maximum);
   if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('invalid PTY timeout');
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-pty-owner-'));
   try {

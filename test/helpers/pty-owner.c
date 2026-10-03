@@ -84,7 +84,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "PTY owner requires its own live terminal session\n"); return 125;
   }
   char *end; unsigned long duration = strtoul(argv[1], &end, 10);
-  if (*end || !duration || duration > 15000) return 125;
+  // The JavaScript transport passes its measured-load allowance. Keep the
+  // native watchdog finite without rejecting allowances above the 15s base.
+  if (*end || !duration || duration > INT32_MAX) return 125;
   uint64_t deadline = milliseconds() + duration;
   pid_t parent = getppid();
   signal(SIGTERM, interrupted); signal(SIGINT, interrupted); signal(SIGHUP, interrupted);

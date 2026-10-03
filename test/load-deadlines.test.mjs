@@ -8,6 +8,7 @@ import { lookupProcess, createProcessTracker } from './helpers/processes.mjs';
 import { environmentFingerprint } from '../lanes/validation.mjs';
 import { HerdrClient } from '../lanes/board/herdr-client.mjs';
 import { EventEmitter } from 'node:events';
+import { waitForInboxIdle } from './helpers/inbox.mjs';
 
 process.env.ORG_ACTOR = 'load-deadlines-test';
 const withLoad = t => {
@@ -132,4 +133,22 @@ test('queue and notice locks wait through loaded contention and never remove a l
       assert.ok(fs.existsSync(lock)); fs.rmSync(lock, { recursive: true });
     }
   } finally { Date.now = now; Atomics.wait = wait; }
+});
+
+test('inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner', async t => {
+  withLoad(t);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'loaded-inbox-shutdown-'));
+  const inbox = path.join(root, 'inbox.log'), lock = `${inbox}.owner.lock`;
+  const now = Date.now, started = now();
+  // Advance wall time 100x: the old 5s wait lasts 50ms, the load-24 wait
+  // lasts 300ms. The actual owner receipt disappears after 80ms.
+  Date.now = () => started + (now() - started) * 100;
+  let timer;
+  t.after(() => { clearTimeout(timer); Date.now = now; fs.rmSync(root, { recursive: true, force: true }); });
+  fs.mkdirSync(lock);
+  timer = setTimeout(() => fs.rmdirSync(lock), 80);
+  await waitForInboxIdle(inbox);
+  fs.mkdirSync(lock);
+  await assert.rejects(waitForInboxIdle(inbox), /fixture inbox owner did not exit/);
+  assert.equal(fs.existsSync(lock), true, 'an unconfirmed owner is never removed or signalled');
 });

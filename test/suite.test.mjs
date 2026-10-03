@@ -32,7 +32,7 @@ test('the phased command forwards suite watchdog overrides to its bounded runner
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'phased-watchdog-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(path.join(root, 'blocked.mjs'), 'while (true) {}');
-  const result = await waitForExit(spawnChild(t, process.execPath, [fileURLToPath(new URL('./helpers/suite.mjs', import.meta.url)), '--file-timeout=5000', '--suite-timeout=1000', 'blocked.mjs'], { cwd: root }));
+  const result = await waitForExit(spawnChild(t, process.execPath, [fileURLToPath(new URL('./helpers/suite.mjs', import.meta.url)), '--fixed-deadlines', '--file-timeout=5000', '--suite-timeout=1000', 'blocked.mjs'], { cwd: root }));
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Test suite exceeded 1000ms/);
 });

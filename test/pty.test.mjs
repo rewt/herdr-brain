@@ -9,6 +9,8 @@ import { ptyCommand, runPTY, PTY_SKIP_REASON } from './helpers/pty.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 import { createProcessTracker } from './helpers/processes.mjs';
 
+process.env.ORG_ACTOR = 'pty-test-agent';
+
 test('PTY transport uses native BSD arguments and shell-safe util-linux arguments', () => {
   const values = ['two words', "apostrophe'", '$(must-not-execute)', '--model', 'literal'];
   const bsd = ptyCommand(process.execPath, values, { platform: 'darwin', executable: 'selected-script' });
@@ -76,6 +78,16 @@ test('PTY completion retains TTY, arguments, output and exit status', { skip: PT
   const result = runPTY(process.execPath, ['-e', 'console.log(JSON.stringify({tty:process.stdin.isTTY,args:process.argv.slice(1)}));process.exitCode=7', ...args]);
   assert.equal(result.status, 7, result.stdout + result.stderr);
   assert.deepEqual(JSON.parse(result.stdout.match(/\{"tty"[^\r\n]+/)[0]), { tty: true, args });
+});
+test('PTY native owner accepts the measured-load allowance above its fifteen-second base', { skip: PTY_SKIP_REASON }, t => {
+  const load = os.loadavg, capacity = os.availableParallelism;
+  os.loadavg = () => [24, 24, 24]; os.availableParallelism = () => 4;
+  t.after(() => { os.loadavg = load; os.availableParallelism = capacity; });
+  // An immediate nonzero exit distinguishes a successful native launch from
+  // rejecting the scaled 90-second bound with status 125 before exec.
+  const result = runPTY(process.execPath, ['-e', 'console.log(process.stdin.isTTY);process.exitCode=7']);
+  assert.equal(result.status, 7, result.stdout + result.stderr);
+  assert.match(result.stdout, /true/);
 });
 test('PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops', { skip: PTY_SKIP_REASON }, async t => {
   const f = fixture(t), start = Date.now();

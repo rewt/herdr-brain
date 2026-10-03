@@ -179,7 +179,7 @@ while(true) {}
     // deadline can kill the launcher before this test ever owns a fixture PID.
     const preload = path.join(f.root, 'slow-start.mjs');
     fs.writeFileSync(preload, `if(process.argv[1]===${JSON.stringify(f.file)}) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1250);`);
-    const child = runFixture(t, [`--${kind}-timeout=3000`, f.file], {
+    const child = runFixture(t, ['--fixed-deadlines', `--${kind}-timeout=3000`, f.file], {
       env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` },
     });
     const result = await waitForExit(child);

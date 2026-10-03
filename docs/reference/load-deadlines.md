@@ -20,6 +20,7 @@ cancellation regressions use `--fixed-deadlines` to request exact timers.
 | Test process identity lookup | 2 seconds | Scale; at most three timeout-only attempts, doubling allowance and backoff |
 | Test synchronous command and per-test caps | 15 / 60 seconds | Scale at each call, including explicitly shorter fixture limits |
 | Test file/suite watchdogs, default child and pipe-drain waits | Existing base limits | Scale; coordinator/worker share a sample; lower file concurrency under load |
+| Test inbox owner shutdown | 5 seconds | Scale; preserve the lock and scratch evidence on non-response |
 | PTY owner and detached-fixture compilation | 10 seconds | Scale; retain native cleanup and fixture cancellation boundaries |
 
 Production promotion validation Git calls already have no imposed deadline;
@@ -39,3 +40,22 @@ compatibility boundary in AGENTS.md and the task brief. Its legacy 120/60-second
 Herdr flags are therefore unchanged; the maintained supervisor launcher has the
 load-aware equivalents. Offline tests use fake transports and owned scratch Git
 repositories. No release harness, model, live pane or project schedule is needed.
+
+The PTY transport samples one command allowance and passes the same finite bound
+to its native session owner. That owner accepts load-scaled values above the
+15-second base; its retained session, identity checks and cleanup scope stay the
+same. The phased npm coordinator forwards `--fixed-deadlines` for deliberate
+watchdog regressions; normal checks continue to scale their limits.
+
+Fixture cancellation has a separate ownership boundary. Ordinary Node dispatch,
+discovery lifecycle and watcher fixtures inherit the live suite group, which the
+runner can clear after a fresh matching leader lookup. A refused lookup still
+prevents signalling. Native `script` creates a separate PTY session, so the suite
+group cannot clear its members. The native PTY owner handles command deadlines,
+transport death and outer-suite cancellation, but cannot run cleanup after its
+own SIGKILL. The blocked PTY test leaf has no independent kernel deadline. The
+2026-10-02 leaked leaf therefore warrants follow-on coverage of promotion-gate
+cancellation and native-owner death, plus a leaf lifetime bound independent of
+both owners. Existing detached discovery regressions already use native alarms
+on every detached Node generation. A green ordinary suite alone does not prove
+the exact cancelled-gate path that produced the historical leak.

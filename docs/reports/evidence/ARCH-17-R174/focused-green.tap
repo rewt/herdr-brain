@@ -1,0 +1,115 @@
+TAP version 13
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 1 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 598.054625
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 2 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 463.285792
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 3 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 946.485208
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 4 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 160.732125
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 5 - a moved default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 545.945375
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 6 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 624.743709
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 7 - explicit replacement remaps the default checkout record by its relative path
+  ---
+  duration_ms: 311.082875
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 8 - a re-clone in place can explicitly replace a missing native record
+  ---
+  duration_ms: 415.618792
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 9 - an unedited example console configuration is rejected with a fleet present
+  ---
+  duration_ms: 145.070875
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 10 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 362.477459
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 11 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 120.923958
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 12 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 279.313167
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 13 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1195.947792
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 14 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 138.920417
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 15 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 479.074958
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 16 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 67.890833
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 17 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 137.167458
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 18 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 909.354209
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 19 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 368.333584
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 20 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 128.062625
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 21 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 599.38425
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9051.68525

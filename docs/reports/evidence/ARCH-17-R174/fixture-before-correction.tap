@@ -1,0 +1,242 @@
+TAP version 13
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 1 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 624.228375
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 2 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 432.485708
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 3 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 941.973459
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 4 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 153.772042
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+not ok 5 - a moved default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 235.297
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor: stale fleet project app at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/fleet-test-2NVk84/app; inspect it, then join --replace app to retain its record
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Object.join (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:37:84)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:128:20
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+not ok 6 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 267.896375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor: stale fleet project app at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/fleet-test-CH4oLf/app; inspect it, then join --replace app to retain its record
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Object.join (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:37:84)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:128:20
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+not ok 7 - explicit replacement remaps the default checkout record by its relative path
+  ---
+  duration_ms: 194.608459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor: cannot replace app: existing record is missing at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/fleet-test-SoFys5/app/.org
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Object.join (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:37:84)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:159:22
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: a re-clone in place with changed Git identity can explicitly replace a missing native record
+not ok 8 - a re-clone in place with changed Git identity can explicitly replace a missing native record
+  ---
+  duration_ms: 152.88975
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: "ENOENT: no such file or directory, lstat '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/fleet-test-DE8Kik/backup/.org'"
+  code: 'ENOENT'
+  stack: |-
+    lstatSync (node:fs:1642:25)
+    getStatsSync (node:internal/fs/cp/cp-sync:120:19)
+    checkPathsSync (node:internal/fs/cp/cp-sync:72:33)
+    cpSyncFn (node:internal/fs/cp/cp-sync:58:42)
+    Object.cpSync (node:fs:3077:3)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:177:56
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+not ok 9 - an unedited example console configuration is rejected with a fleet present
+  ---
+  duration_ms: 136.884625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:200:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 10 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 368.051167
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 11 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 126.734666
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 12 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 321.72225
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 13 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1203.621625
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 14 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 141.334875
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 15 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 468.81525
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 16 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 64.7955
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 17 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 138.570459
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 18 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 878.773792
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 19 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 368.2945
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 20 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 128.333958
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+not ok 21 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 260.019458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor: stale fleet project app at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/fleet-test-R5nY4X/app; inspect it, then join --replace app to retain its record
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Object.join (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:37:84)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/fleet.test.mjs:389:23
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 15
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7664.047542

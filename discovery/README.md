@@ -119,11 +119,19 @@ that have not joined yet, retaining their explicitly configured records and
 presentation and transcript preferences. Reading the console never joins them;
 joining later replaces the configured row with its fleet mapping. A moved or replaced
 checkout is shown stale, with no guessed replacement or usable record binding.
-Automatic join refuses a new identity with the same checkout basename as a stale
-mapping. After inspecting the old mapping, run `monitor fleet join --replace NAME`
-from the moved checkout to retain its existing external record and mapped paths.
-Replacement requires that record's `events.jsonl` to exist and refuses replacing
-a live project or using a checkout already owned by another fleet project.
+An unedited example console configuration is still rejected with a fleet present.
+Automatic join registers a new Git identity independently, even when its checkout
+has the same name as a stale entry; the old entry stays stale and the new name
+includes an identity suffix. It adopts only the entered checkout's own record or
+an explicit mapping, without guessing which stale project it replaced.
+After inspecting the old mapping, run `monitor fleet join --replace NAME` from the
+moved checkout to retain its fleet name and mapped paths. An external record stays
+in place; a record inside the old checkout maps to the same relative path in the
+new checkout. Replacement requires the selected record's `events.jsonl` to exist.
+If the old record is missing after a re-clone, `--replace NAME --record PATH` can
+select an existing restored record. Replacement refuses taking a live checkout or
+a record or checkout already owned by another fleet project. A changed Git identity
+at the same checkout path still requires explicit replacement.
 Malformed fleet JSON or schema fails before entry/join or record commands write
 records; automatic entry also refuses rather than launching an unbound session.
 

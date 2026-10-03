@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { findOrgDir, initOrg } from '../lib/store.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
-import { loadModernConfig, loadConfig } from '../console/lib/config.mjs';
+import { ConfigError, EXAMPLE, loadModernConfig, loadConfig } from '../console/lib/config.mjs';
 import { catalog, createIdentityReader } from '../console/modern/model.mjs';
 import { createEntry } from '../discovery/runtime.mjs';
 import { projectRows } from '../console/modern/project.mjs';
@@ -107,6 +107,97 @@ test('moved checkout remains stale in fleet and console instead of being guessed
   assert.equal(projects[0].org, null);
   assert.equal(catalog(initialConfig.projects, [], createIdentityReader())[0].stale, true, 'a running console rechecks stale paths');
   assert.deepEqual(fs.readFileSync(path.join(f.fleetHome, 'fleet.json')), bytes);
+});
+
+for (const change of ['moved', 're-cloned']) test(`a ${change} default-record checkout joins automatically without claiming the stale same-name entry`, t => {
+  const f = fixture(t), cwd = f.repo('app'), original = f.join(cwd).project;
+  const recordFile = path.join(cwd, '.org/events.jsonl');
+  execFileSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Original work'], { cwd, env: { ...f.env, ORG_ACTOR: 'fleet-test' } });
+  const recordBytes = fs.readFileSync(recordFile);
+  const parent = path.join(f.scratch, 'relocated'); fs.mkdirSync(parent);
+  const entered = path.join(parent, 'app');
+  if (change === 'moved') fs.renameSync(cwd, entered);
+  else {
+    const backup = path.join(f.scratch, 'original'); fs.renameSync(cwd, backup);
+    f.git(f.scratch, ['clone', '-q', backup, entered]);
+    f.git(entered, ['config', 'user.name', 'Fleet test']); f.git(entered, ['config', 'user.email', 'fleet@example.invalid']);
+  }
+  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file);
+  assert.equal(JSON.parse(f.run(f.scratch, ['show']).stdout).projects.app.stale, true);
+  assert.deepEqual(fs.readFileSync(file), before, 'viewing a moved project never repairs it');
+  const joined = f.join(entered);
+  assert.notEqual(joined.name, 'app'); assert.equal(joined.project.checkout, entered);
+  assert.equal(joined.project.identity, fs.realpathSync(path.join(entered, '.git')));
+  assert.equal(joined.project.record, path.join(entered, '.org'));
+  assert.notEqual(joined.project.worktrees, original.worktrees); assert.notEqual(joined.project.temp, original.temp);
+  assert.deepEqual(f.read().projects.app, original, 'a name match never transfers the old mapping');
+  assert.equal(Object.keys(f.read().projects).length, 2);
+  assert.equal(findOrgDir({ cwd: entered, env: f.env }), joined.project.record);
+  assert.deepEqual(fs.readFileSync(path.join(joined.project.record, 'events.jsonl')), change === 'moved' ? recordBytes : Buffer.alloc(0));
+  const config = loadModernConfig(f.consoleFile);
+  assert.equal(config.projects.find(p => p.name === 'app').stale, true);
+  assert.equal(config.projects.find(p => p.name === 'app').org, null);
+  assert.equal(config.projects.find(p => p.name === joined.name).stale, false);
+  const bytes = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
+  f.join(entered); assert.deepEqual(fs.readFileSync(file), bytes); assert.equal(fs.statSync(file).mtimeMs, mtime);
+  const entry = createEntry({ cwd: entered, role: 'supervisor' }); f.keep(entry);
+  assert.equal(entry.context().org, joined.project.record);
+  assert.deepEqual(fs.readFileSync(file), bytes);
+});
+
+test('explicit replacement remaps the default checkout record by its relative path', t => {
+  const f = fixture(t), cwd = f.repo('app'), record = path.join(cwd, '.org');
+  const original = f.join(cwd).project, recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+  const moved = path.join(f.scratch, 'moved'); fs.renameSync(cwd, moved);
+  const mappedRecord = path.join(moved, '.org'), backup = path.join(f.scratch, 'record-backup');
+  fs.renameSync(mappedRecord, backup);
+  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file);
+  const missing = f.run(moved, ['join', '--replace', 'app']);
+  assert.notEqual(missing.status, 0); assert.match(missing.stderr, /record.*missing/);
+  assert.equal(fs.existsSync(mappedRecord), false); assert.deepEqual(fs.readFileSync(file), before);
+  fs.renameSync(backup, mappedRecord);
+  const repaired = f.join(moved, ['--replace', 'app']);
+  assert.equal(repaired.name, 'app'); assert.equal(repaired.project.checkout, moved);
+  assert.equal(repaired.project.record, mappedRecord);
+  for (const key of ['worktrees', 'temp', 'layers']) assert.deepEqual(repaired.project[key], original[key]);
+  assert.equal(Object.keys(f.read().projects).length, 1);
+  assert.equal(findOrgDir({ cwd: moved, env: f.env }), mappedRecord);
+  assert.deepEqual(fs.readFileSync(path.join(mappedRecord, 'events.jsonl')), recordBytes);
+  const bytes = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
+  f.join(moved, ['--replace', 'app']); f.join(moved);
+  assert.deepEqual(fs.readFileSync(file), bytes); assert.equal(fs.statSync(file).mtimeMs, mtime);
+});
+
+test('a re-clone in place can explicitly replace a missing native record', t => {
+  const f = fixture(t), cwd = f.repo('app');
+  const original = f.join(cwd).project;
+  const backup = path.join(f.scratch, 'backup'); fs.renameSync(cwd, backup);
+  f.git(f.scratch, ['clone', '-q', backup, cwd]);
+  const record = path.join(cwd, 'restored-record'); fs.cpSync(path.join(backup, '.org'), record, { recursive: true });
+  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file), recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+  assert.notEqual(f.run(cwd, ['join', '--replace', 'app']).status, 0, 'missing records are never invented during replacement');
+  const other = f.repo('other'), ownedRecord = f.join(other).project.record;
+  const withOther = fs.readFileSync(file);
+  assert.notEqual(f.run(cwd, ['join', '--replace', 'app', '--record', ownedRecord]).status, 0, 'replacement cannot take another project record');
+  assert.deepEqual(fs.readFileSync(file), withOther);
+  const repaired = f.join(cwd, ['--replace', 'app', '--record', record]);
+  assert.equal(repaired.name, 'app'); assert.equal(repaired.project.checkout, cwd);
+  assert.equal(repaired.project.identity, original.identity, 'Git common-directory identity is a canonical path');
+  assert.equal(repaired.project.record, record);
+  assert.equal(findOrgDir({ cwd, env: f.env }), record);
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+  assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
+  assert.notDeepEqual(fs.readFileSync(file), before);
+});
+
+test('an unedited example console configuration is rejected with a fleet present', t => {
+  const f = fixture(t), cwd = f.repo('app'); f.join(cwd);
+  fs.writeFileSync(f.consoleFile, JSON.stringify(EXAMPLE, null, 2) + '\n');
+  const file = path.join(f.fleetHome, 'fleet.json'), fleetBytes = fs.readFileSync(file), configBytes = fs.readFileSync(f.consoleFile);
+  for (const load of [loadConfig, loadModernConfig]) {
+    assert.throws(() => load(f.consoleFile), error => error instanceof ConfigError && /still the example/.test(error.message) && error.message.includes(f.consoleFile));
+  }
+  assert.deepEqual(fs.readFileSync(file), fleetBytes); assert.deepEqual(fs.readFileSync(f.consoleFile), configBytes);
 });
 
 test('malformed fleet fails before entry or discovery touches any record', t => {
@@ -292,19 +383,22 @@ test('a moved checkout can explicitly replace its stale mapping while retaining 
   const parent = path.join(f.scratch, 'relocated'); fs.mkdirSync(parent);
   const moved = path.join(parent, 'app'); fs.renameSync(cwd, moved);
   const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file);
-  const automatic = f.run(moved, ['join']);
-  assert.notEqual(automatic.status, 0); assert.match(automatic.stderr, /stale.*app.*--replace/s);
-  assert.notEqual(f.run(moved, ['join', '--record', record]).status, 0);
+  const unowned = f.repo('relocated-again/app');
+  const automatic = f.join(unowned);
+  assert.notEqual(automatic.name, 'app'); assert.equal(automatic.project.record, path.join(unowned, '.org'));
+  const afterAutomatic = fs.readFileSync(file);
+  assert.notEqual(f.run(moved, ['join', '--record', record]).status, 0, 'automatic adoption cannot take a record already mapped elsewhere');
   assert.notEqual(f.run(moved, ['join', '--replace', 'missing']).status, 0);
   const recordBackup = `${record}-backup`; fs.renameSync(record, recordBackup);
   assert.notEqual(f.run(moved, ['join', '--replace', 'app']).status, 0, 'replacement requires the existing record');
   assert.equal(fs.existsSync(record), false); fs.renameSync(recordBackup, record);
-  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(moved, '.org')), false);
+  assert.notDeepEqual(afterAutomatic, before);
+  assert.deepEqual(fs.readFileSync(file), afterAutomatic); assert.equal(fs.existsSync(path.join(moved, '.org')), false);
   const repaired = f.join(moved, ['--replace', 'app', '--record', record]);
   assert.equal(repaired.name, 'app'); assert.equal(repaired.project.checkout, moved);
   assert.notEqual(repaired.project.identity, original.identity);
   for (const key of ['record', 'worktrees', 'temp', 'layers']) assert.deepEqual(repaired.project[key], original[key]);
-  assert.equal(Object.keys(f.read().projects).length, 1);
+  assert.equal(Object.keys(f.read().projects).length, 2);
   assert.equal(findOrgDir({ cwd: moved, env: f.env }), record);
   const repairedBytes = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
   f.join(moved, ['--replace', 'app']); f.join(moved);

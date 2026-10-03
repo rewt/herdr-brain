@@ -123,7 +123,7 @@ function fromFleet(fleet, file, options = {}) {
     return { ...prior, name, cwd: p.checkout, org: p.record };
   });
   projects.push(...configured.filter(prior => !entries.some(([, p]) => matches(prior, p))));
-  const config = normalizeConfig({ ...preferences, example: false, projects, explain: options.allowUnmanaged ? false : preferences.explain }, fleet.file, options);
+  const config = normalizeConfig({ ...preferences, projects, explain: options.allowUnmanaged ? false : preferences.explain }, file, options);
   config.projects = config.projects.map((p, i) => {
     if (i >= entries.length) return { ...p, joined: false };
     const mapped = entries[i][1];

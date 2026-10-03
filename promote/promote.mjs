@@ -173,7 +173,9 @@ function finishBatchJob(job, result, queue) {
       if (!run.notes.some(note => note.text === text)) invoke(process.execPath, [RECORD, 'note', job.run, text], { cwd: queue.project.canonical, env });
     } catch (error) { warnings.push(`velocity record: ${error.message}`); }
   }
-  if (warnings.length === 0 && result.workspace) {
+  // Only failed integration/replacement proof requires retaining the lane.
+  // A velocity note is telemetry and must not prevent lifecycle cleanup.
+  if ((result.warnings?.length ?? 0) === 0 && result.workspace) {
     warnings.push(...cleanup(job, queue, result.workspace));
     try {
       invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {

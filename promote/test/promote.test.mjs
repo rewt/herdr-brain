@@ -350,7 +350,9 @@ test('recorded completed outcome resumes delivery without repeating promotion', 
   assert.equal(f.results()[0].reason, 'saved refusal'); assert.match(f.messages()[0][3], /saved refusal/);
 });
 
-test('queued cleanup closes the recorded finished tab and preserves operator and other lane tabs', async (t) => {
+for (const failVelocity of [false, true]) test(failVelocity
+  ? 'recovery: a failed velocity note still closes the finished tab and promoted lane'
+  : 'queued cleanup closes the recorded finished tab and preserves operator and other lane tabs', async (t) => {
   const f = fixture(t); const wt = f.lane('first'); const other = f.lane('other');
   const orgCLI = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
   const org = path.join(f.root, 'record');
@@ -385,8 +387,27 @@ if(a[0]==='pane'&&a[1]==='list')r={panes:d.panes};
 if(a[0]==='pane'&&a[1]==='process-info')r={process_info:{shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}]}};
 if(a[0]==='agent'&&a[1]==='list')r={agents:d.agents};
 console.log(JSON.stringify({result:r}));\n`);
-  f.launch(['first', '--org', org]); await until(() => f.results().length === 1);
-  assert.equal(f.results()[0].outcome, 'promoted'); assert.deepEqual(f.results()[0].warnings, []);
+  const failureMarker = path.join(f.root, 'velocity-failed');
+  if (failVelocity) {
+    const preload = path.join(f.root, 'fail-velocity.cjs');
+    fs.writeFileSync(preload, `const fs=require('fs'),cp=require('child_process'),original=cp.spawnSync;
+cp.spawnSync=function(cmd,args,options){
+ if(cmd===process.execPath&&args[0]===${JSON.stringify(orgCLI)}&&args[1]==='note'&&args[3]?.startsWith('Promotion: report-to-main ')){
+  fs.writeFileSync(${JSON.stringify(failureMarker)},'failed');return {status:1,stdout:'',stderr:'injected velocity note failure'};
+ }return original.call(this,cmd,args,options);
+};require('module').syncBuiltinESMExports();`);
+    f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
+  }
+  f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run]);
+  await until(() => f.results().length === 1);
+  assert.equal(f.results()[0].outcome, 'promoted');
+  if (failVelocity) {
+    assert.equal(fs.existsSync(failureMarker), true, 'the velocity note actually failed');
+    assert.deepEqual(f.results()[0].warnings, ['velocity record: injected velocity note failure']);
+  } else {
+    assert.deepEqual(f.results()[0].warnings, []);
+    assert.equal(JSON.parse(record(['show', run, '--json'])).notes.filter(n => n.text.startsWith('Promotion: report-to-main ')).length, 1);
+  }
   const actions = fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(actions.filter((a) => a[0] === 'tab' && a[1] === 'close'), [['tab', 'close', 'w:worker']]);
   assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));

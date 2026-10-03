@@ -218,6 +218,16 @@ function inheritedEvidence() {
     inherited: gate, log: evidence('validation.log', text) };
   save();
 }
+function reviewCommitHead() {
+  const current = head();
+  if (current !== job.head) {
+    if (git(['rev-list', '--parents', '-n', '1', current], job.workspace) !== `${current} ${job.head}` ||
+        git(['diff', '--name-only', job.head, current], job.workspace) !== job.reviewRelative) throw new Error('unexpected commit after review');
+    const review = call(['git'], ['show', `${current}:${job.reviewRelative}`], job.workspace, { encoding: null });
+    if (review.error || review.status !== 0 || hash(review.stdout) !== job.review.sha256) throw new Error('unexpected commit after review');
+  }
+  return current;
+}
 function recaptureMain() {
   // The correction owns the lane now and is settled under its own run. Its
   // dispatch journal, rather than the old review, authorizes recovery.
@@ -226,8 +236,9 @@ function recaptureMain() {
   if (current === job.mainHead && !job.recapture) return;
   if (job.stage === 'reviewing' && !opt['review-again']) throw new Error('review outcome is uncertain; inspect reviewer and retained evidence, then --retry --review-again after it stops');
   // Adopt only our exact prepared replacement if its response was lost.
-  const expected = job.rebase?.state === 'prepared' && head() === job.rebase.to ? job.rebase.to : job.finalHead ?? job.head;
-  unchanged({ movingMain: true, reviewOnly: job.stage === 'commit-review', expectedHead: expected });
+  const expected = job.stage === 'commit-review' ? reviewCommitHead()
+    : job.rebase?.state === 'prepared' && head() === job.rebase.to ? job.rebase.to : job.finalHead ?? job.head;
+  unchanged({ movingMain: true, reviewOnly: job.stage === 'commit-review' && expected === job.head, expectedHead: expected });
   cleanCanonical();
   const state = recordState();
   const reportProblem = job.stage === 'record' && !state.runs.get(id)?.report ? null : recordedReportProblem(state);
@@ -239,6 +250,9 @@ function recaptureMain() {
     delete job.rebase;
   }
   delete job.error; save();
+  // Report intake must authorize replay. Keep only the new target until the
+  // record stage has ingested and checked the captured report.
+  if (job.stage === 'record') return;
   // A completed review stays bound to its original diff. Commit its evidence
   // first, then the usual preservation proof replays it onto the new base.
   if (job.review) {
@@ -512,7 +526,7 @@ function main() {
     bindLaneConfig(job);
     if (!Object.hasOwn(job, 'laneConfig')) { job.laneConfig = laneConfig; save(); }
     if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
-    if (opt.retry && (job.stage !== 'complete' || ['promotable', 'promotable_with_findings'].includes(job.result?.result))) {
+    if (opt.retry && !opt['fix-findings'] && (job.stage !== 'complete' || ['promotable', 'promotable_with_findings'].includes(job.result?.result))) {
       if (recaptureMain() === false) return;
     }
     if (job.stage === 'complete') {
@@ -525,9 +539,9 @@ function main() {
         if (invalid) return escalate(invalid);
         const stale = superseded(state);
         if (stale) return escalate(stale);
-        unchanged(); cleanCanonical();
+        unchanged({ movingMain: opt['fix-findings'] }); cleanCanonical();
         if (activeWork().length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed; inspect current work and blockers');
-        unchanged(); cleanCanonical();
+        unchanged({ movingMain: opt['fix-findings'] }); cleanCanonical();
         const after = recordState(), invalidAfter = recordedReportProblem(after), staleAfter = superseded(after);
         if (invalidAfter || staleAfter) return escalate(invalidAfter ?? staleAfter);
         if (activeWork([], after).length || ['blocked', 'needs_human', 'active', 'dropped'].includes(show(job.item).status)) throw new Error('record readiness changed during validation; inspect current work and blockers');
@@ -609,6 +623,7 @@ function main() {
       catch (error) { return escalate(`Conditional reopen refused: ${error.message}`); }
     }
     job.stage = 'validate'; save();
+    if (job.recapture && recaptureMain() === false) return;
   }
   if (job.stage === 'validate') {
     unchanged();
@@ -664,10 +679,8 @@ function main() {
   if (job.stage === 'commit-review') {
     // Recovery after a commit whose response was lost accepts only its exact
     // single parent and exact review-file tree; no unrelated commit is adopted.
-    const current = head();
+    const current = reviewCommitHead();
     if (current !== job.head) {
-      if (git(['rev-parse', 'HEAD^'], workspace) !== job.head || git(['diff', '--name-only', job.head, current], workspace) !== job.reviewRelative ||
-          git(['show', `${current}:${job.reviewRelative}`], workspace) !== job.review.text.trimEnd()) throw new Error('unexpected commit after review');
       job.finalHead = current; unchanged();
     } else {
       unchanged({ reviewOnly: true });

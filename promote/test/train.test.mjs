@@ -244,6 +244,39 @@ process.exit(r.status??1);`, { mode: 0o755 });
   assert.equal(f.git(['rev-parse', 'main']), integrated);
 });
 
+test('recovery: a lost fast-forward is adopted after a later batch advances main', t => {
+  const f = fixture(t); const first = f.lane('first'); f.lane('later');
+  // Force replay so a redundant resume would append duplicate empty commits.
+  fs.writeFileSync(path.join(f.repo, 'upstream'), 'keep'); f.git(['add', 'upstream']); f.git(['commit', '-qm', 'Advance main']);
+  f.add('first'); f.add('later', { validate: `${process.execPath} ${f.checker} ` });
+  const realGit = f.exec('which', ['git']).stdout.trim(), bin = path.join(f.root, 'bin'), marker = path.join(f.root, 'after-ff');
+  fs.mkdirSync(bin); f.env.PATH = `${bin}:${f.env.PATH}`;
+  fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}
+const fs=require('fs'),cp=require('child_process'),a=process.argv.slice(2);
+const r=cp.spawnSync(${JSON.stringify(realGit)},a,{stdio:'inherit'});
+if(r.status===0&&a.includes('merge')&&a.includes('--ff-only')&&!fs.existsSync(${JSON.stringify(marker)})){
+ fs.writeFileSync(${JSON.stringify(marker)},'once');
+ // Lose the train process before it checkpoints integration; release only its owned fixture lock.
+ const lock=${JSON.stringify(path.join(f.repo, '.git/lane-promote.lock'))};
+ if(JSON.parse(fs.readFileSync(lock+'/owner.json')).pid===process.ppid)fs.rmSync(lock,{recursive:true});
+ process.kill(process.ppid,'SIGKILL');
+}process.exit(r.status??1);`, { mode: 0o755 });
+  const drained = f.drain(); assert.equal(drained.status, 0, drained.stderr);
+  const [interrupted, later] = f.queue.load().results;
+  assert.equal(interrupted.outcome, 'interrupted'); assert.equal(later.outcome, 'promoted'); assert.equal(f.runs(), 2);
+  const before = JSON.parse(fs.readFileSync(interrupted.receipt)), tip = before.attempts[0].tip;
+  assert.equal(before.attempts[0].phase, 'validated'); assert.notEqual(f.git(['rev-parse', 'main']), tip);
+  f.git(['merge-base', '--is-ancestor', tip, 'main']);
+  const integrated = f.git(['rev-parse', 'main']);
+  const resumed = f.drain(); assert.equal(resumed.status, 0, resumed.stderr);
+  assert.equal(f.queue.load().results.at(-1).outcome, 'promoted'); assert.equal(f.runs(), 2, 'no third gate');
+  assert.equal(f.git(['rev-parse', 'main']), integrated, 'no duplicate replay commits');
+  assert.equal(fs.existsSync(first), false); assert.equal(f.queue.load().interrupted.length, 0);
+  const after = JSON.parse(fs.readFileSync(interrupted.receipt)); assert.equal(after.attempts.length, 1);
+  assert.equal(after.attempts[0].phase, 'complete'); assert.equal(after.results[interrupted.id].tip, tip);
+  assert.equal(f.git(['rev-list', '--merges', 'main']), ''); assert.equal(f.git(['remote']), '');
+});
+
 test('STOP and scratch mutation preserve main and produce refusals', t => {
   for (const mode of ['stop', 'dirty']) {
     const f = fixture(t); f.lane('alone'); f.add('alone');

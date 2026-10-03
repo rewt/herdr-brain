@@ -1,0 +1,318 @@
+TAP version 13
+# Subtest: recovery: moved main cannot swallow a capped findings correction
+ok 1 - recovery: moved main cannot swallow a capped findings correction
+  ---
+  duration_ms: 6240.873791
+  ...
+# Subtest: recovery: moved main cannot swallow a capped findings correction even with a replay conflict
+ok 2 - recovery: moved main cannot swallow a capped findings correction even with a replay conflict
+  ---
+  duration_ms: 6140.636333
+  ...
+# Subtest: recovery: record-stage recapture waits for ingestion and follows the latest main
+ok 3 - recovery: record-stage recapture waits for ingestion and follows the latest main
+  ---
+  duration_ms: 5553.50525
+  ...
+# Subtest: recovery: a lost review commit response is adopted before recapturing moved main
+ok 4 - recovery: a lost review commit response is adopted before recapturing moved main
+  ---
+  duration_ms: 9460.942583
+  ...
+# Subtest: lost review commit recovery refuses unrelated changes after main moves
+ok 5 - lost review commit recovery refuses unrelated changes after main moves
+  ---
+  duration_ms: 6042.280667
+  ...
+# Subtest: lost review commit recovery refuses review-bytes changes after main moves
+ok 6 - lost review commit recovery refuses review-bytes changes after main moves
+  ---
+  duration_ms: 6113.61925
+  ...
+# Subtest: lost review commit recovery refuses merge changes after main moves
+ok 7 - lost review commit recovery refuses merge changes after main moves
+  ---
+  duration_ms: 6143.577583
+  ...
+# Subtest: two recaptures after an applied rebase replay only lane and review commits from the same lineage
+ok 8 - two recaptures after an applied rebase replay only lane and review commits from the same lineage
+  ---
+  duration_ms: 6026.103875
+  ...
+# Subtest: uncertain review retry guards lane mutation before recapturing a moved main
+ok 9 - uncertain review retry guards lane mutation before recapturing a moved main
+  ---
+  duration_ms: 4945.820417
+  ...
+# Subtest: refused recapture preflight preserves its old base and gives a terminal conflict handoff
+ok 10 - refused recapture preflight preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 1954.155084
+  ...
+# Subtest: refused recapture replay preserves its old base and gives a terminal conflict handoff
+ok 11 - refused recapture replay preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 1943.1015
+  ...
+# Subtest: a lost recapture replacement response retains the old base until the proved head is adopted
+ok 12 - a lost recapture replacement response retains the old base until the proved head is adopted
+  ---
+  duration_ms: 5814.92075
+  ...
+# Subtest: dispatching recovery after main moves exempts only its existing correction run and changed head
+ok 13 - dispatching recovery after main moves exempts only its existing correction run and changed head
+  ---
+  duration_ms: 6438.0555
+  ...
+# Subtest: a stopped fix tolerates main moving and dispatches one correction after STOP clears
+ok 14 - a stopped fix tolerates main moving and dispatches one correction after STOP clears
+  ---
+  duration_ms: 5760.25825
+  ...
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 15 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 2670.10625
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 16 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 2948.762042
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 17 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1283.387625
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 18 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 6865.385083
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 19 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 1943.443958
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 20 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 2408.625792
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 21 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 2974.586792
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 22 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1219.225667
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 23 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 3676.662042
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 24 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 3617.418875
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 25 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 1972.622708
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 26 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 3950.204084
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 27 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 7578.035959
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 28 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 1698.5555
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 29 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 1941.176958
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 30 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 1962.090541
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 31 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 3877.10425
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 32 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4167.046666
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 33 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 5302.07425
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 34 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 5307.862625
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 35 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 3907.876083
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 36 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 5877.608
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 37 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 1712.089584
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 38 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6430.492792
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 39 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2056.84425
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 40 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1207.769625
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 41 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 1607.897042
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 42 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1433.731291
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 43 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 515.14
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 44 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 1550.471542
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 45 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1728.720292
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 46 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2490.581166
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 47 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2082.032083
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 48 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2002.201875
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 49 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 3366.965167
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 50 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1340.748208
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 51 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 4152.296125
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 52 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 2513.704958
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 53 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 620.085708
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 54 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 218.032542
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 55 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 358.163875
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 56 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 614.462333
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 57 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 3738.362125
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 58 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 3779.786166
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 59 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1520.4255
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 60 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1700.901083
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 61 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 383.692458
+  ...
+1..61
+# tests 61
+# suites 0
+# pass 61
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 78897.7025

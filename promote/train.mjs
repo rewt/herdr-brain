@@ -109,9 +109,13 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
     attempt.phase = 'complete'; save();
   };
   for (const attempt of plan.attempts) {
-    if (attempt.phase === 'validated' && git(['rev-parse', main]) === attempt.tip) {
-      // Lost response after FF: accept only the exact planned validated tip.
-      attempt.phase = 'integrated'; attempt.integrated_at ??= new Date().toISOString(); save();
+    if (attempt.phase === 'validated') {
+      const integrated = run(['merge-base', '--is-ancestor', attempt.tip, main]);
+      if (integrated.error || ![0, 1].includes(integrated.status)) throw new Error(integrated.stderr || integrated.error?.message || 'train ancestry proof failed');
+      if (integrated.status === 0) {
+        // A lost FF response remains adoptable after later batches advance main.
+        attempt.phase = 'integrated'; attempt.integrated_at ??= new Date().toISOString(); save();
+      }
     }
     if (attempt.phase === 'integrated') finishIntegrated(attempt);
   }

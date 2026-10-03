@@ -133,6 +133,8 @@ CLI as a run note, so `record show R-n` exposes report-to-main velocity. This ke
 ignore setup. The record's event log is never written by this module. Queue state
 is mechanical bookkeeping, not stored item/run status. Logs/results are retained
 without a retention policy.
+A failed velocity note is reported as a warning and does not prevent finished
+tab cleanup or lane close. Integration warnings still retain the lane for inspection.
 
 `queue.lock` serializes atomic queue replacements; `worker.lock` owns the drain;
 `GIT_COMMON_DIR/lane-promote.lock` excludes overlapping gates, fast-forwards and
@@ -143,13 +145,14 @@ shutdown cannot strand the request: both transitions hold `queue.lock`.
 
 After inspection/removing stale locks, `--drain --repo /project` resumes pending
 requests and suspended batches. A current train resumes its saved scratch
-candidate and tree-keyed evidence. If main moved, prepared/validated attempts are
-marked stale and rebuilt from current main. Changed, dirty or stopped lanes are
+candidate and tree-keyed evidence. If main moved without containing the validated
+tip, prepared/validated attempts are marked stale and rebuilt from current main. Changed, dirty or stopped lanes are
 refused individually before validation; remaining lanes continue. Dirty or
 off-main canonical checkouts produce per-member refusals before scratch work.
 Interruption before a green fast-forward leaves main untouched. Interruption
-after the fast-forward accepts only the exact planned validated tip already on
-main, and resumes bookkeeping without repeating the gate or integration.
+after the fast-forward accepts the planned validated tip when it is an ancestor
+of main, including after later batches land, and resumes bookkeeping without
+repeating the gate or integration.
 A batch with some halves already landed retains those green integrations and
 resumes its remaining groups. Dirty scratch evidence is retained for inspection.
 Legacy single-job receipts still produce an `interrupted` notice and preserve

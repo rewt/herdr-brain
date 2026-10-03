@@ -191,6 +191,38 @@ function finish(result, reason, extra = {}) {
   print();
 }
 function print() { process.stdout.write(`${JSON.stringify(job.result)}\n`); }
+function transientRecordRefusal(reason) {
+  // Match only record readiness refusals emitted here. Supersession, changed
+  // reports, review uncertainty and replay conflicts must remain terminal.
+  return /^Another run is open: R-\d+(?:, R-\d+)*$/.test(reason) ||
+    /^Correction needs supervisor judgment: the item is [a-z_]+; resolve its closure or blockers(?: \([^)]+\))?(?:; reported outcome (?:needs_human|blocked))?$/.test(reason) ||
+    /^The record still has concurrent work or says [a-z_]+; resolve its blockers or concurrent work$/.test(reason);
+}
+function correctionReceipts() {
+  const directory = path.join(opt.org, 'dispatch');
+  return fs.existsSync(directory) ? fs.readdirSync(directory).filter((x) => x.endsWith('.json') && !x.endsWith('.routes.json'))
+    .map((x) => ({ file: path.join(directory, x), value: JSON.parse(fs.readFileSync(path.join(directory, x), 'utf8')) }))
+    .filter((x) => x.value.brief === job.fixBrief && x.value.item === job.item && x.value.common === job.common) : [];
+}
+function resumeRecordRefusal() {
+  if (job.stage !== 'complete' || job.result?.result !== 'escalate' || !transientRecordRefusal(job.result.reason)) return false;
+  if (opt['fix-findings'] && !job.findingsCorrection) return false;
+  let stage = job.result.resume_stage;
+  if (!stage) {
+    // Legacy complete receipts lost their originating stage. Retained review
+    // and dispatch evidence selects the narrowest continuation, never a new
+    // review or worker when that operation already has a receipt.
+    if (job.fixBrief) stage = correctionReceipts().length ? 'dispatching' : 'fix';
+    else if (job.review) stage = job.result.reason.startsWith('The record still has concurrent work') ? 'ready' : 'rebase';
+    else stage = 'validate';
+  }
+  if (!['validate', 'rebase', 'ready', 'fix', 'dispatching'].includes(stage)) throw new Error('invalid record refusal resume stage');
+  recordSettlementDecision();
+  job.stage = stage;
+  delete job.result; delete job.settleDecision; delete job.error;
+  save();
+  return true;
+}
 function escalate(reason) {
   const item = show(job.item);
   const text = `# Settle handoff for ${id}\n\n${reason}\n\nRecommendation: inspect this evidence and decide whether to resume review, dispatch a correction, change scope, or ask the operator.\n\n${JSON.stringify({ item: item.title, acceptance: item.accept, record_blockers: item.blocked_by, record_status: item.status, record_outcome: item.outcome, record_runs: item.runs,
@@ -198,7 +230,9 @@ function escalate(reason) {
     questions: job.questions, review: job.review, validation: job.validation, rebase: job.rebase,
     workspace: job.workspace, head: job.head, journal }, null, 2)}\n`;
   finish('escalate', reason, { handoff: evidence('handoff.md', text), recommendation: 'supervisor judgment',
-    options: ['continue with a correction', 'change scope', 'ask the operator with these findings'] });
+    options: ['continue with a correction', 'change scope', 'ask the operator with these findings'],
+    ...(transientRecordRefusal(reason) && ['validate', 'rebase', 'ready', 'fix', 'dispatching'].includes(job.stage)
+      ? { resume_stage: job.stage } : {}) });
 }
 function inheritedEvidence() {
   let text = 'No worker validation receipt at the captured tree. The promotion queue runs the promotion tier on the integration batch before main moves.\n';
@@ -437,10 +471,7 @@ function stopCorrection(reason) {
 function fix() {
   let recovery;
   if (job.stage === 'dispatching') {
-    const directory = path.join(opt.org, 'dispatch');
-    const matches = fs.existsSync(directory) ? fs.readdirSync(directory).filter((x) => x.endsWith('.json') && !x.endsWith('.routes.json'))
-      .map((x) => ({ file: path.join(directory, x), value: JSON.parse(fs.readFileSync(path.join(directory, x), 'utf8')) }))
-      .filter((x) => x.value.brief === job.fixBrief && x.value.item === job.item && x.value.common === job.common) : [];
+    const matches = correctionReceipts();
     if (matches.length !== 1) return escalate('Fix dispatch outcome is uncertain; inspect dispatch journals before starting any worker');
     recovery = matches[0];
   } else unchanged({ movingMain: true });
@@ -526,7 +557,8 @@ function main() {
     bindLaneConfig(job);
     if (!Object.hasOwn(job, 'laneConfig')) { job.laneConfig = laneConfig; save(); }
     if (opt.retry && ['brief', 'review-route', 'fix-route', 'to', 'reuse', 'timeout', 'review-round-cap'].some((key) => opt[key] !== undefined)) throw new Error('--retry uses the saved request');
-    if (opt.retry && !opt['fix-findings'] && (job.stage !== 'complete' || ['promotable', 'promotable_with_findings'].includes(job.result?.result))) {
+    const resumedRefusal = resumeRecordRefusal();
+    if ((opt.retry || resumedRefusal) && !opt['fix-findings'] && (job.stage !== 'complete' || ['promotable', 'promotable_with_findings'].includes(job.result?.result))) {
       if (recaptureMain() === false) return;
     }
     if (job.stage === 'complete') {
@@ -552,7 +584,7 @@ function main() {
       job.cappedResult = job.result; job.findingsCorrection = true;
       delete job.result; job.stage = 'fix'; save();
     }
-    if (!opt.retry) throw new Error('settle is incomplete; inspect --status, then use --retry');
+    if (!opt.retry && !resumedRefusal) throw new Error('settle is incomplete; inspect --status, then use --retry');
   } else {
     if (opt.retry) throw new Error('no settle receipt to retry');
     const { config, files } = loadDiscoveredRoutes({ cwd: repo, env: { LANE_CONFIG: laneConfig ?? undefined } });
@@ -631,6 +663,8 @@ function main() {
     const open = activeWork();
     if (open.length) return escalate(`Another run is open: ${open.map((r) => r.id).join(', ')}`);
     if (job.outcome !== 'done') return escalate(`Worker reported ${job.outcome}: ${job.summary}. Read the report's blockers, proposals and questions`);
+    const blocker = correctionBlocker();
+    if (blocker) return escalate(blocker);
     inheritedEvidence();
     unchanged(); job.stage = 'review'; save();
   }

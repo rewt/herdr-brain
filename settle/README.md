@@ -242,6 +242,16 @@ node settle/settle.mjs R-123 --status
 node settle/settle.mjs R-123 --retry
 ```
 
+An escalation caused only by record readiness (an overlapping open run, item
+closure or unresolved blockers) saves its originating stage as `resume_stage`.
+After that precondition clears, `--retry` or a fresh handle resumes that stage
+under the saved request and rechecks project/lane identity, the captured report,
+supersession and current readiness. Existing completed readiness refusals also
+recover: retained review and dispatch receipts select the continuation, so a
+finished review is not repeated and an existing correction is not dispatched
+again. Replay conflicts, changed report evidence, superseded runs and unresolved
+review claims remain terminal escalations. Recovery never overrides a blocker.
+
 An incomplete review is never automatically relaunched. Inspect its named agent
 and retained private evidence; after it stops, `--retry --review-again` explicitly
 starts a different round. Malformed retained evidence can trigger the lane CLI's

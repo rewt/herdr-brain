@@ -1,0 +1,128 @@
+TAP version 13
+# Subtest: recovery: older overlapping run clears a new refusal
+not ok 1 - recovery: older overlapping run clears a new refusal
+  ---
+  duration_ms: 1100.846208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'escalate'
+    - 'promotable'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'promotable'
+  actual: 'escalate'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/settle/test/record-recovery.test.mjs:37:46
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: recovery: older overlapping run clears a legacy refusal after main moves
+not ok 2 - recovery: older overlapping run clears a legacy refusal after main moves
+  ---
+  duration_ms: 1067.854916
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'escalate'
+    - 'promotable'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'promotable'
+  actual: 'escalate'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/settle/test/record-recovery.test.mjs:37:46
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-recovery/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a fresh handle also rechecks an existing completed overlapping-run refusal
+ok 3 - a fresh handle also rechecks an existing completed overlapping-run refusal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.048583
+  ...
+# Subtest: record readiness recovery retains the completed review
+ok 4 - record readiness recovery retains the completed review # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.048666
+  ...
+# Subtest: record readiness recovery retains the completed review from a legacy receipt
+ok 5 - record readiness recovery retains the completed review from a legacy receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0485
+  ...
+# Subtest: a legacy correction refusal resumes the fix stage after blockers clear and main moves
+ok 6 - a legacy correction refusal resumes the fix stage after blockers clear and main moves # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034333
+  ...
+# Subtest: a legacy dispatching refusal adopts only its existing correction after blockers clear
+ok 7 - a legacy dispatching refusal adopts only its existing correction after blockers clear # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078458
+  ...
+# Subtest: legacy refusal recovery rechecks identity before reviewing
+ok 8 - legacy refusal recovery rechecks identity before reviewing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.088209
+  ...
+# Subtest: legacy refusal recovery rechecks head before reviewing
+ok 9 - legacy refusal recovery rechecks head before reviewing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.11575
+  ...
+# Subtest: legacy refusal recovery rechecks dirty before reviewing
+ok 10 - legacy refusal recovery rechecks dirty before reviewing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049959
+  ...
+# Subtest: legacy refusal recovery rechecks report before reviewing
+ok 11 - legacy refusal recovery rechecks report before reviewing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033625
+  ...
+# Subtest: legacy refusal recovery rechecks superseded before reviewing
+ok 12 - legacy refusal recovery rechecks superseded before reviewing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.082125
+  ...
+# Subtest: legacy refusal recovery rechecks blocked before reviewing
+ok 13 - legacy refusal recovery rechecks blocked before reviewing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032458
+  ...
+# Subtest: unverified acceptance remains a terminal escalation on retry
+ok 14 - unverified acceptance remains a terminal escalation on retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.082084
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 12
+# todo 0
+# duration_ms 2206.572167

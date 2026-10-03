@@ -1,0 +1,80 @@
+TAP version 13
+# Subtest: recovery: older overlapping run clears a new refusal
+ok 1 - recovery: older overlapping run clears a new refusal
+  ---
+  duration_ms: 5235.574958
+  ...
+# Subtest: recovery: older overlapping run clears a legacy refusal after main moves
+ok 2 - recovery: older overlapping run clears a legacy refusal after main moves
+  ---
+  duration_ms: 5608.834125
+  ...
+# Subtest: a fresh handle also rechecks an existing completed overlapping-run refusal
+ok 3 - a fresh handle also rechecks an existing completed overlapping-run refusal
+  ---
+  duration_ms: 4163.859917
+  ...
+# Subtest: record readiness recovery retains the completed review
+ok 4 - record readiness recovery retains the completed review
+  ---
+  duration_ms: 5363.547208
+  ...
+# Subtest: record readiness recovery retains the completed review from a legacy receipt
+ok 5 - record readiness recovery retains the completed review from a legacy receipt
+  ---
+  duration_ms: 5316.36825
+  ...
+# Subtest: a legacy correction refusal resumes the fix stage after blockers clear and main moves
+ok 6 - a legacy correction refusal resumes the fix stage after blockers clear and main moves
+  ---
+  duration_ms: 6096.133792
+  ...
+# Subtest: a legacy dispatching refusal adopts only its existing correction after blockers clear
+ok 7 - a legacy dispatching refusal adopts only its existing correction after blockers clear
+  ---
+  duration_ms: 6651.227917
+  ...
+# Subtest: legacy refusal recovery rechecks identity before reviewing
+ok 8 - legacy refusal recovery rechecks identity before reviewing
+  ---
+  duration_ms: 911.815416
+  ...
+# Subtest: legacy refusal recovery rechecks head before reviewing
+ok 9 - legacy refusal recovery rechecks head before reviewing
+  ---
+  duration_ms: 999.383292
+  ...
+# Subtest: legacy refusal recovery rechecks dirty before reviewing
+ok 10 - legacy refusal recovery rechecks dirty before reviewing
+  ---
+  duration_ms: 991.117792
+  ...
+# Subtest: legacy refusal recovery rechecks report before reviewing
+ok 11 - legacy refusal recovery rechecks report before reviewing
+  ---
+  duration_ms: 1140.53375
+  ...
+# Subtest: legacy refusal recovery rechecks superseded before reviewing
+ok 12 - legacy refusal recovery rechecks superseded before reviewing
+  ---
+  duration_ms: 1283.36025
+  ...
+# Subtest: legacy refusal recovery rechecks blocked before reviewing
+ok 13 - legacy refusal recovery rechecks blocked before reviewing
+  ---
+  duration_ms: 1321.266083
+  ...
+# Subtest: unverified acceptance remains a terminal escalation on retry
+ok 14 - unverified acceptance remains a terminal escalation on retry
+  ---
+  duration_ms: 3766.947291
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 48885.475917

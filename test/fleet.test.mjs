@@ -204,3 +204,110 @@ test('without a fleet file legacy ancestor discovery and console configuration a
   assert.equal(loadConfig(f.consoleFile).projects[0].org, record);
   assert.equal(fs.existsSync(f.fleetHome), false);
 });
+
+test('fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records', t => {
+  const f = fixture(t), cwd = f.repo('unjoined'), outside = path.join(f.scratch, 'outside');
+  fs.mkdirSync(outside); fs.mkdirSync(f.fleetHome);
+  fs.writeFileSync(path.join(f.fleetHome, 'fleet.json'), JSON.stringify({ version: 1, session_limit: 6, projects: {} }));
+  const record = path.join(cwd, '.org'); initOrg(record);
+  const code = `import {findOrgDir} from ${JSON.stringify(path.join(root, 'lib/store.mjs'))}; console.log(JSON.stringify(findOrgDir()));`;
+  const probe = () => spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+    cwd: outside, env: { ...f.env, GIT_DIR: path.join(cwd, '.git'), GIT_WORK_TREE: cwd }, encoding: 'utf8', timeout: 2000,
+  });
+  for (const outsideRecord of [false, true]) {
+    if (outsideRecord) initOrg(path.join(outside, '.org'));
+    const result = probe();
+    assert.equal(result.error, undefined, 'discovery must terminate at the filesystem root');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout), record, 'only the selected checkout record may be used');
+  }
+  const nested = path.join(cwd, 'nested'); fs.mkdirSync(nested);
+  assert.equal(findOrgDir({ cwd: nested, env: f.env }), record);
+});
+
+test('entry worktree roots are session overrides and never freeze the fleet mapping', t => {
+  const f = fixture(t), cwd = f.repo('app'), roots = ['first', 'second'].map(name => path.join(f.scratch, name));
+  const first = createEntry({ cwd, worktreeRoot: roots[0] }); f.keep(first);
+  assert.equal(path.dirname(first.context().workspace), roots[0]);
+  const mapped = f.read().projects.app.worktrees;
+  assert.notEqual(mapped, roots[0], 'first entry stores the project default');
+  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
+  const second = createEntry({ cwd, worktreeRoot: roots[1] }); f.keep(second);
+  assert.equal(path.dirname(second.context().workspace), roots[1]);
+  const unselected = createEntry({ cwd }); f.keep(unselected);
+  assert.equal(path.dirname(unselected.context().workspace), mapped);
+  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.statSync(file).mtimeMs, mtime);
+});
+
+test('console merges unjoined configured projects with fleet entries across refresh and adoption', async t => {
+  const f = fixture(t), cwd = f.repo('app'), legacy = f.repo('bch-cloak'), record = path.join(f.scratch, 'legacy-record');
+  initOrg(record);
+  fs.writeFileSync(f.consoleFile, JSON.stringify({ projects: [
+    { name: 'old-app-name', cwd, org: path.join(cwd, '.org'), session_cap: 17 },
+    { name: 'bch-cloak', cwd: legacy, org: record, session_cap: 23 },
+  ], glyphs: 'plain' }));
+  f.join(cwd);
+  const fleetBytes = fs.readFileSync(path.join(f.fleetHome, 'fleet.json')), recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+  const config = loadModernConfig(f.consoleFile);
+  for (const loaded of [config, loadConfig(f.consoleFile)]) {
+    assert.deepEqual(loaded.projects.map(p => p.name), ['app', 'bch-cloak']);
+    assert.equal(loaded.projects[0].session_cap, 17);
+    assert.equal(loaded.projects[1].org, record); assert.equal(loaded.projects[1].session_cap, 23);
+    assert.equal(loaded.glyphs, 'plain');
+    const rows = catalog(loaded.projects, [], createIdentityReader());
+    assert.equal(rows.length, 2); assert.equal(rows[1].org, record);
+  }
+  const console = createModernSession({ config, configFile: f.consoleFile, deps: {
+    herdrList: async () => [], herdrAgents: async () => ({ ok: true, agents: [] }), brainQueue: async () => ({ rows: [], off: true }),
+    orgToday: async () => ({}), orgStatus: async () => ({ items: [], runs: [] }), orgLog: async () => [], orgDesks: async () => ({}), orgHousekeeping: async () => ({}), orgRoutes: async () => ({}), gitSummary: async () => null,
+  } });
+  t.after(console.stop); await console.refresh();
+  assert.deepEqual(console.ui.projects.map(p => p.name), ['app', 'bch-cloak']);
+  assert.deepEqual(fs.readFileSync(path.join(f.fleetHome, 'fleet.json')), fleetBytes);
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+  assert.equal(fs.existsSync(path.join(legacy, '.org')), false);
+  f.join(legacy); await console.refresh();
+  assert.equal(console.ui.projects.length, 2, 'adoption replaces the configured row rather than duplicating it');
+  assert.equal(console.ui.projects.find(p => p.name === 'bch-cloak').org, record);
+});
+
+test('explicit ORG_DIR validates the fleet without launching Git on record commands', t => {
+  const f = fixture(t), cwd = f.repo('app'); f.join(cwd);
+  const record = f.read().projects.app.record, bin = path.join(f.scratch, 'bin'), marker = path.join(f.scratch, 'git-ran');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'git'), '#!/bin/sh\n: > "$GIT_PROBE_MARKER"\nexit 77\n', { mode: 0o755 });
+  const env = { ...f.env, ORG_DIR: record, GIT_PROBE_MARKER: marker, PATH: `${bin}${path.delimiter}${f.env.PATH}` };
+  const result = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd, env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr); assert.equal(fs.existsSync(marker), false);
+  fs.writeFileSync(path.join(f.fleetHome, 'fleet.json'), '{');
+  assert.throws(() => findOrgDir({ cwd, env }), /invalid fleet/);
+  assert.equal(fs.existsSync(marker), false);
+});
+
+test('a moved checkout can explicitly replace its stale mapping while retaining its external record', t => {
+  const f = fixture(t), cwd = f.repo('app'), record = path.join(f.scratch, 'external-record'); initOrg(record);
+  const original = f.join(cwd, ['--record', record]).project, recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+  const other = f.repo('other');
+  assert.notEqual(f.run(other, ['join', '--replace', 'app']).status, 0, 'a live mapping cannot be replaced');
+  const parent = path.join(f.scratch, 'relocated'); fs.mkdirSync(parent);
+  const moved = path.join(parent, 'app'); fs.renameSync(cwd, moved);
+  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file);
+  const automatic = f.run(moved, ['join']);
+  assert.notEqual(automatic.status, 0); assert.match(automatic.stderr, /stale.*app.*--replace/s);
+  assert.notEqual(f.run(moved, ['join', '--record', record]).status, 0);
+  assert.notEqual(f.run(moved, ['join', '--replace', 'missing']).status, 0);
+  const recordBackup = `${record}-backup`; fs.renameSync(record, recordBackup);
+  assert.notEqual(f.run(moved, ['join', '--replace', 'app']).status, 0, 'replacement requires the existing record');
+  assert.equal(fs.existsSync(record), false); fs.renameSync(recordBackup, record);
+  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(moved, '.org')), false);
+  const repaired = f.join(moved, ['--replace', 'app', '--record', record]);
+  assert.equal(repaired.name, 'app'); assert.equal(repaired.project.checkout, moved);
+  assert.notEqual(repaired.project.identity, original.identity);
+  for (const key of ['record', 'worktrees', 'temp', 'layers']) assert.deepEqual(repaired.project[key], original[key]);
+  assert.equal(Object.keys(f.read().projects).length, 1);
+  assert.equal(findOrgDir({ cwd: moved, env: f.env }), record);
+  const repairedBytes = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
+  f.join(moved, ['--replace', 'app']); f.join(moved);
+  assert.deepEqual(fs.readFileSync(file), repairedBytes); assert.equal(fs.statSync(file).mtimeMs, mtime);
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+});

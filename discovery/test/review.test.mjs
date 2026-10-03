@@ -9,9 +9,11 @@ import { createEntry, command } from '../runtime.mjs';
 import { runPTY, SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 import { findOrgDir, initOrg } from '../../lib/store.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const product = fileURLToPath(new URL('../../', import.meta.url));
 function fixture(t) {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-review-test-'));
+  fixtureFleet(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'project'); fs.mkdirSync(repo);
   command('git', ['init', '-q', '-b', 'main'], repo);
@@ -68,7 +70,11 @@ test('plain CLI finds nested records and keeps automatic runtime files out of gi
   command(process.execPath, [path.join(product, 'bin/org.mjs'), 'status'], f.repo, { ORG_DIR: '', ORG_ACTOR: 'test' });
   assert.equal(command('git', ['status', '--porcelain'], f.repo), '');
   const entry = createEntry({ ...f.options, cwd: below }); t.after(entry.close);
-  assert.equal(entry.context().org, path.join(nested, '.org'));
+  // Joining binds the Git project to its canonical record; nested legacy
+  // discovery above remains available before a fleet exists.
+  assert.equal(entry.context().org, path.join(f.repo, '.org'));
+  assert.equal(findOrgDir({ cwd: below, env: {} }), entry.context().org);
+  assert.equal(findOrgDir({ cwd: below, env: { ORG_DIR: path.join(nested, '.org') } }), path.join(nested, '.org'));
 });
 
 test('atomic writer pins its directory when an attacker replaces the directory path', (t) => {

@@ -6,10 +6,12 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createEntry, command } from '../runtime.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 
 const product = fileURLToPath(new URL('../../', import.meta.url));
 function fixture(t) {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-lifecycle-test-'));
+  fixtureFleet(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'unrelated'); fs.mkdirSync(repo);
   command('git', ['init', '-q', '-b', 'main'], repo);
@@ -181,11 +183,12 @@ test('symlinked HOME and operator worktree-root prefixes resolve before no-follo
   const f = fixture(t), home = path.join(f.scratch, 'real-home'), alias = path.join(f.scratch, 'home-link');
   fs.mkdirSync(home); fs.symlinkSync(home, alias);
   const source = `import {createEntry} from ${JSON.stringify(path.join(product, 'discovery/runtime.mjs'))};const entry=createEntry({cwd:${JSON.stringify(f.repo)},runtimeDir:${JSON.stringify(f.options.runtimeDir)}});console.log(JSON.stringify(entry.context()));entry.close();`;
-  const context = JSON.parse(command(process.execPath, ['--input-type=module', '-e', source], f.repo, { HOME: alias }));
-  assert.ok(context.workspace.startsWith(path.join(home, '.herdr/worktrees') + path.sep));
+  const context = JSON.parse(command(process.execPath, ['--input-type=module', '-e', source], f.repo, { HOME: alias, HERDR_MONITOR_FLEET: '' }));
+  assert.ok(context.workspace.startsWith(path.join(home, '.herdr-monitor/p') + path.sep));
   assert.ok(!fs.existsSync(context.workspace));
   const roots = path.join(f.scratch, 'real-roots'), rootLink = path.join(f.scratch, 'root-link');
   fs.mkdirSync(roots); fs.symlinkSync(roots, rootLink);
+  const first = createEntry(f.options); first.close();
   const entry = createEntry({ ...f.options, worktreeRoot: path.join(rootLink, 'not-yet-created/deep') });
   assert.equal(path.dirname(entry.context().workspace), path.join(roots, 'not-yet-created/deep'));
   entry.close();

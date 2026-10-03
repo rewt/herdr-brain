@@ -6,10 +6,12 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { sandboxCommand, selectSandbox } from '../confinement.mjs';
 import { createEntry, command } from '../runtime.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 process.env.ORG_ACTOR = 'eng81-offline-alternatives';
 const product = new URL('../../', import.meta.url).pathname;
 function fixture(t) {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-alternatives-'));
+  fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
   const repo = path.join(scratch, 'repo'); fs.mkdirSync(repo);

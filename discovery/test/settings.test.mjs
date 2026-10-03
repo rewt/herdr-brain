@@ -7,6 +7,7 @@ import { createEntry, command } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { runPTY, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../../lanes/routes.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 
 const product = new URL('../../', import.meta.url).pathname;
 function fixture(t, config = {}) {
@@ -14,6 +15,7 @@ function fixture(t, config = {}) {
   process.env.ORG_ACTOR = 'entry-settings-test';
   t.after(() => { if (previousActor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = previousActor; });
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-settings-test-'));
+  fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
   const repo = path.join(scratch, 'project'); fs.mkdirSync(repo);

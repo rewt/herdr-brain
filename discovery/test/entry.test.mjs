@@ -10,9 +10,11 @@ import { findOrgDir, initOrg, loadEvents } from '../../lib/store.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../../lanes/routes.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { assertSupervisorEntry } from '../../acceptance/entry.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const root = new URL('../../', import.meta.url).pathname;
 const fixture = (t) => {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-entry-test-'));
+  fixtureFleet(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'unrelated'); fs.mkdirSync(repo);
   command('git', ['init', '-q', '-b', 'main'], repo);

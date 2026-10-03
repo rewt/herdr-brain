@@ -1,0 +1,487 @@
+TAP version 13
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 1 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 649.162667
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 2 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 456.44375
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 3 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 965.722791
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 4 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 166.026125
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 5 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 327.618916
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 6 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 127.190083
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 7 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 426.812083
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 8 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1299.050584
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 9 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 157.173
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 10 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 499.324209
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 11 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 64.894792
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 12 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 134.563209
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 13 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 954.305084
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 14 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 385.316084
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 15 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 137.721958
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 16 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 549.958375
+  ...
+# Subtest: receipt publication hides a deliberately paused partial JSON write from the sweep reader
+ok 17 - receipt publication hides a deliberately paused partial JSON write from the sweep reader
+  ---
+  duration_ms: 776.929125
+  ...
+# Subtest: close preserves ignored .env and .lane files and explains retention
+not ok 18 - close preserves ignored .env and .lane files and explains retention
+  ---
+  duration_ms: 99.216875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'stale fleet project unrelated at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-8Ni0Jj/unrelated; inspect it, then join --replace unrelated to retain its record'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:85:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: codex entry forwards terminal hangup and cleans its untouched lane
+not ok 19 - codex entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 10058.226459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timed out: codex native launch'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:26:38)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:107:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: claude entry forwards terminal hangup and cleans its untouched lane
+not ok 20 - claude entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 10040.085833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timed out: claude native launch'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:26:38)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:107:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: next entry sweeps killed untouched owners and preserves every form of work
+not ok 21 - next entry sweeps killed untouched owners and preserves every form of work
+  ---
+  duration_ms: 10058.333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timed out: empty owner receipt'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:26:38)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:125:5
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: sweep never removes a lane owned by a live parent or native child
+not ok 22 - sweep never removes a lane owned by a live parent or native child
+  ---
+  duration_ms: 10055.093959
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timed out: live owner receipt'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:26:38)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:146:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a parent killed during ownership handoff cannot launch an unregistered native child
+not ok 23 - a parent killed during ownership handoff cannot launch an unregistered native child
+  ---
+  duration_ms: 131.903416
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + null
+    - 'SIGKILL'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'SIGKILL'
+  actual: ~
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:173:44
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+not ok 24 - symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+  ---
+  duration_ms: 130.549791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    node:fs:574
+      return binding.open(
+                     ^
+    
+    Error: ENOTDIR: not a directory, open 'home-link'
+        at Object.openSync (node:fs:574:18)
+        at inDirectory (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/files.mjs:32:21)
+        at writeFileAtomic (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/files.mjs:65:10)
+        at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:145:7
+        at withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+        at joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+        at createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+        at file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-DKJiij/unrelated/[eval1]:1:126 {
+      errno: -20,
+      code: 'ENOTDIR',
+      syscall: 'open',
+      path: 'home-link'
+    }
+    
+    Node.js v20.19.4
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Object.openSync (node:fs:574:18)
+    inDirectory (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/files.mjs:32:21)
+    writeFileAtomic (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/files.mjs:65:10)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:145:7
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-DKJiij/unrelated/[eval1]:1:126 {
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:25:40)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/lifecycle.test.mjs:184:30
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: route adoption leaves planted predictable and destination symlinks untouched
+ok 25 - route adoption leaves planted predictable and destination symlinks untouched
+  ---
+  duration_ms: 645.385958
+  ...
+# Subtest: plain CLI finds nested records and keeps automatic runtime files out of git status
+not ok 26 - plain CLI finds nested records and keeps automatic runtime files out of git status
+  ---
+  duration_ms: 255.092
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:70:17
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: atomic writer pins its directory when an attacker replaces the directory path
+ok 27 - atomic writer pins its directory when an attacker replaces the directory path
+  ---
+  duration_ms: 42.119708
+  ...
+# Subtest: supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+ok 28 - supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1665.330458
+  ...
+# Subtest: contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+ok 29 - contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1565.866375
+  ...
+# Subtest: global-only Git identity and unused globally installed LFS survive broker commits
+not ok 30 - global-only Git identity and unused globally installed LFS survive broker commits
+  ---
+  duration_ms: 148.009
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111
+          if (stale) throw new FleetError(`stale fleet project ${stale[0]} at ${stale[1].checkout}; inspect it, then join --replace ${stale[0]} to retain its record`);
+                           ^
+    
+    FleetError: stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record
+        at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+        at withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+        at joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+        at createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+        at file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-1nHR0u/project/[eval1]:1:153
+    
+    Node.js v20.19.4
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-1nHR0u/project/[eval1]:1:153
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:25:40)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:124:21
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+not ok 31 - only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+  ---
+  duration_ms: 1929.75625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    ^Dmonitor entry: stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    interactive (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:33:10)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:139:3
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: interactive no-identity launches warn and preserve the native session
+not ok 32 - interactive no-identity launches warn and preserve the native session
+  ---
+  duration_ms: 1394.653625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+    
+      assert.ok(!fs.existsSync(path.join(cwd, '.org')))
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:165:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+not ok 33 - fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+  ---
+  duration_ms: 1580.018291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: '^D\b\bmonitor entry: stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:25:40)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:187:5
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: canonical preparation and validation remain authoritative in both check and promote
+not ok 34 - canonical preparation and validation remain authoritative in both check and promote
+  ---
+  duration_ms: 102.591833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:202:17
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: operator-selected record ancestors, record files and report links keep working
+not ok 35 - operator-selected record ancestors, record files and report links keep working
+  ---
+  duration_ms: 519.950583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:250:17
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+not ok 36 - symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+  ---
+  duration_ms: 209.169833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:266:17
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+ok 37 - findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+  ---
+  duration_ms: 73.099458
+  ...
+# Subtest: macOS /tmp remains a valid operator record path
+ok 38 - macOS /tmp remains a valid operator record path
+  ---
+  duration_ms: 62.451583
+  ...
+# Subtest: close removes only untouched entry lanes, including failed setup
+not ok 39 - close removes only untouched entry lanes, including failed setup
+  ---
+  duration_ms: 84.315
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'stale fleet project project at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-L04jQw/project; inspect it, then join --replace project to retain its record'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:111:24
+    withInstallationLock (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/herdr/entry-lock.mjs:55:12)
+    joinFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/lib/fleet.mjs:90:10)
+    createEntry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/runtime.mjs:41:17)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/discovery/test/review.test.mjs:294:17
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+1..39
+# tests 39
+# suites 0
+# pass 23
+# fail 16
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 41387.201792

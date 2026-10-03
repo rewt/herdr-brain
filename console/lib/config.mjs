@@ -109,12 +109,26 @@ function fromFleet(fleet, file, options = {}) {
   let preferences = {};
   try { preferences = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw new ConfigError(`${file} cannot be read: ${error.message}`); }
-  const projects = Object.entries(fleet.projects).map(([name, p]) => {
-    const prior = (preferences.projects ?? []).find(v => expand(v.cwd) === p.checkout) ?? {};
+  const configured = Array.isArray(preferences.projects) ? preferences.projects : [];
+  const entries = Object.entries(fleet.projects);
+  const samePath = (value, mapped) => {
+    const expanded = expand(value);
+    if (!expanded) return false;
+    const real = p => { try { return fs.realpathSync(p); } catch { return p; } };
+    return real(expanded) === real(mapped);
+  };
+  const matches = (prior, p) => samePath(prior.cwd, p.checkout) || samePath(prior.org, p.record);
+  const projects = entries.map(([name, p]) => {
+    const prior = configured.find(v => matches(v, p)) ?? {};
     return { ...prior, name, cwd: p.checkout, org: p.record };
   });
+  projects.push(...configured.filter(prior => !entries.some(([, p]) => matches(prior, p))));
   const config = normalizeConfig({ ...preferences, example: false, projects, explain: options.allowUnmanaged ? false : preferences.explain }, fleet.file, options);
-  config.projects = config.projects.map(p => ({ ...p, id: `fleet:${fleet.projects[p.name].identity}`, identity: fleet.projects[p.name].identity,
-    checkout: fleet.projects[p.name].checkout, org: fleet.projects[p.name].stale ? null : p.org, stale: fleet.projects[p.name].stale }));
+  config.projects = config.projects.map((p, i) => {
+    if (i >= entries.length) return { ...p, joined: false };
+    const mapped = entries[i][1];
+    return { ...p, id: `fleet:${mapped.identity}`, identity: mapped.identity, checkout: mapped.checkout,
+      org: mapped.stale ? null : p.org, stale: mapped.stale, joined: true };
+  });
   return { ...config, fleet: { file: fleet.file, session_limit: fleet.session_limit, advisory: true } };
 }

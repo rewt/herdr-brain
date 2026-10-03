@@ -13,7 +13,8 @@ export function projectEntrySettings(project) {
   catch (error) { throw new Error(`cannot read entry config ${file}: ${error.message}`); }
   const invalid = (reason) => { throw new Error(`invalid entry config ${file}: ${reason}`); };
   if (!object(config)) invalid('top level must be an object');
-  if (!Object.hasOwn(config, 'entry')) return defaults;
+  const configured = { ...defaults, main: config.main };
+  if (!Object.hasOwn(config, 'entry')) return configured;
   const entry = config.entry;
   if (!object(entry)) invalid('entry must be an object');
   if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') invalid('entry.enabled must be a boolean');
@@ -22,5 +23,5 @@ export function projectEntrySettings(project) {
   if (Object.keys(entry).some((key) => !['enabled', 'mode', 'policy'].includes(key))) invalid('unknown entry setting');
   if (entry.mode !== undefined && !['worker', 'main'].includes(entry.mode)) invalid('entry.mode must be worker or main');
   if (entry.policy !== undefined && (typeof entry.policy !== 'string' || entry.policy.includes('\0'))) invalid('entry.policy must be text without NUL');
-  return { ...defaults, ...entry, source: file };
+  return { ...configured, ...entry, source: file };
 }

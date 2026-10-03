@@ -1,0 +1,294 @@
+TAP version 13
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 1 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 898.829333
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 2 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 641.901583
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 3 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 1235.959875
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 4 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 217.180625
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 5 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 448.5575
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 6 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 242.779167
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 7 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 387.545875
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 8 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1646.93775
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 9 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 204.673
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 10 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 675.941375
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 11 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 89.142167
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 12 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 174.87225
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 13 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 1125.864625
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 14 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 526.939667
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 15 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 172.417
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 16 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 708.997208
+  ...
+# monitor entry: keeping lane/entry-940e4dbc91db at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-9j91xq/lanes/lane-entry-940e4dbc91db: modified, untracked or ignored files
+# Subtest: receipt publication hides a deliberately paused partial JSON write from the sweep reader
+ok 17 - receipt publication hides a deliberately paused partial JSON write from the sweep reader
+  ---
+  duration_ms: 1059.623542
+  ...
+# Subtest: close preserves ignored .env and .lane files and explains retention
+ok 18 - close preserves ignored .env and .lane files and explains retention
+  ---
+  duration_ms: 1077.51025
+  ...
+# Subtest: codex entry forwards terminal hangup and cleans its untouched lane
+ok 19 - codex entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 778.5335
+  ...
+# Subtest: claude entry forwards terminal hangup and cleans its untouched lane
+ok 20 - claude entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 768.012208
+  ...
+# monitor entry: keeping lane/entry-8db1adfdf41a at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-hOekvG/lanes/lane-entry-8db1adfdf41a: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-59954a5ae355 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-iQ9jtj/lanes/lane-entry-59954a5ae355: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-af9c050fd042 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-SeA6oK/lanes/lane-entry-af9c050fd042: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-768cb6d66fe5 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-bqSJWE/lanes/lane-entry-768cb6d66fe5: commits beyond its creation base
+# monitor entry: keeping lane/entry-0097d6f0b500 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-ydMs0D/lanes/lane-entry-0097d6f0b500: commits beyond its creation base
+# monitor entry: keeping lane/entry-efff1017dba3 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-lifecycle-test-UQwOrk/lanes/lane-entry-efff1017dba3: a run was started in this lane
+# monitor entry: keeping entry-f34ff4afd8e5.json: external Git filters/drivers used by README.md require a native validation sandbox
+# Subtest: next entry sweeps killed untouched owners and preserves every form of work
+ok 21 - next entry sweeps killed untouched owners and preserves every form of work
+  ---
+  duration_ms: 8563.971333
+  ...
+# Subtest: sweep never removes a lane owned by a live parent or native child
+ok 22 - sweep never removes a lane owned by a live parent or native child
+  ---
+  duration_ms: 1185.967083
+  ...
+# Subtest: a parent killed during ownership handoff cannot launch an unregistered native child
+ok 23 - a parent killed during ownership handoff cannot launch an unregistered native child
+  ---
+  duration_ms: 819.983833
+  ...
+# Subtest: symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+ok 24 - symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+  ---
+  duration_ms: 1172.038209
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry: keeping lane/entry-1c03e8eea865 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-VZj9Ku/lanes/lane-entry-1c03e8eea865: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-1c03e8eea865 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-VZj9Ku/lanes/lane-entry-1c03e8eea865: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-93a34feb5c09 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-VZj9Ku/lanes/lane-entry-93a34feb5c09: commits beyond its creation base
+# monitor entry: keeping lane/entry-1c03e8eea865 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-VZj9Ku/lanes/lane-entry-1c03e8eea865: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-93a34feb5c09 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-VZj9Ku/lanes/lane-entry-93a34feb5c09: commits beyond its creation base
+# monitor entry: keeping lane/entry-e994ec1e3f1b at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-review-test-VZj9Ku/lanes/lane-entry-e994ec1e3f1b: a run was started in this lane
+# Subtest: route adoption leaves planted predictable and destination symlinks untouched
+ok 25 - route adoption leaves planted predictable and destination symlinks untouched
+  ---
+  duration_ms: 794.939709
+  ...
+# Subtest: plain CLI finds nested records and keeps automatic runtime files out of git status
+ok 26 - plain CLI finds nested records and keeps automatic runtime files out of git status
+  ---
+  duration_ms: 589.404666
+  ...
+# Subtest: atomic writer pins its directory when an attacker replaces the directory path
+ok 27 - atomic writer pins its directory when an attacker replaces the directory path
+  ---
+  duration_ms: 53.994917
+  ...
+# Subtest: supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+ok 28 - supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 2713.682459
+  ...
+# Subtest: contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+ok 29 - contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1979.076042
+  ...
+# Subtest: global-only Git identity and unused globally installed LFS survive broker commits
+ok 30 - global-only Git identity and unused globally installed LFS survive broker commits
+  ---
+  duration_ms: 823.309708
+  ...
+# Subtest: only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+ok 31 - only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+  ---
+  duration_ms: 4405.011584
+  ...
+# Subtest: interactive no-identity launches warn and preserve the native session
+ok 32 - interactive no-identity launches warn and preserve the native session
+  ---
+  duration_ms: 3818.757083
+  ...
+# Subtest: fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+ok 33 - fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+  ---
+  duration_ms: 3051.714125
+  ...
+# Subtest: canonical preparation and validation remain authoritative in both check and promote
+ok 34 - canonical preparation and validation remain authoritative in both check and promote
+  ---
+  duration_ms: 2493.178042
+  ...
+# Subtest: operator-selected record ancestors, record files and report links keep working
+ok 35 - operator-selected record ancestors, record files and report links keep working
+  ---
+  duration_ms: 833.196125
+  ...
+# Subtest: symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+ok 36 - symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+  ---
+  duration_ms: 442.25825
+  ...
+# Subtest: findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+ok 37 - findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+  ---
+  duration_ms: 77.539334
+  ...
+# Subtest: macOS /tmp remains a valid operator record path
+ok 38 - macOS /tmp remains a valid operator record path
+  ---
+  duration_ms: 66.865
+  ...
+# Subtest: close removes only untouched entry lanes, including failed setup
+ok 39 - close removes only untouched entry lanes, including failed setup
+  ---
+  duration_ms: 1996.698125
+  ...
+# monitor entry: keeping lane/entry-bd65527f90f7 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-settings-test-5Qn4Gn/lanes/lane-entry-bd65527f90f7: a run was started in this lane
+# monitor entry: keeping lane/entry-c1daf758813b at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-settings-test-USv0sZ/lanes/lane-entry-c1daf758813b: a run was started in this lane
+# monitor entry: keeping lane/entry-dc7e02f57ea7 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-settings-test-aC3wlY/lanes/lane-entry-dc7e02f57ea7: a run was started in this lane
+# monitor entry: keeping lane/entry-20241bb09b3b at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-settings-test-wMjX44/lanes/lane-entry-20241bb09b3b: modified, untracked or ignored files
+# Subtest: explicit installed adapters leave opted-out projects and native arguments untouched
+ok 40 - explicit installed adapters leave opted-out projects and native arguments untouched
+  ---
+  duration_ms: 810.788375
+  ...
+# Subtest: automatic interactive adapters pass opted-out sessions straight through
+ok 41 - automatic interactive adapters pass opted-out sessions straight through
+  ---
+  duration_ms: 1532.007125
+  ...
+# Subtest: both transports deliver project settings, integration branch and instruction precedence
+ok 42 - both transports deliver project settings, integration branch and instruction precedence
+  ---
+  duration_ms: 1558.929833
+  ...
+# Subtest: main-checkout mode reaches both native harnesses without becoming a supervisor
+ok 43 - main-checkout mode reaches both native harnesses without becoming a supervisor
+  ---
+  duration_ms: 1595.537042
+  ...
+# Subtest: automatic interactive entry honors the project main-checkout mode
+ok 44 - automatic interactive entry honors the project main-checkout mode
+  ---
+  duration_ms: 2636.7955
+  ...
+# Subtest: worker mode validates and promotes to the declared integration branch
+ok 45 - worker mode validates and promotes to the declared integration branch
+  ---
+  duration_ms: 2145.103542
+  ...
+# Subtest: main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+ok 46 - main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+  ---
+  duration_ms: 813.175167
+  ...
+# Subtest: main-mode done reports require clean committed work and successful sandboxed validation
+ok 47 - main-mode done reports require clean committed work and successful sandboxed validation
+  ---
+  duration_ms: 2952.468125
+  ...
+# Subtest: entry-only configuration preserves the portable route suggestion and pending operator question
+ok 48 - entry-only configuration preserves the portable route suggestion and pending operator question
+  ---
+  duration_ms: 495.125708
+  ...
+# Subtest: entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+ok 49 - entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+  ---
+  duration_ms: 2334.736791
+  ...
+# Subtest: undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+ok 50 - undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+  ---
+  duration_ms: 1722.269208
+  ...
+# Subtest: entry settings use canonical Git identity and do not inherit parent or worker config
+ok 51 - entry settings use canonical Git identity and do not inherit parent or worker config
+  ---
+  duration_ms: 710.100375
+  ...
+# Subtest: invalid enabled settings and mismatched integration branches fail before runtime creation
+ok 52 - invalid enabled settings and mismatched integration branches fail before runtime creation
+  ---
+  duration_ms: 162.627
+  ...
+1..52
+# tests 52
+# suites 0
+# pass 52
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 34976.246458

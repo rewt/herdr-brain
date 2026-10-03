@@ -96,6 +96,11 @@ record is never adopted just because it exists. A new project keeps the native
 under the fleet home keyed by its Git identity. Existing mapped parent settings
 preserve their worktree location. No paths are moved.
 
+Entry's `MONITOR_WORKTREE_ROOT` or `--worktree-root` selects a worktree root for
+that session only; it does not change the fleet mapping. Later entries can
+select another root, and an entry with no override uses the mapped default.
+`monitor fleet join --worktrees` explicitly maps a project root at adoption.
+
 For adoption without a console mapping, the project's supervisor can name its
 existing paths explicitly (repeat `--layer` for each owned settings file):
 
@@ -109,9 +114,16 @@ the project edge and reads only that project's mapping and checkout. An unjoined
 project can bootstrap its own record through `record`, but only entry/join adds
 it to the fleet. `ORG_DIR` and `LANE_CONFIG` remain explicit selections. Without
 a fleet file, legacy discovery and console configuration work as before.
-The console reads joined projects from the fleet and keeps presentation and
-transcript preferences from its existing configuration. A moved or replaced
+The console merges joined projects with projects from its existing configuration
+that have not joined yet, retaining their explicitly configured records and
+presentation and transcript preferences. Reading the console never joins them;
+joining later replaces the configured row with its fleet mapping. A moved or replaced
 checkout is shown stale, with no guessed replacement or usable record binding.
+Automatic join refuses a new identity with the same checkout basename as a stale
+mapping. After inspecting the old mapping, run `monitor fleet join --replace NAME`
+from the moved checkout to retain its existing external record and mapped paths.
+Replacement requires that record's `events.jsonl` to exist and refuses replacing
+a live project or using a checkout already owned by another fleet project.
 Malformed fleet JSON or schema fails before entry/join or record commands write
 records; automatic entry also refuses rather than launching an unbound session.
 

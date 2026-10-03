@@ -37,12 +37,6 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const id = randomUUID().replaceAll('-', '');
   const topic = `entry-${id.slice(0, 12)}`;
   const env = { ORG_ACTOR: `entry-${id.slice(0, 12)}` };
-  // Never inherit a different project's record into an unrelated session.
-  const fleet = joinFleet({ cwd, worktrees: worktreeRoot });
-  let org = fleet.project.record;
-  const recordAlias = org;
-  env.ORG_DIR = org;
-  const record = (args, location = project.canonical) => command(process.execPath, [local('../bin/org.mjs'), ...args], location, env);
   const gitEnv = { ...env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const k of Object.keys(process.env)) if (/^GIT_/u.test(k) && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(k)) gitEnv[k] = undefined;
   // Resolve the operator's identity normally before bounding Git execution config.
@@ -51,6 +45,17 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     if (!identity) throw new Error('Git identity is unavailable');
     gitEnv[`GIT_${type}_NAME`] = identity[1]; gitEnv[`GIT_${type}_EMAIL`] = identity[2];
   }
+  // Entry eligibility must fail before joining or creating a record.
+  if (settings.main !== undefined && (typeof settings.main !== 'string' || !settings.main
+    || command('git', ['-C', project.canonical, 'branch', '--show-current']) !== settings.main))
+    throw new Error('canonical checkout must be on the configured integration branch');
+  command('git', ['-C', project.canonical, 'rev-parse', '--verify', 'HEAD']);
+  // Never inherit a different project's record into an unrelated session.
+  const fleet = joinFleet({ cwd });
+  let org = fleet.project.record;
+  const recordAlias = org;
+  env.ORG_DIR = org; gitEnv.ORG_DIR = org;
+  const record = (args, location = project.canonical) => command(process.execPath, [local('../bin/org.mjs'), ...args], location, env);
   let filterPaths = [org, path.join(project.canonical, '.lane')];
   const filterConfig = new Map([['core.hooksPath', '/dev/null'], ['core.fsmonitor', 'false'], ['commit.gpgsign', 'false']]);
   let canonicalDrivers;
@@ -146,7 +151,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const lifecycleOwner = entryLifecycle({ project, coordination, git, externalGit });
   let workspace = project.canonical;
   if (workerLane) {
-    const root = worktreeDirectory(fleet.project.worktrees, project.identity);
+    const root = worktreeDirectory(worktreeRoot ?? fleet.project.worktrees, project.identity);
     let containingProject;
     try { containingProject = gitProject(root); } catch {}
     if (containingProject) throw new Error('worktree root must be outside existing Git checkouts');

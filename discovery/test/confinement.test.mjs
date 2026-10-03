@@ -6,6 +6,7 @@ import os from 'node:os';
 import { createEntry, command, quote } from '../runtime.mjs';
 import { initOrg } from '../../lib/store.mjs';
 import { sandboxCommand } from '../confinement.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 
 const product = new URL('../../', import.meta.url).pathname;
 const binary = process.env.MONITOR_TEST_SANDBOX;
@@ -19,6 +20,7 @@ for (const linked of [false, true]) test(`native main-mode workers and validatio
   skip: !binary && 'set MONITOR_TEST_SANDBOX to run this offline native filesystem regression', timeout: 60000,
 }, (t) => {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-confinement-test-'));
+  fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
   const repo = path.join(scratch, 'project'), nativeHome = path.join(scratch, 'native-home');

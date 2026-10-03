@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createEntry, command, quote } from '../runtime.mjs';
 import { sandboxCommand } from '../confinement.mjs';
 import { checkedDirectory, validationTemporary } from '../paths.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const product = new URL('../../', import.meta.url).pathname;
 const caseTest = (name, fn) => test(name, { timeout: 45000 }, (t) => {
   process.env.ORG_ACTOR = `r90-${name.replaceAll(/[^a-z0-9]/giu, '-').slice(0, 90)}`;
@@ -14,6 +15,7 @@ const caseTest = (name, fn) => test(name, { timeout: 45000 }, (t) => {
 });
 function fixture(t) {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-r90-'));
+  fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
   const repo = path.join(scratch, 'repo'); fs.mkdirSync(repo);

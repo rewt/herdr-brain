@@ -2,6 +2,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// Disposable projects must not inherit stale mappings from earlier fixtures.
+export function fixtureFleet(t, scratch) {
+  const before = process.env.HERDR_MONITOR_FLEET;
+  process.env.HERDR_MONITOR_FLEET = path.join(scratch, 'fleet');
+  t.after(() => {
+    if (before === undefined) delete process.env.HERDR_MONITOR_FLEET;
+    else process.env.HERDR_MONITOR_FLEET = before;
+  });
+}
+
 // Shared by the bounded runner and direct test-file execution. Fixtures may
 // put their own fake before this refusal adapter, but never inherit live IDs.
 export function offlineHerdr() {

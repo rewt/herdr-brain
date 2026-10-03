@@ -11,6 +11,22 @@ import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 import { spawnChild, waitForExit, killChild } from './helpers/child.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
+function assertNativeSupervisorEntry(native, runtime) {
+  const policy = JSON.parse(native.args.find((arg) => arg.startsWith('developer_instructions=')).slice('developer_instructions='.length));
+  assertSupervisorEntry(policy);
+  assert.match(policy, /Native SessionStart runs supervisor entry on startup, resume, clear and compact/u);
+  assert.match(policy, /resume housekeeping when enabled and resume\nare true/u);
+  assert.match(policy, /re-arms dead open-run watchers and reports stale locks without deleting them/u);
+  assert.match(policy, /Entry failures print diagnostics and allow the session to continue/u);
+  const hook = native.args.find((arg) => arg.startsWith('hooks.SessionStart='));
+  assert.ok(hook, 'installed supervisor must receive a native SessionStart hook');
+  const matcher = new RegExp(JSON.parse(hook.match(/matcher=("(?:[^"\\]|\\.)*")/u)[1]));
+  for (const source of ['startup', 'resume', 'clear', 'compact']) assert.ok(matcher.test(source), source);
+  const command = JSON.parse(hook.match(/command=("(?:[^"\\]|\\.)*")/u)[1]);
+  const entry = path.join(runtime, 'supervisor/session-start.mjs');
+  assert.ok(command.includes(entry), 'hook must use the installed runtime');
+  assert.ok(fs.existsSync(entry), 'the installed runtime must carry the entry hook');
+}
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-plugin-test-'));
   const children = new Set();
@@ -358,9 +374,7 @@ test('release carries entry, pins final versions, rolls back and restores exact 
   f.ok('bash', [path.join(marker().product, 'herdr/supervisor.sh'), '--model', 'literal'], project);
   const supervisor = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(supervisor.cwd, project);
-  assertSupervisorEntry(JSON.parse(supervisor.args.find((arg) => arg.startsWith('developer_instructions=')).slice('developer_instructions='.length)));
-  assert.match(supervisor.args.join('\n'), /At session entry, start the default project schedule/u);
-  assert.ok(supervisor.args.join('\n').includes(`${marker().product}/housekeeping/housekeeping.mjs`));
+  assertNativeSupervisorEntry(supervisor, marker().product);
   f.release('activate', 'second'); f.release('activate', 'second');
   assert.equal(marker().native, f.native); assert.match(marker().product, /releases\/second$/u);
   f.release('rollback'); assert.match(marker().product, /releases\/first$/u);
@@ -449,8 +463,8 @@ test('supervisor resolves the selected workspace to canonical Git instead of its
   f.ok('bash', [path.join(f.repo, 'herdr/supervisor.sh'), '--model', 'literal'], f.repo, context);
   const native = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(native.cwd, project);
-  assertSupervisorEntry(JSON.parse(native.args.find((arg) => arg.startsWith('developer_instructions=')).slice('developer_instructions='.length)));
-  assert.match(native.args.join('\n'), /At session entry, start the default project schedule/u);
+  const runtime = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-entry.json'))).product;
+  assertNativeSupervisorEntry(native, runtime);
   assert.equal(fs.existsSync(path.join(f.repo, '.org')), false);
   assert.notEqual(f.run('bash', [path.join(f.repo, 'herdr/supervisor.sh')], f.repo, { ...context, HERDR_PLUGIN_CONTEXT_JSON: '{}', HERDR_WORKSPACE_ID: '' }).status, 0);
   assert.notEqual(f.run('bash', [path.join(f.repo, 'herdr/supervisor.sh')], f.repo, { ...context, HERDR_PLUGIN_CONTEXT_JSON: JSON.stringify({ workspace_id: 'owned-workspace' }) }).status, 0);

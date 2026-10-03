@@ -1,0 +1,205 @@
+TAP version 13
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 1 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 450.879125
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 2 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 479.698875
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 3 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 1595.494583
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 4 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1461.586042
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 5 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 1384.192917
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 6 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1588.438917
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 7 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 1753.972125
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 8 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1554.371333
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 9 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1415.452791
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 10 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 12889.868958
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 11 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1696.70075
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 12 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1256.152666
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 13 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 912.816833
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 14 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 993.840125
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 15 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 1822.609
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 16 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1654.903416
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 17 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1063.112333
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 18 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1190.8895
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 19 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1207.046083
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 20 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1148.500417
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 21 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1238.850916
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 22 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1197.054208
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 23 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1228.703375
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 24 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1234.952791
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 25 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 1615.536208
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 26 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 3328.748292
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 27 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 500.059625
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 28 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1199.75175
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 29 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1248.732375
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 30 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2205.141416
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 31 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 1908.8035
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 32 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3298.06525
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 33 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 322.986583
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 34 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 1948.67675
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 35 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 1989.06275
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 36 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2199.5655
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 37 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1129.831334
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 38 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1342.818959
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 39 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 1728.026667
+  ...
+1..39
+# tests 39
+# suites 0
+# pass 39
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 68426.917917

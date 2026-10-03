@@ -26,7 +26,7 @@ test('project cap counts completed reviews across fix runs and records the no-di
   const second = result(f.settle(first.fix.run));
   assert.equal(second.result, 'promotable_with_findings'); assert.equal(second.reviewed_commit, head);
   assert.equal(second.review_policy.round, 2); assert.deepEqual(second.review_policy.prior_runs, [run]);
-  assert.equal(second.findings, `${moderate}\n${minor}`); assert.equal(second.validation.exit_code, 0);
+  assert.equal(second.findings, `${moderate}\n${minor}`); assert.equal(second.validation.executed, false);
   assert.match(fs.readFileSync(second.handoff, 'utf8'), /Narrow remaining issue/);
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, starts + 1, 'only the independent reviewer starts');
   assert.deepEqual(f.show(second.item).runs, [run, first.fix.run]);
@@ -75,15 +75,11 @@ test('zero item cap disables the project cap; worker starts without reviews do n
   assert.equal(r.review_policy.cap, 0); assert.equal(r.review_policy.round, 1);
 });
 
-test('cap reached still dispatches for Major, FAIL or red validation', { timeout: 60000 }, (t) => {
-  for (const kind of ['Major', 'FAIL', 'red']) {
+test('cap reached still dispatches for Major or FAIL', { timeout: 60000 }, (t) => {
+  for (const kind of ['Major', 'FAIL']) {
     const f = fixture(t, { actor: `settle-cap-${kind}-test` }); config(f, 1);
     review(f, kind === 'FAIL' ? 'FAIL' : 'NEEDS-WORK', kind === 'Major' ? moderate.replace('Moderate', 'Major') : moderate);
     const run = landed(f);
-    if (kind === 'red') {
-      fs.writeFileSync(path.join(f.workspace, 'test.mjs'), "import test from 'node:test'; test('red',()=>{throw new Error('red')});\n");
-      f.git(['add', 'test.mjs'], f.workspace); f.git(['commit', '-qm', 'Reproduce failed validation'], f.workspace);
-    }
     const r = result(f.settle(run)); assert.equal(r.result, 'fix_round', kind); assert.ok(r.fix.run);
   }
 });

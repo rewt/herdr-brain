@@ -15,7 +15,17 @@ import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
+const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const singleLine = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
+
+export function queueJobs(data) {
+  const current = data.current;
+  const active = current?.jobs ? current.jobs.map(job => {
+    const member = current.results?.find(r => r.job.id === job.id);
+    return member ? { ...job, phase: 'completed', result: member.result, ...member.result } : { ...job, phase: current.phase, batch: current.id };
+  }) : current ? [current] : [];
+  return [...data.results, ...active, ...data.pending];
+}
 
 export function queueFor(cwd) {
   const project = gitProject(cwd);
@@ -73,7 +83,7 @@ export function enqueue(queue, topics, options) {
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
   return queue.transaction((data) => topics.map((topic) => {
-    const existing = [data.current, ...data.pending].find((job) => job?.topic === topic && !(job.phase === 'completed' && job.result?.outcome === 'refused'));
+    const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && job.result?.outcome === 'refused'));
     if (existing) {
       if (existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
       return { id: existing.id, topic, duplicate: true };
@@ -131,6 +141,46 @@ function perform(job, queue) {
   }
 }
 
+function performBatch(batch, queue) {
+  const first = batch.jobs[0], cwd = queue.project.canonical;
+  const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
+  delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
+  const directory = path.join(queue.directory, 'batches', batch.id);
+  fs.mkdirSync(directory, { recursive: true });
+  const receipt = path.join(directory, 'train.json'), log = path.join(directory, 'train.log');
+  if (!fs.existsSync(receipt)) writeFileAtomic(receipt, JSON.stringify({ schema: 'promotion-train/v1', id: batch.id,
+    identity: queue.project.identity, jobs: batch.jobs, phase: 'pending' }, null, 2) + '\n');
+  const output = fs.openSync(log, 'a');
+  let r;
+  try { r = spawnSync(process.execPath, [first.laneCLI, 'promote-batch', receipt], { cwd, env, stdio: ['ignore', output, output] }); }
+  finally { fs.closeSync(output); }
+  if (r.error || r.status !== 0) throw new Error(`batch interrupted or refused; main only moves for a green batch; inspect ${receipt} and ${log}, then resume --drain`);
+  const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  if (train.phase !== 'complete') throw new Error(`incomplete batch receipt: ${receipt}`);
+  return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt } }));
+}
+
+function finishBatchJob(job, result, queue) {
+  if (result.outcome !== 'promoted') return result;
+  const warnings = [...(result.warnings ?? [])];
+  if (result.report_to_main_s !== null && result.report_to_main_s !== undefined && job.org && job.run) {
+    try {
+      const text = `Promotion: report-to-main ${result.report_to_main_s.toFixed(3)} seconds; report ${result.report_at}; main ${result.integrated_at}; batch ${result.batch}; tip ${result.tip}; receipt ${result.receipt}`;
+      const env = { ...process.env, ORG_DIR: job.org };
+      const run = JSON.parse(invoke(process.execPath, [RECORD, 'show', job.run, '--json'], { cwd: queue.project.canonical, env }));
+      if (!run.notes.some(note => note.text === text)) invoke(process.execPath, [RECORD, 'note', job.run, text], { cwd: queue.project.canonical, env });
+    } catch (error) { warnings.push(`velocity record: ${error.message}`); }
+  }
+  if (warnings.length === 0 && result.workspace) {
+    warnings.push(...cleanup(job, queue, result.workspace));
+    try {
+      invoke(process.execPath, [job.laneCLI, 'close', job.topic, '--git-only', '--expected-tip', result.tip], {
+        cwd: queue.project.canonical, env: { ...process.env, LANE_CONFIG: job.laneConfig ?? undefined } });
+    } catch (error) { warnings.push(`lane close: ${error.message}`); }
+  }
+  return { ...result, warnings, reason: warnings.length ? warnings.join('; ') : result.reason };
+}
+
 export function notice(job, result) {
   return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}`;
 }
@@ -173,6 +223,16 @@ export async function drain(queue) {
         }
         const next = data.pending.shift();
         if (!next) { release(); release = null; return null; }
+        if (next.laneCLI === LANE) {
+          // Snapshot whatever is available now. No accumulation timer/window.
+          // Different command/config inputs retain their independent gates.
+          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null]);
+          const jobs = [next];
+          while (data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
+          const job = { id: randomUUID(), phase: 'batching', jobs };
+          data.current = job;
+          return { job, newlyDequeued: true };
+        }
         const job = { ...next, phase: 'promoting' };
         delete job.fresh;
         data.current = job;
@@ -181,6 +241,28 @@ export async function drain(queue) {
       });
       if (!entry) break;
       const { job, newlyDequeued } = entry;
+      if (job.jobs) {
+        let batch = job;
+        if (batch.phase === 'batching') {
+          const results = performBatch(batch, queue);
+          batch = { ...batch, phase: 'batch-delivering', results, deliveredCount: 0 };
+          queue.transaction(data => { data.current = batch; });
+        }
+        for (let index = batch.deliveredCount; index < batch.results.length; index++) {
+          const member = batch.results[index];
+          // Persist integration before cleanup/delivery; recovery replays only
+          // guarded cleanup and idempotent record notes, never a second gate.
+          const result = finishBatchJob(member.job, member.result, queue);
+          const delivery = await deliver(member.job, result, queue);
+          queue.transaction(data => {
+            data.results.push({ ...member.job, ...result, ...delivery, finished: new Date().toISOString() });
+            batch.deliveredCount = index + 1; data.current = batch;
+          });
+          process.stdout.write(JSON.stringify({ id: member.job.id, topic: member.job.topic, ...result, ...delivery }) + '\n');
+        }
+        queue.transaction(data => { data.current = null; });
+        continue;
+      }
       let result;
       if (job.phase === 'completed') result = job.result;
       else if (!newlyDequeued) result = { outcome: 'interrupted', tip: job.tip,

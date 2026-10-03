@@ -24,6 +24,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { acquireLock } from "./promotion-lock.mjs";
 import { withPromotionGuard } from '../promote/guard.mjs';
+import { runTrain } from '../promote/train.mjs';
 import { ROUTE_PRESET } from './preset.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
@@ -2277,7 +2278,7 @@ function check(args) {
   process.stdout.write(`GATE ${head} exit=${gate.exit_code} (${gate.duration_s.toFixed(3)}s)\n`);
   // Exit 75 is reserved for a pre-execution slot refusal. Keep the command's
   // real code in the receipt/GATE line, but report a started exit 75 as failure.
-  process.exit(gate.exit_code === 75 ? 1 : gate.exit_code);
+  process.exitCode = gate.exit_code === 75 ? 1 : gate.exit_code;
 }
 
 function withPromotionLock(operation) {
@@ -2588,6 +2589,15 @@ switch (command) {
     process.stdout.write(`lane ready: ${path}\n`);
     break;
   }
+  case "promote-batch": {
+    if (!topic || rest.length) fail('usage: lane promote-batch RECEIPT');
+    const root = repositoryRoot({ requiredBy: 'promote' });
+    try {
+      withPromotionLock(() => runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
+        main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings() }));
+    } catch (error) { fail(error.message); }
+    break;
+  }
   case "promote": {
     const usage = 'usage: lane promote <topic> [--expected-head COMMIT] [--if-current-run R-n --org DIR]';
     if (topic === undefined) fail(usage);
@@ -2639,7 +2649,7 @@ switch (command) {
         `  status           list open lanes vs ${MAIN}\n` +
         "  check [--cmd <validate command>]\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
-        "                   --tier fast (worker default) or promotion (settle); reuse exact trees\n" +
+        "                   --tier fast (worker default) or promotion (integration CI); reuse exact trees\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

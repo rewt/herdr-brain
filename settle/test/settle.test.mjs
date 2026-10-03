@@ -135,7 +135,7 @@ test('unconfigured project: report, independent claim finding, fresh fix run, re
   while (!f.calls().some((a) => a[1] === 'prompt' && a[3]?.includes(`[org-report] run=${first.fix.run} `)) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
   assert.ok(f.calls().some((a) => a[3]?.includes(`[org-report] run=${first.fix.run} `)), 'real watch delivered correction report');
   const second = result(f.settle(first.fix.run)); assert.equal(second.result, 'promotable');
-  assert.equal(second.review.verdict, 'PASS'); assert.equal(second.validation.exit_code, 0);
+  assert.equal(second.review.verdict, 'PASS'); assert.equal(second.validation.executed, false);
   assert.equal(f.git(['status', '--porcelain'], f.workspace), '');
   assert.equal(f.git(['rev-list', '--merges', 'HEAD'], f.workspace), '');
   const prompt = fs.readFileSync(path.join(f.root, 'review-prompt'), 'utf8');
@@ -290,11 +290,14 @@ test('uncertain fix delivery recovers the dispatch journal and never starts a se
   assert.equal(result(f.retry(run)).result, 'fix_round');
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, count);
 });
-test('failed validation cannot become promotable even with an independent PASS', (t) => {
+test('suite execution is deferred until promotion even with an independent PASS', (t) => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
   fs.writeFileSync(path.join(f.workspace, 'test.mjs'), "import test from 'node:test';test('red gate',()=>{throw new Error('red');});\n");
   f.git(['add', 'test.mjs'], f.workspace); f.git(['commit', '-qm', 'Reproduce red validation'], f.workspace);
-  assert.equal(result(f.settle(run)).result, 'fix_round');
+  const ready = result(f.settle(run)); assert.equal(ready.result, 'promotable');
+  assert.equal(ready.validation.executed, false);
+  const gate = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), 'promote', 'topic'], f.repo);
+  assert.equal(gate.status, 1); assert.match(gate.stderr, /validation failed/);
 });
 test('PASS with unverified claims and moved heads do not return promotable', (t) => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);

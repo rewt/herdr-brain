@@ -29,10 +29,10 @@ test('distinct worker, settle and queue panes reuse each tree through same-tree 
   const settled = f.settle(run); assert.equal(settled.status, 0, settled.stderr);
   const result = JSON.parse(settled.stdout); assert.equal(result.result, 'promotable');
   const journal = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', run + '.json'), 'utf8'));
-  assert.match(fs.readFileSync(path.join(path.dirname(journal.validation.log), run + '.validation.log'), 'utf8'), /REUSE/);
+  assert.equal(journal.validation.executed, false);
   assert.equal(result.rebase.state, 'applied');
   const cached = f.settle(run); assert.equal(cached.status, 0, cached.stderr);
-  assert.match(fs.readFileSync(JSON.parse(cached.stdout).validation.log, 'utf8'), /REUSE/);
+  assert.equal(JSON.parse(cached.stdout).validation.executed, false);
   assert.equal(f.git(['status', '--porcelain'], f.workspace), '');
   const queue = queueFor(f.repo);
   enqueue(queue, ['topic'], { expectedHead: result.head, run, org: f.org, to: 'scratch-supervisor',
@@ -41,18 +41,18 @@ test('distinct worker, settle and queue panes reuse each tree through same-tree 
   const promoted = f.exec(process.execPath, [path.join(f.source, 'promote/promote.mjs'), '--drain']);
   assert.equal(promoted.status, 0, promoted.stderr);
   const promotion = queue.load().results[0]; assert.equal(promotion.outcome, 'promoted', promotion.reason);
-  assert.match(fs.readFileSync(promotion.log, 'utf8'), /REUSE/);
+  assert.equal(promotion.gate.reused, false, 'the review record changes the tree; promotion is its first gate');
   const checks = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(checks.length, 2, 'worker tree and tree including the public review record each run once');
-  assert.equal(checks[0].head, workerHead); assert.equal(checks[1].head, result.head);
+  assert.equal(checks[0].head, workerHead); assert.equal(checks[1].tree, f.git(['rev-parse', `${result.head}^{tree}`]));
   assert.equal(new Set(checks.map(row => row.tree)).size, 2);
   assert.equal(f.git(['rev-parse', 'main']), result.head);
   assert.equal(f.git(['status', '--porcelain'], f.repo), '');
   assert.equal(fs.existsSync(f.workspace), false, 'queue closed only the scratch lane');
-  assert.match(fs.readFileSync(journal.validation.log, 'utf8'), /GATE/);
+  assert.match(fs.readFileSync(journal.validation.log, 'utf8'), /HEAD|tree/);
 });
 
-test('saved settle readiness rechecks command and environment without repeating review', { timeout: 30000 }, t => {
+test('saved settle readiness defers changed commands and environments to promotion without repeating review', { timeout: 30000 }, t => {
   const f = fixture(t, { actor: 'validation-readiness-test' });
   const log = path.join(f.root, 'checks'), checker = path.join(f.root, 'check.cjs');
   fs.writeFileSync(checker, `require('fs').appendFileSync(${JSON.stringify(log)},'check\\n');`);
@@ -60,14 +60,14 @@ test('saved settle readiness rechecks command and environment without repeating 
   const run = f.start(); f.commit('correct\n'); f.report(run);
   assert.equal(JSON.parse(f.settle(run).stdout).result, 'promotable');
   const reviews = f.calls().filter(args => args[0] === 'agent' && args[1] === 'start').length;
-  assert.equal(fs.readFileSync(log, 'utf8'), 'check\ncheck\n');
+  assert.equal(fs.existsSync(log), false);
   const again = f.settle(run); assert.equal(again.status, 0, again.stderr);
-  assert.equal(fs.readFileSync(log, 'utf8'), 'check\ncheck\n');
+  assert.equal(fs.existsSync(log), false);
   f.env.VALIDATION_VARIANT = 'changed';
   assert.equal(f.settle(run).status, 0);
-  assert.equal(fs.readFileSync(log, 'utf8'), 'check\ncheck\ncheck\n');
+  assert.equal(fs.existsSync(log), false);
   f.env.LANE_VALIDATE = 'exit 17';
-  const red = JSON.parse(f.settle(run).stdout); assert.equal(red.result, 'escalate');
-  assert.match(red.reason, /validation no longer passes/);
+  const red = JSON.parse(f.settle(run).stdout); assert.equal(red.result, 'promotable');
+  assert.equal(red.validation.executed, false);
   assert.equal(f.calls().filter(args => args[0] === 'agent' && args[1] === 'start').length, reviews);
 });

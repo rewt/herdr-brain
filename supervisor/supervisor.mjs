@@ -9,6 +9,8 @@ import { writeFileAtomic } from '../lib/store.mjs';
 import { enterSupervisor } from './entry.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart, briefSize, receiptDirectory } from './context.mjs';
+import { queueJobs } from '../promote/promote.mjs';
+import { verifyTrainResult } from '../promote/train.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const local = (name) => fileURLToPath(new URL(name, import.meta.url));
@@ -20,7 +22,10 @@ export function noticeRun(notice) {
   return match[1];
 }
 const attempts = (receipt) => [receipt, ...(receipt.prior_attempts ?? [])];
-const completedJob = (queue, id) => queue.results.find((r) => r.id === id) ?? (queue.current?.id === id && queue.current.phase === 'completed' ? { ...queue.current, ...queue.current.result } : null);
+const completedJob = (queue, id) => {
+  const job = queueJobs(queue).find(r => r.id === id && (r.outcome || r.phase === 'completed'));
+  return job ? { ...job, ...job.result } : null;
+};
 const jobAttempt = (receipt, id) => attempts(receipt).find((a) => a.queue?.jobs?.some((j) => j.id === id));
 export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -73,7 +78,7 @@ export function main(argv = process.argv.slice(2)) {
     if (!saved || saved.identity !== project.identity || saved.org !== project.org || saved.phase !== 'acknowledged' || saved.lane !== result.topic) throw new Error('promotion outcome is not bound to an acknowledged supervisor request; inspect evidence');
     if (result.run !== saved.run || result.expectedHead !== saved.head || result.org !== saved.org) throw new Error('promotion queue head or run binding differs from supervisor request; inspect evidence');
     if (result.outcome !== 'promoted') return { result: 'judge_promotion', run: saved.run, promotion: result };
-    if (result.tip !== saved.head) throw new Error('promoted tip differs from authorized head; inspect evidence');
+    if (result.tip !== saved.head && !verifyTrainResult(result, { project, saved })) throw new Error('promoted tip differs from authorized head without proved train replay; inspect evidence');
     const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', result.tip, 'HEAD'], { cwd: project.canonical, encoding: 'utf8' });
     if (ancestry.error || ancestry.status !== 0) throw new Error('promoted tip is not integrated in the canonical checkout; inspect evidence');
     const run = JSON.parse(call(local('../bin/org.mjs'), ['show', saved.run, '--json']));

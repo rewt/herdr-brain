@@ -7,7 +7,7 @@ node /path/to/herdr-monitor/settle/settle.mjs R-123
 ```
 
 The foreground command discovers the canonical Git project and its record. It
-records the worker report, runs `lane check --tier promotion`, gets an independent `lane review`,
+records the worker report, gets an independent `lane review` without running a suite,
 and returns one JSON result: `promotable`, `promotable_with_findings`, `fix_round`,
 or `escalate`.
 It has no dependencies and all record writes use the record CLI.
@@ -16,13 +16,14 @@ No project config is required. Routes come from the portable preset when none
 is configured. The review route follows the routes module's review selection
 policy and the run's declared pool; an independent session is required, not a
 different provider. The fix route defaults to the worker's route or `engineer`.
-Validation follows the project's declared promotion tier, the legacy `validate`,
-or the lane CLI's default. Exact tree/command/environment passes are reused, with
-the original log linked in settlement evidence. A changed tree, including the
-public review-record commit, gets a new check; an unchanged-tree rebase does not.
+The promotion queue runs the project's promotion tier on the integration batch,
+immediately before main moves. Settle copies a matching worker receipt's entire
+log into its evidence, including the TAP totals at the end. Missing or stale
+worker validation is explicitly deferred to that batch gate. `validation.executed`
+is false; inherited `exit_code` can be null. It does not authorize integration.
 Runtime `.org/` and `.lane/` exclusions use the existing project discovery helper;
-settle requires no tracked configuration. A project without a known working check
-needs its actual validation configured before it can become promotable.
+settle requires no tracked configuration. A project needs a working promotion
+command before its reviewed code can land.
 
 For a manually dispatched run, supply `--brief FILE`. Runs started by dispatch
 recover their original ask from that request. With neither, the item's title,
@@ -35,7 +36,7 @@ waits durably while the operator composes a message. Settle has no separate
 supervisor prompt path.
 
 Mechanical checks pin the report bytes, Git common-directory ownership,
-registered lane, clean tree, HEAD, base branch and validation. The reviewer gets
+registered lane, clean tree, HEAD and base branch. The reviewer gets
 the actual report, original ask, acceptance, diff pointer and validation log and
 checks material claims against code. A `done` report never substitutes for this
 judgment. Already ingested reports use the record's immutable copy; subsequent
@@ -43,7 +44,7 @@ edits to the source cannot silently replace it. After intake, settle confirms
 from the record that the requested run is not abandoned and that its recorded
 report hash matches the captured report. A successful CLI exit alone is not a
 receipt: abandoned intake can skip the report with exit zero. Missing or different
-receipts receive a handoff before reopening, validation, review or correction.
+receipts receive a handoff before reopening, review or correction.
 Resuming a pending settlement and returning saved readiness repeat this check.
 Report-provided commands are
 never executed. Blocked, failed and needs-human reports are recorded and handed
@@ -62,21 +63,21 @@ start, so a superseding report cannot be cleared by opening a correction run.
 The generated review brief explicitly budgets zero build, test, prepare, install
 and check commands. Reviewers independently inspect code, Git and the validation
 log; they acknowledge inherited validation under Non-claims and claim no fresh
-test execution. If an acceptance requirement needs additional evidence or an
-execution beyond that budget, the reviewer names it under Unverified for a
+test execution. Deferred promotion CI is a non-claim. If an acceptance requirement
+lacks code or report evidence, the reviewer names it under Unverified for a
 supervisor handoff. The brief supplies one exact inherited-validation
 acknowledgment that can also appear alone under Unverified; that scoped non-claim
 does not prevent readiness. Any additional Unverified entry does.
 
 Settle commits only the validated public review record, after checking the exact
 reviewed HEAD and only that dirty path. `promotable` requires PASS, no remaining
-unverified claims, clean worktrees, the captured main as an ancestor, and green
-validation at the resulting review-record commit. When the lane is behind the
+unverified claims, clean worktrees and the captured main as an ancestor. The
+promotion queue obtains green validation at the stacked integration tree.
+When the lane is behind the
 captured integration branch, settle prepares a plain rebase in an owned temporary
 detached worktree. It compares the replay's full tree with Git's mechanical merge
 of the captured lane diff onto that branch, including the review record. Only an
-exact match can replace the clean lane head, and validation is obtained for that
-rebased tree, reusing an identical prior pass when available. The result retains
+exact match can replace the clean lane head. The result retains
 the original reviewed commit and includes rebase
 heads, expected/actual trees and log evidence. Changes already present upstream
 count as preserved; unrelated upstream edits can survive in the same file.
@@ -115,7 +116,7 @@ It is readiness evidence: project authority and promotion policy are still the
 supervisor's judgment. Settle never promotes, pushes, closes worktrees or tidies
 panes. An unresolved record blocker receives an evidence handoff.
 
-NEEDS-WORK (unless the review-round cap applies), FAIL or red validation produce
+NEEDS-WORK (unless the review-round cap applies) or FAIL produce
 a correction brief and call dispatch for a new run on the same item/lane.
 Immediately before a new launch or incomplete
 dispatch retry, settle checks current item closure, blockers and concurrent runs;
@@ -156,10 +157,11 @@ receipts without a cap snapshot retain unlimited behaviour.
 At or above the cap, NEEDS-WORK with only parsed Moderate/Minor findings returns
 `promotable_with_findings` without dispatch. It includes the findings, handoff,
 reviewed source commit and head containing the public review record. This still
-requires green initial and final validation, no unresolved Unverified entries,
+requires no unresolved Unverified entries,
 clean worktrees, the captured base as ancestor and current record readiness.
-Unparsed findings receive a supervisor handoff. Major findings, FAIL and red
-validation retain correction/escalation behaviour regardless of the cap. The cap
+Unparsed findings receive a supervisor handoff. Major findings and FAIL retain
+correction/escalation behaviour regardless of the cap. Red batch validation is
+isolated by the promotion queue and handed to the supervisor for correction. The cap
 and settlement decision are recorded through the record CLI; readiness never
 promotes by itself. A missing or lost decision-write response is reconciled on
 retry against the exact recorded note, without repeating review or dispatch.
@@ -245,6 +247,14 @@ and retained private evidence; after it stops, `--retry --review-again` explicit
 starts a different round. Malformed retained evidence can trigger the lane CLI's
 prefix collision checks and needs inspection; settle never deletes it. A public
 record published during an uncertain result also needs inspection before retry.
+If main moves during an incomplete settlement, `--retry` captures the new main
+and proves a clean scratch replay before replacing the lane head. A completed
+review remains bound to its original source commit and is retained when the
+replay matches the mechanical merge tree. An unreviewed lane is rebased before
+the next review. Dirty lanes, conflicting replays, changed lane tips and changed
+record readiness refuse recovery without overwriting work or launching a worker.
+Each recapture and prior rebase receipt remains in the journal. Settles and
+promotions have no shared scheduling window.
 An uncertain correction recovers the single matching dispatch journal. Resolve
 uncertain launch/delivery using dispatch's documented recovery flags there, then
 retry settle; it adopts a completed dispatch without starting another worker.

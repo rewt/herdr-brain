@@ -12,7 +12,7 @@ const commitMain = (f, file, text) => {
 };
 const saved = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
 
-test('clean rebase preserves reviewed changes and revalidates the rebased head before readiness', (t) => {
+test('clean rebase preserves reviewed changes without running a suite', (t) => {
   const f = setup(t), run = f.start(); f.commit('correct\n'); f.report(run);
   const reviewed = f.git(['rev-parse', 'HEAD'], f.workspace);
   commitMain(f, 'main-only.txt', 'upstream work\n');
@@ -30,9 +30,7 @@ cp.execFileSync(process.execPath,['--test','test.mjs'],{stdio:'inherit'});\n`);
   assert.equal(fs.readFileSync(path.join(f.workspace, 'main-only.txt'), 'utf8'), 'upstream work\n');
   assert.equal(f.git(['rev-parse', 'main']), main, 'settle does not promote');
   assert.equal(f.git(['status', '--porcelain'], f.workspace), '');
-  const gates = fs.readFileSync(checks, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.deepEqual(gates.map(g => g.upstream), [false, true]);
-  assert.equal(gates.at(-1).head, r.head);
+  assert.equal(fs.existsSync(checks), false, 'settle runs no suite');
   assert.equal(r.rebase.expected_tree, f.git(['rev-parse', `${r.head}^{tree}`]));
   assert.equal(fs.existsSync(r.rebase.scratch), false, 'owned scratch worktree was removed');
   const launches = f.calls().filter(a => a[1] === 'start').length;
@@ -100,13 +98,14 @@ test('reviewed changes already present upstream survive an empty replay', (t) =>
   assert.equal(f.git(['merge-base', 'main', r.head]), f.git(['rev-parse', 'main']));
 });
 
-test('post-rebase validation failure escalates without readiness or a new worker', (t) => {
+test('post-rebase suite failure belongs to promotion without a new worker', (t) => {
   const f = setup(t), run = f.start(); f.commit('correct\n'); f.report(run);
   commitMain(f, 'test.mjs', "import test from 'node:test';test('new integration failure',()=>{throw Error('red after rebase');});\n");
   const r = result(f.settle(run));
-  assert.equal(r.result, 'escalate'); assert.match(r.reason, /Validation failed/);
-  assert.notEqual(r.validation.exit_code, 0);
-  assert.match(fs.readFileSync(r.validation.log, 'utf8'), /red after rebase/);
+  assert.equal(r.result, 'promotable'); assert.equal(r.validation.executed, false);
+  const promoted = f.exec(process.execPath, [path.join(f.source, 'lanes/lane.mjs'), 'promote', 'topic'], f.repo);
+  assert.equal(promoted.status, 1); assert.match(promoted.stderr, /validation failed/);
+  assert.match(promoted.stdout, /red after rebase/);
   assert.equal(f.git(['merge-base', 'main', r.head]), f.git(['rev-parse', 'main']));
   assert.equal(f.calls().filter(a => a[1] === 'start').length, 1, 'only the reviewer was launched');
 });

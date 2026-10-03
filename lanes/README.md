@@ -57,8 +57,9 @@ Every field is optional. Undeclared tiers use the legacy `validate` command,
 otherwise `npm test` (`node --test` for a project with `test/` and no declared npm test script).
 The tracked file overrides individual tiers from lane config. `LANE_VALIDATE`
 overrides commands for CLI adapters; `check --cmd` wins for that invocation.
-Workers run `lane check` (fast), settle uses `lane check --tier promotion`, and
-promote uses promotion. Workers never run the release gate; the release module
+Workers may run `lane check` (fast); settle performs code/report review with no
+suite, and the promotion train runs the promotion tier on each integration batch.
+Workers never run the release gate; the release module
 owns that declared command. `lane config`, `record desks`, the console's Desks
 screen and project-entry policy show all three tiers. Worker copies cannot weaken
 the canonical declarations.

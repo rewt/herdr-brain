@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { loadEvents, withLock } from '../lib/store.mjs';
 import { fold, laterRuns, openRuns, blockersOf, releases, itemStatus } from '../lib/state.mjs';
 
-export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org }, operation = () => {}) {
+export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org }, operation = () => {}, recordLocked = false) {
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
     if (expectedHead !== undefined) {
@@ -16,7 +16,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
   };
   checkGit();
   if (run === undefined) return operation();
-  return withLock(org, () => {
+  const check = () => {
     const { events, tornTail } = loadEvents(org);
     if (tornTail) throw new Error('incomplete record event; nothing merged');
     const state = fold(events), current = state.runs.get(run), item = state.items.get(current?.item);
@@ -35,5 +35,15 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (item.closed || blocked || overlapping || openRuns(state, item.id).length || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(state, item.id))) throw new Error(`${run} record readiness changed: work, closure, blockers or outcome; nothing merged`);
     checkGit();
     return operation();
-  });
+  };
+  return recordLocked ? check() : withLock(org, check);
+}
+
+// Hold each distinct record once across the batch FF. Re-entering a record's
+// lock per lane would deadlock when several runs belong to the same project.
+export function withPromotionGuards(lanes, operation = () => {}) {
+  const records = [...new Set(lanes.filter(l => l.run !== undefined).map(l => l.org))].sort();
+  const lock = index => index < records.length ? withLock(records[index], () => lock(index + 1)) : check(0);
+  const check = index => index < lanes.length ? withPromotionGuard(lanes[index], () => check(index + 1), true) : operation();
+  return lock(0);
 }

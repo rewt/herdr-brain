@@ -26,13 +26,13 @@ export async function settleCase(candidate, { load, execute = spawnSync,
       'watch delivered the fix report', 8000);
     const final = f.settle(fix.fix.run); assert.equal(final.status, 0, final.stderr);
     const settled = JSON.parse(final.stdout); receipts.push(settled);
-    assert.equal(settled.result, 'promotable'); assert.equal(settled.validation.exit_code, 0);
+    assert.equal(settled.result, 'promotable'); assert.equal(settled.validation.executed, false);
     assert.ok(!fs.existsSync(path.join(f.repo, '.lane.json')));
     assert.equal(f.git(['status', '--porcelain'], f.workspace), '');
     const artifacts = Object.fromEntries(fs.readdirSync(path.join(f.org, 'settle'))
       .filter((name) => fs.statSync(path.join(f.org, 'settle', name)).isFile())
       .map((name) => [name, fs.readFileSync(path.join(f.org, 'settle', name), 'utf8')]));
-    return { receipts, calls: f.calls(), artifacts, detail: `${run} -> ${fix.fix.run}: actual record/review/check/dispatch/watch, no project config, scripted transport and claim check, no model` };
+    return { receipts, calls: f.calls(), artifacts, detail: `${run} -> ${fix.fix.run}: actual record/review/dispatch/watch, suite deferred to promotion, no project config, scripted transport and claim check, no model` };
   } finally { for (const fn of cleanup) await fn(); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

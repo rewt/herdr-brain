@@ -118,7 +118,8 @@ test('unconfigured project: detached worker promotes two lanes in FIFO order usi
   assert.equal(f.git(['remote']), '');
   assert.deepEqual(f.messages().map((args) => args[2]), ['supervisor-herdr', 'supervisor-herdr']);
   assert.match(f.messages()[0][3], /lane=first outcome=promoted/); assert.match(f.messages()[1][3], /lane=second outcome=promoted/);
-  assert.match(fs.readFileSync(f.results()[1].log, 'utf8'), /rebased lane\/second/);
+  assert.ok(f.results()[1].batch, 'both lanes belong to a durable train');
+  assert.equal(f.results()[0].batch, f.results()[1].batch);
   assert.equal(f.git(['status', '--porcelain']), '');
   assert.equal(fs.existsSync(path.join(f.repo, '.promote.json')), false);
 });
@@ -152,7 +153,7 @@ test('queue refuses a lane changed while pending behind another job before valid
   assert.equal(second.expectedHead, expected);
   assert.match(second.reason, new RegExp(`expected ${expected}, found ${actual}`));
   assert.match(f.messages()[1][3], /outcome=refused .*lane tip differs from expected head/);
-  assert.doesNotMatch(fs.readFileSync(second.log, 'utf8'), /validating in/);
+  assert.equal(second.gate, undefined, 'changed lane was excluded before the batch gate');
   assert.equal(f.git(['rev-parse', 'main']), first.tip);
   assert.equal(f.git(['rev-parse', 'lane/second']), actual); assert.ok(fs.existsSync(wt));
 });
@@ -243,22 +244,20 @@ test('replay conflict after clean merge-tree preflight names the file in the not
   const log = fs.readFileSync(refused.log, 'utf8');
   assert.equal(refused.outcome, 'refused', log);
   assert.equal(refused.delivered, true);
-  assert.match(log, /CONFLICT .*shared/);
-  assert.doesNotMatch(log, /validating in/);
-  assert.match(refused.reason, /^lane: rebase replay onto main failed; conflicts in: shared; lane kept/);
-  assert.match(f.messages()[0][3], /lane=bad outcome=refused .*lane: rebase replay onto main failed; conflicts in: shared; lane kept/);
-  assert.match(f.messages()[0][3], /resolve or abort the rebase/);
+  assert.match(log, /conflicts in: shared/);
+  assert.equal(refused.gate, undefined, 'conflicting lane was excluded before the batch gate');
+  assert.match(refused.reason, /rebase replay onto main failed; conflicts in: shared; lane kept intact/);
+  assert.match(f.messages()[0][3], /lane=bad outcome=refused .*conflicts in: shared; lane kept intact/);
   assert.ok(fs.existsSync(bad));
   assert.equal(f.git(['rev-parse', 'lane/bad']), before);
-  assert.equal(f.git(['diff', '--name-only', '--diff-filter=U'], bad), 'shared');
-  assert.ok(fs.existsSync(f.git(['rev-parse', '--git-path', 'rebase-merge'], bad)));
+  assert.equal(f.git(['diff', '--name-only', '--diff-filter=U'], bad), '');
+  assert.equal(fs.existsSync(f.git(['rev-parse', '--git-path', 'rebase-merge'], bad)), false);
   assert.equal(f.results()[1].outcome, 'promoted');
   assert.equal(fs.existsSync(good), false);
   assert.equal(f.git(['merge-base', upstream, 'main']), upstream);
   assert.equal(f.git(['show', 'main:shared']), 'upstream edit');
   assert.equal(fs.existsSync(path.join(f.repo, 'bad.txt')), false);
   assert.equal(f.git(['status', '--porcelain']), '');
-  f.git(['rebase', '--abort'], bad);
   assert.equal(f.git(['symbolic-ref', '--short', 'HEAD'], bad), 'lane/bad');
   assert.equal(f.git(['rev-parse', 'HEAD'], bad), before);
   assert.equal(f.git(['status', '--porcelain'], bad), '');
@@ -419,7 +418,7 @@ async function killCreated(entry) {
   await until(() => !alive(entry.pid));
 }
 
-test('crash during actual saved promoted phase never repeats gate or deletes the lane, even with legacy freshness', async (t) => {
+test('crash during batch cleanup resumes without repeating the gate or trusting saved freshness', async (t) => {
   const f = fixture(t); const wt = f.lane('first'); const blocked = blockCleanup(f);
   const gates = path.join(f.root, 'gates');
   const validate = `${process.execPath} -e 'require("fs").appendFileSync(${JSON.stringify(gates)}, "gate\\n")'`;
@@ -441,17 +440,17 @@ test('crash during actual saved promoted phase never repeats gate or deletes the
   await killCreated(blockedEntry);
   fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true });
   fs.writeFileSync(blocked.release, 'release');
-  assert.equal(saved.phase, 'promoted');
+  assert.equal(saved.phase, 'batch-delivering');
   assert.equal(Object.hasOwn(saved, 'fresh'), false, 'freshness must never be durable');
   assert.equal(f.git(['rev-parse', 'main']), f.git(['rev-parse', 'lane/first']));
   // Also recover a checkpoint produced by the older worker that leaked this flag.
   f.queue.transaction((data) => { data.current.fresh = true; });
   const r = f.cli(['--drain']); assert.equal(r.status, 0, r.stderr);
-  assert.equal(f.results()[0].outcome, 'interrupted');
-  assert.match(f.messages()[0][3], /previous worker stopped in promoted/);
+  assert.equal(f.results()[0].outcome, 'promoted');
+  assert.match(f.messages()[0][3], /outcome=promoted/);
   assert.equal(fs.readFileSync(gates, 'utf8'), 'gate\n');
-  assert.equal(fs.existsSync(wt), true);
-  assert.equal(f.git(['rev-parse', 'lane/first']), saved.tip);
+  assert.equal(fs.existsSync(wt), false);
+  assert.equal(f.git(['rev-parse', 'main']), saved.results[0].result.tip);
   assert.equal(Object.hasOwn(f.results()[0], 'fresh'), false);
   f.onCleanup(async () => {});
 });

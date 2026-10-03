@@ -13,6 +13,7 @@ import { candidateRows } from '../lib/release-record.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { releaseSettings } from '../release/config.mjs';
 import { readMemory, memoryReason, processUsage } from '../lib/memory.mjs';
+import { queueJobs } from '../promote/promote.mjs';
 
 export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', createHash('sha256').update(identity).digest('hex').slice(0, 20));
 const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
@@ -44,7 +45,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const queueFile = path.join(project.identity, 'promote/queue.json');
   const queue = receipt(queueFile);
   if (queue && queue.identity !== project.identity) throw new Error('promotion queue identity changed');
-  const jobs = queue ? [queue.current, ...queue.pending, ...queue.results].filter(Boolean) : [];
+  const jobs = queue ? queueJobs(queue) : [];
   const missing = new Set(), unknown = new Set();
   const belongs = (run) => {
     if (!run.workspace) return true; // Legacy record-only work has no Git binding.

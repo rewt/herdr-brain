@@ -32,7 +32,7 @@ test('a project with only settle settings and no parent routes completes indepen
   const settled = result(f.settle(run));
   assert.equal(settled.result, 'promotable');
   assert.equal(settled.review.verdict, 'PASS');
-  assert.equal(settled.validation.exit_code, 0);
+  assert.equal(settled.validation.executed, false);
   assert.equal(workerPrompts(f).length, 0);
   const job = receipt(f, run);
   const routes = JSON.parse(fs.readFileSync(job.routeConfig, 'utf8'));
@@ -41,7 +41,7 @@ test('a project with only settle settings and no parent routes completes indepen
   assert.equal(job.laneConfig, null);
 });
 
-test('relative LANE_CONFIG uses the intake file for lane validation and canonical review', (t) => {
+test('relative LANE_CONFIG uses the intake file for canonical review without running validation', (t) => {
   const f = fixture(t, { actor: 'settle-relative-config-test' });
   const file = selectedConfig(f);
   f.env.LANE_CONFIG = path.relative(f.repo, file);
@@ -50,9 +50,9 @@ test('relative LANE_CONFIG uses the intake file for lane validation and canonica
   const settled = result(f.settle(run));
   assert.equal(settled.result, 'promotable');
   assert.equal(settled.review.verdict, 'PASS');
-  assert.equal(settled.validation.exit_code, 0);
+  assert.equal(settled.validation.executed, false);
   assert.equal(receipt(f, run).laneConfig, file);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(f.workspace, '.lane', 'gate.json'), 'utf8')).command, 'node --test test.mjs');
+  assert.equal(fs.existsSync(path.join(f.workspace, '.lane', 'gate.json')), false);
   assert.equal(f.show(f.show(run).item).runs.length, 1);
   assert.equal(workerPrompts(f).length, 0);
 });
@@ -67,12 +67,13 @@ test('review retry from another checkout retains the selected absolute config an
   assert.equal(interrupted.status, 1);
   const before = receipt(f, run);
   assert.equal(before.stage, 'reviewing');
-  assert.equal(before.green, true);
+  assert.equal(before.validation.executed, false);
   assert.equal(before.laneConfig, file);
   fs.unlinkSync(path.join(f.root, 'review-fail'));
   // Neither the new invocation's config nor a same-named file in the linked
   // worktree may replace the configuration accepted at intake.
   const decoy = path.join(f.workspace, '.lane', 'selected config.json');
+  fs.mkdirSync(path.dirname(decoy), { recursive: true });
   fs.writeFileSync(decoy, JSON.stringify({ main: 'missing', validate: 'false' }));
   f.env.LANE_CONFIG = 'missing-config.json';
   const cwd = path.join(f.workspace, 'nested'); fs.mkdirSync(cwd);
@@ -80,11 +81,11 @@ test('review retry from another checkout retains the selected absolute config an
     '--retry', '--review-again', '--repo', f.repo, '--org', f.org], cwd));
   assert.equal(settled.result, 'promotable');
   assert.equal(settled.review.verdict, 'PASS');
-  assert.equal(settled.validation.exit_code, 0);
+  assert.equal(settled.validation.executed, false);
   const after = receipt(f, run);
   assert.equal(after.laneConfig, file);
   assert.equal(after.routeConfig, before.routeConfig);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(f.workspace, '.lane', 'gate.json'), 'utf8')).command, 'node --test test.mjs');
+  assert.equal(fs.existsSync(path.join(f.workspace, '.lane', 'gate.json')), false);
   const starts = f.calls().filter((args) => args[0] === 'agent' && args[1] === 'start');
   assert.equal(starts.length, 2);
   for (const args of starts) assert.equal(args[args.indexOf('--model') + 1], 'selected-review-model');
@@ -102,7 +103,7 @@ test('relative LANE_CONFIG resolves from the invoking directory even with --repo
     '--repo', f.repo, '--org', f.org], cwd));
   assert.equal(settled.result, 'promotable');
   assert.equal(receipt(f, run).laneConfig, file);
-  assert.equal(settled.validation.exit_code, 0);
+  assert.equal(settled.validation.executed, false);
   assert.equal(workerPrompts(f).length, 0);
 });
 
@@ -116,7 +117,7 @@ test('a review retry retains discovery when the new invocation sets LANE_CONFIG'
   f.env.LANE_CONFIG = 'missing-config.json';
   const settled = result(f.retry(run, ['--review-again']));
   assert.equal(settled.result, 'promotable');
-  assert.equal(settled.validation.exit_code, 0);
+  assert.equal(settled.validation.executed, false);
   assert.equal(receipt(f, run).laneConfig, null);
   assert.equal(workerPrompts(f).length, 0);
 });

@@ -1,0 +1,100 @@
+TAP version 13
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 1 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 2332.090458
+  ...
+# Subtest: a red three-lane batch lands two good lanes and isolates the breaking lane in two extra runs
+ok 2 - a red three-lane batch lands two good lanes and isolates the breaking lane in two extra runs
+  ---
+  duration_ms: 2564.52225
+  ...
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 3 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 953.988959
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 4 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 1811.018959
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 5 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1073.225166
+  ...
+# Subtest: bisection lands all good work with first red
+ok 6 - bisection lands all good work with first red
+  ---
+  duration_ms: 3039.815
+  ...
+# Subtest: bisection lands all good work with second red
+ok 7 - bisection lands all good work with second red
+  ---
+  duration_ms: 2998.282833
+  ...
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 8 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 1690.576917
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 9 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 2868.316708
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 10 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 1503.695417
+  ...
+# Subtest: settle only reviews code and never executes a configured suite
+ok 11 - settle only reviews code and never executes a configured suite
+  ---
+  duration_ms: 3717.07825
+  ...
+# Subtest: retry recaptures moving main and keeps a completed independent review
+ok 12 - retry recaptures moving main and keeps a completed independent review
+  ---
+  duration_ms: 4721.343083
+  ...
+# Subtest: retry refuses dirty or conflicting lanes while main moves
+ok 13 - retry refuses dirty or conflicting lanes while main moves
+  ---
+  duration_ms: 2730.198334
+  ...
+# Subtest: review evidence retains inherited validation totals beyond eight KiB
+ok 14 - review evidence retains inherited validation totals beyond eight KiB
+  ---
+  duration_ms: 3916.675834
+  ...
+# Subtest: queued integration records report-to-main time on the authorized run
+ok 15 - queued integration records report-to-main time on the authorized run
+  ---
+  duration_ms: 5242.626
+  ...
+# Subtest: batch rechecks current-run record readiness after its gate
+ok 16 - batch rechecks current-run record readiness after its gate
+  ---
+  duration_ms: 4464.762584
+  ...
+# Subtest: main moving while the reviewer runs retains its completed public evidence for retry
+ok 17 - main moving while the reviewer runs retains its completed public evidence for retry
+  ---
+  duration_ms: 4564.882375
+  ...
+# Subtest: a batch holds one shared record lock for two authorized lanes
+ok 18 - a batch holds one shared record lock for two authorized lanes
+  ---
+  duration_ms: 5749.235125
+  ...
+1..18
+# tests 18
+# suites 0
+# pass 18
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 35146.067292

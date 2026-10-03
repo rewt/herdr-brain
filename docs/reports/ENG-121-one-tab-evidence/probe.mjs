@@ -88,10 +88,28 @@ try {
   observations.after_move = snapshot();
   assert.equal(observations.after_move.lane.active_tab_id, first);
   assert.equal(observations.after_move.focused_workspace_id, anchor.workspace.workspace_id);
+  let focusTab = second;
+  if (process.argv.includes('--layout')) {
+    const agentPane = cli('api', 'snapshot').snapshot.panes.find(pane => pane.tab_id === second).pane_id;
+    observations.layout_result = await rpc('layout.apply', {
+      tab_id: second, focus: false, root: { type: 'pane', pane_id: agentPane },
+    });
+    observations.after_layout = snapshot();
+    assert.equal(observations.after_layout.lane.active_tab_id, first);
+    assert.equal(observations.after_layout.focused_workspace_id, anchor.workspace.workspace_id);
+    observations.move_pane_result = await rpc('pane.move', {
+      pane_id: observations.layout_result.layout.focused_pane_id, focus: false,
+      destination: { type: 'new_tab', workspace_id: lane.workspace_id, label: 'moved-agent' },
+    });
+    observations.after_move_pane = snapshot();
+    assert.equal(observations.after_move_pane.lane.active_tab_id, first);
+    assert.equal(observations.after_move_pane.focused_workspace_id, anchor.workspace.workspace_id);
+    focusTab = observations.move_pane_result.move_result.pane.tab_id;
+  }
   // TabTarget has no focus field. Adding one does not add a no-focus operation.
-  await rpc('tab.focus', { tab_id: second, focus: false });
+  await rpc('tab.focus', { tab_id: focusTab, focus: false });
   observations.after_focus_false = snapshot();
-  assert.equal(observations.after_focus_false.lane.active_tab_id, second);
+  assert.equal(observations.after_focus_false.lane.active_tab_id, focusTab);
   assert.equal(observations.after_focus_false.focused_workspace_id, lane.workspace_id);
 } finally {
   if (fs.existsSync(socket)) {

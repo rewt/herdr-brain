@@ -1,0 +1,292 @@
+{
+  "version": "herdr 0.8.2",
+  "private_socket": "/private/tmp/eng-121-herdr-s95tk7/herdr.sock",
+  "initial_tab": "w2:t1",
+  "agent_tab": "w2:t2",
+  "after_create": {
+    "focused_workspace_id": "w1",
+    "focused_tab_id": "w1:t1",
+    "focused_pane_id": "w1:p1",
+    "lane": {
+      "active_tab_id": "w2:t1",
+      "agent_status": "unknown",
+      "focused": false,
+      "label": "lane",
+      "number": 2,
+      "pane_count": 2,
+      "tab_count": 2,
+      "workspace_id": "w2",
+      "worktree": {
+        "checkout_path": "/private/tmp/eng-121-herdr-s95tk7/lane",
+        "is_linked_worktree": true,
+        "repo_key": "/private/tmp/eng-121-herdr-s95tk7/repository/.git",
+        "repo_name": "repository",
+        "repo_root": "/private/tmp/eng-121-herdr-s95tk7/repository"
+      }
+    },
+    "tabs": [
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "1",
+        "number": 1,
+        "pane_count": 1,
+        "tab_id": "w2:t1",
+        "workspace_id": "w2"
+      },
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "agent:probe",
+        "number": 2,
+        "pane_count": 1,
+        "tab_id": "w2:t2",
+        "workspace_id": "w2"
+      }
+    ]
+  },
+  "after_move": {
+    "focused_workspace_id": "w1",
+    "focused_tab_id": "w1:t1",
+    "focused_pane_id": "w1:p1",
+    "lane": {
+      "active_tab_id": "w2:t1",
+      "agent_status": "unknown",
+      "focused": false,
+      "label": "lane",
+      "number": 2,
+      "pane_count": 2,
+      "tab_count": 2,
+      "workspace_id": "w2",
+      "worktree": {
+        "checkout_path": "/private/tmp/eng-121-herdr-s95tk7/lane",
+        "is_linked_worktree": true,
+        "repo_key": "/private/tmp/eng-121-herdr-s95tk7/repository/.git",
+        "repo_name": "repository",
+        "repo_root": "/private/tmp/eng-121-herdr-s95tk7/repository"
+      }
+    },
+    "tabs": [
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "agent:probe",
+        "number": 2,
+        "pane_count": 1,
+        "tab_id": "w2:t2",
+        "workspace_id": "w2"
+      },
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "2",
+        "number": 1,
+        "pane_count": 1,
+        "tab_id": "w2:t1",
+        "workspace_id": "w2"
+      }
+    ]
+  },
+  "layout_result": {
+    "type": "layout_apply",
+    "layout": {
+      "workspace_id": "w2",
+      "tab_id": "w2:t3",
+      "zoomed": false,
+      "focused_pane_id": "w2:p3",
+      "root": {
+        "type": "pane",
+        "pane_id": "w2:p3",
+        "cwd": "/private/tmp/eng-121-herdr-s95tk7/lane"
+      }
+    }
+  },
+  "after_layout": {
+    "focused_workspace_id": "w1",
+    "focused_tab_id": "w1:t1",
+    "focused_pane_id": "w1:p1",
+    "lane": {
+      "active_tab_id": "w2:t1",
+      "agent_status": "unknown",
+      "focused": false,
+      "label": "lane",
+      "number": 2,
+      "pane_count": 2,
+      "tab_count": 2,
+      "workspace_id": "w2",
+      "worktree": {
+        "checkout_path": "/private/tmp/eng-121-herdr-s95tk7/lane",
+        "is_linked_worktree": true,
+        "repo_key": "/private/tmp/eng-121-herdr-s95tk7/repository/.git",
+        "repo_name": "repository",
+        "repo_root": "/private/tmp/eng-121-herdr-s95tk7/repository"
+      }
+    },
+    "tabs": [
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "1",
+        "number": 1,
+        "pane_count": 1,
+        "tab_id": "w2:t1",
+        "workspace_id": "w2"
+      },
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "agent:probe",
+        "number": 3,
+        "pane_count": 1,
+        "tab_id": "w2:t3",
+        "workspace_id": "w2"
+      }
+    ]
+  },
+  "move_pane_result": {
+    "type": "pane_move",
+    "move_result": {
+      "changed": true,
+      "previous_pane_id": "w2:p3",
+      "previous_workspace_id": "w2",
+      "previous_tab_id": "w2:t3",
+      "pane": {
+        "pane_id": "w2:p3",
+        "terminal_id": "term_65cf279c4ab914",
+        "workspace_id": "w2",
+        "tab_id": "w2:t4",
+        "focused": false,
+        "cwd": "/private/tmp/eng-121-herdr-s95tk7/lane",
+        "foreground_cwd": "/private/tmp/eng-121-herdr-s95tk7/lane",
+        "agent_status": "unknown",
+        "scroll": {
+          "offset_from_bottom": 0,
+          "max_offset_from_bottom": 0,
+          "viewport_rows": 39
+        },
+        "revision": 0
+      },
+      "target_layout": {
+        "workspace_id": "w2",
+        "tab_id": "w2:t4",
+        "zoomed": false,
+        "area": {
+          "x": 26,
+          "y": 1,
+          "width": 94,
+          "height": 39
+        },
+        "focused_pane_id": "w2:p3",
+        "panes": [
+          {
+            "pane_id": "w2:p3",
+            "focused": true,
+            "rect": {
+              "x": 26,
+              "y": 1,
+              "width": 94,
+              "height": 39
+            }
+          }
+        ],
+        "splits": []
+      },
+      "created_tab": {
+        "tab_id": "w2:t4",
+        "workspace_id": "w2",
+        "number": 4,
+        "label": "moved-agent",
+        "focused": false,
+        "pane_count": 1,
+        "agent_status": "unknown"
+      },
+      "closed_tab_id": "w2:t3",
+      "focused_pane_id": "w2:p3"
+    }
+  },
+  "after_move_pane": {
+    "focused_workspace_id": "w1",
+    "focused_tab_id": "w1:t1",
+    "focused_pane_id": "w1:p1",
+    "lane": {
+      "active_tab_id": "w2:t1",
+      "agent_status": "unknown",
+      "focused": false,
+      "label": "lane",
+      "number": 2,
+      "pane_count": 2,
+      "tab_count": 2,
+      "workspace_id": "w2",
+      "worktree": {
+        "checkout_path": "/private/tmp/eng-121-herdr-s95tk7/lane",
+        "is_linked_worktree": true,
+        "repo_key": "/private/tmp/eng-121-herdr-s95tk7/repository/.git",
+        "repo_name": "repository",
+        "repo_root": "/private/tmp/eng-121-herdr-s95tk7/repository"
+      }
+    },
+    "tabs": [
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "1",
+        "number": 1,
+        "pane_count": 1,
+        "tab_id": "w2:t1",
+        "workspace_id": "w2"
+      },
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "moved-agent",
+        "number": 4,
+        "pane_count": 1,
+        "tab_id": "w2:t4",
+        "workspace_id": "w2"
+      }
+    ]
+  },
+  "after_focus_false": {
+    "focused_workspace_id": "w2",
+    "focused_tab_id": "w2:t4",
+    "focused_pane_id": "w2:p3",
+    "lane": {
+      "active_tab_id": "w2:t4",
+      "agent_status": "unknown",
+      "focused": true,
+      "label": "lane",
+      "number": 2,
+      "pane_count": 2,
+      "tab_count": 2,
+      "workspace_id": "w2",
+      "worktree": {
+        "checkout_path": "/private/tmp/eng-121-herdr-s95tk7/lane",
+        "is_linked_worktree": true,
+        "repo_key": "/private/tmp/eng-121-herdr-s95tk7/repository/.git",
+        "repo_name": "repository",
+        "repo_root": "/private/tmp/eng-121-herdr-s95tk7/repository"
+      }
+    },
+    "tabs": [
+      {
+        "agent_status": "unknown",
+        "focused": false,
+        "label": "1",
+        "number": 1,
+        "pane_count": 1,
+        "tab_id": "w2:t1",
+        "workspace_id": "w2"
+      },
+      {
+        "agent_status": "unknown",
+        "focused": true,
+        "label": "moved-agent",
+        "number": 4,
+        "pane_count": 1,
+        "tab_id": "w2:t4",
+        "workspace_id": "w2"
+      }
+    ]
+  },
+  "server_exit_code": 0
+}

@@ -34,6 +34,18 @@ to determine whether the blocker still applies.
 The last experiment runs solely against the private scratch server. An extra
 `focus: false` field is ignored; it does not turn `tab.focus` into a safe selector.
 
+The optional layout check also rules out the other layout primitives:
+
+```sh
+node docs/reports/ENG-121-one-tab-evidence/probe.mjs --layout
+```
+
+[layout-observations.json](layout-observations.json) shows that `layout.apply`
+with `focus: false` replaces the scratch agent tab/pane with new IDs and leaves
+the initial tab selected. Moving that new pane into another new tab using
+`pane.move` with `focus: false` also leaves the initial tab selected. Neither is
+a background selector. Only probe-owned scratch shells are changed.
+
 ## CLI and socket contract
 
 Discovery commands executed: `herdr --version`, `herdr --help`, `herdr --skill`,

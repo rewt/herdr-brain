@@ -1,0 +1,162 @@
+{
+  "protocol": 20,
+  "schema_version": 1,
+  "params": {
+    "TabCreateParams": {
+      "properties": {
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "focus": {
+          "default": false,
+          "type": "boolean"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "TabTarget": {
+      "properties": {
+        "tab_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id"
+      ],
+      "type": "object"
+    },
+    "TabMoveParams": {
+      "properties": {
+        "insert_index": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tab_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tab_id",
+        "insert_index"
+      ],
+      "type": "object"
+    },
+    "WorktreeOpenParams": {
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "focus": {
+          "default": false,
+          "type": "boolean"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AgentStartParams": {
+      "properties": {
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pane_id": {
+          "type": "string"
+        },
+        "timeout_ms": {
+          "description": "Startup timeout in milliseconds. Values must be greater than 3000 and at most 300000.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "pane_id"
+      ],
+      "type": "object"
+    }
+  },
+  "layout_methods": [
+    "workspace.create",
+    "workspace.list",
+    "workspace.get",
+    "workspace.focus",
+    "workspace.rename",
+    "workspace.move",
+    "workspace.move_block",
+    "workspace.report_metadata",
+    "workspace.close",
+    "worktree.list",
+    "worktree.create",
+    "worktree.open",
+    "worktree.remove",
+    "tab.create",
+    "tab.list",
+    "tab.get",
+    "tab.focus",
+    "tab.rename",
+    "tab.move",
+    "tab.close"
+  ]
+}

@@ -37,7 +37,8 @@ A refusal exits **75**, with one coded line: `TEST_SLOT_HELD` for a live holder,
 or `TEST_SLOT_HOLDER_UNKNOWN` when liveness cannot be established. Neither is a
 test failure. Lane checks preserve exit 75 and write no failed gate receipt;
 release returns a deferred result without cutting or claiming a candidate (its
-CLI emits the coded refusal and exits 75). Inspect unknown holder evidence;
+CLI emits the coded refusal and exits 75). A command that starts and itself exits
+75 supplies ordinary failed validation evidence. Inspect unknown holder evidence;
 never break a lock by age. Status exits 0 for free/gone, 1 for live, 2 for unknown,
 and reports both paths when the legacy bridge differs from the workspace path.
 
@@ -56,6 +57,12 @@ nonzero timeout (exit 124, `ETIMEDOUT`, or the Node test runner's timeout marker
 under measured load above one per available CPU (capacity capped at four) is
 re-run once, with the slot still held. The log includes
 `TEST_SLOT_TIMEOUT_RETRY` and both attempts. A second timeout counts as failure.
+The retry scope is the wrapped command. This project's promotion command holds
+the slot for the whole chain and wraps each heavy step (`test:core`, `test:cycle`,
+`test:lanes`, `test:acceptance`) separately, so only the timed-out step reruns.
+Containing wrappers recognize a child's retry marker and do not retry the chain
+again. When a containing wrapper initiates the retry, it passes
+`MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1` so descendants cannot add another attempt.
 Ordinary failures, signals and exit 75 never retry. The release claim and snapshot
 are created once; only its gate command can retry, never preparation or the
 release lifecycle. Gate commands must be safe to rerun after a timeout. This

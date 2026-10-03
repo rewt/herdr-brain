@@ -105,6 +105,7 @@ test('tree, command, environment, preparation and declared environment changes i
   const a = environmentFingerprint({ env: { ORG_ACTOR: 'worker', PWD: '/worker', SECRET: 'one' } });
   assert.equal(a, environmentFingerprint({ env: { ORG_ACTOR: 'settle', PWD: '/canonical', SECRET: 'one' } }));
   assert.notEqual(a, environmentFingerprint({ env: { SECRET: 'two' } }));
+  assert.equal(a, environmentFingerprint({ env: { SECRET: 'one', MONITOR_TEST_SLOT_TIMEOUT_RETRIED: '1' } }));
   assert.equal(fs.readFileSync(path.join(f.workspace, '.lane/gate.json'), 'utf8').includes('SECRET'), false);
 });
 
@@ -120,6 +121,23 @@ test('red, signal, dirty and moved-head executions never supply reusable green e
   f.good(f.lane(['check'])); assert.equal(f.gate().reused, false);
   fs.writeFileSync(path.join(f.workspace, 'work'), 'user dirt');
   assert.match(f.lane(['check']).stderr, /not clean/);
+});
+
+test('commands that start and exit 75 record failed receipts in both validation tiers', { timeout: 20000 }, t => {
+  const f = fixture(t, { fast: 'node check.cjs fast; exit 75', promotion: 'node check.cjs promotion; exit 75' });
+  for (const tier of ['fast', 'promotion']) {
+    const result = f.lane(['check', '--tier', tier]);
+    assert.equal(result.status, 75, result.stderr + result.stdout);
+    assert.match(result.stdout, /GATE .* exit=75/);
+    assert.equal(f.gate().exit_code, 75);
+    assert.equal(f.gate().tier, tier);
+    const receipt = path.join(f.repo, '.git/lane-validation', f.gate().key + '.json');
+    assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).exit_code, 75);
+    const repeated = f.lane(['check', '--tier', tier]);
+    assert.equal(repeated.status, 75);
+    assert.doesNotMatch(repeated.stdout, /REUSE/);
+  }
+  assert.deepEqual(f.count(), ['fast', 'fast', 'promotion', 'promotion']);
 });
 
 test('worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse', { timeout: 20000 }, t => {

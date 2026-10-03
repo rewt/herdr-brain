@@ -40,6 +40,7 @@ export const LEGACY_TOKEN_ENV = "BCH_CLOAK_TEST_SLOT_TOKEN";
 export const LEGACY_WAIT_ENV = "BCH_CLOAK_TEST_SLOT_WAIT_SECONDS";
 export const TOKEN_ENV = "MONITOR_TEST_SLOT_TOKEN";
 export const WAIT_ENV = "MONITOR_TEST_SLOT_WAIT_SECONDS";
+export const RETRIED_ENV = "MONITOR_TEST_SLOT_TIMEOUT_RETRIED";
 export const HELD_CODE = "TEST_SLOT_HELD";
 export const HOLDER_UNKNOWN_CODE = "TEST_SLOT_HOLDER_UNKNOWN";
 export const REFUSED_EXIT = 75;
@@ -253,12 +254,13 @@ async function run({ positional, options, child }) {
     throw error;
   }
   let received = null;
+  const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.retryTimeout, options.lockPath, options.compatPath);
+    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, retryTimeout, options.lockPath, options.compatPath, attempt > 0);
     if (options.resultPath) fs.writeFileSync(options.resultPath, JSON.stringify({ signal: received ?? result.signal, attempts: attempt + 1 }) + "\n", { mode: 0o600 });
     if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
     if (!result.groupGone) return result.status || 1;
-    if (attempt === 0 && options.retryTimeout && shouldRetryTimeout(result)) {
+    if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
       process.stderr.write(`TEST_SLOT_TIMEOUT_RETRY: ${label}: timeout under load; re-running once inside the held slot.\n`);
       continue;
     }
@@ -268,23 +270,28 @@ async function run({ positional, options, child }) {
 }
 
 /** Only recognized timeout evidence under measured load permits one retry. */
-export function shouldRetryTimeout({ status, timeout, load }) {
-  return status !== 0 && status !== REFUSED_EXIT && timeout && load > 1;
+export function shouldRetryTimeout({ status, timeout, load, childRetried = false }) {
+  return status !== 0 && status !== REFUSED_EXIT && timeout && load > 1 && !childRetried;
 }
 
-async function executeCommand(argv, slot, received, captureTimeout, lockPath, compatPath) {
+async function executeCommand(argv, slot, received, captureTimeout, lockPath, compatPath, retried) {
   const capacity = Math.max(1, Math.min(4, os.availableParallelism()));
   let load = os.loadavg()[0] / capacity;
   let timeout = false;
+  let childRetried = false;
   // Keep a bounded tail for markers split across chunks; never buffer a suite log.
   let tail = "";
   const observe = (data) => {
     const text = tail + String(data);
     timeout ||= /ETIMEDOUT|testTimeoutFailure|Test (?:file|suite) exceeded \d+ms|ERR_TEST_FAILURE[^\n]*timeout|failureType: ['"]testTimeoutFailure/u.test(text);
+    // A nested wrapper already spent this command's single retry. Its timeout
+    // evidence must not make a containing promotion/release adapter replay it.
+    childRetried ||= text.includes("TEST_SLOT_TIMEOUT_RETRY:");
     tail = text.slice(-1024);
   };
   const proc = spawn(argv[0], argv.slice(1), { stdio: captureTimeout ? ["inherit", "pipe", "pipe"] : "inherit", detached: !slot.nested,
-    env: { ...process.env, [PATH_ENV]: lockPath, [COMPAT_PATH_ENV]: compatPath, [TOKEN_ENV]: slot.token, [LEGACY_TOKEN_ENV]: slot.token } });
+    env: { ...process.env, [PATH_ENV]: lockPath, [COMPAT_PATH_ENV]: compatPath, [TOKEN_ENV]: slot.token, [LEGACY_TOKEN_ENV]: slot.token,
+      ...(retried ? { [RETRIED_ENV]: "1" } : {}) } });
   const completion = new Promise((resolve) => {
     proc.once("error", (error) => { process.stderr.write(`test-slot: ${error.message}\n`); resolve({ status: 127, signal: null }); });
     proc.once("close", (code, signal) => resolve({ status: exitOf(code, signal), signal }));
@@ -316,7 +323,7 @@ async function executeCommand(argv, slot, received, captureTimeout, lockPath, co
       if (!groupGone) process.stderr.write("TEST_SLOT_GROUP_REMAINS: command group still exists; lock retained.\n");
     }
     // Signals are never retryable, including commands that swallow a signal.
-    return { status, signal, timeout: signal ? false : timeout, load, groupGone };
+    return { status, signal, timeout: signal ? false : timeout, load, childRetried, groupGone };
   } catch (error) {
     forward("SIGTERM");
     throw error;

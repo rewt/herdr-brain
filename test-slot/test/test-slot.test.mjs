@@ -9,12 +9,12 @@ import { after, afterEach, describe, it as nodeIt } from "node:test";
 const it = (name, body) => nodeIt(name, { timeout: 30000 }, body);
 import { fileURLToPath } from "node:url";
 
-import { acquireTestSlot, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, HELD_CODE, HOLDER_UNKNOWN_CODE, REFUSED_EXIT, TEST_SLOT_PATH, TOKEN_ENV, WAIT_ENV } from "../test-slot.mjs";
+import { acquireTestSlot, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, HELD_CODE, HOLDER_UNKNOWN_CODE, REFUSED_EXIT, TEST_SLOT_PATH, TOKEN_ENV, WAIT_ENV, RETRIED_ENV } from "../test-slot.mjs";
 
 const CLI = fileURLToPath(new URL("../test-slot.mjs", import.meta.url));
 const MODULE = new URL("../test-slot.mjs", import.meta.url).href;
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
-const ENV = Object.fromEntries(Object.entries(process.env).filter(([key]) => ![TOKEN_ENV, WAIT_ENV, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV].includes(key)));
+const ENV = Object.fromEntries(Object.entries(process.env).filter(([key]) => ![TOKEN_ENV, WAIT_ENV, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, RETRIED_ENV].includes(key)));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const dirs = [];
@@ -497,6 +497,44 @@ describe('workspace configuration and timeout retry', () => {
     const signaled = await cli(['run', 'signal', '--lock-path', s.lockPath, '--retry-timeout-under-load', '--', process.execPath, '-e',
       `console.error('ETIMEDOUT');process.kill(process.pid,'SIGTERM');`], { env }).done;
     assert.equal(signaled.code, 143); assert.doesNotMatch(signaled.stderr, /TEST_SLOT_TIMEOUT_RETRY:/);
+  });
+
+  for (const childRetries of [true, false]) {
+    it(`limits nested retrying holders to two attempts when the ${childRetries ? 'child' : 'ancestor'} initiates the retry`, async () => {
+      const s = scratch(), count = s.file('count'), result = s.file('result.json'), preload = s.file('load.mjs');
+      fs.writeFileSync(preload, `import os from 'node:os';os.loadavg=()=>${childRetries ? '[1000,1000,1000]' : `process.argv[3]==='inner' && process.env.${RETRIED_ENV}!=='1' ? [0,0,0] : [1000,1000,1000]`};`);
+      const body = `require('fs').appendFileSync(${JSON.stringify(count)},'attempt\\n');process.exit(124);`;
+      const inner = [process.execPath, CLI, 'run', 'inner', '--retry-timeout-under-load', '--', process.execPath, '-e', body];
+      const middle = [process.execPath, CLI, 'run', 'middle', '--retry-timeout-under-load', '--', ...inner];
+      const done = await cli(['run', 'outer', '--lock-path', s.lockPath, '--result-path', result,
+        '--retry-timeout-under-load', '--', ...middle], { env: { ...ENV, NODE_OPTIONS: `--import=${preload}` } }).done;
+      assert.equal(done.code, 124, done.stderr);
+      assert.equal(fs.readFileSync(count, 'utf8'), 'attempt\nattempt\n');
+      assert.equal((done.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+      // With no inner retry, the middle wrapper spends the allowance, then
+      // suppresses both the outer replay and another retry in its descendants.
+      assert.equal(JSON.parse(fs.readFileSync(result, 'utf8')).attempts, 1);
+      assert.equal(fs.existsSync(s.lockPath), false);
+    });
+  }
+
+  it('promotion retries only the timed-out heavy step and continues the remaining steps once', async () => {
+    const s = scratch(), count = s.file('steps'), preload = s.file('load.mjs');
+    fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
+    fs.writeFileSync(s.file('npm'), `#!${process.execPath}
+const fs=require('fs'),file=${JSON.stringify(count)},name=process.argv[3];
+const previous=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
+fs.appendFileSync(file,name+'\\n');
+process.exit(name==='test:core'&&!previous.includes('test:core')?124:0);
+`, { mode: 0o755 });
+    const steps = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts['test:promotion:steps'];
+    const done = await cli(['run', 'promotion adapter', '--lock-path', s.lockPath, '--retry-timeout-under-load',
+      '--', '/bin/sh', '-c', steps], { env: { ...ENV, PATH: `${s.dir}:${ENV.PATH}`, NODE_OPTIONS: `--import=${preload}` } }).done;
+    assert.equal(done.code, 0, done.stderr);
+    assert.deepEqual(fs.readFileSync(count, 'utf8').trim().split('\n'),
+      ['test:slot', 'test:core', 'test:core', 'test:cycle', 'test:lanes', 'test:acceptance']);
+    assert.equal((done.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+    assert.equal(fs.existsSync(s.lockPath), false);
   });
 
   it('does not inherit a stale token into a dead holder record', async () => {

@@ -45,7 +45,7 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
   if (!slotHeld) {
     const result = runTestSlotSync(`release ${project.canonical}`, [process.execPath, SELF, '--held-once', JSON.stringify({ cwd: project.canonical, org: org ? path.resolve(org) : undefined, role, tag, measurement })],
       { cwd: project.canonical, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, retryTimeout: false });
-    if (result.status === REFUSED_EXIT) return { result: 'deferred', exit_code: REFUSED_EXIT, reason: result.stderr.trim() };
+    if (result.status === REFUSED_EXIT && result.attempts === undefined) return { result: 'deferred', exit_code: REFUSED_EXIT, reason: result.stderr.trim() };
     if (result.error || result.status !== 0) throw new Error(result.error?.message || result.stderr || `release wrapper exited ${result.status}`);
     return JSON.parse(result.stdout);
   }

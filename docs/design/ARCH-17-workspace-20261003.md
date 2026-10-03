@@ -1,7 +1,8 @@
 # ARCH-17: the workspace
 
 Date: 2026-10-03. Run R-151. Status: **recommendation; nothing built.** Operator decisions are
-marked **Q1–Q6** and collected at the end. ARCH-18 (sandbox) is researched in parallel; the seams are
+marked **Q1–Q4**, and two reversible decisions taken here are marked **D1–D2**; both are
+collected at the end. ARCH-18 (sandbox) is researched in parallel; the seams are
 in their own section. Scratch evidence: `docs/reports/evidence/ARCH-17-R151/`.
 
 ## The short version
@@ -164,8 +165,8 @@ I am not proposing a new project settings file. The existing files (`.lane.json`
 ```
 
 - **Where it lives:** `~/.herdr-monitor/` is the workspace home. It holds the file, project areas
-  (`p/<name>/`), short temp (`t/<8 hex>/`), locks and leases (`locks/`), and, if Q5 says yes, a
-  small workspace record. A single home gives the sandbox one rule: the home is read-only to every
+  (`p/<name>/`), short temp (`t/<8 hex>/`), locks and leases (`locks/`), and a small workspace
+  record (D2). A single home gives the sandbox one rule: the home is read-only to every
   session, and only a session's own area and temp under it are writable. An environment variable
   (`HERDR_MONITOR_WORKSPACE`) points tests and rehearsals elsewhere. The directory name is the
   operator's choice (Q1).
@@ -209,7 +210,7 @@ the checkout. That keeps a `git clean -fdx` in the canonical checkout from delet
 default `<checkout>/.org` sits in `info/exclude`, which `-x` removes. The record stays a plain
 directory that `ORG_DIR` can point at, so the core needs no new concepts.
 
-**Moving herdr-brain's record (optional, Q4).** It was rehearsed on a copy. If the operator ever
+**Moving herdr-brain's record (optional; D1 defers it).** It was rehearsed on a copy. If the operator ever
 wants `rewt/` tidy, the move is safe in this order:
 
 1. Fix the two lock keys to use the record's real path (`watch/watch.mjs:288`,
@@ -253,7 +254,7 @@ reclaimed, two live holders from different projects were granted, and a third wa
 `held 2/2`, so the caller waits. Leases are coordination state like the record lock, not stored
 status, so "status is derived from events" still holds. With leases and gates in place, the G-3
 prose rules ("two lanes while bch-cloak is heavy, six while it is idle, nothing while swap is in
-use") become one number in the workspace file (Q6) plus gates that measure what "heavy" meant.
+use") become one number in the workspace file (Q4) plus gates that measure what "heavy" meant.
 
 ## Who sees what
 
@@ -272,7 +273,7 @@ use") become one number in the workspace file (Q6) plus gates that measure what 
   reasoning, and the record. The cross-project decisions made today were all cap and load
   judgments that the leases and gates make mechanical. When the operator wants to talk about the
   machine, a chat entered with `--role workspace` gets a cold start from every project's
-  `today` plus machine state, and records into the workspace record (Q5) instead of into
+  `today` plus machine state, and records into the workspace record (D2) instead of into
   herdr-brain's G-3.
 
 ## A new machine (ARCH-19)
@@ -330,17 +331,19 @@ the first gets its own record, and the per-run temp path is under 60 characters.
 - **Q2 (security boundary).** Should projects join only by being entered, with no directory roots, so
   `rewt/` is not a root? Recommended: yes. A directory root silently brings 13 other
   repositories inside the boundary, and joining by entry covers the convenience.
-- **Q3 (design).** Should the workspace supervisor be the console plus mechanical guardrails and an
+- **Q3 (how you steer).** Should the workspace supervisor be the console plus mechanical guardrails and an
   on-demand `--role workspace` chat, rather than a resident session? Recommended: yes, per the north
   star and the M2 design.
-- **Q4 (design).** Should herdr-brain's record stay at `rewt/.org`, mapped in place, with any move
-  deferred? Recommended: yes. The move is rehearsed and documented above if you want it later.
-- **Q5 (design).** Should there be a small workspace record in the workspace home for cross-project
-  decisions (lane caps, grants), instead of herdr-brain's G-3? Recommended: yes. It is the same
-  record format and CLI, and G-3 should hold herdr-brain's roadmap, not the machine's.
-- **Q6 (guardrail value).** Should the machine total be 6 worker sessions, with memory and load gates
+- **Q4 (guardrail value).** Should the machine total be 6 worker sessions, with memory and load gates
   deciding below that, replacing the "2 while bch-cloak is heavy" prose? Recommended: yes, once
   ENG-116's gate has landed; until then, keep the current rule.
+
+Decided here (design, reversible; say so to overturn either):
+
+- **D1.** herdr-brain's record stays at `rewt/.org`, mapped in place. The move is rehearsed and
+  documented above for whenever tidiness is worth a quiet window.
+- **D2.** The workspace home gets a small workspace record for cross-project decisions (lane caps,
+  grants), so they stop landing in herdr-brain's G-3. It uses the same record format and CLI.
 
 ## Scratch evidence
 

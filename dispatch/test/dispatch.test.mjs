@@ -29,6 +29,7 @@ if(type==='lane') {
  if(fail===a[0]) { console.error('injected '+fail); process.exit(1); }
  if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);
  if(a[0]==='prepare' && !entry()) process.exit(1);
+ if(a[0]==='prepare' && process.env.TEST_MEMORY_WORKER_PRESSURE) fs.writeFileSync(process.env.TEST_MEMORY_FILE,JSON.stringify({available:128*1024**2,swap_used:0}));
  if(a[0]==='dispatch') {
   const n='worker-'+(Object.keys(workers).length+1), cwd=entry();
   workers[n]={name:n,pane_id:'w:p'+n,workspace_id:'w',cwd,terminal_id:'t-'+n,agent_session:{value:'s-'+n},agent_status:'idle'};save();
@@ -149,21 +150,60 @@ function fixture(t, { realWatch = false, preload } = {}) {
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
 test('dispatch waits under simulated swap pressure before opening a lane and resumes the same request', async t => {
   const f = fixture(t), memory = path.join(f.root, 'memory.json');
-  fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 1024 ** 2 }));
+  fs.writeFileSync(memory, JSON.stringify({ available: 2 * 1024 ** 3, swap_used: 1024 ** 3 }));
   const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], { TEST_MEMORY_FILE: memory });
   let stderr = '';
   pending.child.stderr.on('data', data => { stderr += data; });
   const end = Date.now() + 10000;
   while (!stderr.includes('waiting; memory pressure') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
-  assert.match(stderr, /swap in use 1 MiB/);
+  assert.match(stderr, /swap in use 1024 MiB/);
   assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'open'), false);
   const journal = f.jobs()[0]; assert.equal(JSON.parse(fs.readFileSync(journal)).stage, 'open');
-  fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+  fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 1024 ** 2 }));
   await pending.done;
   assert.equal(pending.child.exitCode, 0, stderr);
   assert.match(stderr, /cleared; proceeding/);
   assert.equal(f.jobs().length, 1); assert.equal(promptCalls(f).length, 1);
 });
+for (const stage of ['open', 'worker']) {
+  test(`STOP during dispatch ${stage} memory wait retains the request without a worker launch`, async t => {
+    const f = fixture(t), memory = path.join(f.root, 'memory.json');
+    fs.writeFileSync(memory, JSON.stringify({ available: (stage === 'open' ? 128 * 1024 ** 2 : 8 * 1024 ** 3), swap_used: 0 }));
+    const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
+      { TEST_MEMORY_FILE: memory, ...(stage === 'worker' ? { TEST_MEMORY_WORKER_PRESSURE: '1' } : {}) });
+    let stderr = '', stdout = '';
+    pending.child.stderr.on('data', data => { stderr += data; });
+    pending.child.stdout.on('data', data => { stdout += data; });
+    const stop = path.join(f.repo, '.lane/supervisor/STOP');
+    try {
+      const end = Date.now() + 10000;
+      while (!stderr.includes('waiting; memory pressure') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
+      assert.match(stderr, /waiting; memory pressure/);
+      assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).stage, stage);
+      fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Operator stop');
+    } finally {
+      fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      await pending.done;
+    }
+    assert.equal(pending.child.exitCode, 0, stderr);
+    const receipt = JSON.parse(stdout);
+    assert.equal(receipt.result, 'stopped'); assert.equal(receipt.stage, stage);
+    assert.match(receipt.reason, /Supervisor STOP/);
+    assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'open').length, stage === 'open' ? 0 : 1);
+    assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
+    assert.equal(promptCalls(f).length, 0);
+    assert.equal(fs.existsSync(`${receipt.journal}.lock`), false, 'stopping releases the request lock');
+    const stillStopped = f.dispatch(['--retry', receipt.journal]);
+    assert.equal(stillStopped.status, 0, stillStopped.stderr);
+    assert.equal(JSON.parse(stillStopped.stdout).result, 'stopped');
+    fs.unlinkSync(stop);
+    const resumed = f.dispatch(['--retry', receipt.journal]);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    if (receipt.run) assert.equal(JSON.parse(resumed.stdout).run, receipt.run);
+    assert.equal(f.jobs().length, 1); assert.equal(promptCalls(f).length, 1);
+    assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'open').length, 1);
+  });
+}
 test('dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work', t => {
   const f = fixture(t);
   f.rec(['priorities', 'add', 'Adoption', '--why=Useful to people'], { ORG_ACTOR: 'human' });

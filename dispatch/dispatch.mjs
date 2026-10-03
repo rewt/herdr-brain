@@ -9,6 +9,7 @@ import { parseArgs } from 'node:util';
 import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
+import { gitProject } from '../lib/project.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -181,13 +182,21 @@ async function main() {
   }
   const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir']));
   if (common !== job.common) throw new Error('repository common-directory identity changed');
+  const stop = path.join(gitProject(job.repo).canonical, '.lane/supervisor/STOP');
+  const checkStop = () => {
+    if (fs.existsSync(stop)) {
+      const error = new Error('Supervisor STOP appeared before dispatch; no new worker launched');
+      error.code = 'DISPATCH_STOPPED';
+      throw error;
+    }
+  };
   if (opt['recover-run']) {
     const run = json(record(['show', opt['recover-run'], '--json']));
     if (job.run || run.item !== job.item || run.meta?.dispatch_journal !== journal) throw new Error('recovery run does not belong to this request');
     job.run = run.id; job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
-    waitForMemory({ label: 'dispatch' });
+    waitForMemory({ label: 'dispatch', check: checkStop });
     if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : []), '--git-only']);
     job.workspace = fs.realpathSync(worktree());
     // prepare validates that the registered lane is owned by this repository.
@@ -244,7 +253,7 @@ async function main() {
     }
   }
   if (job.stage === 'worker') {
-    waitForMemory({ label: 'dispatch worker' });
+    waitForMemory({ label: 'dispatch worker', check: checkStop });
     if (job.reuse) {
       const prior = json(record(['show', job.reuse, '--json']));
       if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');
@@ -317,7 +326,10 @@ catch (error) {
     if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}
   }
   process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}\n`);
-  process.exitCode = 1;
+  if (error.code === 'DISPATCH_STOPPED') {
+    process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
+      reason: error.message, stage: job.stage, journal })}\n`);
+  } else process.exitCode = 1;
 } finally {
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}

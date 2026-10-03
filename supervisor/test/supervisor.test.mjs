@@ -16,7 +16,7 @@ test('cold start surfaces host pressure and memory/CPU process evidence without 
   const f = fixture(t), before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
   const row = { pid: 321, ppid: 123, rss_bytes: 1024 ** 3, cpu_percent: 99, command: 'node test/pty-leaf.mjs' };
   const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env,
-    memory: { total: 16 * 1024 ** 3, available: 8 * 1024 ** 3, swap_used: 1024 ** 2, warning: 'probe detail' },
+    memory: { total: 16 * 1024 ** 3, available: 2 * 1024 ** 3, swap_used: 1024 ** 3, warning: 'probe detail' },
     processes: { by_memory: [row], by_cpu: [row] } });
   assert.match(doc.host.reason, /swap in use/);
   const text = renderColdStart(doc);

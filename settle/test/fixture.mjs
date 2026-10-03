@@ -104,8 +104,8 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   const settle = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief, ...args]);
   const retry = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--retry', ...args]);
   const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
-  const concurrent = (id, executable = path.join(source, 'settle/settle.mjs')) => {
-    const child = spawnChild(t, process.execPath, [executable, id, '--brief', brief], { cwd: repo, env });
+  const concurrent = (id, executable = path.join(source, 'settle/settle.mjs'), args = ['--brief', brief]) => {
+    const child = spawnChild(t, process.execPath, [executable, id, ...args], { cwd: repo, env });
     const done = waitForExit(child).then(result => { rememberWatchers(); return result; });
     done.catch(() => {});
     pending.push(done);

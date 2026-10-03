@@ -332,7 +332,9 @@ function dispatchArgs() {
 function correctionStopped() {
   const stop = path.join(job.repo, '.lane/supervisor/STOP');
   if (!fs.existsSync(stop)) return false;
-  const reason = 'Supervisor STOP appeared before correction dispatch; no new worker launched';
+  return stopCorrection('Supervisor STOP appeared before correction dispatch; no new worker launched');
+}
+function stopCorrection(reason) {
   const handoff = evidence('handoff.md', `# Settle stopped at ${job.stage}\n\n${reason}\n\nReview and correction evidence remain in ${journal}. Inspect the stop and any dispatch journal; after STOP is cleared, resume settle with --retry. Completed dispatch receipts may be adopted without a launch.\n`);
   // Keep fix/dispatching resumable; a complete escalation would strand it.
   job.result = { result: 'stopped', run: id, item: job.item, lane: job.lane, reason, journal, handoff };
@@ -388,6 +390,7 @@ function fix() {
     output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), dispatchArgs());
   }
   const receipt = JSON.parse(output);
+  if (receipt.result === 'stopped') return stopCorrection(receipt.reason);
   job.fixRun = receipt.run; job.dispatch = receipt; save();
   finish('fix_round', 'Independent findings require a correction; a new run was dispatched on the same lane', { fix: receipt });
 }

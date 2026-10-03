@@ -140,3 +140,6 @@ Internal response waits adapt to measured machine load; see the
 
 Dispatch also [waits for memory pressure to clear](../docs/reference/memory-gate.md)
 before opening a lane or launching a worker, retaining the same durable request.
+If the canonical project's `.lane/supervisor/STOP` appears during either wait,
+dispatch returns `result: stopped` and keeps its current stage. After clearing
+STOP, use `--retry` with the returned journal or run to resume that request.

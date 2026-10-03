@@ -2349,7 +2349,8 @@ function promoteLocked(topic, root, options) {
     writeAgentFileAtomic(join(path, '.lane', 'gate.json'), JSON.stringify(gate, null, 2) + '\n');
   }
   if (gate.exit_code !== 0) fail(`validation failed (exit ${gate.exit_code}); nothing merged`);
-  waitForMemory({ label: 'lane fast-forward' });
+  // Validation was gated before acquiring the promotion lock. Finish this
+  // cheap integration under the lock without waiting on unrelated memory pressure.
   if (git(["rev-parse", MAIN]) !== mainHead) {
     fail(`${MAIN} moved during validation; re-run promote`);
   }

@@ -12,7 +12,7 @@ test('settle retains the review stage under simulated memory pressure and launch
   const f = fixture(t), run = f.start();
   f.commit('correct\n'); f.report(run);
   const file = path.join(f.root, 'memory.json'), healthy = { available: 8 * 1024 ** 3, swap_used: 0 };
-  fs.writeFileSync(file, JSON.stringify({ ...healthy, swap_used: 1024 ** 2 }));
+  fs.writeFileSync(file, JSON.stringify({ available: 2 * 1024 ** 3, swap_used: 1024 ** 3 }));
   f.env.TEST_MEMORY_FILE = file;
   const pending = f.concurrent(run);
   let stderr = '';
@@ -29,6 +29,61 @@ test('settle retains the review stage under simulated memory pressure and launch
   assert.match(stderr, /cleared; proceeding/);
   assert.equal(journal(f, run).result.result, 'promotable');
   assert.equal(f.calls().filter(args => args[1] === 'start').length, 1);
+});
+
+test('STOP arriving during correction dispatch memory wait returns a resumable stopped handoff', async t => {
+  const f = fixture(t), run = f.start();
+  f.commit('correct\n'); f.report(run);
+  fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict: 'NEEDS-WORK',
+    findings: '- [Moderate] work.txt:1 - Follow-up remains; Fix: follow up' }));
+  assert.equal(result(f.settle(run, ['--review-round-cap', '1'])).result, 'promotable_with_findings');
+  const starts = f.calls().filter(args => args[1] === 'start').length;
+  const memory = path.join(f.root, 'memory.json');
+  fs.writeFileSync(memory, JSON.stringify({ available: 128 * 1024 ** 2, swap_used: 0 }));
+  f.env.TEST_MEMORY_FILE = memory;
+  // Settle captures dispatch's stderr until it returns. Observe the nested
+  // wait through an offline adapter so STOP is placed after a pressure sample.
+  const adapter = path.join(f.root, 'dispatch-tap.mjs'), log = path.join(f.root, 'dispatch-wait.log');
+  fs.writeFileSync(adapter, `#!/usr/bin/env node
+import fs from 'node:fs'; import { spawn } from 'node:child_process';
+const child = spawn(process.execPath, [${JSON.stringify(path.join(f.source, 'dispatch/dispatch.mjs'))}, ...process.argv.slice(2)], { stdio: ['ignore', 'pipe', 'pipe'] });
+child.stdout.pipe(process.stdout);
+child.stderr.on('data', data => { fs.appendFileSync(${JSON.stringify(log)}, data); process.stderr.write(data); });
+child.on('error', error => { console.error(error); process.exitCode = 1; });
+child.on('close', code => { process.exitCode = code ?? 1; });
+`, { mode: 0o755 });
+  const pending = f.concurrent(run, undefined, ['--retry', '--fix-findings', '--dispatch-cli', adapter]);
+  let stderr = '', stdout = '';
+  pending.child.stderr.on('data', data => { stderr += data; });
+  pending.child.stdout.on('data', data => { stdout += data; });
+  const stop = path.join(f.repo, '.lane/supervisor/STOP');
+  try {
+    const end = Date.now() + 10000;
+    while ((!fs.existsSync(log) || !fs.readFileSync(log, 'utf8').includes('dispatch: waiting')) && Date.now() < end)
+      await new Promise(resolve => setTimeout(resolve, 20));
+    assert.match(fs.readFileSync(log, 'utf8'), /dispatch: waiting; memory pressure/);
+    fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Stop during memory wait');
+  } finally {
+    fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+    await pending.done;
+  }
+  assert.equal(pending.child.exitCode, 0, stderr);
+  const stopped = JSON.parse(stdout);
+  assert.equal(stopped.result, 'stopped'); assert.match(stopped.reason, /Supervisor STOP/);
+  assert.match(fs.readFileSync(stopped.handoff, 'utf8'), /resume settle with --retry/);
+  assert.equal(journal(f, run).stage, 'dispatching');
+  assert.equal(f.calls().filter(args => args[1] === 'start').length, starts, 'no correction worker starts');
+  const directory = path.join(f.org, 'dispatch');
+  const requests = fs.readdirSync(directory).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json'));
+  assert.equal(requests.length, 1);
+  const dispatch = JSON.parse(fs.readFileSync(path.join(directory, requests[0])));
+  assert.equal(dispatch.stage, 'open'); assert.equal(dispatch.run, null);
+  fs.unlinkSync(stop);
+  const resumed = result(f.retry(run));
+  assert.equal(resumed.result, 'fix_round'); assert.ok(resumed.fix.run);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(directory, requests[0]))).run, resumed.fix.run);
+  assert.equal(f.show(stopped.item).runs.length, 2, 'retry creates exactly one correction run');
+  assert.equal(f.calls().filter(args => args[1] === 'start').length, starts + 1);
 });
 
 test('fixture teardown waits for a concurrent child to finish writing before removing its directory', async (t) => {

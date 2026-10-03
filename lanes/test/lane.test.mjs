@@ -721,6 +721,49 @@ test("promote leaves main unchanged when validation fails", () => {
   }
 });
 
+test("promote waits before the lock and completes fast-forward if memory pressure appears during validation", async () => {
+  const fixture = makeFixture();
+  let pending;
+  try {
+    const path = openLane(fixture, "memory-topic");
+    commitFile(path, "lane.txt", "lane\n", "lane change");
+    const memory = join(fixture.root, 'memory.json'), validated = join(fixture.root, 'validated');
+    const pressure = { available: 128 * 1024 ** 2, swap_used: 0 };
+    writeFileSync(memory, JSON.stringify(pressure));
+    fixture.env.TEST_MEMORY_FILE = memory;
+    const script = join(fixture.root, 'validate-memory.cjs');
+    writeFileSync(script, `const fs = require('fs');
+fs.writeFileSync(${JSON.stringify(validated)}, 'validated');
+fs.writeFileSync(${JSON.stringify(memory)}, ${JSON.stringify(JSON.stringify(pressure))});\n`);
+    writeConfig(fixture, { main: 'main', validate: `${JSON.stringify(process.execPath)} ${JSON.stringify(script)}` });
+    pending = laneProcess(fixture, ['promote', 'memory-topic']);
+    try {
+      await waitForCondition(() => pending.stderr().includes('lane promote: waiting; memory pressure'), 'promotion did not wait before validation', 10000);
+      assert.equal(existsSync(join(fixture.repo, '.git/lane-promote.lock')), false, 'pressure wait must leave the promotion lock free');
+      assert.equal(existsSync(validated), false);
+    } finally { writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 1024 ** 2 })); }
+    await waitForCondition(() => existsSync(validated), 'validation did not start after pressure cleared', 10000);
+    try {
+      // A second wait would strand the promotion lock. Fail promptly, then
+      // clear the fixture so the owned child can finish even on a regression.
+      await waitForCondition(() => pending.child.exitCode !== null, 'promotion waited on memory after validation while holding its lock', 10000);
+    } finally {
+      writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      await pending.completed;
+    }
+    assert.equal(pending.child.exitCode, 0, pending.stderr());
+    assert.match(pending.stdout(), /promoted lane\/memory-topic/);
+    assert.equal(git(fixture.repo, ['rev-parse', 'main']), git(fixture.repo, ['rev-parse', 'lane/memory-topic']));
+    assert.equal(existsSync(join(fixture.repo, '.git/lane-promote.lock')), false);
+  } finally {
+    if (pending && pending.child.exitCode === null) {
+      writeFileSync(join(fixture.root, 'memory.json'), JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      await pending.completed;
+    }
+    fixture.cleanup();
+  }
+});
+
 test("promote rebases a clean lane behind main and fast-forwards", () => {
   const fixture = makeFixture();
   try {

@@ -11,6 +11,7 @@ import { entryPolicy } from '../policy.mjs';
 import { freshInteractive, interactiveResume } from '../launch.mjs';
 import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
 import { spawnNative } from '../session.mjs';
+import { FleetError } from '../../lib/fleet.mjs';
 const separator = process.argv.indexOf('--');
 const adapterArgs = process.argv.slice(2, separator < 0 ? undefined : separator);
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);
@@ -56,7 +57,8 @@ try {
   }
 } catch (e) {
   if (entry) entry.close();
-  console.error(`monitor entry: ${e.message}${automatic && !entry ? '; continuing with native Codex' : ''}`);
-  if (automatic && !entry) passthrough(); else process.exitCode = 1;
+  const fallback = automatic && !entry && !(e instanceof FleetError);
+  console.error(`monitor entry: ${e.message}${fallback ? '; continuing with native Codex' : ''}`);
+  if (fallback) passthrough(); else process.exitCode = 1;
 }
 }

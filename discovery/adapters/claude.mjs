@@ -8,6 +8,7 @@ import { entryPolicy } from '../policy.mjs';
 import { freshInteractive, interactiveResume } from '../launch.mjs';
 import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
 import { spawnNative } from '../session.mjs';
+import { FleetError } from '../../lib/fleet.mjs';
 const separator = process.argv.indexOf('--');
 const { values } = parseArgs({ args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
@@ -48,7 +49,8 @@ try {
   }
 } catch (e) {
   if (entry) entry.close();
-  console.error(`monitor entry: ${e.message}${automatic && !entry ? '; continuing with native Claude' : ''}`);
-  if (automatic && !entry) passthrough(); else process.exitCode = 1;
+  const fallback = automatic && !entry && !(e instanceof FleetError);
+  console.error(`monitor entry: ${e.message}${fallback ? '; continuing with native Claude' : ''}`);
+  if (fallback) passthrough(); else process.exitCode = 1;
 }
 }

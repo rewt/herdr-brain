@@ -404,7 +404,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     section('Continue a project');
     for (const project of s.projects) {
       row(`${project.name} · ${project.org ? 'Connected' : 'Discovered in Herdr / opened folder'}`, { id: `project:${project.id}`, fg: 'blue' });
-      row(project.root ?? project.cwd ?? 'No folder linked', { fg: 'muted' });
+      row(`${project.stale ? 'Stale checkout · ' : ''}${project.root ?? project.cwd ?? 'No folder linked'}`, { fg: project.stale ? 'amber' : 'muted' });
     }
     if (!s.projects.length) paragraph('No projects yet. Open a folder, or explore an idea before defining goals.');
     row(); row('Open a folder…', { id: 'folder', fg: 'blue' }); row('Start with an idea', { id: 'ideas', fg: 'goal' });

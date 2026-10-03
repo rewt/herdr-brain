@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from './cli.mjs';
+import { loadFleetConfig } from './config.mjs';
 import { brainAct, brainArgs, explainQuestion, loopStatus, loopWords, readQueue, setLoop, startWorkUp } from './brain.mjs';
 import { initialState, promptParts, reduce, reduceMouse } from './controller.mjs';
 import { RAIL_COLS, hitAt, renderFrame } from './frame.mjs';
@@ -178,9 +179,15 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
   }
 
   async function load({ reorder }) {
+    const previous = project()?.name;
+    const fleet = loadFleetConfig(configFile ?? undefined);
+    if (fleet) {
+      config.projects = fleet.projects; config.fleet = fleet.fleet;
+      s.index = Math.max(0, config.projects.findIndex(p => p.name === previous));
+    }
     const now = d.now();
     const [today, herdr, tabs, brain, loop] = await Promise.all([
-      d.orgToday(project()).then((doc) => ({ doc }), (error) => ({ error })),
+      (project().stale ? Promise.reject(new Error(`stale checkout: ${project().cwd}`)) : d.orgToday(project())).then((doc) => ({ doc }), (error) => ({ error })),
       d.herdrAgents(),
       d.herdrTabs(),
       d.brainQueue ? d.brainQueue() : Promise.resolve({ rows: [], off: true }),
@@ -326,6 +333,7 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
   function header(now) {
     const p = project();
     const h = { project: p.name, clock: hhmm(now.toISOString()), waiting: s.board.waitingCount ?? s.board.waiting.length };
+    if (config.fleet) h.fleet = `fleet limit ${config.fleet.session_limit} (advisory)`;
     if (!p.ledger_dir) h.sessionsNote = 'no session ledger';
     else if (s.ledger?.error) h.sessionsNote = s.ledger.error;
     else if (s.ledger) h.sessions = `${s.ledger.count}${p.session_cap ? `/${p.session_cap}` : ''}`;
@@ -337,6 +345,7 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
     else if (!s.today) h.stale = 'loading…';
     else if (s.todayError) h.stale = `record data ${ago(now - s.todayAt)} old (${s.todayError})`;
     else if (now - s.todayAt > 3 * config.refresh_seconds * 1000) h.stale = `record data ${ago(now - s.todayAt)} old`;
+    if (p.stale) h.stale = `stale checkout: ${p.cwd}`;
     const scope = s.ui.scope;
     if (scope.repo) h.scope = s.board.groups.find((g) => g.key === scope.repo)?.name ?? 'a repository';
     if (scope.view !== 'all') h.scope = `${h.scope ? `${h.scope}, ` : ''}${scope.view === 'needs' ? 'needs you' : 'working'}`;

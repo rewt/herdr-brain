@@ -70,6 +70,51 @@ Only that canonical supervisor starts the project housekeeping schedule. A worke
 starts a loop, dispatches another agent, pushes, deletes a lane or acts on a live
 Herdr pane. Entry itself makes no Herdr calls.
 
+## Fleet
+
+The fleet is the machine's joined project list; a workspace remains Herdr's tab
+group. First entry creates `~/.herdr-monitor/fleet.json` and joins only the entered
+Git project. `HERDR_MONITOR_FLEET` selects a different fleet **home directory**
+for tests. Reads never create or join anything. Agents that bypass entry run:
+
+```sh
+monitor fleet join
+monitor fleet show
+monitor fleet join --session-limit 8
+```
+
+Join is idempotent, including from linked worktrees. The session limit defaults
+to 6 and is advisory; entry, the console and `show` surface it without refusing
+sessions. Entry/join alone writes the file. Supervisors remain per project.
+
+Each entry stores the canonical Git common directory (`identity`), canonical
+`checkout`, `record`, `worktrees`, `temp` and explicitly owned settings `layers`.
+Existing checkout records and matching legacy console mappings are adopted in
+place. The mapping must name this canonical checkout; a neighbouring ancestor
+record is never adopted just because it exists. A new project keeps the native
+`<checkout>/.org` record, excluded from Git, and gets worktree and temp locations
+under the fleet home keyed by its Git identity. Existing mapped parent settings
+preserve their worktree location. No paths are moved.
+
+For adoption without a console mapping, the project's supervisor can name its
+existing paths explicitly (repeat `--layer` for each owned settings file):
+
+```sh
+monitor fleet join --record /project-record \
+  --worktrees /project-worktrees --temp /project-temp --layer /owned/.lane.json
+```
+
+With a fleet present, automatic record and parent-settings discovery stops at
+the project edge and reads only that project's mapping and checkout. An unjoined
+project can bootstrap its own record through `record`, but only entry/join adds
+it to the fleet. `ORG_DIR` and `LANE_CONFIG` remain explicit selections. Without
+a fleet file, legacy discovery and console configuration work as before.
+The console reads joined projects from the fleet and keeps presentation and
+transcript preferences from its existing configuration. A moved or replaced
+checkout is shown stale, with no guessed replacement or usable record binding.
+Malformed fleet JSON or schema fails before entry/join or record commands write
+records; automatic entry also refuses rather than launching an unbound session.
+
 ## Project settings
 
 Projects can commit entry preferences in their canonical checkout's `.lane.json`,

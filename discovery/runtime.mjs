@@ -2,12 +2,12 @@
 // creation and verified Git identity held in memory, never session metadata.
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
+import { joinFleet } from '../lib/fleet.mjs';
 import { plainDirectory, readPlainFile, removePlainDirectory, writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
-import { withLock, findOrgDir } from '../lib/store.mjs';
+import { withLock } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig } from '../lanes/routes.mjs';
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { readReport } from '../lib/report.mjs';
@@ -38,7 +38,8 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const topic = `entry-${id.slice(0, 12)}`;
   const env = { ORG_ACTOR: `entry-${id.slice(0, 12)}` };
   // Never inherit a different project's record into an unrelated session.
-  let org = findOrgDir({ cwd, env: {} }) ?? path.join(project.canonical, '.org');
+  const fleet = joinFleet({ cwd, worktrees: worktreeRoot });
+  let org = fleet.project.record;
   const recordAlias = org;
   env.ORG_DIR = org;
   const record = (args, location = project.canonical) => command(process.execPath, [local('../bin/org.mjs'), ...args], location, env);
@@ -114,7 +115,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     }
   };
   externalGit(project.canonical);
-  const routes = loadDiscoveredRoutes({ cwd: project.canonical, env: {} });
+  const routes = loadDiscoveredRoutes({ cwd: project.canonical, env: { HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET } });
   const lifecycle = Object.assign({}, ...routes.files.map((file) => JSON.parse(fs.readFileSync(file, 'utf8'))));
   const branch = git(['branch', '--show-current']);
   const main = lifecycle.main ?? branch;
@@ -145,7 +146,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   const lifecycleOwner = entryLifecycle({ project, coordination, git, externalGit });
   let workspace = project.canonical;
   if (workerLane) {
-    const root = worktreeDirectory(worktreeRoot, project.identity);
+    const root = worktreeDirectory(fleet.project.worktrees, project.identity);
     let containingProject;
     try { containingProject = gitProject(root); } catch {}
     if (containingProject) throw new Error('worktree root must be outside existing Git checkouts');
@@ -158,7 +159,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   } else lifecycleOwner.sweep();
   let requests, metadata, configFile;
   try {
-    const runtime = plainDirectory(path.resolve(runtimeDir ?? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-entry-'))));
+    const runtime = plainDirectory(path.resolve(runtimeDir ?? fleet.project.temp));
     const requestPath = path.join(runtime, id);
     const metadataPath = path.join(git(['rev-parse', '--path-format=absolute', '--git-dir'], workspace), 'monitor-entry', id);
     lifecycleOwner.runtime({ requests: requestPath, metadata: metadataPath });
@@ -213,6 +214,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     }, timeout);
   };
   const context = () => ({ role, canonical: project.canonical, identity: project.identity, workspace,
+    fleet: { file: fleet.file, project: fleet.name, session_limit: fleet.session_limit, advisory: true },
     branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,
     routing: initial.routing ? { parent: initial.routing.parent, question: initial.routing.question } : null,
     suggestedRoutes: initial.routes.suggested === true, requests,

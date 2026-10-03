@@ -5,6 +5,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { buildBoard } from '../lib/model.mjs';
 import { findOrgDir } from '../../lib/store.mjs';
+import { staleProject } from '../../lib/fleet.mjs';
 
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const firstSentence = value => {
@@ -95,6 +96,7 @@ export function workspaceIdentity(w, identity) {
 
 export function catalog(configured, workspaces, identity, opened = [], agents = []) {
   const result = [...configured, ...opened].map((p) => {
+    if (p.identity && staleProject(p)) return { ...p, stale: true, org: null, repoKey: p.identity, root: p.cwd, git: false, configured: false };
     const repo = identity(p.cwd);
     const org = p.org ?? (p.cwd ? findOrgDir({ cwd: p.cwd, env: {} }) : null);
     return { ...p, org, id: p.id ?? `configured:${p.name}`, repoKey: repo?.key, root: repo?.root ?? p.cwd, git: Boolean(repo?.git), configured: Boolean(org) };

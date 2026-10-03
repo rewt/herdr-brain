@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fleetView } from '../../lib/fleet.mjs';
 
 export class ConfigError extends Error {}
 
@@ -71,6 +72,8 @@ export function normalizeConfig(raw, file, { allowUnmanaged = false } = {}) {
 // Opening the live trial on a new installation must not create an example
 // config or demand an organization before the operator can inspect a project.
 export function loadModernConfig(file = configPath()) {
+  const fleet = loadFleetConfig(file, { allowUnmanaged: true });
+  if (fleet) return fleet;
   let raw;
   try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) {
@@ -81,6 +84,8 @@ export function loadModernConfig(file = configPath()) {
 }
 
 export function loadConfig(file = configPath()) {
+  const fleet = loadFleetConfig(file);
+  if (fleet) return fleet;
   if (!fs.existsSync(file)) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(EXAMPLE, null, 2) + '\n', { flag: 'wx' });
@@ -93,4 +98,23 @@ export function loadConfig(file = configPath()) {
     throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
   }
   return normalizeConfig(raw, file);
+}
+
+export function loadFleetConfig(file = configPath(), options = {}) {
+  const fleet = fleetView();
+  return fleet ? fromFleet(fleet, file, options) : null;
+}
+
+function fromFleet(fleet, file, options = {}) {
+  let preferences = {};
+  try { preferences = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw new ConfigError(`${file} cannot be read: ${error.message}`); }
+  const projects = Object.entries(fleet.projects).map(([name, p]) => {
+    const prior = (preferences.projects ?? []).find(v => expand(v.cwd) === p.checkout) ?? {};
+    return { ...prior, name, cwd: p.checkout, org: p.record };
+  });
+  const config = normalizeConfig({ ...preferences, example: false, projects, explain: options.allowUnmanaged ? false : preferences.explain }, fleet.file, options);
+  config.projects = config.projects.map(p => ({ ...p, id: `fleet:${fleet.projects[p.name].identity}`, identity: fleet.projects[p.name].identity,
+    checkout: fleet.projects[p.name].checkout, org: fleet.projects[p.name].stale ? null : p.org, stale: fleet.projects[p.name].stale }));
+  return { ...config, fleet: { file: fleet.file, session_limit: fleet.session_limit, advisory: true } };
 }

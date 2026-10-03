@@ -3,6 +3,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ROUTE_PRESET } from './preset.mjs';
+import { projectFleet } from '../lib/fleet.mjs';
 
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -315,6 +316,7 @@ function canonicalCheckout(cwd) {
 // Finds the same parent/repository .lane.json layers as lane. An explicit file
 // selects one layer, which is useful for projects that keep routing.json apart.
 export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, file = env.LANE_CONFIG } = {}) {
+  const boundary = projectFleet(cwd, env);
   if (file !== undefined) {
     const absolute = resolve(cwd, file);
     return { config: readRoutesConfig(absolute), files: [absolute] };
@@ -325,11 +327,12 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
   } catch {
     const directory = realpathSync(cwd);
     const local = join(directory, ".lane.json");
-    const nearest = existsSync(local) ? local : nearestParentConfig(directory);
+    const nearest = existsSync(local) ? local : boundary.fleet ? undefined : nearestParentConfig(directory);
     if (!nearest) return { config: structuredClone(ROUTE_PRESET), files: [], suggested: true };
     return { config: readRoutesConfig(nearest), files: [nearest] };
   }
-  const files = [nearestParentConfig(repository), join(repository, ".lane.json")].filter((candidate) => candidate && existsSync(candidate));
+  const parents = boundary.fleet ? boundary.project?.layers ?? [] : [nearestParentConfig(repository)];
+  const files = [...parents, join(repository, ".lane.json")].filter((candidate) => candidate && existsSync(candidate));
   if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
   const config = mergeRoutesConfig(files.map(readRoutesConfig));
   // Lifecycle/entry preferences alone do not declare operator model routes.

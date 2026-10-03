@@ -52,7 +52,7 @@ export function recover(journal, bin, runtimeRoot) {
   const receipt = state(journal);
   if (!receipt) return;
   const plan = JSON.parse(receipt.content.toString('utf8'));
-  const names = ['codex', 'claude', 'monitor-codex', 'monitor-claude', '.monitor-entry.json', '.monitor-shell.json'];
+  const names = ['codex', 'claude', 'monitor-codex', 'monitor-claude', 'monitor', '.monitor-entry.json', '.monitor-shell.json'];
   const shells = ['.zshenv', '.zshrc', '.bashrc', '.bash_profile', '.bash_login', '.profile'];
   const valid = (value) => value === null || (typeof value?.content === 'string' && Number.isInteger(value.mode) && value.mode >= 0 && value.mode <= 0o777);
   if (plan.version !== 2 || typeof plan.token !== 'string' || !/^[a-f0-9-]{36}$/u.test(plan.token) || plan.bin !== bin || !Number.isInteger(plan.pid) || plan.pid < 1 || !Array.isArray(plan.changes) || plan.changes.some((change) =>

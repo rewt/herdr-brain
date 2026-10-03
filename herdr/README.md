@@ -46,7 +46,7 @@ configuration is changed. Defaults require no project or machine settings:
 | `HERDR_MONITOR_CLAUDE` | Native Claude found on PATH; `-` skips it |
 
 Entry installs `codex`, `monitor-codex`, and, when available, `claude` and
-`monitor-claude` into its dedicated directory. It appends a removable PATH snippet
+`monitor-claude`, plus the `monitor` command, into its dedicated directory. It appends a removable PATH snippet
 to zsh's `.zshenv` and `.zshrc` (under the current `ZDOTDIR` or HOME), Bash's
 `.bashrc`, and its first existing login file (`.bash_profile`, `.bash_login`,
 `.profile`, or a new `.bash_profile`). Fresh login and non-login interactive

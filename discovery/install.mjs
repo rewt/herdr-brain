@@ -16,7 +16,7 @@ try {
   if (exists(marker) && !fs.lstatSync(marker).isFile()) throw new Error(`install receipt is not a plain file: ${marker}`);
   const prior = fs.existsSync(marker) ? JSON.parse(fs.readFileSync(marker, 'utf8')) : null;
   // Receipts are machine-owned, but never let corrupted names escape the bin.
-  if (prior && Object.keys(prior.files ?? {}).some((name) => !['codex', 'monitor-codex', 'claude', 'monitor-claude'].includes(name))) throw new Error('invalid managed entry receipt');
+  if (prior && Object.keys(prior.files ?? {}).some((name) => !['codex', 'monitor-codex', 'claude', 'monitor-claude', 'monitor'].includes(name))) throw new Error('invalid managed entry receipt');
   if (values.remove) {
     if (!prior) throw new Error('no managed entry install at this destination');
     for (const [name, content] of Object.entries(prior.files)) {
@@ -41,7 +41,8 @@ try {
     }
     const adapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/codex.mjs`)} --binary ${quote(native ?? 'codex')}${values.validator ? ` --validator ${quote(values.validator)}` : ''} --repo "$PWD"`;
     const common = `#!/bin/sh\n# Herdr Monitor: automatic fresh interactive entry only\nexec ${adapter} --auto-entry -- "$@"\n`;
-    const files = native ? { codex: common, 'monitor-codex': `#!/bin/sh\nexec ${adapter} "$@"\n` } : {};
+    const files = { ...(native ? { codex: common, 'monitor-codex': `#!/bin/sh\nexec ${adapter} "$@"\n` } : {}),
+      monitor: `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(`${product}/discovery/client.mjs`)} "$@"\n` };
     let claudeNative;
     if (values.claude) {
       if (!path.isAbsolute(values.claude)) throw new Error('--claude must name the native executable by absolute path');

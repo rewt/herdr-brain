@@ -20,7 +20,7 @@ const journal = path.join(bin, '.monitor-recovery.json');
 const lock = path.join(path.dirname(bin), '.monitor-install.lock');
 const runtimeRoot = path.resolve(monitorHome, 'entry/runtimes');
 const entryFile = path.join(bin, '.monitor-entry.json');
-const names = ['codex', 'monitor-codex', 'claude', 'monitor-claude'];
+const names = ['codex', 'monitor-codex', 'claude', 'monitor-claude', 'monitor'];
 const tag = '# >>> Herdr Monitor entry >>>';
 const block = `\n${tag}\nexport PATH=${quote(bin)}:"$PATH"\n# <<< Herdr Monitor entry <<<\n`;
 const blockBytes = Buffer.from(block), tagBytes = Buffer.from(tag);

@@ -1,5 +1,6 @@
 // Console effects write through validating CLI commands.
 import * as cli from '../lib/cli.mjs';
+import { loadFleetConfig } from '../lib/config.mjs';
 import { readQueue, brainAct } from '../lib/brain.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -31,7 +32,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
     brainQueue: () => readQueue(config.brain_bin, { configFile, env }), now: () => Date.now(), ...deps };
   const data = { workspaces: [], tabs: [], agents: [], panes: [], since: new Map(), today: null, status: null, events: [], desks: null, housekeeping: null, routes: null, brain: { rows: [], off: true } };
-  const s = { projects: [], projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
+  const s = { projects: [], fleet: config.fleet, projectId: config.projects[projectIndex] ? config.projects[projectIndex].id ?? `configured:${config.projects[projectIndex].name}` : null,
     view: 'overview', detail: null, space: null, tab: null, pane: null, focus: 'scope', scroll: 0, outputScroll: 0,
     appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark',
     showCheckouts: env.HERDR_CONSOLE_SIDEBAR ? env.HERDR_CONSOLE_SIDEBAR === '1' : env.HERDR_ENV !== '1',
@@ -144,6 +145,11 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (s.pending) return s.pending;
     const selected = s.projectId;
     s.pending = (async () => {
+      try {
+        const fleet = loadFleetConfig(configFile ?? undefined, { allowUnmanaged: true });
+        if (fleet) { config.projects = fleet.projects; config.fleet = fleet.fleet; s.fleet = fleet.fleet; }
+        delete s.errors.fleet;
+      } catch (e) { s.errors.fleet = e.message; throw e; }
       const load = async (key, fn, assign) => { try { const value = await fn(); if (s.stopped) return; assign(value); delete s.errors[key]; s.times[key] = d.now(); } catch (e) { s.errors[key] = e.message; } };
       await Promise.all([
         load('workspaces', () => d.herdrList('workspace'), x => data.workspaces = x),

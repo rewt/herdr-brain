@@ -126,6 +126,7 @@ function headerSegments(view, G) {
   ];
   if (h.sessions) left.push({ icon: G.sessions, text: `${h.sessions} sessions today`, short: h.sessions, bg: 'segCount' });
   else if (h.sessionsNote) left.push(alert(h.sessionsNote, 'ledger?'));
+  if (h.fleet) left.push({ text: h.fleet, short: h.fleet, bg: 'segCount', fg: 'muted' });
   const waiting = h.waiting ?? 0;
   left.push(waiting
     ? { icon: G.waiting, text: `${waiting} waiting on you`, short: `${waiting} waiting`, bg: 'segAlert', fg: 'ink', bold: true }

@@ -75,6 +75,8 @@ export function projectRows({ model: m, state: s, project: p, width, height, now
     sx += digits.length + label.length + 4;
   }
   add('content', ...statCells);
+  if (s.fleet) paragraph(`Fleet session limit ${s.fleet.session_limit} · advisory`);
+  if (p?.stale) paragraph(`Stale checkout · ${p.cwd}`, 'amber');
   for (const flag of m.categoryFlags ?? []) {
     for (const text of wrap(`${flag.id} · ${flag.text}`, width - 1)) add('needs', cell(text, 1, width - 1, { id: `item:${flag.id}`, fg: 'amber', bold: true }));
   }

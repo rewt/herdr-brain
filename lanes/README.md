@@ -10,6 +10,11 @@ built-ins.
 Each key is optional. The nearest parent `.lane.json` supplies shared settings and
 the canonical checkout's `.lane.json` overrides them:
 
+When `~/.herdr-monitor/fleet.json` exists, the project's fleet mapping supplies
+its worktree directory and owned parent `.lane.json` layers. Discovery never
+borrows a neighbour's settings. Without a fleet file, legacy parent discovery
+is unchanged. See [fleet entry and adoption](../discovery/README.md#fleet).
+
 ```json
 {
   "main": "main",

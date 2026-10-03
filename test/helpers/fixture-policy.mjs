@@ -29,6 +29,7 @@ function containedEnv(env = process.env, command, args) {
   if (process.env.HERDR_TEST_OFFLINE_ROOT) {
     result.HERDR_TEST_OFFLINE_ROOT ??= process.env.HERDR_TEST_OFFLINE_ROOT;
     result.HERDR_SOCKET_PATH ??= process.env.HERDR_SOCKET_PATH;
+    result.HERDR_MONITOR_FLEET ??= process.env.HERDR_MONITOR_FLEET;
     result.ORG_ACTOR ??= process.env.ORG_ACTOR;
   }
   if (!result.NODE_OPTIONS?.includes(policy)) result.NODE_OPTIONS = `${result.NODE_OPTIONS ?? ''} --import=${JSON.stringify(policy)}`;

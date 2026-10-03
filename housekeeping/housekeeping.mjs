@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Project housekeeping: a deterministic schedule, with record/Git authority.
+import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -85,7 +86,7 @@ export function resumeKey(run, agent) {
 export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', record = [process.execPath, LOCAL_RECORD],
   command = spawnSync, log = () => {}, selfTab = process.env.HERDR_TAB_ID ?? null }) {
   const invoke = (exe, args, extra = {}) => {
-    const r = command(exe, args, { cwd, encoding: 'utf8', timeout: 10000,
+    const r = command(exe, args, { cwd, encoding: 'utf8', timeout: loadTimeout(10000),
       maxBuffer: 32 * 1024 * 1024, env: { ...process.env, ORG_DIR: org }, ...extra });
     if (r.error || r.status !== 0) throw new Error(`${exe} ${args.slice(0, 2).join(' ')}: ${(r.stderr || r.error?.message || r.stdout || `exit ${r.status}`).trim()}`);
     return r.stdout.trim();
@@ -305,7 +306,7 @@ async function main() {
     });
     fs.closeSync(output);
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { child.disconnect(); child.unref(); reject(new Error('schedule startup unconfirmed; inspect schedule.log before retrying')); }, 5000);
+      const timer = setTimeout(() => { child.disconnect(); child.unref(); reject(new Error('schedule startup unconfirmed; inspect schedule.log before retrying')); }, loadTimeout(5000));
       child.once('message', (message) => {
         clearTimeout(timer); child.disconnect(); child.unref();
         if (message?.ready) { log({ action: 'started', pid: child.pid, state_dir: stateDir }); resolve(); }

@@ -1,5 +1,6 @@
 // Fixed test entrypoint. Stay in the suite group, preserve real detachment in
 // the scenario, and put a native deadline on every detached Node descendant.
+import { loadTimeout } from '../../lib/deadline.mjs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +10,7 @@ if (!['completion', 'deadline', 'wrapper-death', 'failure', 'blocked', 'blocked-
 const executable = path.join(root, 'fixture-deadline');
 const source = fileURLToPath(new URL('./fixture-deadline.c', import.meta.url));
 const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', executable, source], {
-  encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: root },
+  encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: root },
 });
 if (built.error || built.status) throw Error(built.error?.message ?? built.stderr);
 if (mode === 'inbox') {

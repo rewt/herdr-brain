@@ -3,6 +3,7 @@
 // a compact notice to a supervisor agent. Herdr's wait is server-side blocking;
 // fs.watch catches a report that lands without another agent state change.
 
+import { loadTimeout } from '../lib/deadline.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -66,7 +67,7 @@ function numberOption(name, { min = 0 } = {}) {
   return value;
 }
 
-const startGraceMs = numberOption('start-grace') * 1_000;
+const startGraceMs = loadTimeout(numberOption('start-grace') * 1_000);
 const idleGraceMs = numberOption('idle-grace') * 1_000;
 const longAfterMs = numberOption('long-after') * 1_000;
 const retryAfterMs = numberOption('retry-after') * 1_000;
@@ -269,7 +270,7 @@ async function detachWatcher() {
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
       reject(new Error(`watcher startup timed out; inspect ${logPath}`));
-    }, 10_000);
+    }, loadTimeout(10_000));
     child.once('error', (error) => { clearTimeout(timer); reject(error); });
     child.once('exit', (code) => { clearTimeout(timer); reject(new Error(`watcher exited during startup (${code}); inspect ${logPath}`)); });
     child.once('message', (message) => {

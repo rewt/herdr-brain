@@ -155,3 +155,6 @@ Each existing live tick also checks the shared supervisor notice inbox and
 restarts its finite delivery owner if necessary. That owner replays unacknowledged
 notice IDs through the composer gate. Dry-run previews never start delivery, and
 a missing or fully acknowledged inbox starts no worker.
+
+Internal response waits adapt to measured machine load; see the
+[deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

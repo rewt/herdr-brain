@@ -59,3 +59,6 @@ supervisor may explicitly open one with `supervisor/settle.sh`; that launcher
 does not observe worker lifecycle. Brain `watch` remains separate: it captures
 all stopped session screens into the operator queue rather than delivering a
 recorded run to a supervisor.
+
+Internal response waits adapt to measured machine load; see the
+[deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

@@ -1,5 +1,6 @@
 // Reserve the named ref before touching files; HEAD/index locks exclude ordinary
 // checkout and commit operations in this worktree throughout the replacement.
+import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -46,7 +47,7 @@ try {
     let timer;
     try {
       const line = await Promise.race([lines.next(), new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('Git ref transaction timed out')), 15_000);
+        timer = setTimeout(() => reject(new Error('Git ref transaction timed out')), loadTimeout(15_000));
       })]);
       if (line.done || line.value !== `${response}: ok`) throw new Error(stderr || `Git ref transaction refused ${response}`);
     } finally { clearTimeout(timer); }

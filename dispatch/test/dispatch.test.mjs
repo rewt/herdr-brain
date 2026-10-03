@@ -104,13 +104,14 @@ for (const source of ['fake watcher receipt', 'real watcher journal']) {
     receipts.cleanup(); assert.deepEqual(signals, [101]);
   });
 }
-function fixture(t, { realWatch = false } = {}) {
+function fixture(t, { realWatch = false, preload } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo);fs.mkdirSync(bin);
   const env = { ...process.env, ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
+  if (preload) env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --require=${preload}`;
   for(const key of Object.keys(env)) if(key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
   const receipts = createReceiptTracker();
   // Install cleanup before setup or any assertion can fail.
@@ -389,4 +390,27 @@ process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.sta
   r=f.dispatch(['--retry',journal,'--recover-run','R-1']);assert.equal(r.status,0,r.stderr);
   assert.ok(fs.readFileSync(f.show('R-1').brief_path,'utf8').includes('R-1'));
   assert.equal(JSON.parse(r.stdout).run,'R-1');assert.equal(f.show(f.item).runs.length,2);
+});
+
+
+test('dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24', { timeout: 60000 }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-loaded-start-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const preload = path.join(root, 'load.cjs');
+  fs.writeFileSync(preload, `const os=require('node:os');os.loadavg=()=>[24,24,24];os.availableParallelism=()=>4;
+const cp=require('node:child_process'),original=cp.spawnSync;
+cp.spawnSync=function(command,args,options){
+if(process.argv[1]===${JSON.stringify(WATCH)}&&!process.argv.includes('--detach')&&args?.includes('show'))
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,11000);
+return original.call(this,command,args,options);};require('node:module').syncBuiltinESMExports();`);
+  const f = fixture(t, { realWatch: true, preload });
+  const result = f.start();
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  const receipt = JSON.parse(result.stdout);
+  assert.ok(receipt.watcher.pid > 0);
+  const job = JSON.parse(fs.readFileSync(receipt.journal));
+  assert.equal(job.stage, 'complete');
+  assert.equal(promptCalls(f).length, 1);
+  const log = fs.readFileSync(receipt.watcher.log, 'utf8');
+  assert.match(log, /watching R-1/);
 });

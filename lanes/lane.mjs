@@ -11,6 +11,7 @@
 // else. Configuration is layered from parent and repository .lane.json files
 // (see README).
 
+import { loadTimeout } from '../lib/deadline.mjs';
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -1120,8 +1121,9 @@ function dispatch(topic, promptText, options = {}) {
   }));
   const pane = created.result.root_pane.pane_id;
   const tabId = created.result.tab.tab_id;
+  const cwdAttempts = loadTimeout(60), startAttempts = loadTimeout(20), readyAttempts = loadTimeout(30);
   let paneCwd;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  for (let attempt = 0; attempt < cwdAttempts && (options.deadline === undefined || Date.now() < options.deadline); attempt += 1) {
     paneCwd = herdrJson(["pane", "get", pane], { deadline: options.deadline })?.pane?.foreground_cwd;
     if (samePath(paneCwd, path)) break;
     sleepMs(Math.min(500, Math.max(1, (options.deadline ?? (Date.now() + 500)) - Date.now())));
@@ -1164,7 +1166,7 @@ function dispatch(topic, promptText, options = {}) {
   // instead of dying, and close the orphaned tab if the start never lands.
   let started = false;
   let lastError = "";
-  for (let attempt = 0; attempt < 20 && !started; attempt += 1) {
+  for (let attempt = 0; attempt < startAttempts && !started && (options.deadline === undefined || Date.now() < options.deadline); attempt += 1) {
     // A failed start can leave the name registered, and a start that herdr
     // reports as failed can still have launched the agent in the pane: use a
     // fresh name per attempt and adopt whatever is already running there.
@@ -1194,7 +1196,7 @@ function dispatch(topic, promptText, options = {}) {
   }
   // codex asks to trust a directory it has not seen; accept the preselected
   // "Yes, continue" — the directory is this repository's own worktree.
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  for (let attempt = 0; attempt < readyAttempts && (options.deadline === undefined || Date.now() < options.deadline); attempt += 1) {
     const visible = spawnSync("herdr", ["agent", "read", agentName, "--source", "visible"], { encoding: "utf8" }).stdout ?? "";
     const status = agentRecord(agentName, options.deadline)?.agent_status;
     if (visible.includes("Do you trust the contents of this directory")) {

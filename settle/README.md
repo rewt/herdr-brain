@@ -263,3 +263,6 @@ Fixture teardown waits for bounded senders and stops their watchers first, then
 confirms and stops the inbox owner and its current transport child before removing
 the scratch record. A busy composer or slow transport cannot keep teardown waiting
 for natural delivery. Unconfirmed ownership or shutdown preserves the directory.
+
+Internal response waits adapt to measured machine load; see the
+[deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

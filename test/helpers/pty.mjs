@@ -1,4 +1,5 @@
 // Dependency-free test transport for BSD script (Darwin) and util-linux script.
+import { loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -24,14 +25,14 @@ export function ptyCommand(binary, args, { platform = process.platform, executab
   throw new Error(`unsupported PTY test platform: ${platform}`);
 }
 export function runPTY(binary, args, options = {}) {
-  const timeout = Math.min(options.timeout || 15000, 15000);
+  const timeout = Math.min(options.timeout || loadTimeout(15000), loadTimeout(15000));
   if (!Number.isSafeInteger(timeout) || timeout < 1) throw Error('invalid PTY timeout');
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-pty-owner-'));
   try {
     const owner = path.join(scratch, 'owner');
     const built = spawnSync('/usr/bin/cc', ['-O2', '-Wall', '-Wextra', '-o', owner,
       fileURLToPath(new URL('./pty-owner.c', import.meta.url))], {
-      encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: scratch },
+      encoding: 'utf8', timeout: loadTimeout(10000), killSignal: 'SIGKILL', env: { PATH: '/usr/bin:/bin', TMPDIR: scratch },
     });
     if (built.error || built.status) throw Error(`PTY owner unavailable: ${built.error?.message ?? built.stderr}`);
     const transport = ptyCommand(owner, [String(timeout), binary, ...args], { exec: true });

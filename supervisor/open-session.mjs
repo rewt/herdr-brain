@@ -10,6 +10,7 @@
 // --max-sessions-per-day sessions are opened per local day there. The ledger
 // defaults to the checklist's directory for compatibility with older callers.
 
+import { loadTimeout } from '../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -271,15 +272,15 @@ function openSession({ mode, r }) {
     for (const [option, ...values] of groups) {
       if (!codexArgs.some((a) => a === option || a.startsWith(`${option}=`))) codexArgs.push(option, ...values);
     }
-    startArgs = ['agent', 'start', name, '--kind', 'codex', '--pane', pane, '--timeout', '120000', '--', ...codexArgs];
+    startArgs = ['agent', 'start', name, '--kind', 'codex', '--pane', pane, '--timeout', String(loadTimeout(120000)), '--', ...codexArgs];
   } else {
-    startArgs = ['agent', 'start', name, '--kind', 'claude', '--pane', pane, '--timeout', '120000', '--',
+    startArgs = ['agent', 'start', name, '--kind', 'claude', '--pane', pane, '--timeout', String(loadTimeout(120000)), '--',
       ...extra, ...opt['add-dir'].flatMap((d) => ['--add-dir', d]),
       '--model', pick.model, '--effort', pick.effort, '--permission-mode', opt['permission-mode'], '--name', name];
   }
   let started;
   for (let attempt = 1; attempt <= 4; attempt++) {
-    if (!dry) sleep(3_000); // a new tab's shell needs a moment to reach its prompt
+    if (!dry) sleep(loadTimeout(3_000) * 2 ** (attempt - 1)); // a new tab's shell needs a moment to reach its prompt
     // Herdr takes the agent's config dir (CLAUDE_CONFIG_DIR) from the caller of
     // `agent start`, not from the tab, so the account must be in this call's env.
     started = act('start agent', 'herdr', startArgs, { env: Object.fromEntries(env.map((e) => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])) });
@@ -309,7 +310,7 @@ function openSession({ mode, r }) {
   ]).concat(`ORG_DIR=${opt.org}`).filter(Boolean).join(' ');
   const prompted = act('prompt agent', 'herdr', ['agent', 'prompt', name, prompt]);
   if (!prompted.ok) die(`settle session ${name} started but was not prompted: ${prompted.error}`);
-  if (!dry) herdr(['agent', 'wait', name, '--until', 'working', '--timeout', '60000']);
+  if (!dry) herdr(['agent', 'wait', name, '--until', 'working', '--timeout', String(loadTimeout(60000))]);
   releaseTurn();
   if (!dry) {
     sleep(15_000);

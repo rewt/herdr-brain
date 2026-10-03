@@ -224,3 +224,6 @@ until the release-gated switch. After that switch, the installed supervisor entr
 this protocol, settle and housekeeping cover the old session-start/SETTLE/work
 pattern responsibilities; project authority/history belongs in record decisions,
 validation in project config, machine paths/accounts in machine installation.
+
+Internal response waits adapt to measured machine load; see the
+[deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

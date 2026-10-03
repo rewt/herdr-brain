@@ -1,4 +1,5 @@
 // Test-only defaults. The outer runner also bounds blocked event loops/files.
+import { loadTimeout } from '../../lib/deadline.mjs';
 import nodeTest from 'node:test';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
@@ -23,7 +24,7 @@ for (const name of ['spawnSync', 'execFileSync', 'execSync']) {
   childProcess[name] = function (...args) {
     const index = name === 'execSync' ? 1 : Array.isArray(args[1]) ? 2 : 1;
     const options = args[index] ?? {};
-    args[index] = { ...options, timeout: Math.min(options.timeout || COMMAND_TIMEOUT, COMMAND_TIMEOUT), killSignal: 'SIGKILL' };
+    args[index] = { ...options, timeout: loadTimeout(Math.min(options.timeout || COMMAND_TIMEOUT, COMMAND_TIMEOUT)), killSignal: 'SIGKILL' };
     return original.apply(this, args);
   };
 }
@@ -31,7 +32,7 @@ syncBuiltinESMExports();
 
 export default function test(name, options, body) {
   if (typeof options === 'function') { body = options; options = {}; }
-  return nodeTest(name, { ...options, timeout: Math.min(options?.timeout || TEST_TIMEOUT, TEST_TIMEOUT) },
+  return nodeTest(name, { ...options, timeout: loadTimeout(Math.min(options?.timeout || TEST_TIMEOUT, TEST_TIMEOUT)) },
     body && ((t) => context.run(t, () => body(t))));
 }
 Object.assign(test, nodeTest, { test });

@@ -130,3 +130,6 @@ The supervisor's next real dispatch is the canary acceptance step. See
 `supervisor/KICKOFF.md`. bch-cloak's script and activated release stay as they are;
 a later release-gated switch can replace its script with this command, its record
 path, supervisor target, route, brief/report paths and optional base.
+
+Internal response waits adapt to measured machine load; see the
+[deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

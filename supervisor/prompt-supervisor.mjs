@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // One durable, serialized delivery path for every supervisor notice. The inbox
 // is a transport journal; it never stores record status or writes record events.
+import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -60,7 +61,7 @@ const record = (file, event) => transaction(file, (_entries, append) => append(e
 const snapshot = (file) => transaction(file, (entries) => entries);
 
 function invoke(herdr, args) {
-  const result = spawnSync(herdr, args, { encoding: 'utf8', timeout: 10000, maxBuffer: 4 * 1024 * 1024 });
+  const result = spawnSync(herdr, args, { encoding: 'utf8', timeout: loadTimeout(10000), maxBuffer: 4 * 1024 * 1024 });
   if (result.error || result.status !== 0) {
     const error = new Error((result.stderr || result.stdout || result.error?.message || `Herdr exited ${result.status}`).trim());
     // Lost acknowledgements retry with the same delivered notice ID.
@@ -249,7 +250,7 @@ export async function resumeInbox(file, options = {}) {
       child.unref();
       if (error) reject(error); else resolve(pid);
     };
-    const timer = setTimeout(() => finish(new Error(`inbox worker startup unconfirmed; inspect ${file}.worker.log`)), 5000);
+    const timer = setTimeout(() => finish(new Error(`inbox worker startup unconfirmed; inspect ${file}.worker.log`)), loadTimeout(5000));
     child.once('message', (message) => message?.ready ? finish(null, message.pid) : finish(new Error(message?.error ?? 'inbox worker failed')));
     child.once('error', (error) => finish(error));
     child.once('exit', (code) => finish(new Error(`inbox worker exited ${code}; inspect ${file}.worker.log`)));

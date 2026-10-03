@@ -1,4 +1,5 @@
 // Only a fresh, successful start-time AND command match authorizes a signal.
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
 
 const fields = ['pid=', 'ppid=', 'pgid=', 'stat=', 'lstart=', 'command='].join(',');
@@ -26,17 +27,24 @@ export function parseProcessLookup(result, pid) {
   return { ok: true, value: rows };
 }
 
-function lookup(pid) {
-  const result = spawnSync('ps', ['-ww', '-o', fields, ...(pid ? ['-p', String(pid)] : ['-A'])], {
-    encoding: 'utf8', timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024,
-    env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
-  });
+export function lookupProcess(pid, { execute = spawnSync, allowance = loadTimeout, pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) } = {}) {
+  let result;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    result = execute('ps', ['-ww', '-o', fields, ...(pid ? ['-p', String(pid)] : ['-A'])], {
+      encoding: 'utf8', timeout: allowance(2000 * 2 ** attempt), killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024,
+      env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
+    });
+    // Retry only an OS timeout on this read-only lookup. Partial, malformed or
+    // refused output never becomes identity evidence; mutations are not retried.
+    if (result.error?.code !== 'ETIMEDOUT' || attempt === 2) break;
+    pause(allowance(50 * 2 ** attempt));
+  }
   return parseProcessLookup(result, pid);
 }
 
 export function createProcessTracker({
-  readIdentity = (pid) => lookup(pid),
-  readIdentities = () => lookup(),
+  readIdentity = (pid) => lookupProcess(pid),
+  readIdentities = () => lookupProcess(),
   sendSignal = (pid, signal) => process.kill(pid, signal),
   report = (message) => console.error(`Fixture cleanup: ${message}`),
 } = {}) {

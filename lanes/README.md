@@ -208,3 +208,6 @@ Requirements are Node.js 20+, Git 2.38+, and Herdr for dispatch and review. Git-
 operations work without Herdr. See [the technical reference](docs/REFERENCE.md) for
 configuration precedence, safety checks, review record rules, recovery, and failure
 messages. Use [the brief template](docs/BRIEF_TEMPLATE.md) when dispatching work.
+
+Internal response waits adapt to measured machine load; see the
+[deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

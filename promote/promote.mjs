@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // A durable FIFO and one detached, finite drain worker. No model calls.
+import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -214,7 +215,7 @@ async function start(queue) {
       if (child.connected) child.disconnect(); child.unref();
       if (error) reject(error); else resolve(value);
     };
-    const timer = setTimeout(() => finish(new Error('worker startup unconfirmed; inspect worker.log and locks; queued requests retained')), 5000);
+    const timer = setTimeout(() => finish(new Error('worker startup unconfirmed; inspect worker.log and locks; queued requests retained')), loadTimeout(5000));
     child.once('message', (value) => finish(null, { pid: child.pid, ...value }));
     child.once('error', (error) => finish(error));
     child.once('exit', (code) => finish(new Error(`worker exited ${code} before startup; inspect worker.log; queue retained`)));

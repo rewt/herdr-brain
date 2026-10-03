@@ -1,4 +1,5 @@
 // One live group leader per suite; no registries, suspended producers or reapers.
+import { loadTimeout, loadFactor } from '../../lib/deadline.mjs';
 import { spawn } from 'node:child_process';
 import { run } from 'node:test';
 import { tap } from 'node:test/reporters';
@@ -15,15 +16,21 @@ const argv = process.argv.slice(2);
 const worker = argv[0] === '--worker';
 if (worker) argv.shift();
 const files = argv.filter(arg => !arg.startsWith('--'));
+// Fixed mode is reserved for intentional cancellation regressions. Ordinary
+// CLI overrides (including the npm scripts' file/suite limits) scale too.
+const fixedDeadlines = argv.includes('--fixed-deadlines');
+const factorOption = argv.find(arg => arg.startsWith('--load-factor='));
+const factor = factorOption ? Number(factorOption.split('=')[1]) : loadFactor();
+if (!Number.isFinite(factor) || factor < 1) throw Error('invalid test load factor');
 function bound(name, fallback, maximum = fallback) {
   const option = argv.find(arg => arg.startsWith(`--${name}=`));
   const value = option ? Number(option.split('=')[1]) : fallback;
   if (!Number.isInteger(value) || value < 1 || value > maximum) throw Error(`${name} must be 1..${maximum} milliseconds`);
-  return value;
+  return fixedDeadlines ? value : loadTimeout(value, factor);
 }
 const fileTimeout = bound('file-timeout', 300_000, 480_000);
 const suiteTimeout = bound('suite-timeout', 360_000, 540_000);
-if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] TEST_FILES...');
+if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] TEST_FILES...');
 
 if (worker) {
   // This leader never exits voluntarily with fixtures running in its group.
@@ -35,7 +42,7 @@ if (worker) {
   };
   process.once('disconnect', cleanup);
   process.once('message', async () => {
-    const stream = run({ files, concurrency: 4, timeout: fileTimeout });
+    const stream = run({ files, concurrency: Math.max(1, Math.floor(4 / factor)), timeout: fileTimeout });
     let code = 0;
     stream.on('test:fail', () => { code = 1; });
     try { await pipeline(stream.compose(tap), process.stdout, { end: false }); }
@@ -46,13 +53,13 @@ if (worker) {
   setTimeout(() => {
     console.error(`Test suite exceeded ${suiteTimeout}ms. Files: ${files.join(', ')}`);
     cleanup();
-  }, suiteTimeout + 2500);
+  }, loadTimeout(suiteTimeout + loadTimeout(2500, factor), 1));
   process.send({ ready: true }, error => { if (error) cleanup(); });
 } else {
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
   env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(policy)}`;
-  const child = spawn(process.execPath, [script, '--worker', ...argv], {
+  const child = spawn(process.execPath, [script, '--worker', ...argv.filter(arg => !arg.startsWith('--load-factor=')), `--load-factor=${factor}`], {
     detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
   });
   child.stdout.pipe(process.stdout, { end: false });
@@ -84,7 +91,7 @@ if (worker) {
       process.exit(code);
     };
     if (child.exitCode !== null || child.signalCode !== null) exit();
-    else { child.once('exit', exit); setTimeout(exit, 2500); }
+    else { child.once('exit', exit); setTimeout(exit, loadTimeout(2500, factor)); }
   }
   child.on('message', message => {
     if (finished) return;

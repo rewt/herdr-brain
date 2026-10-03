@@ -97,7 +97,7 @@ for (const kind of ['normal exit', 'SIGTERM', 'SIGKILL', 'SIGKILL shell job', 's
 import {runPTY} from ${JSON.stringify(ptyHelper)};
 import assert from 'node:assert/strict';
 test('blocked PTY culprit',()=>{const result=runPTY(${JSON.stringify(binary)},${JSON.stringify(args)},{timeout:5000});assert.equal(result.status,0,result.stdout+result.stderr);});`);
-    const outer = spawnChild(t, process.execPath, [runner, ...(kind === 'suite deadline' ? ['--suite-timeout=3000'] : []), file]);
+    const outer = spawnChild(t, process.execPath, [runner, '--fixed-deadlines', ...(kind === 'suite deadline' ? ['--suite-timeout=3000'] : []), file]);
     const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
     const deadline = Date.now() + 10000;
     while (!fs.existsSync(f.receipt) && Date.now() < deadline) await pause();

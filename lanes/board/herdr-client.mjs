@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { EventEmitter } from "node:events";
 import net from "node:net";
 import { homedir } from "node:os";
@@ -60,7 +61,7 @@ export class HerdrClient extends EventEmitter {
       this.pendingRequests.add(finish);
       timer = setTimeout(
         () => finish(new Error(`Herdr request timed out: ${method}`)),
-        timeoutMs,
+        loadTimeout(timeoutMs),
       );
       socket.setEncoding("utf8");
       socket.on("connect", () => socket.write(`${JSON.stringify({ id, method, params })}\n`));
@@ -193,7 +194,7 @@ export class HerdrClient extends EventEmitter {
     });
     socket.on("close", reconnect);
     socket.on("end", reconnect);
-    socket.setTimeout(this.requestTimeoutMs, () => {
+    socket.setTimeout(loadTimeout(this.requestTimeoutMs), () => {
       if (!ready) socket.destroy(new Error("Herdr subscription handshake timed out"));
     });
   }

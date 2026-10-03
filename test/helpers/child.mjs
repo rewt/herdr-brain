@@ -1,3 +1,4 @@
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { registerProcess, killProcess } from './processes.mjs';
@@ -15,22 +16,23 @@ export function killChild(child, signal = 'SIGKILL') {
   return killProcess(processes.get(child), signal);
 }
 
-export function spawnChild(t, command, args, options = {}, timeoutMs = 15_000) {
+export function spawnChild(t, command, args, options = {}, timeoutMs) {
   // A nested suite has its own leader, file watchdog and cancellation cleanup.
   // Its aggregate duration can exceed one command's fifteen-second bound.
   const maximum = command === process.execPath && args[0] === suiteRunner ? 55_000 : 15_000;
-  return trackedChild(t, command, args, options, timeoutMs, maximum);
+  return trackedChild(t, command, args, options, timeoutMs ?? 15_000, maximum, timeoutMs === undefined);
 }
 
 // Explicit compound fixture scenarios perform many separately bounded product
-// operations. Keep them below the enclosing 60s test deadline and retain exactly
+// operations. Keep them below the enclosing test deadline and retain exactly
 // the same ownership, cancellation and teardown as ordinary fixture commands.
-export function spawnScenarioChild(t, command, args, options = {}, timeoutMs = 35_000) {
-  return trackedChild(t, command, args, options, timeoutMs, 55_000);
+export function spawnScenarioChild(t, command, args, options = {}, timeoutMs) {
+  return trackedChild(t, command, args, options, timeoutMs ?? 35_000, 55_000, timeoutMs === undefined);
 }
 
-function trackedChild(t, command, args, options, timeoutMs, maximum) {
+function trackedChild(t, command, args, options, timeoutMs, maximum, scaledDefault) {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > maximum) throw new Error(`child timeout must be 1..${maximum}ms`);
+  const responseMs = scaledDefault ? loadTimeout(timeoutMs) : timeoutMs;
   const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], ...options, detached: false });
   let rollback = false;
   child.kill = (signal = 'SIGTERM') => {
@@ -54,12 +56,12 @@ function trackedChild(t, command, args, options, timeoutMs, maximum) {
       drainTimer = setTimeout(() => {
         child.stdout?.destroy(); child.stderr?.destroy(); clearTimeout(timer);
         resolve({ code, status: code, signal, stdout, stderr });
-      }, 500);
+      }, loadTimeout(500));
     });
     timer = setTimeout(() => {
       killChild(child);
-      reject(new Error(`${t.name}: child ${command} ${args.join(' ')} did not exit within ${timeoutMs}ms\n${stdout}${stderr}`));
-    }, timeoutMs);
+      reject(new Error(`${t.name}: child ${command} ${args.join(' ')} did not exit within ${responseMs}ms\n${stdout}${stderr}`));
+    }, responseMs);
   });
   // Tests sometimes inspect a fixture before awaiting it. Retain an early
   // error/close without an unhandled rejection or a missed close event.

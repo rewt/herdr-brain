@@ -139,3 +139,6 @@ a direct gate overlapping queued closure, conditional removal checks, duplicate
 entries, delivery exhaustion and post-gate mutation. `acceptance/run.mjs` also has
 an unconfigured-project queue case using its owned supervisor PTY. That release
 harness is separate from offline tests.
+
+Internal response waits adapt to measured machine load; see the
+[deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

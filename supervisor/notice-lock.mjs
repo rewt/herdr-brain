@@ -1,12 +1,13 @@
 // Notice delivery is at-least-once: unlike promotion, a dead sender's lock
 // can be recovered automatically. Never remove a live or unidentified owner.
+import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
 function acquireLock(directory, { waitMs = 0 } = {}) {
   fs.mkdirSync(path.dirname(directory), { recursive: true });
   const candidate = fs.mkdtempSync(`${directory}.new-`);
-  const deadline = Date.now() + waitMs;
+  const deadline = Date.now() + loadTimeout(waitMs);
   try {
     const fd = fs.openSync(path.join(candidate, 'owner.json'), 'w', 0o600);
     try {

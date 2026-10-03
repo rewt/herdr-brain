@@ -1,12 +1,13 @@
 // Shared by lane promotion and closure, including queue workers.
 // Crash locks fail closed:
 // removing a lock requires inspecting its owner and any surviving gate first.
+import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
 export function acquireLock(directory, { waitMs = 0 } = {}) {
   fs.mkdirSync(path.dirname(directory), { recursive: true });
-  const deadline = Date.now() + waitMs;
+  const deadline = Date.now() + loadTimeout(waitMs);
   for (;;) {
     try { fs.mkdirSync(directory); break; }
     catch (error) {

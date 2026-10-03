@@ -289,7 +289,7 @@ cp.spawnSync=(command,args,options)=>{
 syncBuiltinESMExports();
 spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true});
 });`);
-  const child = runFixture(t, ['--suite-timeout=2500', f.file]);
+  const child = runFixture(t, ['--fixed-deadlines', '--suite-timeout=2500', f.file]);
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Test suite exceeded 2500ms/);

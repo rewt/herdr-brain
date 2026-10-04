@@ -1,0 +1,709 @@
+Complete supplied test list: 15 files; 2 bounded phases
+Validation phase core-and-modules: 1 files
+TAP version 13
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 1 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6248.396334
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 2 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 1866.676791
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 3 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1237.358791
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 4 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 1550.051583
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 5 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1300.108083
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 6 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 414.813791
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 7 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 1453.048708
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 8 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1589.750667
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 9 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2269.329583
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 10 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1795.741375
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 11 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 1960.054416
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 12 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 3262.6925
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 13 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1325.244708
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 14 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 4054.330875
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 15 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 2373.217125
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 16 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 619.886542
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 17 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 197.347375
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 18 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 280.083791
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 19 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 614.1425
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 20 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 3576.550583
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 21 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1323.227167
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 22 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1549.764959
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 23 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 333.243083
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 41230.319583
+Validation phase settle-supervisor-release: 14 files
+TAP version 13
+# Subtest: a project with only settle settings and no parent routes completes independent review
+ok 1 - a project with only settle settings and no parent routes completes independent review
+  ---
+  duration_ms: 3889.795
+  ...
+# Subtest: relative LANE_CONFIG uses the intake file for canonical review without running validation
+ok 2 - relative LANE_CONFIG uses the intake file for canonical review without running validation
+  ---
+  duration_ms: 3869.386542
+  ...
+# Subtest: review retry from another checkout retains the selected absolute config and effective routes
+ok 3 - review retry from another checkout retains the selected absolute config and effective routes
+  ---
+  duration_ms: 4490.428625
+  ...
+# Subtest: relative LANE_CONFIG resolves from the invoking directory even with --repo elsewhere
+ok 4 - relative LANE_CONFIG resolves from the invoking directory even with --repo elsewhere
+  ---
+  duration_ms: 3781.851917
+  ...
+# Subtest: a review retry retains discovery when the new invocation sets LANE_CONFIG
+ok 5 - a review retry retains discovery when the new invocation sets LANE_CONFIG
+  ---
+  duration_ms: 4441.176292
+  ...
+# Subtest: CLI desk overrides are consumed by settle without adopting routes or losing lifecycle settings
+ok 6 - CLI desk overrides are consumed by settle without adopting routes or losing lifecycle settings
+  ---
+  duration_ms: 3987.316833
+  ...
+# Subtest: unconfigured lane review uses the portable preset with its own memory check
+ok 7 - unconfigured lane review uses the portable preset with its own memory check
+  ---
+  duration_ms: 2833.133875
+  ...
+# Subtest: unconfigured lane review uses the portable preset after the parent memory check
+ok 8 - unconfigured lane review uses the portable preset after the parent memory check
+  ---
+  duration_ms: 2753.758083
+  ...
+# Subtest: dispatch child boundary STOP restores worker stage for ordinary retry
+ok 9 - dispatch child boundary STOP restores worker stage for ordinary retry
+  ---
+  duration_ms: 1900.324084
+  ...
+# Subtest: settle review child boundary STOP restores review stage for ordinary retry
+ok 10 - settle review child boundary STOP restores review stage for ordinary retry
+  ---
+  duration_ms: 4222.355542
+  ...
+# Subtest: dispatch child boundary pressure does not create a second hidden wait
+ok 11 - dispatch child boundary pressure does not create a second hidden wait
+  ---
+  duration_ms: 1822.448708
+  ...
+# Subtest: settle review child boundary pressure does not create a second hidden wait
+ok 12 - settle review child boundary pressure does not create a second hidden wait
+  ---
+  duration_ms: 3930.560209
+  ...
+# Subtest: direct lane dispatch waits visibly and honors canonical STOP from a linked worktree
+ok 13 - direct lane dispatch waits visibly and honors canonical STOP from a linked worktree
+  ---
+  duration_ms: 5172.279791
+  ...
+# Subtest: direct lane review waits visibly and honors canonical STOP from a linked worktree
+ok 14 - direct lane review waits visibly and honors canonical STOP from a linked worktree
+  ---
+  duration_ms: 5170.274875
+  ...
+# Subtest: lane review validates missing round before memory wait
+ok 15 - lane review validates missing round before memory wait
+  ---
+  duration_ms: 138.384125
+  ...
+# Subtest: lane review validates --round 1 --brief before memory wait
+ok 16 - lane review validates --round 1 --brief before memory wait
+  ---
+  duration_ms: 146.381333
+  ...
+# Subtest: lane review validates --round 1 --change topic --route missing-route before memory wait
+ok 17 - lane review validates --round 1 --change topic --route missing-route before memory wait
+  ---
+  duration_ms: 141.215125
+  ...
+# Subtest: lane dispatch validates --route before memory wait
+ok 18 - lane dispatch validates --route before memory wait
+  ---
+  duration_ms: 143.409958
+  ...
+# Subtest: lane dispatch validates --route missing-route before memory wait
+ok 19 - lane dispatch validates --route missing-route before memory wait
+  ---
+  duration_ms: 145.307042
+  ...
+# Subtest: leading whitespace custom driver is refused for " leading.txt"
+ok 20 - leading whitespace custom driver is refused for " leading.txt"
+  ---
+  duration_ms: 4145.568875
+  ...
+# Subtest: leading whitespace custom driver is refused for " \\t\\nréviewed.txt"
+ok 21 - leading whitespace custom driver is refused for " \\t\\nréviewed.txt"
+  ---
+  duration_ms: 4016.082916
+  ...
+# Subtest: leading whitespace custom driver is refused for "﻿leading.txt"
+ok 22 - leading whitespace custom driver is refused for "﻿leading.txt"
+  ---
+  duration_ms: 3952.514292
+  ...
+# Subtest: valid UTF-8 whitespace paths survive a clean automatic rebase
+ok 23 - valid UTF-8 whitespace paths survive a clean automatic rebase
+  ---
+  duration_ms: 4271.517334
+  ...
+# Subtest: intermediate replay conflicts retain the complete whitespace filename
+ok 24 - intermediate replay conflicts retain the complete whitespace filename
+  ---
+  duration_ms: 3993.196083
+  ...
+# Subtest: a non-round-trippable raw Git path refuses before attribute lookup or lane replacement
+ok 25 - a non-round-trippable raw Git path refuses before attribute lookup or lane replacement
+  ---
+  duration_ms: 4176.915625
+  ...
+# Subtest: Git 2.38.0 attribute capabilities allow clean rebase to promotable
+ok 26 - Git 2.38.0 attribute capabilities allow clean rebase to promotable
+  ---
+  duration_ms: 5181.229042
+  ...
+# Subtest: Git 2.38.0 attribute capabilities still catch intermediate custom drivers
+ok 27 - Git 2.38.0 attribute capabilities still catch intermediate custom drivers
+  ---
+  duration_ms: 4536.07675
+  ...
+# Subtest: Git 2.39.0 attribute capabilities allow clean rebase to promotable
+ok 28 - Git 2.39.0 attribute capabilities allow clean rebase to promotable
+  ---
+  duration_ms: 5054.3815
+  ...
+# Subtest: Git 2.39.0 attribute capabilities still catch intermediate custom drivers
+ok 29 - Git 2.39.0 attribute capabilities still catch intermediate custom drivers
+  ---
+  duration_ms: 4497.231125
+  ...
+# Subtest: content-discarding path merge=keep-current driver cannot establish preservation
+ok 30 - content-discarding path merge=keep-current driver cannot establish preservation
+  ---
+  duration_ms: 4064.89825
+  ...
+# Subtest: content-discarding merge.default driver cannot establish preservation
+ok 31 - content-discarding merge.default driver cannot establish preservation
+  ---
+  duration_ms: 3873.640834
+  ...
+# Subtest: content-discarding path merge=text driver cannot establish preservation
+ok 32 - content-discarding path merge=text driver cannot establish preservation
+  ---
+  duration_ms: 3903.947083
+  ...
+# Subtest: content-discarding path merge=set driver cannot establish preservation
+ok 33 - content-discarding path merge=set driver cannot establish preservation
+  ---
+  duration_ms: 3922.813084
+  ...
+# Subtest: content-discarding path merge=unspecified driver cannot establish preservation
+ok 34 - content-discarding path merge=unspecified driver cannot establish preservation
+  ---
+  duration_ms: 3881.7615
+  ...
+# Subtest: content-discarding merge.default driver cannot establish preservation
+ok 35 - content-discarding merge.default driver cannot establish preservation
+  ---
+  duration_ms: 3842.7295
+  ...
+# Subtest: custom attributes in an intermediate reviewed commit also refuse replay
+ok 36 - custom attributes in an intermediate reviewed commit also refuse replay
+  ---
+  duration_ms: 3866.87525
+  ...
+# Subtest: directory-rename split conflicts report informational paths without unmerged files
+ok 37 - directory-rename split conflicts report informational paths without unmerged files
+  ---
+  duration_ms: 3928.53225
+  ...
+# Subtest: a concurrent commit during the final record read remains intact
+ok 38 - a concurrent commit during the final record read remains intact
+  ---
+  duration_ms: 4319.000083
+  ...
+# Subtest: a concurrent switch during the final record read remains intact
+ok 39 - a concurrent switch during the final record read remains intact
+  ---
+  duration_ms: 4304.91275
+  ...
+# Subtest: HEAD and index locks exclude native commits and branch switches during the ref transaction
+ok 40 - HEAD and index locks exclude native commits and branch switches during the ref transaction
+  ---
+  duration_ms: 4893.105416
+  ...
+# Subtest: the named-ref compare-and-swap refuses a commit after the locked identity check
+ok 41 - the named-ref compare-and-swap refuses a commit after the locked identity check
+  ---
+  duration_ms: 7632.748666
+  ...
+# Subtest: reviewed binary, modes, renames and same-file edits survive independent upstream edits
+ok 42 - reviewed binary, modes, renames and same-file edits survive independent upstream edits
+  ---
+  duration_ms: 4407.392292
+  ...
+# Subtest: automatic rebase never updates other branches even when Git updateRefs is enabled
+ok 43 - automatic rebase never updates other branches even when Git updateRefs is enabled
+  ---
+  duration_ms: 4199.528083
+  ...
+# Subtest: a lost lane-head update response resumes only the saved proved commit without replay or review
+ok 44 - a lost lane-head update response resumes only the saved proved commit without replay or review
+  ---
+  duration_ms: 4999.09425
+  ...
+# Subtest: main moving during replay refuses lane-head replacement and keeps the reviewed lane
+ok 45 - main moving during replay refuses lane-head replacement and keeps the reviewed lane
+  ---
+  duration_ms: 4052.052541
+  ...
+# Subtest: clean rebase preserves reviewed changes without running a suite
+ok 46 - clean rebase preserves reviewed changes without running a suite
+  ---
+  duration_ms: 4609.788416
+  ...
+# Subtest: conflicting reviewed diff escalates with paths and leaves the lane intact
+ok 47 - conflicting reviewed diff escalates with paths and leaves the lane intact
+  ---
+  duration_ms: 3832.961708
+  ...
+# Subtest: intermediate replay conflicts escalate even when the final trees merge cleanly
+ok 48 - intermediate replay conflicts escalate even when the final trees merge cleanly
+  ---
+  duration_ms: 4007.108542
+  ...
+# Subtest: a clean replay that loses reviewed content fails preservation before changing the lane
+ok 49 - a clean replay that loses reviewed content fails preservation before changing the lane
+  ---
+  duration_ms: 4032.044209
+  ...
+# Subtest: reviewed changes already present upstream survive an empty replay
+ok 50 - reviewed changes already present upstream survive an empty replay
+  ---
+  duration_ms: 4211.087209
+  ...
+# Subtest: post-rebase suite failure belongs to promotion without a new worker
+ok 51 - post-rebase suite failure belongs to promotion without a new worker
+  ---
+  duration_ms: 4585.47675
+  ...
+# Subtest: two recaptures after an applied rebase replay only lane and review commits from the same lineage
+ok 52 - two recaptures after an applied rebase replay only lane and review commits from the same lineage
+  ---
+  duration_ms: 5970.855167
+  ...
+# Subtest: uncertain review retry guards lane mutation before recapturing a moved main
+ok 53 - uncertain review retry guards lane mutation before recapturing a moved main
+  ---
+  duration_ms: 4992.926083
+  ...
+# Subtest: refused recapture preflight preserves its old base and gives a terminal conflict handoff
+ok 54 - refused recapture preflight preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 1836.341792
+  ...
+# Subtest: refused recapture replay preserves its old base and gives a terminal conflict handoff
+ok 55 - refused recapture replay preserves its old base and gives a terminal conflict handoff
+  ---
+  duration_ms: 1921.723125
+  ...
+# Subtest: a lost recapture replacement response retains the old base until the proved head is adopted
+ok 56 - a lost recapture replacement response retains the old base until the proved head is adopted
+  ---
+  duration_ms: 5899.251875
+  ...
+# Subtest: dispatching recovery after main moves exempts only its existing correction run and changed head
+ok 57 - dispatching recovery after main moves exempts only its existing correction run and changed head
+  ---
+  duration_ms: 6480.730625
+  ...
+# Subtest: a stopped fix tolerates main moving and dispatches one correction after STOP clears
+ok 58 - a stopped fix tolerates main moving and dispatches one correction after STOP clears
+  ---
+  duration_ms: 5704.272625
+  ...
+# Subtest: ingestion receipt requires the captured recorded report before review or correction
+ok 59 - ingestion receipt requires the captured recorded report before review or correction
+  ---
+  duration_ms: 7039.642292
+  ...
+# Subtest: lost successful correction start recovers through settle retry with one recorded run and one prompt
+ok 60 - lost successful correction start recovers through settle retry with one recorded run and one prompt
+  ---
+  duration_ms: 6849.118
+  ...
+# Subtest: lost-start reconciliation retains closures, unresolved and declined blockers, and newer outcomes
+ok 61 - lost-start reconciliation retains closures, unresolved and declined blockers, and newer outcomes
+  ---
+  duration_ms: 27157.726292
+  ...
+# Subtest: lost-start reconciliation refuses multiple recorded matches without launching work
+ok 62 - lost-start reconciliation refuses multiple recorded matches without launching work
+  ---
+  duration_ms: 5284.159833
+  ...
+# Subtest: settling an ingested older report preserves every newer reported outcome without review or correction
+ok 63 - settling an ingested older report preserves every newer reported outcome without review or correction
+  ---
+  duration_ms: 6745.126625
+  ...
+# Subtest: an unrecorded stale report cannot overwrite a newer outcome through ingestion
+ok 64 - an unrecorded stale report cannot overwrite a newer outcome through ingestion
+  ---
+  duration_ms: 790.620583
+  ...
+# Subtest: cached readiness and uncertain review retries hand off superseded runs
+ok 65 - cached readiness and uncertain review retries hand off superseded runs
+  ---
+  duration_ms: 5997.276458
+  ...
+# Subtest: conditional ingest and reopen protect a newer report arriving immediately before the record write
+ok 66 - conditional ingest and reopen protect a newer report arriving immediately before the record write
+  ---
+  duration_ms: 2488.5915
+  ...
+# Subtest: a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+ok 67 - a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+  ---
+  duration_ms: 7783.327583
+  ...
+# Subtest: conditional reopen preserves another run outcome and accepts an already-open no-op retry
+ok 68 - conditional reopen preserves another run outcome and accepts an already-open no-op retry
+  ---
+  duration_ms: 973.593666
+  ...
+# Subtest: incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+ok 69 - incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+  ---
+  duration_ms: 10975.835125
+  ...
+# Subtest: resolved blocker links allow recovery of only the recorded correction run
+ok 70 - resolved blocker links allow recovery of only the recorded correction run
+  ---
+  duration_ms: 6031.276
+  ...
+# Subtest: correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+ok 71 - correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+  ---
+  duration_ms: 4356.27825
+  ...
+# Subtest: legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+ok 72 - legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+  ---
+  duration_ms: 5279.788
+  ...
+# Subtest: project cap counts completed reviews across fix runs and records the no-dispatch decision
+ok 73 - project cap counts completed reviews across fix runs and records the no-dispatch decision
+  ---
+  duration_ms: 9297.951625
+  ...
+# Subtest: a recorded item cap overrides the project and flag overrides persist on the item
+ok 74 - a recorded item cap overrides the project and flag overrides persist on the item
+  ---
+  duration_ms: 9768.647
+  ...
+# Subtest: explicit correction after capped findings remains resumable under STOP
+ok 75 - explicit correction after capped findings remains resumable under STOP
+  ---
+  duration_ms: 6082.864875
+  ...
+# Subtest: zero item cap disables the project cap; worker starts without reviews do not consume rounds
+ok 76 - zero item cap disables the project cap; worker starts without reviews do not consume rounds
+  ---
+  duration_ms: 5313.767125
+  ...
+# Subtest: cap reached still dispatches for Major or FAIL
+ok 77 - cap reached still dispatches for Major or FAIL
+  ---
+  duration_ms: 10290.227083
+  ...
+# Subtest: cap cannot waive unverified claims or unparsed finding severity
+ok 78 - cap cannot waive unverified claims or unparsed finding severity
+  ---
+  duration_ms: 7560.801584
+  ...
+# Subtest: uncertain reviewer retries retain the cap snapshot and do not consume another completed round
+ok 79 - uncertain reviewer retries retain the cap snapshot and do not consume another completed round
+  ---
+  duration_ms: 6037.959334
+  ...
+# Subtest: cached capped findings and explicit correction recheck head and current run
+ok 80 - cached capped findings and explicit correction recheck head and current run
+  ---
+  duration_ms: 8280.055375
+  ...
+# Subtest: malformed cap config or flags are refused before review and dispatch
+ok 81 - malformed cap config or flags are refused before review and dispatch
+  ---
+  duration_ms: 1728.482792
+  ...
+# Subtest: capped decisions recover missing or lost record responses without repeating review or writing duplicate notes
+ok 82 - capped decisions recover missing or lost record responses without repeating review or writing duplicate notes
+  ---
+  duration_ms: 9553.891792
+  ...
+# Subtest: settle retains the review stage under simulated memory pressure and launches once after it clears
+ok 83 - settle retains the review stage under simulated memory pressure and launches once after it clears
+  ---
+  duration_ms: 8787.355541
+  ...
+# Subtest: STOP arriving during correction dispatch memory wait returns a resumable stopped handoff
+ok 84 - STOP arriving during correction dispatch memory wait returns a resumable stopped handoff
+  ---
+  duration_ms: 16339.514208
+  ...
+# Subtest: fixture teardown waits for a concurrent child to finish writing before removing its directory
+ok 85 - fixture teardown waits for a concurrent child to finish writing before removing its directory
+  ---
+  duration_ms: 228.113208
+  ...
+# Subtest: unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable
+ok 86 - unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable
+  ---
+  duration_ms: 9902.437292
+  ...
+# Subtest: already ingested reports use immutable bytes and never create duplicate proposals
+ok 87 - already ingested reports use immutable bytes and never create duplicate proposals
+  ---
+  duration_ms: 4012.223
+  ...
+# Subtest: non-done outcomes escalate with substance without launching a reviewer or correction
+ok 88 - non-done outcomes escalate with substance without launching a reviewer or correction
+  ---
+  duration_ms: 2409.669625
+  ...
+# Subtest: inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence
+ok 89 - inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence
+  ---
+  duration_ms: 7475.840166
+  ...
+# Subtest: discovered project settings override parent settle values and inherit a non-main integration branch
+ok 90 - discovered project settings override parent settle values and inherit a non-main integration branch
+  ---
+  duration_ms: 5197.363083
+  ...
+# Subtest: explicit configuration selects one layer and command flags override settle settings
+ok 91 - explicit configuration selects one layer and command flags override settle settings
+  ---
+  duration_ms: 661.5725
+  ...
+# Subtest: an item dropped or blocked during NEEDS-WORK review cannot launch a correction
+ok 92 - an item dropped or blocked during NEEDS-WORK review cannot launch a correction
+  ---
+  duration_ms: 7827.918291
+  ...
+# Subtest: initial and cached readiness both require a clean canonical checkout
+ok 93 - initial and cached readiness both require a clean canonical checkout
+  ---
+  duration_ms: 7563.776958
+  ...
+# Subtest: dirty lanes and foreign Git identities cannot be reviewed or dispatched
+ok 94 - dirty lanes and foreign Git identities cannot be reviewed or dispatched
+  ---
+  duration_ms: 4327.85475
+  ...
+# Subtest: malformed reviews never silently retry models; inspected uncertain launches can start a new round
+ok 95 - malformed reviews never silently retry models; inspected uncertain launches can start a new round
+  ---
+  duration_ms: 7819.137583
+  ...
+# Subtest: uncertain fix delivery recovers the dispatch journal and never starts a second correction
+ok 96 - uncertain fix delivery recovers the dispatch journal and never starts a second correction
+  ---
+  duration_ms: 6101.628292
+  ...
+# Subtest: suite execution is deferred until promotion even with an independent PASS
+ok 97 - suite execution is deferred until promotion even with an independent PASS
+  ---
+  duration_ms: 4037.338625
+  ...
+# Subtest: PASS with unverified claims and moved heads do not return promotable
+ok 98 - PASS with unverified claims and moved heads do not return promotable
+  ---
+  duration_ms: 7478.193625
+  ...
+# Subtest: same-lane contenders cannot run two independent reviews
+ok 99 - same-lane contenders cannot run two independent reviews
+  ---
+  duration_ms: 3785.045125
+  ...
+# Subtest: other-item lane work and dropped items require judgment; a saved PASS rechecks the record
+ok 100 - other-item lane work and dropped items require judgment; a saved PASS rechecks the record
+  ---
+  duration_ms: 6087.9855
+  ...
+# Subtest: teardown stops a persistently busy inbox owner before deleting the record
+ok 101 - teardown stops a persistently busy inbox owner before deleting the record
+  ---
+  duration_ms: 5952.823542
+  ...
+# Subtest: teardown stops a slow transport and its inbox owner before deleting the record
+ok 102 - teardown stops a slow transport and its inbox owner before deleting the record
+  ---
+  duration_ms: 431.304666
+  ...
+# Subtest: a real detached owner stays alive through test end and stops in the after-hook
+ok 103 - a real detached owner stays alive through test end and stops in the after-hook
+  ---
+  duration_ms: 592.897917
+  ...
+# Subtest: teardown treats a lock pointing at an unrelated command as gone without signalling it
+ok 104 - teardown treats a lock pointing at an unrelated command as gone without signalling it
+  ---
+  duration_ms: 132.017
+  ...
+# Subtest: settle only reviews code and never executes a configured suite
+ok 105 - settle only reviews code and never executes a configured suite
+  ---
+  duration_ms: 3845.640583
+  ...
+# Subtest: retry recaptures moving main and keeps a completed independent review
+ok 106 - retry recaptures moving main and keeps a completed independent review
+  ---
+  duration_ms: 5180.350333
+  ...
+# Subtest: retry refuses dirty or conflicting lanes while main moves
+ok 107 - retry refuses dirty or conflicting lanes while main moves
+  ---
+  duration_ms: 3235.098417
+  ...
+# Subtest: review evidence retains inherited validation totals beyond eight KiB
+ok 108 - review evidence retains inherited validation totals beyond eight KiB
+  ---
+  duration_ms: 4054.699416
+  ...
+# Subtest: queued integration records report-to-main time on the authorized run
+ok 109 - queued integration records report-to-main time on the authorized run
+  ---
+  duration_ms: 5409.048834
+  ...
+# Subtest: batch rechecks current-run record readiness after its gate
+ok 110 - batch rechecks current-run record readiness after its gate
+  ---
+  duration_ms: 4549.330875
+  ...
+# Subtest: main moving while the reviewer runs retains its completed public evidence for retry
+ok 111 - main moving while the reviewer runs retains its completed public evidence for retry
+  ---
+  duration_ms: 4684.563
+  ...
+# Subtest: a batch holds one shared record lock for two authorized lanes
+ok 112 - a batch holds one shared record lock for two authorized lanes
+  ---
+  duration_ms: 6145.783125
+  ...
+# Subtest: distinct worker, settle and queue panes reuse each tree through same-tree rebase and queued promotion
+ok 113 - distinct worker, settle and queue panes reuse each tree through same-tree rebase and queued promotion
+  ---
+  duration_ms: 6343.752917
+  ...
+# Subtest: saved settle readiness defers changed commands and environments to promotion without repeating review
+ok 114 - saved settle readiness defers changed commands and environments to promotion without repeating review
+  ---
+  duration_ms: 4929.3975
+  ...
+1..114
+# tests 114
+# suites 0
+# pass 114
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 185101.661875
+All supplied test files passed in bounded phases.

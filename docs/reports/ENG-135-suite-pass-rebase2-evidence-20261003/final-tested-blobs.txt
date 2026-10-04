@@ -1,0 +1,3 @@
+11bef5c16330dc49e48d0bbf3a5ba503f0799604  console/test/housekeeping.test.mjs
+1a3a9dafb5bf6110e07d855bf7cb446bf24bd9e2  promote/test/promote.test.mjs
+e022bdf1a22cc305eeb144fff3243c1249727330  settle/test/fixture.mjs

@@ -1,0 +1,7 @@
+node test-slot/test-slot.mjs run ENG-135-rebase2-focused --wait 1200 -- node test/helpers/suite.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/promote.test.mjs settle/test/config.test.mjs settle/test/memory-boundaries.test.mjs settle/test/rebase-paths.test.mjs settle/test/rebase-review.test.mjs settle/test/rebase-safety.test.mjs settle/test/rebase.test.mjs settle/test/recapture.test.mjs settle/test/receipts.test.mjs settle/test/record-safety.test.mjs settle/test/round-cap.test.mjs settle/test/settle.test.mjs settle/test/teardown.test.mjs settle/test/train.test.mjs settle/test/validation-tiers.test.mjs
+
+node test-slot/test-slot.mjs run ENG-135-rebase2-final-conflicts --wait 1200 -- node test/helpers/suite.mjs --file-timeout=480000 --suite-timeout=540000 console/test/housekeeping.test.mjs promote/test/promote.test.mjs
+
+node test-slot/test-slot.mjs run ENG-135-rebase2-promote-recheck --wait 1200 -- node test/helpers/suite.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/promote.test.mjs
+
+node test-slot/test-slot.mjs run ENG-135-rebase2-fleet-conflict --wait 1200 -- node test/helpers/suite.mjs --file-timeout=480000 --suite-timeout=540000 promote/test/promote.test.mjs

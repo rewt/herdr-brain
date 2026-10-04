@@ -1,0 +1,192 @@
+Complete supplied test list: 2 files; 1 bounded phases
+Validation phase core-and-modules: 2 files
+TAP version 13
+# Subtest: housekeeping CLI reads without writes, validates tracked overrides, pauses, resets and targets canonical Git identity
+ok 1 - housekeeping CLI reads without writes, validates tracked overrides, pauses, resets and targets canonical Git identity
+  ---
+  duration_ms: 776.150917
+  ...
+# Subtest: status distinguishes running, stale and malformed owners and isolates repositories sharing a record
+ok 2 - status distinguishes running, stale and malformed owners and isolates repositories sharing a record
+  ---
+  duration_ms: 464.402042
+  ...
+# Subtest: unreadable activity, invalid config, symlinks, hardlinks and concurrent writers remain explicit and leave targets intact
+ok 3 - unreadable activity, invalid config, symlinks, hardlinks and concurrent writers remain explicit and leave targets intact
+  ---
+  duration_ms: 410.916583
+  ...
+# Subtest: console renders activity at all widths and reviews actual CLI pause and overrides, including cancellation and stale edits
+ok 4 - console renders activity at all widths and reviews actual CLI pause and overrides, including cancellation and stale edits
+  ---
+  duration_ms: 1469.895625
+  ...
+# Subtest: housekeeping --print renders fixture and stays read only even when pause or override saves are confirmed
+ok 5 - housekeeping --print renders fixture and stays read only even when pause or override saves are confirmed
+  ---
+  duration_ms: 822.091125
+  ...
+# Subtest: an unconfigured Git project can inspect defaults and save a tracked override without creating a record or schedule
+ok 6 - an unconfigured Git project can inspect defaults and save a tracked override without creating a record or schedule
+  ---
+  duration_ms: 420.736375
+  ...
+# Subtest: console retains failed housekeeping reads with explicit stale state and prevents editing until recovery
+ok 7 - console retains failed housekeeping reads with explicit stale state and prevents editing until recovery
+  ---
+  duration_ms: 639.422542
+  ...
+# Subtest: a discovered Git project without a record opens and edits housekeeping through the real console CLI adapters
+ok 8 - a discovered Git project without a record opens and edits housekeeping through the real console CLI adapters
+  ---
+  duration_ms: 1205.865834
+  ...
+# Subtest: housekeeping close failures show both the actual error and planned reason in console and text CLI renders
+ok 9 - housekeeping close failures show both the actual error and planned reason in console and text CLI renders
+  ---
+  duration_ms: 620.844584
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 10 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6295.796208
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 11 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 1913.555125
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 12 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1158.000167
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 13 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 1576.383166
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 14 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1223.562667
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 15 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 414.746833
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 16 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 1457.094
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 17 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1592.840416
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 18 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2331.524167
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 19 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1742.444709
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 20 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 1846.032667
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 21 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 3086.057833
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 22 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1260.629792
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 23 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 3864.44825
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 24 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 2250.851333
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 25 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 631.760625
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 26 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 179.108791
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 27 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 274.955375
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 28 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 646.657041
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 29 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 3697.28975
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+not ok 30 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 3712.795125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-suite-pass/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'hookFailed'
+  error: "ENOTEMPTY: directory not empty, rmdir '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/promote-test-0GpYPN'"
+  code: 'ENOTEMPTY'
+  stack: |-
+    Object.rmdirSync (node:fs:1215:11)
+    _rmdirSync (node:internal/fs/rimraf:262:21)
+    rimrafSync (node:internal/fs/rimraf:195:7)
+    Object.rmSync (node:fs:1264:10)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-suite-pass/promote/test/promote.test.mjs:86:10)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 31 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1355.281416
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 32 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1569.614583
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 33 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 327.729292
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 32
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 44444.652833

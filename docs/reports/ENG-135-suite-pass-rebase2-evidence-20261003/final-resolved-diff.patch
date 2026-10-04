@@ -1,0 +1,313 @@
+diff --git a/console/test/housekeeping.test.mjs b/console/test/housekeeping.test.mjs
+index 18a9130..11bef5c 100644
+--- a/console/test/housekeeping.test.mjs
++++ b/console/test/housekeeping.test.mjs
+@@ -1,4 +1,5 @@
+ import { ownerIdentity } from '../../lib/process-owner.mjs';
++import { loadTimeout } from '../../lib/deadline.mjs';
+ import test from '../../test/helpers/bounded-test.mjs';
+ import assert from 'node:assert/strict';
+ import fs from 'node:fs';
+@@ -18,10 +19,10 @@ function fixture(t) {
+   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+   const cwd = path.join(scratch, 'project'); fs.mkdirSync(cwd);
+   const env = { ...process.env, ORG_DIR: path.join(cwd, '.org'), ORG_ACTOR: 'housekeeping-console-test', HERDR_BIN_PATH: '/usr/bin/false', HERDR_ENV: '1' };
+-  const git = args => execFileSync('git', args, { cwd, env, stdio: 'pipe', timeout: 10000 });
++  const git = args => execFileSync('git', args, { cwd, env, stdio: 'pipe', timeout: loadTimeout(10000) });
+   git(['init', '-b', 'main']); git(['config', 'user.name', 'Fixture']); git(['config', 'user.email', 'fixture@example.test']);
+   fs.writeFileSync(path.join(cwd, 'README.md'), 'Fixture\n'); fs.writeFileSync(path.join(cwd, '.gitignore'), '.org/\n'); git(['add', '.']); git(['commit', '-m', 'Fixture']);
+-  const cli = (args, directory = cwd) => spawnSync(process.execPath, [bin, ...args], { cwd: directory, env, encoding: 'utf8', timeout: 10000 });
++  const cli = (args, directory = cwd) => spawnSync(process.execPath, [bin, ...args], { cwd: directory, env, encoding: 'utf8', timeout: loadTimeout(10000) });
+   const org = (args, directory = cwd) => { const r = cli(args, directory); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+   org(['init']);
+   const snapshot = () => JSON.parse(org(['housekeeping', '--json']));
+@@ -77,7 +78,7 @@ test('housekeeping CLI reads without writes, validates tracked overrides, pauses
+ test('status distinguishes running, stale and malformed owners and isolates repositories sharing a record', { timeout: 30000 }, t => {
+   const f = fixture(t); f.owner(process.pid);
+   assert.equal(f.snapshot().process, 'running');
+-  const deadPid = Number(execFileSync(process.execPath, ['-e', 'console.log(process.pid)'], { env: f.env, encoding: 'utf8', timeout: 10000 }));
++  const deadPid = Number(execFileSync(process.execPath, ['-e', 'console.log(process.pid)'], { env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) }));
+   f.owner(deadPid); assert.equal(f.snapshot().process, 'stale lock');
+   fs.writeFileSync(path.join(f.lock, 'owner.json'), '{}');
+   assert.equal(f.snapshot().process, 'unknown'); assert.equal(f.snapshot().editable, false);
+@@ -87,7 +88,7 @@ test('status distinguishes running, stale and malformed owners and isolates repo
+   own.config = path.join(f.scratch, 'other-config'); fs.writeFileSync(ownerFile, JSON.stringify(own));
+   assert.equal(f.snapshot().process, 'unknown'); assert.equal(f.snapshot().editable, false);
+   const other = path.join(f.scratch, 'another', 'project'); fs.mkdirSync(other, { recursive: true });
+-  execFileSync('git', ['init', '-b', 'main', other], { env: f.env, stdio: 'pipe', timeout: 10000 });
++  execFileSync('git', ['init', '-b', 'main', other], { env: f.env, stdio: 'pipe', timeout: loadTimeout(10000) });
+   const doc = housekeepingSnapshot({ cwd: other, org: f.env.ORG_DIR });
+   assert.notEqual(doc.stateDir, f.state); assert.equal(doc.actions.length, 0); assert.equal(doc.process, 'stopped');
+ });
+@@ -148,7 +149,7 @@ test('housekeeping --print renders fixture and stays read only even when pause o
+   const events = fs.readFileSync(path.join(f.env.ORG_DIR, 'events.jsonl'), 'utf8'), logs = fs.readFileSync(f.logFile, 'utf8');
+   for (const keys of ['H', 'Hj\\n\\n', 'H\\nfalse\\n\\n']) {
+     const output = execFileSync(process.execPath, [app, '--modern', '--config', config, '--print', '100x40', '--keys', keys],
+-      { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 10000 });
++      { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) });
+     if (keys === 'H') { assert.match(output, /Housekeeping/); assert.match(output, /Finished worker/); }
+     else assert.match(output, /--print does not change housekeeping/);
+     assert.equal(fs.existsSync(f.configFile), false);
+@@ -161,11 +162,11 @@ test('housekeeping --print renders fixture and stays read only even when pause o
+ test('an unconfigured Git project can inspect defaults and save a tracked override without creating a record or schedule', { timeout: 30000 }, t => {
+   const f = fixture(t);
+   fs.rmSync(f.env.ORG_DIR, { recursive: true });
+-  const r = spawnSync(process.execPath, [bin, 'housekeeping', '--json'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: 10000 });
++  const r = spawnSync(process.execPath, [bin, 'housekeeping', '--json'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: loadTimeout(10000) });
+   assert.equal(r.status, 0, r.stderr);
+   const doc = JSON.parse(r.stdout); assert.equal(doc.process, 'no record'); assert.equal(doc.stateDir, null);
+   assert.equal(fs.existsSync(f.configFile), false); assert.equal(fs.existsSync(f.env.ORG_DIR), false);
+-  const write = spawnSync(process.execPath, [bin, 'housekeeping', 'set', '--resume=false'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: 10000 });
++  const write = spawnSync(process.execPath, [bin, 'housekeeping', 'set', '--resume=false'], { cwd: f.cwd, env: { ...f.env, ORG_DIR: '' }, encoding: 'utf8', timeout: loadTimeout(10000) });
+   assert.equal(write.status, 0, write.stderr); assert.equal(fs.existsSync(f.env.ORG_DIR), false);
+   assert.deepEqual(JSON.parse(fs.readFileSync(f.configFile)), { resume: false });
+   const folder = path.join(f.scratch, 'ordinary'); fs.mkdirSync(folder);
+@@ -234,7 +235,7 @@ test('housekeeping close failures show both the actual error and planned reason
+   const config = path.join(f.scratch, 'failed-close-console.json');
+   fs.writeFileSync(config, JSON.stringify({ projects: [{ name: 'Close failure fixture', cwd: f.cwd, org: f.env.ORG_DIR }] }));
+   const output = execFileSync(process.execPath, [app, '--modern', '--config', config, '--print', '100x40', '--keys', 'H'],
+-    { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: 10000 });
++    { cwd: f.cwd, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) });
+   assert.match(output, /Error: Herdr refused to close tab-failed/);
+   assert.match(output, /Reason: R-9 report recorded; clean lane promoted/);
+ });
+diff --git a/promote/test/promote.test.mjs b/promote/test/promote.test.mjs
+index 1902562..1a3a9da 100644
+--- a/promote/test/promote.test.mjs
++++ b/promote/test/promote.test.mjs
+@@ -9,6 +9,8 @@ import { spawn, spawnSync } from 'node:child_process';
+ import { fileURLToPath } from 'node:url';
+ import { queueFor, enqueue } from '../promote.mjs';
+ import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
++import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
++import { loadTimeout } from '../../lib/deadline.mjs';
+ import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+ 
+ const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
+@@ -19,7 +21,7 @@ if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{a
+ if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
+ `;
+ async function until(fn) {
+-  const end = Date.now() + 30000;
++  const end = Date.now() + loadTimeout(30000);
+   while (Date.now() < end) { if (fn()) return; await delay(30); }
+   assert.fail('timed out waiting for queue evidence');
+ }
+@@ -55,7 +57,7 @@ function fixture(t) {
+   };
+   const processes = new Map();
+   const cli = (args, cwd = repo) => {
+-    const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: 10000 });
++    const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: loadTimeout(10000) });
+     const owner = path.join(queue.directory, 'worker.lock/owner.json');
+     if (result.status === 0 && fs.existsSync(owner)) {
+       const pid = JSON.parse(fs.readFileSync(owner, 'utf8')).pid;
+@@ -114,7 +116,7 @@ test('queued promotion waits before validation under low-memory pressure and pro
+ test('unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate', async (t) => {
+   const f = fixture(t); const first = f.lane('first'), second = f.lane('second');
+   const launched = f.launch(['first', 'second']); assert.ok(launched.worker.ready);
+-  await until(() => f.results().length === 2);
++  await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+   assert.deepEqual(f.results().map((r) => [r.topic, r.outcome, r.delivered]), [['first', 'promoted', true], ['second', 'promoted', true]]);
+   assert.equal(fs.existsSync(first), false); assert.equal(fs.existsSync(second), false);
+   assert.equal(f.git(['rev-list', '--merges', 'main']), '');
+@@ -135,7 +137,7 @@ test('promotion notice queues during typing and delivers after clearing without
+   await until(() => fs.existsSync(inbox) && readInbox(inbox).length === 1);
+   assert.deepEqual(f.messages(), []); assert.equal(f.queue.load().current.phase, 'completed');
+   fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
+-  await until(() => f.results().length === 1);
++  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
+   assert.equal(f.messages().length, 1); assert.equal(readInbox(inbox)[0].state, 'sent');
+ });
+@@ -171,7 +173,7 @@ test('expected head survives CLI enqueue and succeeds exactly; a changed binding
+   assert.throws(() => enqueue(f.queue, ['first', 'second'], opts), /requires one lane/);
+   assert.equal(f.cli(['first', '--expected-head', 'HEAD']).status, 1);
+   const request = f.launch(['first', '--expected-head', expected]); assert.equal(request.jobs[0].id, job.id);
+-  await until(() => f.results().length === 1);
++  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+   assert.equal(f.results()[0].expectedHead, expected); assert.equal(f.results()[0].tip, expected);
+   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.git(['rev-parse', 'main']), expected);
+ });
+@@ -188,7 +190,7 @@ test('expected head refuses an automatic rebase and post-preparation tip changes
+       f.env.LANE_CONFIG = config;
+     }
+     const base = f.git(['rev-parse', 'main']);
+-    const r = spawnSync(process.execPath, [LANE, 'promote', 'first', '--expected-head', expected], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 10000 });
++    const r = spawnSync(process.execPath, [LANE, 'promote', 'first', '--expected-head', expected], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) });
+     assert.equal(r.status, 1, r.stdout); assert.match(r.stderr, mode === 'rebase' ? /requires a rebase/ : /tip differs from expected head/);
+     assert.doesNotMatch(r.stdout, /validating in/);
+     assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(wt));
+@@ -217,7 +219,7 @@ for (const mode of ['dirty', 'red', 'conflict']) test(`${mode} refusal is delive
+     fs.writeFileSync(path.join(f.repo, 'shared'), 'main\n'); f.git(['add', '.']); f.git(['commit', '-qm', 'main edit']);
+   }
+   const before = f.git(['rev-parse', `lane/bad`]);
+-  f.launch(['bad', 'good']); await until(() => f.results().length === 2);
++  f.launch(['bad', 'good']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+   assert.equal(f.results()[0].outcome, 'refused', fs.readFileSync(f.results()[0].log, 'utf8')); assert.equal(f.results()[0].delivered, true);
+   assert.match(f.results()[0].reason, mode === 'dirty' ? /not clean/ : mode === 'red' ? /validation failed/ : /does not rebase cleanly/);
+   assert.equal(f.git(['rev-parse', 'lane/bad']), before);
+@@ -242,7 +244,7 @@ test('replay conflict after clean merge-tree preflight names the file in the not
+   assert.equal(preflight.status, 0, preflight.stderr);
+   assert.match(preflight.stdout, / clean\n$/);
+ 
+-  f.launch(['bad', 'good']); await until(() => f.results().length === 2);
++  f.launch(['bad', 'good']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+   const refused = f.results()[0];
+   const log = fs.readFileSync(refused.log, 'utf8');
+   assert.equal(refused.outcome, 'refused', log);
+@@ -269,7 +271,7 @@ test('replay conflict after clean merge-tree preflight names the file in the not
+ 
+ test('capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements', async (t) => {
+   const f = fixture(t); f.lane('first'); f.lane('second'); fs.writeFileSync(path.join(f.root, 'delivery-fail'), '1');
+-  f.launch(['first', 'second']); await until(() => f.results().length === 2);
++  f.launch(['first', 'second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+   assert.ok(f.results().every((r) => r.outcome === 'promoted' && r.delivered === false && r.delivery_error));
+   const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
+   assert.ok(fs.existsSync(`${inbox}.owner.lock`));
+@@ -297,18 +299,18 @@ test('two concurrent enqueue commands share one drain; direct promote is exclude
+   const marker = path.join(f.root, 'gate');
+   const command = `${process.execPath} -e 'require("fs").writeFileSync(${JSON.stringify(marker)}, "ready"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1800)'`;
+   f.launch(['first', '--validate', command]);
+-  await until(() => fs.existsSync(marker));
++  await waitForFile(marker, () => true, { timeoutMs: 30000 });
+   const direct = spawnSync(process.execPath, [LANE, 'promote', 'second'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+   assert.notEqual(direct.status, 0); assert.match(direct.stderr, /lane-promote.lock/);
+-  f.launch(['second']); await until(() => f.results().length === 2);
++  f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+   assert.deepEqual(f.results().map((r) => r.topic), ['first', 'second']);
+   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
+ });
+ 
+ test('enqueue during the empty-worker handoff always starts a new drain', async (t) => {
+   const f = fixture(t); f.lane('first'); f.lane('second');
+-  f.launch(['first']); await until(() => f.results().length === 1);
+-  f.launch(['second']); await until(() => f.results().length === 2);
++  f.launch(['first']); await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
++  f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
+ });
+ 
+@@ -399,7 +401,7 @@ cp.spawnSync=function(cmd,args,options){
+     f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
+   }
+   f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run]);
+-  await until(() => f.results().length === 1);
++  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+   assert.equal(f.results()[0].outcome, 'promoted');
+   if (failVelocity) {
+     assert.equal(fs.existsSync(failureMarker), true, 'the velocity note actually failed');
+@@ -425,7 +427,8 @@ function blockCleanup(f) {
+   fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const args=process.argv.slice(2);
+ ${quietFake}
+ if (args[0]==='workspace' && args[1]==='list') {
+-  fs.writeFileSync(${JSON.stringify(marker)}, String(process.pid));
++  fs.writeFileSync(${JSON.stringify(marker + ".tmp")}, String(process.pid));
++  fs.renameSync(${JSON.stringify(marker + ".tmp")}, ${JSON.stringify(marker)});
+   while (!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
+ }
+ if (args[0]==='agent' && args[1]==='prompt') fs.appendFileSync(${JSON.stringify(path.join(f.root, 'notices.jsonl'))},JSON.stringify(args)+'\\n');
+@@ -455,7 +458,7 @@ test('crash during batch cleanup resumes without repeating the gate or trusting
+     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
+   };
+   f.onCleanup(stop);
+-  await until(() => fs.existsSync(blocked.marker));
++  await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
+   blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
+   assert.ok(blockedEntry.command.includes(f.herdr), 'birth command belongs to the created cleanup fixture');
+   const saved = f.queue.load().current;
+@@ -484,7 +487,7 @@ test('direct gate overlapping queued cleanup prevents queue and direct close fro
+   const request = f.launch(['first', '--org', blocked.org]);
+   const ready = path.join(f.root, 'direct-gate-pid'); const release = path.join(f.root, 'direct-gate-release');
+   const script = path.join(f.root, 'direct-gate.mjs');
+-  fs.writeFileSync(script, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));
++  fs.writeFileSync(script, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready + ".tmp")},String(process.pid));fs.renameSync(${JSON.stringify(ready + ".tmp")},${JSON.stringify(ready)});
+ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);\n`);
+   let direct, blockedEntry, gateEntry;
+   f.onCleanup(async () => {
+@@ -494,7 +497,7 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
+     for (const entry of [blockedEntry, gateEntry]) await killCreated(entry);
+     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
+   });
+-  await until(() => fs.existsSync(blocked.marker));
++  await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
+   blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
+   assert.ok(blockedEntry.command.includes(f.herdr));
+   const tip = f.git(['rev-parse', 'lane/first']);
+@@ -502,11 +505,11 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
+     env: { ...f.env, LANE_VALIDATE: `${process.execPath} ${script}` }, stdio: ['ignore', 'pipe', 'pipe'] });
+   let output = ''; direct.stdout.on('data', (v) => { output += v; }); direct.stderr.on('data', (v) => { output += v; });
+   const exited = waitForExit(direct);
+-  await until(() => fs.existsSync(ready));
++  await waitForFile(ready, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
+   gateEntry = registerProcess(Number(fs.readFileSync(ready, 'utf8')), false);
+   assert.ok(gateEntry.command.includes(script));
+   fs.writeFileSync(blocked.release, 'release');
+-  await until(() => f.results().length === 1);
++  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+   assert.equal(direct.exitCode, null, 'the direct gate is still in progress');
+   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
+   assert.match(f.results()[0].reason, /lane close:.*lane-promote.lock/);
+diff --git a/settle/test/fixture.mjs b/settle/test/fixture.mjs
+index 057de28..e022bdf 100644
+--- a/settle/test/fixture.mjs
++++ b/settle/test/fixture.mjs
+@@ -2,6 +2,7 @@
+ // transport/model execution is scripted. No routes or validation config exists.
+ import fs from 'node:fs';
+ import { loadTimeout } from '../../lib/deadline.mjs';
++import { repositorySeed } from '../../test/helpers/git-seed.mjs';
+ import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+ import os from 'node:os';
+ import path from 'node:path';
+@@ -11,10 +12,11 @@ import { createProcessTracker, killProcess } from '../../test/helpers/processes.
+ import { fileURLToPath } from 'node:url';
+ import assert from 'node:assert/strict';
+ const rootTool = fileURLToPath(new URL('../../', import.meta.url));
++let copyInitialRepository;
+ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', execute = spawnSync } = {}) {
+   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-test-')));
+   const repo = path.join(root, 'project'), workspace = path.join(root, 'lane'), bin = path.join(root, 'bin');
+-  fs.mkdirSync(repo); fs.mkdirSync(bin);
++  fs.mkdirSync(bin);
+   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, SETTLE_TEST_ROOT: root,
+     HOME: path.join(root, 'home'), XDG_CONFIG_HOME: path.join(root, 'xdg'),
+     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+@@ -80,16 +82,31 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
+   };
+   t.after(cleanup);
+   const exec = (file, args, cwd = repo, extra = {}) => {
+-    try { return execute(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 15_000 }); }
++    try { return execute(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(15_000) }); }
+     finally { rememberWatchers(); }
+   };
+   const checked = (file, args, cwd, extra) => { const r = exec(file, args, cwd, extra); assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim(); };
+   const git = (args, cwd = repo) => checked('git', args, cwd);
+-  git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Settle tests']); git(['config', 'user.email', 'settle@example.invalid']);
+-  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: 'node --test test.mjs' } }));
+-  fs.writeFileSync(path.join(repo, 'work.txt'), 'base\n');
+-  fs.writeFileSync(path.join(repo, 'test.mjs'), "import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs'; test('work is nonempty',()=>assert.ok(fs.readFileSync('work.txt','utf8').trim()));\n");
+-  git(['add', '.']); git(['commit', '-qm', 'Create unconfigured project']);
++  const initializeRepository = seed => {
++    const git = args => {
++      const result = execute('git', ['-C', seed, ...args], { cwd: seed, env, encoding: 'utf8', timeout: loadTimeout(15000) });
++      assert.equal(result.status, 0, result.stderr || result.stdout);
++    };
++    git(['init', '-q', '-b', 'main']); git(['config', 'user.name', 'Settle tests']); git(['config', 'user.email', 'settle@example.invalid']);
++    fs.writeFileSync(path.join(seed, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: 'node --test test.mjs' } }));
++    fs.writeFileSync(path.join(seed, 'work.txt'), 'base\n');
++    fs.writeFileSync(path.join(seed, 'test.mjs'), "import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs'; test('work is nonempty',()=>assert.ok(fs.readFileSync('work.txt','utf8').trim()));\n");
++    git(['add', '.']); git(['commit', '-qm', 'Create unconfigured project']);
++  };
++  // A supplied command hook owns only this fixture's scratch tree. Do not send
++  // it shared seed operations or change the setup-failure boundary it scripts.
++  if (execute === spawnSync) {
++    copyInitialRepository ??= repositorySeed(process.env.HERDR_TEST_OFFLINE_ROOT, initializeRepository);
++    copyInitialRepository(repo);
++  } else {
++    fs.mkdirSync(repo);
++    initializeRepository(repo);
++  }
+   git(['worktree', 'add', '-q', '-b', 'lane/topic', workspace]);
+   const org = path.join(repo, '.org');
+   env.SETTLE_TEST_RECORD = path.join(source, 'bin/org.mjs');

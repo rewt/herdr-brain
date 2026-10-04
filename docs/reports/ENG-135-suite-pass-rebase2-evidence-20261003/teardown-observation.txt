@@ -1,0 +1,7 @@
+The first final-base focused run failed only in the after-hook of the velocity-note failure regression, with ENOTEMPTY removing its temporary root. All test-body assertions completed.
+
+Remaining files inspected after the failed run:
+  cleanup-calls
+  record/supervisor/inbox.log
+
+The fixture after-hook waits for repo/.git/supervisor/inbox.log; this test passes --org pointing to root/record. Late writes under the explicit record path are consistent with an inbox teardown race. This is an inference from the retained paths and source, not a proven causal diagnosis. No fixture implementation was changed in this rebase-only run.

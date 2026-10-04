@@ -1,0 +1,35 @@
+1:  98ad2ba ! 1:  25f12d9 Reduce suite fixture cost and define promotion and release coverage
+    @@ release/test/release.test.mjs: function fixture(t, config) {
+     
+      ## settle/test/fixture.mjs ##
+     @@
+    - // Real Git, record, lane review/check, dispatch and detached watch. Only Herdr's
+      // transport/model execution is scripted. No routes or validation config exists.
+      import fs from 'node:fs';
+    -+import { loadTimeout } from '../../lib/deadline.mjs';
+    + import { loadTimeout } from '../../lib/deadline.mjs';
+     +import { repositorySeed } from '../../test/helpers/git-seed.mjs';
+      import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+      import os from 'node:os';
+    @@ settle/test/fixture.mjs: import { createProcessTracker, killProcess } from '../.
+        const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, SETTLE_TEST_ROOT: root,
+          HOME: path.join(root, 'home'), XDG_CONFIG_HOME: path.join(root, 'xdg'),
+          GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    -@@ settle/test/fixture.mjs: export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
+    -     // Failed/unconfirmed completion retains the directory for inspection.
+    -     await Promise.all(pending);
+    -     for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
+    --    const deadline = Date.now() + 2000;
+    -+    const deadline = Date.now() + loadTimeout(2000);
+    -     while (watchers.size && Date.now() < deadline) {
+    -       const current = tracker.snapshot();
+    -       if (!current.ok) throw Error('Cannot confirm watcher shutdown');
+     @@ settle/test/fixture.mjs: export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
+        };
+        t.after(cleanup);
+2:  52cdf36 = 2:  032c3d9 Report suite measurements and retained safety coverage for R-170
+3:  4fae3f3 = 3:  1caf37a Include verified watcher event waits in the suite pass
+4:  373805f = 4:  8ab25d3 Finalize the checked suite pass report
+5:  dec170f = 5:  a599388 Add suite-pass independent review record
+6:  c8e4576 = 6:  c65e561 Retain focused suite rebase verification for R-184
+7:  681ecd2 = 7:  a0f2d3f Report R-184 suite pass conflict rebase

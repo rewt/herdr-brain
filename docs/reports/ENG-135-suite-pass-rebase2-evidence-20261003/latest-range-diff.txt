@@ -1,0 +1,97 @@
+1:  98ad2ba ! 1:  512fcd6 Reduce suite fixture cost and define promotion and release coverage
+    @@ console/test/desks.test.mjs: test('--print cannot commit new desk or route contr
+     
+      ## console/test/housekeeping.test.mjs ##
+     @@
+    + import { ownerIdentity } from '../../lib/process-owner.mjs';
+     +import { loadTimeout } from '../../lib/deadline.mjs';
+      import test from '../../test/helpers/bounded-test.mjs';
+      import assert from 'node:assert/strict';
+    @@ discovery/test/acceptance.test.mjs
+      import fs from 'node:fs';
+     @@ discovery/test/acceptance.test.mjs: for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product
+        delete env.NODE_TEST_CONTEXT; // Project node --test must start its own runner.
+    -   Object.assign(env, { MONITOR_TEST_SLOT_PATH: path.join(root, 'test-slot.lock'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'test-slot.lock'), ORG_ACTOR: `r107-copied-${harness}-test`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
+    +   Object.assign(env, { HERDR_MONITOR_FLEET: path.join(root, 'fleet'), HERDR_ORG_CONSOLE_CONFIG: path.join(root, 'console.json'), MONITOR_TEST_SLOT_PATH: path.join(root, 'test-slot.lock'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'test-slot.lock'), ORG_ACTOR: `r107-copied-${harness}-test`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
+        const invoke = (binary, args, cwd = root, extra = {}) => {
+     -    const result = spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 35000, killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
+     +    const result = spawnSync(binary, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(35000), [commandAllowance]: loadTimeout(35000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
+    @@ package.json
+      }
+     
+      ## promote/test/promote.test.mjs ##
+    -@@ promote/test/promote.test.mjs: import { spawn, spawnSync } from 'node:child_process';
+    - import { fileURLToPath } from 'node:url';
+    +@@ promote/test/promote.test.mjs: import { fileURLToPath } from 'node:url';
+      import { queueFor, enqueue } from '../promote.mjs';
+    - import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
+    + import { readInbox, inboxPath } from '../../supervisor/prompt-supervisor.mjs';
+    + import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+     +import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
+     +import { loadTimeout } from '../../lib/deadline.mjs';
+    - import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+      
+      const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
+    + const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
+     @@ promote/test/promote.test.mjs: if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{a
+      if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
+      `;
+    @@ promote/test/promote.test.mjs: test('two concurrent enqueue commands share one d
+        assert.ok(f.results().every((r) => r.outcome === 'promoted'));
+      });
+      
+    -@@ promote/test/promote.test.mjs: if(a[0]==='pane'&&a[1]==='list')r={panes:d.panes};
+    - if(a[0]==='pane'&&a[1]==='process-info')r={process_info:{shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}]}};
+    - if(a[0]==='agent'&&a[1]==='list')r={agents:d.agents};
+    - console.log(JSON.stringify({result:r}));\n`);
+    --  f.launch(['first', '--org', org]); await until(() => f.results().length === 1);
+    -+  f.launch(['first', '--org', org]); await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+    -   assert.equal(f.results()[0].outcome, 'promoted'); assert.deepEqual(f.results()[0].warnings, []);
+    -   const actions = fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse);
+    -   assert.deepEqual(actions.filter((a) => a[0] === 'tab' && a[1] === 'close'), [['tab', 'close', 'w:worker']]);
+    +@@ promote/test/promote.test.mjs: cp.spawnSync=function(cmd,args,options){
+    +     f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
+    +   }
+    +   f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run]);
+    +-  await until(() => f.results().length === 1);
+    ++  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+    +   assert.equal(f.results()[0].outcome, 'promoted');
+    +   if (failVelocity) {
+    +     assert.equal(fs.existsSync(failureMarker), true, 'the velocity note actually failed');
+     @@ promote/test/promote.test.mjs: function blockCleanup(f) {
+        fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const args=process.argv.slice(2);
+      ${quietFake}
+    @@ release/test/release.test.mjs: function fixture(t, config) {
+     
+      ## settle/test/fixture.mjs ##
+     @@
+    - // Real Git, record, lane review/check, dispatch and detached watch. Only Herdr's
+      // transport/model execution is scripted. No routes or validation config exists.
+      import fs from 'node:fs';
+    -+import { loadTimeout } from '../../lib/deadline.mjs';
+    + import { loadTimeout } from '../../lib/deadline.mjs';
+     +import { repositorySeed } from '../../test/helpers/git-seed.mjs';
+      import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
+      import os from 'node:os';
+    @@ settle/test/fixture.mjs: import { createProcessTracker, killProcess } from '../.
+        const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, SETTLE_TEST_ROOT: root,
+          HOME: path.join(root, 'home'), XDG_CONFIG_HOME: path.join(root, 'xdg'),
+          GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    -@@ settle/test/fixture.mjs: export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
+    -     // Failed/unconfirmed completion retains the directory for inspection.
+    -     await Promise.all(pending);
+    -     for (const entry of watchers.values()) killProcess(entry, 'SIGTERM');
+    --    const deadline = Date.now() + 2000;
+    -+    const deadline = Date.now() + loadTimeout(2000);
+    -     while (watchers.size && Date.now() < deadline) {
+    -       const current = tracker.snapshot();
+    -       if (!current.ok) throw Error('Cannot confirm watcher shutdown');
+     @@ settle/test/fixture.mjs: export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
+        };
+        t.after(cleanup);
+2:  52cdf36 = 2:  74b21d1 Report suite measurements and retained safety coverage for R-170
+3:  4fae3f3 = 3:  ce35040 Include verified watcher event waits in the suite pass
+4:  373805f = 4:  2883178 Finalize the checked suite pass report
+5:  dec170f = 5:  d04873f Add suite-pass independent review record
+6:  c8e4576 = 6:  db682f8 Retain focused suite rebase verification for R-184
+7:  681ecd2 = 7:  9f88e4e Report R-184 suite pass conflict rebase

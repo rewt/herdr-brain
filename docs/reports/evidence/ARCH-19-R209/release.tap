@@ -1,0 +1,160 @@
+TAP version 13
+# Subtest: the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+ok 1 - the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+  ---
+  duration_ms: 400.558625
+  ...
+# Subtest: missing input setup and missing build evidence fail before invoking acceptance
+ok 2 - missing input setup and missing build evidence fail before invoking acceptance
+  ---
+  duration_ms: 3.20025
+  ...
+# Subtest: private cache copies only pinned dependency tarballs and refuses missing content
+ok 3 - private cache copies only pinned dependency tarballs and refuses missing content
+  ---
+  duration_ms: 10.345417
+  ...
+# Subtest: unset compatibility input is optional through the declared build and gate
+ok 4 - unset compatibility input is optional through the declared build and gate
+  ---
+  duration_ms: 388.0745
+  ...
+# Subtest: real project preflight leaves invalid inputs uncut and retries the same commit
+ok 5 - real project preflight leaves invalid inputs uncut and retries the same commit
+  ---
+  duration_ms: 1464.085834
+  ...
+# Subtest: release safety checks stop the gate on failure and precede acceptance on success
+ok 6 - release safety checks stop the gate on failure and precede acceptance on success
+  ---
+  duration_ms: 104.403542
+  ...
+# Subtest: release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+ok 7 - release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+  ---
+  duration_ms: 590.928625
+  ...
+# Subtest: unconfigured release uses npm test, initializes its record and never executes ship
+ok 8 - unconfigured release uses npm test, initializes its record and never executes ship
+  ---
+  duration_ms: 817.263333
+  ...
+# Subtest: unset and missing preflight inputs remain retryable on the same commit
+ok 9 - unset and missing preflight inputs remain retryable on the same commit
+  ---
+  duration_ms: 1158.82775
+  ...
+# Subtest: unset and missing preflight inputs remain retryable after main advances
+ok 10 - unset and missing preflight inputs remain retryable after main advances
+  ---
+  duration_ms: 1121.870291
+  ...
+# Subtest: a signaled preflight is retryable and malformed preflight declarations are rejected
+ok 11 - a signaled preflight is retryable and malformed preflight declarations are rejected
+  ---
+  duration_ms: 769.623833
+  ...
+# Subtest: a preflight launch error creates no candidate and can be corrected on a later commit
+ok 12 - a preflight launch error creates no candidate and can be corrected on a later commit
+  ---
+  duration_ms: 694.485583
+  ...
+# Subtest: two real lane promotions become one tagged batch and one operator question
+ok 13 - two real lane promotions become one tagged batch and one operator question
+  ---
+  duration_ms: 1298.859708
+  ...
+# Subtest: publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+ok 14 - publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+  ---
+  duration_ms: 1147.297584
+  ...
+# Subtest: release replies require normalized yes and leave later promotions eligible
+ok 15 - release replies require normalized yes and leave later promotions eligible
+  ---
+  duration_ms: 2304.4955
+  ...
+# Subtest: release replies require normalized no and leave later promotions eligible
+ok 16 - release replies require normalized no and leave later promotions eligible
+  ---
+  duration_ms: 2288.445625
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered yes
+ok 17 - agents cannot start a run on an operator-reserved question answered yes
+  ---
+  duration_ms: 1351.455292
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered no
+ok 18 - agents cannot start a run on an operator-reserved question answered no
+  ---
+  duration_ms: 1332.033084
+  ...
+# Subtest: low load, drained promotion queue, clean base and supervisor ownership are required
+ok 19 - low load, drained promotion queue, clean base and supervisor ownership are required
+  ---
+  duration_ms: 272.177625
+  ...
+# Subtest: red gate is durable, never repeated, and a later promotion may become a new candidate
+ok 20 - red gate is durable, never repeated, and a later promotion may become a new candidate
+  ---
+  duration_ms: 1189.215208
+  ...
+# Subtest: interrupted start, duplicate record writes and older folds preserve once-only semantics
+ok 21 - interrupted start, duplicate record writes and older folds preserve once-only semantics
+  ---
+  duration_ms: 420.748458
+  ...
+# Subtest: tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+ok 22 - tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+  ---
+  duration_ms: 922.531583
+  ...
+# Subtest: snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+ok 23 - snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+  ---
+  duration_ms: 736.047833
+  ...
+# Subtest: supervisor, discovery and console recover gate evidence and the operator decision from the record
+ok 24 - supervisor, discovery and console recover gate evidence and the operator decision from the record
+  ---
+  duration_ms: 909.543375
+  ...
+# Subtest: a running gate excludes a second release and a direct promotion with the shared lock
+ok 25 - a running gate excludes a second release and a direct promotion with the shared lock
+  ---
+  duration_ms: 653.418167
+  ...
+# Subtest: gate result receipts are immutable and duplicate completion creates no extra operator question
+ok 26 - gate result receipts are immutable and duplicate completion creates no extra operator question
+  ---
+  duration_ms: 604.879084
+  ...
+# Subtest: preparation env is scoped and a signaled gate records interruption without a replay
+ok 27 - preparation env is scoped and a signaled gate records interruption without a replay
+  ---
+  duration_ms: 722.231833
+  ...
+# Subtest: scratch preview runs preparation with inherited dependency-skip switches removed
+ok 28 - scratch preview runs preparation with inherited dependency-skip switches removed
+  ---
+  duration_ms: 648.954333
+  ...
+# Subtest: a moved candidate tag cannot reuse its green evidence
+ok 29 - a moved candidate tag cannot reuse its green evidence
+  ---
+  duration_ms: 657.884333
+  ...
+# Subtest: a held host slot defers release before cutting or claiming a candidate
+ok 30 - a held host slot defers release before cutting or claiming a candidate
+  ---
+  duration_ms: 633.544708
+  ...
+1..30
+# tests 30
+# suites 0
+# pass 30
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 23298.654333

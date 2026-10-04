@@ -1,0 +1,1041 @@
+TAP version 13
+# Subtest: native adapter pins the original socket despite an isolated HOME or caller override
+ok 1 - native adapter pins the original socket despite an isolated HOME or caller override
+  ---
+  duration_ms: 173.950709
+  ...
+# Subtest: foreign pane/workspace targets and symlink escapes never reach mutation APIs
+ok 2 - foreign pane/workspace targets and symlink escapes never reach mutation APIs
+  ---
+  duration_ms: 577.968541
+  ...
+# Subtest: model launch requests are always replaced by the scratch worker script
+ok 3 - model launch requests are always replaced by the scratch worker script
+  ---
+  duration_ms: 286.81375
+  ...
+# Subtest: parent-focusing worktree removal is refused before any native mutation
+ok 4 - parent-focusing worktree removal is refused before any native mutation
+  ---
+  duration_ms: 24.726792
+  ...
+# Subtest: the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+ok 5 - the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+  ---
+  duration_ms: 100.861333
+  ...
+# Subtest: creation receipts grant the only new targets and force no-focus
+ok 6 - creation receipts grant the only new targets and force no-focus
+  ---
+  duration_ms: 481.167833
+  ...
+# Subtest: explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+ok 7 - explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+  ---
+  duration_ms: 92.2435
+  ...
+# Subtest: agent send-keys requires an owned target and checks its live cwd
+ok 8 - agent send-keys requires an owned target and checks its live cwd
+  ---
+  duration_ms: 7086.792
+  ...
+# Subtest: named-agent mutation receipts retain the pane resolved by native identity lookup
+ok 9 - named-agent mutation receipts retain the pane resolved by native identity lookup
+  ---
+  duration_ms: 229.875333
+  ...
+# Subtest: late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+ok 10 - late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+  ---
+  duration_ms: 278.426083
+  ...
+# Subtest: non-zero native Herdr replies are harness failures through both body and forwarding paths
+ok 11 - non-zero native Herdr replies are harness failures through both body and forwarding paths
+  ---
+  duration_ms: 493.009291
+  ...
+# Subtest: stand-in registration timeout is harness pending without a safety marker
+ok 12 - stand-in registration timeout is harness pending without a safety marker
+  ---
+  duration_ms: 9144.109167
+  ...
+# Subtest: scripted PTY acknowledgement timeout is harness pending without a safety marker
+ok 13 - scripted PTY acknowledgement timeout is harness pending without a safety marker
+  ---
+  duration_ms: 14685.823459
+  ...
+# Subtest: actual capability refusals stay product FAIL even when wrapped by cleanup
+ok 14 - actual capability refusals stay product FAIL even when wrapped by cleanup
+  ---
+  duration_ms: 7181.381541
+  ...
+# Subtest: missing live pane cwd receipt is a harness limit, not a candidate capability violation
+ok 15 - missing live pane cwd receipt is a harness limit, not a candidate capability violation
+  ---
+  duration_ms: 184.914875
+  ...
+# Subtest: native transport pins the original socket when copied HOME changes
+ok 16 - native transport pins the original socket when copied HOME changes
+  ---
+  duration_ms: 210.08125
+  ...
+# Subtest: final tab rename is allowed only for receipt-owned tabs
+ok 17 - final tab rename is allowed only for receipt-owned tabs
+  ---
+  duration_ms: 196.558
+  ...
+# Subtest: private lane environment preparation reaches only an owned pane with a live scratch cwd
+ok 18 - private lane environment preparation reaches only an owned pane with a live scratch cwd
+  ---
+  duration_ms: 7478.285167
+  ...
+# Subtest: inserting a case anywhere leaves every production dependency and outcome unchanged
+ok 19 - inserting a case anywhere leaves every production dependency and outcome unchanged
+  ---
+  duration_ms: 16.617667
+  ...
+# Subtest: optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+ok 20 - optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+  ---
+  duration_ms: 0.787042
+  ...
+# Subtest: a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+ok 21 - a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+  ---
+  duration_ms: 0.25175
+  ...
+# Subtest: independent product and explicit safety failures retain precedence over genuine canary limits
+ok 22 - independent product and explicit safety failures retain precedence over genuine canary limits
+  ---
+  duration_ms: 0.198209
+  ...
+# Subtest: case keys are required and unique even when display names differ
+ok 23 - case keys are required and unique even when display names differ
+  ---
+  duration_ms: 0.434625
+  ...
+# Subtest: no configured existing project skips all five compatibility bodies visibly and permits a green gate
+ok 24 - no configured existing project skips all five compatibility bodies visibly and permits a green gate
+  ---
+  duration_ms: 0.288041
+  ...
+# Subtest: optional compatibility never hides other failures or pending live cases
+ok 25 - optional compatibility never hides other failures or pending live cases
+  ---
+  duration_ms: 0.841
+  ...
+# Subtest: configured compatibility retains strict failures and prerequisites
+ok 26 - configured compatibility retains strict failures and prerequisites
+  ---
+  duration_ms: 0.451125
+  ...
+# Subtest: cleanup closes main and linked workspaces after pass, including an unfurled creation receipt
+ok 27 - cleanup closes main and linked workspaces after pass, including an unfurled creation receipt
+  ---
+  duration_ms: 16.138834
+  ...
+# Subtest: cleanup closes main and linked workspaces after fail, including an unfurled creation receipt
+ok 28 - cleanup closes main and linked workspaces after fail, including an unfurled creation receipt
+  ---
+  duration_ms: 13.39325
+  ...
+# Subtest: failed inventory still attempts every owned receipt and audits the actual residue by ID and label
+ok 29 - failed inventory still attempts every owned receipt and audits the actual residue by ID and label
+  ---
+  duration_ms: 13.789917
+  ...
+# Subtest: unreceipted scratch workspace is named by the raw audit without gaining closure authority
+ok 30 - unreceipted scratch workspace is named by the raw audit without gaining closure authority
+  ---
+  duration_ms: 4.699834
+  ...
+# Subtest: direct linked creation receipt survives a failed pane-layout read
+ok 31 - direct linked creation receipt survives a failed pane-layout read
+  ---
+  duration_ms: 412.33075
+  ...
+# Subtest: nested linked creation receipt survives a failed pane-layout read
+ok 32 - nested linked creation receipt survives a failed pane-layout read
+  ---
+  duration_ms: 357.898125
+  ...
+# Subtest: cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost
+ok 33 - cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost
+  ---
+  duration_ms: 17.354709
+  ...
+# Subtest: a malformed journal entry does not prevent closing other receipt-owned workspaces
+ok 34 - a malformed journal entry does not prevent closing other receipt-owned workspaces
+  ---
+  duration_ms: 10.114166
+  ...
+# Subtest: SIGINT closes receipt-owned main and linked workspaces before emitting summary
+ok 35 - SIGINT closes receipt-owned main and linked workspaces before emitting summary
+  ---
+  duration_ms: 40.582625
+  ...
+# Subtest: SIGTERM closes receipt-owned main and linked workspaces before emitting summary
+ok 36 - SIGTERM closes receipt-owned main and linked workspaces before emitting summary
+  ---
+  duration_ms: 39.3465
+  ...
+# Subtest: adapter records the implicit main workspace as well as the explicit linked creation reply
+ok 37 - adapter records the implicit main workspace as well as the explicit linked creation reply
+  ---
+  duration_ms: 280.634417
+  ...
+# Subtest: rollback restores every file byte and executable mode
+ok 38 - rollback restores every file byte and executable mode
+  ---
+  duration_ms: 6.714334
+  ...
+# Subtest: contrib cannot retire with an extra executable caller, and scans refuse symlinks
+ok 39 - contrib cannot retire with an extra executable caller, and scans refuse symlinks
+  ---
+  duration_ms: 4.026375
+  ...
+# Subtest: all current edits apply to relocated inventory scripts and refuse premise drift
+ok 40 - all current edits apply to relocated inventory scripts and refuse premise drift
+  ---
+  duration_ms: 11.6715
+  ...
+# Subtest: current snapshot covers every switch and active caller and relocates all fixed temp paths
+ok 41 - current snapshot covers every switch and active caller and relocates all fixed temp paths
+  ---
+  duration_ms: 13.976834
+  ...
+# Subtest: mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+ok 42 - mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+  ---
+  duration_ms: 14.337041
+  ...
+# Subtest: current legacy notify queues its report in scratch and needs an event-service delivery consumer
+ok 43 - current legacy notify queues its report in scratch and needs an event-service delivery consumer
+  ---
+  duration_ms: 827.473916
+  ...
+# Subtest: relocated dispatch keeps the lock and session cap in baseline and switched copies
+ok 44 - relocated dispatch keeps the lock and session cap in baseline and switched copies
+  ---
+  duration_ms: 690.968875
+  ...
+# Subtest: cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+ok 45 - cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+  ---
+  duration_ms: 10.721458
+  ...
+# Subtest: production notice contract accepts rewritten current documents and rejects missing obligations
+ok 46 - production notice contract accepts rewritten current documents and rejects missing obligations
+  ---
+  duration_ms: 14.577833
+  ...
+# Subtest: retirement scans nested Python, executable extensionless and notify entry callers
+ok 47 - retirement scans nested Python, executable extensionless and notify entry callers
+  ---
+  duration_ms: 3.942083
+  ...
+# Subtest: installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+ok 48 - installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+  ---
+  duration_ms: 674.030417
+  ...
+# Subtest: installed tidy recovers a bounded tail from each log including a late older run
+ok 49 - installed tidy recovers a bounded tail from each log including a late older run
+  ---
+  duration_ms: 484.713334
+  ...
+# Subtest: only unreferenced timestamped script backups qualify as historical material
+ok 50 - only unreferenced timestamped script backups qualify as historical material
+  ---
+  duration_ms: 5.617333
+  ...
+# Subtest: executable shell case arms cannot hide contrib callers or references to historical backups
+ok 51 - executable shell case arms cannot hide contrib callers or references to historical backups
+  ---
+  duration_ms: 3.559292
+  ...
+# Subtest: referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+ok 52 - referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+  ---
+  duration_ms: 5.477209
+  ...
+# Subtest: ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+ok 53 - ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 701.81725
+  ...
+# Subtest: ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+ok 54 - ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 567.389625
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 24
+ok 55 - a genuinely hung sandbox-exec reaches its finite deadline at load 24
+  ---
+  duration_ms: 303.493
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 0
+ok 56 - a genuinely hung sandbox-exec reaches its finite deadline at load 0
+  ---
+  duration_ms: 53.269208
+  ...
+# Subtest: report polling scales once from its own operation load and stays bounded
+ok 57 - report polling scales once from its own operation load and stays bounded
+  ---
+  duration_ms: 0.570708
+  ...
+# Subtest: each command samples current load, preserves zero, and supplies a bounded default
+ok 58 - each command samples current load, preserves zero, and supplies a bounded default
+  ---
+  duration_ms: 0.492
+  ...
+# Subtest: real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused
+ok 59 - real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused
+  ---
+  duration_ms: 11307.714042
+  ...
+# Subtest: acceptance admits the exact private lane environment handoff including literal shell metacharacters
+ok 60 - acceptance admits the exact private lane environment handoff including literal shell metacharacters
+  ---
+  duration_ms: 2.521208
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: outside
+ok 61 - acceptance refuses altered lane environment handoff: outside
+  ---
+  duration_ms: 1.23625
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: suffix
+ok 62 - acceptance refuses altered lane environment handoff: suffix
+  ---
+  duration_ms: 0.939334
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: cleanup
+ok 63 - acceptance refuses altered lane environment handoff: cleanup
+  ---
+  duration_ms: 1.063125
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: mode
+ok 64 - acceptance refuses altered lane environment handoff: mode
+  ---
+  duration_ms: 0.913292
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: symlink
+ok 65 - acceptance refuses altered lane environment handoff: symlink
+  ---
+  duration_ms: 0.861375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: script
+ok 66 - acceptance refuses altered lane environment handoff: script
+  ---
+  duration_ms: 0.842
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: verifier
+ok 67 - acceptance refuses altered lane environment handoff: verifier
+  ---
+  duration_ms: 0.789209
+  ...
+# Subtest: focus sampling continues while the acceptance parent blocks and spans cleanup
+ok 68 - focus sampling continues while the acceptance parent blocks and spans cleanup
+  ---
+  duration_ms: 704.551791
+  ...
+# Subtest: native pane_focused events catch a transient change between unchanged samples and name both calls
+ok 69 - native pane_focused events catch a transient change between unchanged samples and name both calls
+  ---
+  duration_ms: 598.092542
+  ...
+# Subtest: native startup replay settles before the baseline and subsequent transient owned moves still fail
+ok 70 - native startup replay settles before the baseline and subsequent transient owned moves still fail
+  ---
+  duration_ms: 783.111333
+  ...
+# Subtest: continuous operator focus starts without silence and an immediate transient harness move still fails
+ok 71 - continuous operator focus starts without silence and an immediate transient harness move still fails
+  ---
+  duration_ms: 6685.302875
+  ...
+# Subtest: continuous operator activity alone passes after bounded replay
+ok 72 - continuous operator activity alone passes after bounded replay
+  ---
+  duration_ms: 831.274875
+  ...
+# Subtest: a busy stream from an unknown server never assumes the verified replay bound
+ok 73 - a busy stream from an unknown server never assumes the verified replay bound
+  ---
+  duration_ms: 707.807958
+  ...
+# Subtest: owned changes need no correlated call and incomplete monitoring never passes
+ok 74 - owned changes need no correlated call and incomplete monitoring never passes
+  ---
+  duration_ms: 0.215291
+  ...
+# Subtest: external sampled and transient event moves are recorded and re-baseline without failing
+ok 75 - external sampled and transient event moves are recorded and re-baseline without failing
+  ---
+  duration_ms: 726.873166
+  ...
+# Subtest: an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+ok 76 - an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+  ---
+  duration_ms: 708.217333
+  ...
+# Subtest: external moves during unrelated active and completed calls re-baseline without failing
+ok 77 - external moves during unrelated active and completed calls re-baseline without failing
+  ---
+  duration_ms: 819.474833
+  ...
+# Subtest: a move to the pane targeted by a concurrent call fails after an external re-baseline
+ok 78 - a move to the pane targeted by a concurrent call fails after an external re-baseline
+  ---
+  duration_ms: 727.374625
+  ...
+# Subtest: workspace destinations correlate only with their matching call despite a newer unrelated completion
+ok 79 - workspace destinations correlate only with their matching call despite a newer unrelated completion
+  ---
+  duration_ms: 601.593084
+  ...
+# Subtest: a resolved agent target receipt correlates a named call without guessing pane IDs
+ok 80 - a resolved agent target receipt correlates a named call without guessing pane IDs
+  ---
+  duration_ms: 600.515708
+  ...
+# Subtest: a creation receipt attributes a transient move before ownership is registered
+ok 81 - a creation receipt attributes a transient move before ownership is registered
+  ---
+  duration_ms: 587.574209
+  ...
+# Subtest: a focus event after a slow completed call names that call using its completion time
+ok 82 - a focus event after a slow completed call names that call using its completion time
+  ---
+  duration_ms: 1704.574208
+  ...
+# Subtest: an unreachable read-only focus socket is an explicit harness limitation
+ok 83 - an unreachable read-only focus socket is an explicit harness limitation
+  ---
+  duration_ms: 21.395417
+  ...
+# Subtest: the monitor retains forbidden attempts even when every sample remains unchanged
+ok 84 - the monitor retains forbidden attempts even when every sample remains unchanged
+  ---
+  duration_ms: 451.852083
+  ...
+# Subtest: unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+ok 85 - unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+  ---
+  duration_ms: 575.17875
+  ...
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+ok 86 - the real scripted supervisor presents an empty composer before publishing idle and after each notice
+  ---
+  duration_ms: 1107.853625
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+ok 87 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+  ---
+  duration_ms: 41.184167
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 88 - native polling bounds each call and rejects nonresponse at the real deadline
+  ---
+  duration_ms: 0.502584
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 89 - native polling bounds each call and rejects late success at the real deadline
+  ---
+  duration_ms: 0.072833
+  ...
+# Subtest: run.mjs cutover wiring propagates quiet FAIL into retirement
+ok 90 - run.mjs cutover wiring propagates quiet FAIL into retirement
+  ---
+  duration_ms: 0.708583
+  ...
+# Subtest: run.mjs cutover wiring propagates loaded PENDING into retirement
+ok 91 - run.mjs cutover wiring propagates loaded PENDING into retirement
+  ---
+  duration_ms: 0.254125
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 92 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+  ---
+  duration_ms: 224.985417
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+ok 93 - product tidy preserves a focused finished tab while closing the same tab in the background
+  ---
+  duration_ms: 1.173708
+  ...
+# Subtest: the real adapter bounds a slow cwd native read by the polling deadline
+ok 94 - the real adapter bounds a slow cwd native read by the polling deadline
+  ---
+  duration_ms: 1528.335958
+  ...
+# Subtest: the real adapter bounds a slow registration native read by the polling deadline
+ok 95 - the real adapter bounds a slow registration native read by the polling deadline
+  ---
+  duration_ms: 1757.74775
+  ...
+# Subtest: failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+ok 96 - failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+  ---
+  duration_ms: 0.668375
+  ...
+# Subtest: housekeeping accepts either its direct closure or auto-tidy for the eligible worker
+ok 97 - housekeeping accepts either its direct closure or auto-tidy for the eligible worker
+  ---
+  duration_ms: 0.726375
+  ...
+# Subtest: housekeeping rejects unrelated closures, dry runs and failed tidy output
+ok 98 - housekeeping rejects unrelated closures, dry runs and failed tidy output
+  ---
+  duration_ms: 0.424292
+  ...
+# Subtest: housekeeping rejects closure of any ineligible worker through either path
+ok 99 - housekeeping rejects closure of any ineligible worker through either path
+  ---
+  duration_ms: 0.140084
+  ...
+# Subtest: housekeeping requires a keep action for every ineligible worker
+ok 100 - housekeeping requires a keep action for every ineligible worker
+  ---
+  duration_ms: 0.089875
+  ...
+# Subtest: native creation envelopes retain their result once and exclude failed creates and reads
+ok 101 - native creation envelopes retain their result once and exclude failed creates and reads
+  ---
+  duration_ms: 0.952166
+  ...
+# Subtest: a leaking refusal fails even when the separate configured workspace is unchanged
+ok 102 - a leaking refusal fails even when the separate configured workspace is unchanged
+  ---
+  duration_ms: 1.335834
+  ...
+# Subtest: an exit-zero no-op retry fails the production busy-retry check
+ok 103 - an exit-zero no-op retry fails the production busy-retry check
+  ---
+  duration_ms: 0.148583
+  ...
+# Subtest: a refusal with no effects and one registered, prompted retry session qualify
+ok 104 - a refusal with no effects and one registered, prompted retry session qualify
+  ---
+  duration_ms: 0.12275
+  ...
+# Subtest: retry requires destination, native creation, live topology, registration and exact prompt attribution
+ok 105 - retry requires destination, native creation, live topology, registration and exact prompt attribution
+  ---
+  duration_ms: 0.523708
+  ...
+# Subtest: refusal also rejects topology or prompt changes without a creation receipt
+ok 106 - refusal also rejects topology or prompt changes without a creation receipt
+  ---
+  duration_ms: 0.235834
+  ...
+# Subtest: rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+ok 107 - rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+  ---
+  duration_ms: 810.805208
+  ...
+# Subtest: legacy consumer defers a queued report while the scratch supervisor input is busy
+ok 108 - legacy consumer defers a queued report while the scratch supervisor input is busy
+  ---
+  duration_ms: 835.427084
+  ...
+# Subtest: inherited live consumer settings cannot select its queues, target or fixed port
+ok 109 - inherited live consumer settings cannot select its queues, target or fixed port
+  ---
+  duration_ms: 870.369458
+  ...
+# Subtest: an exited or unready consumer fails startup and remains receipted for cleanup
+ok 110 - an exited or unready consumer fails startup and remains receipted for cleanup
+  ---
+  duration_ms: 2745.656584
+  ...
+# Subtest: failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+ok 111 - failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+  ---
+  duration_ms: 317.098875
+  ...
+# Subtest: consumer refuses outside or symlinked scratch paths before spawning
+ok 112 - consumer refuses outside or symlinked scratch paths before spawning
+  ---
+  duration_ms: 11.972333
+  ...
+# Subtest: the real queued transport delivers inside the independent copied-code sandbox
+ok 113 - the real queued transport delivers inside the independent copied-code sandbox
+  ---
+  duration_ms: 1059.292083
+  ...
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+ok 114 - real live discovery setup confines a short fleet temp with no project configuration
+  ---
+  duration_ms: 883.4205
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 115 - real live-worker arguments reach the installed adapter with its supported private temp grant
+  ---
+  duration_ms: 1098.41775
+  ...
+# Subtest: installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+not ok 116 - installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+  ---
+  duration_ms: 3349.799208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor sandbox: WARNING: default_permissions="acceptance" from CLI -c selects the operator's native policy instead of generated project confinement
+    node:assert:90
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: monitor: rebased lane/entry-b021293c8d8e onto main (12aa8ac -> 2fe99d7, clean replay)
+    validating in /private/tmp/as-EhiCCX/entry-worktrees/lane-entry-b021293c8d8e: '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node' '/private/tmp/al-6bzAum/installed-product/discovery/validate.mjs' '/private/tmp/al-6bzAum/transport-german' '/private/tmp/as-EhiCCX/entry-worktrees/lane-entry-b021293c8d8e' '["/private/tmp/herdr-discovery-ir13ri/project/.org","/private/tmp/herdr-discovery-ir13ri/project/.org/events.jsonl","/private/tmp/herdr-discovery-ir13ri/project/.org/config.json","/private/tmp/herdr-discovery-ir13ri/project/.org/runs","/private/tmp/herdr-discovery-ir13ri/project/.org/reports","/private/tmp/herdr-discovery-ir13ri/project/.lane","/private/tmp/herdr-discovery-ir13ri/project/.lane/discovery"]' 'node --test'
+    Rebasing (1/1)Successfully rebased and updated refs/heads/lane/entry-b021293c8d8e.
+    TEST_SLOT_HELD: promotion /private/tmp/as-EhiCCX/entry-worktrees/lane-entry-b021293c8d8e refused: promotion /Users/rewt/development/rewt/herdr-brain/.git/promote/batches/7720886a-4f93-4cac-b50d-09c2d377e5d4/scratch-0 (pid 12571, group 12573, /Users/rewt/development/rewt/herdr-brain/.git/promote/batches/7720886a-4f93-4cac-b50d-09c2d377e5d4/scratch-0) has held the test slot /private/tmp/bch-cloak-test-slot.lock since 2026-10-04T06:51:10.190Z. Heavy validation commands share one host slot; wait for it to finish, or set MONITOR_TEST_SLOT_WAIT_SECONDS to queue.
+    
+    
+    1 !== 0
+    
+        at cli (/private/tmp/as-EhiCCX/offline-worker.cjs:8:18)
+        at client (/private/tmp/as-EhiCCX/offline-worker.cjs:11:29)
+        at Object.<anonymous> (/private/tmp/as-EhiCCX/offline-worker.cjs:49:16)
+        at Module._compile (node:internal/modules/cjs/loader:1529:14)
+        at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+        at Module.load (node:internal/modules/cjs/loader:1275:32)
+        at Module._load (node:internal/modules/cjs/loader:1096:12)
+        at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+        at node:internal/main/run_main_module:28:49 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual'
+    }
+    
+    Node.js v20.19.4
+    monitor entry: keeping lane/entry-b021293c8d8e at /private/tmp/as-EhiCCX/entry-worktrees/lane-entry-b021293c8d8e: a run was started in this lane
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    cli (/private/tmp/as-EhiCCX/offline-worker.cjs:8:18)
+    client (/private/tmp/as-EhiCCX/offline-worker.cjs:11:29)
+    Object.<anonymous> (/private/tmp/as-EhiCCX/offline-worker.cjs:49:16)
+    Module._compile (node:internal/modules/cjs/loader:1529:14)
+    Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    Module.load (node:internal/modules/cjs/loader:1275:32)
+    Module._load (node:internal/modules/cjs/loader:1096:12)
+    Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    node:internal/main/run_main_module:28:49 {
+    Object.finish (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/test/live-session.test.mjs:163:16)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Promise.allSettled (index 1)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/test/live-session.test.mjs:196:23
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: retry context and cutover aggregate preserve heavy-load PENDING
+ok 117 - retry context and cutover aggregate preserve heavy-load PENDING
+  ---
+  duration_ms: 1.520208
+  ...
+# Subtest: retry context and cutover aggregate preserve normal-load FAIL
+ok 118 - retry context and cutover aggregate preserve normal-load FAIL
+  ---
+  duration_ms: 0.316209
+  ...
+# Subtest: a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+ok 119 - a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+  ---
+  duration_ms: 48.865416
+  ...
+# Subtest: settle bounded child timeout is PENDING with its operation samples
+ok 120 - settle bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 327.939958
+  ...
+# Subtest: settle report deadline is PENDING with its own wait samples
+ok 121 - settle report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 6892.2815
+  ...
+# Subtest: settle bounded child timeout is FAIL with its operation samples
+ok 122 - settle bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 318.04825
+  ...
+# Subtest: settle report deadline is FAIL with its own wait samples
+ok 123 - settle report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 5563.143083
+  ...
+# Subtest: settle independent child assertion failure stays FAIL under heavy load
+ok 124 - settle independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 456.158292
+  ...
+# Subtest: supervisor bounded child timeout is PENDING with its operation samples
+ok 125 - supervisor bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 1095.608625
+  ...
+# Subtest: supervisor report deadline is PENDING with its own wait samples
+ok 126 - supervisor report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 8262.914333
+  ...
+# Subtest: supervisor bounded child timeout is FAIL with its operation samples
+ok 127 - supervisor bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 1039.331167
+  ...
+# Subtest: supervisor report deadline is FAIL with its own wait samples
+ok 128 - supervisor report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 6797.129541
+  ...
+# Subtest: supervisor independent child assertion failure stays FAIL under heavy load
+ok 129 - supervisor independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 895.949667
+  ...
+# Subtest: supervisor queue deadline is PENDING with queue-operation samples
+ok 130 - supervisor queue deadline is PENDING with queue-operation samples
+  ---
+  duration_ms: 14793.215583
+  ...
+# Subtest: supervisor queue deadline is FAIL with queue-operation samples
+ok 131 - supervisor queue deadline is FAIL with queue-operation samples
+  ---
+  duration_ms: 13561.6715
+  ...
+# Subtest: delegated fixture setup timeout also cleans its owned root before returning
+ok 132 - delegated fixture setup timeout also cleans its owned root before returning
+  ---
+  duration_ms: 104.74375
+  ...
+# Subtest: measured heavy-load report timeout is harness pending and names load on the screen
+ok 133 - measured heavy-load report timeout is harness pending and names load on the screen
+  ---
+  duration_ms: 1.611667
+  ...
+# Subtest: candidate that never reports at normal load remains product fail
+ok 134 - candidate that never reports at normal load remains product fail
+  ---
+  duration_ms: 0.391875
+  ...
+# Subtest: heavy load is relative to capacity even on a single-CPU host
+ok 135 - heavy load is relative to capacity even on a single-CPU host
+  ---
+  duration_ms: 0.268583
+  ...
+# Subtest: load is scoped to each wait and successful reports pass even under heavy load
+ok 136 - load is scoped to each wait and successful reports pass even under heavy load
+  ---
+  duration_ms: 0.235875
+  ...
+# Subtest: a wait retains measured contention even if load falls before its deadline
+ok 137 - a wait retains measured contention even if load falls before its deadline
+  ---
+  duration_ms: 0.293709
+  ...
+# Subtest: bounded child command and native focus timeouts name measured heavy load
+ok 138 - bounded child command and native focus timeouts name measured heavy load
+  ---
+  duration_ms: 0.41225
+  ...
+# Subtest: actual stalled child timeout uses the measured command window
+ok 139 - actual stalled child timeout uses the measured command window
+  ---
+  duration_ms: 104.41125
+  ...
+# Subtest: heavy load cannot hide incorrect candidate behaviour or safety refusals
+ok 140 - heavy load cannot hide incorrect candidate behaviour or safety refusals
+  ---
+  duration_ms: 0.574333
+  ...
+# Subtest: heavy-load canary timeout propagates through aggregate and retirement as harness pending
+ok 141 - heavy-load canary timeout propagates through aggregate and retirement as harness pending
+  ---
+  duration_ms: 0.56975
+  ...
+# Subtest: native transport prioritizes bypass refusal and still blocks capability leaks before launch
+ok 142 - native transport prioritizes bypass refusal and still blocks capability leaks before launch
+  ---
+  duration_ms: 129.779
+  ...
+# Subtest: socket premise uses the inherited endpoint and requires an actual host socket
+ok 143 - socket premise uses the inherited endpoint and requires an actual host socket
+  ---
+  duration_ms: 3.345083
+  ...
+# Subtest: entry case environment bootstraps only the scratch fleet despite inherited operator homes
+ok 144 - entry case environment bootstraps only the scratch fleet despite inherited operator homes
+  ---
+  duration_ms: 420.456334
+  ...
+# Subtest: case guard refuses real-home fleet resolution and symlink redirects before product execution
+ok 145 - case guard refuses real-home fleet resolution and symlink redirects before product execution
+  ---
+  duration_ms: 7.411458
+  ...
+# Subtest: delegated scratch cases restore product homes after their fixture scrubs machine variables
+ok 146 - delegated scratch cases restore product homes after their fixture scrubs machine variables
+  ---
+  duration_ms: 1.173125
+  ...
+# Subtest: in-process cases use the real fleetPath under scratch homes and restore the caller after failure
+ok 147 - in-process cases use the real fleetPath under scratch homes and restore the caller after failure
+  ---
+  duration_ms: 1.644709
+  ...
+# Subtest: SIGINT drains an active workspace and recovers its lost reply
+ok 148 - SIGINT drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 605.781291
+  ...
+# Subtest: SIGINT drains an active create-cwd and recovers its lost reply
+ok 149 - SIGINT drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 607.047291
+  ...
+# Subtest: SIGINT drains an active open-cwd and recovers its lost reply
+ok 150 - SIGINT drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 650.253833
+  ...
+# Subtest: SIGINT drains an active create-workspace and recovers its lost reply
+ok 151 - SIGINT drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 616.419834
+  ...
+# Subtest: SIGINT drains an active open-workspace and recovers its lost reply
+ok 152 - SIGINT drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 625.081458
+  ...
+# Subtest: SIGTERM drains an active workspace and recovers its lost reply
+ok 153 - SIGTERM drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 584.1745
+  ...
+# Subtest: SIGTERM drains an active create-cwd and recovers its lost reply
+ok 154 - SIGTERM drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 657.412209
+  ...
+# Subtest: SIGTERM drains an active open-cwd and recovers its lost reply
+ok 155 - SIGTERM drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 642.561084
+  ...
+# Subtest: SIGTERM drains an active create-workspace and recovers its lost reply
+ok 156 - SIGTERM drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 648.381083
+  ...
+# Subtest: SIGTERM drains an active open-workspace and recovers its lost reply
+ok 157 - SIGTERM drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 612.500167
+  ...
+# Subtest: cleanup refuses snapshots until every registered producer acknowledges stop
+ok 158 - cleanup refuses snapshots until every registered producer acknowledges stop
+  ---
+  duration_ms: 87.883
+  ...
+# Subtest: cleanup reconciles again when a lost-reply workspace appears after the first inventory
+ok 159 - cleanup reconciles again when a lost-reply workspace appears after the first inventory
+  ---
+  duration_ms: 14.886958
+  ...
+# Subtest: a matching caller label with a foreign native path never grants recovery authority
+ok 160 - a matching caller label with a foreign native path never grants recovery authority
+  ---
+  duration_ms: 8.8345
+  ...
+# Subtest: cleanup stops and awaits a supervisor executing dispatch before reading ownership
+ok 161 - cleanup stops and awaits a supervisor executing dispatch before reading ownership
+  ---
+  duration_ms: 716.779375
+  ...
+# Subtest: stopping an individual idle PTY worker leaves the run admission barrier open
+ok 162 - stopping an individual idle PTY worker leaves the run admission barrier open
+  ---
+  duration_ms: 74.966916
+  ...
+# Subtest: fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+ok 163 - fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+  ---
+  duration_ms: 51.962042
+  ...
+# Subtest: candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+ok 164 - candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+  ---
+  duration_ms: 0.435584
+  ...
+# Subtest: cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+ok 165 - cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+  ---
+  duration_ms: 0.758084
+  ...
+# Subtest: ordinary product entry and source-attribution gaps fail without a safety or harness marker
+ok 166 - ordinary product entry and source-attribution gaps fail without a safety or harness marker
+  ---
+  duration_ms: 0.218958
+  ...
+# Subtest: dependent cutover/default-cycle cases preserve prerequisite causes and origins
+ok 167 - dependent cutover/default-cycle cases preserve prerequisite causes and origins
+  ---
+  duration_ms: 0.269916
+  ...
+# Subtest: workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+ok 168 - workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+  ---
+  duration_ms: 1.178
+  ...
+# Subtest: relocation requires the expected launcher and audits every transitive copied file before use
+ok 169 - relocation requires the expected launcher and audits every transitive copied file before use
+  ---
+  duration_ms: 2.500709
+  ...
+# Subtest: kernel boundary denies dynamically computed external code reads and record writes
+ok 170 - kernel boundary denies dynamically computed external code reads and record writes
+  ---
+  duration_ms: 25.216
+  ...
+# Subtest: scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+ok 171 - scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+  ---
+  duration_ms: 3.701292
+  ...
+# Subtest: missing ripgrep is named pending before executing any candidate code
+ok 172 - missing ripgrep is named pending before executing any candidate code
+  ---
+  duration_ms: 273.494416
+  ...
+# Subtest: record shim rejects a changed pin and symlink escape before invoking the CLI
+ok 173 - record shim rejects a changed pin and symlink escape before invoking the CLI
+  ---
+  duration_ms: 50.110625
+  ...
+# Subtest: real session environment removes capability, identity and credential overrides
+ok 174 - real session environment removes capability, identity and credential overrides
+  ---
+  duration_ms: 0.89025
+  ...
+# Subtest: policy attribution refuses repository exposure and unwitnessed self-reports
+ok 175 - policy attribution refuses repository exposure and unwitnessed self-reports
+  ---
+  duration_ms: 2.180666
+  ...
+# Subtest: SIGINT removes credentials before cleanup and reports cleanup failure/residue
+ok 176 - SIGINT removes credentials before cleanup and reports cleanup failure/residue
+  ---
+  duration_ms: 29.10675
+  ...
+# Subtest: SIGTERM removes credentials before cleanup and reports cleanup failure/residue
+ok 177 - SIGTERM removes credentials before cleanup and reports cleanup failure/residue
+  ---
+  duration_ms: 25.608333
+  ...
+# Subtest: immutable release copy supports console build and contrib retirement without changing source
+ok 178 - immutable release copy supports console build and contrib retirement without changing source
+  ---
+  duration_ms: 6.663875
+  ...
+# Subtest: Git archive executable bits survive and snapshot chmod never follows symlinks
+ok 179 - Git archive executable bits survive and snapshot chmod never follows symlinks
+  ---
+  duration_ms: 36.190959
+  ...
+# Subtest: actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+ok 180 - actual scratch permission failures and npm stderr become HARNESS through case and prerequisite handling
+  ---
+  duration_ms: 1.811958
+  ...
+# Subtest: scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+ok 181 - scratch context preserves product refusals and excludes foreign, prefix, traversal and symlink paths
+  ---
+  duration_ms: 0.827167
+  ...
+# Subtest: foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+ok 182 - foreign symlink followed by a parent segment stays FAIL for real EACCES and command EPERM
+  ---
+  duration_ms: 1.1115
+  ...
+# Subtest: unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+ok 183 - unresolved links, missing roots, relative and mixed paths fail closed; real aliases qualify
+  ---
+  duration_ms: 2.022958
+  ...
+# Subtest: discovery setup failures use newly registered separate roots before candidate execution
+ok 184 - discovery setup failures use newly registered separate roots before candidate execution
+  ---
+  duration_ms: 33.478
+  ...
+# Subtest: session and verifier temp roots classify direct and command errors while preserving safety failures
+ok 185 - session and verifier temp roots classify direct and command errors while preserving safety failures
+  ---
+  duration_ms: 1.761084
+  ...
+# monitor entry: keeping lane/entry-7bbe9eda2d8d at /private/tmp/as-d4fmYU/lanes/lane-entry-7bbe9eda2d8d: a run was started in this lane
+# monitor entry: keeping lane/entry-3c957ced3b39 at /private/tmp/as-d4fmYU/lanes/lane-entry-3c957ced3b39: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 186 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 43.052083
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 187 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 39.868834
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 188 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 40.431708
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+ok 189 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 3448.453583
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+ok 190 - native per-run validation temp is admitted only by its private identity and exact environment handoff
+  ---
+  duration_ms: 67.098708
+  ...
+# Subtest: installed product contains every relative module import, including fleet dependencies
+ok 191 - installed product contains every relative module import, including fleet dependencies
+  ---
+  duration_ms: 1406.847083
+  ...
+# Subtest: native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+ok 192 - native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+  ---
+  duration_ms: 239.954292
+  ...
+# Subtest: model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+ok 193 - model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+  ---
+  duration_ms: 202.147125
+  ...
+# Subtest: record verification and scripted answer are kernel-confined even if model output redirects .org
+ok 194 - record verification and scripted answer are kernel-confined even if model output redirects .org
+  ---
+  duration_ms: 362.786834
+  ...
+1..194
+# tests 194
+# suites 0
+# pass 193
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 85837.644291

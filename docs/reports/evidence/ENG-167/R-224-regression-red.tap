@@ -1,0 +1,25 @@
+TAP version 13
+# Subtest: rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+not ok 1 - rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+  ---
+  duration_ms: 1891.004667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timeout: scratch supervisor receipt'
+  code: 'ERR_TEST_FAILURE'
+  name: 'LoadTimeout'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/load.mjs:53:9)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/test/legacy-consumer.test.mjs:54:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1925.204083

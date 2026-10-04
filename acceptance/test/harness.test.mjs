@@ -49,13 +49,15 @@ test('the real scripted supervisor presents an empty composer before publishing 
 test('scratch promotion inherits the actual gate slot while project and session metadata are scrubbed', async t => {
   const root = scratch(t);
   const inherited = { ...process.env, MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'compat'),
-    ORG_DIR: '/foreign/record', HERDR_PANE_ID: 'foreign:pane', MONITOR_ENTRY: 'foreign' };
+    ORG_DIR: '/foreign/record', HERDR_PANE_ID: 'foreign:pane', MONITOR_ENTRY: 'foreign',
+    SE_ROOT: '/foreign/project', SE_LOCK_PORT: '47391', NW_OUTBOX: '/foreign/outbox', NW_WAITERS: '/foreign/waiters' };
   const slot = await acquireHostTestSlot('offline gate', { env: inherited });
   t.after(slot.release);
   inherited.MONITOR_TEST_SLOT_TOKEN = slot.token;
   inherited.BCH_CLOAK_TEST_SLOT_TOKEN = slot.token;
   const env = harnessEnvironment(inherited, root);
   assert.equal(env.ORG_DIR, undefined); assert.equal(env.HERDR_PANE_ID, undefined); assert.equal(env.MONITOR_ENTRY, undefined);
+  for (const key of ['SE_ROOT', 'SE_LOCK_PORT', 'NW_OUTBOX', 'NW_WAITERS']) assert.equal(env[key], undefined);
   const code = `import {acquireHostTestSlot} from ${JSON.stringify(path.join(source, 'test-slot/test-slot.mjs'))};const slot=await acquireHostTestSlot('nested promotion');console.log(slot.nested);slot.release();`;
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env, encoding: 'utf8', timeout: 10000 });
   assert.equal(child.status, 0, child.stderr); assert.equal(child.stdout.trim(), 'true');

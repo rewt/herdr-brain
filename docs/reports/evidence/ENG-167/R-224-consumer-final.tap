@@ -1,0 +1,45 @@
+TAP version 13
+# Subtest: rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+ok 1 - rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+  ---
+  duration_ms: 779.823709
+  ...
+# Subtest: legacy consumer defers a queued report while the scratch supervisor input is busy
+ok 2 - legacy consumer defers a queued report while the scratch supervisor input is busy
+  ---
+  duration_ms: 892.286416
+  ...
+# Subtest: inherited live consumer settings cannot select its queues, target or fixed port
+ok 3 - inherited live consumer settings cannot select its queues, target or fixed port
+  ---
+  duration_ms: 898.833208
+  ...
+# Subtest: an exited or unready consumer fails startup and remains receipted for cleanup
+ok 4 - an exited or unready consumer fails startup and remains receipted for cleanup
+  ---
+  duration_ms: 2310.201959
+  ...
+# Subtest: failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+ok 5 - failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+  ---
+  duration_ms: 484.604291
+  ...
+# Subtest: consumer refuses outside or symlinked scratch paths before spawning
+ok 6 - consumer refuses outside or symlinked scratch paths before spawning
+  ---
+  duration_ms: 16.6865
+  ...
+# Subtest: the real queued transport delivers inside the independent copied-code sandbox
+ok 7 - the real queued transport delivers inside the independent copied-code sandbox
+  ---
+  duration_ms: 896.602958
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6309.947667

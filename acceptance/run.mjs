@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
@@ -31,10 +31,11 @@ import { testSlotEnvironment, scratchProductHomes, assertScratchHomes, enterScra
 import { fleetPath } from '../lib/fleet.mjs';
 import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
+import { startLegacyConsumer } from './legacy-consumer.mjs';
 
 export function harnessEnvironment(input, root) {
   const env = { ...input };
-  for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_)/.test(key)) delete env[key];
+  for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_|SE_|NW_)/.test(key)) delete env[key];
   Object.assign(env, testSlotEnvironment(input), scratchProductHomes(root), { ACCEPTANCE_ROOT: root, TMPDIR: root, TMP: root, TEMP: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     ORG_ACTOR: 'release-acceptance-setup', npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
   return assertScratchHomes(env, [root], { realHome: input.HOME, fleetFile: fleetPath(env) });
@@ -95,6 +96,7 @@ let logFile, candidateCommit, fixture, supervisor, defaultOrg;
 let focusMonitor, focusError;
 let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
+const legacyConsumers = new Set();
 const discoveryRoots = [];
 const env = harnessEnvironment(process.env, root);
 // General cases also enter native validation. Keep their machine fleet short,
@@ -131,7 +133,7 @@ const copiedPolicy = path.join(root, 'copied.sb');
 write(copiedPolicy, copiedSandbox(root, [fs.realpathSync(path.join(path.dirname(process.execPath), '..'))])
   + `(allow file-read* file-write* (subpath ${JSON.stringify(fleetRoot)}))\n`);
 let liveCopyReady = false, copy, live;
-function runCopy(command, args, options = {}) {
+function copyInvocation(command, args, options = {}) {
   if (!liveCopyReady) throw new Error('copied scripts were not successfully relocated/audited');
   auditCopies(copy, { live, home: realHome, root });
   const org = options.extra?.ORG_DIR;
@@ -141,8 +143,13 @@ function runCopy(command, args, options = {}) {
   const native = JSON.parse(read(path.join(root, 'ownership.json'))).binary;
   const toolPolicy = read(copiedPolicy) + [native, fs.realpathSync(native)].map((file) => `(allow file-read* (literal ${JSON.stringify(file)}))\n`).join('');
   write(copiedPolicy, toolPolicy);
-  return run('/usr/bin/sandbox-exec', ['-f', copiedPolicy, command, ...args],
-    { ...options, extra: { ...options.extra, HOME: scratchHome, TMPPREFIX: path.join(root, 'zsh'), ACCEPTANCE_PINNED_ORG: org } });
+  const extra = { ...options.extra, HOME: scratchHome, TMPPREFIX: path.join(root, 'zsh'), ACCEPTANCE_PINNED_ORG: org };
+  return { command: '/usr/bin/sandbox-exec', args: ['-f', copiedPolicy, command, ...args],
+    options: { ...options, extra, ...(options.isolatedEnv ? { isolatedEnv: { ...options.isolatedEnv, ...extra } } : {}) } };
+}
+function runCopy(command, args, options = {}) {
+  const call = copyInvocation(command, args, options);
+  return run(call.command, call.args, call.options);
 }
 const node = (file, args, options) => run(process.execPath, [file, ...args], options);
 const git = (cwd, args) => run('git', safeGitArgs(cwd, args)).stdout.trim();
@@ -239,6 +246,10 @@ async function closeScope() {
     // Stop PTY workers and adapter admissions before reading dispatch journals:
     // an active default-cycle dispatch may publish another watcher receipt.
     stopProducers(root);
+    for (const consumer of legacyConsumers) {
+      try { await consumer.stop(); }
+      catch (error) { errors.push(`legacy consumer cleanup: ${error.message}`); }
+    }
     await awaitProducers(root);
     // PIDs originate only in successful candidate detach receipts or in this
     // scratch record’s dispatch journals (including partially failed dispatch).
@@ -878,30 +889,52 @@ try {
       const report = path.join(root, `cutover-${stage}.md`), ask = path.join(root, `cutover-${stage}-ask.md`);
       write(ask, `You are run R-RUN. Write the report to ${report}; commit a scratch file.\n`);
       write(path.join(root, 'mode'), mode);
-      const dispatched = execute('.lane/supervisor/dispatch.sh', [item, topic, 'engineer', 'codex', 'scripted', 'low', ask, report], { timeout: 90_000 });
-      const runId = dispatched.stdout.match(/(R-\d+) .*agent=/)?.[1]; assert.ok(runId, 'legacy dispatch receipt missing');
-      const watchReceipt = dispatched.stdout.split('\n').find((line) => line.startsWith('{'));
-      if (watchReceipt) pids.add(JSON.parse(watchReceipt).pid);
-      const info = json(rec(['show', runId, '--json']));
-      const job = { run: runId, info, wt };
-      if (stage === 'switched') {
-        await until(() => fs.existsSync(report), 'held worker report');
-        const duplicate = execute('.lane/supervisor/arm-watch.sh', [runId], { ok: false });
-        assert.notEqual(duplicate.status, 0, 'arm wrapper must refuse a second active watcher');
-        h('agent', 'prompt', info.meta.agent, 'acceptance-state idle');
-      }
+      const consumer = stage === 'legacy' ? await startLegacyConsumer({ root, copy, org,
+        herdr: path.join(root, 'bin/herdr'), target: supervisor.name, env, evidence, load,
+        onStart: handle => legacyConsumers.add(handle),
+        launch(command, args, options) {
+          const call = copyInvocation(command, args, { cwd: copy, extra: { ORG_DIR: org }, isolatedEnv: options.env });
+          return spawn(call.command, call.args, { ...options, env: checkHomes(call.options.isolatedEnv) });
+        },
+      }) : undefined;
+      try {
+        const dispatched = execute('.lane/supervisor/dispatch.sh', [item, topic, 'engineer', 'codex', 'scripted', 'low', ask, report], { timeout: 90_000 });
+        const runId = dispatched.stdout.match(/(R-\d+) .*agent=/)?.[1]; assert.ok(runId, 'legacy dispatch receipt missing');
+        const watchReceipt = dispatched.stdout.split('\n').find((line) => line.startsWith('{'));
+        if (watchReceipt) pids.add(JSON.parse(watchReceipt).pid);
+        const info = json(rec(['show', runId, '--json']));
+        const job = { run: runId, info, wt };
+        if (stage === 'switched') {
+          await until(() => fs.existsSync(report), 'held worker report');
+          const duplicate = execute('.lane/supervisor/arm-watch.sh', [runId], { ok: false });
+          assert.notEqual(duplicate.status, 0, 'arm wrapper must refuse a second active watcher');
+          h('agent', 'prompt', info.meta.agent, 'acceptance-state idle');
+        }
 
-      await until(() => inbox().includes(`report=${report}`) && fs.existsSync(report), 'cutover final delivery');
-      const notices = inbox().split('\n').filter(Boolean).map(JSON.parse).filter((v) => v.line.startsWith(`[org-report] run=${runId} `) && v.line.includes(`report=${report}`));
-      assert.equal(notices.length, 1, 'one canary delivery');
-      const log = path.join(copy, '.lane/supervisor/watch-logs', `${runId}.log`);
-      await until(() => fs.existsSync(log) && read(log).includes('[org-report]'), 'canary delivery log');
-      assert.match(read(log), /\[org-report\]/);
-      if (stage !== 'legacy') assert.ok(!read(log).includes('verdict='));
-      else assert.match(read(log), /delivered by notify-watch/);
-      rec(['check', report]); rec(['ingest', report, '--run', runId]);
-      fs.copyFileSync(log, path.join(evidence, `cutover-${stage}-watch.log`));
-      return job;
+        await until(() => inbox().includes(`report=${report}`) && fs.existsSync(report), 'cutover final delivery');
+        const notices = inbox().split('\n').filter(Boolean).map(JSON.parse).filter((v) => v.line.startsWith(`[org-report] run=${runId} `) && v.line.includes(`report=${report}`));
+        assert.equal(notices.length, 1, 'one canary delivery');
+        const log = path.join(copy, '.lane/supervisor/watch-logs', `${runId}.log`);
+        await until(() => fs.existsSync(log) && read(log).includes('[org-report]'), 'canary delivery log');
+        assert.match(read(log), /\[org-report\]/);
+        if (stage !== 'legacy') assert.ok(!read(log).includes('verdict='));
+        else {
+          assert.match(read(log), /delivered by notify-watch/);
+          assert.match(notices[0].line, /outcome=done verdict=/);
+          const deliveryLog = path.join(copy, '.lane/supervisor/notify-log.tsv');
+          await until(() => fs.existsSync(deliveryLog) && read(deliveryLog).includes(`\tsupervisor-events\tsent\t${notices[0].line}`), 'legacy outbox delivery receipt');
+          await until(() => !fs.readdirSync(path.join(copy, '.lane/supervisor/outbox')).filter(name => name.endsWith('.msg'))
+            .some(name => read(path.join(copy, '.lane/supervisor/outbox', name)).includes(`report=${report}`)), 'legacy canary outbox drained');
+          await consumer.stop();
+          const delivered = read(deliveryLog).split('\n').filter(line => line.includes(`\tsupervisor-events\tsent\t${notices[0].line}`));
+          assert.equal(delivered.length, 1, 'one event-service delivery receipt');
+          const confirmed = inbox().split('\n').filter(Boolean).map(JSON.parse).filter(v => v.line === notices[0].line);
+          assert.equal(confirmed.length, 1, 'one PTY delivery after consumer stopped');
+        }
+        rec(['check', report]); rec(['ingest', report, '--run', runId]);
+        fs.copyFileSync(log, path.join(evidence, `cutover-${stage}-watch.log`));
+        return job;
+      } finally { await consumer?.stop(); }
     }
     await check(cutoverChecks.canary, async () => {
       cutoverCanary = await legacyCanary('switched');
@@ -993,7 +1026,7 @@ try {
     });
     await check(cutoverChecks.legacy, async () => {
       const legacy = await legacyCanary('legacy');
-      return `${legacy.run}: restored dispatch delivered through actual notify-watch with legacy notice fields`;
+      return `${legacy.run}: restored dispatch -> notify-watch outbox -> scratch-owned supervisor-events -> real PTY receipt, exactly once; consumer stopped with lifecycle and delivery receipts`;
     });
     write(path.join(evidence, 'cutover-switches.json'), JSON.stringify({ files: switches, checks, rollback: originals.map(({ key, file, mode }) => ({ key, file, mode, exact: true })) }, null, 2));
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);

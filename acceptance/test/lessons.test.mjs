@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { ptyCommand, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { nativeEntryReceipt, assertLessonEntry } from '../entry.mjs';
 import { lessonsEntryCase, nativeUiReady } from '../lessons.mjs';
 import { cases, runCase } from '../cases.mjs';
@@ -69,10 +70,12 @@ function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = 
     const banner = kind === 'codex' ? 'OpenAI Codex offline UI' : 'Claude Code offline UI';
     const prompt = kind === 'codex' ? '› Ask a question' : '❯ Try a command';
     const screen = kind !== exitKind || exitWithPrompt ? `${banner}\n${prompt}` : banner;
-    write(binaries[kind], `#!${process.execPath}\nif(process.argv.includes('--help')||process.argv.includes('--version'))process.exit(0);console.log(${JSON.stringify(screen)});${kind === exitKind ? `process.exit(${exitCode});` : 'setInterval(()=>{},1000);'}\n`);
+    // Finish writing the retained screen before the scripted exit. A timer or
+    // process.exit immediately after console.log can race PTY output drainage.
+    write(binaries[kind], `#!${process.execPath}\nif(process.argv.includes('--help')||process.argv.includes('--version'))process.exit(0);process.stdout.write(${JSON.stringify(`${screen}\n`)},()=>{${kind === exitKind ? `process.exit(${exitCode});` : 'setInterval(()=>{},1000);'}});\n`);
     fs.chmodSync(binaries[kind], 0o755);
   }
-  const children = [], screens = new Map(), closed = [];
+  const children = [], paneChildren = new Map(), screens = new Map(), closed = [];
   const run = (file, args, options = {}) => {
     if (file === 'which') return { status: 0, stdout: binaries[args[0]] };
     const result = spawnSync(file, args, { cwd: options.cwd ?? root, env: options.isolatedEnv ?? { ...process.env, ...options.extra }, encoding: 'utf8' });
@@ -116,16 +119,27 @@ function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = 
     if (args[1] === 'get') return { pane: { foreground_cwd: cwd } };
     if (args[1] === 'run') {
       const pane = args[2], transport = ptyCommand('/bin/sh', ['-c', args[3]]);
-      const child = spawnChild(t, transport.file, transport.args, { cwd, env: process.env });
+      const child = spawnScenarioChild(t, transport.file, transport.args, { cwd, env: process.env });
       child.stdout.on('data', data => screens.set(pane, (screens.get(pane) ?? '') + data));
       child.stderr.on('data', data => screens.set(pane, (screens.get(pane) ?? '') + data));
-      children.push(child); return {};
+      children.push(child); paneChildren.set(pane, child); return {};
     }
     if (args[1] === 'close') { closed.push(args[2]); return {}; }
     assert.fail(`Unexpected Herdr operation ${args.join(' ')}`);
   };
   const until = async (check, label) => {
-    const deadline = Date.now() + 12000;
+    const deadline = Date.now() + loadTimeout(12000);
+    if (exitKind && !delayedCleanup && label === `lessons-${exitKind} native entry receipt`) {
+      // native.done is published on the UI child's exit, before the transport
+      // and installed adapter close. Let the whole session exit naturally:
+      // otherwise the harness's finally/stop can signal that closing adapter
+      // and replace its scripted completion code with a null/signal result.
+      // waitForExit retains the close event and the scenario child bounds it
+      // with a load-aware allowance; no chosen delay stands in for completion.
+      const pane = exitKind === 'codex' ? 'w1:p1' : 'w2:p1';
+      const completion = await waitForExit(paneChildren.get(pane));
+      assert.equal(completion.signal, null);
+    }
     const exitReady = () => {
       if (!exitKind || label !== `lessons-${exitKind} native entry receipt`) return true;
       const scratch = JSON.parse(read(path.join(root, 'ownership.json'))).creationRoots[0];
@@ -187,6 +201,9 @@ for (const kind of ['codex', 'claude']) for (const exitCode of [0, 1]) {
     const completion = JSON.parse(f.read(path.join(f.evidence, `lessons-${kind}.done.json`)));
     assert.equal(completion.code, exitCode);
     assert.equal(completion.signal, null);
+    const nativeCompletion = JSON.parse(f.read(path.join(f.evidence, `lessons-${kind}.native.done.json`)));
+    assert.equal(nativeCompletion.code, exitCode);
+    assert.equal(nativeCompletion.signal, null);
     assert.match(f.read(path.join(f.evidence, `lessons-${kind}.screen.txt`)), /offline UI/);
     for (const child of f.children) await waitForExit(child);
     assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);

@@ -1,0 +1,243 @@
+{
+  "command": "node test/helpers/run.mjs acceptance/test/lessons.test.mjs",
+  "parallelCopies": 6,
+  "rounds": [
+    {
+      "round": 1,
+      "started": "2026-10-04T19:34:42.778Z",
+      "finished": "2026-10-04T19:35:13.371Z",
+      "load": [
+        3.95556640625,
+        3.67529296875,
+        3.44775390625
+      ],
+      "green": true,
+      "results": [
+        {
+          "copy": 1,
+          "log": "round-1-copy-1.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 2,
+          "log": "round-1-copy-2.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 3,
+          "log": "round-1-copy-3.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 4,
+          "log": "round-1-copy-4.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 5,
+          "log": "round-1-copy-5.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 6,
+          "log": "round-1-copy-6.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "started": "2026-10-04T19:35:13.372Z",
+      "finished": "2026-10-04T19:35:43.902Z",
+      "load": [
+        5.265625,
+        4.03515625,
+        3.5859375
+      ],
+      "green": true,
+      "results": [
+        {
+          "copy": 1,
+          "log": "round-2-copy-1.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 2,
+          "log": "round-2-copy-2.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 3,
+          "log": "round-2-copy-3.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 4,
+          "log": "round-2-copy-4.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 5,
+          "log": "round-2-copy-5.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 6,
+          "log": "round-2-copy-6.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "started": "2026-10-04T19:35:43.902Z",
+      "finished": "2026-10-04T19:36:14.418Z",
+      "load": [
+        5.73486328125,
+        4.28125,
+        3.6904296875
+      ],
+      "green": true,
+      "results": [
+        {
+          "copy": 1,
+          "log": "round-3-copy-1.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 2,
+          "log": "round-3-copy-2.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 3,
+          "log": "round-3-copy-3.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 4,
+          "log": "round-3-copy-4.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 5,
+          "log": "round-3-copy-5.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        },
+        {
+          "copy": 6,
+          "log": "round-3-copy-6.tap",
+          "code": 0,
+          "signal": null,
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "skipped": 0,
+          "cancelled": 0
+        }
+      ]
+    }
+  ]
+}

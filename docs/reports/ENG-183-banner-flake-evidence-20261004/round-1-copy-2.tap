@@ -1,0 +1,75 @@
+TAP version 13
+# Subtest: native receipts require actual lesson prompt arguments for each transport
+ok 1 - native receipts require actual lesson prompt arguments for each transport
+  ---
+  duration_ms: 1.642375
+  ...
+# Subtest: skipped fresh lessons sessions keep the release gate pending without launching anything
+ok 2 - skipped fresh lessons sessions keep the release gate pending without launching anything
+  ---
+  duration_ms: 0.433167
+  ...
+# Subtest: native interactive readiness requires more than a retained banner
+ok 3 - native interactive readiness requires more than a retained banner
+  ---
+  duration_ms: 0.291334
+  ...
+# Subtest: release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+ok 4 - release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+  ---
+  duration_ms: 3986.965208
+  ...
+# Subtest: a proposed canary cannot pass entry delivery and its fresh session still stops
+ok 5 - a proposed canary cannot pass entry delivery and its fresh session still stops
+  ---
+  duration_ms: 1845.262417
+  ...
+# Subtest: codex banner then exit 0 fails the gate and closes its owned session
+ok 6 - codex banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 1847.268792
+  ...
+# Subtest: codex banner then exit 1 fails the gate and closes its owned session
+ok 7 - codex banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 1808.631875
+  ...
+# Subtest: claude banner then exit 0 fails the gate and closes its owned session
+ok 8 - claude banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 3690.50475
+  ...
+# Subtest: claude banner then exit 1 fails the gate and closes its owned session
+ok 9 - claude banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 4155.951208
+  ...
+# Subtest: codex prompt then exit 0 fails while adapter cleanup is blocked
+ok 10 - codex prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 1836.207541
+  ...
+# Subtest: codex prompt then exit 1 fails while adapter cleanup is blocked
+ok 11 - codex prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 2110.231041
+  ...
+# Subtest: claude prompt then exit 0 fails while adapter cleanup is blocked
+ok 12 - claude prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 4018.92
+  ...
+# Subtest: claude prompt then exit 1 fails while adapter cleanup is blocked
+ok 13 - claude prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 3919.540208
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 29261.974666

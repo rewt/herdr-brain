@@ -1,0 +1,58 @@
+{
+  "at": "2026-10-04T05:43:05.702Z",
+  "source": "/Users/rewt/development/bastian/bch-cloak",
+  "method": "Read current files only; apply harness path/name relocation in memory and compare all cutover premise strings/structural checks. No copied script execution.",
+  "files": [
+    {
+      "file": "scripts/lane/launch-supervisor.mjs",
+      "sha256": "65809874fa4373360654def4b09af9514dff2ecaf305a679a4b34f510e6cd1b9"
+    },
+    {
+      "file": ".lane/supervisor/dispatch.sh",
+      "sha256": "734caf8c111fb470cb2f82ae2a3f5d0e9f1139ec092837eb3ab9b80e1440fdc1"
+    },
+    {
+      "file": ".lane/supervisor/session-start.sh",
+      "sha256": "d5c102857f1f212ef7fca40dfda7d9cd1b91ba7140114693f2754cf9fad9646a"
+    },
+    {
+      "file": ".lane/supervisor/tidy-tabs.sh",
+      "sha256": "d0219065af7cec073beca24e456e8969ac17a383d890e7bfcd48b2a0a12b4bd6"
+    },
+    {
+      "file": ".lane/supervisor/close-finished-agents.sh",
+      "sha256": "a56119a3e6f9ee91ca7784ea7815c2b09eb179ee7b470adb8f754b80eb5da710"
+    },
+    {
+      "file": ".lane/supervisor/SETTLE.md",
+      "sha256": "40ef8b00f7ed617c70b72f3914c166706e136408c67e2a70dceaff073a0715ce"
+    },
+    {
+      "file": ".lane/supervisor/WORK-PATTERN.md",
+      "sha256": "6f1841b52392195c51c548612ecf1857f7d0a1b07d7093337b6a9f975b6ab227"
+    },
+    {
+      "file": "scripts/lane/routing.test.mjs",
+      "sha256": "7c26e480bee2286c95f7a2030a7a0482c921fb3f892e3e37a093ff015107a53f"
+    }
+  ],
+  "checks": {
+    "launcher": true,
+    "dispatch": true,
+    "workspace": true,
+    "naming": true,
+    "tidy-sweep": true,
+    "tidy-log": true,
+    "tidy-tail": true,
+    "tidy-cleanup": true,
+    "cleanup": true,
+    "cleanup-workspace": true,
+    "protocol": true,
+    "notice-watchers": true,
+    "routes": true,
+    "notice-cleanup": true,
+    "notice-delivery": true
+  },
+  "remainingDrift": [],
+  "additionalDriftFound": "WORK-PATTERN.md:77-79 now targets the exact supervisor agent name rather than the pane/tab-label fallback; its strict cutover rewrite was updated too."
+}

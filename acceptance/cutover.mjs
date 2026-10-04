@@ -81,14 +81,22 @@ done
 # No agentless sweep: unknown panes carry no authoritative completion evidence.
 `;
   contents.protocol = contents.protocol.replace('a watcher that will open the next session', 'a watcher that delivers to the supervisor; fresh session launch is separate');
-  contents.notices = replace(contents.notices, '**A finished worker closes itself.** When its watcher delivers an `outcome: done` report, it closes the worker\'s tab.', '**Janitor closes finished workers.** The watcher only delivers; janitor closes done worker tabs.');
+  contents.notices = replace(contents.notices, `**A finished worker closes itself.** When its watcher has queued the notification for an \`outcome: done\` report, it closes the
+  worker's tab (the report file is the record; supervisor-events delivers the notification when the input box is empty). If the
+  notification cannot be queued, the watcher exits 1 and closes nothing.
+  A blocked or needs-human worker keeps its tab so the pane can be read.
+- **No janitor (retired 2026-10-03).** Its 60-second tick polled herdr. Finished workers' tabs close when their report notification is queued
+  (above). Run \`close-finished-agents.sh\` and \`tidy-tabs.sh\` by hand at each settle or shift end; they are one-shot.`,
+  `**One-shot cleanup closes finished workers.** The watcher only delivers; close-finished-agents.sh closes recorded done or abandoned worker tabs.
+  A blocked or needs-human worker keeps its tab so the pane can be read.
+- **No janitor loop.** Run \`close-finished-agents.sh\` and \`tidy-tabs.sh\` by hand at each settle or shift end; they are one-shot.`);
   contents.notices = contents.notices.replace('starts each notify watcher', 'starts each standalone watcher');
-  const targetStart = contents.notices.indexOf('- Reports go to the pane');
-  const targetEnd = contents.notices.indexOf('\n- **Never let', targetStart);
-  assert.ok(targetStart >= 0 && targetEnd > targetStart, 'delivery-target protocol drift');
-  contents.notices = contents.notices.slice(0, targetStart) + '- Reports go to the stable supervisor agent name established by session-start.sh. Dispatch refuses before record start when that name is absent. No tab-label fallback is used.' + contents.notices.slice(targetEnd);
+  contents.notices = replace(contents.notices, `- Reports go to the agent named exactly **\`${legacyTarget}\`** (no fallback since 2026-10-03; the old ${workspace}/cwd fallback could hit
+  another session). The SessionStart hook (\`session-start.sh\`) applies the name at session start; if it is missing, run
+  \`herdr agent rename <supervisor pane> ${legacyTarget}\`. Undelivered messages wait in \`.lane/supervisor/outbox/\`.`,
+  '- Reports go to the stable supervisor agent name established by session-start.sh. Dispatch refuses before record start when that name is absent. No tab-label fallback is used.');
   contents.protocol += '\n## Scratch cutover protocol\narm-watch delivers only; launch-supervisor invokes open-session separately. Retain the original [org-report] notice on busy refusal, wait for the named session with herdr agent wait NAME --until idle --until done --until blocked, and retry the same settle.sh R-n or continue.sh request. An already recorded report ends the retry.\n';
-  contents.notices += '\n## Standalone notices\n[watch-blocked] [watch-no-report] [watch-invalid-report] [watch-long-running] [watch-unavailable] preserve the worker. [org-report] requires run, outcome, headline, check and report; verdict is no longer read. Idle grace is 900 seconds after observed working. session-start establishes the stable supervisor name; missing targets refuse dispatch before record start. Janitor owns finished-tab cleanup through close-finished-agents.sh, which requires a recorded done or abandoned latest run and preserves blocked/needs_human, open, unknown and unrecorded workers.\n';
+  contents.notices += '\n## Standalone notices\n[watch-blocked] [watch-no-report] [watch-invalid-report] [watch-long-running] [watch-unavailable] preserve the worker. [org-report] requires run, outcome, headline, check and report; verdict is no longer read. Idle grace is 900 seconds after observed working. session-start establishes the stable supervisor name; missing targets refuse dispatch before record start. One-shot cleanup owns finished-tab closure through close-finished-agents.sh, which requires a recorded done or abandoned latest run and preserves blocked/needs_human, open, unknown and unrecorded workers.\n';
   contents.routes = replace(contents.routes, 'for (const script of [continueScript, watchScript])', 'for (const script of [continueScript])');
   contents.routes += `\ntest('cutover entries select split release modules',()=>{const i=buildSupervisorInvocation(REPO,['--route','executive','--','--open']);assert.equal(i.args[0],${JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs'))});assert.match(readFileSync(resolve(REPO,'.lane/supervisor/arm-watch.sh'),'utf8'),/watch\\/watch.mjs/);assert.doesNotMatch(readFileSync(resolve(REPO,'scripts/lane/launch-supervisor.mjs'),'utf8'),/contrib\\/settle-watch/);});\n`;
   // Retain the original outside the caller tree until canary and rollback pass.

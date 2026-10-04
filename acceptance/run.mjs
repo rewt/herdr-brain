@@ -23,6 +23,7 @@ import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './la
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
+import { assertHousekeepingActions } from './housekeeping.mjs';
 import { assertSupervisorEntry } from './entry.mjs';
 import { startFocusMonitor, assertFocus } from './focus.mjs';
 import { cleanupWorkspaces, cleanupInboxes } from './cleanup.mjs';
@@ -552,6 +553,8 @@ try {
       await final(blocked);
       const human = await dispatch('needs-human', 'housekeeping-human'); jobs.push(human);
       await final(human);
+      const tabFor = (job) => h('pane', 'get', job.pane).pane.tab_id;
+      const closedTab = tabFor(done), keptTabs = [blocked, human].map(tabFor);
       const state = path.join(root, 'housekeeping-state');
       let failure;
       try {
@@ -564,7 +567,7 @@ try {
       if (failure) throw failure;
       const close = node(path.join(root, 'herdr.mjs'), ['pane', 'get', done.pane], { ok: false });
       assert.notEqual(close.status, 0, 'one real housekeeping pass left the promoted, ingested done worker open; inspect canonical workspace metadata and action log');
-      assert.match(read(path.join(state, 'actions.jsonl')), /"action":"closed"/);
+      assertHousekeepingActions(read(path.join(state, 'actions.jsonl')), { closedTab, keptTabs });
       return 'actual released one-pass entrypoint closed promoted done worker; blocked/needs-human panes preserved';
     } finally {
       for (const job of jobs) lane(['close', job.lane]);

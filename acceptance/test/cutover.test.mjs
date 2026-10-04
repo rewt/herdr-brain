@@ -37,6 +37,30 @@ test('all eleven edits apply to relocated inventory scripts and refuse premise d
   assert.throws(() => switchedFiles(spec), /premise drift/);
 });
 
+test('cutover rewrites queued-notification cleanup ownership and refuses changed notice premises', (t) => {
+  const { copy, spec, edits } = inventory(t);
+  const file = path.join(copy, '.lane/supervisor/WORK-PATTERN.md');
+  const original = fs.readFileSync(file, 'utf8');
+  assert.match(original, /When its watcher has queued the notification/);
+  assert.match(edits.notices, /One-shot cleanup closes finished workers/);
+  assert.match(edits.notices, /recorded done or abandoned worker tabs/);
+  assert.match(edits.notices, /blocked or needs-human worker keeps its tab/);
+  assert.match(original, /Reports go to the agent named exactly/);
+  assert.match(edits.notices, /stable supervisor agent name established by session-start.sh/);
+  assert.match(edits.notices, /No tab-label fallback is used/);
+  assert.doesNotMatch(edits.notices, /worker closes itself|notification cannot be queued|tabs close when their report notification is queued/);
+  for (const [before, after] of [
+    ['has queued the notification for', 'delivers'],
+    ['notification when the input box is empty', 'notification immediately'],
+    ['No janitor (retired 2026-10-03)', 'No janitor (retired later)'],
+    ['Reports go to the agent named exactly', 'Reports go to the pane'],
+    ['Undelivered messages wait', 'Undelivered messages disappear'],
+  ]) {
+    fs.writeFileSync(file, original.replace(before, after));
+    assert.throws(() => switchedFiles(spec), /cutover premise drift/);
+  }
+});
+
 test('retirement scans nested Python, executable extensionless and notify entry callers', (t) => {
   const root = fixture(t), compat = path.join(root, 'compat.mjs');
   fs.writeFileSync(compat, 'compatibility');

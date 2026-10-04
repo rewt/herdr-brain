@@ -118,3 +118,79 @@ The new types do not alter existing work/run events. The regression folds actual
 lesson events interleaved with work and run events through the frozen
 `test/fixtures/state-v0.mjs` unknown-type branch, proving the older fold retains
 its work/run state and does not treat lesson IDs as work.
+
+## Distillation
+
+Brain builds a model-free digest of signals since the last acknowledged pass:
+report learnings, recorded review notes with verdicts, failed/interrupted release
+gates with their recorded details and log links, CI/validation failure notes,
+refusals, retries, work rounds per item, and operator overrules. Notes use literal
+markers already in the record, so they are candidates to inspect, not inferred
+causes or authority to change anything. Unknown event types are ignored.
+Each signal carries its exact `event:N` and, when available, run and item IDs.
+Release-candidate IDs are displayed, but evidence uses the gate event because
+lesson evidence accepts items, runs and events, not candidate IDs.
+
+Groups use an explicit module or the first literal path's top directory, plus
+signal kind. Paths are attached to each signal (up to four). Signal text provides
+paths first; explicit item/run metadata and report artifacts are fallbacks.
+Without a target the group is `record`. No file search or model assigns relevance.
+Work rounds count `run.started` events on an item; they are not review rounds and
+cannot themselves prove why a correction was needed.
+
+For modern `Settle:` notes, Brain can read the named receipt in the selected
+record's `settle/` directory. Enrichment requires the same recorded decision,
+run, item, record identity, report hash, and verified review-text hash. It retains
+the verdict, findings excerpt and source link. Missing, changed or unverifiable
+receipts leave the recorded note with an explicit missing-evidence message.
+The distiller must inspect originals before using an excerpt as cause evidence.
+
+A proposed or active lesson covers the exact provenance references it cites.
+Those references suppress matching signals; retired and superseded claims do not
+suppress new proposals. Evidence granularity matters: `event:N` covers all signals
+from that event, a run covers its signals, and an item covers its signals across
+runs. Prefer precise event evidence to avoid silencing unrelated future incidents.
+A shared path or module never establishes coverage. Model-free filtering cannot
+recognize paraphrases from different evidence: the distill run must read existing
+lessons and avoid a duplicate claim before `record lesson add`.
+
+The supervisor runs a pass on demand, for example after a release gate completes
+and before planning the next cycle. There is no installed schedule or automatic
+model call. From the canonical checkout:
+
+1. Generate a bounded digest with `node brain/bin/brain.mjs digest --org "$ORG_DIR"
+   --json > /private/tmp/distill-digest.json`. Keep its pass ID and its bounds.
+2. Create a normal distill work item under the learning goal, using the record
+   CLI. Compose an ask containing `brain/distill.md`, the digest path and selected
+   record CLI. Dispatch that item with the configured route through
+   `node dispatch/dispatch.mjs ITEM --org "$ORG_DIR" --lane distill-pass
+   --route engineer --brief /absolute/path/to/distill-ask.md`. This is the model
+   reasoning step; Brain itself neither routes nor launches it.
+3. The worker follows [the short procedure](../../brain/distill.md), compares
+   existing claims, cites originals, and uses `record lesson add` to propose only.
+   Its checked report lists proposed lesson IDs and the digest pass ID. Seed
+   Claude-only project memories through this same path: memories are leads;
+   locate their record evidence, compare already seeded lessons, and apply the
+   same evidence bar rather than bulk copying private prose.
+4. Review the proposals. Require one or two actionable sentences, appropriate
+   scope/paths, and at least two independent signals or one confirmed gate failure
+   with a cause supporting the action. Multiple references to one incident and
+   two remarks in one report count once. Never activate from one remark or an
+   unexplained exit code. Activate qualifying lessons via `record lesson activate
+   L-n`; retire rejected proposals with a reason. Corrections/supersessions use
+   the normal lesson CLI and project authority. Any resulting workflow/default
+   code changes still pass the ordinary review, train and release gate.
+5. When the pass has finished and every candidate is reviewed or explicitly
+   declined, acknowledge its exact pending ID with `node brain/bin/brain.mjs
+   digest --org "$ORG_DIR" --ack PASS_ID`. Do not acknowledge a failed run or
+   unresolved evidence. New events appended during the run remain for the next
+   page. Repeat while the digest says `more`; the supervisor can stop between
+   pages without losing unprocessed signals. Keep Brain state consistent across
+   preview and acknowledgement; a temporary `BRAIN_STATE` is a separate preview.
+
+Activation makes lessons available to the ordinary readers. Dispatch briefs and
+supervisor cold starts consume active lessons through ENG-170's integration;
+distillation does not bypass those consumers or make proposals active at entry.
+The cursor and latest pending digest stay in Brain's own bounded local state,
+not the record or a committed digest archive. See [Brain's command and recovery
+notes](../../brain/README.md#record-signal-digest-and-lesson-distillation).

@@ -23,6 +23,8 @@ import { startSession } from '../lib/start.mjs';
 import { explainItem } from '../lib/explain.mjs';
 import * as service from '../lib/service.mjs';
 import { loadProjects, withProject } from '../lib/projects.mjs';
+import { parseArgs } from 'node:util';
+import { recordDigest, renderDigest } from '../lib/signals.mjs';
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';
@@ -298,6 +300,19 @@ async function main() {
       return;
     }
     case 'digest': {
+      if (argv[1]?.startsWith('--') || argv.length === 1) {
+        const { values, positionals } = parseArgs({ args: argv.slice(1), options: {
+          org: { type: 'string' }, limit: { type: 'string' }, 'max-chars': { type: 'string' },
+          json: { type: 'boolean' }, ack: { type: 'string' },
+        } });
+        if (positionals.length) throw new Error('record digest takes no result ID');
+        if (values.ack && (values.limit || values['max-chars'])) throw new Error('--ack cannot change digest bounds');
+        const d = recordDigest({ orgDir: values.org ?? process.env.ORG_DIR,
+          limit: values.limit === undefined ? undefined : Number(values.limit),
+          maxChars: values['max-chars'] === undefined ? undefined : Number(values['max-chars']), ack: values.ack });
+        process.stdout.write(values.json ? JSON.stringify(d, null, 2) + '\n' : renderDigest(d));
+        return;
+      }
       const r = get(argv[1]);
       if (!r) { process.stderr.write('no such result\n'); process.exit(1); }
       const d = await runDigest(r, { model: val('--model', 'claude-sonnet-5') });
@@ -316,6 +331,8 @@ async function main() {
         '  brain never <id> ["why"]              drop it for good',
         '  brain answer <id> "…"                 record what you decided',
         '  brain digest <id>                     run the reading pass by hand',
+        '  brain digest --org DIR [--json]        model-free record signals for distillation',
+        '    [--limit N] [--max-chars N] [--ack PASS]  acknowledge only after the pass completes',
         '  brain explain --org DIR ID            an org item in plain words, with actions (cached)',
         '  brain status [--json]                 is the loop alive',
         '  brain service start|stop|install      the loop as an always-on LaunchAgent',

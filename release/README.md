@@ -192,12 +192,21 @@ Every external gate/setup log and receipt stays in place. Before deletion,
 retention copies the snapshot's `.release-build.json`, `.release-commit`, logs,
 JSONL, receipt/evidence files and directories, and JSON outside generated
 dependency/cache trees into `release/evidence/TAG/`, preserving relative paths and
-bytes. Dependencies, cache contents and source copies are disposable.
+bytes. A recorded gate log inside the snapshot is always copied regardless of
+its filename, including a text-suffixed actual-result recovery log. Dependencies,
+cache contents and source copies are disposable.
 Byte-identical copies of committed historical evidence stay recoverable in the
 tag; Git blob hashes are checked so they need no additional local copy. New or
 changed evidence is always copied. The
 append-only `release/retention.jsonl` records a synced removal intent after
-preserving evidence, followed by a synced removal receipt. A stopped deletion
-can be retried; conflicting evidence refuses the retry. Retention advisories do
+preserving evidence, followed by a synced removal receipt. The intent records
+the snapshot directory's device/inode identity and hashes of selected evidence.
+A retry validates the recorded candidate, surviving tag and retained evidence,
+then resumes deletion only from that same directory, even if its ownership marker
+was already removed. If deletion finished before its completion receipt, the
+retry validates retained evidence and appends the missing receipt. Dry runs show
+both recovery cases without writing. Changed ownership or evidence, new snapshot
+evidence, malformed journals, and legacy intents without ownership/evidence proof
+refuse recovery and leave remaining data for inspection. Retention advisories do
 not change a recorded gate result. Installed releases, Git tags, record history,
 and committed reports are never pruned by this command.

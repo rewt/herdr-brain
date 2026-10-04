@@ -121,3 +121,119 @@ test('unrecorded directories and partial extraction stay untouched', t => {
   assert.equal(result.removed.length, 1);
   for (const name of ['unknown', `${c.tag}.partial`]) assert.ok(fs.existsSync(path.join(path.dirname(c.snapshot), name)));
 });
+
+function interruptRemoval(f, c, window = 'partial') {
+  fs.writeFileSync(path.join(c.snapshot, 'gate-output.txt'), 'actual gate output\n');
+  c.gate.log = path.join(c.snapshot, 'gate-output.txt');
+  const original = fs.rmSync, originalWrite = fs.writeSync;
+  fs.rmSync = (file, options) => {
+    if (file !== c.snapshot || window !== 'partial') return original(file, options);
+    fs.unlinkSync(path.join(file, '.release-commit'));
+    fs.unlinkSync(path.join(file, 'gate-output.txt'));
+    throw Error('simulated interruption');
+  };
+  fs.writeSync = (fd, bytes, ...args) => {
+    if (window === 'absent' && typeof bytes === 'string' && JSON.parse(bytes).action === 'removed') throw Error('simulated interruption');
+    return originalWrite(fd, bytes, ...args);
+  };
+  let result;
+  try { result = f.prune(); } finally { fs.rmSync = original; fs.writeSync = originalWrite; }
+  assert.match(result.refused[0].reason, /simulated interruption/);
+  const receipt = path.join(f.project.identity, 'release/retention.jsonl');
+  const intent = JSON.parse(fs.readFileSync(receipt, 'utf8').trim());
+  assert.equal(intent.action, 'remove-intent');
+  return { receipt, intent };
+}
+
+for (const window of ['partial', 'absent']) test(`retention recovers ${window} removal from the synced intent and completes exactly once`, t => {
+  const f = fixture(t), c = f.add();
+  const { receipt, intent } = interruptRemoval(f, c, window);
+  assert.equal(fs.existsSync(c.snapshot), window === 'partial');
+  assert.equal(fs.existsSync(path.join(c.snapshot, '.release-commit')), false);
+  const before = fs.readFileSync(receipt);
+  const preview = f.prune({ dryRun: true });
+  assert.equal(preview.refused.length, 0);
+  assert.equal(preview.would_remove.length, 1);
+  assert.match(preview.would_remove[0].recovery, window === 'partial' ? /partial deletion/ : /completion receipt/);
+  assert.deepEqual(fs.readFileSync(receipt), before);
+  assert.equal(fs.existsSync(c.snapshot), window === 'partial');
+  const result = f.prune();
+  assert.deepEqual(result.refused, []);
+  assert.equal(result.removed[0].recovered, true);
+  assert.equal(fs.existsSync(c.snapshot), false);
+  assert.equal(fs.readFileSync(path.join(intent.evidence, 'gate-output.txt'), 'utf8'), 'actual gate output\n');
+  assert.equal(f.git(['rev-parse', c.tag]), c.commit);
+  const entries = fs.readFileSync(receipt, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(entries.map(row => row.action), ['remove-intent', 'removed']);
+  assert.deepEqual(entries[1].snapshot_identity, intent.snapshot_identity);
+  assert.deepEqual(entries[1].evidence_manifest, intent.evidence_manifest);
+  assert.equal(f.prune().removed.length, 0);
+  assert.equal(fs.readFileSync(receipt, 'utf8').trim().split('\n').length, 2);
+});
+
+for (const mode of ['replacement-directory', 'missing-evidence', 'changed-evidence', 'changed-source-evidence', 'new-source-evidence', 'evidence-symlink', 'snapshot-symlink', 'marker-mismatch', 'moved-tag', 'legacy-intent', 'different-intent', 'torn-journal']) test(`interrupted retention keeps remaining data when ${mode} makes recovery uncertain`, t => {
+  const f = fixture(t), c = f.add();
+  const { receipt, intent } = interruptRemoval(f, c);
+  const retainedLog = path.join(intent.evidence, 'gate-output.txt');
+  if (mode === 'replacement-directory') {
+    fs.renameSync(c.snapshot, `${c.snapshot}.saved`);
+    fs.mkdirSync(c.snapshot);
+    fs.writeFileSync(path.join(c.snapshot, '.release-commit'), c.commit);
+  }
+  if (mode === 'missing-evidence') fs.unlinkSync(retainedLog);
+  if (mode === 'changed-evidence') fs.writeFileSync(retainedLog, 'different');
+  if (mode === 'changed-source-evidence') fs.writeFileSync(path.join(c.snapshot, 'historical.log'), 'different');
+  if (mode === 'new-source-evidence') fs.writeFileSync(path.join(c.snapshot, 'new.log'), 'new');
+  if (mode === 'evidence-symlink') { fs.unlinkSync(retainedLog); fs.symlinkSync(path.join(c.snapshot, 'source'), retainedLog); }
+  if (mode === 'snapshot-symlink') { fs.renameSync(c.snapshot, `${c.snapshot}.saved`); fs.symlinkSync(`${c.snapshot}.saved`, c.snapshot); }
+  if (mode === 'marker-mismatch') fs.writeFileSync(path.join(c.snapshot, '.release-commit'), 'b'.repeat(40));
+  if (mode === 'moved-tag') f.git(['tag', '-d', c.tag]);
+  if (mode === 'legacy-intent') { delete intent.snapshot_identity; delete intent.evidence_manifest; fs.writeFileSync(receipt, JSON.stringify(intent) + '\n'); }
+  if (mode === 'different-intent') { intent.commit = 'b'.repeat(40); fs.writeFileSync(receipt, JSON.stringify(intent) + '\n'); }
+  if (mode === 'torn-journal') fs.appendFileSync(receipt, '{"action":');
+  const before = fs.readFileSync(receipt);
+  assert.equal(f.prune({ dryRun: true }).refused.length, 1);
+  const result = f.prune();
+  assert.equal(result.refused.length, 1);
+  assert.equal(result.removed.length, 0);
+  assert.ok(fs.lstatSync(c.snapshot));
+  assert.deepEqual(fs.readFileSync(receipt), before);
+});
+
+test('missing completion refuses changed retained evidence even after the snapshot is absent', t => {
+  const f = fixture(t), c = f.add();
+  const { receipt, intent } = interruptRemoval(f, c, 'absent');
+  fs.unlinkSync(path.join(intent.evidence, 'gate-output.txt'));
+  const before = fs.readFileSync(receipt);
+  assert.equal(f.prune().refused.length, 1);
+  assert.deepEqual(fs.readFileSync(receipt), before);
+});
+
+test('a newly active candidate stays kept even with an interrupted removal intent', t => {
+  const f = fixture(t), c = f.add();
+  const { receipt } = interruptRemoval(f, c);
+  const before = fs.readFileSync(receipt);
+  assert.equal(f.prune({ activeTag: c.tag }).kept[0].reason, 'active release');
+  assert.ok(fs.existsSync(c.snapshot));
+  assert.deepEqual(fs.readFileSync(receipt), before);
+});
+
+test('a recorded gate log in a dependency tree is retained regardless of filename', t => {
+  const f = fixture(t), c = f.add();
+  const relative = 'node_modules/tool/output.txt';
+  c.gate.log = path.join(c.snapshot, relative);
+  fs.mkdirSync(path.dirname(c.gate.log), { recursive: true });
+  fs.writeFileSync(c.gate.log, 'gate evidence');
+  const result = f.prune();
+  assert.deepEqual(result.refused, []);
+  assert.equal(fs.readFileSync(path.join(result.removed[0].evidence, relative), 'utf8'), 'gate evidence');
+});
+
+for (const mode of ['missing', 'directory', 'symlink']) test(`retention keeps the snapshot when its recorded gate log is ${mode}`, t => {
+  const f = fixture(t), c = f.add();
+  c.gate.log = path.join(c.snapshot, 'output.txt');
+  if (mode === 'directory') fs.mkdirSync(c.gate.log);
+  if (mode === 'symlink') fs.symlinkSync(path.join(c.snapshot, 'source'), c.gate.log);
+  assert.equal(f.prune().refused.length, 1);
+  assert.ok(fs.existsSync(c.snapshot));
+});

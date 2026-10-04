@@ -443,7 +443,7 @@ test('result recovery preserves an interrupted claim until the actual result is 
   fs.mkdirSync(snapshot, { recursive: true });
   fs.writeFileSync(path.join(snapshot, '.release-commit'), commit + '\n');
   fs.writeFileSync(path.join(snapshot, '.release-build.json'), '{"proof":"actual build"}\n');
-  const log = path.join(f.project.identity, 'release', `${c.id}.log`);
+  const log = path.join(snapshot, 'gate-output.txt');
   fs.writeFileSync(log, 'actual gate exited 7 before the recorder stopped\n');
   assert.equal(f.attempt().result, 'inspect');
   assert.ok(fs.existsSync(snapshot)); assert.equal(fs.existsSync(f.count), false);
@@ -456,7 +456,7 @@ test('result recovery preserves an interrupted claim until the actual result is 
   assert.equal(fs.existsSync(f.count), false, 'recovery and retention never replay a gate');
   assert.equal(fs.readFileSync(path.join(recovered.retention.removed[0].evidence, '.release-build.json'), 'utf8'), '{"proof":"actual build"}\n');
   assert.equal(f.git(['rev-parse', tag]), commit);
-  assert.equal(fs.readFileSync(log, 'utf8'), 'actual gate exited 7 before the recorder stopped\n');
+  assert.equal(fs.readFileSync(path.join(recovered.retention.removed[0].evidence, 'gate-output.txt'), 'utf8'), 'actual gate exited 7 before the recorder stopped\n');
   assert.equal(f.record(['release', 'result', c.id, '--file', input]).gate.exit_code, 7, 'duplicate results still recover after snapshot removal');
   const before = fs.readFileSync(path.join(f.repo, '.org/events.jsonl'));
   const preview = JSON.parse(f.ok(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--prune', '--dry-run']));

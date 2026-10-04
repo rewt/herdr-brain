@@ -76,6 +76,7 @@ function settings(project, opt) {
   if (run !== undefined && !org) throw new Error('--if-current-run requires a record');
   return { to, attempts, retry, herdr: opt.herdr ?? 'herdr', laneCLI,
     org, expectedHead, run,
+    workflow: opt.workflow ?? process.env.PROMOTE_WORKFLOW_ENGINE === '1',
     validate,
     laneConfig: process.env.LANE_CONFIG ? path.resolve(process.env.LANE_CONFIG) : null };
 }
@@ -145,7 +146,8 @@ function perform(job, queue) {
 
 function performBatch(batch, queue) {
   const first = batch.jobs[0], cwd = queue.project.canonical;
-  const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined };
+  const env = { ...process.env, LANE_VALIDATE: first.validate ?? undefined, LANE_CONFIG: first.laneConfig ?? undefined,
+    PROMOTE_WORKFLOW_ENGINE: first.workflow === undefined ? process.env.PROMOTE_WORKFLOW_ENGINE : first.workflow ? '1' : '0' };
   delete env.HERDR_PANE_ID; delete env.HERDR_TAB_ID; delete env.HERDR_WORKSPACE_ID;
   const directory = path.join(queue.directory, 'batches', batch.id);
   fs.mkdirSync(directory, { recursive: true });
@@ -154,7 +156,7 @@ function performBatch(batch, queue) {
     identity: queue.project.identity, jobs: batch.jobs, phase: 'pending' }, null, 2) + '\n');
   const output = fs.openSync(log, 'a');
   let r;
-  try { r = spawnSync(process.execPath, [first.laneCLI, 'promote-batch', receipt], { cwd, env, stdio: ['ignore', output, output] }); }
+  try { r = spawnSync(process.execPath, [first.laneCLI, 'promote-batch', receipt, ...(first.workflow ? ['--workflow'] : [])], { cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
   if (r.error || r.status !== 0) throw new Error(`batch interrupted or refused; main only moves for a green batch; inspect ${receipt} and ${log}, then resume --drain`);
   const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
@@ -242,7 +244,7 @@ export async function drain(queue) {
         if (next.laneCLI === LANE) {
           // Snapshot whatever is available now. No accumulation timer/window.
           // Different command/config inputs retain their independent gates.
-          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null]);
+          const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, job.workflow ?? false]);
           const jobs = [next];
           while (data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
           const job = { id: randomUUID(), phase: 'batching', jobs };
@@ -319,7 +321,7 @@ export async function drain(queue) {
 async function start(queue) {
   const output = fs.openSync(path.join(queue.directory, 'worker.log'), 'a');
   const env = { ...process.env };
-  for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID', 'LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR']) delete env[key];
+  for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID', 'LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR', 'PROMOTE_WORKFLOW_ENGINE']) delete env[key];
   const child = spawn(process.execPath, [SELF, '--drain', '--repo', queue.project.canonical], {
     cwd: queue.project.canonical, detached: true, stdio: ['ignore', output, output, 'ipc'], env,
   });
@@ -344,7 +346,7 @@ async function main() {
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
     'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
-    drain: { type: 'boolean' }, status: { type: 'boolean' },
+    drain: { type: 'boolean' }, status: { type: 'boolean' }, workflow: { type: 'boolean' },
   } });
   const queue = queueFor(opt.repo);
   if (opt.status) { process.stdout.write(JSON.stringify({ queue: queue.file, ...queue.load() }, null, 2) + '\n'); return; }

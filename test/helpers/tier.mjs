@@ -48,6 +48,8 @@ const promotion = [
   'lanes/test/validation.test.mjs',
   'promote/test/promote.test.mjs',
   'promote/test/train.test.mjs',
+  'promote/test/workflow-engine.test.mjs',
+  'promote/test/workflow-train.test.mjs',
   'release/test/candidate.test.mjs',
   'settle/test/rebase-paths.test.mjs',
   'settle/test/rebase-review.test.mjs',

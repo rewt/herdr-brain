@@ -10,6 +10,7 @@ import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
+import { loadWorkflow, runWorkflow } from '../workflow/engine.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
@@ -40,7 +41,7 @@ export function verifyTrainResult(result, { project, saved }) {
       git(['rev-list', '--merges', `${onto}..${result.tip}`]) === '';
   } catch { return false; }
 }
-export function runTrain({ file, canonical, identity, main, prepare, validation }) {
+export function runTrain({ file, canonical, identity, main, prepare, validation, workflow = process.env.PROMOTE_WORKFLOW_ENGINE === '1' }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
@@ -88,8 +89,23 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
       plan.groups = []; save(); return false;
     }
   };
+  const definition = (workflow || plan.workflow) ? loadWorkflow(fileURLToPath(new URL('../.herdr/workflows/train.md', import.meta.url))) : null;
+  if (definition) {
+    // v1 is a migration seam, not a way to remove/reorder lifecycle guards.
+    const expected = ['prepare', 'validate', 'integrate', 'close'];
+    if (JSON.stringify(definition.steps.map(s => [s.id, s.command, s.permission])) !==
+        JSON.stringify(expected.map(id => [id, ['train', id], 'train'])) ||
+        JSON.stringify(definition.gates) !== '["validate"]') throw new Error('unsupported train workflow stages or gates');
+    if (plan.workflow && plan.workflow.hash !== definition.hash) throw new Error('train workflow changed during batch; inspect saved receipt');
+    plan.workflow = { file: definition.file, hash: definition.hash }; save();
+  }
+  const workflowOptions = {
+    directory: path.join(path.dirname(file), 'workflow'), inputs: { batch: plan.id }, grants: ['train'], cwd: canonical, env,
+    onStart: ({ manifest }) => { plan.workflow_runs ??= []; plan.workflow_runs.push(manifest); save(); },
+  };
   // A persisted integrated checkpoint never gates or fast-forwards twice.
   const finishIntegrated = attempt => {
+    if (!['integrated', 'complete'].includes(attempt.phase)) throw new Error('train bookkeeping requires an integrated checkpoint');
     phase('closing');
     if (git(['merge-base', attempt.tip, main]) !== attempt.tip) throw new Error('integrated train tip is no longer on main');
     for (const job of attempt.jobs) {
@@ -122,13 +138,19 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
         attempt.phase = 'integrated'; attempt.integrated_at ??= new Date().toISOString(); save();
       }
     }
-    if (attempt.phase === 'integrated') finishIntegrated(attempt);
+    if (attempt.phase === 'integrated') {
+      if (!definition) finishIntegrated(attempt);
+      else {
+        const execution = runWorkflow({ ...definition, steps: definition.steps.filter(step => step.id === 'close'), gates: [] }, {
+          ...workflowOptions, runCommand: () => { finishIntegrated(attempt); return { status: 0, stdout: 'recovered integration bookkeeping complete\n' }; },
+        });
+        if (execution.error) throw execution.error;
+      }
+    }
   }
-  while (plan.groups.length) {
-    const ids = plan.groups[0].filter(id => !plan.results[id]);
-    if (!ids.length) { plan.groups.shift(); save(); continue; }
+  const prepareAttempt = ids => {
     phase('preparing');
-    if (!canonicalReady()) break;
+    if (!canonicalReady()) return null;
     let attempt = plan.attempts.findLast(a => ['prepared', 'validated'].includes(a.phase) && JSON.stringify(a.ids) === JSON.stringify(ids));
     if (attempt && git(['rev-parse', main]) !== attempt.base) {
       attempt.phase = 'stale'; attempt.error = 'main moved; replan from the current integration branch'; save();
@@ -141,7 +163,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
         try { jobs.push(capture(job)); }
         catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); }
       }
-      if (!jobs.length) continue;
+      if (!jobs.length) return null;
       const base = git(['rev-parse', main]);
       const branch = `promote-train/${randomUUID()}`;
       const scratch = path.join(path.dirname(file), `scratch-${plan.attempts.length}`);
@@ -184,19 +206,22 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
       }
       attempt.jobs = kept; attempt.ids = kept.map(j => j.id); attempt.tip = tip;
       attempt.phase = 'prepared'; save();
-      if (!kept.length) { attempt.phase = 'complete'; save(); continue; }
+      if (!kept.length) { attempt.phase = 'complete'; save(); return null; }
     }
     if (git(['rev-parse', main]) !== attempt.base) {
-      attempt.phase = 'stale'; attempt.error = 'main moved during preparation; replan'; save(); continue;
+      attempt.phase = 'stale'; attempt.error = 'main moved during preparation; replan'; save(); return null;
     }
     let invalid = false;
     for (const job of attempt.jobs) {
       try { capture(job); }
       catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); invalid = true; }
     }
-    if (invalid) { attempt.phase = 'invalid'; save(); continue; }
+    if (invalid) { attempt.phase = 'invalid'; save(); return null; }
     clean(attempt.scratch);
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch changed');
+    return attempt;
+  };
+  const validateAttempt = attempt => {
     try {
       phase('preparing');
       for (const step of prepare) {
@@ -223,7 +248,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
       }
       attempt.phase = 'invalid'; attempt.error = error.message; plan.groups.shift();
       for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
-      save(); continue;
+      save(); return false;
     }
     attempt.phase = attempt.gate.exit_code === 0 ? 'validated' : 'red'; save();
     if (attempt.phase === 'red') {
@@ -233,18 +258,22 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
         const middle = Math.ceil(attempt.ids.length / 2);
         plan.groups.unshift(attempt.ids.slice(0, middle), attempt.ids.slice(middle));
       }
-      save(); continue;
+      save(); return false;
     }
-    if (!canonicalReady()) break;
+    return true;
+  };
+  const integrateAttempt = attempt => {
+    if (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) throw new Error('train integration requires exact-commit green evidence');
+    if (!canonicalReady()) return false;
     if (git(['rev-parse', main]) !== attempt.base) {
-      attempt.phase = 'stale'; attempt.error = 'main moved during validation; replan'; save(); continue;
+      attempt.phase = 'stale'; attempt.error = 'main moved during validation; replan'; save(); return false;
     }
-    invalid = false;
+    let invalid = false;
     for (const job of attempt.jobs) {
       try { capture(job); }
       catch (error) { result(job, { outcome: 'refused', reason: error.message, batch: plan.id }); invalid = true; }
     }
-    if (invalid) { attempt.phase = 'invalid'; save(); continue; }
+    if (invalid) { attempt.phase = 'invalid'; save(); return false; }
     clean(attempt.scratch);
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip) throw new Error('validated train tip changed');
     phase('fast-forwarding');
@@ -252,10 +281,40 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
     catch (error) {
       attempt.phase = 'invalid'; attempt.error = error.message;
       for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
-      save(); continue;
+      save(); return false;
     }
     attempt.integrated_at = new Date().toISOString(); attempt.phase = 'integrated'; save();
-    finishIntegrated(attempt);
+    return true;
+  };
+  while (plan.groups.length) {
+    const ids = plan.groups[0].filter(id => !plan.results[id]);
+    if (!ids.length) { plan.groups.shift(); save(); continue; }
+    if (!definition) {
+      const attempt = prepareAttempt(ids);
+      if (!attempt || !validateAttempt(attempt) || !integrateAttempt(attempt)) continue;
+      finishIntegrated(attempt);
+      continue;
+    }
+    let attempt;
+    const execution = runWorkflow(definition, {
+      ...workflowOptions,
+      runCommand: ([host, verb]) => {
+        if (host !== 'train') throw new Error('unknown train workflow command');
+        if (verb === 'prepare') { attempt = prepareAttempt(ids); return { status: attempt ? 0 : 1, stdout: attempt ? `prepared ${attempt.tip}\n` : 'group refused or requires replanning\n' }; }
+        if (!attempt) throw new Error('train step requires a prepared attempt');
+        if (verb === 'validate') {
+          const green = validateAttempt(attempt);
+          return { status: green ? 0 : attempt.gate?.exit_code > 0 ? attempt.gate.exit_code : 1,
+            signal: attempt.gate?.signal ?? null, stdout: JSON.stringify({ gate: attempt.gate, error: attempt.error }) + '\n', output_path: attempt.gate?.log };
+        }
+        if (verb === 'integrate') { const integrated = integrateAttempt(attempt); return { status: integrated ? 0 : 1, stdout: integrated ? `integrated ${attempt.tip}\n` : 'integration refused or requires replanning\n' }; }
+        if (verb === 'close') { finishIntegrated(attempt); return { status: 0, stdout: 'integration bookkeeping complete\n' }; }
+        throw new Error('unknown train workflow verb');
+      },
+    });
+    // An exception is an interrupted batch, as on the legacy path. Domain red
+    // gates/refusals have already changed groups/results and may continue.
+    if (execution.error) throw execution.error;
   }
   plan.phase = 'complete'; save();
   for (const attempt of plan.attempts) {

@@ -2592,7 +2592,7 @@ switch (command) {
     break;
   }
   case "promote-batch": {
-    if (!topic || rest.length) fail('usage: lane promote-batch RECEIPT');
+    if (!topic || (rest.length && (rest.length !== 1 || rest[0] !== '--workflow'))) fail('usage: lane promote-batch RECEIPT [--workflow]');
     const root = repositoryRoot({ requiredBy: 'promote' });
     try {
       try {
@@ -2606,7 +2606,8 @@ switch (command) {
         // Let the train's existing guards persist each member's STOP refusal.
       }
       withPromotionLock(() => runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
-        main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings() }));
+        main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings(),
+        workflow: rest.includes('--workflow') || process.env.PROMOTE_WORKFLOW_ENGINE === '1' }));
     } catch (error) { fail(error.message); }
     break;
   }

@@ -309,7 +309,8 @@ actual `npm ci --offline` runs separately using copies of the supplied cache's
 indexes and lockfile tarballs. Missing cache content fails; omitting
 `--npm-cache` leaves the full dependency build pending.
 
-The eleven ENG-64 switches (including the reviewed cleanup correction) are applied to the audited live-script copies and executed,
+The thirteen ENG-64 switches (including cleanup, retirement of the legacy notify section
+of the mixed se-test, and the event-service comment correction) are applied to the audited live-script copies and executed,
 then rolled back byte-for-byte with their original executable modes. Raw live
 bytes/checksums remain in a separate backup; executed baselines are relocated.
 Legacy temporary files and worktree constants all resolve inside scratch. Fixed

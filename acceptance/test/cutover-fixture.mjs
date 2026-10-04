@@ -15,17 +15,16 @@ export function fixture(t) {
 }
 export function inventory(t) {
   const root = fixture(t), copy = path.join(root, 'existing/bch-cloak'), candidate = path.join(root, 'candidate');
-  const kit = path.resolve(import.meta.dirname, '../../kit/bch-cloak-20261001');
-  const spec = { copy, candidate, workspace: 'owned-workspace', target: 'new-target', legacyTarget: 'legacy-target', home: path.join(root, 'home') };
-  for (const [, file] of switches) {
-    const source = file.replace('.lane/supervisor/', 'supervisor/').replace('scripts/lane/', 'lane/');
-    let text = fs.readFileSync(path.join(kit, source), 'utf8');
-    // Read-only snapshot of bch-cloak's current document; tests need no live checkout.
-    if (file.endsWith('WORK-PATTERN.md')) text = fs.readFileSync(new URL('./fixtures/bch-cloak-WORK-PATTERN-20261004.md', import.meta.url), 'utf8');
-    if (file.endsWith('launch-supervisor.mjs')) text = text.replace(/const SETTLE_WATCH = .*;/, `const SETTLE_WATCH = ${JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs'))};`);
-    text = relocate(text, { live: '/Users/rewt/development/bastian/bch-cloak', home: '/Users/rewt', scratchHome: spec.home, copy, candidate, root })
-      .replaceAll('wFN', spec.workspace).replaceAll('supervisor-opus', spec.legacyTarget);
-    fs.mkdirSync(path.dirname(path.join(copy, file)), { recursive: true }); fs.writeFileSync(path.join(copy, file), text);
+  const snapshot = path.resolve(import.meta.dirname, 'fixtures/bch-cloak-20261004');
+  const manifest = JSON.parse(fs.readFileSync(path.join(snapshot, 'manifest.json')));
+  const spec = { copy, candidate, workspace: 'owned-workspace', target: 'new-target', legacyTarget: 'legacy-target', home: path.join(root, 'copy-home') };
+  for (const { file, mode } of manifest.files) {
+    const text = relocate(fs.readFileSync(path.join(snapshot, file), 'utf8'), {
+      live: manifest.source, home: '/Users/rewt', scratchHome: spec.home, copy, candidate, root,
+      launcher: file === 'scripts/lane/launch-supervisor.mjs',
+    }).replaceAll('wFN', spec.workspace).replaceAll('supervisor-opus', spec.legacyTarget);
+    fs.mkdirSync(path.dirname(path.join(copy, file)), { recursive: true });
+    fs.writeFileSync(path.join(copy, file), text, { mode });
   }
   return { root, copy, spec, edits: switchedFiles(spec) };
 }

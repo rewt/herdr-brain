@@ -1,0 +1,671 @@
+{
+  "source": "/Users/rewt/development/bastian/bch-cloak",
+  "date": "2026-10-04",
+  "files": [
+    {
+      "file": ".claude/skills/lane/SKILL.md",
+      "sha256": "5616b8196977ee9f2ba6ce7571e50bc3085c7d8d6e1a7e43a630368870509a81",
+      "mode": 420,
+      "kit": "absent",
+      "fixedPaths": [
+        {
+          "line": 9,
+          "text": "`~/.herdr/worktrees/bch-cloak/`. The manager is `scripts/lane/lane.mjs`;"
+        },
+        {
+          "line": 78,
+          "text": "  `~/development/bastian/proofnote-workspace/state/wallets/chipnet-batch-demo/`"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/SETTLE.md",
+      "sha256": "40ef8b00f7ed617c70b72f3914c166706e136408c67e2a70dceaff073a0715ce",
+      "mode": 420,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 19,
+          "text": "export ORG_DIR=/Users/rewt/development/bastian/.org"
+        },
+        {
+          "line": 41,
+          "text": "   - `/Users/rewt/development/bastian/archive/DIRECTION-20260904.md` \u2014 what the"
+        },
+        {
+          "line": 182,
+          "text": "$EDITOR /Users/rewt/development/bastian/archive/BRIEF-<NAME>-<YYYYMMDD>.md"
+        },
+        {
+          "line": 193,
+          "text": "org note <ID> \"Task brief: /Users/rewt/development/bastian/archive/BRIEF-<NAME>-<YYYYMMDD>.md \u2014 follow it exactly\""
+        },
+        {
+          "line": 195,
+          "text": "     --report /Users/rewt/development/bastian/archive/<NAME>-<YYYYMMDD>.md"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/WORK-PATTERN.md",
+      "sha256": "6f1841b52392195c51c548612ecf1857f7d0a1b07d7093337b6a9f975b6ab227",
+      "mode": 420,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 25,
+          "text": "  open with the log in `/private/tmp/TOPIC-promote/`."
+        },
+        {
+          "line": 62,
+          "text": "- **Simulation suites** take the host test slot. An agent that finds it held writes `/private/tmp/bch-cloak-waiters/R-n.slot` and"
+        },
+        {
+          "line": 89,
+          "text": "- **Fix at the source:** `~/.codex/config.toml` `[tui] alternate_screen = \"never\"`. The same capture shows no mouse"
+        },
+        {
+          "line": 100,
+          "text": "`PATH=$HOME/.nvm/versions/node/v$(cat .nvmrc)/bin:$PATH`."
+        },
+        {
+          "line": 118,
+          "text": "`org` and `lane` on PATH run the installed Herdr Monitor release (`~/.local/share/herdr-monitor/current`, v0.1.2 at"
+        },
+        {
+          "line": 175,
+          "text": "- **Slot:** `echo R-n > /private/tmp/bch-cloak-waiters/R-n.slot`, last line `WAITING-FOR-SLOT`. Agents are woken with `SLOT-FREE`,"
+        },
+        {
+          "line": 177,
+          "text": "- **File:** `echo /abs/raw-exit-path > /private/tmp/bch-cloak-waiters/R-n.file`, last line `WAITING-FOR-FILE: /abs/raw-exit-path`."
+        },
+        {
+          "line": 185,
+          "text": "`<raw-exit path>` into `/private/tmp/bch-cloak-waiters/R-RUN.file` and end your turn with the line `WAITING-FOR-FILE: <raw-exit path>`; do not"
+        },
+        {
+          "line": 186,
+          "text": "poll or tail the log; you will be woken with FILE-READY. If the slot is held before you start, write `/private/tmp/bch-cloak-waiters/R-RUN.slot`"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/apply-settle.sh",
+      "sha256": "a56b2c40a564826812e7904c2869b6f8900606edf0b63d1c499abfab839f1b8c",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 12,
+          "text": "ROOT=/Users/rewt/development/bastian; A=$ROOT/archive; cd $ROOT/bch-cloak"
+        },
+        {
+          "line": 46,
+          "text": "python3 - $REP <<'PY' > /private/tmp/apply-settle-cmds.$$"
+        },
+        {
+          "line": 59,
+          "text": "odd=$(grep -oE '\\b[A-Z]+(-[A-Z]+)*-(NEW|PROPOSAL)(-[A-Z]+)*\\b|\\bFOLLOWON-[A-Z-]+\\b' /private/tmp/apply-settle-cmds.$$ | grep -vxE 'ITEM-NEW|NEW-ITEM-ID|ITEM-PROPOSAL|NEW-PROPOSAL-ID' | sort -u)"
+        },
+        {
+          "line": 60,
+          "text": "[ -z \"$odd\" ] || { echo \"custom placeholders ($odd): apply by hand\"; rm -f /private/tmp/apply-settle-cmds.$$; exit 1; }"
+        },
+        {
+          "line": 75,
+          "text": "done < /private/tmp/apply-settle-cmds.$$"
+        },
+        {
+          "line": 76,
+          "text": "rm -f /private/tmp/apply-settle-cmds.$$"
+        },
+        {
+          "line": 89,
+          "text": "sed -i '' \"s|lane/$LANE|the review desk worktree /Users/rewt/.herdr/worktrees/bch-cloak/lane-$DESK, detached at $SHA ($BASE)|g\" $B"
+        },
+        {
+          "line": 90,
+          "text": "printf '\\n## Review desk\\n\\nYou review in /Users/rewt/.herdr/worktrees/bch-cloak/lane-%s. First command: `git checkout --detach %s` (%s), then print HEAD and a clean tree. Make no edits or commits. Last command: `git checkout lane/%s`, leaving the desk clean.\\n' $DESK $SHA $BASE $DESK >> $B"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/arm-watch.sh",
+      "sha256": "363b4e88978247d957ceee2bca304a2347e22f7a8084fd6d96f26399cfea920b",
+      "mode": 493,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 13,
+          "text": "BASTIAN=/Users/rewt/development/bastian"
+        },
+        {
+          "line": 20,
+          "text": "  --add-dir \"$HOME/.herdr/worktrees/bch-cloak\" \\"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/box-empty.py",
+      "sha256": "b2d293409d8386d456e4c1f2422ffcf6cd8fde1692391910d1e0c8d898f7dba5",
+      "mode": 420,
+      "kit": "absent",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/close-finished-agents.sh",
+      "sha256": "a56119a3e6f9ee91ca7784ea7815c2b09eb179ee7b470adb8f754b80eb5da710",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 9,
+          "text": "export ORG_DIR=${ORG_DIR:-/Users/rewt/development/bastian/.org}"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/continue.sh",
+      "sha256": "70c4aafefabf0aba03a9d7f2f0103b359afcc060703e66ba59dea856e8446bb2",
+      "mode": 493,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 6,
+          "text": "BASTIAN=/Users/rewt/development/bastian"
+        },
+        {
+          "line": 16,
+          "text": "  --add-dir \"$HOME/.herdr/worktrees/bch-cloak\" \\"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/direct-review.sh",
+      "sha256": "423a5e17b6990675a3d56fc44d18375b45986f768dce6df1ae63990dad6a3039",
+      "mode": 493,
+      "kit": "absent",
+      "fixedPaths": [
+        {
+          "line": 12,
+          "text": "ROOT=/Users/rewt/development/bastian; A=$ROOT/archive; cd $ROOT/bch-cloak"
+        },
+        {
+          "line": 18,
+          "text": "for l in open('/Users/rewt/development/bastian/.org/events.jsonl'):"
+        },
+        {
+          "line": 41,
+          "text": "WT=/Users/rewt/.herdr/worktrees/bch-cloak/lane-$ELANE"
+        },
+        {
+          "line": 80,
+          "text": "- You review in \\`/Users/rewt/.herdr/worktrees/bch-cloak/lane-$DESK\\`. First command: \\`git checkout --detach $SHA\\`, then print HEAD (must be"
+        },
+        {
+          "line": 109,
+          "text": "\\`$EV/\\` with SHA256SUMS. Scratch under \\`/private/tmp/$ELANE-review-R-RUN/\\`. Run \\`org check\\` on the report until it passes, then stop. No"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/dispatch.sh",
+      "sha256": "734caf8c111fb470cb2f82ae2a3f5d0e9f1139ec092837eb3ab9b80e1440fdc1",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 5,
+          "text": "ROOT=/Users/rewt/development/bastian; REPO=$ROOT/bch-cloak; cd $REPO"
+        },
+        {
+          "line": 14,
+          "text": "LOCKF=/private/tmp/bch-cloak-dispatch.flock; : >> $LOCKF"
+        },
+        {
+          "line": 19,
+          "text": "WT=/Users/rewt/.herdr/worktrees/bch-cloak/lane-$LANE"
+        },
+        {
+          "line": 23,
+          "text": "cp $ROOT/.org/runs/$RUN/brief.md /tmp/orgctx-$RUN.md"
+        },
+        {
+          "line": 24,
+          "text": "{ cat $BRIEF; printf '\\n---\\n\\n# Org context (generated by org start)\\n\\n'; cat /tmp/orgctx-$RUN.md; } > $ROOT/.org/runs/$RUN/brief.md"
+        },
+        {
+          "line": 25,
+          "text": "if [ ! -d $WT ]; then node scripts/lane/lane.mjs open $LANE $BASE >/dev/null; node scripts/lane/lane.mjs prepare $LANE > /tmp/prep-$LANE.log 2>&1 || { echo \"lane prepare failed for $LANE: see /tmp/prep-$LANE.log ($RUN started; abandon it before retrying)\"; exit 1; }; fi"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/extract-brief.py",
+      "sha256": "44a7c4f0c95f3775158677e4383f327f9a700b0c2b2c1c2e5fed39ac14bd49e2",
+      "mode": 493,
+      "kit": "same",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/gate-queue.sh",
+      "sha256": "b936245f601e011ac196b3801e50e278a905efb994a2f817b6e197c9081d63f8",
+      "mode": 493,
+      "kit": "absent",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/janitor.sh",
+      "sha256": "28fe5a1d6a372e1ef3c3acdfd4f78dc3190d924a8d4fffdddbf2b1593e7c48ff",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/notify-watch.sh",
+      "sha256": "3b0761a06c7b4a6c225b836a2548761e9b41bac3a97fd6c3ff469fed31f25fea",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 34,
+          "text": "export ORG_DIR=${ORG_DIR:-/Users/rewt/development/bastian/.org}"
+        },
+        {
+          "line": 35,
+          "text": "OUTBOX=${NW_OUTBOX:-/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/outbox}"
+        },
+        {
+          "line": 36,
+          "text": "WAITERS=${NW_WAITERS:-/private/tmp/bch-cloak-waiters}"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/promote-queue.sh",
+      "sha256": "2105fd7b6074a4ebbcf5375f7a4ddc5ca7d679e1ac558533b8687ba8bd88f45d",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/promote.sh",
+      "sha256": "95c3f80a44def0d72c4912bbbb9159f68e66f97b39340b241ab0d46b09e3a19b",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 8,
+          "text": "ROOT=/Users/rewt/development/bastian; cd $ROOT/bch-cloak"
+        },
+        {
+          "line": 11,
+          "text": "NV=$(cat .nvmrc 2>/dev/null); NB=$HOME/.nvm/versions/node/v$NV/bin"
+        },
+        {
+          "line": 17,
+          "text": "L=/private/tmp/$T-promote; mkdir -p $L"
+        },
+        {
+          "line": 24,
+          "text": "PLOCK=/private/tmp/bch-cloak-promote.flock; : >> $PLOCK"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/prompt-supervisor.sh",
+      "sha256": "10f1d026058cbf344f0d061466cf80123e2731affb74294baf4f10217d30c7a3",
+      "mode": 493,
+      "kit": "absent",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/resume-interrupted.sh",
+      "sha256": "43798ff1628506a7f8e99f2480f4326f8fb68ddffc7a71bd75517a51e0db76c3",
+      "mode": 493,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 7,
+          "text": "# New Codex sessions no longer capture the mouse (~/.codex/config.toml tui.alternate_screen = \"never\"); this covers"
+        },
+        {
+          "line": 11,
+          "text": "S=/Users/rewt/development/bastian/bch-cloak/.lane/supervisor"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/review-desk.sh",
+      "sha256": "b45391b88bcae0041379cd9ab2fd656886389890c641bde5b3b3c4556e82f975",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 9,
+          "text": "ROOT=/Users/rewt/development/bastian; cd $ROOT/bch-cloak"
+        },
+        {
+          "line": 16,
+          "text": "  WT=/Users/rewt/.herdr/worktrees/bch-cloak/lane-$d"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/se-test/probe-early-error.mjs",
+      "sha256": "1eb827ac118e578bf76fb08dcc86ddb56ee3709d28e7b5e0b1aeb1eaeb1b69bd",
+      "mode": 420,
+      "kit": "absent",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/se-test/run.sh",
+      "sha256": "b671f9660e8fc5490d1bacccd7db0b4baf3758dd4f2c483c50a1d5839fb771bc",
+      "mode": 493,
+      "kit": "absent",
+      "fixedPaths": [
+        {
+          "line": 7,
+          "text": "NODE=$HOME/.nvm/versions/node/v22.22.3/bin/node"
+        },
+        {
+          "line": 12,
+          "text": "  T=$(mktemp -d /private/tmp/se-test-XXXX); mkdir -p $T/sup $T/tmp $T/w $T/req"
+        },
+        {
+          "line": 210,
+          "text": "PT=$(mktemp -d /private/tmp/se-test-XXXX); sed 's/const settle = (v) => { result = v; if (exited) finish(v); };/const settle = (v) => { result = v; finish(v); };/' $SE > $PT/broken.mjs"
+        },
+        {
+          "line": 216,
+          "text": "  T=$(mktemp -d /private/tmp/se-test-XXXX); mkdir -p $T/bin $T/w; echo idle > $T/status"
+        },
+        {
+          "line": 267,
+          "text": "LT=$(mktemp -d /private/tmp/se-test-XXXX); mkdir $LT/bin; echo brief > $LT/brief.md"
+        },
+        {
+          "line": 271,
+          "text": ": >> /private/tmp/bch-cloak-dispatch.flock"
+        },
+        {
+          "line": 272,
+          "text": "zsh -c 'zmodload zsh/system; zsystem flock -f fd /private/tmp/bch-cloak-dispatch.flock; sleep 3' & LH=$!; sleep 0.5"
+        },
+        {
+          "line": 280,
+          "text": ": >> /private/tmp/bch-cloak-promote.flock"
+        },
+        {
+          "line": 281,
+          "text": "zsh -c 'zmodload zsh/system; zsystem flock -f fd /private/tmp/bch-cloak-promote.flock; sleep 3' & LH=$!; sleep 0.5"
+        },
+        {
+          "line": 284,
+          "text": "wait $LH; out=$(zsh $LT/promote.sh se-test-fake 2>&1); rc=$?; rm -rf /private/tmp/se-test-fake-promote"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/session-start.sh",
+      "sha256": "d5c102857f1f212ef7fca40dfda7d9cd1b91ba7140114693f2754cf9fad9646a",
+      "mode": 493,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 5,
+          "text": "[ \"$PWD\" = /Users/rewt/development/bastian/bch-cloak ] || exit 0"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/settle.sh",
+      "sha256": "2d9bd952f9381588d46f24ed89531e04c11c7dacf0dc83543dbc90528d60c65b",
+      "mode": 493,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 13,
+          "text": "ROOT=/Users/rewt/development/bastian; A=$ROOT/archive; cd $ROOT/bch-cloak"
+        },
+        {
+          "line": 27,
+          "text": "- LANE: lane/$LANE, worktree /Users/rewt/.herdr/worktrees/bch-cloak/lane-$LANE"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/slot-notify.sh",
+      "sha256": "40dee4594c3001e69088d1440846f82ffcd4fe2f02178482de0a6c77a83ceb2c",
+      "mode": 493,
+      "kit": "absent",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/stage.py",
+      "sha256": "c8e429b00c72d5a7622eaf6c4d0afa1eb2eee254d191b1b77ddb222bfeb8735b",
+      "mode": 420,
+      "kit": "same",
+      "fixedPaths": []
+    },
+    {
+      "file": ".lane/supervisor/stage.sh",
+      "sha256": "b105108a2f4af8029437c2cb7cd412522a5853a75b25dc57e32d970cdaf5c127",
+      "mode": 493,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 5,
+          "text": "ORG_DIR=${ORG_DIR:-/Users/rewt/development/bastian/.org}"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/supervisor-events.mjs",
+      "sha256": "0580e0eea71e638487d2ee1b55e56819e39260f2dfb9d86228ebaa7e19318382",
+      "mode": 420,
+      "kit": "absent",
+      "fixedPaths": [
+        {
+          "line": 25,
+          "text": "// Inputs (agents in a sandbox can write the /private/tmp ones):"
+        },
+        {
+          "line": 26,
+          "text": "//   /private/tmp/bch-cloak-waiters/R-n.slot    the run's agent waits for the host test slot; woken with SLOT-FREE, oldest mtime first,"
+        },
+        {
+          "line": 28,
+          "text": "//   /private/tmp/bch-cloak-waiters/R-n.file    first line = an absolute path; woken with FILE-READY once it exists"
+        },
+        {
+          "line": 29,
+          "text": "//   /private/tmp/bch-cloak-gate-requests/*.req answered at once: skipped (engineer-gates-off) or refused (no gate runner); never run."
+        },
+        {
+          "line": 44,
+          "text": "const ROOT = env.SE_ROOT ?? \"/Users/rewt/development/bastian/bch-cloak\";"
+        },
+        {
+          "line": 46,
+          "text": "const WAITERS = env.SE_WAITERS ?? \"/private/tmp/bch-cloak-waiters\";"
+        },
+        {
+          "line": 47,
+          "text": "const GATE_REQ = env.SE_GATE_REQ ?? \"/private/tmp/bch-cloak-gate-requests\";"
+        },
+        {
+          "line": 48,
+          "text": "const SLOT_LOCK = env.SE_SLOT_LOCK ?? \"/private/tmp/bch-cloak-test-slot.lock\";"
+        },
+        {
+          "line": 49,
+          "text": "const ORG_EVENTS = env.SE_ORG_EVENTS ?? \"/Users/rewt/development/bastian/.org/events.jsonl\";"
+        }
+      ]
+    },
+    {
+      "file": ".lane/supervisor/tidy-tabs.sh",
+      "sha256": "d0219065af7cec073beca24e456e8969ac17a383d890e7bfcd48b2a0a12b4bd6",
+      "mode": 493,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 10,
+          "text": "#      (no lane/<topic> branch and no worktree at ~/.herdr/worktrees/bch-cloak/lane-<topic>)."
+        },
+        {
+          "line": 30,
+          "text": "export ORG_DIR=${ORG_DIR:-/Users/rewt/development/bastian/.org}"
+        },
+        {
+          "line": 31,
+          "text": "REPO=/Users/rewt/development/bastian/bch-cloak"
+        },
+        {
+          "line": 32,
+          "text": "WT=/Users/rewt/.herdr/worktrees/bch-cloak"
+        },
+        {
+          "line": 69,
+          "text": "python3 - \"${ORG_DIR:-/Users/rewt/development/bastian/.org}/events.jsonl\" <<'PY' || echo \"(balance tally failed)\""
+        },
+        {
+          "line": 90,
+          "text": "/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/close-finished-agents.sh | sed 's/^/  /' || echo \"  (close-finished-agents failed)\""
+        }
+      ]
+    },
+    {
+      "file": "scripts/lane/lane.mjs",
+      "sha256": "d75a67b0a7d9823806fb0c426f3b4aa23f56c08ffd32b3c6734009386273c3dc",
+      "mode": 420,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 32,
+          "text": "const WORKTREE_ROOT = join(homedir(), \".herdr\", \"worktrees\", \"bch-cloak\");"
+        },
+        {
+          "line": 445,
+          "text": "// /private/tmp/<topic>-* and goes with the lane at close. Durable results must"
+        },
+        {
+          "line": 449,
+          "text": "  const tmp = \"/private/tmp\";"
+        }
+      ]
+    },
+    {
+      "file": "scripts/lane/launch-supervisor.mjs",
+      "sha256": "65809874fa4373360654def4b09af9514dff2ecaf305a679a4b34f510e6cd1b9",
+      "mode": 420,
+      "kit": "changed",
+      "fixedPaths": [
+        {
+          "line": 12,
+          "text": "const SETTLE_WATCH = resolve(homedir(), \".local/share/herdr-monitor/current/contrib/settle-watch.mjs\");"
+        }
+      ]
+    },
+    {
+      "file": "scripts/lane/prepare.test.mjs",
+      "sha256": "7d2e87852ad253eff5760b8dcda65478892afc3eb5ca362c6a14853a24626018",
+      "mode": 420,
+      "kit": "same",
+      "fixedPaths": []
+    },
+    {
+      "file": "scripts/lane/routing.json",
+      "sha256": "268a2257174af2b2569f692dac810e62f62c24eb478ff2e85fd6fd6ac62483e2",
+      "mode": 420,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 10,
+          "text": "      \"CLAUDE_CONFIG_DIR=/Users/rewt/.claude-personal\","
+        },
+        {
+          "line": 11,
+          "text": "      \"GH_CONFIG_DIR=/Users/rewt/.config/gh-personal\","
+        },
+        {
+          "line": 17,
+          "text": "    \"claude\": [\"--plugin-dir\", \"/Users/rewt/development/claude-mem/adapters/claude-bastian\"],"
+        }
+      ]
+    },
+    {
+      "file": "scripts/lane/routing.mjs",
+      "sha256": "b77188e6893272b8a7687449b5cb7e655471c08f816fc2e7639a696337168b5f",
+      "mode": 420,
+      "kit": "same",
+      "fixedPaths": []
+    },
+    {
+      "file": "scripts/lane/routing.test.mjs",
+      "sha256": "7c26e480bee2286c95f7a2030a7a0482c921fb3f892e3e37a093ff015107a53f",
+      "mode": 420,
+      "kit": "same",
+      "fixedPaths": [
+        {
+          "line": 58,
+          "text": "    \"--plugin-dir\", \"/Users/rewt/development/claude-mem/adapters/claude-bastian\","
+        },
+        {
+          "line": 110,
+          "text": "    () => resolveRouting(config, { route: \"review-opus\", args: [\"--plugin-dir\", \"/tmp/shadow\"] }),"
+        },
+        {
+          "line": 154,
+          "text": "  const routine = buildSupervisorInvocation(REPO, [\"--route\", \"settle\", \"--\", \"R-1\", \"--org\", \"/tmp/org\"]);"
+        },
+        {
+          "line": 155,
+          "text": "  const critical = buildSupervisorInvocation(REPO, [\"--route\", \"settle-critical\", \"--\", \"R-1\", \"--org\", \"/tmp/org\"]);"
+        },
+        {
+          "line": 156,
+          "text": "  const executive = buildSupervisorInvocation(REPO, [\"--route\", \"executive\", \"--\", \"--open\", \"--org\", \"/tmp/org\"]);"
+        }
+      ]
+    }
+  ],
+  "historical": [
+    ".lane/supervisor/apply-settle.sh.bak-20261001-path",
+    ".lane/supervisor/apply-settle.sh.bak-20261002-claude-budget",
+    ".lane/supervisor/arm-watch.sh.bak-20260918-rename",
+    ".lane/supervisor/close-finished-agents.sh.bak-20261001-path",
+    ".lane/supervisor/continue.sh.bak-20260918-rename",
+    ".lane/supervisor/dispatch.sh.bak-20261002-sessioncap",
+    ".lane/supervisor/dispatch.sh.bak-20261003-nopoll",
+    ".lane/supervisor/dispatch.sh.bak-20261003-revfail",
+    ".lane/supervisor/gate-queue.sh.bak-20261002-onegate",
+    ".lane/supervisor/gate-queue.sh.bak-20261003-retired",
+    ".lane/supervisor/janitor.sh.bak-20261002-slotnotify",
+    ".lane/supervisor/janitor.sh.bak-20261003-retired",
+    ".lane/supervisor/notify-watch.sh.bak-20260924-1245",
+    ".lane/supervisor/notify-watch.sh.bak-20261002-inputgate",
+    ".lane/supervisor/notify-watch.sh.bak-20261002-waitmarkers",
+    ".lane/supervisor/notify-watch.sh.bak-20261003-nopoll",
+    ".lane/supervisor/notify-watch.sh.bak-20261003-r2",
+    ".lane/supervisor/notify-watch.sh.bak-20261003-revfail",
+    ".lane/supervisor/promote-queue.sh.bak-20261002-inputgate",
+    ".lane/supervisor/promote-queue.sh.bak-20261002-reserve",
+    ".lane/supervisor/promote-queue.sh.bak-20261003-retired",
+    ".lane/supervisor/promote.sh.bak-20261003-nopoll",
+    ".lane/supervisor/promote.sh.bak-20261003-revfail",
+    ".lane/supervisor/prompt-supervisor.sh.bak-20261003-retired",
+    ".lane/supervisor/se-test/run.sh.bak-20261003-r2",
+    ".lane/supervisor/se-test/run.sh.bak-20261003-r3",
+    ".lane/supervisor/se-test/run.sh.bak-20261003-r4",
+    ".lane/supervisor/se-test/run.sh.bak-20261003-revfail",
+    ".lane/supervisor/session-start.sh.bak-20261003-revfail",
+    ".lane/supervisor/slot-notify.sh.bak-20261003-retired",
+    ".lane/supervisor/supervisor-events.mjs.bak-20261003-r2",
+    ".lane/supervisor/supervisor-events.mjs.bak-20261003-r3",
+    ".lane/supervisor/supervisor-events.mjs.bak-20261003-r4",
+    ".lane/supervisor/supervisor-events.mjs.bak-20261003-revfail"
+  ]
+}

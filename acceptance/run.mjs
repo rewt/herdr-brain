@@ -133,7 +133,7 @@ write(copiedPolicy, copiedSandbox(root, [fs.realpathSync(path.join(path.dirname(
 let liveCopyReady = false, copy, live;
 function runCopy(command, args, options = {}) {
   if (!liveCopyReady) throw new Error('copied scripts were not successfully relocated/audited');
-  auditCopies(copy, { live, home: realHome });
+  auditCopies(copy, { live, home: realHome, root });
   const org = options.extra?.ORG_DIR;
   if (!org || !fs.existsSync(org) || !within(root, org)) throw new Error('copied invocation requires an explicit scratch ORG_DIR');
   // Allow the installed native Herdr executable only as a tool for the scoped
@@ -670,7 +670,7 @@ try {
           .replaceAll('wFN', supervisor.workspace).replaceAll('supervisor-opus', supervisor.name).replaceAll('supervisor-fable', supervisor.name));
       }
     };
-    transform(copy); auditCopies(copy, { live, home: realHome }); liveCopyReady = true;
+    transform(copy); auditCopies(copy, { live, home: realHome, root }); liveCopyReady = true;
     return 'live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)';
   });
   const existingReady = () => { requirePrerequisite(results, cases.copy.key); requirePrerequisite(results, cases.fixture.key); };
@@ -803,7 +803,7 @@ try {
     const base = switchedFiles({ copy, candidate, workspace: supervisor.workspace, target, legacyTarget: supervisor.name, home: scratchHome });
     cutover = { originals, base, target, pane, org, rec };
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
-    auditCopies(copy, { live, home: realHome });
+    auditCopies(copy, { live, home: realHome, root });
     const execute = (rel, args = [], options = {}) => runCopy(rel.endsWith('.mjs') ? process.execPath : '/bin/zsh',
       [...(rel.endsWith('.mjs') ? [] : ['-f']), path.join(copy, rel), ...args], { cwd: copy, extra: { ORG_DIR: org, HERDR_PANE_ID: pane }, ...options });
     const persona = path.join(root, 'cutover-persona');
@@ -989,7 +989,7 @@ try {
       runCopy(process.execPath, ['--test', path.join(copy, 'scripts/lane/routing.test.mjs')], { cwd: copy, extra: { ORG_DIR: org } });
       execute('.lane/supervisor/continue.sh', isolation);
       if (cutoverCanary) execute('.lane/supervisor/arm-watch.sh', [cutoverCanary.run, ...isolation]);
-      return 'all eleven exact scratch baselines restored; actual legacy suite and both wrappers executed';
+      return 'all thirteen exact scratch baselines restored; actual legacy suite and both wrappers executed';
     });
     await check(cutoverChecks.legacy, async () => {
       const legacy = await legacyCanary('legacy');

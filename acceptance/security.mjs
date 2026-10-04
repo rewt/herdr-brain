@@ -25,6 +25,10 @@ export function copiedSandbox(root, toolRoots) {
 }
 
 export function relocate(text, { live, home, scratchHome, copy, candidate, root, launcher = false }) {
+  // Do this before inserting any scratch paths: root itself may be under
+  // /private/tmp. Cover locks, queues, mktemp and lane-close sweeps, including
+  // transitive scripts and the relocated rollback baseline.
+  text = text.replace(/(?<![\w$}])\/(?:private\/)?tmp\b/g, root);
   if (launcher) {
     const target = 'resolve(homedir(), ".local/share/herdr-monitor/current/contrib/settle-watch.mjs")';
     if (!text.includes(target)) throw new Error('required launcher relocation did not match; refuse copied code');
@@ -32,9 +36,6 @@ export function relocate(text, { live, home, scratchHome, copy, candidate, root,
   }
   return text.replaceAll(path.dirname(live), path.dirname(copy))
     .replaceAll(path.join(home, '.herdr/worktrees/bch-cloak'), path.join(scratchHome, '.herdr/worktrees/bch-cloak'))
-    .replaceAll('/private/tmp/apply-settle-cmds.', path.join(root, 'apply-settle-cmds.'))
-    .replaceAll('/tmp/orgctx-', path.join(root, 'orgctx-'))
-    .replaceAll('/tmp/prep-', path.join(root, 'prep-'))
     .replaceAll('${HOME}', scratchHome).replaceAll('$HOME', scratchHome)
     .replaceAll('homedir()', JSON.stringify(scratchHome))
     .replaceAll(home, scratchHome).replaceAll('~/', `${scratchHome}/`);
@@ -51,19 +52,21 @@ export function workspaceIdentityCutover(text, candidate) {
 // Re-run before *every* execution, including transitive imports/shell callers.
 // Unknown path spellings fail closed. The OS write boundary is independent of
 // this textual check, so a dynamically derived ORG_DIR cannot write live state.
-export function auditCopies(directory, { live, home }) {
+export function auditCopies(directory, { live, home, root }) {
   const forbidden = [live, path.join(path.dirname(live), '.org'), home,
     path.join(home, '.local/share/herdr-monitor'), '/Users/', '/home/'];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     if (entry.name === '.git') continue;
     const file = path.join(directory, entry.name);
     if (entry.isSymbolicLink()) throw new Error(`copied file is a symlink: ${file}`);
-    if (entry.isDirectory()) { auditCopies(file, { live, home }); continue; }
+    if (entry.isDirectory()) { auditCopies(file, { live, home, root }); continue; }
     const text = fs.readFileSync(file, 'utf8');
     const residue = forbidden.find((value) => text.includes(value));
     if (residue || /\$(?:\{HOME\}|HOME\b)|homedir\(\)|~\//.test(text)) {
       throw new Error(`unrelocated live path in ${file}: ${residue ?? 'home-relative path'}`);
     }
+    const outsideScratch = root ? text.replaceAll(root, '') : text;
+    if (/(?<![\w$}])\/(?:private\/)?tmp\b/.test(outsideScratch)) throw new Error(`unrelocated host temp path in ${file}`);
   }
 }
 

@@ -15,6 +15,8 @@ export const switches = [
   ['notices', '.lane/supervisor/WORK-PATTERN.md'],
   ['routes', 'scripts/lane/routing.test.mjs'],
   ['retire', '.lane/supervisor/notify-watch.sh'],
+  ['notifyTests', '.lane/supervisor/se-test/run.sh'],
+  ['events', '.lane/supervisor/supervisor-events.mjs'],
 ];
 const q = (v) => "'" + v.replaceAll("'", "'\\''") + "'";
 function replace(text, before, after) {
@@ -27,6 +29,11 @@ export function switchedFiles({ copy, candidate, workspace, target, legacyTarget
   contents.continue = '# open-session refuses busy sessions; retain the request and retry after the named session stops.\n' + contents.continue;
   contents.arm = `#!/bin/sh\nset -eu\nRUN=\${1:?run required}; shift\n# This wrapper delivers reports only; routed fresh sessions use launch-supervisor.mjs separately.\nexec node ${q(path.join(candidate, 'watch/watch.mjs'))} "$RUN" --org ${q(path.join(path.dirname(copy), '.org'))} --cwd ${q(copy)} --to ${q(target)} --idle-grace 900 "$@" --detach --log ${q(path.join(copy, '.lane/supervisor/watch-logs'))}/"$RUN".log\n`;
   contents.dispatch = replace(contents.dispatch, `env -u HERDR_PANE_ID nohup .lane/supervisor/notify-watch.sh $RUN --to ${legacyTarget} > .lane/supervisor/watch-logs/$RUN.log 2>&1 < /dev/null &!`, 'env -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID .lane/supervisor/arm-watch.sh $RUN');
+  // Keep the cap and kernel lock; count the detached standalone watcher after
+  // the switch. Its --org/--cwd arguments now precede --to.
+  contents.dispatch = replace(contents.dispatch,
+    `sed -n 's/.*notify-watch\\.sh \\(R-[0-9]*\\) --to ${legacyTarget}.*/\\1/p'`,
+    `sed -n 's/.*watch\\/watch\\.mjs \\(R-[0-9]*\\) .*--to ${target} .*/\\1/p'`);
   contents.dispatch = contents.dispatch.replaceAll(legacyTarget, target);
   contents.name = replace(contents.name, `${workspace}:*`, `${workspace}:*`);
   contents.name = replace(contents.name, `${legacyTarget} >/dev/null 2>&1 || true`, `${target} >/dev/null || { echo 'supervisor naming failed' >&2; exit 1; }`);
@@ -101,6 +108,20 @@ done
   contents.routes += `\ntest('cutover entries select split release modules',()=>{const i=buildSupervisorInvocation(REPO,['--route','executive','--','--open']);assert.equal(i.args[0],${JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs'))});assert.match(readFileSync(resolve(REPO,'.lane/supervisor/arm-watch.sh'),'utf8'),/watch\\/watch.mjs/);assert.doesNotMatch(readFileSync(resolve(REPO,'scripts/lane/launch-supervisor.mjs'),'utf8'),/contrib\\/settle-watch/);});\n`;
   // Retain the original outside the caller tree until canary and rollback pass.
   contents.retire = '#!/bin/sh\necho "notify-watch retired; use arm-watch" >&2\nexit 1\n';
+  // se-test is mixed: retain supervisor-events and kernel-lock coverage, but
+  // retire the NW_* outbox/verdict/grace assertions with their legacy entry.
+  // They cannot test standalone watch's notice and argument contract.
+  contents.notifyTests = replace(contents.notifyTests, '; NW=${NW_UNDER_TEST:-$SUPD/notify-watch.sh}', '');
+  const notifyStart = contents.notifyTests.indexOf('# ---- notify-watch.sh ');
+  const notifyEnd = contents.notifyTests.indexOf('# ---- the two kernel locks ');
+  assert.ok(notifyStart >= 0 && notifyEnd > notifyStart, 'notify test retirement premise drift');
+  contents.notifyTests = contents.notifyTests.slice(0, notifyStart)
+    + '# Legacy notify tests retired with that entry; standalone watch has its own offline suite.\n'
+    + contents.notifyTests.slice(notifyEnd);
+  contents.notifyTests = replace(contents.notifyTests, 'supervisor-events.mjs and notify-watch.sh', 'supervisor-events.mjs');
+  contents.notifyTests = replace(contents.notifyTests, `notify target ${legacyTarget} not found`, `notify target ${target} not found`);
+  contents.events = replace(contents.events, 'export function notify(msg) { // other scripts do the same with a file: see notify-watch.sh',
+    'export function notify(msg) { // Queue event-service notices in its outbox.');
   return contents;
 }
 export function capture(copy) {

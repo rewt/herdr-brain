@@ -6,22 +6,34 @@ and merge correctness files, and a selected lane lifecycle subset through the
 existing bounded runner. Fast remains the worker smoke command.
 
 `npm run test:release` retains the complete former promotion chain: slot, core,
-cycle, lanes and offline acceptance. The release candidate prepare step installs
+cycle, lanes, offline acceptance and the release-only tier inventory. The release candidate prepare step installs
 the pinned offline dependencies, runs this full suite under the release-owned
 slot, and writes build evidence only after success. Preparation failure stops
 the release lifecycle before live acceptance. The live harness still runs once
 per release candidate; lanes never run it. No behavioral assertion was deleted.
 
-The explicit promotion file list is in `package.json`. Real processes remain in
+The explicit promotion file list is in `test/helpers/tier.mjs`; selected mixed-file
+case patterns remain in `package.json`. Real processes remain in
 CI where they protect record consistency, canonical Git identity, current-run
 readiness, clean replay, compare-and-swap, clean fast-forward or recoverable
 archives. Most installed-adapter, PTY, copied-product, reviewer/dispatch cycle,
 wall-clock, sandbox and fake-server integration runs move to release.
 
-The 31 whole files moved from CI are listed below; the mixed-file tables identify
+The 31 original whole files moved from CI are listed below; the mixed-file tables identify
 fast cases retained from the other files. The full lane file still runs in release;
 only the merge-critical titles listed afterward remain in promotion.
-All new test files must be assigned deliberately to promotion or release.
+The merged ENG-135 inventory assigns 69 full files to promotion and the remaining
+54 to release, including mixed files supplying selected promotion cases. Each of
+all 123 bounded files runs once in the complete release command. New files default
+to release until explicitly assigned to promotion. ENG-135's file-wait, Git-seed
+and tier-plan regressions are retained in promotion. Its additional slow files
+remain in release:
+
+| Additional release file | Behavior protected | Reason |
+| --- | --- | --- |
+| `test/deadline-boundaries.test.mjs` | Git response past the old command deadline; nested suites exceeding one fixture command while ordinary commands remain bounded. | Real 15.2/15.5-second response boundaries. |
+| `settle/test/ref-wallclock.test.mjs` | Slow start/prepare/commit ref-transaction replies preserve success under load. | Three real 15.2-second responses, extracted by ENG-135 from ref-deadlines. |
+| `test/pty-cache.test.mjs` | Unchanged native ownership code compiles once; fault variants and source changes get separate executable bytes. | Native compilation and real PTY sessions. |
 
 | File moved to release | Behavior protected | Reason |
 | --- | --- | --- |
@@ -96,8 +108,8 @@ Mixed files retain fast logic and safety checks via `test:promotion:logic`:
 
 | Partial file | Kept in promotion | Moved behavior and cost |
 | --- | --- | --- |
-| `test/load-deadlines.test.mjs` | All except the 15.2-second Git response. | Real response beyond the old deadline runs only in release. |
-| `settle/test/ref-deadlines.test.mjs` | Exhausted/refused transactions, concurrent-ref CAS and foreign locks. | Three real 15.2-second start/prepare/commit responses run only in release. |
+| `test/load-deadlines.test.mjs` | Measured-load calculations, native executor allowances and record-lock ownership. | The real response beyond the old deadline moved to `test/deadline-boundaries.test.mjs` and runs only in release. |
+| `settle/test/ref-deadlines.test.mjs` | Exhausted/refused transactions, concurrent-ref CAS and foreign locks. | Three real 15.2-second start/prepare/commit responses moved to `settle/test/ref-wallclock.test.mjs` and run only in release. |
 | `discovery/test/alternatives.test.mjs` | Provider selection and confinement profile construction. | Scratch installation, native sandbox/syscall/filter/network and descendant deadlines run in release. |
 | `discovery/test/validation-deadlines.test.mjs` | Static owner, wrapper and client allowance calculations. | Real descendant lifetime and delayed promotion run in release. |
 | `supervisor/test/delivery.test.mjs` | Captured composer/ANSI parsing, wrapping and placeholder ambiguity. | Quiet-read waits, fake Herdr transport, durable delivery/replay and inbox teardown run in release. |
@@ -107,7 +119,7 @@ Mixed files retain fast logic and safety checks via `test:promotion:logic`:
 The R-206 audit restores the following fast cases to the existing logic selector.
 These use assertions, small file fixtures or injected operations; they launch no
 real child process and wait for no elapsed deadline. All cases also remain in
-the full release globs. See [the audit](reports/ENG-157-fast-ci-evidence-20261004/logic-audit-R-206.md)
+the complete release inventory. See [the audit](reports/ENG-157-fast-ci-evidence-20261004/logic-audit-R-206.md)
 for exact retained titles and the audit of every whole-file deferral.
 
 | Partial file | Kept in promotion | Moved behavior and cost |

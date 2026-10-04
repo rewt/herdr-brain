@@ -66,7 +66,7 @@ with real `npm ci` in offline, build-only mode. It then runs `npm run test:relea
 A failing offline suite stops preparation before live acceptance. It never installs machine entry.
 The retained `.release-build.json` names the candidate commit, both lockfile
 hashes, installed package counts and build command before acceptance starts.
-The gate first runs the offline release tier against the prepared candidate.
+The gate requires successful preparation evidence before starting acceptance.
 Copied-product workflows and deliberate long-response regressions must pass
 before live acceptance starts; a failure stops the gate.
 The gate passes `--npm-cache` (that private copy) and, when configured, `--bch-cloak` to
@@ -138,13 +138,12 @@ evidence. The production CLI refuses `--skip-live` without `--dry-run`.
 `--max-load-per-cpu N` may change the tracked threshold in the scratch preview;
 the returned evidence names it. It never overrides the production declaration.
 
-`npm test` includes bounded offline tests with explicit actors: real disposable
-lane promotions into a batch, default and declared gates, once-only reuse, red
-and interrupted results, load/STOP/dirty/lock/queue/role deferral, operator-only
-decisions, record compatibility, discovery, supervisor and console integration.
-Its complete file list runs in three bounded phases to keep the copied-entry
-probes isolated and avoid one aggregate six-minute timeout. Fixture, file and
-suite watchdogs remain unchanged; failures stop validation immediately.
+`npm run test:release` includes the complete bounded offline inventory with
+explicit actors: record, console, lane promotion, settle/recovery, supervisor,
+queue, discovery, native ownership and offline acceptance coverage. The tier
+helper partitions files across core, cycle, lanes, acceptance and release-only
+steps so each file runs once; copied-entry probes stay isolated. Fixture, file
+and suite watchdogs remain unchanged; failures stop validation immediately.
 
 The release cycle takes the [host test slot](../test-slot/README.md) before
 cutting or claiming a candidate, and keeps it through preparation and the gate.

@@ -535,7 +535,7 @@ describe('workspace configuration and timeout retry', () => {
 
   for (const [tier, failedStep, expected] of [
     ['promotion', 'test:promotion:core', ['test:slot', 'test:promotion:core', 'test:promotion:core', 'test:promotion:lanes', 'test:promotion:logic']],
-    ['release', 'test:core', ['test:slot', 'test:core', 'test:core', 'test:cycle', 'test:lanes', 'test:acceptance']],
+    ['release', 'test:core', ['test:slot', 'test:core', 'test:core', 'test:cycle', 'test:lanes', 'test:acceptance', 'test:release:only']],
   ]) it(`${tier} retries only the timed-out heavy step and continues the remaining steps once`, async () => {
     const s = scratch(), count = s.file('steps'), preload = s.file('load.mjs');
     fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");

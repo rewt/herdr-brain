@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { phases } from './helpers/suite.mjs';
+import { tierFiles } from './helpers/tier.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 
 process.env.ORG_ACTOR = 'suite-tests';
@@ -57,14 +58,15 @@ test('release keeps the complete offline suite and promotion covers the fast tie
   assert.match(scripts['test:release'], /test-slot.*npm run test:release:steps/);
   assert.match(scripts['test:release:steps'], /npm test.*npm run test:lanes.*npm run test:acceptance/);
   for (const step of ['slot', 'core', 'cycle']) assert.ok(scripts.test.includes(`test:${step}`));
-  const releaseCommands = ['slot', 'core', 'cycle', 'lanes', 'acceptance'].map(step => scripts[`test:${step}`]).join(' ');
+  assert.match(scripts['test:release:steps'], /npm run test:release:only/);
+  assert.match(scripts['test:release:only'], /test\/helpers\/tier\.mjs release/);
+  assert.match(scripts['test:promotion:core'], /test\/helpers\/tier\.mjs promotion/);
+  for (const tier of ['fast', 'core', 'cycle', 'lanes', 'acceptance']) assert.ok(scripts[`test:${tier}`].includes(`test/helpers/tier.mjs ${tier}`));
   const root = fileURLToPath(new URL('../', import.meta.url));
-  for (const dir of ['test', 'brain/test', 'console/test', 'console/proto', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'settle/test', 'supervisor/test', 'release/test', 'lanes/test', 'acceptance/test', 'test-slot/test']) {
-    for (const name of fs.readdirSync(path.join(root, dir)).filter(name => name.endsWith('.test.mjs'))) {
-      assert.ok(releaseCommands.includes(`${dir}/*.mjs`) || releaseCommands.includes(`${dir}/*.test.mjs`) || releaseCommands.includes(`${dir}/${name}`), `release omits ${dir}/${name}`);
-    }
-  }
-  for (const file of scripts['test:fast'].split(' ').filter(word => word.endsWith('.test.mjs'))) {
-    assert.ok(scripts['test:promotion:core'].includes(file), `promotion omits fast check ${file}`);
-  }
+  const releaseFiles = ['core', 'cycle', 'lanes', 'acceptance', 'release'].flatMap(tier => tierFiles(tier, root));
+  const expected = ['test', 'brain/test', 'console/test', 'console/proto', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'settle/test', 'supervisor/test', 'release/test', 'lanes/test', 'acceptance/test'].flatMap(dir => fs.readdirSync(path.join(root, dir)).filter(name => name.endsWith('.test.mjs')).map(name => `${dir}/${name}`));
+  assert.equal(new Set(releaseFiles).size, releaseFiles.length, 'each release file runs once');
+  assert.deepEqual([...releaseFiles].sort(), expected.sort());
+  assert.match(scripts['test:slot'], /node --test test-slot\/test\/\*\.test\.mjs/);
+  for (const file of tierFiles('fast', root)) assert.ok(tierFiles('promotion', root).includes(file), `promotion omits fast check ${file}`);
 });

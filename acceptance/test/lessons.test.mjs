@@ -9,7 +9,7 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import { nativeEntryReceipt, assertLessonEntry } from '../entry.mjs';
 import { lessonsEntryCase, nativeUiReady } from '../lessons.mjs';
 import { cases, runCase } from '../cases.mjs';
-import { gateOutcome } from '../results.mjs';
+import { gateOutcome, resultLine } from '../results.mjs';
 
 const product = path.resolve(import.meta.dirname, '../..');
 test('native receipts require actual lesson prompt arguments for each transport', () => {
@@ -47,12 +47,15 @@ test('native interactive readiness requires more than a retained banner', () => 
   assert.equal(nativeUiReady('claude', 'Welcome to Claude Code\nChoose the text style\nEnter to confirm'), true);
 });
 
-function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = false, delayedCleanup = false } = {}) {
+function fixture(t, { activate = true, claudeProfile = true, missingNative = false, exitKind, exitCode = 1, exitWithPrompt = false, delayedCleanup = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync('/tmp/lesson-gate-test-'));
   const scratchRoots = [root], discoveryRoots = [], evidence = path.join(root, 'evidence');
   fs.mkdirSync(evidence);
   t.after(() => { for (const directory of scratchRoots) fs.rmSync(directory, { recursive: true, force: true }); });
   const write = (file, data) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, data); };
+  // Explicit offline stand-in profile: no real credentials or host profile reads.
+  const profile = path.join(root, 'dedicated-profile');
+  if (claudeProfile) write(path.join(profile, 'profile-marker'), 'offline profile');
   const terminationObservations = [];
   const read = file => {
     if (delayedCleanup && file.endsWith(`/${exitKind}/native.done.json`)) terminationObservations.push({
@@ -72,7 +75,8 @@ function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = 
     const screen = kind !== exitKind || exitWithPrompt ? `${banner}\n${prompt}` : banner;
     // Finish writing the retained screen before the scripted exit. A timer or
     // process.exit immediately after console.log can race PTY output drainage.
-    write(binaries[kind], `#!${process.execPath}\nif(process.argv.includes('--help')||process.argv.includes('--version'))process.exit(0);process.stdout.write(${JSON.stringify(`${screen}\n`)},()=>{${kind === exitKind ? `process.exit(${exitCode});` : 'setInterval(()=>{},1000);'}});\n`);
+    const profileCheck = kind === 'claude' ? `const fs=require('node:fs'),path=require('node:path');const config=process.env.CLAUDE_CONFIG_DIR;if(config!==${JSON.stringify(claudeProfile ? path.join(root, 'claude-runtime') : '')}&& !config.startsWith(process.env.HOME+'/'))throw Error('profile escaped scratch');if(fs.existsSync(path.join(config,'profile-marker'))!==${claudeProfile})throw Error('wrong profile mode');` : '';
+    write(binaries[kind], `#!${process.execPath}\nif(process.argv.includes('--help')||process.argv.includes('--version'))process.exit(0);${profileCheck}process.stdout.write(${JSON.stringify(`${screen}\n`)},()=>{${kind === exitKind ? `process.exit(${exitCode});` : 'setInterval(()=>{},1000);'}});\n`);
     fs.chmodSync(binaries[kind], 0o755);
   }
   const children = [], paneChildren = new Map(), screens = new Map(), closed = [];
@@ -118,6 +122,7 @@ function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = 
     }
     if (args[1] === 'get') return { pane: { foreground_cwd: cwd } };
     if (args[1] === 'run') {
+      if (missingNative && count === 2) fs.unlinkSync(binaries.claude);
       const pane = args[2], transport = ptyCommand('/bin/sh', ['-c', args[3]]);
       const child = spawnScenarioChild(t, transport.file, transport.args, { cwd, env: process.env });
       child.stdout.on('data', data => screens.set(pane, (screens.get(pane) ?? '') + data));
@@ -152,14 +157,16 @@ function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = 
       await new Promise(resolve => setTimeout(resolve, 25));
     }
   };
-  return { options: { root, scratchRoots, discoveryRoots, candidate: product, evidence, run, node, initRepo, h, until, write, read },
+  return { options: { opt: claudeProfile ? { 'claude-profile': profile } : {}, root, scratchRoots, discoveryRoots, candidate: product, evidence, run, node, initRepo, h, until, write, read },
     closed, children, read, evidence, root, terminationObservations };
 }
 
 const skip = process.platform !== 'darwin' ? 'entry UI canary uses macOS sandbox-exec' : PTY_SKIP_REASON;
 test('release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins', { skip }, async t => {
   const f = fixture(t);
-  assert.match(await lessonsEntryCase(f.options), /fresh Codex and Claude/);
+  assert.match(await lessonsEntryCase(f.options), /fresh Codex and Claude native UIs with interactive readiness; explicit Claude profile/);
+  assert.equal(f.read(path.join(f.options.opt['claude-profile'], 'profile-marker')), 'offline profile');
+  assert.equal(fs.existsSync(path.join(f.root, 'claude-runtime')), false);
   assert.deepEqual(f.closed, ['w1', 'w2']);
   const planted = JSON.parse(f.read(path.join(f.evidence, 'lessons-planted.json')));
   for (const kind of ['codex', 'claude']) {
@@ -172,6 +179,65 @@ test('release lesson case uses real installed automatic adapters and owned PTYs 
     assert.equal(completion.signal, 'SIGTERM');
     assert.ok(receipt.cwd !== planted.repo);
   }
+  for (const child of f.children) await waitForExit(child);
+  assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
+});
+
+for (const exitCode of [0, 1]) for (const exitWithPrompt of [false, true]) {
+  test(`uncredentialed Claude ${exitWithPrompt ? 'prompt' : 'banner'} then exit ${exitCode} passes only delivery and start`, { skip }, async t => {
+    const f = fixture(t, { claudeProfile: false, exitKind: 'claude', exitCode, exitWithPrompt, delayedCleanup: exitWithPrompt });
+    const results = [{ ...cases.fixture, status: 'PASS' }];
+    await runCase(results, cases.lessons, () => lessonsEntryCase(f.options));
+    assert.equal(results[1].status, 'PASS', results[1].detail);
+    assert.equal(gateOutcome(results).ready, true);
+    assert.match(results[1].detail, /Claude lesson delivery and native process start only/);
+    assert.match(results[1].detail, /interactive readiness unproven/);
+    assert.match(results[1].detail, /Codex lesson delivery and interactive readiness proven/);
+    assert.match(resultLine(results[1]), /PASS.*LIMITATION:.*interactive readiness unproven/);
+    const planted = JSON.parse(f.read(path.join(f.evidence, 'lessons-planted.json')));
+    const scratch = JSON.parse(f.read(path.join(f.root, 'ownership.json'))).creationRoots[0];
+    for (const kind of ['codex', 'claude']) assertLessonEntry(JSON.parse(f.read(path.join(f.evidence, `lessons-${kind}.entry.json`))), {
+      kind, installation: path.join(scratch, 'product'), lesson: planted.lesson,
+    });
+    const completion = JSON.parse(f.read(path.join(f.evidence, 'lessons-claude.native.done.json')));
+    assert.equal(completion.code, exitCode);
+    assert.equal(completion.signal, null);
+    assert.deepEqual(f.closed, ['w1', 'w2']);
+    for (const child of f.children) await waitForExit(child);
+    assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
+  });
+}
+
+test('uncredentialed Claude still stops a running native child after delivery proof', { skip }, async t => {
+  const f = fixture(t, { claudeProfile: false });
+  assert.match(await lessonsEntryCase(f.options), /LIMITATION/);
+  assert.equal(JSON.parse(f.read(path.join(f.evidence, 'lessons-claude.native.done.json'))).signal, 'SIGTERM');
+  assert.deepEqual(f.closed, ['w1', 'w2']);
+  for (const child of f.children) await waitForExit(child);
+  assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
+});
+
+test('uncredentialed Claude cannot pass without a native spawn receipt', { skip }, async t => {
+  const f = fixture(t, { claudeProfile: false, missingNative: true });
+  const results = [{ ...cases.fixture, status: 'PASS' }];
+  await runCase(results, cases.lessons, () => lessonsEntryCase(f.options));
+  assert.equal(results[1].status, 'FAIL', results[1].detail);
+  assert.match(results[1].detail, /entry exited before/);
+  assert.equal(fs.existsSync(path.join(f.evidence, 'lessons-claude.entry.json')), false);
+  assert.equal(gateOutcome(results).ready, false);
+  assert.deepEqual(f.closed, ['w1', 'w2']);
+  for (const child of f.children) await waitForExit(child);
+  assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
+});
+
+for (const exitWithPrompt of [false, true]) test(`Codex ${exitWithPrompt ? 'prompt' : 'banner'} then exit still fails without a Claude profile`, { skip }, async t => {
+  const f = fixture(t, { claudeProfile: false, exitKind: 'codex', exitWithPrompt, delayedCleanup: exitWithPrompt });
+  const results = [{ ...cases.fixture, status: 'PASS' }];
+  await runCase(results, cases.lessons, () => lessonsEntryCase(f.options));
+  assert.equal(results[1].status, 'FAIL');
+  assert.match(results[1].detail, /entry exited before interactive readiness/);
+  assert.equal(gateOutcome(results).ready, false);
+  assert.deepEqual(f.closed, ['w1']);
   for (const child of f.children) await waitForExit(child);
   assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
 });
@@ -192,6 +258,7 @@ for (const kind of ['codex', 'claude']) for (const exitCode of [0, 1]) {
     assert.equal(results[1].status, 'FAIL');
     assert.match(results[1].detail, /entry exited before interactive readiness/);
     assert.equal(gateOutcome(results).ready, false);
+    assert.equal(fs.existsSync(path.join(f.root, 'claude-runtime')), false);
     assert.deepEqual(f.closed, kind === 'codex' ? ['w1'] : ['w1', 'w2']);
     const scratch = JSON.parse(f.read(path.join(f.root, 'ownership.json'))).creationRoots[0];
     const planted = JSON.parse(f.read(path.join(f.evidence, 'lessons-planted.json')));
@@ -217,6 +284,7 @@ for (const kind of ['codex', 'claude']) for (const exitCode of [0, 1]) test(`${k
   assert.equal(results[1].status, 'FAIL');
   assert.match(results[1].detail, /entry exited before interactive readiness/);
   assert.equal(gateOutcome(results).ready, false);
+  assert.equal(fs.existsSync(path.join(f.root, 'claude-runtime')), false);
   assert.deepEqual(f.terminationObservations[0], { cleanupBlocked: true, adapterDone: false });
   const completion = JSON.parse(f.read(path.join(f.evidence, `lessons-${kind}.native.done.json`)));
   assert.equal(completion.code, exitCode);

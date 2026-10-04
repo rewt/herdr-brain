@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+export const credentialResidue = root => ['codex-runtime', 'claude-runtime']
+  .map(name => path.join(root, name)).filter(directory => fs.existsSync(directory));
+
 export function removeCredentials(root) {
-  const directory = path.join(root, 'codex-runtime');
-  fs.rmSync(directory, { recursive: true, force: true });
-  return fs.existsSync(directory) ? [directory] : [];
+  for (const name of ['codex-runtime', 'claude-runtime']) fs.rmSync(path.join(root, name), { recursive: true, force: true });
+  return credentialResidue(root);
 }
 
 export function installSignalCleanup({ root, cleanup, summarize, onSignal = () => {} }) {
@@ -18,8 +20,7 @@ export function installSignalCleanup({ root, cleanup, summarize, onSignal = () =
     try { removeCredentials(root); } catch (error) { errors.push(error.message); }
     try { await cleanup(signal); } catch (error) { errors.push(error.message); }
     try { removeCredentials(root); } catch (error) { errors.push(error.message); }
-    const directory = path.join(root, 'codex-runtime');
-    summarize({ signal, cleanupErrors: errors, credentialResidue: fs.existsSync(directory) ? [directory] : [] });
+    summarize({ signal, cleanupErrors: errors, credentialResidue: credentialResidue(root) });
     process.exit(signal === 'SIGINT' ? 130 : 143);
   });
 }

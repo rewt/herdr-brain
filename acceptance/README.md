@@ -6,13 +6,28 @@ Startup probes every required executable; missing tools produce a named PENDING
 result before executing candidate or copied code.
 
 The `lessons-entry` gate case also requires the installed native Claude CLI. It
-plants an active area lesson in a scratch record, then opens fresh Codex and
-Claude UIs through the candidate's installed automatic entry. The shared receipt
-machinery retains the actual native prompt arguments and policy source; native
-UI screens prove each executable started. The canary uses scratch homes, no
-operator credentials, no task prompt, no model turn and a kernel boundary that
-denies network and writes outside scratch/terminal devices. Created panes and
-processes use the gate's existing ownership and producer cleanup. Evidence is
+plants an active area lesson in a scratch record, then launches fresh Codex and
+Claude processes through the candidate's installed automatic entry. The shared
+receipt machinery retains the actual native prompt arguments and policy source.
+Codex must reach a live interactive UI. Without an explicitly configured Claude
+profile, Claude proves lesson delivery at the native launch input and native
+process start only, even if it subsequently exits for missing login. The case
+reports PASS with a visible LIMITATION in the screen and JSON summary; it does
+not claim Claude interactive readiness. PASS retains the two delivery proofs
+and Codex readiness instead of skipping the whole case.
+
+Supply `--claude-profile DEDICATED_PROFILE` only for an operator-authorized,
+credentialed profile to require the full Claude interactive readiness proof.
+The directory is copied into the owned temporary `claude-runtime` profile
+(symlinks are refused); the original is never written. The copy is removed on
+success, failure and interruption, including with `--keep`, and residue is
+reported alongside Codex credentials. No profile is discovered from the
+environment, user home or Keychain. Both full UI proofs reject banner/prompt
+then exit, including when adapter cleanup is delayed. The default canary uses scratch
+homes, no operator credentials, no task prompt, no model turn and a boundary that
+denies network and writes outside owned scratch/profile/terminal devices.
+Created panes and processes use the gate's existing ownership and producer
+cleanup. Evidence is
 `lessons-planted.json`, `lessons-{codex,claude}.entry.json` and corresponding
 `.screen.txt` files. Missing native tools or `--skip-live` keep the gate pending.
 

@@ -12,7 +12,7 @@ import { discovery } from './live.mjs';
 import { lessonsEntryCase } from './lessons.mjs';
 import { auditCopies, relocate, within, copiedSandbox, workspaceIdentityCutover } from './security.mjs';
 import { HarnessLimit, Pending, commandFailure, withCommandContext, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
-import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
+import { installSignalCleanup, removeCredentials, credentialResidue } from './signal-cleanup.mjs';
 import { stopProducers, awaitProducers } from './producers.mjs';
 import { safeGitArgs } from './verify.mjs';
 import { retainedRoots, resultLine, gateOutcome } from './results.mjs';
@@ -80,11 +80,12 @@ const { values: opt } = parseArgs({ options: {
   candidate: { type: 'string' }, source: { type: 'string', default: SOURCE },
   'bch-cloak': { type: 'string' }, keep: { type: 'boolean', default: false },
   'npm-cache': { type: 'string' },
+  'claude-profile': { type: 'string' },
   'skip-live': { type: 'boolean', default: false },
   'discovery-model': { type: 'string', default: 'gpt-5.6-luna' },
   'discovery-effort': { type: 'string', default: 'low' },
 } });
-if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--bch-cloak LIVE_REPO] [--keep]'); process.exit(2); }
+if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--bch-cloak LIVE_REPO] [--claude-profile DEDICATED_PROFILE] [--keep]'); process.exit(2); }
 const scratchRoots = [];
 const realHome = os.homedir(), authHome = process.env.CODEX_HOME ?? path.join(realHome, '.codex');
 const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-'), scratchRoots);
@@ -312,9 +313,8 @@ function emitSummary(interruption = {}) {
   const measuredLoad = load.snapshot(); load.stop();
   const elapsedSeconds = Math.round((Date.now() - started) / 1000);
   const { counts, ready } = gateOutcome(results);
-  const authDirectory = path.join(root, 'codex-runtime');
   const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, ready, evidence, results, load: measuredLoad,
-    credentialResidue: fs.existsSync(authDirectory) ? [authDirectory] : [], retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
+    credentialResidue: credentialResidue(root), retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
   write(path.join(evidence, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
   const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending / ${counts.SKIP} skipped — ${ready ? 'READY' : 'NOT READY'}`,
     ...results.map((v) => resultLine(v, summary.retainedDiscoveryRoots)), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');

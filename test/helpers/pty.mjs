@@ -2,7 +2,6 @@
 import { loadFactor, loadTimeout } from '../../lib/deadline.mjs';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { offlineHerdr } from './offline-herdr.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -31,8 +30,7 @@ let cache;
 function nativeOwner(source) {
   const digest = createHash('sha256').update(fs.readFileSync(source)).digest('hex');
   if (!cache) {
-    offlineHerdr();
-    cache = fs.mkdtempSync(path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'pty-owner-'));
+    cache = fs.mkdtempSync(path.join(process.env.HERDR_TEST_OFFLINE_ROOT ?? os.tmpdir(), 'pty-owner-'));
     process.once('exit', () => fs.rmSync(cache, { recursive: true, force: true }));
   }
   const owner = path.join(cache, digest);

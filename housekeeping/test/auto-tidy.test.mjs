@@ -41,6 +41,12 @@ function fixture(t) {
     state.items.push({ id: item, status: 'active', blocked_by: [] });
   };
   f.add('finished', 'lane-topic-worker');
+  f.reviewSession = (name, extra = {}) => {
+    const agent = state.agents.find(a => a.name === name);
+    return { name, repo, lane: 'lane/topic', topic: 'topic', role: 'review-codex',
+      pane: agent.pane_id, workspace: agent.workspace_id, terminal_id: agent.terminal_id,
+      agent_session_id: agent.agent_session.value, created_at: '2020-01-01T00:00:00Z', ...extra };
+  };
   const file = path.join(root, 'fake-state.json');
   f.save = () => fs.writeFileSync(file, JSON.stringify(state));
   f.read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -229,7 +235,7 @@ test('finished reviews and old settle sessions use the existing tidy policy', t 
   const registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.repo, 'docs/reviews/topic');
   fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
   for (const [name, created_at] of [['lane-topic-review-old', '2020-01-01T00:00:00Z'], ['lane-topic-review-new', '2099-01-01T00:00:00Z']]) {
-    fs.writeFileSync(path.join(registry, `${name}.json`), JSON.stringify({ name, topic: 'topic', role: 'review', created_at }));
+    fs.writeFileSync(path.join(registry, `${name}.json`), JSON.stringify(f.reviewSession(name, { role: 'review', created_at })));
   }
   fs.writeFileSync(path.join(reviews, 'verdict.md'), '**PASS**\n');
   const ledger = path.join(f.repo, '.lane/supervisor'); fs.mkdirSync(ledger);
@@ -247,8 +253,8 @@ test('three fix rounds clear reported workers and review-codex verdict tabs, lea
     const name = `lane-topic-review-${round}`;
     f.add(`review-${round}`, name);
     f.stateData.runs.pop(); // Lane reviewers have verdict evidence, no worker reports.
-    fs.writeFileSync(path.join(registry, `${name}.json`), JSON.stringify({ name, topic: 'topic', role: 'review-codex',
-      created_at: `2020-01-0${round}T00:00:00Z` }));
+    fs.writeFileSync(path.join(registry, `${name}.json`), JSON.stringify(f.reviewSession(name, {
+      created_at: `2020-01-0${round}T00:00:00Z` })));
     const file = path.join(reviews, `round-${round}.md`);
     fs.writeFileSync(file, `**${round < 3 ? 'NEEDS-WORK' : 'PASS'}**\nTopic: topic\nRound: ${round}\n`);
     fs.utimesSync(file, new Date(`2020-01-0${round}T01:00:00Z`), new Date(`2020-01-0${round}T01:00:00Z`));
@@ -273,11 +279,82 @@ test('supported review routes need a matching topic verdict newer than their ses
     ['lane-topic-review', 'lane-topic-review-codex', 'lane-topic-review-max', 'lane-topic-review-custom']);
 });
 
+test('automatic review tidy preserves missing or mismatched occupant evidence without worker runs', t => {
+  const f = fixture(t), registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.lane, 'docs/reviews/topic');
+  fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
+  f.stateData.runs = []; // The verdict is the only completion evidence.
+  const name = f.stateData.agents[0].name, original = structuredClone(f.stateData), session = f.reviewSession(name);
+  const record = path.join(registry, 'review.json');
+  fs.writeFileSync(path.join(reviews, 'verdict.md'), '**PASS**\n');
+  for (const variant of ['pane', 'cwd', 'workspace', 'terminal', 'session', 'missing-live-terminal',
+    'missing-live-session', 'missing-live-cwd', 'missing-record-pane', 'missing-record-workspace',
+    'missing-record-lane', 'unknown-record-lane', 'missing-record-repo', 'wrong-record-repo',
+    'missing-record-identities', 'missing-verdict', 'older-verdict', 'newest-open-review',
+    'newest-missing-repo', 'newest-missing-identity', 'tied-newest', 'duplicate-name']) {
+    Object.assign(f.stateData, structuredClone(original));
+    const agent = f.stateData.agents[0], recorded = structuredClone(session);
+    if (variant === 'pane') recorded.pane = 'previous-pane';
+    if (variant === 'cwd') agent.cwd = f.repo;
+    if (variant === 'workspace') recorded.workspace = 'previous-workspace';
+    if (variant === 'terminal') agent.terminal_id = 'replacement-terminal';
+    if (variant === 'session') agent.agent_session.value = 'replacement-session';
+    if (variant === 'missing-live-terminal') delete agent.terminal_id;
+    if (variant === 'missing-live-session') delete agent.agent_session;
+    if (variant === 'missing-live-cwd') delete agent.cwd;
+    if (variant === 'missing-record-pane') delete recorded.pane;
+    if (variant === 'missing-record-workspace') delete recorded.workspace;
+    if (variant === 'missing-record-lane') delete recorded.lane;
+    if (variant === 'unknown-record-lane') recorded.lane = 'lane/absent';
+    if (variant === 'missing-record-repo') delete recorded.repo;
+    if (variant === 'wrong-record-repo') recorded.repo = f.root;
+    if (variant === 'missing-record-identities') { delete recorded.terminal_id; delete recorded.agent_session_id; }
+    if (variant === 'missing-verdict') recorded.topic = 'other';
+    if (variant === 'older-verdict') recorded.created_at = '2099-01-01T00:00:00Z';
+    if (variant === 'duplicate-name') f.stateData.agents.push({ ...agent, terminal_id: 'replacement' });
+    fs.writeFileSync(record, JSON.stringify(recorded));
+    const newer = path.join(registry, 'newer.json');
+    if (variant.startsWith('newest-') || variant === 'tied-newest') {
+      const nextSession = { ...session, created_at: variant === 'tied-newest' ? session.created_at : '2020-01-02T00:00:00Z' };
+      if (variant === 'newest-open-review') nextSession.created_at = '2099-01-01T00:00:00Z';
+      if (variant === 'newest-missing-repo') delete nextSession.repo;
+      if (variant === 'newest-missing-identity') { delete nextSession.terminal_id; delete nextSession.agent_session_id; }
+      fs.writeFileSync(newer, JSON.stringify(nextSession));
+    }
+    f.save();
+    const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
+    assert.equal(r.status, 0, `${variant}: ${r.stderr}`); assert.deepEqual(f.read().actions, [], variant);
+    fs.rmSync(newer, { force: true });
+  }
+  // Either recorded immutable identity suffices; every identity present must match.
+  for (const omitted of ['terminal_id', 'agent_session_id']) {
+    Object.assign(f.stateData, structuredClone(original));
+    const recorded = { ...session }; delete recorded[omitted];
+    fs.writeFileSync(record, JSON.stringify(recorded)); f.save();
+    assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, [['tab', 'close', 'finished']]);
+  }
+});
+
+test('replacement reviewers at the final observation keep their tabs without worker runs', t => {
+  const f = fixture(t), registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.lane, 'docs/reviews/topic');
+  fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
+  f.stateData.runs = [];
+  fs.writeFileSync(path.join(registry, 'review.json'), JSON.stringify(f.reviewSession(f.stateData.agents[0].name)));
+  fs.writeFileSync(path.join(reviews, 'verdict.md'), '**NEEDS-WORK**\n');
+  const original = structuredClone(f.stateData);
+  for (const replacement of [{ pane_id: 'new-pane' }, { cwd: f.repo }, { workspace_id: 'main' },
+    { terminal_id: 'new-terminal' }, { agent_session: { value: 'new-session' } },
+    { terminal_id: null }, { agent_session: null }, { cwd: null }]) {
+    Object.assign(f.stateData, structuredClone(original), { replacement }); f.save();
+    const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
+    assert.equal(r.status, 0, r.stderr); assert.deepEqual(f.read().actions, []);
+    assert.ok(f.read().agentReads >= 2, 'the original reviewer qualified before the final recheck');
+  }
+});
+
 test('review evidence cannot override a recorded worker waiting on a blocker', t => {
   const f = fixture(t), registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.repo, 'docs/reviews/topic');
   fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
-  fs.writeFileSync(path.join(registry, 'worker.json'), JSON.stringify({ name: 'lane-topic-worker',
-    topic: 'topic', role: 'review-codex', created_at: '2020-01-01T00:00:00Z' }));
+  fs.writeFileSync(path.join(registry, 'worker.json'), JSON.stringify(f.reviewSession('lane-topic-worker')));
   fs.writeFileSync(path.join(reviews, 'verdict.md'), '**PASS**\n');
   f.stateData.runs[0].report.outcome = 'blocked';
   f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);

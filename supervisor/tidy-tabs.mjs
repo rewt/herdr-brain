@@ -28,6 +28,14 @@ const FINISHED = new Set(['idle', 'done']);
 const SHELLS = new Set(['zsh', '-zsh', 'bash', '-bash', 'sh', '-sh', 'fish', '-fish']);
 const canonicalPath = (file) => fs.existsSync(file) ? fs.realpathSync(file) : path.resolve(file);
 
+function matchingOccupant(agent, { pane, workspace, cwd, terminal_id, agent_session_id }) {
+  return Boolean(pane && pane === agent.pane_id && workspace && workspace === agent.workspace_id &&
+    cwd && agent.cwd && canonicalPath(cwd) === canonicalPath(agent.cwd) &&
+    (terminal_id || agent_session_id) &&
+    (!terminal_id || terminal_id === agent.terminal_id) &&
+    (!agent_session_id || agent_session_id === agent.agent_session?.value));
+}
+
 // Names locate the newest record; pane, workspace, cwd and immutable occupant
 // identity prove that it belongs to the live worker. Session metadata cannot
 // supply missing record evidence.
@@ -36,12 +44,7 @@ export function matchingRun(agent, runs) {
   matches.sort((a, b) => (b.started?.seq ?? 0) - (a.started?.seq ?? 0));
   if (!matches.length || (matches[1] && matches[0].started?.seq === matches[1].started?.seq)) return null;
   const run = matches[0], meta = run.meta;
-  if (!run.workspace || !meta.pane || meta.pane !== agent.pane_id ||
-      !meta.worker_workspace || meta.worker_workspace !== agent.workspace_id ||
-      (meta.terminal_id && meta.terminal_id !== agent.terminal_id) ||
-      (meta.agent_session_id && meta.agent_session_id !== agent.agent_session?.value) ||
-      (!meta.terminal_id && !meta.agent_session_id)) return null;
-  if (!agent.cwd || canonicalPath(agent.cwd) !== canonicalPath(run.workspace)) return null;
+  if (!matchingOccupant(agent, { ...meta, workspace: meta.worker_workspace, cwd: run.workspace })) return null;
   return run;
 }
 
@@ -140,7 +143,8 @@ export function planTidy(snapshot) {
   return { close, keep };
 }
 
-// Pure: a review session is complete only when a verdict for its lane topic is
+// Pure: locate verdict evidence only; this does not authorize a live occupant.
+// A review session has completion evidence only when a verdict for its lane topic is
 // newer than the session. This prevents an earlier review round from closing a
 // later review tab on the same lane.
 export function reviewedAgentsFromRecords(sessions, reviewRecords) {
@@ -153,6 +157,27 @@ export function reviewedAgentsFromRecords(sessions, reviewRecords) {
     .filter((s) => /^review(?:-[a-z0-9][a-z0-9-]*)?$/.test(s?.role ?? '') && s?.name && s?.topic && Number.isFinite(Date.parse(s.created_at)))
     .filter((s) => (newest.get(s.topic) ?? -Infinity) > Date.parse(s.created_at))
     .map((s) => s.name));
+}
+
+// A verdict belongs to the recorded reviewer, never to a later occupant using
+// its name. The registry records the lane branch rather than an absolute cwd;
+// Git resolves that branch to its checkout. Registry metadata only constrains
+// verdict evidence and cannot establish completion on its own.
+export function reviewedOccupantsFromRecords(agents, sessions, reviewRecords, laneRoots, repoRoot) {
+  const eligible = new Set(), ineligible = new Set();
+  for (const agent of agents) {
+    const matches = sessions.filter((s) => s.name === agent.name);
+    matches.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    const session = matches[0];
+    const unambiguous = session && matches.every((s, i) => i === 0 ||
+      (Number.isFinite(Date.parse(s.created_at)) && Date.parse(s.created_at) < Date.parse(session.created_at)));
+    const complete = unambiguous && reviewedAgentsFromRecords([session], reviewRecords).has(agent.name);
+    const matchesLive = complete && session.repo && canonicalPath(session.repo) === canonicalPath(repoRoot) && matchingOccupant(agent, {
+      ...session, cwd: laneRoots.get(session.lane),
+    });
+    (matchesLive ? eligible : ineligible).add(agent.name);
+  }
+  return new Set([...eligible].filter((name) => !ineligible.has(name)));
 }
 
 export function reviewVerdict(text) {
@@ -276,8 +301,14 @@ function main() {
       // match for a recorded worker with the same name.
       recordedNames = new Set(runs.map((run) => run.meta?.agent));
     }
-    const reviewedAgents = new Set([...reviewedAgentsFromRecords(laneSessions(checkout),
-      reviewRecords([checkout, ...mine.filter((w) => w.worktree.is_linked_worktree).map((w) => w.worktree.checkout_path)]))]
+    const laneRoots = new Map();
+    for (const entry of invoke('git', ['worktree', 'list', '--porcelain', '-z']).split('\0\0')) {
+      const fields = entry.split('\0'), root = fields.find((f) => f.startsWith('worktree '))?.slice(9);
+      const branch = fields.find((f) => f.startsWith('branch refs/heads/'))?.slice(18);
+      if (root && branch) laneRoots.set(branch, root);
+    }
+    const reviewedAgents = new Set([...reviewedOccupantsFromRecords(agents, laneSessions(checkout),
+      reviewRecords([checkout, ...mine.filter((w) => w.worktree.is_linked_worktree).map((w) => w.worktree.checkout_path)]), laneRoots, checkout)]
       .filter((name) => !recordedNames.has(name)));
     const ledgerDir = opt['ledger-dir'] ?? path.join(checkout, '.lane/supervisor');
     const ledgers = [];

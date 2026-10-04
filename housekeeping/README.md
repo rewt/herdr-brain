@@ -58,6 +58,11 @@ no supervisor context is consumed after that.
   or waiting report, and an idle/done worker. Blocked and needs_human reports stay
   even when Herdr reports an idle worker. Review routes (`review`, `review-codex`,
   `review-max` and other `review-*` routes) require a newer verdict for their topic;
+  the newest unambiguous review record must match the live pane, workspace,
+  lane checkout and every recorded immutable occupant identity, with at least one
+  identity recorded. Git resolves the recorded lane branch to its checkout for
+  the cwd check. Missing or mismatched review evidence preserves the tab, including
+  when a later reviewer reuses the name. These checks run again before each close;
   that evidence never overrides a recorded worker's missing identity or waiting run.
 - Settled-lane cleanup requires a recorded report or abandonment, no open run in the same lane,
   no unresolved blocking item or waiting report, and an idle/done worker. Git

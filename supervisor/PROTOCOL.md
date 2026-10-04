@@ -28,7 +28,24 @@ Use dispatch/dispatch.mjs for a selected item, lane, named route and ask, with
 Skip work already running and honor record blockers and project authority.
 Unaligned work and exceeded advisory budgets remain visible and may proceed.
 
-Every final `[org-report]` notice takes one path:
+The inbox applies `notice-autopilot/v1` before automatic delivery. Under the
+project's auto tooling authority it handles recorded done reports, promotes
+independent PASS, leaves watched fixes in flight, retries the exact base-moved
+escalation once, and files one follow-up before accepting capped Moderate/Minor
+findings. A promoted queue notice closes its bound item. These routine notices
+do not reach chat. The action receipts retain commands and acknowledgements;
+`supervisor.mjs status [--json]` reads lane stages and the last policy actions
+without model calls or writes. See [README.md](README.md) for the kill switch and
+receipt paths. STOP or paused housekeeping disables automatic actions.
+
+Exceptions wake with one line and a receipt path: FAIL, capped Major, refusals,
+train/release failures or gate results, non-done/no-report workers, questions,
+unknown or uncertain results, and operator-reserved categories. Read the receipt
+and its retained original notice before choosing a recovery command. An
+interrupted policy command is never automatically replayed. The policy does not
+answer operator questions, publish, rank priorities, or start housekeeping.
+
+For a final `[org-report]` exception or manual handling, use the existing path:
 
 1. Run `handle --notice 'THE COMPLETE NOTICE' --role supervisor`, optionally
    `--to YOUR-SUPERVISOR` and `--brief FILE` for a manual run. This invokes settle
@@ -62,7 +79,8 @@ with Moderate/Minor findings and current clean/green readiness evidence. Inspect
 the findings and exact reviewed/head commits. Decide whether to accept them and
 file follow-ups, then `promote RUN --accept-findings --why REASON --role supervisor`,
 or send one more correction with `handle RUN --retry --fix-findings --role supervisor`.
-Both choices are recorded; neither happens automatically. Set a recorded per-item
+Both manual choices are recorded. Autopilot accepts only parsed Moderate/Minor
+findings and records their follow-up before requesting promotion. Set a recorded per-item
 cap with `record set ITEM meta.settle_review_round_cap=N`, or supply
 `--review-round-cap N` to the initial `handle`. The project default is tracked
 `settle.review_round_cap`; an item override wins, and 0 disables the cap.

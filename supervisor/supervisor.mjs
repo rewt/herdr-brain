@@ -11,6 +11,7 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart, briefSize, receiptDirectory } from './context.mjs';
 import { queueJobs } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
+import { supervisorStatus, renderStatus } from './status.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const local = (name) => fileURLToPath(new URL(name, import.meta.url));
@@ -40,7 +41,11 @@ export function main(argv = process.argv.slice(2)) {
   const [action = 'brief', requested] = positionals;
   if (opt['accept-findings'] && action !== 'promote') throw new Error('--accept-findings is a promotion decision');
   if ((opt['fix-findings'] || opt['review-round-cap'] !== undefined) && action !== 'handle') throw new Error('--fix-findings and --review-round-cap belong to handle');
-  if (positionals.length > 2 || !['brief', 'entry', 'checkpoint', 'handle', 'promote', 'release'].includes(action)) throw new Error('usage: supervisor.mjs brief [--json] | entry --role supervisor | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT | release; mutations require --role supervisor');
+  if (positionals.length > 2 || !['brief', 'status', 'entry', 'checkpoint', 'handle', 'promote', 'release'].includes(action)) throw new Error('usage: supervisor.mjs brief|status [--json] | entry --role supervisor | checkpoint --through N | handle --notice TEXT | promote R-n --why TEXT | release; mutations require --role supervisor');
+  if (action === 'status') {
+    const status = supervisorStatus({ cwd: opt.repo, org: opt.org });
+    process.stdout.write(opt.json ? JSON.stringify(status) + '\n' : renderStatus(status)); return;
+  }
   if (action === 'entry') { enterSupervisor({ cwd: opt.repo, org: opt.org, role: opt.role, to: opt.to }); return; }
   const doc = coldStart({ cwd: opt.repo, org: opt.org, sinceSeq: opt['since-seq'] === undefined ? undefined : Number(opt['since-seq']) });
   const project = doc.project;

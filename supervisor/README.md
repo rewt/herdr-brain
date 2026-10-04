@@ -2,7 +2,54 @@
 
 All automatic supervisor notices use `prompt-supervisor.mjs`, including watch's
 intermediate/final notices, promotion outcomes, and settle/dispatch's correction
-watchers. The helper aligns with bch-cloak's `prompt-supervisor.sh` and
+watchers. Before delivery, [autopilot.mjs](autopilot.mjs) applies the model-free
+`notice-autopilot/v1` policy to notices bound to the canonical Git identity and
+record. Routine notices complete without prompting or notifying the supervisor.
+Policy processing at enqueue does not wait behind a busy chat or an older
+exception; the existing delivery FIFO still orders exceptions. Restored inbox
+workers recover pending policy through the same durable action receipts.
+
+| Evidence | Policy action |
+| --- | --- |
+| Recorded `[org-report]` done | `supervisor handle RUN`, using the project's review route |
+| `promotable`, independent PASS | `promote RUN --why 'notice-autopilot/v1: PASS promotes …'` |
+| `fix_round` | Leave the dispatched, watched correction in flight |
+| Exact settle "base branch moved" escalation | One `handle RUN --retry`; a second escalation wakes |
+| Capped `promotable_with_findings`, parsed Moderate/Minor only | One engineer follow-up containing all findings, then `promote --accept-findings` with the follow-up and policy in its reason |
+| `[promote-queue]` promoted | `handle --notice TEXT` closes the bound item, or no action if already closed |
+| Anything else | Wake with a bounded one-line reason and the action receipt path |
+
+FAIL, Major findings at the review cap, refusals, train failures, release gate
+notices, non-done/no-report workers, questions, uncertain or interrupted results,
+and unknown notices/results always wake. Settle retains responsibility for review
+and correction dispatch: a FAIL or capped Major can already have dispatched a fix
+when its result arrives; autopilot wakes with that evidence and does not promote.
+Only fixed notice prefixes route actions. Headline and report narrative are never
+commands. CLIs receive argument arrays; all record writes go through the record
+CLI. Autopilot starts no project schedule and calls no supervisor model. The
+independent reviewer still runs through the project's configured review route.
+
+STOP, paused housekeeping (`enabled: false`), malformed configuration, and record
+damage disable automatic actions. The project kill switch is a canonical
+`.supervisor.json` containing `{"autopilot":{"enabled":false}}`; absence means
+enabled. The schema accepts only `autopilot.enabled` as a boolean. Tooling must be
+`auto` in the record's approvals config. Operator-reserved/human items,
+publish/priorities categories, other categories routed to `ask`, report questions,
+blockers, unclassified decisions and category warnings wake for judgment. No
+operator question is answered, and no publish, priority or other reserved action
+is executed by this policy. Authority, STOP and pause are re-read before each CLI
+command; settle/promotion retain their existing lifecycle safety checks.
+
+Action receipts live under `ORG/supervisor/REPOSITORY_KEY/autopilot/`. Their key is
+the report run or promotion job, so different delivery IDs cannot create duplicate
+follow-ups. Each command's argv, intent and acknowledged result are retained.
+A lost reply or interrupted sequence wakes instead of replaying commands. The
+inbox retains the complete original notice and records its handled/wake disposition
+and receipt. Exceptions retain the fixed report envelope for foreground `handle`
+compatibility; their narrative is replaced by the compact reason and receipt.
+Legacy/custom inbox entries without a project binding keep their delivery path.
+
+For exceptions, the helper aligns with bch-cloak's `prompt-supervisor.sh` and
 `box-empty.py`: append the notice to `inbox.log` first, read the input box twice
 three seconds apart, then call `herdr agent prompt`. Both reads also require an
 idle/done agent and the same live occupant. Busy or unreadable input raises a
@@ -51,7 +98,7 @@ complete delivered text before the attempt and after its acknowledgement.
 Delivery is at-least-once: a crash or lost acknowledgement replays that ID through
 the input gate, so the supervisor can recognise a duplicate. Acknowledged notices
 are not replayed, and newer notices wait for the oldest notice's acknowledgement.
-The helper exits 0 for acknowledged delivery, 3 when pending with an owner, and
+The helper exits 0 for acknowledged delivery or a handled policy result, 3 when pending with an owner, and
 1 for a journal or startup failure. Its JSON receipt includes `owner_pid` while
 pending. Delivery that waited is logged in the journal and caller output; the
 worker's diagnostic output goes to `inbox.log.worker.log`.
@@ -147,11 +194,24 @@ supported sources, project trust and surface limitations (checked 2026-10-03).
 node /path/to/monitor/supervisor/supervisor.mjs entry --repo PROJECT --org RECORD --role supervisor --to YOUR-SUPERVISOR
 ```
 
+`status` renders active lanes and the ten most recent landed lanes with run, item,
+lane, stage (engineering, review, fix, train, landed), provider/model, start time
+and elapsed time, followed by the last ten policy receipts and their actions.
+[status.mjs](status.mjs) exports the same read-only JSON projection for a future
+minimal console profile. Stage comes from the event fold, verified settle receipts
+and promotion queue; Herdr's agent list and optional lane session receipts supply
+display fields only. Provider/model metadata never authorizes work. Elapsed time
+stops at integration for landed lanes. Missing Herdr data or damaged receipts
+produce warnings rather than fabricated live status. This path does not render a
+cold start, inspect transcripts, run a model, or write record/checkpoint events.
+
 From a project checkout, or with `--repo PROJECT --org RECORD`:
 
 ```sh
 node /path/to/monitor/supervisor/supervisor.mjs brief
 node /path/to/monitor/supervisor/supervisor.mjs brief --json
+node /path/to/monitor/supervisor/supervisor.mjs status
+node /path/to/monitor/supervisor/supervisor.mjs status --json
 node /path/to/monitor/supervisor/supervisor.mjs checkpoint --through 123 --role supervisor
 node /path/to/monitor/supervisor/supervisor.mjs handle --notice 'COMPLETE WATCH NOTICE' --role supervisor
 node /path/to/monitor/supervisor/supervisor.mjs promote R-123 --why 'Authority and readiness evidence' --to supervisor-project --role supervisor
@@ -221,12 +281,13 @@ policy, reviewed source commit and head including the public review record, and
 the cold start suggests `decide_findings`. Settle's [guide](../settle/README.md)
 defines project defaults, recorded item overrides and round counting.
 
-After inspecting capped findings, explicitly choose
+For a manual exception, after inspecting capped findings, explicitly choose
 `promote RUN --accept-findings --why REASON --role supervisor` to record their
 acceptance and enqueue the bound head, or
 `handle RUN --retry --fix-findings --role supervisor` to dispatch another fix
 without repeating the review. Repeated correction requests adopt the existing
-receipt. Follow-up items remain the supervisor's decision. Major/FAIL findings,
+receipt. Autopilot files one follow-up only for the parsed Moderate/Minor case
+above; other follow-ups remain the supervisor's decision. Major/FAIL findings,
 red validation and unresolved evidence keep their correction or handoff path.
 
 `promote RUN --why REASON` is the supervisor's explicit authority judgment. It

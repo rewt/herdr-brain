@@ -1,0 +1,14 @@
+Snapshot · 1 active
+
+Session                          Provider / model                 Stage        Started      Running
+supervisor-herdr                 Claude                           supervisor   unknown      unknown
+
+
+
+
+
+
+
+
+
+q quit

@@ -9,7 +9,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { herdrRightClick } from './lib/cli.mjs';
-import { ConfigError, configPath, loadConfig, loadModernConfig } from './lib/config.mjs';
+import { ConfigError, configPath, consoleProfile, loadConfig, loadModernConfig } from './lib/config.mjs';
 import { lineText } from './lib/frame.mjs';
 import { MOUSE_OFF, MOUSE_ON, parseMouse } from './lib/mouse.mjs';
 import { VERSION, createSession } from './lib/session.mjs';
@@ -18,6 +18,7 @@ import { createModernSession } from './modern/session.mjs';
 import { MODERN_PALETTES } from './modern/frame.mjs';
 import { folderPath, createIdentityReader } from './modern/model.mjs';
 import { createPainter } from './modern/paint.mjs';
+import { createMinimalSession } from './modern/minimal-session.mjs';
 
 let opt;
 try {
@@ -25,6 +26,8 @@ try {
     options: {
       project: { type: 'string' },
       modern: { type: 'boolean' },
+      minimal: { type: 'boolean' },
+      profile: { type: 'string' },
       folder: { type: 'string' },
       config: { type: 'string' },
       print: { type: 'string' },
@@ -42,10 +45,13 @@ try {
 if (opt.help) {
   process.stdout.write(`Herdr Monitor ${VERSION}
 usage: record console [--project NAME] [--modern]
+       node console/app.mjs --minimal [--project NAME] [--print COLSxROWS]
        record console --modern --folder PATH
        node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
 
 --modern opens the project console. Answers, routes, desks, priorities and housekeeping use validating record commands.
+--minimal opens a read-only session list; q quits. Config: "profile": "minimal".
+--profile full overrides the configured minimal profile; combine with --modern for the full project console.
 --print is read only, including confirmed answers, project settings and priority changes.
 --keys sends characters in order: literal \\n means Enter and \\e means Escape.
 Modern keys: p scope dropdown, h overview, c control, d decided, f asked, u routes, P priorities, H housekeeping, S desks,
@@ -64,7 +70,11 @@ if (opt.version) {
 let config;
 let folderIndex = null;
 const loadedConfigPath = path.resolve(opt.config ?? configPath());
+let minimal;
 try {
+  if (opt.minimal && opt.profile && opt.profile !== 'minimal') throw new ConfigError('--minimal conflicts with --profile full');
+  minimal = consoleProfile(loadedConfigPath, opt.minimal ? 'minimal' : opt.profile) === 'minimal';
+  if (minimal) opt.modern = true;
   if (opt.folder && (!opt.modern || opt.project)) throw new ConfigError('--folder requires --modern and cannot be combined with --project');
   config = (opt.modern ? loadModernConfig : loadConfig)(loadedConfigPath);
   if (opt.folder) {
@@ -91,7 +101,7 @@ if (opt.project) {
 }
 
 const NO_COLOR = Boolean(process.env.NO_COLOR);
-const createConsole = opt.modern ? createModernSession : createSession;
+const createConsole = minimal ? createMinimalSession : opt.modern ? createModernSession : createSession;
 
 if (opt.print) {
   const m = /^(\d+)x(\d+)$/.exec(opt.print);

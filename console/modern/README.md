@@ -1,5 +1,44 @@
 # Live Projects trial
 
+## Minimal profile
+
+For a single read-only screen of the project's live sessions, including the
+canonical checkout and its lanes:
+
+```sh
+node console/dev.mjs --project herdr-brain --minimal
+node console/app.mjs --minimal --project herdr-brain --print 100x24
+```
+
+Set `"profile": "minimal"` at the top level of the console config to make it
+the default. `--profile full --modern` opens the full project console again;
+`--profile full` opens the existing classic console. The profile preference is
+never written by the console. `--minimal` and `--profile minimal` also work
+without `--modern`, including with `--folder`.
+
+The five columns are session name, provider/model, stage, local start time and
+elapsed time. Earlier dates include month/day. Missing model information leaves
+the provider alone; missing start times say `unknown`. A lane's recorded launch
+time leads transcript start and run start, so a reused correction worker keeps
+its session age. Working sessions come first, then newest launches; names and
+pane IDs break ties. Stage uses structured session/run roles, correction dispatch
+origins and the established review/settle/supervisor session names. It does not
+read prose to guess stages or call a model.
+
+Idle chats and supervisors remain visible while Herdr still lists them. Workers
+with a reported or abandoned run drop off once they stop working or blocking;
+Herdr `done` workers/reviewers without a linked run also drop off. Missing agents
+disappear on the next successful refresh. Source failures retain the last known
+rows with a small notice. There are no actions beyond `q` to quit (Ctrl-C also
+exits). No goals, tasks, decisions or control panels are rendered; the Brain
+queue is never read. Launch-pending shells appear only after agent detection.
+
+At 80 columns the widths are 21/21/11/11/8 with two spaces between columns.
+Extra width goes equally to name and provider. Rows that cannot fit in the pane
+are counted in the footer; enlarge the pane to see them. Below 80 columns the
+screen asks for a wider pane. Refresh follows `refresh_seconds`; the painter
+writes only changed rows and duration text advances once per minute.
+
 This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes
 are the project screen's prompt (a new chat, or a task under the work block),

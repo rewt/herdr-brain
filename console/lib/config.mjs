@@ -10,6 +10,17 @@ export function configPath(env = process.env) {
   return env.HERDR_ORG_CONSOLE_CONFIG || path.join(os.homedir(), '.config', 'herdr-org', 'console.json');
 }
 
+export function consoleProfile(file, explicit) {
+  let profile = explicit;
+  if (profile === undefined) {
+    try { profile = JSON.parse(fs.readFileSync(file, 'utf8')).profile; }
+    catch (error) { if (error.code !== 'ENOENT') throw new ConfigError(`${file} cannot be read: ${error.message}`); }
+  }
+  profile ??= 'full';
+  if (!['full', 'minimal'].includes(profile)) throw new ConfigError('console profile must be "full" or "minimal"');
+  return profile;
+}
+
 export const EXAMPLE = {
   '//': [
     'Herdr Monitor configuration. Edit the project below, then delete the "example" line.',
@@ -21,6 +32,7 @@ export const EXAMPLE = {
     'refresh_seconds         how often to re-read when nothing changed',
     'brain_bin               path to brain.mjs; its queue of stopped sessions joins Waiting on you',
     'glyphs                  "nerd" (a Nerd Font is set in Herdr) or "plain" (ASCII only)',
+    'profile                 "minimal" for sessions only, or "full" (default)',
   ],
   example: true,
   projects: [
@@ -66,7 +78,7 @@ export function normalizeConfig(raw, file, { allowUnmanaged = false } = {}) {
   const brainBin = expand(raw.brain_bin);
   if (raw.brain_bin && !brainBin) throw new ConfigError(`${file}: "brain_bin" must be a path`);
   // explain: false turns off the plain-words reading of org questions (one small model call each, cached).
-  return { projects: out, refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs, brain_bin: brainBin, explain: raw.explain !== false };
+  return { projects: out, profile: consoleProfile(file, raw.profile ?? 'full'), refresh_seconds: Number.isFinite(refresh) && refresh >= 1 ? refresh : 5, glyphs, brain_bin: brainBin, explain: raw.explain !== false };
 }
 
 // Opening the live trial on a new installation must not create an example

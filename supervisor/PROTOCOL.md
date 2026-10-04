@@ -46,7 +46,9 @@ before choosing a recovery command. An
 interrupted policy command is never automatically replayed. The policy does not
 answer operator questions, publish, rank priorities, or start housekeeping.
 
-For a final `[org-report]` exception or manual handling, use the existing path:
+Every final `[org-report]` notice takes one path through settle and guarded
+promotion. Autopilot uses this path for routine notices. For exceptions or manual
+handling, the supervisor follows these steps:
 
 1. Run `handle --notice 'THE COMPLETE NOTICE' --role supervisor`, optionally
    `--to YOUR-SUPERVISOR` and `--brief FILE` for a manual run. This invokes settle

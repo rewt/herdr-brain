@@ -1,0 +1,20 @@
+TAP version 13
+# Subtest: copied codex probe product validates, guards and promotes worker and routing changes offline
+ok 1 - copied codex probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 7959.670583
+  ...
+# Subtest: copied claude probe product validates, guards and promotes worker and routing changes offline
+ok 2 - copied claude probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 7602.213125
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 15590.439375

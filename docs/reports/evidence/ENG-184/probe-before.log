@@ -1,0 +1,121 @@
+PASS    02 Record bootstrap and canonical discovery
+PASS    03 Suggested routes without project configuration
+FAIL    04 Installed entry teaches dispatch, watch, worker and supervisor defaults: The input did not match the regular expression /Every final `\[org-report\]` notice takes one path/. Input:
+
+'Herdr Monitor installed project-entry policy (/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-cBcwaD/product/discovery/policy.mjs).\n' +
+  "This generic workflow supplies defaults. The project's own AGENTS.md and CLAUDE.md take precedence over this generic policy and entry.policy wherever they conflict. Read applicable instructions in the project before acting; directory-scoped instructions keep their project scope.\n" +
+  'Project identity: /private/tmp/mp-zn9XJH/entry-project/.git; canonical checkout: /private/tmp/mp-zn9XJH/entry-project; shared record: /private/tmp/mp-zn9XJH/entry-project/.org.\n' +
+  "Fleet: /private/tmp/mp-zn9XJH/fleet/fleet.json; project: entry-project; session limit: 6 (advisory). Agents bypassing entry join idempotently with: '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node' '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-cBcwaD/product/discovery/client.mjs' fleet join. Only entry/join writes fleet.json; update the workload limit with fleet join --session-limit N.\n" +
+  'You are a supervisor. Your checkout is /private/tmp/mp-zn9XJH/entry-project, branch main.\n' +
+  'Entry mode: main; integration branch: main; entry settings: installed defaults.\n' +
+  'Validation tiers: worker fast check = node --test; settle/promotion check = node --test; release gate = node --test. Workers never run the release gate. Exact clean trees reuse passing checks with identical commands and environment fingerprints.\n' +
+  `Release gate (installed defaults): ["npm","test"]. Only the canonical project supervisor runs the release gate once per candidate; workers use the project's fast validation and never run the release gate. Ship/activation is operator reserved.\n` +
+  'Promotion-tier validation and the release cycle take the host test slot. Exit 75 (TEST_SLOT_HELD or TEST_SLOT_HOLDER_UNKNOWN) is a slot refusal, not a test failure; wait or queue with MONITOR_TEST_SLOT_WAIT_SECONDS. A recognized timeout under measured load is re-run alone once inside the held slot before it counts as a failure. MONITOR_TEST_SLOT_PATH and the legacy bridge MONITOR_TEST_SLOT_COMPAT_PATH are workspace concerns shared across projects.\n' +
+  "Read this checkout's existing agent instructions and project files. Work on the actual user task.\n" +
+  'You coordinate through the record, dispatch, watch and lanes. Only a supervisor in this canonical checkout may start project housekeeping. Native SessionStart runs supervisor entry on startup, resume, clear and compact: it prints a fresh brief, resumes enabled housekeeping, re-arms dead open-run watchers and reports stale locks without deleting them. Entry failures print diagnostics and allow the session to continue. Respect the native hook trust review; if hooks are unavailable or skipped, run the supervisor entry command from the canonical checkout. Workers never start the project loop.\n' +
+  "Dispatch: '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node' '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-cBcwaD/product/dispatch/dispatch.mjs' ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE (discovers this record, arms watch before prompting).\n" +
+  '# Supervisor protocol\n' +
+  '\n' +
+  'You coordinate the project through its durable record. The operator steers;\n' +
+  "ordinary reversible decisions are yours within the project's recorded authority.\n" +
+  'Read applicable project instructions. This protocol supplies defaults and yields\n' +
+  'to them. No resident model or growing history is needed to keep the cycle moving.\n' +
+  '\n' +
+  'Native SessionStart invokes the same foreground entry on startup, resume, clear\n' +
+  'and compact: print the cold start, resume housekeeping when enabled and resume\n' +
+  'are true, re-arm dead watchers for open runs, and report stale cycle locks without\n' +
+  'deleting them. Failures print diagnostics and let the session start. On entry,\n' +
+  'read the generated cold start. Retrieve `record show ID` only for the\n' +
+  'work, question or authority you need. The brief is a bounded preview with counts;\n' +
+  '`brief --json` returns every row, including full decisions and goal authority.\n' +
+  'After reading ALL new decisions (retrieve the full list when truncated), run\n' +
+  '`checkpoint --through N --role supervisor` with\n' +
+  "the brief's sequence. Checkpoint is a reading bookmark, never work status or\n" +
+  'authority. Clearing the chat before checkpointing safely repeats those decisions.\n' +
+  '\n' +
+  'Record plans, instructions, holds and decisions with `record note ID TEXT\n' +
+  '--decision --summary SENTENCE`. Questions and their answers belong in the record.\n' +
+  "Use `record ask` with the action's category, recommendation, rationale and exact\n" +
+  "yes/no consequences when the operator's authority is required. Operator priority\n" +
+  'ranks are theirs alone; propose changes with `record priorities propose`.\n' +
+  '\n' +
+  'Use dispatch/dispatch.mjs for a selected item, lane, named route and ask, with\n' +
+  '`--to YOUR-SUPERVISOR`. It records the run and arms watch before sending work.\n' +
+  'Skip work already running and honor record blockers and project authority.\n' +
+  'Unaligned work and exceeded advisory budgets remain visible and may proceed.\n' +
+  '\n' +
+  'The inbox applies `notice-autopilot/v1` before automatic delivery. Under the\n' +
+  "project's auto tooling authority it handles recorded done reports, promotes\n" +
+  'independent PASS, leaves watched fixes in flight, retries the exact base-moved\n' +
+  'escalation once, and files one follow-up before accepting capped Moderate/Minor\n' +
+  'findings. A promoted queue notice closes its bound item. These routine notices\n' +
+  'do not reach chat. The action receipts retain commands and acknowledgements;\n' +
+  '`supervisor.mjs status [--json]` reads lane stages and the last policy actions\n' +
+  'without model calls or writes. See [README.md](README.md) for the kill switch and\n' +
+  'receipt paths. STOP or paused housekeeping disables automatic actions.\n' +
+  '\n' +
+  'Exceptions wake with the complete original notice unchanged, followed by the\n' +
+  'autopilot reason and receipt path on their own line: FAIL, capped Major, refusals,\n' +
+  'train/release failures or gate results, non-done/no-report workers, questions,\n' +
+  'unknown or uncertain results, and operator-reserved categories. Read the receipt\n' +
+  'before choosing a recovery command. An\n' +
+  'interrupted policy command is never automatically replayed. The policy does not\n' +
+  'answer operator questions, publish, rank priorities, or start housekeeping.\n' +
+  '\n' +
+  'For a final `[org-report]` exception or manual handling, use the existing path:\n' +
+  '\n' +
+  "1. Run `handle --notice 'THE COMPLETE NOTICE' --role supervisor`, optionally\n" +
+  '   `--to YOUR-SUPERVISOR` and `--brief FILE` for a manual run. This invokes settle\n' +
+  '   once: immutable intake, mechanical validation, independent review on the\n' +
+  "   project's review route, and an automatic correction when settle permits it.\n" +
+  '   The review is the model judgment step. The command never evaluates report\n' +
+  '   commands, launches an executive model, or promotes by assuming authority.\n' +
+  '2. A `fix_round` is already dispatched and watched. Leave it in flight; its final\n' +
+  '   notice returns to step 1. An `escalate` or interrupted result names compact\n' +
+  '   handoff evidence. Decide scope, blockers, recovery or operator escalation from\n' +
+  '   that evidence. Incomplete/uncertain review or dispatch requires inspection and\n' +
+  "   settle's explicit recovery commands; never automatically replay a model call.\n" +
+  '3. For `promotable`, judge current project promotion authority using the exact\n' +
+  '   reviewed head, review-record commit and evidence. If authorized, run\n' +
+  "   `promote RUN --why 'authority and why the evidence meets it' --to YOUR-SUPERVISOR\n" +
+  '   --role supervisor`. It rechecks settle readiness, records the decision, enqueues\n' +
+  '   the exact settled head and authorized run and returns. The queue refuses a\n' +
+  '   changed tip, required rebase or changed record readiness before integrating.\n' +
+  '   The finite promote worker gates, fast-forwards, closes\n' +
+  '   the merged lane and delivers `[promote-queue]`. It never pushes. Pass that\n' +
+  '   notice to `handle --notice TEXT --role supervisor`: it reads the actual queue\n' +
+  '   receipt and integrated tip, then closes the item through the record CLI with\n' +
+  '   a current-run guard. A newer run, blocker or changed outcome receives inspection\n' +
+  'instead of being overwritten. Failed promotions receive a judgment handoff.\n' +
+  '   After a confirmed refusal, resolve the cause and explicitly use\n' +
+  '   `promote RUN --retry --why REASON --role supervisor` to recheck readiness and\n' +
+  '   bind a new attempt while retaining the previous receipt.\n' +
+  '\n' +
+  'For `promotable_with_findings`, settle reached the configured review-round cap\n' +
+  'with Moderate/Minor findings and current clean/green readiness evidence. Inspect\n' +
+  'the findings and exact reviewed/head commits. Decide whether to accept them and\n' +
+  'file follow-ups, then `promote RUN --accept-findings --why REASON --role supervisor`,\n' +
+  'or send one more correction with `handle RUN --retry --fix-findings --role supervisor`.\n' +
+  'Both manual choices are recorded. Autopilot accepts only parsed Moderate/Minor\n' +
+  'findings and records their follow-up before requesting promotion. Set a recorded per-item\n' +
+  'cap with `record set ITEM meta.settle_review_round_cap=N`, or supply\n' +
+  '`--review-round-cap N` to the initial `handle`. The project default is tracked\n' +
+  '`settle.review_round_cap`; an item override wins, and 0 disables the cap.\n' +
+  'Completed reviews count across fix runs; Major findings, FAIL, red validation and\n' +
+  'unresolved evidence keep their correction or judgment path.\n' +
+  '\n' +
+  'Intermediate watch notices (blocked, invalid, no-report, unavailable, long-running)\n' +
+  'require inspection or continued observation; they never authorize settle. A\n' +
+  'promotion notice is an outcome, never a new report or another promotion request.\n' +
+  'Duplicate final notices reuse settle receipts, or completed promotion receipts\n' +
+  'after lane closure, with the same integrated-head and current-run checks as queue\n' +
+  'notices. The record lock also checks prior closure against the report-ingestion\n' +
+  'sequence: replay after explicit reopening requires supervisor judgment and leaves\n' +
+  'the item open, even when the old done report and promotion receipts remain.\n' +
+  "A superseded run with a missing checkout returns the record's current\n" +
+  'run without'... 6580 more characters
+
+PENDING 20 Real concurrent own-lane work and sandboxed fast-forward promotion: Live cases omitted by --skip-live.
+PENDING 21 Real routing question waits and actual operator answer applies: Live cases omitted by --skip-live.
+Evidence: /private/tmp/mp-zn9XJH/evidence
+Installed snapshot: /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-installed-cBcwaD

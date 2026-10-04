@@ -10,6 +10,7 @@ import { findOrgDir, initOrg, loadEvents } from '../../lib/store.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../../lanes/routes.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { assertSupervisorEntry } from '../../acceptance/entry.mjs';
+import { copyProduct } from '../../lib/product-files.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const root = new URL('../../', import.meta.url).pathname;
 const fixture = (t) => {
@@ -25,12 +26,17 @@ const fixture = (t) => {
   return { scratch, repo, options: { cwd: repo, runtimeDir: path.join(scratch, 'runtime'), worktreeRoot: path.join(scratch, 'worktrees') } };
 };
 const rec = (repo, args) => command(process.execPath, [path.join(root, 'bin/org.mjs'), ...args], repo, { ORG_DIR: path.join(repo, '.org'), ORG_ACTOR: 'human' });
-test('installed supervisor entry in an untouched project satisfies the release cold-start and notice contract offline', { timeout: 15000 }, (t) => {
+// Keep the cheap copied-policy contract in promotion; the complete worker probe
+// remains a release check. Neither adapter may lose the shared notice path.
+for (const harness of ['codex', 'claude']) test(`copied ${harness} supervisor entry in an untouched project satisfies the release cold-start and notice contract offline`, { timeout: 15000 }, (t) => {
   const f = fixture(t), receipt = path.join(f.scratch, 'native-called');
+  const product = path.join(f.scratch, 'product');
+  copyProduct(root, product);
+  assert.ok(!fs.existsSync(path.join(product, 'discovery/test')), 'entry uses the distributed product');
   const native = path.join(f.scratch, 'fake-native');
   fs.writeFileSync(native, `#!/usr/bin/env node\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, 'unexpected launch');\n`, { mode: 0o755 });
   for (const name of ['.org', '.lane.json', 'AGENTS.md']) assert.ok(!fs.existsSync(path.join(f.repo, name)));
-  const entry = spawnSync(process.execPath, [path.join(root, 'discovery/adapters/codex.mjs'),
+  const entry = spawnSync(process.execPath, [path.join(product, `discovery/adapters/${harness}.mjs`),
     '--repo', f.repo, '--binary', native, '--role', 'supervisor', '--policy-only',
     '--runtime-dir', f.options.runtimeDir, '--worktree-root', f.options.worktreeRoot],
   { cwd: f.repo, env: { ...process.env, ORG_ACTOR: 'supervisor-entry-contract-test' }, encoding: 'utf8', timeout: loadTimeout(10000) });

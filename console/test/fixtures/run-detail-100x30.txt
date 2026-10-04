@@ -1,6 +1,15 @@
 ‹ Back  Esc
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Run · R-2 · ENG-2                                                                                │
+│  Run lifecycle                                                                                   │
+│  ›✓ Dispatch →  ✓ Engineering →  ✓ Report →  ✓ Review →  ✓ Train →  ✓ Landed                     │
+│   done          done             done        done        done       done                         │
+│   unknown       30m 0s           unknown     unknown     9m 0s      unknown                      │
+│  ↓                                                                                               │
+│   ○ Release candidate                                                                            │
+│   waiting                                                                                        │
+│   unknown                                                                                        │
+│                                                                                                  │
 │  Run status                                                                                      │
 │  Open ENG-2                                                                                      │
 │  ENG-2 · Make every console row useful                                                           │
@@ -17,14 +26,5 @@
 │  The console opens durable evidence.                                                             │
 │                                                                                                  │
 │  WHAT CHANGED                                                                                    │
-│  A readable report with a long paragraph that wraps to the viewport.                             │
-│                                                                                                  │
-│  • First verified fact                                                                           │
-│  • Second verified fact                                                                          │
-│                                                                                                  │
-│  More evidence.                                                                                  │
-│                                                                                                  │
-│  More evidence.                                                                                  │
-│                                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-↑↓ scroll · Tab section · 1–25/132
+↑↓ scroll/links · ←→ links · Tab · Enter · 1–25/141

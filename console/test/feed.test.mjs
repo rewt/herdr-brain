@@ -5,6 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { createFeedReader, reportFeed, noticeEntries, noticeFields, trainFacts } from '../modern/feed.mjs';
 
+test('notice delivery includes explicit autopilot handling without claiming a sent prompt', () => {
+  const events = [{ type: 'notice', id: 'promotion', message: '[promote-queue] id=j outcome=promoted' },
+    { type: 'autopilot', id: 'promotion', result: { disposition: 'handled' } }];
+  assert.equal(noticeEntries(events)[0].delivery, 'handled');
+});
+
 const at = n => new Date(Date.UTC(2026, 9, 4, 17, n)).toISOString();
 const report = (id, n, outcome = 'done') => ({ id, item: 'ENG-1', report: { at: at(n), outcome, headline: `Headline ${id}` } });
 const notice = (id, n, message) => ({ type: 'notice', id, at: at(n), message });

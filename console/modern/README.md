@@ -76,6 +76,31 @@ recent results open their receipt and log. A view stays on its batch when anothe
 batch starts. Missing timing data is labelled, never inferred from file updates.
 Detail views support arrows, PageUp/PageDown and the wheel for scrolling; Tab
 jumps sections. Item, report and promotion links retain a nested Back history.
+Run details begin with a lifecycle chain: dispatch, engineering, report, review,
+each recorded correction's fix/report/review links, train, landed and release
+candidate. Press `p` on any Runs row or click its stage to inspect its chain,
+including a worker that is still active; Enter on the run keeps opening its
+session. Batch details show queued, rebase, CI, fast-forward, close lanes and
+notify. `✓` done, `●` running, `×` failed, `○` waiting and `–` skipped remain
+readable without colour. Wide views chain links horizontally, wrapping long
+lifecycles into connected bands; narrow views stack them vertically. Arrows
+select links, Enter or a click opens their brief, report, review, check output,
+promotion receipt or candidate gate. Esc and ‹ Back restore the selected link
+and scroll. The CI view includes each attempted check, a bounded live tail and
+structured failing tests with their diagnostic messages from the full log.
+
+Chains use record timestamps and receipts, with `unknown` for missing clocks.
+The CI clock describes the current/latest attempted check, including its
+recorded reuse evidence; it freezes when finished and stops on interruption.
+Rebase, fast-forward, lane closure and notice delivery have no independent
+stage clocks in older receipts and remain unknown. Closure and delivery use
+the queue's distinct receipts and the notice journal, including autopilot
+handling. Correction links require explicit settle/dispatch run relationships;
+candidate membership requires the promoted commit in that project's recorded
+candidate. Readers never use a file's modification time as a stage clock.
+While validation runs, its temporary log is selected only when the validation
+lock names this batch's exact receipt and one matching log exists. Ambiguous
+logs wait for the completed gate's explicit path.
 Each live session activation rechecks the exact occupant and canonical repository. The embedded view reuses the full
 console's native terminal grid and Herdr control stream. **Esc** or the top-left
 **‹ Back** button releases control and restores selection and scroll; Esc is never
@@ -83,8 +108,8 @@ sent to the pane. **Ctrl+\** deliberately sends Esc to interrupt the agent and
 is labelled in the footer. Ctrl+] also returns. Ordinary typing belongs to the
 agent, including Meta/Alt keys; q and Ctrl-C quit from read-only views. The session
 opens at its own full viewport width. There are no other write paths.
-Launch-pending shells appear only after agent detection. Release candidate gates are omitted
-from this compact profile.
+Launch-pending shells appear only after agent detection. Release candidate gates
+are reachable from a landed run's lifecycle link.
 
 The minimal controller and fact readers load without console dependencies. Ink
 and React load dynamically only when the minimal profile prepares its renderer;

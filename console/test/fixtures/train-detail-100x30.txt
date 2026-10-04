@@ -1,6 +1,11 @@
 ‹ Back  Esc
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Train · batch-1                                                                                  │
+│  Train batch                                                                                     │
+│  ›✓ Queued →  ✓ Rebase →  ● CI    →  ○ Fast-forward →  ○ Close lanes →  ○ Notify                 │
+│   done        done        running    waiting           waiting          waiting                  │
+│   unknown     unknown     2m 0s      unknown           unknown          unknown                  │
+│                                                                                                  │
 │  Batch status                                                                                    │
 │  console · R-4                                                                                   │
 │  Lanes: console                                                                                  │
@@ -21,10 +26,5 @@
 │  Check log · tail                                                                                │
 │  check started                                                                                   │
 │  first suite passed                                                                              │
-│  suite 2 passed                                                                                  │
-│  suite 3 passed                                                                                  │
-│  suite 4 passed                                                                                  │
-│  suite 5 passed                                                                                  │
-│  suite 6 passed                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-↑↓ scroll · Tab section · 1–25/73
+↑↓ scroll/links · ←→ links · Tab · Enter · 1–25/78

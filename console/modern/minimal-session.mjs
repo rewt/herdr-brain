@@ -51,7 +51,7 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
   };
   const snapshot = () => ({ view: ui.view, focus: ui.focus, panel: ui.panel, selections: [...ui.selections], panelOffsets: [...ui.panelOffsets],
     detail: ui.detail, document: ui.document, detailScroll: ui.detailScroll, detailFocus: ui.detailFocus, detailError: ui.detailError });
-  const detailFacts = () => ({ project, status: data.status, ...model(), now: d.now() });
+  const detailFacts = () => ({ project, status: data.status, journal: data.journal, ...model(), now: d.now() });
   async function readDetail() {
     const descriptor = ui.detail, generation = epoch;
     try {
@@ -60,6 +60,7 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       ui.document = document;
       ui.detailError = ['status', 'journal', 'train'].filter(source => ui.errors[source]).map(source => `${source} unavailable · last known data`).join('; ') || null;
       if (document.list && !ui.detailFocus) ui.detailFocus = document.sections.flatMap(s => s.entries ?? [])[0]?.id;
+      if (!ui.detailFocus && document.sections[0]?.pipeline) ui.detailFocus = document.sections[0].pipeline[0]?.id;
     }
     catch (e) { if (ui.stopped || ui.view !== 'detail' || ui.detail !== descriptor || generation !== epoch) return;
       ui.detailError = e.message; ui.document ??= { title: `${ui.detail.kind} · ${ui.detail.run ?? ui.detail.batch ?? ''}`,
@@ -102,17 +103,19 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
   async function activate(id) {
     if (id === 'back') return back();
     let open;
-    if (ui.view === 'detail') open = lastDetail?.lines.find(r => r.id === id)?.open;
+    if (ui.view === 'detail') open = lastDetail?.links.find(r => r.id === id)?.open;
     else if (ui.view === 'table') {
       open = id === 'context' ? { kind: 'context' } : lastView?.groups.flat().find(r => r.id === id)?.open;
+      if (id?.startsWith('pipeline:')) open = lastView?.groups[0].find(r => r.pipeline?.id === id)?.pipeline.open;
       if (open) {
-        ui.focus = id;
-        const panel = lastView.groups.findIndex(group => group.some(r => r.id === id));
-        if (panel >= 0) { ui.panel = panel; ui.selections[panel] = id; }
+        ui.focus = lastView.groups[0].find(r => r.pipeline?.id === id)?.id ?? id;
+        const panel = lastView.groups.findIndex(group => group.some(r => r.id === ui.focus));
+        if (panel >= 0) { ui.panel = panel; ui.selections[panel] = ui.focus; }
       }
     }
     if (!open) return false;
     if (open.kind !== 'session') {
+      if (ui.view === 'detail') ui.detailFocus = id;
       history.push(snapshot()); release();
       Object.assign(ui, { view: 'detail', detail: open, document: null, detailScroll: 0, detailFocus: null, detailError: null, message: '' });
       await readDetail(); changed(); return false;
@@ -222,15 +225,15 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
           const step = key.shift ? -1 : 1;
           const index = l.sections.findLastIndex(s => s.index <= ui.detailScroll || s.id === ui.detailFocus);
           const next = l.sections[(index + step + l.sections.length) % l.sections.length];
-          ui.detailFocus = next.id; ui.detailScroll = next.index;
-        } else if (key.upArrow || key.downArrow || input === 'j' || input === 'k') {
-          const step = key.upArrow || input === 'k' ? -1 : 1;
-          const focused = l.lines.find(line => line.id === ui.detailFocus), panel = focused?.section ?? ui.detailFocus;
-          const links = l.lines.filter(line => line.link && (ui.document.list || line.section === panel));
+          ui.detailFocus = next.id === 'pipeline' ? l.links.find(link => link.section === 'pipeline')?.id ?? next.id : next.id; ui.detailScroll = next.index;
+        } else if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow || input === 'j' || input === 'k') {
+          const step = key.upArrow || key.leftArrow || input === 'k' ? -1 : 1;
+          const focused = l.links.find(line => line.id === ui.detailFocus), panel = focused?.section ?? ui.detailFocus;
+          const links = l.links.filter(line => line.link && (ui.document.list || line.section === panel));
           if (links.length) {
             const index = links.findIndex(line => line.id === ui.detailFocus), next = links[Math.max(0, Math.min(links.length - 1, index + step))];
             ui.detailFocus = next.id;
-            const at = l.lines.indexOf(next);
+            const at = next.index;
             if (at < ui.detailScroll || at >= ui.detailScroll + l.capacity) ui.detailScroll = at;
           } else { ui.detailFocus = null; ui.detailScroll += step; }
         } else if (key.pageUp || key.pageDown) { ui.detailFocus = null; ui.detailScroll += (key.pageUp ? -1 : 1) * l.capacity; }
@@ -240,6 +243,10 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
         changed(); return false;
       }
       const groups = [...(lastView?.groups ?? []), ...(lastView?.contextText ? [[{ id: 'context' }]] : [])];
+      if (input === 'p') {
+        const row = lastView?.groups[0].find(r => r.id === ui.focus);
+        if (row?.pipeline) return activate(row.pipeline.id);
+      }
       if (key.tab) {
         ui.selections[ui.panel] = ui.focus;
         const panels = groups.map((group, i) => group.length ? i : -1).filter(i => i >= 0);

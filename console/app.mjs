@@ -51,6 +51,7 @@ usage: record console [--project NAME] [--modern]
 
 --modern opens the project console. Answers, routes, desks, priorities and housekeeping use validating record commands.
 --minimal shows runs, reports and the merge train; Enter/click opens a session or detail. Config: "profile": "minimal".
+Minimal pipelines: p on a run or click its stage; train rows open the batch chain. Arrows select links; Enter opens evidence.
 Minimal session: Esc or ‹ Back returns; Ctrl+\\ sends Esc to interrupt the agent.
 --profile full overrides the configured minimal profile; combine with --modern for the full project console.
 --print is read only, including confirmed answers, project settings and priority changes.

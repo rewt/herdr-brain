@@ -23,6 +23,7 @@ export function noticeEntries(events = []) {
       const notice = notices.get(event.id);
       if (!notice) continue;
       if (event.type === 'sent') notice.delivery = 'sent';
+      if (event.type === 'autopilot' && event.result?.disposition === 'handled') notice.delivery = 'handled';
       if (event.type === 'sending') notice.delivery = 'uncertain';
       if (event.type === 'retry') notice.delivery = 'pending';
     }
@@ -86,17 +87,27 @@ export function trainFacts(queue, batches = []) {
     if (r.outcome === 'interrupted' && ['promoted', 'refused'].includes(saved?.outcome)) continue;
     results.set(r.id, { ...saved, ...r, at: r.finished ?? r.integrated_at ?? r.gate?.finished_at ?? saved?.at });
   }
+  for (const [index, member] of (current?.results ?? []).entries()) {
+    const r = member.result, job = member.job;
+    if (!r || !job) continue;
+    const saved = results.get(job.id);
+    if (r.outcome === 'interrupted' && ['promoted', 'refused'].includes(saved?.outcome)) continue;
+    results.set(job.id, { ...saved, ...job, ...r,
+      close_complete: index < current.deliveredCount || current.phase === 'completed' && index === current.deliveredCount,
+      at: r.integrated_at ?? r.gate?.finished_at ?? saved?.at });
+  }
   return {
     waiting: queue?.pending ?? [], interrupted: queue?.interrupted ?? [], batches,
     current: current ? { id: current.id, lanes: (attempt?.jobs ?? current.jobs ?? [current]).map(j => j.topic),
-      phase: current.phase === 'batching' ? (attempt?.phase === 'prepared' && batch?.command && !attempt.gate ? 'validating' : attempt?.phase ?? batch?.phase ?? current.phase) : current.phase,
+      phase: current.phase === 'batching' ? (batch?.phase && batch.phase !== 'pending' ? batch.phase
+        : attempt?.phase === 'prepared' && batch?.command && !attempt.gate ? 'validating' : attempt?.phase ?? batch?.phase ?? current.phase) : current.phase,
       started: batch?.started_at ?? batch?.created_at ?? null,
       checkStarted: attempt?.gate?.started_at ?? null,
       checkFinished: attempt?.gate?.finished_at ?? null,
       checkDurationSeconds: attempt?.gate?.duration_s ?? null,
       checkComplete: Boolean(attempt?.gate && (attempt.gate.finished_at || attempt.gate.exit_code != null)),
       command: attempt?.gate?.command ?? batch?.command ?? null, log: batch?.log ?? current.log,
-      jobs: attempt?.jobs ?? current.jobs ?? [], receipt: batch?.receipt } : null,
+      jobs: attempt?.jobs ?? current.jobs ?? [], receipt: batch?.receipt, error: current.phase === 'batching' ? null : current.error } : null,
     results: [...results.values()].sort(newest),
   };
 }

@@ -3,7 +3,7 @@ import { Box, Text, renderToString } from 'ink';
 import { stripVTControlCharacters } from 'node:util';
 import { duration, startText, shortTitle, shortModel } from './minimal.mjs';
 import { sanitize } from '../lib/text.mjs';
-import { Panel, Table, Spans, cleanCell, fitCell } from './table.mjs';
+import { Panel, Table, Spans, cleanCell, fitCell, columnWidths } from './table.mjs';
 import { sessionScreenRows } from './session-screen.mjs';
 import { MODERN_PALETTES } from './frame.mjs';
 
@@ -42,9 +42,11 @@ export function minimalLayout({ project, sessions = [], runs = [], reports = [],
     const cells = compact ? (width < 28 ? [span(`${r.run} ${title}`)] : [span(r.run), span(title), stage])
       : [span(r.run), span(title), stage, span(provider(r)), span(startText(r.started, now)), span(elapsed(r.running_seconds, now))];
     cells[0].underline = true;
+    if (cells[2]) cells[2].underline = true;
     const details = compact ? [span(`${width < 28 ? r.stage + ' · ' : ''}${provider(r)} · ${startText(r.started, now)} · ${elapsed(r.running_seconds, now)}`)] : null;
     return { id: `run:${r.run}`, cells, details, target: r.target,
       open: r.target && !['landed', 'blocked', 'finished'].includes(r.stage) ? { kind: 'session', target: r.target } : { kind: 'run', run: r.run },
+      pipeline: { id: `pipeline:${r.run}`, open: { kind: 'run', run: r.run } },
       cost: compact ? 2 : 1, dim: r.stage === 'landed' };
   });
   const recent = reports.map(r => {
@@ -107,6 +109,11 @@ export function minimalLayout({ project, sessions = [], runs = [], reports = [],
     let at = y + 2 + (i === 0 && work.length ? 2 : 0);
     for (const r of group) {
       if (r.open) { controls.push({ id: r.id }); for (let n = 0; n < r.cost; n++) hits[at + n] = [{ from: 1, to: width - 1, id: r.id }]; }
+      if (r.pipeline && runColumns.length >= 3) {
+        const padding = width >= runColumns.length * 4 + 2 ? 1 : 0, sizes = columnWidths(runColumns, width, padding);
+        const from = 1 + sizes[0] + sizes[1] + padding * 4 + 2, to = from + sizes[2] + padding * 2;
+        if (to > from) { hits[at].unshift({ from, to, id: r.pipeline.id }); controls.push({ id: r.pipeline.id }); }
+      }
       at += r.cost;
     }
     y += costs[i] + group.reduce((sum, r) => sum + r.cost, 0);
@@ -127,7 +134,8 @@ function Dashboard({ layout, noColor }) {
     h(Panel, { title: l.titles[1], width: l.width }, ...rows(l.visible[1])),
     h(Panel, { title: l.titles[2], width: l.width }, ...rows(l.visible[2])),
     ...l.messages.map((text, i) => h(Spans, { key: `error:${i}`, width: l.width, dim: true, spans: [span(text)] }))),
-    h(Spans, { width: l.width, dim: true, spans: [span(l.width >= 40 ? '↑↓ rows · Tab panels · Enter · q quit' : 'Tab · Enter · q quit')] }));
+    h(Spans, { width: l.width, dim: true, spans: [span(l.width >= 60 ? '↑↓ rows · Tab panels · Enter · p pipeline · q quit'
+      : l.width >= 32 ? 'Tab · Enter · p pipeline · q quit' : 'p pipeline · q quit')] }));
 }
 
 export function SessionView({ state, cols, rows, noColor }) {

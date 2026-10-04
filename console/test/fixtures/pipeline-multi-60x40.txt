@@ -1,0 +1,40 @@
+‹ Back  Esc
+┌──────────────────────────────────────────────────────────┐
+│ Run · R-2 · ENG-2                                        │
+│  Run lifecycle                                           │
+│› ✓ Dispatch · done · unknown                             │
+│  │                                                       │
+│  ✓ Engineering · done · 30m 0s                           │
+│  │                                                       │
+│  ✓ Report · done · unknown                               │
+│  │                                                       │
+│  × Review · failed · 1m 0s                               │
+│  │                                                       │
+│  ✓ Fix 1 · R-3 · done · 30m 0s                           │
+│  │                                                       │
+│  × Report · R-3 · failed · unknown                       │
+│  │                                                       │
+│  × Review 2 · failed · 1m 0s                             │
+│  │                                                       │
+│  ✓ Fix 2 · R-4 · done · 30m 0s                           │
+│  │                                                       │
+│  ✓ Report · R-4 · done · unknown                         │
+│  │                                                       │
+│  ✓ Review 3 · done · 1m 0s                               │
+│  │                                                       │
+│  ● Train · running · 6m 0s                               │
+│  │                                                       │
+│  ○ Landed · waiting · unknown                            │
+│  │                                                       │
+│  ○ Release candidate · waiting · unknown                 │
+│  × Review: NEEDS-WORK                                    │
+│  × Report · R-3: blocked                                 │
+│  × Review 2: NEEDS-WORK                                  │
+│                                                          │
+│  Run status                                              │
+│  Open ENG-2                                              │
+│  ENG-2 · Make every console row useful                   │
+│                                                          │
+│  Outcome: done · Check: pass                             │
+└──────────────────────────────────────────────────────────┘
+↑↓ scroll/links · ←→ links · Tab · Enter · 1–35/162

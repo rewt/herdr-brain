@@ -1,0 +1,30 @@
+‹ Back  Esc
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Train · batch-1                                                                                                  │
+│  Train batch                                                                                                     │
+│  ›✓ Queued →  ✓ Rebase →  ● CI    →  ○ Fast-forward →  ○ Close lanes →  ○ Notify                                 │
+│   done        done        running    waiting           waiting          waiting                                  │
+│   1m 0s       unknown     2m 0s      unknown           unknown          unknown                                  │
+│                                                                                                                  │
+│  Batch status                                                                                                    │
+│  console · R-4                                                                                                   │
+│  Lanes: console                                                                                                  │
+│  Phase: validating                                                                                               │
+│  Check: node offline-check.mjs                                                                                   │
+│  Elapsed: 2m 0s                                                                                                  │
+│                                                                                                                  │
+│  Live log · latest                                                                                               │
+│  suite 8 passed                                                                                                  │
+│  suite 9 passed                                                                                                  │
+│  suite 10 passed                                                                                                 │
+│  suite 11 passed                                                                                                 │
+│  suite 12 passed                                                                                                 │
+│  suite 13 passed                                                                                                 │
+│  suite 14 passed                                                                                                 │
+│  suite 15 passed                                                                                                 │
+│                                                                                                                  │
+│  Check log · tail                                                                                                │
+│  check started                                                                                                   │
+│  first suite passed                                                                                              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+↑↓ scroll/links · ←→ links · Tab · Enter · 1–25/79

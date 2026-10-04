@@ -1,0 +1,30 @@
+‹ Back  Esc
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Run · R-2 · ENG-2                                                                                                │
+│  Run lifecycle                                                                                                   │
+│  ›✓ Dispatch →  ✓ Engineering →  ✓ Report →  × Review →  ✓ Fix 1 · R-3 →  × Report · R-3 →  × Review 2           │
+│   done          done             done        failed      done             failed            failed               │
+│   unknown       30m 0s           unknown     1m 0s       30m 0s           unknown           1m 0s                │
+│  ↓                                                                                                               │
+│   ✓ Fix 2 · R-4 →  ✓ Report · R-4 →  ✓ Review 3 →  ● Train →  ○ Landed →  ○ Release candidate                    │
+│   done             done              done          running    waiting     waiting                                │
+│   30m 0s           unknown           1m 0s         6m 0s      unknown     unknown                                │
+│  × Review: NEEDS-WORK                                                                                            │
+│  × Report · R-3: blocked                                                                                         │
+│  × Review 2: NEEDS-WORK                                                                                          │
+│                                                                                                                  │
+│  Run status                                                                                                      │
+│  Open ENG-2                                                                                                      │
+│  ENG-2 · Make every console row useful                                                                           │
+│                                                                                                                  │
+│  Outcome: done · Check: pass                                                                                     │
+│                                                                                                                  │
+│  Review: NEEDS-WORK · Promotion: promoted                                                                        │
+│                                                                                                                  │
+│  Commit: def5678                                                                                                 │
+│                                                                                                                  │
+│  Review recorded; ready for the train                                                                            │
+│                                                                                                                  │
+│  Report                                                                                                          │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+↑↓ scroll/links · ←→ links · Tab · Enter · 1–25/143

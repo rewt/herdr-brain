@@ -1,19 +1,19 @@
 // Minimal reads project facts; explicit row activation controls one live pane.
 import fs from 'node:fs';
-import React from 'react';
 import { supervisorStatus } from '../../supervisor/status.mjs';
 import { herdrAgents, herdrList, orgStatus } from '../lib/cli.mjs';
 import { createSessionReader } from '../lib/sources.mjs';
 import { catalog, createIdentityReader, workspaceIdentity } from './model.mjs';
-import { minimalRows, minimalTree } from './minimal.mjs';
-import { SessionView, inkFrame } from './minimal-view.mjs';
+import { minimalRows } from './minimal.mjs';
 import { controlTerminal, splitInput } from './control.mjs';
 import { createFeedReader, reportFeed } from './feed.mjs';
+import { createDetailReader } from './details.mjs';
+import { loadMinimalRenderer } from './minimal-renderer.mjs';
 
 export function createMinimalSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
-  const reader = createSessionReader(), feed = createFeedReader();
+  const reader = createSessionReader(), feed = createFeedReader(), detail = createDetailReader();
   const d = { herdrAgents, herdrList, orgStatus, controlTerminal, identity: createIdentityReader(), now: Date.now,
-    journal: feed.journal, train: feed.train,
+    journal: feed.journal, train: feed.train, document: detail.document,
     runs: (project, agents, now) => supervisorStatus({ cwd: project.root ?? project.cwd, org: project.org, agents, now: new Date(now).toISOString() }),
     details(agent, run, project) {
       const lane = reader.laneSession({ repoRoot: project.root, name: agent.name, sessionId: agent.session });
@@ -23,9 +23,15 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       return { lane, transcript, dispatch };
     }, ...deps };
   const ui = { appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', errors: {}, loading: true, stopped: false,
-    view: 'table', focus: null, interactive: false, active: null, terminalFrame: null, outputError: null, message: '' };
+    view: 'table', focus: null, panel: 0, selections: [], panelOffsets: [0, 0, 0],
+    detail: null, document: null, detailScroll: 0, detailFocus: null, detailError: null,
+    interactive: false, active: null, terminalFrame: null, outputError: null, message: '' };
   const data = { agents: [], workspaces: [], panes: [], tabs: [], status: null, runs: null, rawAgents: [], journal: [], train: {} };
-  let project = null, pending = null, timer = null, controller = null, epoch = 0, lastView = null, controlSize = null;
+  let project = null, pending = null, timer = null, controller = null, epoch = 0, lastView = null, lastDetail = null, controlSize = null;
+  let viewport = { cols: 80, rows: 24 };
+  let renderer;
+  const prepare = async () => { renderer ??= await loadMinimalRenderer(); };
+  const history = [];
   let facts = new Map();
   const own = a => Boolean(a && project?.repoKey && d.identity(a.cwd)?.key === project.repoKey && (a.tool || a.session));
   const target = a => own(a) ? { pane: a.pane, name: a.name, session: a.session, tab: a.tab, cwd: a.cwd } : null;
@@ -36,49 +42,90 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       const recorded = data.status?.runs?.find(run => run.id === r.run);
       const live = data.agents.find(a => a.pane === r.pane && a.name === r.agent &&
         (!recorded?.meta?.agent_session_id || recorded.meta.agent_session_id === a.session));
-      return { ...r, target: target(live ?? data.agents.find(a => sessions.some(s => s.pane === a.pane && s.run === r.run))) };
+      const occupant = live ?? data.agents.find(a => sessions.some(s => s.pane === a.pane && s.run === r.run));
+      return { ...r, target: ['working', 'idle'].includes(occupant?.status) ? target(occupant) : null };
     });
-    const byRun = id => runs.find(r => r.run === id)?.target ?? target(data.agents.find(a => sessions.some(s => s.run === id && s.pane === a.pane)));
-    const byJob = j => byRun(j.run) ?? runs.find(r => r.lane === j.topic)?.target;
-    const train = { ...data.train, waiting: data.train.waiting?.map(j => ({ ...j, target: byJob(j) })),
-      results: data.train.results?.map(j => ({ ...j, target: byJob(j) })) };
-    if (train.current) {
-      const members = train.current.lanes.map(topic => ({ topic, target: byJob({ topic }) }));
-      train.current = { ...train.current, members: members.length > 1 ? members : [], target: members.length === 1 ? members[0].target : null };
-    }
-    return { sessions, runs, reports: reportFeed(data.status, data.journal).map(r => ({ ...r, target: byRun(r.run) })), train };
+    return { sessions: sessions.map(s => ({ ...s, target: target(data.agents.find(a => a.pane === s.pane)) })),
+      runs, reports: reportFeed(data.status, data.journal), train: data.train };
   };
+  const snapshot = () => ({ view: ui.view, focus: ui.focus, panel: ui.panel, selections: [...ui.selections], panelOffsets: [...ui.panelOffsets],
+    detail: ui.detail, document: ui.document, detailScroll: ui.detailScroll, detailFocus: ui.detailFocus, detailError: ui.detailError });
+  const detailFacts = () => ({ project, status: data.status, ...model(), now: d.now() });
+  async function readDetail() {
+    const descriptor = ui.detail, generation = epoch;
+    try {
+      const document = await d.document(descriptor, detailFacts());
+      if (ui.stopped || ui.view !== 'detail' || ui.detail !== descriptor || generation !== epoch) return;
+      ui.document = document;
+      ui.detailError = ['status', 'journal', 'train'].filter(source => ui.errors[source]).map(source => `${source} unavailable · last known data`).join('; ') || null;
+      if (document.list && !ui.detailFocus) ui.detailFocus = document.sections.flatMap(s => s.entries ?? [])[0]?.id;
+    }
+    catch (e) { if (ui.stopped || ui.view !== 'detail' || ui.detail !== descriptor || generation !== epoch) return;
+      ui.detailError = e.message; ui.document ??= { title: `${ui.detail.kind} · ${ui.detail.run ?? ui.detail.batch ?? ''}`,
+      sections: [{ id: 'error', title: 'Source unavailable', content: e.message }] }; }
+  }
   const changed = () => { if (!ui.stopped) onChange(); };
   function release() { epoch++; controller?.stop(); controller = null; controlSize = null; ui.interactive = false; }
-  function back() { release(); Object.assign(ui, { view: 'table', active: null, terminalFrame: null, outputError: null }); changed(); return false; }
+  function back() { release(); Object.assign(ui, history.pop() ?? { view: 'table' }, { active: null, terminalFrame: null, outputError: null }); changed(); return false; }
   function view(cols, rows) {
+    viewport = { cols, rows };
     if (ui.view === 'output') {
-      const tree = React.createElement(SessionView, { state: ui, cols, rows, noColor: Boolean(env.NO_COLOR) });
+      const tree = renderer.sessionTree({ state: ui, cols, rows, noColor: Boolean(env.NO_COLOR) });
       ui.screenViewport = { cols: Math.max(1, Math.min(cols, 400)), rows: Math.max(1, Math.min(160, rows - 2 - Number(Boolean(ui.outputError)))) };
       const size = `${ui.screenViewport.cols}x${ui.screenViewport.rows}`;
       if (controller && controlSize !== size) { controller.resize?.(ui.screenViewport.cols, ui.screenViewport.rows); controlSize = size; }
       return { tree, hits: [[{ id: 'back', from: 0, to: Math.min(13, cols) }]], controls: [{ id: 'back' }] };
     }
-    const result = minimalTree({ project, ...model(), ...ui, selected: ui.focus, now: d.now() }, cols, rows, { noColor: Boolean(env.NO_COLOR) });
+    if (ui.view === 'detail') {
+      const document = ui.document ?? { title: 'Opening…', sections: [{ id: 'reading', title: 'Reading details…', content: '' }] };
+      lastDetail = renderer.detailTree({ ...document, title: document.title + (ui.detailError ? ' · source unavailable' : '') }, ui, cols, rows, { noColor: Boolean(env.NO_COLOR), now: d.now() });
+      ui.detailScroll = lastDetail.scroll;
+      return lastDetail;
+    }
+    const current = { project, ...model(), ...ui, selected: ui.focus, now: d.now() };
+    const layout = renderer.minimalLayout(current, cols, rows);
+    if (!ui.loading && !(ui.focus === 'context' && layout.contextText)) {
+      const panel = layout.groups.findIndex(group => group.some(row => row.id === ui.focus));
+      if (panel >= 0) ui.panel = panel;
+      else {
+        const group = layout.groups[ui.panel] ?? [];
+        ui.focus = group[Math.min(ui.panelOffsets[ui.panel] ?? 0, group.length - 1)]?.id ?? layout.groups.flat()[0]?.id ?? null;
+        ui.panel = Math.max(0, layout.groups.findIndex(group => group.some(row => row.id === ui.focus)));
+      }
+    }
+    const result = renderer.minimalTree({ ...current, selected: ui.focus }, cols, rows, { noColor: Boolean(env.NO_COLOR) });
     lastView = result;
+    ui.panelOffsets = result.offsets;
     return result;
   }
   async function activate(id) {
     if (id === 'back') return back();
-    if (ui.view !== 'table') return false;
-    const row = lastView?.groups.flat().find(r => r.id === id);
-    if (!row) return false;
-    ui.focus = id;
+    let open;
+    if (ui.view === 'detail') open = lastDetail?.lines.find(r => r.id === id)?.open;
+    else if (ui.view === 'table') {
+      open = id === 'context' ? { kind: 'context' } : lastView?.groups.flat().find(r => r.id === id)?.open;
+      if (open) {
+        ui.focus = id;
+        const panel = lastView.groups.findIndex(group => group.some(r => r.id === id));
+        if (panel >= 0) { ui.panel = panel; ui.selections[panel] = id; }
+      }
+    }
+    if (!open) return false;
+    if (open.kind !== 'session') {
+      history.push(snapshot()); release();
+      Object.assign(ui, { view: 'detail', detail: open, document: null, detailScroll: 0, detailFocus: null, detailError: null, message: '' });
+      await readDetail(); changed(); return false;
+    }
     if (d.allowSessionInput === false) return false;
-    if (!row.target) { ui.message = 'No live session for this row'; changed(); return false; }
-    const selected = row.target, generation = ++epoch;
+    if (!open.target) { ui.message = 'Session unavailable'; changed(); return false; }
+    const selected = open.target, generation = ++epoch;
     try {
       const fresh = await d.herdrAgents();
-      if (ui.stopped || generation !== epoch || ui.focus !== id || ui.view !== 'table') return false;
+      if (ui.stopped || generation !== epoch) return false;
       if (!fresh.ok || !fresh.agents.some(a => same(a, selected))) throw Error('Session changed · refresh and select it again');
-      release(); const current = epoch;
+      history.push(snapshot()); release(); const current = epoch;
       Object.assign(ui, { view: 'output', active: selected, pane: selected.pane, interactive: true, terminalFrame: null, outputError: null, message: '' });
-      const size = { cols: Math.max(1, Math.min(lastView?.width ?? 80, 400)), rows: Math.max(1, Math.min((lastView?.rows ?? 24) - 2, 160)) };
+      const size = { cols: Math.max(1, Math.min(viewport.cols, 400)), rows: Math.max(1, Math.min(viewport.rows - 2, 160)) };
       controlSize = `${size.cols}x${size.rows}`;
       const live = () => !ui.stopped && ui.view === 'output' && epoch === current;
       const next = d.controlTerminal({ pane: selected.pane, ...size,
@@ -99,6 +146,7 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
   async function refresh() {
     if (pending) return pending;
     pending = (async () => {
+      await prepare();
       const read = async (key, fn) => {
         try { const value = await fn(); if (ui.stopped) return; data[key] = value; delete ui.errors[key]; }
         catch (e) { if (!ui.stopped) ui.errors[key] = e.message; }
@@ -122,7 +170,8 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       const nextProject = selected ? projects.find(p => p.id === (selected.id ?? `configured:${selected.name}`) && p.repoKey === selectedKey)
         : projects.find(p => p.repoKey === currentKey) ?? projects[0] ?? null;
       if (project?.repoKey !== nextProject?.repoKey || project?.org !== nextProject?.org) {
-        if (ui.view === 'output') back();
+        if (ui.view !== 'table') back();
+        history.length = 0; Object.assign(ui, { view: 'table', focus: null, panel: 0, selections: [], panelOffsets: [0, 0, 0] });
         data.status = null; data.runs = null; data.journal = []; data.train = {}; facts = new Map();
         for (const source of ['status', 'runs', 'journal', 'train']) delete ui.errors[source];
       }
@@ -147,13 +196,14 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       const all = model();
       const ids = [...all.runs.map(r => `run:${r.run}`), ...all.reports.map(r => `report:${r.id ?? r.run}`)];
       if (!ui.focus) ui.focus = ids[0] ?? null;
+      if (ui.view === 'detail') await readDetail();
       ui.loading = false;
       if (!ui.stopped) onChange();
     })().finally(() => { pending = null; });
     return pending;
   }
   return {
-    refresh, activate,
+    prepare, refresh, activate,
     async start() { timer = setInterval(() => refresh().catch(e => { ui.errors.sessions = e.message; changed(); }), config.refresh_seconds * 1000); return refresh(); },
     stop() { ui.stopped = true; release(); clearInterval(timer); },
     async key(input, key = {}) {
@@ -163,11 +213,43 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
         return false;
       }
       if (input === 'q' || (input === 'c' && key.ctrl)) return true;
-      if (key.escape) { epoch++; return false; }
-      const entries = lastView?.groups.flat() ?? [];
-      if (key.upArrow || key.downArrow || key.tab || input === 'j' || input === 'k') {
-        const index = entries.findIndex(r => r.id === ui.focus), step = key.upArrow || input === 'k' || (key.tab && key.shift) ? -1 : 1;
+      if (key.escape) { if (ui.view === 'detail') return back(); epoch++; return false; }
+      if (ui.view === 'detail') {
+        const l = lastDetail;
+        if (!l) return false;
+        const step = key.upArrow || input === 'k' || key.shift ? -1 : 1;
+        if (key.tab) {
+          const index = l.sections.findLastIndex(s => s.index <= ui.detailScroll || s.id === ui.detailFocus);
+          const next = l.sections[(index + step + l.sections.length) % l.sections.length];
+          ui.detailFocus = next.id; ui.detailScroll = next.index;
+        } else if (key.upArrow || key.downArrow || input === 'j' || input === 'k') {
+          const focused = l.lines.find(line => line.id === ui.detailFocus), panel = focused?.section ?? ui.detailFocus;
+          const links = l.lines.filter(line => line.link && (ui.document.list || line.section === panel));
+          if (links.length) {
+            const index = links.findIndex(line => line.id === ui.detailFocus), next = links[Math.max(0, Math.min(links.length - 1, index + step))];
+            ui.detailFocus = next.id;
+            const at = l.lines.indexOf(next);
+            if (at < ui.detailScroll || at >= ui.detailScroll + l.capacity) ui.detailScroll = at;
+          } else { ui.detailFocus = null; ui.detailScroll += step; }
+        } else if (key.pageUp || key.pageDown) { ui.detailFocus = null; ui.detailScroll += (key.pageUp ? -1 : 1) * l.capacity; }
+        else if (key.return) return activate(ui.detailFocus);
+        else return false;
+        ui.detailScroll = Math.max(0, Math.min(Math.max(0, l.lines.length - l.capacity), ui.detailScroll));
+        changed(); return false;
+      }
+      const groups = [...(lastView?.groups ?? []), ...(lastView?.contextText ? [[{ id: 'context' }]] : [])];
+      if (key.tab) {
+        ui.selections[ui.panel] = ui.focus;
+        const panels = groups.map((group, i) => group.length ? i : -1).filter(i => i >= 0);
+        const index = panels.indexOf(ui.panel), step = key.shift ? -1 : 1;
+        ui.panel = panels[(index + step + panels.length) % panels.length] ?? 0;
+        ui.focus = groups[ui.panel]?.find(r => r.id === ui.selections[ui.panel])?.id ?? groups[ui.panel]?.[0]?.id ?? null;
+        epoch++; ui.message = ''; changed();
+      } else if (key.upArrow || key.downArrow || key.pageUp || key.pageDown || input === 'j' || input === 'k') {
+        const entries = groups[ui.panel] ?? [], index = entries.findIndex(r => r.id === ui.focus);
+        const step = (key.upArrow || key.pageUp || input === 'k' ? -1 : 1) * (key.pageUp || key.pageDown ? Math.max(1, lastView.visible[ui.panel]?.length ?? 1) : 1);
         ui.focus = entries[Math.max(0, Math.min(entries.length - 1, index + step))]?.id ?? null;
+        ui.selections[ui.panel] = ui.focus;
         epoch++; ui.message = ''; changed();
       }
       if (key.return) return activate(ui.focus);
@@ -179,6 +261,18 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
         if (event.button === 'left' && event.y === 0 && event.x < 13) return back();
         if (event.button === 'wheelUp' || event.button === 'wheelDown') controller?.scroll?.(event.button === 'wheelUp' ? 'up' : 'down', 3);
         return false;
+      }
+      if (ui.view === 'detail') {
+        if (event.button === 'wheelUp' || event.button === 'wheelDown') {
+          ui.detailFocus = null; ui.detailScroll = Math.max(0, Math.min(Math.max(0, lastDetail.lines.length - lastDetail.capacity), ui.detailScroll + (event.button === 'wheelUp' ? -3 : 3))); changed();
+        } else if (event.button === 'left') {
+          const hit = lastDetail?.hits[event.y]?.find(h => event.x >= h.from && event.x < h.to);
+          if (hit) return activate(hit.id);
+        }
+        return false;
+      }
+      if (event.button === 'wheelUp' || event.button === 'wheelDown') {
+        return this.key('', { [event.button === 'wheelUp' ? 'upArrow' : 'downArrow']: true });
       }
       if (event.button === 'left') {
         const hit = lastView?.hits[event.y]?.find(h => event.x >= h.from && event.x < h.to);
@@ -194,7 +288,8 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       for (let i = 0; i < text.length; i++) {
         if (text[i] === '\x1c') { if (forwarded) controller?.input(Buffer.from(forwarded, 'latin1')); forwarded = ''; controller?.input(Buffer.from('\x1b')); }
         else if (text[i] === '\x1b') {
-          // Preserve arrows/function keys; a bare or partial Esc always returns.
+          // Preserve arrows/function keys and Meta/Alt pairs. Only a bare,
+          // chunk-final Esc (or the explicit Esc encodings) returns.
           const sequence = /^(?:\x1b\[[0-?]*[ -/]*[@-~]|\x1bO[ -~])/.exec(text.slice(i))?.[0];
           if (/^\x1b\[27(?:;[\d:]+)*u$|^\x1b\[27;\d+;27~$|^\x1b\[93;5(?::[12])?u$/.test(sequence ?? '')) { leave = true; break; }
           if (/^\x1b\[(?:28(?:;1)?|92;5(?::[12])?)u$/.test(sequence ?? '')) {
@@ -202,6 +297,7 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
             forwarded = ''; controller?.input(Buffer.from('\x1b')); i += sequence.length - 1;
           }
           else if (sequence) { forwarded += sequence; i += sequence.length - 1; }
+          else if (i + 1 < text.length) { forwarded += text.slice(i, i + 2); i++; }
           else { leave = true; break; }
         } else forwarded += text[i];
       }
@@ -212,7 +308,7 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
     tree(cols, rows) { return view(cols, rows).tree; },
     frame(cols, rows) {
       const result = view(cols, rows);
-      return inkFrame(result.tree, cols, rows, { hits: result.hits, controls: result.controls });
+      return renderer.inkFrame(result.tree, cols, rows, { hits: result.hits, controls: result.controls });
     },
     get ui() { return ui; }, set ui(value) { Object.assign(ui, value); },
     get project() { return project; }, get model() { return model(); },

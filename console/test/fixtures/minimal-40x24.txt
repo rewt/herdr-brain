@@ -4,7 +4,7 @@ Context · supervisor Claude
 │ Runs · 1 open                        │
 │ Run    │ Work          │ Stage       │
 │────────┼───────────────┼─────────────│
-│ R-1    │ ENG-1 Compac… │ engineering │
+│›R-1    │ ENG-1 Compac… │ engineering │
 │ Codex Sol · 15:50 · 1h 10m           │
 └──────────────────────────────────────┘
 ┌──────────────────────────────────────┐
@@ -21,4 +21,4 @@ Context · supervisor Claude
 
 
 
-↑↓ select · Enter session · q quit
+↑↓ rows · Tab panels · Enter · q quit

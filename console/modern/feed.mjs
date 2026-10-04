@@ -75,7 +75,7 @@ export function trainFacts(queue, batches = []) {
   // Receipts survive queue rotation; the queue has richer delivery timestamps.
   for (const b of batches) for (const [id, result] of Object.entries(b.results ?? {})) {
     const job = b.jobs?.find(j => j.id === id);
-    results.set(id, { ...result, id, topic: job?.topic, run: job?.run,
+    results.set(id, { ...result, id, topic: job?.topic, run: job?.run, queued: job?.queued, batch: result.batch ?? b.id,
       at: result.integrated_at ?? result.gate?.finished_at ?? b.updated_at,
       log: result.log ?? b.log, receipt: b.receipt });
   }
@@ -87,7 +87,7 @@ export function trainFacts(queue, batches = []) {
     results.set(r.id, { ...saved, ...r, at: r.finished ?? r.integrated_at ?? r.gate?.finished_at ?? saved?.at });
   }
   return {
-    waiting: queue?.pending ?? [], interrupted: queue?.interrupted ?? [],
+    waiting: queue?.pending ?? [], interrupted: queue?.interrupted ?? [], batches,
     current: current ? { id: current.id, lanes: (attempt?.jobs ?? current.jobs ?? [current]).map(j => j.topic),
       phase: current.phase === 'batching' ? (attempt?.phase === 'prepared' && batch?.command && !attempt.gate ? 'validating' : attempt?.phase ?? batch?.phase ?? current.phase) : current.phase,
       started: batch?.started_at ?? batch?.created_at ?? null,
@@ -95,7 +95,8 @@ export function trainFacts(queue, batches = []) {
       checkFinished: attempt?.gate?.finished_at ?? null,
       checkDurationSeconds: attempt?.gate?.duration_s ?? null,
       checkComplete: Boolean(attempt?.gate && (attempt.gate.finished_at || attempt.gate.exit_code != null)),
-      command: attempt?.gate?.command ?? batch?.command ?? null, log: batch?.log ?? current.log } : null,
+      command: attempt?.gate?.command ?? batch?.command ?? null, log: batch?.log ?? current.log,
+      jobs: attempt?.jobs ?? current.jobs ?? [], receipt: batch?.receipt } : null,
     results: [...results.values()].sort(newest),
   };
 }
@@ -143,7 +144,7 @@ export function createFeedReader({ fsApi = fs } = {}) {
         // The current receipt writer records its creation, not a running gate's
         // clock. Preserve that distinction. The validating line names the CI.
         let command = null;
-        if (queue?.current?.id === b.id) {
+        if (queue?.current?.id === b.id && !b.attempts?.at(-1)?.gate?.command) {
           const validating = read(log, text => [...text.matchAll(/^validating in (.+?): (.+)$/gm)].map(m => ({ scratch: m[1], command: m[2] })));
           command = validating?.filter(v => !b.attempts?.at(-1)?.scratch || v.scratch === b.attempts.at(-1).scratch).at(-1)?.command ?? null;
         }

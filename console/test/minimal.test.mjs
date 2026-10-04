@@ -4,10 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { duration, minimalRows, minimalFrame, sessionStage } from '../modern/minimal.mjs';
+import { duration, minimalRows, sessionStage } from '../modern/minimal.mjs';
+import { inkTest, minimalView } from './optional-ink.mjs';
 import { createMinimalSession } from '../modern/minimal-session.mjs';
 import { consoleProfile, normalizeConfig } from '../lib/config.mjs';
-import { minimalLayout, checkElapsed } from '../modern/minimal-view.mjs';
+const { minimalFrame, minimalLayout, checkElapsed } = minimalView;
 import { createIdentityReader } from '../modern/model.mjs';
 import { cellWidth } from '../lib/text.mjs';
 
@@ -72,7 +73,7 @@ test('a replacement session cannot inherit a report or model tied to another ses
   assert.equal(result[0].stage, 'chat'); assert.equal(result[0].model, '');
 });
 
-test('minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged', () => {
+inkTest('minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged', () => {
   const sessions = rows({ agents: Array.from({ length: 20 }, (_, i) => agent(`会話-${i}\x1b[2J`, { started: iso(i) })) });
   for (const width of [40, 80, 100, 140]) {
     const frame = minimalFrame({ project, sessions, now }, width, 12);
@@ -87,7 +88,7 @@ test('minimal frame is bounded, safe with Unicode, clear about overflow and quie
   assert.equal(text(minimalFrame({ project, sessions, now }, 100, 12)), text(minimalFrame({ project, sessions, now }, 100, 12)));
 });
 
-test('minimal refresh retains last good sources and has no record or scheduling effects', async () => {
+inkTest('minimal refresh retains last good sources and has no record or scheduling effects', async () => {
   let fail = false, stopped = false, calls = [];
   const config = { projects: [{ name: 'Project', cwd: '/project', org: '/org' }], refresh_seconds: 10 };
   const session = createMinimalSession({ config, env: {}, deps: { identity, now: () => now, details: () => ({}),
@@ -120,7 +121,7 @@ test('profile preferences validate, are read without creation, and explicit full
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('--print snapshot works for the flag and configured profile; action keys issue only reads', () => {
+inkTest('--print snapshot works for the flag and configured profile; action keys issue only reads', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'minimal-print-'));
   const config = path.join(dir, 'console.json'), clock = path.join(dir, 'clock.mjs'), herdr = path.join(dir, 'herdr'), record = path.join(dir, 'record.mjs'), log = path.join(dir, 'reads.jsonl');
   try {
@@ -151,6 +152,7 @@ console.log(JSON.stringify({ result }));
       const result = spawnSync(process.execPath, ['--import', clock, 'console/app.mjs', ...flags, '--config', config, '--project', 'Snapshot', '--print', `${width}x${height}`, '--keys', 'ny\\ncPSHy\\n'], { env, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
       const fixture = new URL(`./fixtures/minimal-${width}x${height}.txt`, import.meta.url);
+      if (process.env.UPDATE_CONSOLE_SNAPSHOTS === '1') fs.writeFileSync(fixture, result.stdout);
       assert.equal(result.stdout, fs.readFileSync(fixture, 'utf8'));
       assert.match(result.stdout, /R-1\s+│ ENG-1 Compac/);
       assert.match(result.stdout, /done \/ pass/);
@@ -172,7 +174,7 @@ test('a pane replacement cannot inherit another named agent run; immutable IDs c
   assert.equal(rows({ agents: [a], status: { runs: [{ ...old, meta: { pane: 'shared' } }] } })[0].run, null);
 });
 
-test('duplicate project labels select the requested stable ID and repository, including current-workspace discovery', async () => {
+inkTest('duplicate project labels select the requested stable ID and repository, including current-workspace discovery', async () => {
   const config = { projects: [{ id: 'p1', name: 'Same', cwd: '/project', org: '/org1' },
     { id: 'p2', name: 'Same', cwd: '/other', org: '/org2' }], refresh_seconds: 10 };
   const visited = [];
@@ -195,7 +197,7 @@ test('work purpose uses item titles; reviewer subject never inherits the reporte
   assert.equal(result[0].title, 'Better console'); assert.equal(result[0].run, 'R-1'); assert.equal(result[0].stage, 'review');
 });
 
-test('feed source failure retains last good data and recovers independently', async () => {
+inkTest('feed source failure retains last good data and recovers independently', async () => {
   let fail = false;
   const deps = { identity, now: () => now, details: () => ({}), runs: () => ({ lanes: [] }),
     herdrAgents: async () => ({ ok: true, agents: [] }), herdrList: async () => [],
@@ -209,7 +211,7 @@ test('feed source failure retains last good data and recovers independently', as
   fail = false; await session.refresh(); assert.deepEqual(session.ui.errors, {}); session.stop();
 });
 
-test('narrow and wide frames show active CI, check clocks, refusals and log paths with sparse state colour', () => {
+inkTest('narrow and wide frames show active CI, check clocks and refusals with sparse state colour', () => {
   const reports = [{ at: iso(3), run: 'R-1', item: 'ENG-1', outcome: 'invalid', check: 'fail', headline: 'Fix the report fields', attention: true }];
   const train = { waiting: [{ topic: 'waiting' }], current: { lanes: ['one', 'two'], phase: 'prepared', started: iso(9), command: 'node check.mjs', checkStarted: null },
     results: [{ at: iso(2), topic: 'red', outcome: 'refused', reason: 'validation failed', log: '/project/.git/promote/batches/b/train.log' }] };
@@ -217,14 +219,14 @@ test('narrow and wide frames show active CI, check clocks, refusals and log path
     const frame = minimalFrame({ project, reports, train, now }, width, 25);
     assert.match(text(frame), /one, two/); assert.match(text(frame), /Waiting · waiting/);
     assert.match(text(frame), /refused/); assert.match(text(frame), /validation fail/);
-    assert.match(text(frame), /train.log/); assert.match(text(frame), /Check unknown/);
+    assert.match(text(frame), /Check unknown/);
     assert.match(text(frame), /invalid \/ fail/);
     assert.equal(minimalLayout({ project, reports, train, now }, width, 25).groups[1][0].lines[0].find(s => s.text.includes('fail')).color, 'yellow');
     assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
   }
 });
 
-test('Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history', () => {
+inkTest('Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history', () => {
   const runs = [
     { run: 'R-239', item: 'ENG-184', title: 'Copied-product probe regression: details', stage: 'engineering', provider: 'codex', model: 'gpt-6.1-sol', started: iso(20), running_seconds: 1200 },
     { run: 'R-240', item: 'ENG-186', title: '会話 console\x1b[2J (operator details)', stage: 'review', provider: 'claude', model: 'claude-opus-5-5', started: '2026-10-02T12:30:00Z', running_seconds: 3600 },
@@ -246,7 +248,7 @@ test('Runs is an aligned table with short titles, local starts, frozen landed ti
   }
 });
 
-test('configured cwd without org or ID selects its catalog entry and discovers the record', async () => {
+inkTest('configured cwd without org or ID selects its catalog entry and discovers the record', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'minimal-project-'));
   try {
     assert.equal(spawnSync('git', ['init', '-q', root]).status, 0);
@@ -263,7 +265,7 @@ test('configured cwd without org or ID selects its catalog entry and discovers t
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test('finished check duration freezes while delivery waits; a running check advances', () => {
+inkTest('finished check duration freezes while delivery waits; a running check advances', () => {
   const check = { checkStarted: iso(10), checkFinished: iso(8), checkComplete: true, checkDurationSeconds: 120 };
   assert.equal(checkElapsed(check, now), '2m'); assert.equal(checkElapsed(check, now + 3600000), '2m');
   assert.equal(checkElapsed({ ...check, checkDurationSeconds: null }, now + 3600000), '2m');

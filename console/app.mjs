@@ -50,7 +50,7 @@ usage: record console [--project NAME] [--modern]
        node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
 
 --modern opens the project console. Answers, routes, desks, priorities and housekeeping use validating record commands.
---minimal shows work, reports and the merge train; Enter/click opens a live session. Config: "profile": "minimal".
+--minimal shows runs, reports and the merge train; Enter/click opens a session or detail. Config: "profile": "minimal".
 Minimal session: Esc or ‹ Back returns; Ctrl+\\ sends Esc to interrupt the agent.
 --profile full overrides the configured minimal profile; combine with --modern for the full project console.
 --print is read only, including confirmed answers, project settings and priority changes.
@@ -204,6 +204,7 @@ async function suspend(fn) {
 }
 
 const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps: { suspend }, onChange: notify });
+await session.prepare?.();
 
 
 function color(token) {

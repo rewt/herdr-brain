@@ -1,0 +1,30 @@
+‹ Back  Esc
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Report · R-245 · ENG-181                                                                         │
+│  Report status                                                                                   │
+│  Open ENG-181                                                                                    │
+│  ENG-181 · Persist in-flight promotion batch CI telemetry                                        │
+│                                                                                                  │
+│  Outcome: done · Check: pass                                                                     │
+│                                                                                                  │
+│  Review: NEEDS-WORK · Promotion: interrupted                                                     │
+│                                                                                                  │
+│  Review round 1 reached cap 1 with no Major or FAIL; the supervisor must decide whether to accept│
+│  findings or request another correction                                                          │
+│                                                                                                  │
+│  Report                                                                                          │
+│  The train atomically persists its current batch phase and the check command and start time      │
+│  before synchronous validation blocks. Completed gates retain their full finish, duration, exit  │
+│  and proof fields. Recovery checkpoints, interrupted batches, cached green evidence and cleanup  │
+│  crash recovery remain covered by unchanged existing assertions. Six new regressions cover live  │
+│  phases, a paused check, interrupted resumes, resumed validated checkpoints, red exits and       │
+│  validation exceptions. All 34 focused checks passed. Code, documentation and test evidence are  │
+│  committed in 62afedd. This report precedes its record check, report commit and final lane check.│
+│                                                                                                  │
+│  The promotion-train/v1 receipt now writes batch phase before preparing, rebasing, validating,   │
+│  fast-forwarding and closing work. The existing atomic replacement helper saves every transition.│
+│  Batch started_at is initialized once and preserved on resume.                                   │
+│                                                                                                  │
+│  Before validateTree runs, the latest attempt's gate contains command and started_at, with no    │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+↑↓ scroll · Tab section · 1–25/101

@@ -1,14 +1,13 @@
-import test from 'node:test';
+import { inkTest as test, React, ink, minimalView } from './optional-ink.mjs';
 import assert from 'node:assert/strict';
 import { PassThrough, Writable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
-import React from 'react';
-import { render, renderToString } from 'ink';
-import { Table, columnWidths } from '../modern/table.mjs';
-import { minimalTree, minimalLayout } from '../modern/minimal-view.mjs';
+const { render, renderToString } = ink ?? {};
+const { Table, columnWidths } = ink ? await import('../modern/table.mjs') : {};
+const { minimalTree, minimalLayout } = minimalView;
 import { cellWidth } from '../lib/text.mjs';
 
-const h = React.createElement;
+const h = React?.createElement;
 const columns = [{ label: 'Run', width: 6 }, { label: 'Work', flex: 1, min: 1 }, { label: 'Elapsed', width: 7, align: 'right' }];
 const rows = [{ id: 'a', cells: [{ text: 'R-242' }, { text: '会話\x1b[2J and a long title' }, { text: '20m' }] },
   { id: 'b', cells: [{ text: 'R-2' }, { text: 'Cafe\u0301' }, { text: '1h 2m' }] }];

@@ -58,7 +58,9 @@ export function Table({ title, columns, rows = [], width, selected, noColor = fa
     return h(Box, { key, width: inner, height: 1, flexShrink: 0 }, ...columns.flatMap((column, i) => {
       const cell = cells[i] ?? {};
       const value = typeof cell === 'object' ? cell : { text: cell };
-      const text = ' '.repeat(padding) + fitCell(cleanCell(value.text), sizes[i], column.align) + ' '.repeat(padding);
+      const marker = i === 0 && chosen ? '›' : ' ';
+      const text = !padding && i === 0 && chosen && sizes[i] > 0 ? '›' + fitCell(cleanCell(value.text), sizes[i] - 1, column.align)
+        : (padding ? (i === 0 ? marker : ' ') : '') + fitCell(cleanCell(value.text), sizes[i], column.align) + ' '.repeat(padding);
       return [...(i ? [h(Text, { key: `sep:${i}` }, single.left)] : []),
         h(Spans, { key: `cell:${i}`, width: sizes[i] + padding * 2, selected: chosen, dim, noColor,
           spans: [{ ...value, text, bold: header || chosen }] })];

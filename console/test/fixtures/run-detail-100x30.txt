@@ -1,0 +1,30 @@
+‹ Back  Esc
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Run · R-2 · ENG-2                                                                                │
+│  Run status                                                                                      │
+│  Open ENG-2                                                                                      │
+│  ENG-2 · Make every console row useful                                                           │
+│                                                                                                  │
+│  Outcome: done · Check: pass                                                                     │
+│                                                                                                  │
+│  Review: PASS · Promotion: promoted                                                              │
+│                                                                                                  │
+│  Commit: def5678                                                                                 │
+│                                                                                                  │
+│  Review recorded; ready for the train                                                            │
+│                                                                                                  │
+│  Report                                                                                          │
+│  The console opens durable evidence.                                                             │
+│                                                                                                  │
+│  WHAT CHANGED                                                                                    │
+│  A readable report with a long paragraph that wraps to the viewport.                             │
+│                                                                                                  │
+│  • First verified fact                                                                           │
+│  • Second verified fact                                                                          │
+│                                                                                                  │
+│  More evidence.                                                                                  │
+│                                                                                                  │
+│  More evidence.                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+↑↓ scroll · Tab section · 1–25/132

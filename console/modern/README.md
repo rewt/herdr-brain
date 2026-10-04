@@ -39,12 +39,12 @@ feed extension; this version does not consume an unfinished autopilot schema.
 
 **Train** reads `GIT_COMMON_DIR/promote/queue.json` and `promote/batches/*/train.json`,
 showing waiting lanes, current batch members/phase, batch start and elapsed time,
-CI command, interrupted batches and the three latest results. Refusals include
-reason and log path (the end of long paths remains visible in narrow panes).
-The current writer only persists a gate clock after validation finishes. Batch
+CI command, interrupted batches and recent results. Refusals include their reason;
+Enter opens the receipt and log. ENG-181 receipts expose the running gate command
+and start time before CI finishes. Older receipts still work without that clock. Batch
 creation time comes from the stable batch directory's birth time when no explicit
-start exists; atomic receipt saves do not reset it. The current CI command comes
-from its `train.log` validating line. A missing check start stays `unknown`;
+start exists; atomic receipt saves do not reset it. The current CI command prefers
+the gate receipt, then its `train.log` validating line. A missing check start stays `unknown`;
 finished checks use their recorded duration or finish time while delivery waits.
 Final promoted/refused receipts supersede old interrupted queue rows after resume.
 No promotion, validation, scheduling or model calls are issued by this view.
@@ -65,18 +65,32 @@ Idle chats and supervisors remain visible while Herdr lists them. Reported or
 abandoned workers drop off once they stop working or blocking. Source failures
 retain the last good data with a source notice; changing repository clears old
 source data. Optional missing journals/queues are normal and create no files.
-Use ↑/↓ (or j/k) to select a row, then Enter, or click a row to read and type
-into its live agent session here. Underlined run IDs have live targets; historical
-rows without a current session explain that on Enter. Reports and train entries
-also link when their run/lane has a current agent. Each activation rechecks the
-exact occupant and canonical repository. The embedded view reuses the full
+Use Tab/Shift+Tab to move between panels, remembering each selected row. ↑/↓
+(or j/k) select within a panel; the `›` marker remains visible without colour.
+Enter or a click opens the row. Active runs open their live agent; landed,
+blocked or finished runs open durable details: the report, its check, review
+verdict and findings, promotion and commit, decisions and recorded stage timings.
+Reports always open their report with its review. The Context line opens its
+supervisor and chat sessions. The running batch opens a live status and log tail;
+recent results open their receipt and log. A view stays on its batch when another
+batch starts. Missing timing data is labelled, never inferred from file updates.
+Detail views support arrows, PageUp/PageDown and the wheel for scrolling; Tab
+jumps sections. Item, report and promotion links retain a nested Back history.
+Each live session activation rechecks the exact occupant and canonical repository. The embedded view reuses the full
 console's native terminal grid and Herdr control stream. **Esc** or the top-left
-**‹ Back** button releases control and restores the table selection; Esc is never
+**‹ Back** button releases control and restores selection and scroll; Esc is never
 sent to the pane. **Ctrl+\** deliberately sends Esc to interrupt the agent and
 is labelled in the footer. Ctrl+] also returns. Ordinary typing belongs to the
-agent; q and Ctrl-C quit only from the dashboard. There are no other write paths.
+agent, including Meta/Alt keys; q and Ctrl-C quit from read-only views. The session
+opens at its own full viewport width. There are no other write paths.
 Launch-pending shells appear only after agent detection. Release candidate gates are omitted
 from this compact profile.
+
+The minimal controller and fact readers load without console dependencies. Ink
+and React load dynamically only when the minimal profile prepares its renderer;
+other `--print` profiles and their tests do not need them. Install optional UI
+dependencies with `npm --prefix console ci`. Tests requiring Ink visibly skip
+when the packages are absent; run them in an installed checkout to validate views.
 
 This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes

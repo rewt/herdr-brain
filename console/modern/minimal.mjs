@@ -88,6 +88,3 @@ export function shortModel(model) {
   if (/sol/i.test(value)) return 'Sol';
   return value.replace(/^claude-|^gpt-/i, '');
 }
-
-// The live view and --print share this Ink tree.
-export { minimalFrame, minimalTree, minimalLayout } from './minimal-view.mjs';

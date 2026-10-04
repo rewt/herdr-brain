@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { inkTest as test } from './optional-ink.mjs';
 import assert from 'node:assert/strict';
 import { createMinimalSession } from '../modern/minimal-session.mjs';
 import { lineText } from '../lib/frame.mjs';
@@ -61,7 +61,7 @@ test('interrupt key sends Esc, ordinary typing and arrows retain bytes, mouse is
   } finally { session.stop(); }
 });
 
-test('click targets survive compact rows and reports/train link to the matching live run', async () => {
+test('click targets survive compact rows; reports and train open details without controlling an agent', async () => {
   for (const width of [40, 100]) {
     const { session, controllers } = fixture();
     try {
@@ -69,8 +69,11 @@ test('click targets survive compact rows and reports/train link to the matching 
       for (const id of ['run:R-2', 'report:report:R-2', 'train:waiting']) {
         const y = frame.hits.findIndex(h => h?.some(hit => hit.id === id));
         assert.ok(y >= 0, id); const hit = frame.hits[y].find(h => h.id === id);
-        await session.mouse({ button: 'left', x: hit.from + 1, y }); assert.equal(session.ui.view, 'output');
-        assert.equal(controllers.at(-1).pane, 'w:p2'); await session.activate('back'); assert.equal(session.ui.focus, id);
+        const before = controllers.length;
+        await session.mouse({ button: 'left', x: hit.from + 1, y });
+        assert.equal(session.ui.view, id === 'run:R-2' ? 'output' : 'detail');
+        assert.equal(controllers.length, before + Number(id === 'run:R-2'));
+        await session.activate('back'); assert.equal(session.ui.focus, id);
         frame = session.frame(width, 40);
       }
     } finally { session.stop(); }
@@ -103,12 +106,25 @@ test('Esc encoded by extended keyboard protocols returns without interrupting th
   const { session, controllers } = fixture();
   try {
     await session.refresh();
-    for (const escape of ['\x1b[27u', '\x1b[27;1u', '\x1b[27;1:1u', '\x1b[27;1;27~', '\x1b[', '\x1bq']) {
+    for (const escape of ['\x1b', '\x1b[27u', '\x1b[27;1u', '\x1b[27;1:1u', '\x1b[27;1;27~']) {
       session.frame(80, 24); await session.key('', { return: true });
       const c = controllers.at(-1); await session.input(Buffer.from(escape));
       assert.equal(session.ui.view, 'table'); assert.equal(c.inputs.length, 0); assert.equal(c.stopped, true);
     }
     session.frame(80, 24); await session.key('', { return: true });
     await session.input('\x1b[92;5u'); assert.deepEqual(controllers.at(-1).inputs, [Buffer.from('\x1b')]); assert.equal(session.ui.view, 'output');
+  } finally { session.stop(); }
+});
+
+test('Meta keys retain every byte and the session opens at its full viewport width immediately', async () => {
+  const { session, controllers } = fixture();
+  try {
+    await session.refresh(); session.frame(180, 40); await session.key('', { return: true });
+    const c = controllers[0]; assert.deepEqual([c.cols, c.rows], [180, 38]); assert.deepEqual(c.sizes, []);
+    for (const input of ['\x1b\r', '\x1bb', '\x1bf', '\x1b\x7f', '\x1bq', '\x1b会話', '\x1b[']) {
+      await session.input(Buffer.from(input)); assert.deepEqual(c.inputs.at(-1), Buffer.from(input)); assert.equal(session.ui.view, 'output');
+    }
+    await session.input(Buffer.from('\x1b')); assert.equal(session.ui.view, 'table');
+    assert.ok(c.inputs.every(input => !input.equals(Buffer.from('\x1b'))));
   } finally { session.stop(); }
 });

@@ -1,0 +1,267 @@
+TAP version 13
+# Subtest: landed, blocked and finished run rows open details; Esc and mouse Back restore selection and panel scroll
+ok 1 - landed, blocked and finished run rows open details; Esc and mouse Back restore selection and panel scroll
+  ---
+  duration_ms: 211.974
+  ...
+# Subtest: Tab changes panels and remembers each row; report opens with its review and nested Back retains detail scroll
+ok 2 - Tab changes panels and remembers each row; report opens with its review and nested Back retains detail scroll
+  ---
+  duration_ms: 121.201833
+  ...
+# Subtest: live train views work with and without clocks and follow their batch to a refusal without opening an agent
+ok 3 - live train views work with and without clocks and follow their batch to a refusal without opening an agent
+  ---
+  duration_ms: 110.543667
+  ...
+# Subtest: detail source errors retain the last good document
+ok 4 - detail source errors retain the last good document
+  ---
+  duration_ms: 46.93475
+  ...
+# Subtest: read-only details fit narrow and wide panes; arrows, wheel and section navigation keep links reachable
+ok 5 - read-only details fit narrow and wide panes; arrows, wheel and section navigation keep links reachable
+  ---
+  duration_ms: 95.35
+  ...
+# Subtest: a report-only dashboard starts in Reports, and Context is keyboard reachable with safe session Back
+ok 6 - a report-only dashboard starts in Reports, and Context is keyboard reachable with safe session Back
+  ---
+  duration_ms: 46.642916
+  ...
+# Subtest: live train output stays quiet when unchanged and updates its tail in place
+ok 7 - live train output stays quiet when unchanged and updates its tail in place
+  ---
+  duration_ms: 166.327208
+  ...
+# Subtest: the current check clock advances between polls and a finished clock stays fixed
+ok 8 - the current check clock advances between polls and a finished clock stays fixed
+  ---
+  duration_ms: 50.781416
+  ...
+# Subtest: the real --print path opens run, report and train details and matches readable snapshots
+ok 9 - the real --print path opens run, report and train details and matches readable snapshots
+  ---
+  duration_ms: 1275.230083
+  ...
+# [?25h
+# Subtest: historical runs retain readable reports, all findings, promotions, decisions and honest stage timings
+ok 10 - historical runs retain readable reports, all findings, promotions, decisions and honest stage timings
+  ---
+  duration_ms: 35.771
+  ...
+# Subtest: report views include the archived body and review; watcher exceptions explain an absent report
+ok 11 - report views include the archived body and review; watcher exceptions explain an absent report
+  ---
+  duration_ms: 26.241417
+  ...
+# Subtest: details reject foreign settlements and altered report or review bytes
+ok 12 - details reject foreign settlements and altered report or review bytes
+  ---
+  duration_ms: 30.966084
+  ...
+# Subtest: train details read running telemetry and bounded log tails, then retain the same batch after completion
+ok 13 - train details read running telemetry and bounded log tails, then retain the same batch after completion
+  ---
+  duration_ms: 43.185584
+  ...
+# Subtest: feed uses record headlines and explicit watch checks, newest first including closed items
+ok 14 - feed uses record headlines and explicit watch checks, newest first including closed items
+  ---
+  duration_ms: 1.887125
+  ...
+# Subtest: watch exceptions are deduplicated, readable after delivery, and superseded by final ingestion
+ok 15 - watch exceptions are deduplicated, readable after delivery, and superseded by final ingestion
+  ---
+  duration_ms: 0.890875
+  ...
+# Subtest: recent feed is bounded but keeps unresolved exceptions and drops superseded attention
+ok 16 - recent feed is bounded but keeps unresolved exceptions and drops superseded attention
+  ---
+  duration_ms: 0.233375
+  ...
+# Subtest: train merges queue and receipts, shows waiting, active CI and interrupted work without invented clocks
+ok 17 - train merges queue and receipts, shows waiting, active CI and interrupted work without invented clocks
+  ---
+  duration_ms: 0.199541
+  ...
+# Subtest: optional read sources are cached, reject wrong identities and malformed lines, ignore only a torn journal tail
+ok 18 - optional read sources are cached, reject wrong identities and malformed lines, ignore only a torn journal tail
+  ---
+  duration_ms: 3.073834
+  ...
+# Subtest: a final resumed receipt wins over an older interrupted queue row, before and after delivery
+ok 19 - a final resumed receipt wins over an older interrupted queue row, before and after delivery
+  ---
+  duration_ms: 0.11
+  ...
+# Subtest: batch start survives atomic receipt replacement and honours explicit timestamps
+ok 20 - batch start survives atomic receipt replacement and honours explicit timestamps
+  ---
+  duration_ms: 3.55875
+  ...
+# Subtest: train projection carries finished check clocks and durations during delivery
+ok 21 - train projection carries finished check clocks and durations during delivery
+  ---
+  duration_ms: 0.08175
+  ...
+# Subtest: Enter opens the selected row, Esc returns without pane input, and Back preserves selection
+ok 22 - Enter opens the selected row, Esc returns without pane input, and Back preserves selection
+  ---
+  duration_ms: 81.238291
+  ...
+# Subtest: interrupt key sends Esc, ordinary typing and arrows retain bytes, mouse is never sent
+ok 23 - interrupt key sends Esc, ordinary typing and arrows retain bytes, mouse is never sent
+  ---
+  duration_ms: 7.90625
+  ...
+# Subtest: click targets survive compact rows; reports and train open details without controlling an agent
+ok 24 - click targets survive compact rows; reports and train open details without controlling an agent
+  ---
+  duration_ms: 58.671459
+  ...
+# Subtest: reused panes, foreign repositories, source failure and stale callbacks cannot take over input
+ok 25 - reused panes, foreign repositories, source failure and stale callbacks cannot take over input
+  ---
+  duration_ms: 13.01075
+  ...
+# Subtest: snapshot activation never opens a control stream
+ok 26 - snapshot activation never opens a control stream
+  ---
+  duration_ms: 6.846292
+  ...
+# Subtest: Esc encoded by extended keyboard protocols returns without interrupting the pane
+ok 27 - Esc encoded by extended keyboard protocols returns without interrupting the pane
+  ---
+  duration_ms: 34.753583
+  ...
+# Subtest: Meta keys retain every byte and the session opens at its full viewport width immediately
+ok 28 - Meta keys retain every byte and the session opens at its full viewport width immediately
+  ---
+  duration_ms: 8.454208
+  ...
+# Subtest: minimal provider uses the live harness; metadata supplies the known model and actual launch
+ok 29 - minimal provider uses the live harness; metadata supplies the known model and actual launch
+  ---
+  duration_ms: 2.263875
+  ...
+# Subtest: minimal stages come from structured roles, correction origins and established session names
+ok 30 - minimal stages come from structured roles, correction origins and established session names
+  ---
+  duration_ms: 0.10425
+  ...
+# Subtest: durations retain minutes, handle days, and never invent unknown or future starts
+ok 31 - durations retain minutes, handle days, and never invent unknown or future starts
+  ---
+  duration_ms: 0.108125
+  ...
+# Subtest: working first then newest, stable ties, canonical scope and live cwd win over workspace labels
+ok 32 - working first then newest, stable ties, canonical scope and live cwd win over workspace labels
+  ---
+  duration_ms: 0.842166
+  ...
+# Subtest: finished workers drop off when settled, idle chats stay, working and blocked reports remain visible
+ok 33 - finished workers drop off when settled, idle chats stay, working and blocked reports remain visible
+  ---
+  duration_ms: 0.313792
+  ...
+# Subtest: a replacement session cannot inherit a report or model tied to another session ID
+ok 34 - a replacement session cannot inherit a report or model tied to another session ID
+  ---
+  duration_ms: 0.116375
+  ...
+# Subtest: minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged
+ok 35 - minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged
+  ---
+  duration_ms: 50.204417
+  ...
+# Subtest: minimal refresh retains last good sources and has no record or scheduling effects
+ok 36 - minimal refresh retains last good sources and has no record or scheduling effects
+  ---
+  duration_ms: 22.702875
+  ...
+# Subtest: profile preferences validate, are read without creation, and explicit full overrides minimal
+ok 37 - profile preferences validate, are read without creation, and explicit full overrides minimal
+  ---
+  duration_ms: 1.1455
+  ...
+# Subtest: --print snapshot works for the flag and configured profile; action keys issue only reads
+ok 38 - --print snapshot works for the flag and configured profile; action keys issue only reads
+  ---
+  duration_ms: 2246.799708
+  ...
+# Subtest: a pane replacement cannot inherit another named agent run; immutable IDs can match a renamed occupant
+ok 39 - a pane replacement cannot inherit another named agent run; immutable IDs can match a renamed occupant
+  ---
+  duration_ms: 0.183125
+  ...
+# Subtest: duplicate project labels select the requested stable ID and repository, including current-workspace discovery
+ok 40 - duplicate project labels select the requested stable ID and repository, including current-workspace discovery
+  ---
+  duration_ms: 0.285583
+  ...
+# Subtest: work purpose uses item titles; reviewer subject never inherits the reported worker lifecycle
+ok 41 - work purpose uses item titles; reviewer subject never inherits the reported worker lifecycle
+  ---
+  duration_ms: 0.097084
+  ...
+# Subtest: feed source failure retains last good data and recovers independently
+ok 42 - feed source failure retains last good data and recovers independently
+  ---
+  duration_ms: 9.536625
+  ...
+# Subtest: narrow and wide frames show active CI, check clocks and refusals with sparse state colour
+ok 43 - narrow and wide frames show active CI, check clocks and refusals with sparse state colour
+  ---
+  duration_ms: 21.703584
+  ...
+# Subtest: Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history
+ok 44 - Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history
+  ---
+  duration_ms: 28.404459
+  ...
+# Subtest: configured cwd without org or ID selects its catalog entry and discovers the record
+ok 45 - configured cwd without org or ID selects its catalog entry and discovers the record
+  ---
+  duration_ms: 38.195791
+  ...
+# Subtest: finished check duration freezes while delivery waits; a running check advances
+ok 46 - finished check duration freezes while delivery waits; a running check advances
+  ---
+  duration_ms: 5.333834
+  ...
+# Subtest: Ink Table has bounded borders, aligned columns, header rules and cell truncation
+ok 47 - Ink Table has bounded borders, aligned columns, header rules and cell truncation
+  ---
+  duration_ms: 40.105167
+  ...
+# Subtest: Ink Table handles empty rows and strips controls from labels and cells
+ok 48 - Ink Table handles empty rows and strips controls from labels and cells
+  ---
+  duration_ms: 1.453083
+  ...
+# Subtest: Ink rendering writes nothing for unchanged facts and resizes between narrow and wide tables
+ok 49 - Ink rendering writes nothing for unchanged facts and resizes between narrow and wide tables
+  ---
+  duration_ms: 256.063583
+  ...
+# Subtest: short panes allocate whole entries, retain panel headings and keep selected history visible
+ok 50 - short panes allocate whole entries, retain panel headings and keep selected history visible
+  ---
+  duration_ms: 151.436083
+  ...
+# Subtest: table truncation preserves joined emoji, flags and combining glyphs as whole cells
+ok 51 - table truncation preserves joined emoji, flags and combining glyphs as whole cells
+  ---
+  duration_ms: 2.227833
+  ...
+# [?25h
+1..51
+# tests 51
+# suites 0
+# pass 51
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2654.7215

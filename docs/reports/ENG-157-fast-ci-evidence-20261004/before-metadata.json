@@ -1,0 +1,9 @@
+{
+  "commit": "bf89a5bd5df4230783e4c7d6bcc25f1528aae264",
+  "tree": "726e3a24b37878d277fa9cef8dab7aaf608fe230",
+  "node": "v20.19.4",
+  "git": "git version 2.54.0",
+  "host": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "command": "npm run test:promotion",
+  "slot": "/private/tmp/bch-cloak-test-slot.lock"
+}

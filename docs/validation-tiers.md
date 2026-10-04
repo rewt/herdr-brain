@@ -1,87 +1,116 @@
 # Validation tiers in herdr-brain
 
-The tracked `.lane.validation.json` declares `npm run test:fast` for workers,
-`npm run test:promotion` for settlement/promotion, and the release acceptance
-harness for releases. The release module (ENG-109) must supply
-`HERDR_RELEASE_CANDIDATE` with the candidate tag, commit or directory before
-executing that command. Workers cannot select release through `lane check`.
-This lane has not run the release harness.
+Promotion runs once per batch before main moves. `npm run test:promotion` holds
+the host test slot and runs native slot ownership tests, explicitly named logic
+and merge correctness files, and a selected lane lifecycle subset through the
+existing bounded runner. Fast remains the worker smoke command.
 
-The supervisor's 2026-10-02 profile contains 822 top-level tests, about 2,004
-seconds summed serial time and 215 seconds wall time through concurrency. It
-warns that the parallel benefit collapses under load. The profile is at
-`/private/tmp/claude-501/-Users-rewt-development-rewt-herdr-brain/4ec1de75-93e3-447f-9929-5114c8ae1f1d/scratchpad/npm-test-profile.txt`.
-Its 32 runner-environment failures are not product evidence.
+`npm run test:release` retains the complete former promotion chain: slot, core,
+cycle, lanes and offline acceptance. The release candidate prepare step installs
+the pinned offline dependencies, runs this full suite under the release-owned
+slot, and writes build evidence only after success. Preparation failure stops
+the release lifecycle before live acceptance. The live harness still runs once
+per release candidate; lanes never run it. No behavioral assertion was deleted.
 
-The proposed split uses whole test files so the selected coverage is explicit
-and doesn't depend on a title filter:
+The explicit promotion file list is in `package.json`. Real processes remain in
+CI where they protect record consistency, canonical Git identity, current-run
+readiness, clean replay, compare-and-swap, clean fast-forward or recoverable
+archives. Most installed-adapter, PTY, copied-product, reviewer/dispatch cycle,
+wall-clock, sandbox and fake-server integration runs move to release.
 
-| Tier | Coverage | Reason |
+Whole files moved from CI are listed below. The full lane file still runs in
+release; only the merge-critical titles listed afterward remain in promotion.
+All new test files must be assigned deliberately to promotion or release.
+
+| File moved to release | Behavior protected | Reason |
 | --- | --- | --- |
-| Fast | Report parsing, discernment and sanitization; Brain capture; console model, layout, painting, names, waiting and prototype; route resolution; focused validation config, reuse, invalidation, mutation and locking tests | Frequent feedback from mostly in-process checks plus a small set of disposable Git checks |
-| Promotion | All existing `npm test` files, `test:lanes` and offline `test:acceptance` | Full record, entry/confinement, installation, console controls, dispatch/watch, settle/rebase/recovery, supervisor and queue/lifecycle proof |
-| Release | `acceptance/run.mjs --candidate "$HERDR_RELEASE_CANDIDATE"` | The live release acceptance gate runs once per candidate, after accumulated promotions; ENG-109 owns execution and lifecycle |
+| `acceptance/test/boundary.test.mjs` | Confined native adapter preserves socket identity, ownership, no-focus rules and explicit refusal attribution. | Native confinement, socket, focus, load or release cleanup integration. |
+| `acceptance/test/cleanup.test.mjs` | Cleanup closes only receipt-owned resources and reports residue despite malformed journals or failed inventory. | Native confinement, socket, focus, load or release cleanup integration. |
+| `acceptance/test/cutover.test.mjs` | Cutover and rollback preserve exact bytes; transitive executable callers prevent premature contrib retirement. | Native confinement, socket, focus, load or release cleanup integration. |
+| `acceptance/test/focus.test.mjs` | Continuous focus evidence distinguishes operator activity from transient owned moves and refuses incomplete monitoring. | Native confinement, socket, focus, load or release cleanup integration. |
+| `acceptance/test/load-round2.test.mjs` | Operation-scoped contention may classify timeouts as pending, while independent assertions and safety failures remain failures. | Native confinement, socket, focus, load or release cleanup integration. |
+| `acceptance/test/recovery.test.mjs` | Signals stop producers before ownership snapshots and recover late or lost replies without granting foreign authority. | Native confinement, socket, focus, load or release cleanup integration. |
+| `acceptance/test/validation.test.mjs` | Confined native validation and promotion protect Git/shared state while allowing only proved scratch writes. | Native confinement, socket, focus, load or release cleanup integration. |
+| `acceptance/test/verification.test.mjs` | Kernel-confined verification permits authorized refs/worktrees but denies config, hooks and redirected record writes. | Native confinement, socket, focus, load or release cleanup integration. |
+| `console/test/session.test.mjs` | Session interaction routes answers through the CLI, preserves modal input and distinguishes gone from unavailable sessions. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/acceptance.test.mjs` | Copied Codex and Claude workflows validate, guard, promote and finish both worker and approved-routing changes offline. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/entry.test.mjs` | Installed supervisor entry completes the unconfigured cold-start and notice contract using real record and lanes. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/lifecycle.test.mjs` | Atomic lifecycle receipts and conservative close rules retain ignored files, working sessions and unconfirmed process evidence. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/owner.test.mjs` | Bundled native ownership binaries match source/architecture and preserve independent bounded cleanup without compiler overrides. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/review-r2.test.mjs` | Provider guards refuse writable symlink escapes and preserve PTY argument, shell, filter and validation boundaries. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/review-r3.test.mjs` | Kernel syscall/network guards and detached cleanup retain immutable ownership evidence and protect unrelated processes. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/review.test.mjs` | Automatic entry, route adoption and validation guard preserve project opt-out, canonical records and refusal safety. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/sandbox.test.mjs` | Optional real native sandbox supports authorized validation/promotion while denying external writes and Git metadata. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `discovery/test/settings.test.mjs` | Installed interactive adapters honor opt-out, explicit assignment, project settings and conservative entry cleanup. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `dispatch/test/dispatch.test.mjs` | Dispatch validates priorities, startup, identity and reports; lost replies, STOP, refused ownership and PID reuse never duplicate or authorize work. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `housekeeping/test/auto-tidy.test.mjs` | finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay; dry-run previews finished tabs and never closes, including through housekeeping --once; a working or blocked change at the final recheck preserves the finished tab | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `lanes/test/workspace-native.test.mjs` | native dispatch opens a one-tab lane from a project with no Herdr workspace and preserves focus | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `release/test/release.test.mjs` | Release state machine binds immutable candidates, records/retries gate evidence and refuses stale main or failed preflight without executing ship. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `settle/test/config.test.mjs` | Settle intake and canonical review use validated project settings and independent reviewer routes. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `settle/test/memory-boundaries.test.mjs` | Memory and STOP at dispatch/review child boundaries remain resumable and never create hidden double waits. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `settle/test/recapture.test.mjs` | recovery: record-stage recapture waits for ingestion and follows the latest main; two recaptures after an applied rebase replay only lane and review commits from the same lineage; uncertain review retry guards lane mutation before recapturing a moved main | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `settle/test/receipts.test.mjs` | Report ingestion and correction receipts recover lost replies without repeating dispatch or accepting uncaptured reports. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `settle/test/round-cap.test.mjs` | Review caps preserve severity, claim verification, STOP, exact head/current run and idempotent record recovery. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `settle/test/settle.test.mjs` | Unconfigured independent review/correction cycle preserves claim verification, readiness, queue delivery, restart and safe fixture teardown. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `settle/test/teardown.test.mjs` | Fixture teardown stops freshly owned detached inbox/transport groups before deleting evidence and refuses uncertain ownership. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `settle/test/validation-tiers.test.mjs` | Worker, settle and queue panes reuse validated trees only while head, command and environment match. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
+| `supervisor/test/supervisor.test.mjs` | Foreground supervisor enforces review/correction caps, STOP, bound promotion, durable context and conditional record completion. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/brain-start.test.mjs` | Brain launcher records the acting session through a fake Herdr transport. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/console-launch.test.mjs` | Console CLI explains missing dependencies and launches/configures the optional console correctly. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/fleet.test.mjs` | first entry maps an existing record in place; a neighbouring repository gets its own record and routes; concurrent first entries publish one complete fleet with both projects; join is a byte and mtime no-op from a linked checkout; session limit changes only through join | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/mcp.test.mjs` | Core wrapper invokes optional offline MCP suite when dependencies exist and names its missing-dependency skip. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/open-session.test.mjs` | Legacy session launcher records actor/run identity, resolves routes and refuses duplicate supervisor/settle sessions. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/plugin-install.test.mjs` | Install/upgrade/rollback/recovery preserve exact shell bytes/modes and foreign runtime state across real CLI and PTY boundaries. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/pty.test.mjs` | Real PTYs retain arguments/status/TTY and independent native cleanup through timeouts, refusal and outer-runner death. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/release.test.mjs` | Legacy immutable tagged release switches/rollback/restore preserve launchers, Brain service and plugin links. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/settle-watch.test.mjs` | Retained settle-watch compatibility launcher keeps its flags, route arguments and acting-session record. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+| `test/startup-deadlines.test.mjs` | Module startup handshakes receive measured-load allowances without starting real project background services. | Real elapsed response, watchdog or descendant-cleanup integration. |
+| `test/test-hangs.test.mjs` | Native watchdog/ownership cleanup survives blocked event loops, cancellation, nested runners and detached descendants without touching replacements. | Real elapsed response, watchdog or descendant-cleanup integration. |
+| `watch/test/watch.test.mjs` | Real detached watcher derives report/worker terminal states, wakes on file events and delivers durable notices once across typing, restart and transport outage. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 
-The longest profile entries include lost-start reconciliation (57.9 seconds),
-review-cap correction cases (30.1 seconds), bound promotion guards (29.9 seconds),
-the supervisor cycle (28.1 seconds) and copied discovery probes (24.8 seconds).
-Those scenarios remain in promotion. They do not become a dependency of every
-worker's fast feedback. A worker still runs focused tests for the changed module,
-and follows project instructions requiring additional checks.
+Lane merge checks retained in promotion (`test:promotion:lanes`):
 
-In this lane the initial fast run passed 139 tests in 10.1 seconds. This is an
-observed run under current conditions, not a promised latency or a like-for-like
-comparison with the supervisor's earlier full-suite profile. `npm test` keeps
-every existing test in two sequential bounded batches: `test:core` covers the
-record/UI/entry/module tests and `test:cycle` covers settle and supervisor. Each
-uses the existing runner's supported nine-minute maximum; per-file and fixture
-command bounds and owned-process cleanup remain. The single aggregate exceeded
-both six and nine minutes under observed load, so batching avoids losing completed
-coverage to that aggregate deadline.
-After rebasing onto main's interim timeout adjustment, both batches retain its
-eight-minute file bound; ordinary fixture calls keep their 15-second limit.
+- promote refuses a dirty lane worktree
+- promote leaves main unchanged when validation fails
+- promote rebases a clean lane behind main and fast-forwards
+- promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes
+- promote accepts a gitignored session registry in the canonical checkout
+- promote refuses a conflicting rebase and names the file
+- promote refuses when main moves during validation
+- close deletes a merged branch
+- close retires a background workspace without worktree.remove and preserves the archive
+- close refuses a dirty worktree
+- close preserves a locked worktree and its workspace when Git removal refuses
+- linked invocations use canonical repository config for explanation, check, and promote
+- bare repositories with only linked worktrees allow reads and refuse mutations clearly
+- same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities
+- open refuses symlink escapes and destinations inside repository checkouts before mutation
+- registered paths are rejected when their on-disk repository identity changes
+- failed archive and post-close metadata writes preserve honest completion state
+- a repository with a separate git directory retains its canonical checkout identity
+- selected malformed, unreadable, and wrongly typed config files fail before mutation
+- open refuses ordinary and foreign-worktree destinations without creating branches
 
-Evidence is keyed by the entire Git tree, exact command and hashed environment.
-No test category or path is excluded from tree identity. A public review record
-therefore changes the tree and correctly causes another check; an empty commit
-or clean rebase producing the same tree does not. Matching commands can share
-proof across fast and promotion. Promotion still checks canonical/lane cleanliness,
-branch identity, base freshness, expected head/run readiness and fast-forward.
+Every other title in `lanes/test/lane.test.mjs` moves to release. These cover
+Herdr startup/readiness, workspace/tab setup, routing/configuration matrices,
+display-only session/registry metadata and review publication/transport. Their
+real process/server/wait cost is paid once per candidate. Exact selection uses
+`--test-name-pattern` passed to Node's existing test runner; the same suite group,
+watchdogs, offline policy and owned-process cleanup apply.
 
-Use reproducible tracked dependencies. The environment fingerprint includes
-Node/Git/OS identity, preparation definitions and process environment, excluding
-documented cwd/coordination fields. It cannot discover a silently edited external
-binary, ignored dependency or service behind an unchanged path. Projects can
-change `validation.environment` to name that external revision. Logs and receipts
-remain under the canonical Git common directory, outside worker-writable gate
-files; altered/missing logs and nonpassing receipts are not reused.
+Validation evidence still binds the entire Git tree, command and environment.
+All lifecycle freshness and cleanliness guards remain unchanged. Native entry
+bounds and the host slot's PID/birth identity, refusal and retry semantics are
+unchanged. Leaf steps alone may retry a timeout under measured load once.
 
-Worker, settle and queue pane identities are normalized before preparation and
-validation, and before hashing the environment. Changing a pane, tab or workspace
-therefore does not invalidate evidence or provide a validation input. An
-undeclared project with package metadata, `test/` and no npm test script retains
-the `node --test` fallback through native entry, including promotion.
+Mixed files retain fast logic and safety checks via `test:promotion:logic`:
 
-Native entry keeps a two-minute owner deadline for fast checks, preparation and
-Git filters, and allows promotion checks up to 30 minutes. Wrapper and broker
-bounds reserve compilation/cleanup and preparation/Git time; the broker has a
-one-hour cap and the request client reserves five more seconds for its reply.
-Each native step is shortened when needed to preserve cleanup time within the
-remaining aggregate deadline, including after preparation.
-These are trusted execution bounds, not agent-configurable request fields. An
-identical command that passes fast validation still supplies reusable promotion
-evidence. The offline regression copies this policy with shorter numeric bounds
-and runs the real entry, request client and native descendant owner, proving a
-longer declared command succeeds only with the promotion lifetime while late
-descendant writes remain impossible. Sandbox transport is scripted in that test;
-existing host-provider confinement tests retain their explicit applicability.
-
-Promotion commands now hold the [host test slot](../test-slot/README.md), including
-when invoked directly through `npm run test:promotion`. Release holds it before
-its candidate claim. `npm test` also runs the slot's isolated process-group
-regressions before its existing bounded core and cycle batches. Slot refusal is
-CLI exit 75 with no GATE line or failed receipt. Started commands returning 75
-are failures: lane check/promote exit 1 and preserve exit 75 in failed evidence.
-The promotion adapter holds the slot without retrying the chain. Retry-enabled
-leaf commands retry their own timeout under measured load at most once. Workspace
-paths and wait/token fields do not change the validation fingerprint.
+| Partial file | Kept in promotion | Moved behavior and cost |
+| --- | --- | --- |
+| `test/load-deadlines.test.mjs` | All except the 15.2-second Git response. | Real response beyond the old deadline runs only in release. |
+| `settle/test/ref-deadlines.test.mjs` | Exhausted/refused transactions, concurrent-ref CAS and foreign locks. | Three real 15.2-second start/prepare/commit responses run only in release. |
+| `discovery/test/alternatives.test.mjs` | Provider selection and confinement profile construction. | Scratch installation, native sandbox/syscall/filter/network and descendant deadlines run in release. |
+| `discovery/test/validation-deadlines.test.mjs` | Static owner, wrapper and client allowance calculations. | Real descendant lifetime and delayed promotion run in release. |
+| `supervisor/test/delivery.test.mjs` | Captured composer/ANSI parsing, wrapping and placeholder ambiguity. | Quiet-read waits, fake Herdr transport, durable delivery/replay and inbox teardown run in release. |
+| `housekeeping/test/housekeeping.test.mjs` | Interruption/composer parsing. | Native Git lifecycle, process/startup, schedule recovery and fake Herdr action scenarios run in release. |
+| `supervisor/test/entry.test.mjs` | Repository hook policy. | Installed adapters, startup/recovery and durable pane/owner integrations run in release. |

@@ -68,9 +68,10 @@ sessions and custom shells need their own entry transport; see the guide.
 Ship the tests for a lane change and run its relevant files as needed. The
 promotion batch runs `npm run test:promotion` once before merging; settle reviews
 run no suite. `npm run test:fast` gives checks that finish in seconds.
-`npm run test:release` runs the offline copied-product and wall-clock checks
-before the release acceptance gate. See [test tiers](docs/reference/test-tiers.md)
+The release prepare step runs the complete offline `npm run test:release` once
+per candidate before live acceptance. See [test tiers](docs/reference/test-tiers.md)
 for file selection, fixture ownership and prerequisite skips.
+Console and MCP have pinned dependencies; the core, lanes and cycle modules have none.
 
 Tests stay offline and call no model. The dependency-free runner bounds tests,
 files and suites; each fixture has owned cleanup. Standalone hang regressions use

@@ -73,8 +73,11 @@ under measured load above one per available CPU (capacity capped at four) is
 re-run once, with the slot still held. The log includes
 `TEST_SLOT_TIMEOUT_RETRY` and both attempts. A second timeout counts as failure.
 The retry scope is the wrapped command. This project's promotion command holds
-the slot for the whole chain and wraps each heavy step (`test:core`, `test:cycle`,
-`test:lanes`, `test:acceptance`) separately, so only the timed-out step reruns.
+the slot for the whole chain and wraps `test:promotion:core`, the focused
+`test:promotion:lanes` and mixed-file `test:promotion:logic` separately, so only
+the timed-out step reruns. The complete
+former chain (`test:core`, `test:cycle`, `test:lanes`, `test:acceptance`) now runs
+in `test:release`, retaining the same bounded leaf retries.
 Containing wrappers recognize a child's retry marker and do not retry the chain
 again. When a containing wrapper initiates the retry, it passes
 `MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1` so descendants cannot add another attempt.

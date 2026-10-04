@@ -11,8 +11,9 @@
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
   and never writes `events.jsonl`. `supervisor/` supplies the read-only cold start and generic protocol,
   foreground notice/queue glue, and legacy settle launchers. Workers never invoke its cycle mutations.
-- Tests run once, before code merges into main: the promotion batch runs the full suites, like CI on a
-  pull request (operator, 2026-10-03). In a lane, ship the change with the tests that prove it and run them
+- Tests run once, before code merges into main: the promotion batch runs the merge checks, like CI on a
+  pull request. Release preparation runs the full offline suites once per candidate. In a lane, ship
+  the change with the tests that prove it and run them
   while developing as you see fit; do not run a baseline, `npm test`, `test:promotion` or `test:lanes`.
   Settle reviews code and runs no suite. Tests are offline and never call a model.
 - Only the project supervisor, from the canonical checkout, starts the default

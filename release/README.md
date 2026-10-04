@@ -61,7 +61,9 @@ fixtures. `parent` may name an existing record item for the operator question.
 This repository declares `herdr/release-candidate.mjs` as its project wrapper.
 Preparation copies npm cache indexes and just the console/MCP lockfile tarballs
 into the candidate's private `.release-npm-cache`, then runs `herdr/install.sh`
-with real `npm ci` in offline, build-only mode. It never installs machine entry.
+with real `npm ci` in offline, build-only mode. It then runs `npm run test:release`
+(the complete offline suite formerly in promotion) before writing build evidence.
+A failing offline suite stops preparation before live acceptance. It never installs machine entry.
 The retained `.release-build.json` names the candidate commit, both lockfile
 hashes, installed package counts and build command before acceptance starts.
 The gate first runs the offline release tier against the prepared candidate.

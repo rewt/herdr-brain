@@ -1,0 +1,9 @@
+{
+  "base_commit": "8d633c28067ec6ee9ef38eed7920dd2bbe94a9f0",
+  "node": "v20.19.4",
+  "npm": "10.8.2",
+  "host": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "command": "npm run test:promotion",
+  "slot": "/private/tmp/bch-cloak-test-slot.lock",
+  "diff_sha256": "82b123e86d8b15952fedbb47b4e58573a476d44015158602f6ce5a497a708601"
+}

@@ -22,8 +22,6 @@ function fixture(t) {
   const candidate = path.join(root, 'candidate'), cache = path.join(root, 'cache'), bch = path.join(root, 'existing project');
   fs.mkdirSync(path.join(candidate, 'herdr'), { recursive: true });
   fs.mkdirSync(path.join(candidate, 'acceptance'));
-  fs.mkdirSync(path.join(candidate, 'test/helpers'), { recursive: true });
-  fs.writeFileSync(path.join(candidate, 'test/helpers/tier.mjs'), "import assert from 'node:assert/strict';assert.equal(process.argv[2],'release');console.log('offline release checks');process.exitCode=Number(process.env.RELEASE_TEST_FAILURE||0);");
   fs.mkdirSync(path.join(cache, '_cacache/index-v5'), { recursive: true });
   fs.mkdirSync(bch);
   fs.writeFileSync(path.join(candidate, '.release-commit'), 'a'.repeat(40) + '\n');
@@ -34,6 +32,7 @@ function fixture(t) {
     fs.writeFileSync(path.join(candidate, module, 'package.json'), JSON.stringify({ name: module, version: '1.0.0' }));
     fs.writeFileSync(path.join(candidate, module, 'package-lock.json'), JSON.stringify({ name: module, version: '1.0.0', lockfileVersion: 3, packages: { '': { name: module, version: '1.0.0' } } }));
   }
+  fs.writeFileSync(path.join(candidate, 'package.json'), JSON.stringify({ private: true, scripts: { 'test:release': "node -e \"require('fs').appendFileSync('offline-checks', 'checked\\n');process.exit(Number(process.env.OFFLINE_CHECK_EXIT || 0))\"" } }));
   const env = { ...process.env, ORG_ACTOR: 'candidate-fixture', RELEASE_NPM_CACHE: cache, RELEASE_BCH_CLOAK: bch,
     RELEASE_NO_NPM: '1', npm_config_userconfig: '/dev/null' };
   const invoke = (argv, extra = {}) => spawnSync(argv[0], argv.slice(1), { cwd: candidate, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(12000) });
@@ -49,6 +48,7 @@ test('the tracked preflight checks inputs and preparation supplies configured ac
   // Exercise the exact declaration with actual npm ci on dependency-free fixtures.
   const prepare = f.invoke(releaseArgv(declaration.prepare, values));
   assert.equal(prepare.status, 0, prepare.stderr + prepare.stdout);
+  assert.equal(fs.readFileSync(path.join(f.candidate, 'offline-checks'), 'utf8'), 'checked\n');
   assert.match(prepare.stdout, /console dependencies installed/); assert.match(prepare.stdout, /mcp dependencies installed/);
   const build = JSON.parse(fs.readFileSync(path.join(f.candidate, '.release-build.json'), 'utf8'));
   assert.equal(build.commit, values.commit); assert.equal(build.offline, true);
@@ -152,15 +152,31 @@ test('real project preflight leaves invalid inputs uncut and retries the same co
 
 test('release safety checks stop the gate on failure and precede acceptance on success', t => {
   const f = fixture(t);
-  fs.writeFileSync(path.join(f.candidate, '.release-build.json'), JSON.stringify({ commit: 'a'.repeat(40) }));
   const marker = path.join(f.root, 'acceptance-ran');
   fs.writeFileSync(path.join(f.candidate, 'acceptance/run.mjs'), `import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(marker)},'ran');`);
-  const command = releaseArgv(declaration.gate, { candidate: f.candidate });
-  const refused = f.invoke(command, { RELEASE_TEST_FAILURE: '9' });
+  const command = releaseArgv(declaration.prepare, { candidate: f.candidate });
+  const refused = f.invoke(command, { OFFLINE_CHECK_EXIT: '9' });
   assert.equal(refused.status, 9, refused.stdout + refused.stderr);
   assert.equal(fs.existsSync(marker), false, 'red offline safety evidence prevents the live gate');
+  fs.rmSync(path.join(f.candidate, '.release-npm-cache'), { recursive: true });
   const green = f.invoke(command);
   assert.equal(green.status, 0, green.stdout + green.stderr);
+  const gate = f.invoke(releaseArgv(declaration.gate, { candidate: f.candidate }));
+  assert.equal(gate.status, 0, gate.stdout + gate.stderr);
   assert.equal(fs.readFileSync(marker, 'utf8'), 'ran');
-  assert.equal((green.stdout.match(/offline release checks/g) ?? []).length, 1);
+  assert.equal(fs.readFileSync(path.join(f.candidate, 'offline-checks'), 'utf8'), 'checked\nchecked\n');
+});
+
+// Release preparation must keep the offline suite between build and live gate.
+test('failed offline release coverage prevents build evidence and acceptance', t => {
+  const f = fixture(t);
+  const values = { candidate: f.candidate, repo: f.candidate };
+  fs.writeFileSync(path.join(f.candidate, 'acceptance/run.mjs'), "import fs from 'node:fs';fs.writeFileSync('acceptance-ran','unsafe');");
+  const prepare = f.invoke(releaseArgv(declaration.prepare, values), { OFFLINE_CHECK_EXIT: '9' });
+  assert.equal(prepare.status, 9, prepare.stderr + prepare.stdout);
+  assert.equal(fs.readFileSync(path.join(f.candidate, 'offline-checks'), 'utf8'), 'checked\n');
+  assert.equal(fs.existsSync(path.join(f.candidate, '.release-build.json')), false);
+  const gate = f.invoke(releaseArgv(declaration.gate, values));
+  assert.equal(gate.status, 1, gate.stderr + gate.stdout);
+  assert.equal(fs.existsSync(path.join(f.candidate, 'acceptance-ran')), false);
 });

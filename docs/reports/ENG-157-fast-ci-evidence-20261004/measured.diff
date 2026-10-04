@@ -1,0 +1,465 @@
+diff --git a/.lane.json b/.lane.json
+index a5c1d2b..a190e2d 100644
+--- a/.lane.json
++++ b/.lane.json
+@@ -1,5 +1,5 @@
+ {
+   "settle": {
+-    "review_round_cap": 2
++    "review_round_cap": 1
+   }
+ }
+diff --git a/AGENTS.md b/AGENTS.md
+index 30ecd91..5edd7c2 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -11,8 +11,9 @@
+ - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
+   and never writes `events.jsonl`. `supervisor/` supplies the read-only cold start and generic protocol,
+   foreground notice/queue glue, and legacy settle launchers. Workers never invoke its cycle mutations.
+-- Tests run once, before code merges into main: the promotion batch runs the full suites, like CI on a
+-  pull request (operator, 2026-10-03). In a lane, ship the change with the tests that prove it and run them
++- Tests run once, before code merges into main: the promotion batch runs the merge checks, like CI on a
++  pull request. Release preparation runs the full offline suites once per candidate. In a lane, ship
++  the change with the tests that prove it and run them
+   while developing as you see fit; do not run a baseline, `npm test`, `test:promotion` or `test:lanes`.
+   Settle reviews code and runs no suite. Tests are offline and never call a model.
+ - Only the project supervisor, from the canonical checkout, starts the default
+diff --git a/README.md b/README.md
+index 200e902..17f3560 100644
+--- a/README.md
++++ b/README.md
+@@ -65,9 +65,11 @@ sessions and custom shells need their own entry transport; see the guide.
+ 
+ ## Development
+ 
+-Run `ORG_ACTOR=developer npm test` before and after changes. Tests are bounded,
+-offline and make no model calls. `npm run test:lanes` covers the separate lane
+-suite; Herdr-only checks explicitly skip when Herdr is absent. Console and MCP
++Workers run focused tests as needed while developing. Promotion runs
++`npm run test:promotion` once per batch; the release prepare step runs the complete
++offline `npm run test:release` once per candidate before live acceptance. Tests
++are bounded, offline and make no model calls; Herdr-only checks explicitly skip
++when Herdr is absent. Console and MCP
+ have pinned dependencies; the core, lanes and cycle modules have none.
+ 
+ To run one file, use the same offline process containment and watchdogs as the
+diff --git a/docs/validation-tiers.md b/docs/validation-tiers.md
+index d109e68..a3dcef7 100644
+--- a/docs/validation-tiers.md
++++ b/docs/validation-tiers.md
+@@ -1,87 +1,116 @@
+ # Validation tiers in herdr-brain
+ 
+-The tracked `.lane.validation.json` declares `npm run test:fast` for workers,
+-`npm run test:promotion` for settlement/promotion, and the release acceptance
+-harness for releases. The release module (ENG-109) must supply
+-`HERDR_RELEASE_CANDIDATE` with the candidate tag, commit or directory before
+-executing that command. Workers cannot select release through `lane check`.
+-This lane has not run the release harness.
++Promotion runs once per batch before main moves. `npm run test:promotion` holds
++the host test slot and runs native slot ownership tests, explicitly named logic
++and merge correctness files, and a selected lane lifecycle subset through the
++existing bounded runner. Fast remains the worker smoke command.
+ 
+-The supervisor's 2026-10-02 profile contains 822 top-level tests, about 2,004
+-seconds summed serial time and 215 seconds wall time through concurrency. It
+-warns that the parallel benefit collapses under load. The profile is at
+-`/private/tmp/claude-501/-Users-rewt-development-rewt-herdr-brain/4ec1de75-93e3-447f-9929-5114c8ae1f1d/scratchpad/npm-test-profile.txt`.
+-Its 32 runner-environment failures are not product evidence.
++`npm run test:release` retains the complete former promotion chain: slot, core,
++cycle, lanes and offline acceptance. The release candidate prepare step installs
++the pinned offline dependencies, runs this full suite under the release-owned
++slot, and writes build evidence only after success. Preparation failure stops
++the release lifecycle before live acceptance. The live harness still runs once
++per release candidate; lanes never run it. No behavioral assertion was deleted.
+ 
+-The proposed split uses whole test files so the selected coverage is explicit
+-and doesn't depend on a title filter:
++The explicit promotion file list is in `package.json`. Real processes remain in
++CI where they protect record consistency, canonical Git identity, current-run
++readiness, clean replay, compare-and-swap, clean fast-forward or recoverable
++archives. Most installed-adapter, PTY, copied-product, reviewer/dispatch cycle,
++wall-clock, sandbox and fake-server integration runs move to release.
+ 
+-| Tier | Coverage | Reason |
+-| --- | --- | --- |
+-| Fast | Report parsing, discernment and sanitization; Brain capture; console model, layout, painting, names, waiting and prototype; route resolution; focused validation config, reuse, invalidation, mutation and locking tests | Frequent feedback from mostly in-process checks plus a small set of disposable Git checks |
+-| Promotion | All existing `npm test` files, `test:lanes` and offline `test:acceptance` | Full record, entry/confinement, installation, console controls, dispatch/watch, settle/rebase/recovery, supervisor and queue/lifecycle proof |
+-| Release | `acceptance/run.mjs --candidate "$HERDR_RELEASE_CANDIDATE"` | The live release acceptance gate runs once per candidate, after accumulated promotions; ENG-109 owns execution and lifecycle |
++Whole files moved from CI are listed below. The full lane file still runs in
++release; only the merge-critical titles listed afterward remain in promotion.
++All new test files must be assigned deliberately to promotion or release.
+ 
+-The longest profile entries include lost-start reconciliation (57.9 seconds),
+-review-cap correction cases (30.1 seconds), bound promotion guards (29.9 seconds),
+-the supervisor cycle (28.1 seconds) and copied discovery probes (24.8 seconds).
+-Those scenarios remain in promotion. They do not become a dependency of every
+-worker's fast feedback. A worker still runs focused tests for the changed module,
+-and follows project instructions requiring additional checks.
++| File moved to release | Behavior protected | Reason |
++| --- | --- | --- |
++| `acceptance/test/boundary.test.mjs` | Confined native adapter preserves socket identity, ownership, no-focus rules and explicit refusal attribution. | Native confinement, socket, focus, load or release cleanup integration. |
++| `acceptance/test/cleanup.test.mjs` | Cleanup closes only receipt-owned resources and reports residue despite malformed journals or failed inventory. | Native confinement, socket, focus, load or release cleanup integration. |
++| `acceptance/test/cutover.test.mjs` | Cutover and rollback preserve exact bytes; transitive executable callers prevent premature contrib retirement. | Native confinement, socket, focus, load or release cleanup integration. |
++| `acceptance/test/focus.test.mjs` | Continuous focus evidence distinguishes operator activity from transient owned moves and refuses incomplete monitoring. | Native confinement, socket, focus, load or release cleanup integration. |
++| `acceptance/test/load-round2.test.mjs` | Operation-scoped contention may classify timeouts as pending, while independent assertions and safety failures remain failures. | Native confinement, socket, focus, load or release cleanup integration. |
++| `acceptance/test/recovery.test.mjs` | Signals stop producers before ownership snapshots and recover late or lost replies without granting foreign authority. | Native confinement, socket, focus, load or release cleanup integration. |
++| `acceptance/test/validation.test.mjs` | Confined native validation and promotion protect Git/shared state while allowing only proved scratch writes. | Native confinement, socket, focus, load or release cleanup integration. |
++| `acceptance/test/verification.test.mjs` | Kernel-confined verification permits authorized refs/worktrees but denies config, hooks and redirected record writes. | Native confinement, socket, focus, load or release cleanup integration. |
++| `console/test/session.test.mjs` | Session interaction routes answers through the CLI, preserves modal input and distinguishes gone from unavailable sessions. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/acceptance.test.mjs` | Copied Codex and Claude workflows validate, guard, promote and finish both worker and approved-routing changes offline. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/entry.test.mjs` | Installed supervisor entry completes the unconfigured cold-start and notice contract using real record and lanes. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/lifecycle.test.mjs` | Atomic lifecycle receipts and conservative close rules retain ignored files, working sessions and unconfirmed process evidence. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/owner.test.mjs` | Bundled native ownership binaries match source/architecture and preserve independent bounded cleanup without compiler overrides. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/review-r2.test.mjs` | Provider guards refuse writable symlink escapes and preserve PTY argument, shell, filter and validation boundaries. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/review-r3.test.mjs` | Kernel syscall/network guards and detached cleanup retain immutable ownership evidence and protect unrelated processes. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/review.test.mjs` | Automatic entry, route adoption and validation guard preserve project opt-out, canonical records and refusal safety. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/sandbox.test.mjs` | Optional real native sandbox supports authorized validation/promotion while denying external writes and Git metadata. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `discovery/test/settings.test.mjs` | Installed interactive adapters honor opt-out, explicit assignment, project settings and conservative entry cleanup. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `dispatch/test/dispatch.test.mjs` | Dispatch validates priorities, startup, identity and reports; lost replies, STOP, refused ownership and PID reuse never duplicate or authorize work. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `housekeeping/test/auto-tidy.test.mjs` | finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay; dry-run previews finished tabs and never closes, including through housekeeping --once; a working or blocked change at the final recheck preserves the finished tab | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `lanes/test/workspace-native.test.mjs` | native dispatch opens a one-tab lane from a project with no Herdr workspace and preserves focus | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `release/test/release.test.mjs` | Release state machine binds immutable candidates, records/retries gate evidence and refuses stale main or failed preflight without executing ship. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `settle/test/config.test.mjs` | Settle intake and canonical review use validated project settings and independent reviewer routes. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `settle/test/memory-boundaries.test.mjs` | Memory and STOP at dispatch/review child boundaries remain resumable and never create hidden double waits. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `settle/test/recapture.test.mjs` | recovery: record-stage recapture waits for ingestion and follows the latest main; two recaptures after an applied rebase replay only lane and review commits from the same lineage; uncertain review retry guards lane mutation before recapturing a moved main | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `settle/test/receipts.test.mjs` | Report ingestion and correction receipts recover lost replies without repeating dispatch or accepting uncaptured reports. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `settle/test/round-cap.test.mjs` | Review caps preserve severity, claim verification, STOP, exact head/current run and idempotent record recovery. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `settle/test/settle.test.mjs` | Unconfigured independent review/correction cycle preserves claim verification, readiness, queue delivery, restart and safe fixture teardown. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `settle/test/teardown.test.mjs` | Fixture teardown stops freshly owned detached inbox/transport groups before deleting evidence and refuses uncertain ownership. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `settle/test/validation-tiers.test.mjs` | Worker, settle and queue panes reuse validated trees only while head, command and environment match. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
++| `supervisor/test/supervisor.test.mjs` | Foreground supervisor enforces review/correction caps, STOP, bound promotion, durable context and conditional record completion. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/brain-start.test.mjs` | Brain launcher records the acting session through a fake Herdr transport. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/console-launch.test.mjs` | Console CLI explains missing dependencies and launches/configures the optional console correctly. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/fleet.test.mjs` | first entry maps an existing record in place; a neighbouring repository gets its own record and routes; concurrent first entries publish one complete fleet with both projects; join is a byte and mtime no-op from a linked checkout; session limit changes only through join | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/mcp.test.mjs` | Core wrapper invokes optional offline MCP suite when dependencies exist and names its missing-dependency skip. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/open-session.test.mjs` | Legacy session launcher records actor/run identity, resolves routes and refuses duplicate supervisor/settle sessions. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/plugin-install.test.mjs` | Install/upgrade/rollback/recovery preserve exact shell bytes/modes and foreign runtime state across real CLI and PTY boundaries. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/pty.test.mjs` | Real PTYs retain arguments/status/TTY and independent native cleanup through timeouts, refusal and outer-runner death. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/release.test.mjs` | Legacy immutable tagged release switches/rollback/restore preserve launchers, Brain service and plugin links. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/settle-watch.test.mjs` | Retained settle-watch compatibility launcher keeps its flags, route arguments and acting-session record. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
++| `test/startup-deadlines.test.mjs` | Module startup handshakes receive measured-load allowances without starting real project background services. | Real elapsed response, watchdog or descendant-cleanup integration. |
++| `test/test-hangs.test.mjs` | Native watchdog/ownership cleanup survives blocked event loops, cancellation, nested runners and detached descendants without touching replacements. | Real elapsed response, watchdog or descendant-cleanup integration. |
++| `watch/test/watch.test.mjs` | Real detached watcher derives report/worker terminal states, wakes on file events and delivers durable notices once across typing, restart and transport outage. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
+ 
+-In this lane the initial fast run passed 139 tests in 10.1 seconds. This is an
+-observed run under current conditions, not a promised latency or a like-for-like
+-comparison with the supervisor's earlier full-suite profile. `npm test` keeps
+-every existing test in two sequential bounded batches: `test:core` covers the
+-record/UI/entry/module tests and `test:cycle` covers settle and supervisor. Each
+-uses the existing runner's supported nine-minute maximum; per-file and fixture
+-command bounds and owned-process cleanup remain. The single aggregate exceeded
+-both six and nine minutes under observed load, so batching avoids losing completed
+-coverage to that aggregate deadline.
+-After rebasing onto main's interim timeout adjustment, both batches retain its
+-eight-minute file bound; ordinary fixture calls keep their 15-second limit.
++Lane merge checks retained in promotion (`test:promotion:lanes`):
+ 
+-Evidence is keyed by the entire Git tree, exact command and hashed environment.
+-No test category or path is excluded from tree identity. A public review record
+-therefore changes the tree and correctly causes another check; an empty commit
+-or clean rebase producing the same tree does not. Matching commands can share
+-proof across fast and promotion. Promotion still checks canonical/lane cleanliness,
+-branch identity, base freshness, expected head/run readiness and fast-forward.
++- promote refuses a dirty lane worktree
++- promote leaves main unchanged when validation fails
++- promote rebases a clean lane behind main and fast-forwards
++- promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes
++- promote accepts a gitignored session registry in the canonical checkout
++- promote refuses a conflicting rebase and names the file
++- promote refuses when main moves during validation
++- close deletes a merged branch
++- close retires a background workspace without worktree.remove and preserves the archive
++- close refuses a dirty worktree
++- close preserves a locked worktree and its workspace when Git removal refuses
++- linked invocations use canonical repository config for explanation, check, and promote
++- bare repositories with only linked worktrees allow reads and refuse mutations clearly
++- same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities
++- open refuses symlink escapes and destinations inside repository checkouts before mutation
++- registered paths are rejected when their on-disk repository identity changes
++- failed archive and post-close metadata writes preserve honest completion state
++- a repository with a separate git directory retains its canonical checkout identity
++- selected malformed, unreadable, and wrongly typed config files fail before mutation
++- open refuses ordinary and foreign-worktree destinations without creating branches
+ 
+-Use reproducible tracked dependencies. The environment fingerprint includes
+-Node/Git/OS identity, preparation definitions and process environment, excluding
+-documented cwd/coordination fields. It cannot discover a silently edited external
+-binary, ignored dependency or service behind an unchanged path. Projects can
+-change `validation.environment` to name that external revision. Logs and receipts
+-remain under the canonical Git common directory, outside worker-writable gate
+-files; altered/missing logs and nonpassing receipts are not reused.
++Every other title in `lanes/test/lane.test.mjs` moves to release. These cover
++Herdr startup/readiness, workspace/tab setup, routing/configuration matrices,
++display-only session/registry metadata and review publication/transport. Their
++real process/server/wait cost is paid once per candidate. Exact selection uses
++`--test-name-pattern` passed to Node's existing test runner; the same suite group,
++watchdogs, offline policy and owned-process cleanup apply.
+ 
+-Worker, settle and queue pane identities are normalized before preparation and
+-validation, and before hashing the environment. Changing a pane, tab or workspace
+-therefore does not invalidate evidence or provide a validation input. An
+-undeclared project with package metadata, `test/` and no npm test script retains
+-the `node --test` fallback through native entry, including promotion.
++Validation evidence still binds the entire Git tree, command and environment.
++All lifecycle freshness and cleanliness guards remain unchanged. Native entry
++bounds and the host slot's PID/birth identity, refusal and retry semantics are
++unchanged. Leaf steps alone may retry a timeout under measured load once.
+ 
+-Native entry keeps a two-minute owner deadline for fast checks, preparation and
+-Git filters, and allows promotion checks up to 30 minutes. Wrapper and broker
+-bounds reserve compilation/cleanup and preparation/Git time; the broker has a
+-one-hour cap and the request client reserves five more seconds for its reply.
+-Each native step is shortened when needed to preserve cleanup time within the
+-remaining aggregate deadline, including after preparation.
+-These are trusted execution bounds, not agent-configurable request fields. An
+-identical command that passes fast validation still supplies reusable promotion
+-evidence. The offline regression copies this policy with shorter numeric bounds
+-and runs the real entry, request client and native descendant owner, proving a
+-longer declared command succeeds only with the promotion lifetime while late
+-descendant writes remain impossible. Sandbox transport is scripted in that test;
+-existing host-provider confinement tests retain their explicit applicability.
++Mixed files retain fast logic and safety checks via `test:promotion:logic`:
+ 
+-Promotion commands now hold the [host test slot](../test-slot/README.md), including
+-when invoked directly through `npm run test:promotion`. Release holds it before
+-its candidate claim. `npm test` also runs the slot's isolated process-group
+-regressions before its existing bounded core and cycle batches. Slot refusal is
+-CLI exit 75 with no GATE line or failed receipt. Started commands returning 75
+-are failures: lane check/promote exit 1 and preserve exit 75 in failed evidence.
+-The promotion adapter holds the slot without retrying the chain. Retry-enabled
+-leaf commands retry their own timeout under measured load at most once. Workspace
+-paths and wait/token fields do not change the validation fingerprint.
++| Partial file | Kept in promotion | Moved behavior and cost |
++| --- | --- | --- |
++| `test/load-deadlines.test.mjs` | All except the 15.2-second Git response. | Real response beyond the old deadline runs only in release. |
++| `settle/test/ref-deadlines.test.mjs` | Exhausted/refused transactions, concurrent-ref CAS and foreign locks. | Three real 15.2-second start/prepare/commit responses run only in release. |
++| `discovery/test/alternatives.test.mjs` | Provider selection and confinement profile construction. | Scratch installation, native sandbox/syscall/filter/network and descendant deadlines run in release. |
++| `discovery/test/validation-deadlines.test.mjs` | Static owner, wrapper and client allowance calculations. | Real descendant lifetime and delayed promotion run in release. |
++| `supervisor/test/delivery.test.mjs` | Captured composer/ANSI parsing, wrapping and placeholder ambiguity. | Quiet-read waits, fake Herdr transport, durable delivery/replay and inbox teardown run in release. |
++| `housekeeping/test/housekeeping.test.mjs` | Interruption/composer parsing. | Native Git lifecycle, process/startup, schedule recovery and fake Herdr action scenarios run in release. |
++| `supervisor/test/entry.test.mjs` | Repository hook policy. | Installed adapters, startup/recovery and durable pane/owner integrations run in release. |
+diff --git a/herdr/release-candidate.mjs b/herdr/release-candidate.mjs
+index 22af2db..57904f1 100644
+--- a/herdr/release-candidate.mjs
++++ b/herdr/release-candidate.mjs
+@@ -106,8 +106,13 @@ export function main(argv = process.argv.slice(2)) {
+   }
+   const invocation = candidateCommand(stage, candidate, { skipLive: values['skip-live'] });
+   console.log(`release ${stage}: ${JSON.stringify(invocation.command)}`);
+-  const result = spawnSync(invocation.command[0], invocation.command.slice(1), { cwd: candidate, env: invocation.env, stdio: 'inherit' });
++  let result = spawnSync(invocation.command[0], invocation.command.slice(1), { cwd: candidate, env: invocation.env, stdio: 'inherit' });
+   if (result.error) throw result.error;
++  if (stage === 'prepare' && result.status === 0) {
++    console.log('release prepare: npm run test:release');
++    result = spawnSync('npm', ['run', 'test:release'], { cwd: candidate, env: invocation.env, stdio: 'inherit' });
++    if (result.error) throw result.error;
++  }
+   if (stage === 'prepare' && result.status === 0) {
+     const build = { commit: fs.readFileSync(path.join(candidate, '.release-commit'), 'utf8').trim(),
+       completed_at: new Date().toISOString(), command: invocation.command, offline: true, cache: invocation.cache,
+diff --git a/package.json b/package.json
+index 2bf2569..bb881ff 100644
+--- a/package.json
++++ b/package.json
+@@ -12,12 +12,19 @@
+     "test:cycle": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 settle/test/*.test.mjs supervisor/test/*.test.mjs release/test/*.test.mjs",
+     "test:lanes": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 lanes/test/*.test.mjs",
+     "test:acceptance": "node test/helpers/run.mjs acceptance/test/*.test.mjs",
+-    "test:promotion:steps": "npm test && node test-slot/test-slot.mjs run test:lanes --retry-timeout-under-load -- npm run test:lanes && node test-slot/test-slot.mjs run test:acceptance --retry-timeout-under-load -- npm run test:acceptance",
+-    "test:slot": "node --test test-slot/test/*.test.mjs"
++    "test:promotion:steps": "npm run test:slot && node test-slot/test-slot.mjs run test:promotion:core --retry-timeout-under-load -- npm run test:promotion:core && node test-slot/test-slot.mjs run test:promotion:lanes --retry-timeout-under-load -- npm run test:promotion:lanes && node test-slot/test-slot.mjs run test:promotion:logic --retry-timeout-under-load -- npm run test:promotion:logic",
++    "test:slot": "node --test test-slot/test/*.test.mjs",
++    "test:promotion:logic": "node test/helpers/run.mjs --test-name-pattern='^(measured load|a loaded native lookup|the default native executor|the record lock|exhausted record-lock|exhausted, refused|a replacement PID|slow Herdr|housekeeping gives|queue and notice locks|inbox fixture teardown|owned inbox teardown|(?:exhausted|refused) (?:start|prepare|commit) replies|loaded transaction|provider selection|alternative profiles|entry reserves|(?:claude|codex): captured ANSI|compound styles|Codex includes|interruption requires|repository does not track)' test/load-deadlines.test.mjs settle/test/ref-deadlines.test.mjs discovery/test/alternatives.test.mjs discovery/test/validation-deadlines.test.mjs supervisor/test/delivery.test.mjs housekeeping/test/housekeeping.test.mjs supervisor/test/entry.test.mjs",
++    "test:release:steps": "npm test && node test-slot/test-slot.mjs run test:lanes --retry-timeout-under-load -- npm run test:lanes && node test-slot/test-slot.mjs run test:acceptance --retry-timeout-under-load -- npm run test:acceptance",
++    "test:promotion:core": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/approvals.test.mjs test/discernment.test.mjs test/flow.test.mjs test/focus.test.mjs test/inbox.test.mjs test/memory.test.mjs test/name-alias.test.mjs test/no-setuid-processes.test.mjs test/offline-herdr.test.mjs test/one-watcher.test.mjs test/priorities.test.mjs test/processes.test.mjs test/recap.test.mjs test/report.test.mjs test/sanitization.test.mjs test/suite.test.mjs test/tidy-tabs.test.mjs test/today.test.mjs test/workspace.test.mjs brain/test/capture.test.mjs brain/test/projects.test.mjs console/proto/autonomy.test.mjs console/proto/prototype.test.mjs console/proto/workflows.test.mjs console/test/board.test.mjs console/test/brain.test.mjs console/test/control-plane.test.mjs console/test/control.test.mjs console/test/controller.test.mjs console/test/desks.test.mjs console/test/frame.test.mjs console/test/housekeeping.test.mjs console/test/model.test.mjs console/test/modern.test.mjs console/test/names.test.mjs console/test/paint.test.mjs console/test/sources.test.mjs console/test/terminal.test.mjs console/test/waiting.test.mjs discovery/test/confinement.test.mjs discovery/test/review-r4.test.mjs watch/test/lock.test.mjs lanes/test/herdr-client.test.mjs lanes/test/no-focus.test.mjs lanes/test/routes.test.mjs lanes/test/validation.test.mjs promote/test/promote.test.mjs promote/test/train.test.mjs settle/test/rebase.test.mjs settle/test/rebase-safety.test.mjs settle/test/rebase-paths.test.mjs settle/test/rebase-review.test.mjs settle/test/record-safety.test.mjs settle/test/record-recovery.test.mjs settle/test/train.test.mjs release/test/candidate.test.mjs acceptance/test/cases.test.mjs acceptance/test/deadlines.test.mjs acceptance/test/environment.test.mjs acceptance/test/launch.test.mjs acceptance/test/load.test.mjs acceptance/test/probe.test.mjs acceptance/test/results.test.mjs acceptance/test/security.test.mjs acceptance/test/signal.test.mjs acceptance/test/snapshot.test.mjs",
++    "test:promotion:lanes": "node test/helpers/run.mjs --test-name-pattern='^(promote (refuses|leaves|rebases|accepts)|close (deletes|retires|refuses|preserves)|open refuses (symlink|ordinary)|registered paths are rejected|same-named repositories|a repository with a separate git directory|failed archive and post-close metadata|selected malformed, unreadable, and wrongly typed config|linked invocations use canonical repository config|bare repositories with only linked worktrees)' lanes/test/lane.test.mjs",
++    "test:release": "node test-slot/test-slot.mjs run test:release -- npm run test:release:steps"
+   },
+   "bin": {
+     "record": "./bin/org.mjs",
+     "org": "./bin/org.mjs"
+   },
+-  "engines": { "node": ">=20" }
++  "engines": {
++    "node": ">=20"
++  }
+ }
+diff --git a/release/README.md b/release/README.md
+index 9cc5c46..5123337 100644
+--- a/release/README.md
++++ b/release/README.md
+@@ -61,7 +61,9 @@ fixtures. `parent` may name an existing record item for the operator question.
+ This repository declares `herdr/release-candidate.mjs` as its project wrapper.
+ Preparation copies npm cache indexes and just the console/MCP lockfile tarballs
+ into the candidate's private `.release-npm-cache`, then runs `herdr/install.sh`
+-with real `npm ci` in offline, build-only mode. It never installs machine entry.
++with real `npm ci` in offline, build-only mode. It then runs `npm run test:release`
++(the complete offline suite formerly in promotion) before writing build evidence.
++A failing offline suite stops preparation before live acceptance. It never installs machine entry.
+ The retained `.release-build.json` names the candidate commit, both lockfile
+ hashes, installed package counts and build command before acceptance starts.
+ The gate passes `--npm-cache` (that private copy) and, when configured, `--bch-cloak` to
+diff --git a/release/test/candidate.test.mjs b/release/test/candidate.test.mjs
+index 2d0b52c..b45bcaf 100644
+--- a/release/test/candidate.test.mjs
++++ b/release/test/candidate.test.mjs
+@@ -30,6 +30,7 @@ function fixture(t) {
+     fs.writeFileSync(path.join(candidate, module, 'package.json'), JSON.stringify({ name: module, version: '1.0.0' }));
+     fs.writeFileSync(path.join(candidate, module, 'package-lock.json'), JSON.stringify({ name: module, version: '1.0.0', lockfileVersion: 3, packages: { '': { name: module, version: '1.0.0' } } }));
+   }
++  fs.writeFileSync(path.join(candidate, 'package.json'), JSON.stringify({ private: true, scripts: { 'test:release': "node -e \"require('fs').appendFileSync('offline-checks', 'checked\\n');process.exit(Number(process.env.OFFLINE_CHECK_EXIT || 0))\"" } }));
+   const env = { ...process.env, ORG_ACTOR: 'candidate-fixture', RELEASE_NPM_CACHE: cache, RELEASE_BCH_CLOAK: bch,
+     RELEASE_NO_NPM: '1', npm_config_userconfig: '/dev/null' };
+   const invoke = (argv, extra = {}) => spawnSync(argv[0], argv.slice(1), { cwd: candidate, env: { ...env, ...extra }, encoding: 'utf8', timeout: 12000 });
+@@ -45,6 +46,7 @@ test('the tracked preflight checks inputs and preparation supplies configured ac
+   // Exercise the exact declaration with actual npm ci on dependency-free fixtures.
+   const prepare = f.invoke(releaseArgv(declaration.prepare, values));
+   assert.equal(prepare.status, 0, prepare.stderr + prepare.stdout);
++  assert.equal(fs.readFileSync(path.join(f.candidate, 'offline-checks'), 'utf8'), 'checked\n');
+   assert.match(prepare.stdout, /console dependencies installed/); assert.match(prepare.stdout, /mcp dependencies installed/);
+   const build = JSON.parse(fs.readFileSync(path.join(f.candidate, '.release-build.json'), 'utf8'));
+   assert.equal(build.commit, values.commit); assert.equal(build.offline, true);
+@@ -145,3 +147,17 @@ test('real project preflight leaves invalid inputs uncut and retries the same co
+   assert.equal(events().filter(e => e.type === 'release.gate.started').length, 1);
+   assert.equal(events().filter(e => e.type === 'release.gate.finished').length, 1);
+ });
++
++// Release preparation must keep the offline suite between build and live gate.
++test('failed offline release coverage prevents build evidence and acceptance', t => {
++  const f = fixture(t);
++  const values = { candidate: f.candidate, repo: f.candidate };
++  fs.writeFileSync(path.join(f.candidate, 'acceptance/run.mjs'), "import fs from 'node:fs';fs.writeFileSync('acceptance-ran','unsafe');");
++  const prepare = f.invoke(releaseArgv(declaration.prepare, values), { OFFLINE_CHECK_EXIT: '9' });
++  assert.equal(prepare.status, 9, prepare.stderr + prepare.stdout);
++  assert.equal(fs.readFileSync(path.join(f.candidate, 'offline-checks'), 'utf8'), 'checked\n');
++  assert.equal(fs.existsSync(path.join(f.candidate, '.release-build.json')), false);
++  const gate = f.invoke(releaseArgv(declaration.gate, values));
++  assert.equal(gate.status, 1, gate.stderr + gate.stdout);
++  assert.equal(fs.existsSync(path.join(f.candidate, 'acceptance-ran')), false);
++});
+diff --git a/test-slot/README.md b/test-slot/README.md
+index d77bb51..a26d508 100644
+--- a/test-slot/README.md
++++ b/test-slot/README.md
+@@ -73,8 +73,11 @@ under measured load above one per available CPU (capacity capped at four) is
+ re-run once, with the slot still held. The log includes
+ `TEST_SLOT_TIMEOUT_RETRY` and both attempts. A second timeout counts as failure.
+ The retry scope is the wrapped command. This project's promotion command holds
+-the slot for the whole chain and wraps each heavy step (`test:core`, `test:cycle`,
+-`test:lanes`, `test:acceptance`) separately, so only the timed-out step reruns.
++the slot for the whole chain and wraps `test:promotion:core`, the focused
++`test:promotion:lanes` and mixed-file `test:promotion:logic` separately, so only
++the timed-out step reruns. The complete
++former chain (`test:core`, `test:cycle`, `test:lanes`, `test:acceptance`) now runs
++in `test:release`, retaining the same bounded leaf retries.
+ Containing wrappers recognize a child's retry marker and do not retry the chain
+ again. When a containing wrapper initiates the retry, it passes
+ `MONITOR_TEST_SLOT_TIMEOUT_RETRIED=1` so descendants cannot add another attempt.
+diff --git a/test-slot/test/test-slot.test.mjs b/test-slot/test/test-slot.test.mjs
+index 8cb4b2f..1fc5e19 100644
+--- a/test-slot/test/test-slot.test.mjs
++++ b/test-slot/test/test-slot.test.mjs
+@@ -532,7 +532,10 @@ describe('workspace configuration and timeout retry', () => {
+     });
+   }
+ 
+-  it('promotion retries only the timed-out heavy step and continues the remaining steps once', async () => {
++  for (const [tier, failedStep, expected] of [
++    ['promotion', 'test:promotion:core', ['test:slot', 'test:promotion:core', 'test:promotion:core', 'test:promotion:lanes', 'test:promotion:logic']],
++    ['release', 'test:core', ['test:slot', 'test:core', 'test:core', 'test:cycle', 'test:lanes', 'test:acceptance']],
++  ]) it(`${tier} retries only the timed-out heavy step and continues the remaining steps once`, async () => {
+     const s = scratch(), count = s.file('steps'), preload = s.file('load.mjs');
+     fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
+     const scripts = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts;
+@@ -541,14 +544,14 @@ const fs=require('fs'),file=${JSON.stringify(count)},name=process.argv[3];
+ if(process.argv[2]==='test'){const r=require('child_process').spawnSync('/bin/sh',['-c',${JSON.stringify(scripts.test)}],{stdio:'inherit'});process.exit(r.status??1);}
+ const previous=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
+ fs.appendFileSync(file,name+'\\n');
+-process.exit(name==='test:core'&&!previous.includes('test:core')?124:0);
++process.exit(name===${JSON.stringify(failedStep)}&&!previous.includes(${JSON.stringify(failedStep)})?124:0);
+ `, { mode: 0o755 });
+-    const steps = scripts['test:promotion:steps'];
+-    const done = await cli(['run', 'promotion adapter', '--lock-path', s.lockPath, '--retry-timeout-under-load',
++    const steps = scripts[`test:${tier}:steps`];
++    const done = await cli(['run', `${tier} adapter`, '--lock-path', s.lockPath, '--retry-timeout-under-load',
+       '--', '/bin/sh', '-c', steps], { env: { ...ENV, PATH: `${s.dir}:${ENV.PATH}`, NODE_OPTIONS: `--import=${preload}` } }).done;
+     assert.equal(done.code, 0, done.stderr);
+     assert.deepEqual(fs.readFileSync(count, 'utf8').trim().split('\n'),
+-      ['test:slot', 'test:core', 'test:core', 'test:cycle', 'test:lanes', 'test:acceptance']);
++      expected);
+     assert.equal((done.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+     assert.equal(fs.existsSync(s.lockPath), false);
+   });
+diff --git a/test/helpers/run.mjs b/test/helpers/run.mjs
+index 52d3bb8..d747f07 100644
+--- a/test/helpers/run.mjs
++++ b/test/helpers/run.mjs
+@@ -16,6 +16,8 @@ const argv = process.argv.slice(2);
+ const worker = argv[0] === '--worker';
+ if (worker) argv.shift();
+ const files = argv.filter(arg => !arg.startsWith('--'));
++const nameOption = argv.find(arg => arg.startsWith('--test-name-pattern='));
++const testNamePatterns = nameOption ? [new RegExp(nameOption.slice('--test-name-pattern='.length))] : undefined;
+ // Fixed mode is reserved for intentional cancellation regressions. Ordinary
+ // CLI overrides (including the npm scripts' file/suite limits) scale too.
+ const fixedDeadlines = argv.includes('--fixed-deadlines');
+@@ -30,7 +32,7 @@ function bound(name, fallback, maximum = fallback) {
+ }
+ const fileTimeout = bound('file-timeout', 300_000, 480_000);
+ const suiteTimeout = bound('suite-timeout', 360_000, 540_000);
+-if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] TEST_FILES...');
++if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] [--test-name-pattern=REGEX] TEST_FILES...');
+ 
+ if (worker) {
+   // This leader never exits voluntarily with fixtures running in its group.
+@@ -42,7 +44,7 @@ if (worker) {
+   };
+   process.once('disconnect', cleanup);
+   process.once('message', async () => {
+-    const stream = run({ files, concurrency: Math.max(1, Math.floor(4 / factor)), timeout: fileTimeout });
++    const stream = run({ files, concurrency: Math.max(1, Math.floor(4 / factor)), timeout: fileTimeout, testNamePatterns });
+     let code = 0;
+     stream.on('test:fail', () => { code = 1; });
+     try { await pipeline(stream.compose(tap), process.stdout, { end: false }); }
+diff --git a/test/suite.test.mjs b/test/suite.test.mjs
+index 5d731c9..0250de9 100644
+--- a/test/suite.test.mjs
++++ b/test/suite.test.mjs
+@@ -36,3 +36,35 @@ test('the phased command forwards suite watchdog overrides to its bounded runner
+   assert.equal(result.code, 1, result.stdout + result.stderr);
+   assert.match(result.stderr, /Test suite exceeded 1000ms/);
+ });
++
++// Use the existing bounded owner even when selecting the merge-critical subset.
++test('bounded runner selects merge checks and forwards the selection to its worker', async t => {
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'selected-suite-test-'));
++  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
++  fs.writeFileSync(path.join(root, 'selected.mjs'), "import test from 'node:test';import fs from 'node:fs';test('merge guard',()=>fs.writeFileSync('selected','yes'));test('release integration',()=>{throw Error('release-only failure');});");
++  const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
++  const result = await waitForExit(spawnChild(t, process.execPath, [runner, '--test-name-pattern=^merge guard$', 'selected.mjs'], { cwd: root }));
++  assert.equal(result.code, 0, result.stdout + result.stderr);
++  assert.equal(fs.readFileSync(path.join(root, 'selected'), 'utf8'), 'yes');
++  const failed = await waitForExit(spawnChild(t, process.execPath, [runner, '--test-name-pattern=^release integration$', 'selected.mjs'], { cwd: root }));
++  assert.equal(failed.code, 1, failed.stdout + failed.stderr);
++  assert.match(failed.stdout, /release-only failure/);
++});
++
++// The release tier retains all former promotion paths, including future files.
++test('release keeps the complete offline suite and promotion covers the fast tier', () => {
++  const scripts = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).scripts;
++  assert.match(scripts['test:release'], /test-slot.*npm run test:release:steps/);
++  assert.match(scripts['test:release:steps'], /npm test.*npm run test:lanes.*npm run test:acceptance/);
++  for (const step of ['slot', 'core', 'cycle']) assert.ok(scripts.test.includes(`test:${step}`));
++  const releaseCommands = ['slot', 'core', 'cycle', 'lanes', 'acceptance'].map(step => scripts[`test:${step}`]).join(' ');
++  const root = fileURLToPath(new URL('../', import.meta.url));
++  for (const dir of ['test', 'brain/test', 'console/test', 'console/proto', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'settle/test', 'supervisor/test', 'release/test', 'lanes/test', 'acceptance/test', 'test-slot/test']) {
++    for (const name of fs.readdirSync(path.join(root, dir)).filter(name => name.endsWith('.test.mjs'))) {
++      assert.ok(releaseCommands.includes(`${dir}/*.mjs`) || releaseCommands.includes(`${dir}/*.test.mjs`) || releaseCommands.includes(`${dir}/${name}`), `release omits ${dir}/${name}`);
++    }
++  }
++  for (const file of scripts['test:fast'].split(' ').filter(word => word.endsWith('.test.mjs'))) {
++    assert.ok(scripts['test:promotion:core'].includes(file), `promotion omits fast check ${file}`);
++  }
++});

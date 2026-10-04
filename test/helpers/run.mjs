@@ -16,6 +16,8 @@ const argv = process.argv.slice(2);
 const worker = argv[0] === '--worker';
 if (worker) argv.shift();
 const files = argv.filter(arg => !arg.startsWith('--'));
+const nameOption = argv.find(arg => arg.startsWith('--test-name-pattern='));
+const testNamePatterns = nameOption ? [new RegExp(nameOption.slice('--test-name-pattern='.length))] : undefined;
 // Fixed mode is reserved for intentional cancellation regressions. Ordinary
 // CLI overrides (including the npm scripts' file/suite limits) scale too.
 const fixedDeadlines = argv.includes('--fixed-deadlines');
@@ -30,7 +32,7 @@ function bound(name, fallback, maximum = fallback) {
 }
 const fileTimeout = bound('file-timeout', 300_000, 480_000);
 const suiteTimeout = bound('suite-timeout', 360_000, 540_000);
-if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] TEST_FILES...');
+if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] [--test-name-pattern=REGEX] TEST_FILES...');
 
 if (worker) {
   // This leader never exits voluntarily with fixtures running in its group.
@@ -42,7 +44,7 @@ if (worker) {
   };
   process.once('disconnect', cleanup);
   process.once('message', async () => {
-    const stream = run({ files, concurrency: Math.max(1, Math.floor(4 / factor)), timeout: fileTimeout });
+    const stream = run({ files, concurrency: Math.max(1, Math.floor(4 / factor)), timeout: fileTimeout, testNamePatterns });
     let code = 0;
     stream.on('test:fail', () => { code = 1; });
     try { await pipeline(stream.compose(tap), process.stdout, { end: false }); }

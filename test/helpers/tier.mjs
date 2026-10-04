@@ -61,6 +61,7 @@ const promotion = [
   'test/focus.test.mjs',
   'test/git-seed.test.mjs',
   'test/inbox.test.mjs',
+  'test/lessons.test.mjs',
   'test/memory.test.mjs',
   'test/name-alias.test.mjs',
   'test/no-setuid-processes.test.mjs',

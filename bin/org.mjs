@@ -12,8 +12,9 @@ import {
 } from '../lib/store.mjs';
 import {
   BUDGET_KEYS, attention, blockedBy, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
-  wouldCycleBlock, wouldCycleParent, releases,
+  wouldCycleBlock, wouldCycleParent, releases, nextLessonId, lessonState, wouldCycleLesson,
 } from '../lib/state.mjs';
+import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
@@ -27,7 +28,7 @@ import { releaseRecordCommand } from '../lib/release-record.mjs';
 import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
-  renderSnapshot, renderStatus, statusJson, truncate, renderPriorities,
+  renderSnapshot, renderStatus, statusJson, truncate, renderPriorities, renderLessons,
 } from '../lib/render.mjs';
 
 const BIN = fileURLToPath(import.meta.url);
@@ -60,6 +61,16 @@ Questions for the operator
                                           (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
   record close <ID> [--dropped] [--note T] [--if-current-run R-n]
   record reopen <ID> [--note T] [--if-current-run R-n]
+
+Lessons (durable knowledge, separate from work items)
+  record lesson add TEXT --evidence ID|event:N... [--scope project|fleet|framework]
+          [--path PATH]... [--module NAME]...   propose a short claim (at most 400 code points)
+  record lesson activate L-n [--supersedes L-n]... [--reason TEXT]
+                                          activate and atomically supersede older lessons
+  record lesson retire L-n --reason TEXT  retain the lesson and why it stopped helping
+  record lessons [--path PATH] [--module NAME] [--scope S] [--state S] [--json]
+                                          active by default; text shows five, JSON all matches
+                                          states: proposed, active, retired, superseded, all
 
 Runs and reports
   record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [--workspace DIR]
@@ -163,6 +174,70 @@ function requireItem(s, id) {
   const item = s.items.get(id);
   if (!item) throw new UserError(`unknown item ${id}`);
   return item;
+}
+
+function requireLesson(s, id) {
+  const lesson = s.lessons.get(id);
+  if (!lesson) throw new UserError(`unknown lesson ${id}`);
+  return lesson;
+}
+
+function lesson(argv) {
+  const [action, ...rest] = argv;
+  if (action === 'add') {
+    const { values, positionals } = args(rest, {
+      scope: { type: 'string' }, path: { type: 'string', multiple: true }, module: { type: 'string', multiple: true },
+      evidence: { type: 'string', multiple: true },
+    }, { min: 1, usage: 'record lesson add TEXT --evidence ID|event:N [--scope S] [--path PATH] [--module NAME]' });
+    const { result } = mutate(openOrg(), (s, events) => {
+      const fields = lessonProposal(s, events, { text: positionals.join(' '), scope: values.scope,
+        paths: values.path, modules: values.module, evidence: values.evidence });
+      const id = nextLessonId(s);
+      return { add: [{ type: 'lesson.proposed', id, ...fields }], result: id };
+    });
+    out(result + '\n');
+    return 0;
+  }
+  if (action === 'activate' || action === 'retire') {
+    const { values, positionals } = args(rest, {
+      reason: { type: 'string' }, ...(action === 'activate' ? { supersedes: { type: 'string', multiple: true } } : {}),
+    }, { min: 1, max: 1, usage: `record lesson ${action} L-n ${action === 'retire' ? '--reason TEXT' : '[--supersedes L-n] [--reason TEXT]'}` });
+    const id = positionals[0], reason = values.reason?.trim();
+    if (action === 'retire' && !reason) throw new UserError('retiring a lesson requires --reason TEXT');
+    const { added } = mutate(openOrg(), s => {
+      const target = requireLesson(s, id);
+      if (action === 'retire') {
+        if (target.supersession) throw new UserError(`${id} is superseded by ${target.supersession.by_lesson}; propose a new lesson instead`);
+        return { add: target.retirement?.reason === reason ? [] : [{ type: 'lesson.retired', id, reason }] };
+      }
+      const predecessors = [...new Set(values.supersedes ?? [])];
+      for (const oldId of predecessors) {
+        const old = requireLesson(s, oldId);
+        if (wouldCycleLesson(s, oldId, id)) throw new UserError(`superseding ${oldId} by ${id} would create a lesson cycle`);
+        if (old.supersession && old.supersession.by_lesson !== id)
+          throw new UserError(`${oldId} is already superseded by ${old.supersession.by_lesson}`);
+      }
+      if (target.supersession) throw new UserError(`${id} is superseded by ${target.supersession.by_lesson}; propose a new lesson instead`);
+      return { add: [
+        ...(lessonState(target) === 'active' ? [] : [{ type: 'lesson.activated', id }]),
+        ...predecessors.filter(oldId => !s.lessons.get(oldId).supersession).map(oldId => ({
+          type: 'lesson.superseded', id: oldId, by_lesson: id, reason: reason || `Replaced by ${id}`,
+        })),
+      ] };
+    });
+    safeOut(added.length ? added.map(describeEvent).join('\n') + '\n' : 'nothing to change\n');
+    return 0;
+  }
+  throw new UserError('usage: record lesson add|activate|retire (see: record help)');
+}
+
+function lessons(argv) {
+  const { values } = args(argv, {
+    path: { type: 'string' }, module: { type: 'string' }, scope: { type: 'string' }, state: { type: 'string' }, json: { type: 'boolean' },
+  }, { max: 0, usage: 'record lessons [--path PATH] [--module NAME] [--scope S] [--state S] [--json]' });
+  const doc = lessonsJson(openOrg().state, values);
+  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderLessons(doc));
+  return 0;
 }
 
 function requireCurrentRun(s, itemId, runId) {
@@ -938,6 +1013,7 @@ function priorities(argv) {
 }
 
 const COMMANDS = {
+  lesson, lessons,
   release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
   releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,

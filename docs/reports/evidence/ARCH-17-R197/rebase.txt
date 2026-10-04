@@ -1,0 +1,13 @@
+Run: R-197
+Branch: lane/fleet
+Previous tip: 4782960
+Previous base: 2b073a0
+Rebased onto main: a19de1e7c36d682c9225fd84eae3c9c0b20844f0
+Rebased tip: d63f48ec6879a7d609736cbbf1489d8dad7cea62
+Replayed inventory commit: 317c6b2
+Conflict: housekeeping/test/helpers/cli-fixture.mjs, replayed twice.
+Resolution: preserve process-owner, processes, process-source and native identity assets through copyProduct from lib/product-files.mjs; retain fleet and entry-lock dependencies.
+No new product behavior or tests. Final helper and inventory equal their pre-rebase lane versions.
+Self-review: range-diff reviewed; code diff whitespace check passed excluding historical evidence.
+Focused command: GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 housekeeping/test/housekeeping.test.mjs supervisor/test/entry.test.mjs acceptance/test/verification.test.mjs
+Result: exit 0; 118 passed, 0 failed, 0 skipped.

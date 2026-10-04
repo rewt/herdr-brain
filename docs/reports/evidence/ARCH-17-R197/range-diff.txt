@@ -1,0 +1,96 @@
+ 1:  23163d0 !  1:  46d6624 Add the project fleet registry and bounded discovery
+    @@ discovery/README.md: Only that canonical supervisor starts the project housekeep
+
+      ## discovery/adapters/claude.mjs ##
+     @@ discovery/adapters/claude.mjs: import { entryPolicy } from '../policy.mjs';
+    - import { freshInteractive } from '../launch.mjs';
+    - import { sessionEnvironment, sessionHookArguments } from '../../supervisor/session-hooks.mjs';
+    + import { freshInteractive, interactiveResume } from '../launch.mjs';
+    + import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
+      import { spawnNative } from '../session.mjs';
+     +import { FleetError } from '../../lib/fleet.mjs';
+      const separator = process.argv.indexOf('--');
+    @@ discovery/adapters/claude.mjs: try {
+
+      ## discovery/adapters/codex.mjs ##
+     @@ discovery/adapters/codex.mjs: import { entryPolicy } from '../policy.mjs';
+    - import { freshInteractive } from '../launch.mjs';
+    - import { sessionEnvironment, sessionHookArguments } from '../../supervisor/session-hooks.mjs';
+    + import { freshInteractive, interactiveResume } from '../launch.mjs';
+    + import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
+      import { spawnNative } from '../session.mjs';
+     +import { FleetError } from '../../lib/fleet.mjs';
+      const separator = process.argv.indexOf('--');
+ 2:  c730a44 =  2:  6a4d5a1 Report the fleet build and acceptance evidence
+ 3:  1c40e45 =  3:  e9f610a Add fleet independent review record
+ 4:  0a02f66 =  4:  217a85c Fix fleet discovery boundaries, entry overrides, and adoption
+ 5:  738f068 =  5:  2697f99 Report fleet review fixes for R-167
+ 6:  8bdee54 =  6:  40cb7c8 Add fleet independent review record
+ 7:  2e233a5 =  7:  0c1e315 Fix fleet rejoin recovery and example config rejection
+ 8:  d0d930a =  8:  d7f78a2 Report fleet rejoin fixes for R-174
+ 9:  52e834b =  9:  9c6e3e2 Add fleet independent review record
+10:  88b6dae = 10:  b66704d Fix fleet dependencies and isolation in copied discovery probe
+11:  0e0625b = 11:  b3500b5 Report ARCH-17 copied-product CI fix for R-178
+12:  5574f34 ! 12:  b370b16 Fix fleet discovery dependencies and scratch fixture cleanup
+    @@ docs/reports/evidence/ARCH-17-R183/sandbox-green.tap (new)
+     +# duration_ms 7896.075917
+
+      ## housekeeping/test/helpers/cli-fixture.mjs ##
+    -@@ housekeeping/test/helpers/cli-fixture.mjs: const sourceRoot = fileURLToPath(new URL('../../../', import.meta.url));
+    - export function installRuntime(root) {
+    -   for (const relative of ['housekeeping/housekeeping.mjs', 'housekeeping/config.mjs', 'supervisor/tidy-tabs.mjs',
+    +@@ housekeeping/test/helpers/cli-fixture.mjs: export function installRuntime(root) {
+          'supervisor/prompt-supervisor.mjs', 'supervisor/composer.mjs', 'supervisor/notice-lock.mjs', 'lanes/promotion-lock.mjs',
+    --    'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs', 'lib/deadline.mjs']) {
+    -+    'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs', 'lib/deadline.mjs', 'lib/fleet.mjs', 'herdr/entry-lock.mjs']) {
+    +     'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs', 'lib/deadline.mjs', 'lib/process-owner.mjs',
+    +     'lib/processes.mjs', 'lib/process-source.c', 'lib/native/manifest.json',
+    +-    'lib/native/process-source-darwin-arm64', 'lib/native/process-source-darwin-x64']) {
+    ++    'lib/native/process-source-darwin-arm64', 'lib/native/process-source-darwin-x64',
+    ++    'lib/fleet.mjs', 'herdr/entry-lock.mjs']) {
+          const target = path.join(root, relative);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.copyFileSync(path.join(sourceRoot, relative), target);
+    @@ promote/test/promote.test.mjs: function fixture(t) {
+        });
+        return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, ownedProcess: (pid) => processes.get(pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
+      }
+    -@@ promote/test/promote.test.mjs: console.log(JSON.stringify({result:r}));\n`);
+    +@@ promote/test/promote.test.mjs: cp.spawnSync=function(cmd,args,options){
+        assert.ok(!actions.some((a) => a[0] === 'worktree' || a[0] === 'workspace' && a[1] !== 'list'));
+        assert.ok(!actions.some((a) => ['pane','tab'].includes(a[0]) && a[1] === 'list' && a.at(-1) === 'other'));
+        assert.equal(fs.existsSync(wt), false); assert.equal(fs.existsSync(other), true);
+    @@ promote/test/promote.test.mjs: console.log(JSON.stringify({result:r}));\n`);
+      function blockCleanup(f) {
+
+      ## supervisor/test/entry.test.mjs ##
+    -@@ supervisor/test/entry.test.mjs: import { fileURLToPath } from 'node:url';
+    +@@ supervisor/test/entry.test.mjs: import { housekeepingSnapshot } from '../../housekeeping/command.mjs';
+      import { gitProject } from '../../lib/project.mjs';
+      import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
+      import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
+     +import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+      import { sessionEnvironment, sessionHookArguments } from '../session-hooks.mjs';
+      const root = fileURLToPath(new URL('../../', import.meta.url));
+    - const deadPid = 2147483647;
+    + const linuxBoot = '12345678-1234-4234-8234-123456789abc';
+     @@ supervisor/test/entry.test.mjs: const exec = (file, args, cwd, env = {}, input) => {
+      const good = r => { assert.equal(r.status, 0, r.stderr || r.error?.message); return r.stdout.trim(); };
+      function fixture(t) {
+13:  7c1e8a8 = 13:  0f5d8e3 Report ARCH-17 fleet CI integration fix for R-183
+14:  ad013bd = 14:  c20ce83 Record fleet rebase validation for R-187
+15:  2288c9f = 15:  4c728c9 Report fleet rebase for R-187
+16:  436f598 ! 16:  317c6b2 Share the product inventory across installed runtime copies
+    @@ housekeeping/test/helpers/cli-fixture.mjs: import path from 'node:path';
+      export function installRuntime(root) {
+     -  for (const relative of ['housekeeping/housekeeping.mjs', 'housekeeping/config.mjs', 'supervisor/tidy-tabs.mjs',
+     -    'supervisor/prompt-supervisor.mjs', 'supervisor/composer.mjs', 'supervisor/notice-lock.mjs', 'lanes/promotion-lock.mjs',
+    --    'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs', 'lib/deadline.mjs', 'lib/fleet.mjs', 'herdr/entry-lock.mjs']) {
+    +-    'lib/store.mjs', 'lib/project.mjs', 'lib/files.mjs', 'lib/deadline.mjs', 'lib/process-owner.mjs',
+    +-    'lib/processes.mjs', 'lib/process-source.c', 'lib/native/manifest.json',
+    +-    'lib/native/process-source-darwin-arm64', 'lib/native/process-source-darwin-x64',
+    +-    'lib/fleet.mjs', 'herdr/entry-lock.mjs']) {
+     -    const target = path.join(root, relative);
+     -    fs.mkdirSync(path.dirname(target), { recursive: true });
+     -    fs.copyFileSync(path.join(sourceRoot, relative), target);
+17:  4782960 = 17:  d63f48e Report R-194 fleet product-copy audit and validation

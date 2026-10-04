@@ -1,0 +1,600 @@
+TAP version 13
+# Subtest: interruption requires the current banner and an exclusively wheel-junk composer
+ok 1 - interruption requires the current banner and an exclusively wheel-junk composer
+  ---
+  duration_ms: 0.910792
+  ...
+# Subtest: recorded promoted workers close through the shared tidy planner
+ok 2 - recorded promoted workers close through the shared tidy planner
+  ---
+  duration_ms: 309.225916
+  ...
+# Subtest: abandoned promoted workers may close
+ok 3 - abandoned promoted workers may close
+  ---
+  duration_ms: 370.400083
+  ...
+# Subtest: CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+ok 4 - CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+  ---
+  duration_ms: 235.425958
+  ...
+# Subtest: preserves open workers/tabs
+ok 5 - preserves open workers/tabs
+  ---
+  duration_ms: 103.81875
+  ...
+# Subtest: preserves unpromoted workers/tabs
+ok 6 - preserves unpromoted workers/tabs
+  ---
+  duration_ms: 120.763375
+  ...
+# Subtest: preserves dirty workers/tabs
+ok 7 - preserves dirty workers/tabs
+  ---
+  duration_ms: 112.293334
+  ...
+# Subtest: preserves blocked workers/tabs
+ok 8 - preserves blocked workers/tabs
+  ---
+  duration_ms: 98.957167
+  ...
+# Subtest: preserves working workers/tabs
+ok 9 - preserves working workers/tabs
+  ---
+  duration_ms: 107.220959
+  ...
+# Subtest: preserves unknown workers/tabs
+ok 10 - preserves unknown workers/tabs
+  ---
+  duration_ms: 95.587125
+  ...
+# Subtest: preserves unnamed workers/tabs
+ok 11 - preserves unnamed workers/tabs
+  ---
+  duration_ms: 94.88675
+  ...
+# Subtest: preserves unrecorded workers/tabs
+ok 12 - preserves unrecorded workers/tabs
+  ---
+  duration_ms: 96.761666
+  ...
+# Subtest: preserves replaced workers/tabs
+ok 13 - preserves replaced workers/tabs
+  ---
+  duration_ms: 93.728833
+  ...
+# Subtest: preserves waiting workers/tabs
+ok 14 - preserves waiting workers/tabs
+  ---
+  duration_ms: 97.058416
+  ...
+# Subtest: preserves report-blocked workers/tabs
+ok 15 - preserves report-blocked workers/tabs
+  ---
+  duration_ms: 102.721292
+  ...
+# Subtest: preserves report-needs-human workers/tabs
+ok 16 - preserves report-needs-human workers/tabs
+  ---
+  duration_ms: 104.673125
+  ...
+# Subtest: preserves new-open-run workers/tabs
+ok 17 - preserves new-open-run workers/tabs
+  ---
+  duration_ms: 97.477792
+  ...
+# Subtest: preserves declined workers/tabs
+ok 18 - preserves declined workers/tabs
+  ---
+  duration_ms: 89.22025
+  ...
+# Subtest: preserves wrong-repo workers/tabs
+ok 19 - preserves wrong-repo workers/tabs
+  ---
+  duration_ms: 90.680291
+  ...
+# Subtest: preserves mixed-pane workers/tabs
+ok 20 - preserves mixed-pane workers/tabs
+  ---
+  duration_ms: 111.848625
+  ...
+# Subtest: preserves running-shell workers/tabs
+ok 21 - preserves running-shell workers/tabs
+  ---
+  duration_ms: 112.553917
+  ...
+# Subtest: preserves session-done workers/tabs
+ok 22 - preserves session-done workers/tabs
+  ---
+  duration_ms: 106.366375
+  ...
+# Subtest: preserves review-file workers/tabs
+ok 23 - preserves review-file workers/tabs
+  ---
+  duration_ms: 95.566667
+  ...
+# Subtest: latest open fix round defeats an older reported run using the same worker name
+ok 24 - latest open fix round defeats an older reported run using the same worker name
+  ---
+  duration_ms: 93.294917
+  ...
+# Subtest: unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+ok 25 - unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+  ---
+  duration_ms: 109.382458
+  ...
+# Subtest: never closes or resumes its own tab
+ok 26 - never closes or resumes its own tab
+  ---
+  duration_ms: 120.165416
+  ...
+# Subtest: an interrupted open worker resumes once, and durable attempts survive a new runner
+ok 27 - an interrupted open worker resumes once, and durable attempts survive a new runner
+  ---
+  duration_ms: 122.592541
+  ...
+# Subtest: failed prompt is logged and never replayed at the same state sequence
+ok 28 - failed prompt is logged and never replayed at the same state sequence
+  ---
+  duration_ms: 121.742542
+  ...
+# Subtest: unrecorded disk report, human words, other harness and absent identity prevent resume
+ok 29 - unrecorded disk report, human words, other harness and absent identity prevent resume
+  ---
+  duration_ms: 135.817208
+  ...
+# Subtest: dry run reports close/resume plans and persists no attempts or live actions
+ok 30 - dry run reports close/resume plans and persists no attempts or live actions
+  ---
+  duration_ms: 137.036833
+  ...
+# Subtest: fresh state or record changes prevent deletion
+ok 31 - fresh state or record changes prevent deletion
+  ---
+  duration_ms: 128.788
+  ...
+# Subtest: a run completed during the pre-input recheck receives no resume input
+ok 32 - a run completed during the pre-input recheck receives no resume input
+  ---
+  duration_ms: 120.121833
+  ...
+# Subtest: a record change after clearing composer suppresses the prompt
+ok 33 - a record change after clearing composer suppresses the prompt
+  ---
+  duration_ms: 113.937292
+  ...
+# Subtest: incomplete or failed reads never authorize any action
+ok 34 - incomplete or failed reads never authorize any action
+  ---
+  duration_ms: 117.065084
+  ...
+# Subtest: one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+ok 35 - one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+  ---
+  duration_ms: 649.077
+  ...
+# Subtest: the loop rereads opt-in and shuts down with its lock removed
+ok 36 - the loop rereads opt-in and shuts down with its lock removed
+  ---
+  duration_ms: 1459.761375
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a canonical checkout
+ok 37 - no configuration defaults on and project record/main are discovered from a canonical checkout
+  ---
+  duration_ms: 441.976625
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a linked preview
+ok 38 - no configuration defaults on and project record/main are discovered from a linked preview
+  ---
+  duration_ms: 433.073167
+  ...
+# Subtest: no record and no Git project are quiet no-ops
+ok 39 - no record and no Git project are quiet no-ops
+  ---
+  duration_ms: 209.191166
+  ...
+# Subtest: an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+ok 40 - an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+  ---
+  duration_ms: 797.658041
+  ...
+# Subtest: housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+ok 41 - housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+  ---
+  duration_ms: 1.4895
+  ...
+# Subtest: canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 42 - canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 596.414375
+  ...
+# Subtest: installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 43 - installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 590.665875
+  ...
+# Subtest: canonical checkout start stays idempotent after a lane is removed
+ok 44 - canonical checkout start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1622.41075
+  ...
+# Subtest: installed copy start stays idempotent after a lane is removed
+ok 45 - installed copy start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1630.028833
+  ...
+# Subtest: dry-run start leaves no timer process
+ok 46 - dry-run start leaves no timer process
+  ---
+  duration_ms: 163.403375
+  ...
+# Subtest: old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+ok 47 - old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+  ---
+  duration_ms: 26.866291
+  ...
+# Subtest: lane code cannot --once live housekeeping even with the canonical target
+ok 48 - lane code cannot --once live housekeeping even with the canonical target
+  ---
+  duration_ms: 184.184416
+  ...
+# Subtest: canonical code cannot --once live housekeeping from a linked target
+ok 49 - canonical code cannot --once live housekeeping from a linked target
+  ---
+  duration_ms: 165.091333
+  ...
+# Subtest: lane code cannot --start live housekeeping even with the canonical target
+ok 50 - lane code cannot --start live housekeeping even with the canonical target
+  ---
+  duration_ms: 182.896334
+  ...
+# Subtest: canonical code cannot --start live housekeeping from a linked target
+ok 51 - canonical code cannot --start live housekeeping from a linked target
+  ---
+  duration_ms: 171.718042
+  ...
+# Subtest: lane code cannot --loop live housekeeping even with the canonical target
+ok 52 - lane code cannot --loop live housekeeping even with the canonical target
+  ---
+  duration_ms: 191.414625
+  ...
+# Subtest: canonical code cannot --loop live housekeeping from a linked target
+ok 53 - canonical code cannot --loop live housekeeping from a linked target
+  ---
+  duration_ms: 168.502084
+  ...
+# Subtest: a record CLI override in a lane cannot pin a live schedule to removable code
+ok 54 - a record CLI override in a lane cannot pin a live schedule to removable code
+  ---
+  duration_ms: 171.450709
+  ...
+# Subtest: linked code remains usable for isolated dry-run previews
+ok 55 - linked code remains usable for isolated dry-run previews
+  ---
+  duration_ms: 543.136291
+  ...
+# Subtest: an existing different-script owner never reports already-running or alters the old lock
+ok 56 - an existing different-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 191.990458
+  ...
+# Subtest: an existing different-record owner never reports already-running or alters the old lock
+ok 57 - an existing different-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 185.977084
+  ...
+# Subtest: an existing missing-script owner never reports already-running or alters the old lock
+ok 58 - an existing missing-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 176.574125
+  ...
+# Subtest: an existing missing-record owner never reports already-running or alters the old lock
+ok 59 - an existing missing-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 187.378
+  ...
+# Subtest: an existing legacy owner never reports already-running or alters the old lock
+ok 60 - an existing legacy owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 179.839
+  ...
+# Subtest: promotion cleanup inspects and closes only the requested lane workspace
+ok 61 - promotion cleanup inspects and closes only the requested lane workspace
+  ---
+  duration_ms: 201.709458
+  ...
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 62 - repository does not track a Codex project hook that can interrupt unattended workers
+  ---
+  duration_ms: 5.272958
+  ...
+# Subtest: durable supervisor pane binding survives native restore, clear and compact without adapter env
+ok 63 - durable supervisor pane binding survives native restore, clear and compact without adapter env
+  ---
+  duration_ms: 2020.765208
+  ...
+# Subtest: claude adapter reuses the project SessionStart entry exactly once
+ok 64 - claude adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 1145.875584
+  ...
+# Subtest: codex supervisor adapter injects SessionStart without a project hook
+ok 65 - codex supervisor adapter injects SessionStart without a project hook
+  ---
+  duration_ms: 1167.784583
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 66 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 1042.178292
+  ...
+# Subtest: adapter exports its known supervisor agent identity
+ok 67 - adapter exports its known supervisor agent identity
+  ---
+  duration_ms: 77.462
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 68 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 316.361583
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 69 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 815.533083
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 70 - entry respects {"enabled":false}
+  ---
+  duration_ms: 191.31
+  ...
+# Subtest: entry respects {"resume":false}
+ok 71 - entry respects {"resume":false}
+  ---
+  duration_ms: 182.378875
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 72 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 158.64725
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 73 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 194.332958
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 74 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 367.396667
+  ...
+# Subtest: Claude project hook delivers supervisor entry on startup
+ok 75 - Claude project hook delivers supervisor entry on startup
+  ---
+  duration_ms: 361.638084
+  ...
+# Subtest: Claude project hook delivers supervisor entry on resume
+ok 76 - Claude project hook delivers supervisor entry on resume
+  ---
+  duration_ms: 368.440041
+  ...
+# Subtest: Claude project hook delivers supervisor entry on clear
+ok 77 - Claude project hook delivers supervisor entry on clear
+  ---
+  duration_ms: 353.585834
+  ...
+# Subtest: Claude project hook delivers supervisor entry on compact
+ok 78 - Claude project hook delivers supervisor entry on compact
+  ---
+  duration_ms: 348.3055
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 79 - hook skips or explains unmarked without blocking startup
+  ---
+  duration_ms: 124.242917
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 80 - hook skips or explains worker without blocking startup
+  ---
+  duration_ms: 101.765666
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 81 - hook skips or explains lane without blocking startup
+  ---
+  duration_ms: 150.307584
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 82 - hook skips or explains foreign without blocking startup
+  ---
+  duration_ms: 132.9435
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 83 - hook skips or explains bad-input without blocking startup
+  ---
+  duration_ms: 110.516375
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 84 - hook skips or explains missing-record without blocking startup
+  ---
+  duration_ms: 301.262417
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 85 - hook skips or explains worker-bypass without blocking startup
+  ---
+  duration_ms: 100.435083
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 86 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 410.534875
+  ...
+# Subtest: claude adapter binds supervisor and supplies native hooks only to supervisors
+ok 87 - claude adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 951.797458
+  ...
+# Subtest: claude adapter binds worker and supplies native hooks only to supervisors
+ok 88 - claude adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 892.7745
+  ...
+# Subtest: codex adapter binds supervisor and supplies native hooks only to supervisors
+ok 89 - codex adapter binds supervisor and supplies native hooks only to supervisors
+  ---
+  duration_ms: 952.536583
+  ...
+# Subtest: codex adapter binds worker and supplies native hooks only to supervisors
+ok 90 - codex adapter binds worker and supplies native hooks only to supervisors
+  ---
+  duration_ms: 665.086458
+  ...
+# Subtest: entry safely handles STOP
+ok 91 - entry safely handles STOP
+  ---
+  duration_ms: 306.720291
+  ...
+# Subtest: entry safely handles invalid-config
+ok 92 - entry safely handles invalid-config
+  ---
+  duration_ms: 408.414583
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 93 - entry safely handles invalid-pid
+  ---
+  duration_ms: 370.733417
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 94 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 410.015458
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 95 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 292.711
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 96 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 173.9895
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 97 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 179.305208
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 98 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 178.26675
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 99 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 167.604833
+  ...
+# Subtest: watch recovery handles reused identity without blocking entry
+ok 100 - watch recovery handles reused identity without blocking entry
+  ---
+  duration_ms: 483.102792
+  ...
+# Subtest: watch recovery handles unreadable identity without blocking entry
+ok 101 - watch recovery handles unreadable identity without blocking entry
+  ---
+  duration_ms: 324.483875
+  ...
+# Subtest: watch recovery handles legacy-live identity without blocking entry
+ok 102 - watch recovery handles legacy-live identity without blocking entry
+  ---
+  duration_ms: 351.858959
+  ...
+# Subtest: watch recovery handles changed-during-entry identity without blocking entry
+ok 103 - watch recovery handles changed-during-entry identity without blocking entry
+  ---
+  duration_ms: 365.726
+  ...
+# Subtest: empty supervisor environment and null dispatch recipient use the supervisor fallback
+ok 104 - empty supervisor environment and null dispatch recipient use the supervisor fallback
+  ---
+  duration_ms: 447.004084
+  ...
+# Subtest: housekeeping snapshot reports reused birth without changing the lock
+ok 105 - housekeeping snapshot reports reused birth without changing the lock
+  ---
+  duration_ms: 101.85875
+  ...
+# Subtest: housekeeping snapshot reports unreadable birth without changing the lock
+ok 106 - housekeeping snapshot reports unreadable birth without changing the lock
+  ---
+  duration_ms: 99.763417
+  ...
+# Subtest: housekeeping snapshot reports legacy-live birth without changing the lock
+ok 107 - housekeeping snapshot reports legacy-live birth without changing the lock
+  ---
+  duration_ms: 101.30825
+  ...
+# Subtest: housekeeping resume replaces a reused PID without signaling the replacement process
+ok 108 - housekeeping resume replaces a reused PID without signaling the replacement process
+  ---
+  duration_ms: 489.693791
+  ...
+# Subtest: claude interactive --resume through automatic adapter preserves supervisor entry and worker guards
+ok 109 - claude interactive --resume through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1190.758792
+  ...
+# Subtest: claude interactive --continue through automatic adapter preserves supervisor entry and worker guards
+ok 110 - claude interactive --continue through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1131.3815
+  ...
+# Subtest: codex interactive resume through automatic adapter preserves supervisor entry and worker guards
+ok 111 - codex interactive resume through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1151.180083
+  ...
+# Subtest: Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+ok 112 - Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+  ---
+  duration_ms: 927.531083
+  ...
+# Subtest: claude nested headless launch cannot inherit supervisor recognition
+ok 113 - claude nested headless launch cannot inherit supervisor recognition
+  ---
+  duration_ms: 595.6465
+  ...
+# Subtest: codex nested headless launch cannot inherit supervisor recognition
+ok 114 - codex nested headless launch cannot inherit supervisor recognition
+  ---
+  duration_ms: 682.653084
+  ...
+# Subtest: installed product contains every relative module import, including fleet dependencies
+ok 115 - installed product contains every relative module import, including fleet dependencies
+  ---
+  duration_ms: 1427.848375
+  ...
+# Subtest: native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+ok 116 - native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+  ---
+  duration_ms: 238.5955
+  ...
+# Subtest: model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+ok 117 - model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+  ---
+  duration_ms: 196.383375
+  ...
+# Subtest: record verification and scripted answer are kernel-confined even if model output redirects .org
+ok 118 - record verification and scripted answer are kernel-confined even if model output redirects .org
+  ---
+  duration_ms: 349.362542
+  ...
+1..118
+# tests 118
+# suites 0
+# pass 118
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 24986.6025

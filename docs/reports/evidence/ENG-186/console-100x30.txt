@@ -1,0 +1,30 @@
+herdr-brain · 2 open · 1 need attention
+Context · supervisor Claude Opus · 2 chats
+
+Runs · 2 open · 9 landed · +4 lines
+RUN   ITEM                                                  STAGE       PROVIDER       START RUNNING
+R-240 ENG-186 Console Runs table                            engineering Codex Sol      14:05 8m
+R-99  ENG-81 Prove Claude discovery and broaden validation… blocked     Codex Sol      10/02 39m
+R-239 ENG-184 RC-8 preparation regression                   landed      Codex Sol      13:41 11m
+R-236 ENG-173 Lessons at entry and over MCP                 landed      Codex Sol      12:36 18m
+R-232 ENG-175 Minimal console profile                       landed      Codex Sol      11:58 27m
+R-228 ENG-171 Distillation                                  landed      Codex Sol      11:50 28m
+R-231 ENG-170 Lessons reach every agent                     landed      Codex Sol      11:51 20m
+
+Reports · recent 9 · outcome / check · +2 lines
+13:48  R-239 ENG-184  done / pass           Copied Codex and Claude probes pass with supervisor ent…
+13:27  R-238 ENG-177  done / pass           Supervisor wakes now preserve the complete original not…
+13:06  R-237 ENG-177  done / pass           Fresh notices and base movement now complete automatica…
+12:44  R-236 ENG-173  done / pass           Entry readiness now checks the native session before ac…
+12:44  R-235 ENG-178  done / pass           The console now shows current work, checked report head…
+12:43  R-233 ENG-177  done / pass           Routine notices now follow recorded policy and lane sta…
+12:28  R-234 ENG-173  done / pass           Both entry adapters handle bracket directories and the…
+
+Train
+No batch running
+Waiting · none
+13:53  probe-regression  promoted
+13:30  autopilot  promoted
+13:19  autopilot  refused · batch validation failed (exit 1); lane isolated for correction
+  log …elopment/rewt/herdr-brain/.git/promote/batches/78e2f9d3-e081-4837-a12b-5e75a3b92244/train.log
+q quit

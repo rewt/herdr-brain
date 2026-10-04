@@ -79,7 +79,7 @@ test('minimal frame is bounded, safe with Unicode, clear about overflow and quie
     assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
     assert.doesNotMatch(text(frame), /\x1b/);
     assert.match(text(frame), /q quit/);
-    assert.match(text(frame), /Now/);
+    assert.match(text(frame), /Runs/);
     assert.match(text(frame), /Reports/);
     assert.match(text(frame), /Train/);
   }
@@ -97,12 +97,13 @@ test('minimal refresh retains last good sources, recovers, accepts only quit and
     herdrAgents: async () => fail ? { ok: false, error: 'offline' } : { ok: true, agents: stopped ? [] : [agent('worker')] },
     herdrList: async resource => { calls.push(resource); return resource === 'workspace' ? [{ workspace_id: 'main', cwd: '/project' }] : []; },
     orgStatus: async () => { calls.push('status'); return { runs: [run('worker')] }; },
+    runs: () => ({ lanes: stopped ? [] : [{ run: 'R-1', item: 'ENG-1', title: 'Current work', stage: 'engineering', provider: 'codex', started: iso(70), running_seconds: 4200 }] }),
   } });
   await session.refresh(); assert.equal(session.model.sessions.length, 1);
   fail = true; await session.refresh(); assert.equal(session.model.sessions.length, 1);
   assert.match(text(session.frame(100, 15)), /agents unavailable/);
   fail = false; stopped = true; await session.refresh(); assert.equal(session.model.sessions.length, 0);
-  assert.match(text(session.frame(100, 15)), /No active work/);
+  assert.match(text(session.frame(100, 15)), /No open runs/);
   for (const input of ['c', 'd', 'n', 'P', 'H', 'y', '\n', '\x1b']) assert.equal(await session.key(input), false);
   assert.equal(await session.mouse({ button: 'left' }), false);
   assert.equal(await session.key('q'), true);
@@ -124,8 +125,15 @@ test('profile preferences validate, are read without creation, and explicit full
 
 test('--print snapshot works for the flag and configured profile; action keys issue only reads', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'minimal-print-'));
-  const config = path.join(dir, 'console.json'), herdr = path.join(dir, 'herdr'), record = path.join(dir, 'record.mjs'), log = path.join(dir, 'reads.jsonl');
+  const config = path.join(dir, 'console.json'), clock = path.join(dir, 'clock.mjs'), herdr = path.join(dir, 'herdr'), record = path.join(dir, 'record.mjs'), log = path.join(dir, 'reads.jsonl');
   try {
+    assert.equal(spawnSync('git', ['init', '-q', dir]).status, 0);
+    fs.writeFileSync(clock, `const NativeDate = Date; globalThis.Date = class extends NativeDate { constructor(...args) { super(...(args.length ? args : [${now}])); } static now() { return ${now}; } };`);
+    const events = [
+      { type: 'item.added', id: 'ENG-1', title: 'Compact console' },
+      { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace: fs.realpathSync(dir), meta: { agent: 'worker', harness: 'codex', model: 'gpt-6.1-sol' } },
+    ].map((e, i) => ({ seq: i + 1, at: iso(70), by: 'test', ...e }));
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), events.map(e => JSON.stringify(e)).join('\n') + '\n');
     fs.writeFileSync(config, JSON.stringify({ profile: 'minimal', projects: [{ name: 'Snapshot', cwd: dir, org: dir }] }));
     fs.writeFileSync(herdr, `#!/usr/bin/env node
 const fs = require('node:fs');
@@ -143,10 +151,10 @@ console.log(JSON.stringify({ result }));
     fs.writeFileSync(path.join(dir, 'supervisor/inbox.log'), JSON.stringify({ type: 'notice', id: 'n', message: '[org-report] run=R-2 item=ENG-2 check=pass', at: '2020-01-02T12:30:00Z' }) + '\n');
     const env = { ...process.env, HERDR_BIN_PATH: herdr, HERDR_ORG_BIN: record, ORG_FLEET_DIR: path.join(dir, 'no-fleet'), TZ: 'UTC' };
     for (const flags of [[], ['--minimal'], ['--profile', 'minimal']]) {
-      const result = spawnSync(process.execPath, ['console/app.mjs', ...flags, '--config', config, '--project', 'Snapshot', '--print', '100x14', '--keys', 'ny\\ncPSHy\\n'], { env, encoding: 'utf8' });
+      const result = spawnSync(process.execPath, ['--import', clock, 'console/app.mjs', ...flags, '--config', config, '--project', 'Snapshot', '--print', '100x14', '--keys', 'ny\\ncPSHy\\n'], { env, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stdout, fs.readFileSync(new URL('./fixtures/minimal-100x14.txt', import.meta.url), 'utf8'));
-      assert.match(result.stdout, /R-1 ENG-1  Compact console/);
+      assert.match(result.stdout, /R-1\s+ENG-1 Compact console/);
       assert.match(result.stdout, /done \/ pass/);
       assert.match(result.stdout, /The headline comes from the record/);
     }
@@ -170,7 +178,7 @@ test('duplicate project labels select the requested stable ID and repository, in
   const config = { projects: [{ id: 'p1', name: 'Same', cwd: '/project', org: '/org1' },
     { id: 'p2', name: 'Same', cwd: '/other', org: '/org2' }], refresh_seconds: 10 };
   const visited = [];
-  const deps = { identity, now: () => now, details: () => ({}), journal: () => [], train: () => ({}),
+  const deps = { identity, now: () => now, details: () => ({}), runs: () => ({ lanes: [] }), journal: () => [], train: () => ({}),
     herdrAgents: async () => ({ ok: true, agents: [] }),
     herdrList: async key => key === 'workspace' ? [{ workspace_id: 'current', cwd: '/other' }] : [],
     orgStatus: async p => { visited.push(p.org); return { runs: [] }; } };
@@ -191,7 +199,7 @@ test('work purpose uses item titles; reviewer subject never inherits the reporte
 
 test('feed source failure retains last good data and recovers independently', async () => {
   let fail = false;
-  const deps = { identity, now: () => now, details: () => ({}),
+  const deps = { identity, now: () => now, details: () => ({}), runs: () => ({ lanes: [] }),
     herdrAgents: async () => ({ ok: true, agents: [] }), herdrList: async () => [],
     orgStatus: async () => ({ runs: [{ id: 'R-1', item: 'ENG-1', report: { at: iso(2), outcome: 'done', headline: 'Ready' } }] }),
     journal: () => { if (fail) throw Error('torn'); return [{ type: 'notice', id: 'n', at: iso(2), message: '[org-report] run=R-1 item=ENG-1 check=pass' }]; },
@@ -215,5 +223,27 @@ test('narrow and wide frames show active CI, check clocks, refusals and log path
     assert.match(text(frame), /invalid \/ fail/);
     assert.ok(frame.lines.flatMap(l => l.spans).some(s => s.fg === 'amber' && s.text.includes('fail')));
     assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
+  }
+});
+
+test('Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history', () => {
+  const runs = [
+    { run: 'R-239', item: 'ENG-184', title: 'Copied-product probe regression: details', stage: 'engineering', provider: 'codex', model: 'gpt-6.1-sol', started: iso(20), running_seconds: 1200 },
+    { run: 'R-240', item: 'ENG-186', title: '会話 console\x1b[2J (operator details)', stage: 'review', provider: 'claude', model: 'claude-opus-5-5', started: '2026-10-02T12:30:00Z', running_seconds: 3600 },
+    { run: 'R-238', item: 'ENG-183', title: 'Done', stage: 'landed', provider: 'codex', model: 'gpt-6.1-sol', started: iso(100), running_seconds: 2400 },
+  ];
+  for (const width of [40, 60, 80, 100, 140]) {
+    const frame = minimalFrame({ project, runs, now }, width, 25), output = text(frame);
+    assert.match(output, /Runs · 2 open · 1 landed/); assert.doesNotMatch(output, /Now|details|\x1b/);
+    assert.match(output, /RUN/); assert.match(output, /STAGE/); assert.match(output, /START/); assert.match(output, /RUNNING/);
+    assert.match(output, /10\/02/); assert.match(output, /40m/);
+    assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
+    assert.ok(frame.lines.flatMap(l => l.spans).some(s => s.dim && s.text.includes('R-238')));
+    if (width >= 60) {
+      const lines = output.split('\n').filter(l => /^R-/.test(l));
+      assert.equal(lines.length, 3);
+      const stages = ['engineering', 'review', 'landed'];
+      assert.equal(new Set(lines.map((l, i) => cellWidth(l.slice(0, l.indexOf(stages[i]))))).size, 1);
+    }
   }
 });

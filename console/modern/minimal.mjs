@@ -89,7 +89,7 @@ export function shortModel(model) {
   return value.replace(/^claude-|^gpt-/i, '');
 }
 
-export function minimalFrame({ project, sessions = [], reports = [], train = {}, errors = {}, loading = false, now = Date.now() }, cols, height) {
+export function minimalFrame({ project, sessions = [], runs = [], reports = [], train = {}, errors = {}, loading = false, now = Date.now() }, cols, height) {
   const width = Math.max(1, cols), rows = Math.max(1, height), content = Math.min(width, 116);
   const fit = (text, n) => pad(sanitize(text), n);
   const line = (parts, bold = false) => {
@@ -104,27 +104,39 @@ export function minimalFrame({ project, sessions = [], reports = [], train = {},
     return { spans };
   };
   const muted = text => line([{ text, fg: 'muted' }]);
-  const work = sessions.filter(s => !['supervisor', 'chat'].includes(s.stage));
+  const work = runs;
+  const open = work.filter(r => r.stage !== 'landed');
   const context = sessions.filter(s => ['supervisor', 'chat'].includes(s.stage));
   const provider = s => `${s.provider}${s.model ? ` ${shortModel(s.model)}` : ''}`;
   const blocks = [[], [], []];
   const compact = content < 90;
-  const purposeWidth = Math.min(content - 38, Math.max(32, ...work.map(s =>
-    cellWidth(`${[s.run, s.item].filter(Boolean).join(' ')}  ${s.title ?? s.name}`))));
-  for (const s of work) {
-    const id = [s.run, s.item].filter(Boolean).join(' ');
-    const purpose = `${id ? id + '  ' : ''}${s.title ?? s.name}`;
-    if (compact) {
-      blocks[0].push(line(fit(purpose, content)));
-      blocks[0].push(line([{ text: `  ${s.blocked ? 'blocked / ' : ''}${s.stage} · ${provider(s)} · ${s.elapsed}`, fg: s.blocked ? 'amber' : 'muted' }]));
-    } else {
-      const purposeW = purposeWidth;
-      blocks[0].push(line([{ text: fit(purpose, purposeW) + '  ', fg: 'text' },
-        { text: fit(s.blocked ? 'blocked' : s.stage, 11) + '  ', fg: s.blocked ? 'amber' : 'muted' },
-        { text: fit(provider(s), 14) + '  ' + fit(s.elapsed, 7), fg: 'muted' }]));
-    }
-  }
-  if (!work.length) blocks[0].push(muted(loading ? 'Reading work…' : 'No active work'));
+  const stacked = content < 54;
+  const runW = Math.max(5, ...work.map(r => cellWidth(clean(r.run))));
+  const stageW = 11, providerW = content < 80 ? 11 : 14, startedW = 5, runningW = 7;
+  const itemW = Math.max(1, content - runW - stageW - providerW - startedW - runningW - 5);
+  const running = r => duration(new Date(now - r.running_seconds * 1000).toISOString(), now);
+  const started = r => {
+    const ms = timestamp(r.started);
+    if (ms === null) return '?';
+    const d = new Date(ms);
+    return d.toDateString() === new Date(now).toDateString()
+      ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+      : `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const runProvider = r => `${/claude/i.test(r.provider ?? '') ? 'Claude' : /codex/i.test(r.provider ?? '') ? 'Codex' : clean(r.provider) || '?'}${r.model ? ` ${shortModel(r.model)}` : ''}`;
+  const cells = (r, header = false) => {
+    const fg = r.stage === 'blocked' ? 'amber' : header || r.stage === 'landed' ? 'muted' : 'text';
+    const dim = r.stage === 'landed';
+    const values = header ? ['RUN', 'ITEM', 'STAGE', 'PROVIDER', 'START', 'RUNNING']
+      : [r.run, `${r.item} ${shortTitle(r.title)}`, r.stage, runProvider(r), started(r), running(r)];
+    if (stacked) return [
+      line([{ text: fit(header ? 'RUN / ITEM' : `${r.run} ${values[1]}`, content), fg, dim }]),
+      line([{ text: [fit(values[2], stageW), fit(values[3], 11), fit(values[4], startedW), fit(values[5], runningW)].join(' '), fg, dim }]),
+    ];
+    return [line([{ text: values.map((v, i) => fit(v, [runW, itemW, stageW, providerW, startedW, runningW][i])).join(' '), fg, dim }])];
+  };
+  if (work.length) blocks[0].push(...cells({}, true), ...work.flatMap(r => cells(r)));
+  else blocks[0].push(muted(loading ? 'Reading runs…' : 'No open runs'));
   for (const r of reports) {
     const meta = `${startText(r.at, now)}  ${r.run ?? '?'} ${r.item ?? '?'}  `;
     const result = `${r.outcome} / ${r.check}`;
@@ -157,14 +169,14 @@ export function minimalFrame({ project, sessions = [], reports = [], train = {},
     context.some(s => s.stage === 'chat') ? `${context.filter(s => s.stage === 'chat').length} chats` : null,
   ].filter(Boolean).join(' · ')}` : '';
   const messages = Object.keys(errors).map(source => muted(`${source} unavailable · showing last known data`));
-  const lines = [line(`${project?.name ?? 'Project'} · ${work.length} working · ${reports.filter(r => r.attention).length} need attention`, true)];
+  const lines = [line(`${project?.name ?? 'Project'} · ${open.length} open · ${reports.filter(r => r.attention).length} need attention`, true)];
   if (contextText) lines.push(muted(contextText));
   // Give each section space before spending spare rows on recent history. A
   // small pane always retains all three headings and counts omitted lines.
   const separated = rows >= 18;
   const available = Math.max(0, rows - lines.length - (separated ? 6 : 3) - messages.length - 1);
   const caps = blocks.map(() => 0);
-  const minimums = [compact ? 2 : 1, compact ? 2 : 1, c ? 3 : 2];
+  const minimums = [work.length ? (stacked ? 4 : 2) : 1, compact ? 2 : 1, c ? 3 : 2];
   let left = available;
   for (let pass = 0; pass < Math.max(...minimums) && left; pass++) for (let i = 0; i < 3 && left; i++) {
     if (caps[i] < Math.min(blocks[i].length, minimums[i])) { caps[i]++; left--; }
@@ -173,10 +185,10 @@ export function minimalFrame({ project, sessions = [], reports = [], train = {},
     if (left && caps[i] < blocks[i].length) { caps[i]++; left--; }
   }
   if (compact) {
-    if (work.length) caps[0] -= caps[0] % 2;
+    if (work.length && stacked) caps[0] -= caps[0] % 2;
     if (reports.length) caps[1] -= caps[1] % 2;
   }
-  const headings = [`Now · ${work.length}`, `Reports · recent ${reports.length} · outcome / check`, 'Train'];
+  const headings = [`Runs · ${open.length} open${work.length > open.length ? ` · ${work.length - open.length} landed` : ''}`, `Reports · recent ${reports.length} · outcome / check`, 'Train'];
   for (let i = 0; i < 3; i++) {
     const hidden = blocks[i].length - caps[i];
     if (separated) lines.push(muted(''));

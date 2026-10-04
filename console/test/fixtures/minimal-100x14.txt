@@ -1,13 +1,13 @@
-Snapshot · 1 working · 0 need attention
+Snapshot · 1 open · 0 need attention
 Context · supervisor Claude
-Now · 1
-R-1 ENG-1  Compact console        engineering  Codex Sol       unknown
+Runs · 1 open
+RUN   ITEM                                                  STAGE       PROVIDER       START RUNNING
+R-1   ENG-1 Compact console                                 engineering Codex Sol      15:50 1h 10m
 Reports · recent 1 · outcome / check
 01/02 12:30  R-2 ENG-2  done / pass         The headline comes from the record.
 Train
 No batch running
 Waiting · none
-
 
 
 

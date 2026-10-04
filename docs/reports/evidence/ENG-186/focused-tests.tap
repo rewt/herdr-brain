@@ -1,0 +1,175 @@
+TAP version 13
+# Subtest: status derives all lane stages and timing without record mutations or model calls
+ok 1 - status derives all lane stages and timing without record mutations or model calls
+  ---
+  duration_ms: 395.061625
+  ...
+# Subtest: status shows correction runs as fix and retains recent autopilot receipts
+ok 2 - status shows correction runs as fix and retains recent autopilot receipts
+  ---
+  duration_ms: 322.02275
+  ...
+# Subtest: a correction moves from fix to its own review and displays the active reviewer metadata
+ok 3 - a correction moves from fix to its own review and displays the active reviewer metadata
+  ---
+  duration_ms: 316.981375
+  ...
+# Subtest: status warns and omits structurally damaged action receipts before sorting or mapping
+ok 4 - status warns and omits structurally damaged action receipts before sorting or mapping
+  ---
+  duration_ms: 174.728333
+  ...
+# Subtest: unavailable Herdr and malformed receipts are visible without changing state
+ok 5 - unavailable Herdr and malformed receipts are visible without changing state
+  ---
+  duration_ms: 152.948083
+  ...
+# Subtest: status CLI is read-only from a linked checkout and does not require a supervisor role
+ok 6 - status CLI is read-only from a linked checkout and does not require a supervisor role
+  ---
+  duration_ms: 351.309625
+  ...
+# Subtest: review display uses matching session provider/model and excludes foreign session metadata
+ok 7 - review display uses matching session provider/model and excludes foreign session metadata
+  ---
+  duration_ms: 180.468417
+  ...
+# Subtest: removed completed legacy lanes are history rather than active review lanes
+ok 8 - removed completed legacy lanes are history rather than active review lanes
+  ---
+  duration_ms: 232.414959
+  ...
+# Subtest: the current reviewer matches the configured opaque route and verified occupant, working before idle
+ok 9 - the current reviewer matches the configured opaque route and verified occupant, working before idle
+  ---
+  duration_ms: 280.681166
+  ...
+# Subtest: recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+ok 10 - recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+  ---
+  duration_ms: 392.494167
+  ...
+# Subtest: open runs precede only today’s landed runs and refused promotion is blocked
+ok 11 - open runs precede only today’s landed runs and refused promotion is blocked
+  ---
+  duration_ms: 477.435709
+  ...
+# Subtest: a blocked report with no live session keeps its completed duration instead of counting idle hours
+ok 12 - a blocked report with no live session keeps its completed duration instead of counting idle hours
+  ---
+  duration_ms: 341.042375
+  ...
+# Subtest: minimal provider uses the live harness; metadata supplies the known model and actual launch
+ok 13 - minimal provider uses the live harness; metadata supplies the known model and actual launch
+  ---
+  duration_ms: 1.693041
+  ...
+# Subtest: minimal stages come from structured roles, correction origins and established session names
+ok 14 - minimal stages come from structured roles, correction origins and established session names
+  ---
+  duration_ms: 0.120292
+  ...
+# Subtest: durations retain minutes, handle days, and never invent unknown or future starts
+ok 15 - durations retain minutes, handle days, and never invent unknown or future starts
+  ---
+  duration_ms: 0.054916
+  ...
+# Subtest: working first then newest, stable ties, canonical scope and live cwd win over workspace labels
+ok 16 - working first then newest, stable ties, canonical scope and live cwd win over workspace labels
+  ---
+  duration_ms: 4.474208
+  ...
+# Subtest: finished workers drop off when settled, idle chats stay, working and blocked reports remain visible
+ok 17 - finished workers drop off when settled, idle chats stay, working and blocked reports remain visible
+  ---
+  duration_ms: 0.282083
+  ...
+# Subtest: a replacement session cannot inherit a report or model tied to another session ID
+ok 18 - a replacement session cannot inherit a report or model tied to another session ID
+  ---
+  duration_ms: 0.107375
+  ...
+# Subtest: minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged
+ok 19 - minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged
+  ---
+  duration_ms: 1.7075
+  ...
+# Subtest: minimal refresh retains last good sources, recovers, accepts only quit and has no action effects
+ok 20 - minimal refresh retains last good sources, recovers, accepts only quit and has no action effects
+  ---
+  duration_ms: 1.481792
+  ...
+# Subtest: profile preferences validate, are read without creation, and explicit full overrides minimal
+ok 21 - profile preferences validate, are read without creation, and explicit full overrides minimal
+  ---
+  duration_ms: 0.961958
+  ...
+# Subtest: --print snapshot works for the flag and configured profile; action keys issue only reads
+ok 22 - --print snapshot works for the flag and configured profile; action keys issue only reads
+  ---
+  duration_ms: 490.050417
+  ...
+# Subtest: a pane replacement cannot inherit another named agent run; immutable IDs can match a renamed occupant
+ok 23 - a pane replacement cannot inherit another named agent run; immutable IDs can match a renamed occupant
+  ---
+  duration_ms: 0.130959
+  ...
+# Subtest: duplicate project labels select the requested stable ID and repository, including current-workspace discovery
+ok 24 - duplicate project labels select the requested stable ID and repository, including current-workspace discovery
+  ---
+  duration_ms: 0.223041
+  ...
+# Subtest: work purpose uses item titles; reviewer subject never inherits the reported worker lifecycle
+ok 25 - work purpose uses item titles; reviewer subject never inherits the reported worker lifecycle
+  ---
+  duration_ms: 0.085209
+  ...
+# Subtest: feed source failure retains last good data and recovers independently
+ok 26 - feed source failure retains last good data and recovers independently
+  ---
+  duration_ms: 0.550708
+  ...
+# Subtest: narrow and wide frames show active CI, check clocks, refusals and log paths with sparse state colour
+ok 27 - narrow and wide frames show active CI, check clocks, refusals and log paths with sparse state colour
+  ---
+  duration_ms: 1.824125
+  ...
+# Subtest: Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history
+ok 28 - Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history
+  ---
+  duration_ms: 1.901875
+  ...
+# Subtest: feed uses record headlines and explicit watch checks, newest first including closed items
+ok 29 - feed uses record headlines and explicit watch checks, newest first including closed items
+  ---
+  duration_ms: 1.567542
+  ...
+# Subtest: watch exceptions are deduplicated, readable after delivery, and superseded by final ingestion
+ok 30 - watch exceptions are deduplicated, readable after delivery, and superseded by final ingestion
+  ---
+  duration_ms: 0.239458
+  ...
+# Subtest: recent feed is bounded but keeps unresolved exceptions and drops superseded attention
+ok 31 - recent feed is bounded but keeps unresolved exceptions and drops superseded attention
+  ---
+  duration_ms: 0.177959
+  ...
+# Subtest: train merges queue and receipts, shows waiting, active CI and interrupted work without invented clocks
+ok 32 - train merges queue and receipts, shows waiting, active CI and interrupted work without invented clocks
+  ---
+  duration_ms: 0.153125
+  ...
+# Subtest: optional read sources are cached, reject wrong identities and malformed lines, ignore only a torn journal tail
+ok 33 - optional read sources are cached, reject wrong identities and malformed lines, ignore only a torn journal tail
+  ---
+  duration_ms: 3.255917
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3662.614625

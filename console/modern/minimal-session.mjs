@@ -1,5 +1,6 @@
 // Minimal has read effects only: no full-console actions, queues or model calls.
 import fs from 'node:fs';
+import { supervisorStatus } from '../../supervisor/status.mjs';
 import { herdrAgents, herdrList, orgStatus } from '../lib/cli.mjs';
 import { createSessionReader } from '../lib/sources.mjs';
 import { catalog, createIdentityReader, workspaceIdentity } from './model.mjs';
@@ -11,6 +12,7 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
   const feed = createFeedReader();
   const d = { herdrAgents, herdrList, orgStatus, identity: createIdentityReader(), now: Date.now,
     journal: feed.journal, train: feed.train,
+    runs: (project, agents, now) => supervisorStatus({ cwd: project.root ?? project.cwd, org: project.org, agents, now: new Date(now).toISOString() }),
     details(agent, run, project) {
       const lane = reader.laneSession({ repoRoot: project.root, name: agent.name, sessionId: agent.session });
       const transcript = /claude/i.test(agent.tool ?? '') ? reader.transcript({ configDirs: project.claude_config_dirs ?? [], cwd: agent.cwd, id: agent.session }) : null;
@@ -19,11 +21,11 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       return { lane, transcript, dispatch };
     }, ...deps };
   const ui = { appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', errors: {}, loading: true, stopped: false };
-  const data = { agents: [], workspaces: [], panes: [], tabs: [], status: null, journal: [], train: {} };
+  const data = { agents: [], workspaces: [], panes: [], tabs: [], status: null, runs: null, rawAgents: [], journal: [], train: {} };
   let project = null, pending = null, timer = null;
   let facts = new Map();
   const model = () => ({ sessions: minimalRows({ ...data, project, identity: d.identity, details: a => facts.get(a.pane), now: d.now() }),
-    reports: reportFeed(data.status, data.journal), train: data.train });
+    runs: data.runs?.lanes ?? [], reports: reportFeed(data.status, data.journal), train: data.train });
   async function refresh() {
     if (pending) return pending;
     pending = (async () => {
@@ -32,7 +34,13 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
         catch (e) { if (!ui.stopped) ui.errors[key] = e.message; }
       };
       await Promise.all([
-        read('agents', async () => { const r = await d.herdrAgents(); if (!r.ok) throw Error(r.error); return r.agents; }),
+        read('agents', async () => {
+          const r = await d.herdrAgents();
+          if (!r.ok) throw Error(r.error);
+          data.rawAgents = r.rawAgents ?? r.agents.map(a => ({ name: a.name, cwd: a.cwd, agent: a.tool, model: a.model,
+            agent_status: a.status, pane_id: a.pane, workspace_id: a.workspace, agent_session: { value: a.session } }));
+          return r.agents;
+        }),
         ...['workspace', 'pane', 'tab'].map(resource => read(`${resource}s`, () => d.herdrList(resource))),
       ]);
       if (ui.stopped) return;
@@ -45,12 +53,13 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
         ?? projects.find(p => p.repoKey === selectedKey && p.cwd === selected.cwd && p.org === selected.org)
         : projects.find(p => p.repoKey === currentKey) ?? projects[0] ?? null;
       if (project?.repoKey !== nextProject?.repoKey || project?.org !== nextProject?.org) {
-        data.status = null; data.journal = []; data.train = {}; facts = new Map();
-        for (const source of ['status', 'journal', 'train']) delete ui.errors[source];
+        data.status = null; data.runs = null; data.journal = []; data.train = {}; facts = new Map();
+        for (const source of ['status', 'runs', 'journal', 'train']) delete ui.errors[source];
       }
       project = nextProject ?? null;
       await Promise.all([
         project?.org ? read('status', () => d.orgStatus(project)) : Promise.resolve().then(() => { data.status = null; delete ui.errors.status; }),
+        project?.org && project?.git ? read('runs', () => d.runs(project, data.rawAgents, d.now())) : Promise.resolve().then(() => { data.runs = null; delete ui.errors.runs; }),
         read('journal', () => d.journal(project)),
         read('train', () => d.train(project)),
       ]);

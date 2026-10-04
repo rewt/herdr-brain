@@ -53,10 +53,10 @@ test('a correction moves from fix to its own review and displays the active revi
   for (const [name, route, harness, model, created_at] of [
     ['original', 'engineer', 'claude', 'engineer-model', '2026-10-04T10:00:00Z'],
     ['reviewer', 'review', 'codex', 'review-model', '2026-10-04T11:00:00Z'],
-  ]) fs.writeFileSync(path.join(sessions, `${name}.json`), JSON.stringify({ repo_id: p.identity, name, route, harness, model, created_at }));
+  ]) fs.writeFileSync(path.join(sessions, `${name}.json`), JSON.stringify({ repo_id: p.identity, name, route, harness, model, created_at, agent_session_id: name }));
   const get = () => supervisorStatus({ cwd: f.repo, org: f.org, now: '2026-10-04T11:05:00Z', agents: [
     { name: 'original', agent: 'claude', cwd: f.workspace, agent_status: 'done' },
-    { name: 'reviewer', agent: 'codex', cwd: f.workspace, agent_status: 'working' },
+    { name: 'reviewer', agent: 'codex', cwd: f.workspace, agent_status: 'working', agent_session: { value: 'reviewer' } },
   ] });
   assert.equal(get().lanes[0].stage, 'fix');
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
@@ -115,13 +115,13 @@ test('status CLI is read-only from a linked checkout and does not require a supe
 test('review display uses matching session provider/model and excludes foreign session metadata', t => {
   const f = fixture(t), run = f.start(), p = gitProject(f.repo);
   fs.mkdirSync(path.join(f.org, 'settle'), { recursive: true });
-  fs.writeFileSync(path.join(f.org, 'settle', `${run}.json`), JSON.stringify({ run, common: p.identity, stage: 'reviewing' }));
+  fs.writeFileSync(path.join(f.org, 'settle', `${run}.json`), JSON.stringify({ run, common: p.identity, stage: 'reviewing', reviewRoute: 'review-codex' }));
   const directory = path.join(f.repo, '.lane/sessions.json.d'); fs.mkdirSync(directory, { recursive: true });
-  fs.writeFileSync(path.join(directory, 'review.json'), JSON.stringify({ repo_id: p.identity, name: 'reviewer', route: 'review-codex', harness: 'codex', model: 'review-model', created_at: '2026-10-04T10:00:00Z' }));
+  fs.writeFileSync(path.join(directory, 'review.json'), JSON.stringify({ repo_id: p.identity, name: 'reviewer', agent_session_id: 'reviewer', route: 'review-codex', harness: 'codex', model: 'review-model', created_at: '2026-10-04T10:00:00Z' }));
   fs.writeFileSync(path.join(directory, 'foreign.json'), JSON.stringify({ repo_id: '/foreign/.git', name: 'reviewer', model: 'foreign-model' }));
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
   const doc = supervisorStatus({ cwd: f.repo, org: f.org, agents: [{ name: 'original', agent: 'claude', cwd: f.workspace, agent_status: 'done' },
-    { name: 'reviewer', agent: 'codex', cwd: f.workspace, agent_status: 'working' }] });
+    { name: 'reviewer', agent: 'codex', cwd: f.workspace, agent_status: 'working', agent_session: { value: 'reviewer' } }] });
   assert.equal(doc.lanes[0].stage, 'review'); assert.equal(doc.lanes[0].model, 'review-model');
   assert.equal(doc.lanes[0].provider, 'codex'); assert.equal(doc.lanes[0].started, '2026-10-04T10:00:00Z');
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
@@ -131,4 +131,69 @@ test('removed completed legacy lanes are history rather than active review lanes
   const archived = path.join(f.root, 'removed-lane'); fs.renameSync(f.workspace, archived);
   try { assert.deepEqual(supervisorStatus({ cwd: f.repo, org: f.org, agents: [] }).lanes, []); }
   finally { fs.renameSync(archived, f.workspace); }
+});
+
+test('the current reviewer matches the configured opaque route and verified occupant, working before idle', t => {
+  const f = fixture(t), run = f.start(), p = gitProject(f.repo);
+  const settle = path.join(f.org, 'settle'); fs.mkdirSync(settle, { recursive: true });
+  fs.writeFileSync(path.join(settle, `${run}.json`), JSON.stringify({ run, common: p.identity, stage: 'reviewing', reviewRoute: 'engineer-xhigh' }));
+  const directory = path.join(f.repo, '.lane/sessions.json.d'); fs.mkdirSync(directory, { recursive: true });
+  const metadata = [
+    ['idle', 'old', 'engineer-xhigh', '2026-10-04T10:00:00Z'],
+    ['reused', 'stale', 'engineer-xhigh', '2026-10-04T12:00:00Z'],
+    ['wrong-route', 'wrong', 'review-codex', '2026-10-04T12:00:00Z'],
+    ['current', 'current', 'engineer-xhigh', '2026-10-04T11:00:00Z'],
+  ];
+  for (const [name, id, route, created_at] of metadata) fs.writeFileSync(path.join(directory, `${name}.json`), JSON.stringify({
+    repo_id: p.identity, name, agent_session_id: id, terminal_id: `terminal-${id}`, route, created_at, harness: 'codex', model: `${name}-model`,
+  }));
+  const agents = metadata.map(([name, id]) => ({ name, cwd: f.workspace, agent: 'codex',
+    agent_session: { value: name === 'reused' ? 'replacement' : id }, terminal_id: `terminal-${id}`,
+    agent_status: name === 'idle' ? 'idle' : 'working' }));
+  const get = agents => supervisorStatus({ cwd: f.repo, org: f.org, agents, now: '2026-10-04T11:05:00Z' }).lanes[0];
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const row = get(agents);
+  assert.equal(row.agent, 'current'); assert.equal(row.model, 'current-model'); assert.equal(row.running_seconds, 300);
+  assert.equal(get(agents.filter(a => a.name !== 'current')).agent, 'idle');
+  assert.equal(get(agents.filter(a => !['current', 'idle'].includes(a.name))).agent, null);
+  assert.equal(get([{ ...agents.at(-1), terminal_id: 'replacement' }]).model, null);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+});
+
+test('recorded reports in retained checkouts are not active review without live work or an in-progress settlement', t => {
+  const f = fixture(t), run = f.start(); f.report(run); f.record(['ingest', f.show(run).report_path]);
+  const p = gitProject(f.repo), agents = [{ name: 'original', cwd: f.workspace, agent_status: 'done' }];
+  const get = () => supervisorStatus({ cwd: f.repo, org: f.org, agents }).lanes;
+  assert.deepEqual(get(), []);
+  const directory = path.join(f.org, 'settle'); fs.mkdirSync(directory, { recursive: true });
+  const save = saved => fs.writeFileSync(path.join(directory, `${run}.json`), JSON.stringify({ run, common: p.identity, ...saved }));
+  save({ stage: 'complete' }); assert.deepEqual(get(), []);
+  save({ stage: 'reviewing', reviewRoute: 'review' }); assert.equal(get()[0].stage, 'review');
+  save({ stage: 'complete', result: { result: 'escalate' } }); assert.equal(get()[0].stage, 'blocked');
+  save({ stage: 'complete', result: { result: 'promotable' } }); assert.equal(get()[0].stage, 'train');
+});
+
+test('open runs precede only today’s landed runs and refused promotion is blocked', t => {
+  const f = fixture(t), run = f.start(), p = gitProject(f.repo);
+  const item = f.record(['add', 'Another item', '--role', 'engineer']).split(' ')[0];
+  const active = f.record(['start', item, '--workspace', f.workspace, '--meta', 'lane=other']).match(/R-\d+/)[0];
+  const directory = path.join(p.identity, 'promote'); fs.mkdirSync(directory, { recursive: true });
+  const save = job => fs.writeFileSync(path.join(directory, 'queue.json'), JSON.stringify({ identity: p.identity, pending: [], current: null, results: [job] }));
+  const get = () => supervisorStatus({ cwd: f.repo, org: f.org, agents: [], now: '2026-10-04T20:00:00Z' }).lanes;
+  save({ id: 'j', run, org: f.org, outcome: 'promoted', integrated_at: '2026-10-04T19:00:00Z' });
+  assert.deepEqual(get().map(r => [r.run, r.stage]), [[active, 'engineering'], [run, 'landed']]);
+  assert.equal(get()[1].title, 'Produce correct work');
+  assert.equal(get()[1].running_seconds, Math.max(0, (Date.parse('2026-10-04T19:00:00Z') - Date.parse(f.show(run).started.at)) / 1000));
+  save({ id: 'j', run, org: f.org, outcome: 'promoted', integrated_at: '2026-10-03T19:00:00Z' });
+  assert.deepEqual(get().map(r => r.run), [active]);
+  save({ id: 'j', run, org: f.org, outcome: 'refused' });
+  assert.equal(get().find(r => r.run === run).stage, 'blocked');
+});
+
+test('a blocked report with no live session keeps its completed duration instead of counting idle hours', t => {
+  const f = fixture(t), run = f.start(); f.report(run, 'blocked'); f.record(['ingest', f.show(run).report_path]);
+  const reportAt = Date.parse(f.show(run).report.at);
+  const get = hours => supervisorStatus({ cwd: f.repo, org: f.org, agents: [], now: new Date(reportAt + hours * 3600000).toISOString() }).lanes[0];
+  assert.equal(get(1).stage, 'blocked');
+  assert.equal(get(1).running_seconds, get(57).running_seconds);
 });

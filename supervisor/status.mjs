@@ -1,4 +1,4 @@
-// Shared read-only projection for the CLI and future minimal console profile.
+// Shared read-only projection for the CLI and minimal console profile.
 // Session metadata supplies display fields only, never cycle decisions.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,6 +23,18 @@ function validActionReceipt(saved) {
     saved.actions.every(a => object(a) && typeof a.name === 'string' && typeof a.phase === 'string' &&
       timestamp(a.at) && optionalTimestamp(a.finished));
 }
+
+const live = agent => ['working', 'idle', 'blocked'].includes(agent?.agent_status);
+const samePath = (a, b) => {
+  if (!a || !b) return false;
+  try { return fs.realpathSync(a) === fs.realpathSync(b); } catch { return a === b; }
+};
+const occupantMatches = (saved, agent) =>
+  (!saved.agent_session_id || saved.agent_session_id === agent.agent_session?.value) &&
+  (!saved.terminal_id || saved.terminal_id === agent.terminal_id) &&
+  (!saved.pane || saved.pane === agent.pane_id) &&
+  (!saved.workspace || saved.workspace === agent.workspace_id);
+const sameDay = (a, b) => timestamp(a) && new Date(a).toDateString() === new Date(b).toDateString();
 
 export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', agents, now = new Date().toISOString() } = {}) {
   const project = gitProject(cwd), warnings = [];
@@ -87,26 +99,50 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
     }
     if (binding && binding !== project.identity) continue;
     if (!binding) warnings.push(`${run.id}: repository binding unavailable; inspect ${run.workspace ?? 'record-only lane'}`);
-    const stage = job?.outcome === 'promoted' ? 'landed' : job ? 'train'
-      : ['fix', 'dispatching'].includes(saved?.stage) || saved?.result?.result === 'fix_round' ? 'fix'
-        : saved || run.report ? 'review' : fixes.has(run.id) ? 'fix' : 'engineering';
+    const candidates = agents.filter(a => samePath(a.cwd, run.workspace));
+    const worker = candidates.find(a => occupantMatches(run.meta, a) &&
+      (run.meta.agent_session_id || run.meta.terminal_id || a.name === run.meta.agent));
+    const sessionFor = (a, route) => sessions.filter(s => s.name === a.name && occupantMatches(s, a) && (!route || (s.route ?? s.role) === route))
+      .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))[0];
+    const reviewRoute = saved?.reviewRoute ?? saved?.review?.route ?? 'review';
+    const reviewing = ['review', 'reviewing', 'commit-review', 'decide'].includes(saved?.stage);
+    // A configured route is opaque. Verify the occupant before using its route,
+    // and rank working reviewers ahead of idle sessions from previous rounds.
+    const reviewers = reviewing ? candidates.filter(a => live(a) && sessions.some(s =>
+      s.name === a.name && (s.route ?? s.role) === reviewRoute &&
+      (s.agent_session_id || s.terminal_id) && occupantMatches(s, a)))
+      .sort((a, b) => Number(b.agent_status === 'working') - Number(a.agent_status === 'working') ||
+        String(sessionFor(b, reviewRoute)?.created_at ?? '').localeCompare(String(sessionFor(a, reviewRoute)?.created_at ?? ''))) : [];
+    const agent = reviewing ? reviewers[0] : worker;
+    const session = agent && sessionFor(agent, reviewing ? reviewRoute : null);
+    const inProgress = saved && saved.stage !== 'complete' && !saved.result;
+    const blocked = ['refused', 'interrupted'].includes(job?.outcome) ||
+      ['escalate', 'stopped'].includes(saved?.result?.result) ||
+      (run.report && run.report.outcome !== 'done') || agent?.agent_status === 'blocked';
+    const landed = job?.outcome === 'promoted';
+    const integrated = landed ? job.integrated_at ?? job.finished : null;
+    if (landed && !sameDay(integrated, now)) continue;
+    // A retained checkout or a finished settlement is not evidence of activity.
+    // Completed reports without a live occupant belong in the report feed.
+    if (run.report && !landed && !job && !inProgress && !blocked && !live(agent) && !['promotable', 'promotable_with_findings'].includes(saved?.result?.result)) continue;
+    const stage = landed ? 'landed' : blocked ? 'blocked' : job ? 'train'
+      : ['fix', 'dispatching'].includes(saved?.stage) ? 'fix'
+        : inProgress ? 'review' : ['promotable', 'promotable_with_findings'].includes(saved?.result?.result) ? 'train'
+          : run.report ? 'review' : fixes.has(run.id) ? 'fix' : 'engineering';
     if (item.closed && stage !== 'landed') continue;
-    const candidates = agents.filter(a => a.cwd === run.workspace);
-    const reviewing = stage === 'review' && ['review', 'reviewing', 'commit-review', 'decide'].includes(saved?.stage);
-    const agent = (reviewing && candidates.find(a => sessions.some(s => s.name === a.name && /review/.test(s.route ?? s.role ?? '')) && ['working', 'idle'].includes(a.agent_status)))
-      || agents.find(a => a.name === run.meta.agent || (run.meta.pane && a.pane_id === run.meta.pane));
-    const session = agent && sessions.find(s => s.name === agent.name && (!s.agent_session_id || s.agent_session_id === agent.agent_session?.value));
     const started = session?.created_at ?? run.started.at;
-    const end = stage === 'landed' ? job.integrated_at ?? now : now;
-    lanes.push({ run: run.id, item: run.item, lane: run.meta.lane ?? saved?.lane ?? null, stage,
-      provider: agent?.agent ?? session?.harness ?? run.meta.harness ?? null,
+    const end = landed ? integrated : blocked && !live(agent) ? run.report?.at ?? now : now;
+    lanes.push({ run: run.id, item: run.item, title: item?.title ?? '', lane: run.meta.lane ?? saved?.lane ?? null, stage,
+      provider: agent?.agent ?? session?.harness ?? (reviewing ? null : run.meta.harness) ?? null,
       model: agent?.model ?? session?.model ?? (reviewing ? null : run.meta.model) ?? null,
-      started, run_started: run.started.at, running_seconds: Math.max(0, (Date.parse(end) - Date.parse(started)) / 1000) || 0,
-      live_status: agent?.agent_status ?? 'unknown', agent: agent?.name ?? run.meta.agent ?? null,
-      pane: agent?.pane_id ?? run.meta.pane ?? null, workspace: run.workspace,
+      started, run_started: run.started.at, integrated_at: integrated,
+      running_seconds: Math.max(0, (Date.parse(end) - Date.parse(started)) / 1000) || 0,
+      live_status: agent?.agent_status ?? 'unknown', agent: agent?.name ?? (reviewing ? null : run.meta.agent) ?? null,
+      pane: agent?.pane_id ?? (reviewing ? null : run.meta.pane) ?? null, workspace: run.workspace,
       evidence: job ? path.join(project.identity, 'promote/queue.json') : saved ? path.join(settleDir, `${run.id}.json`) : null });
   }
-  const active = lanes.filter(r => r.stage !== 'landed'), landed = lanes.filter(r => r.stage === 'landed').sort((a, b) => b.run_started.localeCompare(a.run_started)).slice(0, 10);
+  const active = lanes.filter(r => r.stage !== 'landed').sort((a, b) => b.run_started.localeCompare(a.run_started));
+  const landed = lanes.filter(r => r.stage === 'landed').sort((a, b) => b.integrated_at.localeCompare(a.integrated_at));
   const actionDir = path.join(receiptDirectory(org, project.identity), 'autopilot');
   const actions = files(actionDir).map(name => ({ receipt: path.join(actionDir, name), saved: read(path.join(actionDir, name)) }))
     .filter(({ saved }) => saved?.project?.identity === project.identity && saved.project.org === org)

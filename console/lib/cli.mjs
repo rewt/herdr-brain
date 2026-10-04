@@ -192,7 +192,7 @@ export async function herdrAgents() {
   const r = await run(herdrBinary(), ['agent', 'list'], { timeout: 4000 });
   if (!r.ok) return { ok: false, agents: [], error: firstLine(r.stderr) || r.error?.code || 'herdr agent list failed' };
   try {
-    return { ok: true, agents: parseAgentList(r.stdout) };
+    return { ok: true, agents: parseAgentList(r.stdout), rawAgents: JSON.parse(r.stdout).result.agents };
   } catch (error) {
     return { ok: false, agents: [], error: error.message };
   }

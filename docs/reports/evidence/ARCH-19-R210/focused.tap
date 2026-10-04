@@ -1,0 +1,584 @@
+TAP version 13
+# Subtest: the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+ok 1 - the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+  ---
+  duration_ms: 531.676875
+  ...
+# Subtest: missing input setup and missing build evidence fail before invoking acceptance
+ok 2 - missing input setup and missing build evidence fail before invoking acceptance
+  ---
+  duration_ms: 27.764542
+  ...
+# Subtest: private cache copies only pinned dependency tarballs and refuses missing content
+ok 3 - private cache copies only pinned dependency tarballs and refuses missing content
+  ---
+  duration_ms: 39.934958
+  ...
+# Subtest: unset compatibility input is optional through the declared build and gate
+ok 4 - unset compatibility input is optional through the declared build and gate
+  ---
+  duration_ms: 515.229375
+  ...
+# Subtest: real project preflight leaves invalid inputs uncut and retries the same commit
+ok 5 - real project preflight leaves invalid inputs uncut and retries the same commit
+  ---
+  duration_ms: 1841.127292
+  ...
+# Subtest: release safety checks stop the gate on failure and precede acceptance on success
+ok 6 - release safety checks stop the gate on failure and precede acceptance on success
+  ---
+  duration_ms: 944.882791
+  ...
+# Subtest: failed offline release coverage prevents build evidence and acceptance
+ok 7 - failed offline release coverage prevents build evidence and acceptance
+  ---
+  duration_ms: 440.339792
+  ...
+# Subtest: release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+ok 8 - release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+  ---
+  duration_ms: 706.03275
+  ...
+# Subtest: unconfigured release uses npm test, initializes its record and never executes ship
+ok 9 - unconfigured release uses npm test, initializes its record and never executes ship
+  ---
+  duration_ms: 1038.608959
+  ...
+# Subtest: unset and missing preflight inputs remain retryable on the same commit
+ok 10 - unset and missing preflight inputs remain retryable on the same commit
+  ---
+  duration_ms: 1432.934291
+  ...
+# Subtest: unset and missing preflight inputs remain retryable after main advances
+ok 11 - unset and missing preflight inputs remain retryable after main advances
+  ---
+  duration_ms: 1387.745708
+  ...
+# Subtest: a signaled preflight is retryable and malformed preflight declarations are rejected
+ok 12 - a signaled preflight is retryable and malformed preflight declarations are rejected
+  ---
+  duration_ms: 1041.323583
+  ...
+# Subtest: a preflight launch error creates no candidate and can be corrected on a later commit
+ok 13 - a preflight launch error creates no candidate and can be corrected on a later commit
+  ---
+  duration_ms: 983.915375
+  ...
+# Subtest: two real lane promotions become one tagged batch and one operator question
+ok 14 - two real lane promotions become one tagged batch and one operator question
+  ---
+  duration_ms: 2199.62725
+  ...
+# Subtest: publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+ok 15 - publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+  ---
+  duration_ms: 1574.090084
+  ...
+# Subtest: release replies require normalized yes and leave later promotions eligible
+ok 16 - release replies require normalized yes and leave later promotions eligible
+  ---
+  duration_ms: 3155.252417
+  ...
+# Subtest: release replies require normalized no and leave later promotions eligible
+ok 17 - release replies require normalized no and leave later promotions eligible
+  ---
+  duration_ms: 3264.096625
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered yes
+ok 18 - agents cannot start a run on an operator-reserved question answered yes
+  ---
+  duration_ms: 2004.771208
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered no
+ok 19 - agents cannot start a run on an operator-reserved question answered no
+  ---
+  duration_ms: 1703.330083
+  ...
+# Subtest: low load, drained promotion queue, clean base and supervisor ownership are required
+ok 20 - low load, drained promotion queue, clean base and supervisor ownership are required
+  ---
+  duration_ms: 457.153459
+  ...
+# Subtest: red gate is durable, never repeated, and a later promotion may become a new candidate
+ok 21 - red gate is durable, never repeated, and a later promotion may become a new candidate
+  ---
+  duration_ms: 1721.580417
+  ...
+# Subtest: interrupted start, duplicate record writes and older folds preserve once-only semantics
+ok 22 - interrupted start, duplicate record writes and older folds preserve once-only semantics
+  ---
+  duration_ms: 522.010167
+  ...
+# Subtest: tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+ok 23 - tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+  ---
+  duration_ms: 1101.014583
+  ...
+# Subtest: snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+ok 24 - snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+  ---
+  duration_ms: 700.005708
+  ...
+# Subtest: supervisor, discovery and console recover gate evidence and the operator decision from the record
+ok 25 - supervisor, discovery and console recover gate evidence and the operator decision from the record
+  ---
+  duration_ms: 943.153083
+  ...
+# Subtest: a running gate excludes a second release and a direct promotion with the shared lock
+ok 26 - a running gate excludes a second release and a direct promotion with the shared lock
+  ---
+  duration_ms: 648.312916
+  ...
+# Subtest: gate result receipts are immutable and duplicate completion creates no extra operator question
+ok 27 - gate result receipts are immutable and duplicate completion creates no extra operator question
+  ---
+  duration_ms: 628.251083
+  ...
+# Subtest: preparation env is scoped and a signaled gate records interruption without a replay
+ok 28 - preparation env is scoped and a signaled gate records interruption without a replay
+  ---
+  duration_ms: 755.525125
+  ...
+# Subtest: scratch preview runs preparation with inherited dependency-skip switches removed
+ok 29 - scratch preview runs preparation with inherited dependency-skip switches removed
+  ---
+  duration_ms: 666.879625
+  ...
+# Subtest: a moved candidate tag cannot reuse its green evidence
+ok 30 - a moved candidate tag cannot reuse its green evidence
+  ---
+  duration_ms: 685.151208
+  ...
+# Subtest: a held host slot defers release before cutting or claiming a candidate
+ok 31 - a held host slot defers release before cutting or claiming a candidate
+  ---
+  duration_ms: 670.090084
+  ...
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 32 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1353.915292
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 33 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1228.585708
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 34 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1322.785459
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 35 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 59.514625
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 36 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 51.792334
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 37 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 265.526542
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 38 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 273.078917
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 39 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 368.848417
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 40 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 1999.641209
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 41 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1978.602042
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 42 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 2123.5655
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 43 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1656.709417
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 44 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1377.746083
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 45 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 2293.497167
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+not ok 46 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 3372.791625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor entry: run temp root /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fwQ56P/home/fleet/t/fdbfac232a44279e needs 121 bytes; maximum is 60 for Unix socket paths; select a shorter fleet temp root
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Object.ok (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:42:33)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:146:5
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 47 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.288875
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 48 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 996.360584
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 49 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 2557.3475
+  ...
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 50 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 849.284125
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 51 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 730.371125
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 52 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 1201.942792
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 53 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 299.7985
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 54 - a moved default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 759.428166
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 55 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 677.2305
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 56 - explicit replacement remaps the default checkout record by its relative path
+  ---
+  duration_ms: 320.581208
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 57 - a re-clone in place can explicitly replace a missing native record
+  ---
+  duration_ms: 601.873209
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 58 - an unedited example console configuration is rejected with a fleet present
+  ---
+  duration_ms: 269.811042
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 59 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 460.219
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 60 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 240.871458
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 61 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 444.696584
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 62 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 2972.961584
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 63 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 507.086875
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 64 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 1015.801583
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 65 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 171.489708
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 66 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 284.327375
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 67 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 1457.5435
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 68 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 598.550917
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 69 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 146.053583
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 70 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 1361.23175
+  ...
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 71 - offline fleet fixtures keep default run temp within the Unix socket budget
+  ---
+  duration_ms: 4.303292
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 72 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 308.695167
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 73 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 296.290708
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 74 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 3394.154709
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 75 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 2655.957959
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 76 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 2574.165083
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 77 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 2442.884583
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 78 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 2497.662875
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 79 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1790.771125
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 80 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 2386.192417
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 81 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 12452.143375
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 82 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1524.186167
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 83 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1438.928875
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 84 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 967.071292
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 85 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1096.20725
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 86 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 2039.642833
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 87 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1179.755375
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 88 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1232.435625
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 89 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1318.770417
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 90 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1340.032958
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 91 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1338.79875
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 92 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1392.767125
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 93 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1387.746834
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 94 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1374.381125
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 95 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1507.2385
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 96 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 1927.270084
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 97 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 3763.982791
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 98 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 474.802959
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 99 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1487.544375
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 100 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1462.338709
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 101 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2398.452916
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 102 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 2216.039042
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 103 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3455.447542
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 104 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 249.373916
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 105 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 2378.333042
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 106 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 2424.828291
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 107 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2355.25
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 108 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1215.379459
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 109 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1311.684375
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 110 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 1838.892083
+  ...
+1..110
+# tests 110
+# suites 0
+# pass 109
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 83313.301833

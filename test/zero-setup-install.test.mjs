@@ -6,17 +6,19 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { copyProduct } from '../lib/product-files.mjs';
 import { freshAccount } from '../docs/adoption/account.mjs';
+import { fixtureFleet } from './helpers/offline-herdr.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function fixture(t, kinds = ['codex', 'claude']) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-zero-setup-'));
   t.after(() => { spawnSync('chmod', ['-R', 'u+w', root]); fs.rmSync(root, { recursive: true, force: true }); });
+  fixtureFleet(t, root);
   const home = path.join(root, 'home'), product = path.join(root, 'product'), tools = path.join(root, 'tools');
   for (const dir of [home, tools]) fs.mkdirSync(dir);
   copyProduct(source, product);
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(MONITOR_|HERDR_|RELEASE_|ORG_|LANE_|CODEX_|CLAUDE_|GIT_|ZDOTDIR$)/u.test(key)));
   Object.assign(env, { HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
-    HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_FLEET: path.join(home, 'fleet'),
+    HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET,
     HERDR_MONITOR_CODEX: '-', HERDR_MONITOR_CLAUDE: '-', PATH: `${tools}:/usr/bin:/bin`,
     ORG_ACTOR: 'zero-setup-test', RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     HERDR_SOCKET_PATH: path.join(root, 'absent.sock'), ENTRY_TEST_RECEIPT: path.join(root, 'native.json') });
@@ -124,7 +126,8 @@ for (const kind of ['codex', 'claude']) for (const source of ['startup', 'resume
   assert.equal(result.stdout, '', 'disabled entry supplies no join or adapter guidance');
   assert.equal(result.stderr, '');
   assert.equal(fs.existsSync(f.calls), false, 'disabled entry makes no Herdr calls');
-  assert.equal(fs.existsSync(f.env.HERDR_MONITOR_FLEET), false, 'disabled entry creates no fleet state');
+  // The short-path fixture may precreate an empty fleet root.
+  assert.deepEqual(fs.existsSync(f.env.HERDR_MONITOR_FLEET) ? fs.readdirSync(f.env.HERDR_MONITOR_FLEET) : [], [], 'disabled entry creates no fleet state');
   for (const directory of [project, checkout]) for (const name of ['.org', '.lane', '.herdr-monitor']) assert.equal(fs.existsSync(path.join(directory, name)), false, name);
   assert.equal(fs.existsSync(path.join(project, '.git/monitor-controls')), false);
 });

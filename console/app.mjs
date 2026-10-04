@@ -50,7 +50,7 @@ usage: record console [--project NAME] [--modern]
        node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
 
 --modern opens the project console. Answers, routes, desks, priorities and housekeeping use validating record commands.
---minimal opens a read-only session list; q quits. Config: "profile": "minimal".
+--minimal shows read-only work, reports and the merge train; q quits. Config: "profile": "minimal".
 --profile full overrides the configured minimal profile; combine with --modern for the full project console.
 --print is read only, including confirmed answers, project settings and priority changes.
 --keys sends characters in order: literal \\n means Enter and \\e means Escape.

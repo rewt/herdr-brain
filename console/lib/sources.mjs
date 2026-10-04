@@ -286,9 +286,11 @@ export function createSessionReader({ fsApi = nodeFs, now = Date.now } = {}) {
         add(JSON.parse(fsApi.readFileSync(path.join(directory, file), 'utf8')));
       } catch {}
     }
-    return records.find((record) =>
-      record.done !== true && !completed.has(record.session_id)
-      && ((sessionId && record.agent_session_id === sessionId) || (name && record.name === name))) ?? null;
+    const active = records.filter(record => record.done !== true && !completed.has(record.session_id));
+    // Immutable matches win even when an older same-name record occurs first.
+    // Name fallback is only safe for legacy records without an occupant ID.
+    return (sessionId && active.find(record => record.agent_session_id === sessionId))
+      || active.find(record => name && record.name === name && (!sessionId || !record.agent_session_id)) || null;
   }
 
   return { find, notes, load, transcript, laneSession };

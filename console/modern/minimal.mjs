@@ -1,6 +1,6 @@
 // Display-only session facts. Ownership always comes from canonical Git identity.
 import { workspaceIdentity } from './model.mjs';
-import { pad, sanitize } from '../lib/text.mjs';
+import { pad, sanitize, cellWidth, clipStart } from '../lib/text.mjs';
 
 const clean = value => sanitize(value).replace(/\s+/g, ' ').trim();
 const timestamp = value => {
@@ -33,11 +33,13 @@ export function minimalRows({ project, agents = [], workspaces = [], panes = [],
   const spaces = new Set(workspaces.filter(w => workspaceIdentity(w, identity)?.key === project.repoKey).map(w => w.workspace_id));
   // Herdr can list a named launch-pending shell before an agent is detected.
   const own = agents.filter(a => (a.tool || a.session) && (a.cwd ? identity(a.cwd)?.key === project.repoKey : spaces.has(a.workspace)));
+  const items = new Map((status?.items ?? []).map(i => [i.id, i]));
   return own.map(agent => {
     // A session ID, when recorded, prevents a reused pane/name inheriting old work.
     const runs = (status?.runs ?? []).filter(r => (!r.workspace || identity(r.workspace)?.key === project.repoKey)
       && (!r.meta?.agent_session_id || r.meta.agent_session_id === agent.session)
-      && ((agent.name && r.meta?.agent === agent.name) || (agent.pane && r.meta?.pane === agent.pane)));
+      && (r.meta?.agent_session_id ? r.meta.agent_session_id === agent.session
+        : r.meta?.agent ? r.meta.agent === agent.name : false));
     const run = runs.sort((a, b) => (timestamp(b.started?.at) ?? 0) - (timestamp(a.started?.at) ?? 0))[0];
     const { lane, transcript, dispatch } = details(agent, run) ?? {};
     const stage = sessionStage(agent, run, lane, dispatch);
@@ -51,12 +53,20 @@ export function minimalRows({ project, agents = [], workspaces = [], panes = [],
     const topic = lane?.topic ?? run?.meta?.lane;
     const name = clean(label || (topic ? `${stage === 'review' ? 'review' : 'lane'} ${topic}` : agent.name)
       || tabs.find(t => t.tab_id === agent.tab)?.label || agent.title || agent.pane);
-    return { pane: agent.pane, name, provider, model, stage, started, elapsed: duration(started, now), working: agent.status === 'working' };
+    // A review's subject can be shown from its lane without treating the
+    // reviewer as the worker that owns that run (or inheriting its lifecycle).
+    const subject = stage === 'review' && !run && topic ? (status?.runs ?? [])
+      .filter(r => r.meta?.lane === topic && (!r.workspace || identity(r.workspace)?.key === project.repoKey))
+      .sort((a, b) => (timestamp(b.started?.at) ?? 0) - (timestamp(a.started?.at) ?? 0))[0] : null;
+    const item = run?.item ?? lane?.item ?? subject?.item;
+    const title = shortTitle(items.get(item)?.title ?? topic ?? lane?.goal ?? name);
+    return { pane: agent.pane, name, run: run?.id ?? lane?.run ?? subject?.id ?? null, item: item ?? null, title,
+      provider, model, stage, started, elapsed: duration(started, now), working: agent.status === 'working', blocked: agent.status === 'blocked' };
   }).filter(Boolean).sort((a, b) => Number(b.working) - Number(a.working)
     || (timestamp(b.started) ?? -Infinity) - (timestamp(a.started) ?? -Infinity) || a.name.localeCompare(b.name) || String(a.pane).localeCompare(String(b.pane)));
 }
 
-function startText(iso, now) {
+export function startText(iso, now) {
   const ms = timestamp(iso);
   if (ms === null) return 'unknown';
   const d = new Date(ms), today = new Date(now);
@@ -64,32 +74,117 @@ function startText(iso, now) {
   return d.toDateString() === today.toDateString() ? time : `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${time}`;
 }
 
-export function minimalFrame({ project, sessions = [], errors = {}, loading = false, now = Date.now() }, cols, height) {
-  const width = Math.max(1, cols), rows = Math.max(1, height);
+export function shortTitle(value) {
+  return clean(value).split(/\s*\(operator\b|:\s|\s[—–]\s/i)[0];
+}
+
+export function shortModel(model) {
+  const value = clean(model);
+  if (/opus/i.test(value)) return 'Opus';
+  if (/sonnet/i.test(value)) return 'Sonnet';
+  if (/haiku/i.test(value)) return 'Haiku';
+  if (/astra/i.test(value)) return 'Astra';
+  if (/luna/i.test(value)) return 'Luna';
+  if (/sol/i.test(value)) return 'Sol';
+  return value.replace(/^claude-|^gpt-/i, '');
+}
+
+export function minimalFrame({ project, sessions = [], reports = [], train = {}, errors = {}, loading = false, now = Date.now() }, cols, height) {
+  const width = Math.max(1, cols), rows = Math.max(1, height), content = Math.min(width, 116);
   const fit = (text, n) => pad(sanitize(text), n);
-  const lines = [];
-  const add = (text, fg = 'text', bold = false) => lines.push({ spans: [{ text: fit(text, width), fg, bg: 'bg', bold }] });
-  add(`${project?.name ?? 'Sessions'} · ${sessions.length} active`, 'text', true);
-  add('');
-  if (width < 80) {
-    add('Enlarge pane to 80 columns for session columns', 'muted');
-    while (lines.length < rows - 1) add('');
-    add('q quit', 'muted');
-    return { lines: lines.slice(0, rows), hits: [], controls: [] };
+  const line = (parts, bold = false) => {
+    if (typeof parts === 'string') parts = [{ text: parts, fg: 'text' }];
+    let remaining = width;
+    const spans = parts.map(part => {
+      const text = fit(part.text, Math.min(remaining, cellWidth(sanitize(part.text))));
+      remaining -= cellWidth(text);
+      return { ...part, text, bg: 'bg', bold };
+    });
+    if (remaining) spans.push({ text: ' '.repeat(remaining), fg: 'text', bg: 'bg' });
+    return { spans };
+  };
+  const muted = text => line([{ text, fg: 'muted' }]);
+  const work = sessions.filter(s => !['supervisor', 'chat'].includes(s.stage));
+  const context = sessions.filter(s => ['supervisor', 'chat'].includes(s.stage));
+  const provider = s => `${s.provider}${s.model ? ` ${shortModel(s.model)}` : ''}`;
+  const blocks = [[], [], []];
+  const compact = content < 90;
+  const purposeWidth = Math.min(content - 38, Math.max(32, ...work.map(s =>
+    cellWidth(`${[s.run, s.item].filter(Boolean).join(' ')}  ${s.title ?? s.name}`))));
+  for (const s of work) {
+    const id = [s.run, s.item].filter(Boolean).join(' ');
+    const purpose = `${id ? id + '  ' : ''}${s.title ?? s.name}`;
+    if (compact) {
+      blocks[0].push(line(fit(purpose, content)));
+      blocks[0].push(line([{ text: `  ${s.blocked ? 'blocked / ' : ''}${s.stage} · ${provider(s)} · ${s.elapsed}`, fg: s.blocked ? 'amber' : 'muted' }]));
+    } else {
+      const purposeW = purposeWidth;
+      blocks[0].push(line([{ text: fit(purpose, purposeW) + '  ', fg: 'text' },
+        { text: fit(s.blocked ? 'blocked' : s.stage, 11) + '  ', fg: s.blocked ? 'amber' : 'muted' },
+        { text: fit(provider(s), 14) + '  ' + fit(s.elapsed, 7), fg: 'muted' }]));
+    }
   }
-  // Five columns at 80 cells: 21 / 21 / 11 / 11 / 8, separated by two spaces.
-  const stageW = 11, startW = 11, elapsedW = 8;
-  const flexible = Math.max(2, width - stageW - startW - elapsedW - 8);
-  const nameW = Math.max(1, Math.floor(flexible * .5)), providerW = Math.max(1, flexible - nameW);
-  const table = cells => cells.map((v, i) => fit(v, [nameW, providerW, stageW, startW, elapsedW][i])).join('  ');
-  add(table(['Session', 'Provider / model', 'Stage', 'Started', 'Running']), 'muted');
-  const messages = Object.entries(errors).map(([source]) => `${source} unavailable · showing last known data`);
-  const capacity = Math.max(0, rows - 5 - messages.length);
-  const shown = sessions.slice(0, capacity);
-  for (const s of shown) add(table([s.name, `${s.provider}${s.model ? ` ${s.model}` : ''}`, s.stage, startText(s.started, now), s.elapsed]), s.working ? 'text' : 'muted');
-  if (!sessions.length && capacity) add(loading ? 'Reading sessions…' : 'No active sessions', 'muted');
-  for (const message of messages) add(message, 'muted');
-  while (lines.length < rows - 1) add('');
-  add(`${sessions.length > shown.length ? `+${sessions.length - shown.length} more · enlarge pane   ` : ''}q quit`, 'muted');
-  return { lines: lines.slice(0, rows), hits: [], controls: [] };
+  if (!work.length) blocks[0].push(muted(loading ? 'Reading work…' : 'No active work'));
+  for (const r of reports) {
+    const meta = `${startText(r.at, now)}  ${r.run ?? '?'} ${r.item ?? '?'}  `;
+    const result = `${r.outcome} / ${r.check}`;
+    const state = [{ text: meta, fg: 'muted' }, { text: result, fg: r.attention || r.check === 'fail' ? 'amber' : r.check === 'pass' ? 'teal' : 'muted' }];
+    if (compact) {
+      blocks[1].push(line(state));
+      blocks[1].push(line(fit(`  ${clean(r.headline)}`, content)));
+    } else {
+      const metaW = Math.min(57, Math.max(44, cellWidth(meta + result) + 2));
+      blocks[1].push(line([...state, { text: ' '.repeat(Math.max(2, metaW - cellWidth(meta + result))) + fit(clean(r.headline), content - metaW), fg: 'text' }]));
+    }
+  }
+  if (!reports.length) blocks[1].push(muted(loading ? 'Reading reports…' : 'No recent reports'));
+  const c = train.current;
+  if (c) {
+    blocks[2].push(line(`Batch · ${c.lanes.join(', ')} · ${c.phase}`));
+    blocks[2].push(muted(`  started ${startText(c.started, now)} · ${duration(c.started, now)} · CI ${c.command ?? 'unknown'}`));
+    if (c.command) blocks[2].push(muted(`  check started ${startText(c.checkStarted, now)} · ${duration(c.checkStarted, now)}`));
+  } else blocks[2].push(muted('No batch running'));
+  blocks[2].push(muted(`Waiting · ${train.waiting?.length ? train.waiting.map(j => j.topic).join(', ') : 'none'}`));
+  for (const b of train.interrupted ?? []) blocks[2].push(line([{ text: `! interrupted · ${(b.jobs ?? []).map(j => j.topic).join(', ')} · inspect receipt`, fg: 'amber' }]));
+  for (const r of (train.results ?? []).slice(0, 3)) {
+    blocks[2].push(line([{ text: `${startText(r.at, now)}  ${r.topic ?? '?'}  `, fg: 'muted' },
+      { text: r.outcome, fg: r.outcome === 'promoted' ? 'teal' : 'amber' },
+      { text: r.outcome === 'promoted' ? '' : ` · ${clean(r.reason)}`, fg: 'text' }]));
+    if (r.outcome !== 'promoted') blocks[2].push(muted(`  log ${clipStart(r.log ?? r.receipt ?? 'unknown', content - 6)}`));
+  }
+  const contextText = context.length ? `Context · ${[
+    ...context.filter(s => s.stage === 'supervisor').map(s => `supervisor ${provider(s)}`),
+    context.some(s => s.stage === 'chat') ? `${context.filter(s => s.stage === 'chat').length} chats` : null,
+  ].filter(Boolean).join(' · ')}` : '';
+  const messages = Object.keys(errors).map(source => muted(`${source} unavailable · showing last known data`));
+  const lines = [line(`${project?.name ?? 'Project'} · ${work.length} working · ${reports.filter(r => r.attention).length} need attention`, true)];
+  if (contextText) lines.push(muted(contextText));
+  // Give each section space before spending spare rows on recent history. A
+  // small pane always retains all three headings and counts omitted lines.
+  const separated = rows >= 18;
+  const available = Math.max(0, rows - lines.length - (separated ? 6 : 3) - messages.length - 1);
+  const caps = blocks.map(() => 0);
+  const minimums = [compact ? 2 : 1, compact ? 2 : 1, c ? 3 : 2];
+  let left = available;
+  for (let pass = 0; pass < Math.max(...minimums) && left; pass++) for (let i = 0; i < 3 && left; i++) {
+    if (caps[i] < Math.min(blocks[i].length, minimums[i])) { caps[i]++; left--; }
+  }
+  while (left && caps.some((cap, i) => cap < blocks[i].length)) for (const i of [0, 1, 2]) {
+    if (left && caps[i] < blocks[i].length) { caps[i]++; left--; }
+  }
+  if (compact) {
+    if (work.length) caps[0] -= caps[0] % 2;
+    if (reports.length) caps[1] -= caps[1] % 2;
+  }
+  const headings = [`Now · ${work.length}`, `Reports · recent ${reports.length} · outcome / check`, 'Train'];
+  for (let i = 0; i < 3; i++) {
+    const hidden = blocks[i].length - caps[i];
+    if (separated) lines.push(muted(''));
+    lines.push(line(`${headings[i]}${hidden ? ` · +${hidden} lines` : ''}`, true), ...blocks[i].slice(0, caps[i]));
+  }
+  lines.push(...messages);
+  while (lines.length < rows - 1) lines.push(muted(''));
+  const bounded = lines.slice(0, rows - 1);
+  bounded.push(muted('q quit'));
+  return { lines: bounded, hits: [], controls: [] };
 }

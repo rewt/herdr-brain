@@ -16,28 +16,51 @@ the default. `--profile full --modern` opens the full project console again;
 never written by the console. `--minimal` and `--profile minimal` also work
 without `--modern`, including with `--folder`.
 
-The five columns are session name, provider/model, stage, local start time and
-elapsed time. Earlier dates include month/day. Missing model information leaves
-the provider alone; missing start times say `unknown`. A lane's recorded launch
-time leads transcript start and run start, so a reused correction worker keeps
-its session age. Working sessions come first, then newest launches; names and
-pane IDs break ties. Stage uses structured session/run roles, correction dispatch
-origins and the established review/settle/supervisor session names. It does not
-read prose to guess stages or call a model.
+The minimal screen has three compact parts. **Now** names active work by run,
+item and short purpose, followed by stage, short provider/model and duration.
+Reviews show the latest run in their recorded lane as their subject without
+inheriting that worker's lifecycle. Supervisors and operator chats occupy one
+quiet Context line. Immutable session IDs take precedence over names; a pane
+alone cannot associate an occupant with a run. Project selection uses the stable
+project ID and canonical Git common-directory identity.
 
-Idle chats and supervisors remain visible while Herdr still lists them. Workers
-with a reported or abandoned run drop off once they stop working or blocking;
-Herdr `done` workers/reviewers without a linked run also drop off. Missing agents
-disappear on the next successful refresh. Source failures retain the last known
-rows with a small notice. There are no actions beyond `q` to quit (Ctrl-C also
-exits). No goals, tasks, decisions or control panels are rendered; the Brain
-queue is never read. Launch-pending shells appear only after agent detection.
+**Reports** shows the eight newest ingested reports plus unresolved exceptions,
+newest first, with local time, run/item, outcome, watch check and record headline.
+Checks come from explicit `[org-report]` notices, never from the outcome; missing
+checks say `unknown`. The console folds the transport journal at
+`ORG/supervisor/inbox.log` (or `GIT_COMMON_DIR/supervisor/inbox.log` for projects
+without a record). Blocked, invalid, missing, unavailable and long-running watch
+notices remain visible after delivery until a newer notice/report supersedes
+them. Superseded or closed items do not count as current exceptions. A completed
+journal line must parse; a concurrent partial tail waits until the next refresh.
+`modern/feed.mjs` exposes pure projections for a future web renderer or autopilot
+feed extension; this version does not consume an unfinished autopilot schema.
 
-At 80 columns the widths are 21/21/11/11/8 with two spaces between columns.
-Extra width goes equally to name and provider. Rows that cannot fit in the pane
-are counted in the footer; enlarge the pane to see them. Below 80 columns the
-screen asks for a wider pane. Refresh follows `refresh_seconds`; the painter
-writes only changed rows and duration text advances once per minute.
+**Train** reads `GIT_COMMON_DIR/promote/queue.json` and `promote/batches/*/train.json`,
+showing waiting lanes, current batch members/phase, batch start and elapsed time,
+CI command, interrupted batches and the three latest results. Refusals include
+reason and log path (the end of long paths remains visible in narrow panes).
+The current writer only persists a gate clock after validation finishes. Batch
+creation time comes from the receipt's file birth time when no explicit start
+exists; the current CI command comes from its `train.log` validating line. A
+missing check start stays `unknown`, rather than borrowing the batch/queue time.
+No promotion, validation, scheduling or model calls are issued by this view.
+
+At 90 columns and above, rows fit within a 116-cell reading width; wider panes
+do not stretch the spacing. Narrow panes use two lines per work/report entry.
+Each section receives a minimum share of the height; omitted lines are counted
+in its heading. Times are HH:MM today and MM/DD HH:MM earlier, consistently across
+sections. Amber marks exceptions and failed checks, teal marks explicit passes
+and promotions; the rest is neutral. Refresh follows `refresh_seconds`; the
+painter writes only changed rows and duration text advances once per minute.
+
+Idle chats and supervisors remain visible while Herdr lists them. Reported or
+abandoned workers drop off once they stop working or blocking. Source failures
+retain the last good data with a source notice; changing repository clears old
+source data. Optional missing journals/queues are normal and create no files.
+Only `q` and Ctrl-C exit; action keys and mouse clicks do nothing. Launch-pending
+shells appear only after agent detection. Release candidate gates are omitted
+from this compact profile.
 
 This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes

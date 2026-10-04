@@ -1,12 +1,12 @@
-Snapshot · 1 active
-
-Session                          Provider / model                 Stage        Started      Running
-supervisor-herdr                 Claude                           supervisor   unknown      unknown
-
-
-
-
-
+Snapshot · 1 working · 0 need attention
+Context · supervisor Claude
+Now · 1
+R-1 ENG-1  Compact console        engineering  Codex Sol       unknown
+Reports · recent 1 · outcome / check
+01/02 12:30  R-2 ENG-2  done / pass         The headline comes from the record.
+Train
+No batch running
+Waiting · none
 
 
 

@@ -32,7 +32,7 @@ export const EXAMPLE = {
     'refresh_seconds         how often to re-read when nothing changed',
     'brain_bin               path to brain.mjs; its queue of stopped sessions joins Waiting on you',
     'glyphs                  "nerd" (a Nerd Font is set in Herdr) or "plain" (ASCII only)',
-    'profile                 "minimal" for sessions only, or "full" (default)',
+    'profile                 "minimal" for work, reports and train, or "full" (default)',
   ],
   example: true,
   projects: [

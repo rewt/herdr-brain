@@ -4,10 +4,13 @@ import { herdrAgents, herdrList, orgStatus } from '../lib/cli.mjs';
 import { createSessionReader } from '../lib/sources.mjs';
 import { catalog, createIdentityReader, workspaceIdentity } from './model.mjs';
 import { minimalRows, minimalFrame } from './minimal.mjs';
+import { createFeedReader, reportFeed } from './feed.mjs';
 
 export function createMinimalSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const reader = createSessionReader();
+  const feed = createFeedReader();
   const d = { herdrAgents, herdrList, orgStatus, identity: createIdentityReader(), now: Date.now,
+    journal: feed.journal, train: feed.train,
     details(agent, run, project) {
       const lane = reader.laneSession({ repoRoot: project.root, name: agent.name, sessionId: agent.session });
       const transcript = /claude/i.test(agent.tool ?? '') ? reader.transcript({ configDirs: project.claude_config_dirs ?? [], cwd: agent.cwd, id: agent.session }) : null;
@@ -16,10 +19,11 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       return { lane, transcript, dispatch };
     }, ...deps };
   const ui = { appearance: env.HERDR_CONSOLE_THEME === 'light' ? 'light' : 'dark', errors: {}, loading: true, stopped: false };
-  const data = { agents: [], workspaces: [], panes: [], tabs: [], status: null };
+  const data = { agents: [], workspaces: [], panes: [], tabs: [], status: null, journal: [], train: {} };
   let project = null, pending = null, timer = null;
   let facts = new Map();
-  const model = () => ({ sessions: minimalRows({ ...data, project, identity: d.identity, details: a => facts.get(a.pane), now: d.now() }) });
+  const model = () => ({ sessions: minimalRows({ ...data, project, identity: d.identity, details: a => facts.get(a.pane), now: d.now() }),
+    reports: reportFeed(data.status, data.journal), train: data.train });
   async function refresh() {
     if (pending) return pending;
     pending = (async () => {
@@ -36,9 +40,20 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       const selected = config.projects[projectIndex];
       const current = data.workspaces.find(w => w.workspace_id === env.HERDR_WORKSPACE_ID);
       const currentKey = current && workspaceIdentity(current, d.identity)?.key;
-      project = projects.find(p => selected ? p.name === selected.name : p.repoKey === currentKey) ?? projects[0] ?? null;
-      if (project?.org) await read('status', () => d.orgStatus(project));
-      else { data.status = null; delete ui.errors.status; }
+      const selectedKey = selected && (selected.identity ?? d.identity(selected.cwd)?.key);
+      const nextProject = selected ? projects.find(p => p.id === selected.id && p.repoKey === selectedKey)
+        ?? projects.find(p => p.repoKey === selectedKey && p.cwd === selected.cwd && p.org === selected.org)
+        : projects.find(p => p.repoKey === currentKey) ?? projects[0] ?? null;
+      if (project?.repoKey !== nextProject?.repoKey || project?.org !== nextProject?.org) {
+        data.status = null; data.journal = []; data.train = {}; facts = new Map();
+        for (const source of ['status', 'journal', 'train']) delete ui.errors[source];
+      }
+      project = nextProject ?? null;
+      await Promise.all([
+        project?.org ? read('status', () => d.orgStatus(project)) : Promise.resolve().then(() => { data.status = null; delete ui.errors.status; }),
+        read('journal', () => d.journal(project)),
+        read('train', () => d.train(project)),
+      ]);
       if (ui.stopped) return;
       const nextFacts = new Map();
       minimalRows({ ...data, project, identity: d.identity, now: d.now(), details(a, r) {

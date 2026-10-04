@@ -76,10 +76,12 @@ test('minimal frame is bounded, safe with Unicode, clear about overflow and quie
   for (const width of [40, 80, 100, 140]) {
     const frame = minimalFrame({ project, sessions, now }, width, 12);
     assert.equal(frame.lines.length, 12);
-    assert.ok(frame.lines.every(l => cellWidth(l.spans[0].text) === width));
+    assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
     assert.doesNotMatch(text(frame), /\x1b/);
     assert.match(text(frame), /q quit/);
-    if (width >= 80) assert.match(text(frame), /\+13 more/);
+    assert.match(text(frame), /Now/);
+    assert.match(text(frame), /Reports/);
+    assert.match(text(frame), /Train/);
   }
   let writes = 0;
   const painter = createPainter({ write: () => writes++, color: () => undefined });
@@ -100,7 +102,7 @@ test('minimal refresh retains last good sources, recovers, accepts only quit and
   fail = true; await session.refresh(); assert.equal(session.model.sessions.length, 1);
   assert.match(text(session.frame(100, 15)), /agents unavailable/);
   fail = false; stopped = true; await session.refresh(); assert.equal(session.model.sessions.length, 0);
-  assert.match(text(session.frame(100, 15)), /No active sessions/);
+  assert.match(text(session.frame(100, 15)), /No active work/);
   for (const input of ['c', 'd', 'n', 'P', 'H', 'y', '\n', '\x1b']) assert.equal(await session.key(input), false);
   assert.equal(await session.mouse({ button: 'left' }), false);
   assert.equal(await session.key('q'), true);
@@ -129,18 +131,89 @@ test('--print snapshot works for the flag and configured profile; action keys is
 const fs = require('node:fs');
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n');
 const resource = process.argv[2];
-const result = resource === 'agent' ? { agents: [{ name: 'supervisor-herdr', agent: 'claude', agent_status: 'working', pane_id: 'p1', cwd: ${JSON.stringify(dir)} }] } : { [resource + 's']: [] };
+const result = resource === 'agent' ? { agents: [{ name: 'supervisor-herdr', agent: 'claude', agent_status: 'working', pane_id: 'p1', cwd: ${JSON.stringify(dir)} }, { name: 'worker', agent: 'codex', agent_status: 'working', pane_id: 'p2', cwd: ${JSON.stringify(dir)} }] } : { [resource + 's']: [] };
 console.log(JSON.stringify({ result }));
 `, { mode: 0o755 });
-    fs.writeFileSync(record, `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n'); console.log(JSON.stringify({ items: [], runs: [] }));`);
+    const snapshotStatus = { items: [{ id: 'ENG-1', title: 'Compact console' }], runs: [
+      { id: 'R-1', item: 'ENG-1', meta: { agent: 'worker', model: 'gpt-6.1-sol' } },
+      { id: 'R-2', item: 'ENG-2', report: { at: '2020-01-02T12:30:00Z', outcome: 'done', headline: 'The headline comes from the record.' } },
+    ] };
+    fs.writeFileSync(record, `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n'); console.log(${JSON.stringify(JSON.stringify(snapshotStatus))});`);
+    fs.mkdirSync(path.join(dir, 'supervisor'));
+    fs.writeFileSync(path.join(dir, 'supervisor/inbox.log'), JSON.stringify({ type: 'notice', id: 'n', message: '[org-report] run=R-2 item=ENG-2 check=pass', at: '2020-01-02T12:30:00Z' }) + '\n');
     const env = { ...process.env, HERDR_BIN_PATH: herdr, HERDR_ORG_BIN: record, ORG_FLEET_DIR: path.join(dir, 'no-fleet'), TZ: 'UTC' };
     for (const flags of [[], ['--minimal'], ['--profile', 'minimal']]) {
       const result = spawnSync(process.execPath, ['console/app.mjs', ...flags, '--config', config, '--project', 'Snapshot', '--print', '100x14', '--keys', 'ny\\ncPSHy\\n'], { env, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stdout, fs.readFileSync(new URL('./fixtures/minimal-100x14.txt', import.meta.url), 'utf8'));
+      assert.match(result.stdout, /R-1 ENG-1  Compact console/);
+      assert.match(result.stdout, /done \/ pass/);
+      assert.match(result.stdout, /The headline comes from the record/);
     }
     const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
     assert.ok(calls.every(args => (['agent', 'workspace', 'pane', 'tab'].includes(args[0]) && args[1] === 'list') || (args[0] === 'status' && args[1] === '--json')));
     assert.equal(JSON.parse(fs.readFileSync(config, 'utf8')).profile, 'minimal');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a pane replacement cannot inherit another named agent run; immutable IDs can match a renamed occupant', () => {
+  const old = run('old', { id: 'R-1', item: 'ENG-1', meta: { agent: 'old', pane: 'shared', model: 'wrong' } });
+  const a = agent('new', { pane: 'shared', session: 'current' });
+  const replacement = rows({ agents: [a], status: { runs: [old] } })[0];
+  assert.equal(replacement.stage, 'chat'); assert.equal(replacement.run, null); assert.equal(replacement.model, '');
+  const same = { ...old, meta: { ...old.meta, agent_session_id: 'current' } };
+  assert.equal(rows({ agents: [a], status: { runs: [same] } })[0].run, 'R-1');
+  assert.equal(rows({ agents: [a], status: { runs: [{ ...old, meta: { pane: 'shared' } }] } })[0].run, null);
+});
+
+test('duplicate project labels select the requested stable ID and repository, including current-workspace discovery', async () => {
+  const config = { projects: [{ id: 'p1', name: 'Same', cwd: '/project', org: '/org1' },
+    { id: 'p2', name: 'Same', cwd: '/other', org: '/org2' }], refresh_seconds: 10 };
+  const visited = [];
+  const deps = { identity, now: () => now, details: () => ({}), journal: () => [], train: () => ({}),
+    herdrAgents: async () => ({ ok: true, agents: [] }),
+    herdrList: async key => key === 'workspace' ? [{ workspace_id: 'current', cwd: '/other' }] : [],
+    orgStatus: async p => { visited.push(p.org); return { runs: [] }; } };
+  for (const projectIndex of [1, -1]) {
+    const session = createMinimalSession({ config, deps, projectIndex, env: { HERDR_WORKSPACE_ID: 'current' } });
+    await session.refresh(); assert.equal(session.project.id, 'p2'); assert.equal(session.project.repoKey, '/other/.git'); session.stop();
+  }
+  assert.deepEqual(visited, ['/org2', '/org2']);
+});
+
+test('work purpose uses item titles; reviewer subject never inherits the reported worker lifecycle', () => {
+  const status = { items: [{ id: 'ENG-1', title: 'Better console: operator details' }], runs: [run('worker', {
+    id: 'R-1', item: 'ENG-1', report: {}, meta: { agent: 'worker', lane: 'console' } })] };
+  const result = rows({ agents: [agent('review', { status: 'idle' })], status,
+    details: () => ({ lane: { topic: 'console', role: 'review' } }) });
+  assert.equal(result[0].title, 'Better console'); assert.equal(result[0].run, 'R-1'); assert.equal(result[0].stage, 'review');
+});
+
+test('feed source failure retains last good data and recovers independently', async () => {
+  let fail = false;
+  const deps = { identity, now: () => now, details: () => ({}),
+    herdrAgents: async () => ({ ok: true, agents: [] }), herdrList: async () => [],
+    orgStatus: async () => ({ runs: [{ id: 'R-1', item: 'ENG-1', report: { at: iso(2), outcome: 'done', headline: 'Ready' } }] }),
+    journal: () => { if (fail) throw Error('torn'); return [{ type: 'notice', id: 'n', at: iso(2), message: '[org-report] run=R-1 item=ENG-1 check=pass' }]; },
+    train: () => { if (fail) throw Error('bad'); return { waiting: [{ topic: 'next' }], results: [] }; } };
+  const session = createMinimalSession({ config: { projects: [{ name: 'Project', cwd: '/project', org: '/org' }] }, deps, env: {} });
+  await session.refresh(); fail = true; await session.refresh();
+  assert.equal(session.model.reports[0].check, 'pass'); assert.equal(session.model.train.waiting[0].topic, 'next');
+  assert.match(text(session.frame(100, 18)), /journal unavailable/); assert.match(text(session.frame(100, 18)), /train unavailable/);
+  fail = false; await session.refresh(); assert.deepEqual(session.ui.errors, {}); session.stop();
+});
+
+test('narrow and wide frames show active CI, check clocks, refusals and log paths with sparse state colour', () => {
+  const reports = [{ at: iso(3), run: 'R-1', item: 'ENG-1', outcome: 'invalid', check: 'fail', headline: 'Fix the report fields', attention: true }];
+  const train = { waiting: [{ topic: 'waiting' }], current: { lanes: ['one', 'two'], phase: 'prepared', started: iso(9), command: 'node check.mjs', checkStarted: null },
+    results: [{ at: iso(2), topic: 'red', outcome: 'refused', reason: 'validation failed', log: '/project/.git/promote/batches/b/train.log' }] };
+  for (const width of [40, 60, 80, 100, 140]) {
+    const frame = minimalFrame({ project, reports, train, now }, width, 25);
+    assert.match(text(frame), /one, two/); assert.match(text(frame), /Waiting · waiting/);
+    assert.match(text(frame), /refused/); assert.match(text(frame), /validation failed/);
+    assert.match(text(frame), /train.log/); assert.match(text(frame), /check started unknown/);
+    assert.match(text(frame), /invalid \/ fail/);
+    assert.ok(frame.lines.flatMap(l => l.spans).some(s => s.fg === 'amber' && s.text.includes('fail')));
+    assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
+  }
 });

@@ -130,3 +130,20 @@ test('a live lane session record is found by name or transcript id; completed re
   nodeFs.writeFileSync(path.join(directory, `${doneRecord.session_id}.json`), JSON.stringify(doneRecord));
   assert.equal(reader.laneSession({ repoRoot: repo, name: doneRecord.name }), null);
 });
+
+test('immutable lane session ID outranks earlier same-name records and rejects mismatched occupants', () => {
+  const repo = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'console-lane-identity-'));
+  try {
+    nodeFs.mkdirSync(path.join(repo, '.lane'));
+    const records = [{ name: 'shared', agent_session_id: 'old', model: 'wrong' },
+      { name: 'renamed', agent_session_id: 'current', model: 'right' }];
+    nodeFs.writeFileSync(path.join(repo, '.lane/sessions.json'), JSON.stringify(records));
+    const reader = createSessionReader();
+    assert.equal(reader.laneSession({ repoRoot: repo, name: 'shared', sessionId: 'current' }).model, 'right');
+    assert.equal(reader.laneSession({ repoRoot: repo, name: 'shared', sessionId: 'replacement' }), null);
+    records.push({ name: 'legacy', model: 'legacy' });
+    nodeFs.writeFileSync(path.join(repo, '.lane/sessions.json'), JSON.stringify(records));
+    assert.equal(reader.laneSession({ repoRoot: repo, name: 'legacy', sessionId: 'current' }).model, 'right');
+    assert.equal(reader.laneSession({ repoRoot: repo, name: 'legacy', sessionId: 'unknown' }).model, 'legacy');
+  } finally { nodeFs.rmSync(repo, { recursive: true, force: true }); }
+});

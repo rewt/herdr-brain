@@ -1,0 +1,250 @@
+TAP version 13
+# Subtest: copied codex probe product validates, guards and promotes worker and routing changes offline
+not ok 1 - copied codex probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 1387.320333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor entry: run temp root /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-probe-worker-8IMZXf/fleet/t/c3dbbaa9d68b06b8 needs 118 bytes; maximum is 60 for Unix socket paths; select a shorter fleet temp root
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    success (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/acceptance.test.mjs:23:40)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/acceptance.test.mjs:69:5
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: copied claude probe product validates, guards and promotes worker and routing changes offline
+not ok 2 - copied claude probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 1427.639875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor entry: run temp root /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-probe-worker-8Xdew1/fleet/t/7b18f96bceb1b3a3 needs 118 bytes; maximum is 60 for Unix socket paths; select a shorter fleet temp root
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    success (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/acceptance.test.mjs:23:40)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/acceptance.test.mjs:69:5
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# monitor entry: keeping lane/entry-6a07853d05fe at /private/tmp/mr2-vZDBfk/lanes/lane-entry-6a07853d05fe: a run was started in this lane
+# monitor entry: keeping lane/entry-c7219333412b at /private/tmp/mr2-0U6wnT/lanes/lane-entry-c7219333412b: a run was started in this lane
+# monitor entry: keeping lane/entry-b96d1afff04f at /private/tmp/mr2-MfaARC/lanes/lane-entry-b96d1afff04f: a run was started in this lane
+# monitor entry: keeping lane/entry-5366998aef21 at /private/tmp/mr2-E1NAxu/lanes/lane-entry-5366998aef21: a run was started in this lane
+# monitor entry: keeping lane/entry-07bcb1adc4f3 at /private/tmp/mr2-6vW88u/lanes/lane-entry-07bcb1adc4f3: a run was started in this lane
+# monitor entry: keeping lane/entry-6c6d0d0308ad at /private/tmp/mr2-IEqno1/lanes/lane-entry-6c6d0d0308ad: a run was started in this lane
+# monitor entry: keeping lane/entry-cd0edefee29b at /private/tmp/mr2-0ZPuLI/lanes/lane-entry-cd0edefee29b: a run was started in this lane
+# monitor entry: keeping lane/entry-c96d94a6219a at /private/tmp/mr2-iwRsez/lanes/lane-entry-c96d94a6219a: a run was started in this lane
+# monitor entry: keeping lane/entry-dd085461e8d9 at /private/tmp/mr2-Iprrly/lanes/lane-entry-dd085461e8d9: a run was started in this lane
+# monitor entry: keeping lane/entry-261dac1f9542 at /private/tmp/mr2-55AuUb/lanes/lane-entry-261dac1f9542: external Git driver configuration differs between lane and canonical checkout
+# Subtest: all providers reject temporary writable symlink components
+ok 3 - all providers reject temporary writable symlink components
+  ---
+  duration_ms: 47.6385
+  ...
+# Subtest: all providers reject ancestor writable symlink components
+ok 4 - all providers reject ancestor writable symlink components
+  ---
+  duration_ms: 45.38025
+  ...
+# Subtest: all providers reject dangling writable symlink components
+ok 5 - all providers reject dangling writable symlink components
+  ---
+  duration_ms: 41.149833
+  ...
+# Subtest: sandbox grants reject redirected workspaces, queues and external runtime paths
+ok 6 - sandbox grants reject redirected workspaces, queues and external runtime paths
+  ---
+  duration_ms: 39.650417
+  ...
+# Subtest: sandbox exceptions cannot override a protected record, Git tree or nested record target
+ok 7 - sandbox exceptions cannot override a protected record, Git tree or nested record target
+  ---
+  duration_ms: 52.467542
+  ...
+# Subtest: Git filter refuses a temporary symlink to record before execution
+ok 8 - Git filter refuses a temporary symlink to record before execution
+  ---
+  duration_ms: 68.210708
+  ...
+# Subtest: Git filter refuses a temporary symlink to git before execution
+ok 9 - Git filter refuses a temporary symlink to git before execution
+  ---
+  duration_ms: 63.615333
+  ...
+# Subtest: disabled clean filters preserve binary bytes across integration
+ok 10 - disabled clean filters preserve binary bytes across integration
+  ---
+  duration_ms: 1704.567209
+  ...
+# Subtest: disabled smudge filters preserve binary bytes across integration
+ok 11 - disabled smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 1742.152708
+  ...
+# Subtest: disabled process filters preserve binary bytes across integration
+ok 12 - disabled process filters preserve binary bytes across integration
+  ---
+  duration_ms: 1679.702375
+  ...
+# Subtest: disabled clean/smudge/process filters preserve binary bytes across integration
+ok 13 - disabled clean/smudge/process filters preserve binary bytes across integration
+  ---
+  duration_ms: 1774.883292
+  ...
+# Subtest: disabled process/clean/smudge filters preserve binary bytes across integration
+ok 14 - disabled process/clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 1666.081208
+  ...
+# Subtest: disabled clean/smudge filters preserve binary bytes across integration
+ok 15 - disabled clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 2677.0625
+  ...
+# Subtest: disabled clean/smudge filters preserve binary bytes across integration
+ok 16 - disabled clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 2733.846917
+  ...
+# Subtest: clean-only required filters preserve the missing direction as identity
+ok 17 - clean-only required filters preserve the missing direction as identity
+  ---
+  duration_ms: 2372.546833
+  ...
+# Subtest: smudge-only required filters preserve the missing direction as identity
+ok 18 - smudge-only required filters preserve the missing direction as identity
+  ---
+  duration_ms: 2444.673584
+  ...
+# Subtest: required configured filters cannot fall back to identity after a command failure
+ok 19 - required configured filters cannot fall back to identity after a command failure
+  ---
+  duration_ms: 973.609041
+  ...
+# Subtest: Claude live cases stay pending without authorized authentication and never launch the native binary
+ok 20 - Claude live cases stay pending without authorized authentication and never launch the native binary
+  ---
+  duration_ms: 766.341416
+  ...
+# Subtest: retained Claude discovery evidence marks unauthenticated cases pending on HUM-19
+ok 21 - retained Claude discovery evidence marks unauthenticated cases pending on HUM-19
+  ---
+  duration_ms: 0.141042
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry: keeping lane/entry-3b8c0c4b1249 at /private/tmp/mr-RHtPKa/lanes/lane-entry-3b8c0c4b1249: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-3b8c0c4b1249 at /private/tmp/mr-RHtPKa/lanes/lane-entry-3b8c0c4b1249: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-13c21e4ab198 at /private/tmp/mr-RHtPKa/lanes/lane-entry-13c21e4ab198: commits beyond its creation base
+# monitor entry: keeping lane/entry-13c21e4ab198 at /private/tmp/mr-RHtPKa/lanes/lane-entry-13c21e4ab198: commits beyond its creation base
+# monitor entry: keeping lane/entry-3b8c0c4b1249 at /private/tmp/mr-RHtPKa/lanes/lane-entry-3b8c0c4b1249: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-86a9167fa005 at /private/tmp/mr-RHtPKa/lanes/lane-entry-86a9167fa005: a run was started in this lane
+# Subtest: route adoption leaves planted predictable and destination symlinks untouched
+ok 22 - route adoption leaves planted predictable and destination symlinks untouched
+  ---
+  duration_ms: 656.440958
+  ...
+# Subtest: plain CLI finds nested records and keeps automatic runtime files out of git status
+ok 23 - plain CLI finds nested records and keeps automatic runtime files out of git status
+  ---
+  duration_ms: 460.041125
+  ...
+# Subtest: atomic writer pins its directory when an attacker replaces the directory path
+ok 24 - atomic writer pins its directory when an attacker replaces the directory path
+  ---
+  duration_ms: 37.653167
+  ...
+# Subtest: supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+ok 25 - supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1828.257709
+  ...
+# Subtest: contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+ok 26 - contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1474.619
+  ...
+# Subtest: global-only Git identity and unused globally installed LFS survive broker commits
+ok 27 - global-only Git identity and unused globally installed LFS survive broker commits
+  ---
+  duration_ms: 694.469041
+  ...
+# Subtest: only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+ok 28 - only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+  ---
+  duration_ms: 3349.769416
+  ...
+# Subtest: interactive no-identity launches warn and preserve the native session
+ok 29 - interactive no-identity launches warn and preserve the native session
+  ---
+  duration_ms: 2382.24025
+  ...
+# Subtest: fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+ok 30 - fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+  ---
+  duration_ms: 2666.875334
+  ...
+# Subtest: canonical preparation and validation remain authoritative in both check and promote
+ok 31 - canonical preparation and validation remain authoritative in both check and promote
+  ---
+  duration_ms: 2370.179292
+  ...
+# Subtest: operator-selected record ancestors, record files and report links keep working
+ok 32 - operator-selected record ancestors, record files and report links keep working
+  ---
+  duration_ms: 740.567458
+  ...
+# Subtest: symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+ok 33 - symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+  ---
+  duration_ms: 417.048791
+  ...
+# Subtest: findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+ok 34 - findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+  ---
+  duration_ms: 72.961917
+  ...
+# Subtest: macOS /tmp remains a valid operator record path
+ok 35 - macOS /tmp remains a valid operator record path
+  ---
+  duration_ms: 62.064
+  ...
+# Subtest: close removes only untouched entry lanes, including failed setup
+ok 36 - close removes only untouched entry lanes, including failed setup
+  ---
+  duration_ms: 1706.81675
+  ...
+1..36
+# tests 36
+# suites 0
+# pass 34
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 20935.88675

@@ -2,7 +2,6 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { createEntry, command } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { runPTY, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
@@ -14,7 +13,7 @@ function fixture(t, config = {}) {
   const previousActor = process.env.ORG_ACTOR;
   process.env.ORG_ACTOR = 'entry-settings-test';
   t.after(() => { if (previousActor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = previousActor; });
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-settings-test-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'ms-'));
   fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
@@ -34,12 +33,15 @@ function install(f) {
   const bin = path.join(f.scratch, 'bin'), native = path.join(f.scratch, 'native'), receipt = path.join(f.scratch, 'native.json'), guard = path.join(f.scratch, 'guard.json');
   fs.writeFileSync(native, `#!${process.execPath}
 const fs=require('fs'),args=process.argv.slice(2);
+if(args.includes('--help')){console.log('--sandbox --add-dir --settings --permission-profile');process.exit(0);}
+if(args.includes('--version')){console.log('2.1.284');process.exit(0);}
 if(args[0]==='sandbox'){
   fs.writeFileSync(process.env.NATIVE_GUARD_RECEIPT,JSON.stringify(args));
   const split=args.indexOf('--'),child=require('child_process').spawnSync(args[split+1],args.slice(split+2),{stdio:'inherit'});
   process.exit(child.status??1);
 }
-fs.writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args,cwd:process.cwd(),org:process.env.ORG_DIR,requests:process.env.MONITOR_REQUEST_DIR}));`, { mode: 0o755 });
+fs.writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args,cwd:process.cwd(),org:process.env.ORG_DIR,requests:process.env.MONITOR_REQUEST_DIR,
+  settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexOf('--settings')+1])):null}));`, { mode: 0o755 });
   command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--codex', native, '--claude', native], f.repo);
   const env = { ORG_ACTOR: 'settings-test-agent', PATH: `${bin}${path.delimiter}${process.env.PATH}`, NATIVE_RECEIPT: receipt, NATIVE_GUARD_RECEIPT: guard,
     ORG_DIR: path.join(f.scratch, 'foreign-record'), MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
@@ -116,13 +118,17 @@ test('main-checkout mode reaches both native harnesses without becoming a superv
     assert.match(delivered, /Never start project housekeeping/u);
     assert.ok(!fs.existsSync(f.options.worktreeRoot));
     assert.ok(!fs.existsSync(got.requests));
-    const guard = JSON.parse(fs.readFileSync(installed.guard));
-    assert.ok(guard.includes('monitor-main-worker'));
-    const filesystem = guard.find((arg) => arg.startsWith('permissions.monitor-main-worker.filesystem='));
-    assert.ok(filesystem.includes(`${JSON.stringify(path.join(f.repo, '.org'))}="read"`));
-    assert.ok(filesystem.includes(`${JSON.stringify(path.join(f.repo, '.lane/discovery'))}="read"`));
-    assert.ok(filesystem.includes(`${JSON.stringify(got.requests)}="write"`));
-    assert.ok(guard.includes('--include-managed-config'));
+    assert.ok(!fs.existsSync(installed.guard), 'native harness starts without an outer sandbox');
+    if (kind === 'codex') {
+      const filesystem = got.args.find(arg => arg.startsWith('permissions.monitor-worker.filesystem='));
+      assert.ok(filesystem.includes(`${JSON.stringify(path.join(f.repo, '.org'))}="write"`));
+      assert.ok(filesystem.includes(`${JSON.stringify(got.requests)}="write"`));
+      assert.ok(filesystem.includes('".lane"="read"'));
+    } else {
+      assert.equal(got.settings.sandbox.enabled, true);
+      assert.ok(got.settings.sandbox.filesystem.allowWrite.includes(path.join(f.repo, '.org')));
+      assert.ok(got.settings.sandbox.filesystem.allowWrite.includes(got.requests));
+    }
     assert.equal(got.args[got.args.indexOf('--model') + 1], 'literal');
   }
   assert.equal(command('git', ['branch', '--list', 'lane/*'], f.repo), '');

@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { checkedDirectory } from './paths.mjs';
-export function lifetimeScope() {
+export function lifetimeScope(_cwd, { temporary = '/tmp' } = {}) {
   if (process.platform !== 'darwin') return null;
-  const directory = fs.mkdtempSync(path.join(checkedDirectory('/tmp'), 'monitor-lifetime-'));
+  const directory = fs.mkdtempSync(path.join(checkedDirectory(temporary), 'monitor-lifetime-'));
   try {
     fs.chmodSync(directory, 0o700); checkedDirectory(directory);
     const allowed = `probe-${randomUUID()}`, denied = `probe-${randomUUID()}`;

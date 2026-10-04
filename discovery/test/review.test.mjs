@@ -3,7 +3,6 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createEntry, command } from '../runtime.mjs';
@@ -13,7 +12,7 @@ import { writeFileAtomic } from '../../lib/files.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const product = fileURLToPath(new URL('../../', import.meta.url));
 function fixture(t) {
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-review-test-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'mr-'));
   fixtureFleet(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'project'); fs.mkdirSync(repo);

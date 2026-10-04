@@ -23,13 +23,15 @@ node /path/to/installed-monitor/discovery/install.mjs \
 `--claude` is optional. Put that directory ahead of the native CLI directories on
 the machine's Herdr shell PATH. Fresh interactive `codex` and `claude` launches
 then enter through Monitor. Model, effort, account and native
-permission settings pass through. Help, authentication, debugging, sandbox and
+approval settings pass through; session sandbox settings are generated from the
+project's fleet mapping. Help, authentication, debugging, sandbox and
 other non-session commands pass directly to the native executable. The installer
 refuses unmanaged files, retains native executable receipts, supports upgrades,
 and removes only its unchanged managed files with `--bin ... --remove`.
 
-Batch/print, resume, utility and noninteractive invocations pass directly through.
-Every session inside an existing linked worktree also passes through. Lane
+Batch/print, resume and sessions inside an existing linked worktree retain their
+checkout and workflow. Joined-project sessions still receive native sandbox
+settings and a new private temp; utilities pass directly through. Lane
 dispatch, supervisor/open-session and contrib/settle-watch set
 `MONITOR_ENTRY_BYPASS=1` in the tab and launch environment, preserving their
 assigned checkout, role, report path and run. A fresh native `herdr agent start`
@@ -165,15 +167,43 @@ record the task, commit, check and finish in that checkout; there is no lane to
 rebase or promote. A done report requires a clean committed checkout and a green
 sandboxed check before ingestion. Main-mode sessions share that checkout, so a
 project choosing this mode also chooses to coordinate concurrent edits there.
-Both Codex and Claude main-mode workers run inside an additional native filesystem
-guard that keeps the selected record, its resolved files, and entry coordination
-state read-only. The guard leaves harness runtime/account writes and the harness's
-own tool sandbox, network and approval settings in place. Only this session's
-request queue is writable under protected state; bounded parent commands perform
-record and Git mutations. Opt-out and explicit supervisor sessions retain their
-existing launch behavior.
+Both harnesses use their own native sandbox; entry adds no outer wrapper. Codex
+uses a named permission profile when supported, with filesystem writes to the
+worktree, selected record, request queue and run temp. The workflow and harness
+config directories remain protected. Older Codex builds use native workspace-write
+roots with system temp excluded. Claude receives a per-session settings file that
+enables its sandbox, refuses unavailable containment and unsandboxed command
+retries, and grants the same write paths. Other fleet projects' checkout, record,
+worktrees and temp have native write denies and matching file-edit deny rules.
+Existing CLI settings and hooks are merged into the session file; Herdr's socket
+environment and native socket settings are preserved. Claude's native OS sandbox
+covers shell commands; its file tools and hooks retain Claude's native permission
+behavior. No live model is needed to test the launch settings.
 An explicit `--role supervisor` always uses the canonical checkout and its existing
 supervisor workflow, unless the project opts out.
+
+Each launch and validation step creates `<fleet-project-temp>/r-XXXXXX` with mode
+0700 and exports `TMPDIR`, `TMP` and `TEMP`. Claude also receives
+`CLAUDE_CODE_TMPDIR`; its native internal `claude-<uid>` subdirectory stays under
+that run temp. The resolved run path may use at most 60 bytes, leaving room for
+Unix socket names on macOS. Longer roots fail with the path and reason before a
+harness launches. Select a short temp root when joining the fleet; no symlink or
+system-temp fallback is used. Normal exit removes the run temp. Crash leftovers
+remain under the project's mapped temp for later lane cleanup (ENG-127).
+
+Extra directories use native options in canonical `.lane.json`: Codex's
+`sandbox_workspace_write.writable_roots`, or `always_args.codex` / `always_args.claude`
+with `--add-dir`. Paths are relative to the canonical checkout unless absolute.
+An undeclared directory flag is refused. Unsupported harnesses launch with a
+visible unconfined warning and their own temp. Claude settings generation requires
+2.1.284 or later, the verified settings schema; missing platform sandbox
+dependencies then fail through native `failIfUnavailable`. Unjoined passthrough
+sessions warn that no project sandbox was generated; utilities and project
+workflow opt-out keep their native launch behavior.
+The native configuration keys are documented in the
+[Codex configuration reference](https://developers.openai.com/codex/config-reference),
+[Claude sandbox settings](https://code.claude.com/docs/en/sandboxing), and
+[Claude temp environment reference](https://code.claude.com/docs/en/env-vars).
 
 The existing top-level `main` field declares the integration branch for both
 modes. If omitted, entry uses the canonical checkout's current branch. Entry
@@ -272,8 +302,8 @@ checks intact. Preparation and validation execute in a native filesystem sandbox
 checkout, protected `.git`, and no network. The session parent also supplies
 read-only exclusions for the selected record (including resolved symlink targets)
 and the canonical `.lane` state, so preparation or validation cannot overwrite
-ignored shared state from the main checkout. Its dedicated validation temporary
-directory remains writable. The default check is the project's
+ignored shared state from the main checkout. Its short per-run fleet temp remains
+writable and is removed after each step, including failures. The default check is the project's
 `npm test`, or `node --test` for a Node test directory. Projects can declare fast,
 promotion and release commands in tracked canonical `.lane.validation.json` (or
 `validation` in `.lane.json`). Entry tells workers the effective tiers; check uses

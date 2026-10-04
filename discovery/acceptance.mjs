@@ -7,7 +7,6 @@ import os from 'node:os';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
-import { sandboxCommand } from './confinement.mjs';
 import { fileURLToPath } from 'node:url';
 import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
@@ -23,7 +22,7 @@ const results = [], usage = [], active = new Set();
 let interrupted = false;
 try {
   install = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-installed-'));
-  scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-projects-'));
+  scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'mp-'));
   evidence = path.join(scratch, 'evidence'); fs.mkdirSync(evidence);
 
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => {
@@ -62,19 +61,9 @@ async function check(name, fn) {
 const product = path.join(install, 'product'); fs.mkdirSync(product);
 copyProduct(source, product);
 const bin = path.join(install, 'bin');
-// Claude's native tools execute under a scratch-only kernel write boundary.
-// The launch wrapper supplies no workflow policy; installed entry owns that.
-let entryBinary = binary;
+// Installed adapters generate the harness's native settings for these projects.
 const liveRequired = !opt['skip-live'] && !(opt.harness === 'claude' && !opt['claude-auth']);
-if (opt.harness === 'claude' && liveRequired) {
-  if (process.platform !== 'darwin') throw new Error('the live Claude probe currently requires the macOS filesystem guard');
-  entryBinary = path.join(install, 'claude-native.mjs');
-  fs.writeFileSync(entryBinary, `#!${process.execPath}\nimport {spawn} from 'node:child_process';import {sandboxCommand} from ${JSON.stringify(path.join(product, 'discovery/confinement.mjs'))};
-const guard=sandboxCommand('/usr/bin/sandbox-exec',process.cwd(),{sharedPaths:[${JSON.stringify(install)}],runtimePaths:[process.env.MONITOR_REQUEST_DIR,process.env.CLAUDE_CONFIG_DIR].filter(Boolean),network:true});
-const child=spawn(guard.binary,[...guard.args,${JSON.stringify(binary)},...process.argv.slice(2)],{stdio:'inherit'});
-for(const s of ['SIGTERM','SIGINT','SIGHUP'])process.on(s,()=>child.kill(s));child.on('error',e=>{console.error(e.message);process.exitCode=1});child.on('close',c=>process.exitCode=c??1);\n`, {mode:0o755});
-}
-run(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, `--${opt.harness}`, entryBinary,
+run(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, `--${opt.harness}`, binary,
   ...(opt.validator ? ['--validator', opt.validator] : [])], scratch);
 const record = (p, args, actor = 'acceptance-agent') => run(process.execPath, [path.join(product, 'bin/org.mjs'), ...args], p, { ORG_DIR: '', ORG_ACTOR: actor });
 async function live(p, name, task) {
@@ -146,7 +135,7 @@ setupComplete = true;
   });
   await check('04 Installed entry teaches dispatch, watch, worker and supervisor defaults', () => {
     const p = repo('entry-project');
-    const policy = run(process.execPath, [path.join(product, `discovery/adapters/${opt.harness}.mjs`), '--repo', p, '--binary', entryBinary, '--role', 'supervisor', '--policy-only'], p);
+    const policy = run(process.execPath, [path.join(product, `discovery/adapters/${opt.harness}.mjs`), '--repo', p, '--binary', binary, '--role', 'supervisor', '--policy-only'], p);
     assertSupervisorEntry(policy);
     const help = run(process.execPath, [path.join(product, 'dispatch/dispatch.mjs')], p); assert.match(help, /watch/u);
   });

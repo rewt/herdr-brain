@@ -3,7 +3,6 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { sandboxCommand, selectSandbox } from '../confinement.mjs';
 import { createEntry, command } from '../runtime.mjs';
@@ -11,7 +10,7 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 process.env.ORG_ACTOR = 'eng81-offline-alternatives';
 const product = new URL('../../', import.meta.url).pathname;
 function fixture(t) {
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-alternatives-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'ma-'));
   fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });

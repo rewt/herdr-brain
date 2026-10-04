@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 
 module.exports = async function () {
+  if (['--help', '--version'].includes(process.argv[2])) return 0;
   if (process.argv[2] === 'sandbox') return require('./lifetime.cjs')(process.argv.slice(2));
   const { loadTimeout } = await import('../../../lib/deadline.mjs');
   const product = process.env.PROBE_PRODUCT;

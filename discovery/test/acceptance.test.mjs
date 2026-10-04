@@ -3,7 +3,6 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -11,7 +10,7 @@ import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 const source = fileURLToPath(new URL('../../', import.meta.url));
 
 for (const harness of ['codex', 'claude']) test(`copied ${harness} probe product validates, guards and promotes worker and routing changes offline`, { timeout: 60000 }, async (t) => {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-probe-worker-'));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'mpw-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|MONITOR_|GIT_|HERDR_)/u.test(key)) delete env[key];

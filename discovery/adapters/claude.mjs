@@ -9,6 +9,8 @@ import { freshInteractive, interactiveResume } from '../launch.mjs';
 import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
 import { spawnNative } from '../session.mjs';
 import { FleetError } from '../../lib/fleet.mjs';
+import { nativeSandboxLaunch, nativeSessionContext, nativeSession } from '../native-sandbox.mjs';
+import { TemporaryError } from '../temporary.mjs';
 const separator = process.argv.indexOf('--');
 const { values } = parseArgs({ args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
@@ -19,10 +21,18 @@ const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
 function passthrough() {
-  const child = spawn(values.binary, native, { stdio: 'inherit', env: passthroughEnvironment(process.env,
-    { interactiveResume: interactiveResume({ kind: 'claude', args: native }) }) });
+  let launch = { binary: values.binary, args: native, env: passthroughEnvironment(process.env,
+    { interactiveResume: interactiveResume({ kind: 'claude', args: native }) }) };
+  try {
+    if (nativeSession('claude', native)) {
+      const context = nativeSessionContext(values.repo);
+      if (context) launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
+      else console.error('monitor sandbox: WARNING: project has no fleet mapping; native sandbox settings were not generated');
+    }
+  } catch (error) { console.error(`monitor sandbox: ${error.message}`); process.exitCode = 1; return; }
+  const child = spawn(launch.binary, launch.args, { stdio: 'inherit', env: launch.env });
   child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
-  child.on('close', (code) => { process.exitCode = code ?? 1; });
+  child.on('close', (code) => { launch.close?.(); process.exitCode = code ?? 1; });
 }
 const automatic = values['auto-entry'];
 const enter = !automatic || freshInteractive({ kind: 'claude', args: native, cwd: values.repo });
@@ -38,18 +48,21 @@ try {
   const context = entry.context(), policy = entryPolicy(context, root);
   if (values['policy-only']) { console.log(policy); entry.close(); }
   else {
-    const child = spawnNative(entry, values.binary, [...native, ...sessionHookArguments('claude', context, root), '--append-system-prompt', policy, '--add-dir', context.requests], {
-      cwd: context.workspace, env: { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests },
-    });
+    const launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary,
+      args: [...native, ...sessionHookArguments('claude', context, root), '--append-system-prompt', policy], context,
+      env: { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests } });
+    let child;
+    try { child = spawnNative(entry, launch.binary, launch.args, { cwd: context.workspace, env: launch.env }); }
+    catch (error) { launch.close(); throw error; }
     const timer = setInterval(() => entry.poll(), 40);
     for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(s, () => child.kill(s));
     child.on('error', (e) => { console.error(e.message); process.exitCode = 1; });
-    child.on('close', (code) => { clearInterval(timer); entry.close(); process.exitCode = code ?? 1; });
+    child.on('close', (code) => { clearInterval(timer); launch.close(); entry.close(); process.exitCode = code ?? 1; });
   }
   }
 } catch (e) {
   if (entry) entry.close();
-  const fallback = automatic && !entry && !(e instanceof FleetError);
+  const fallback = automatic && !entry && !(e instanceof FleetError) && !(e instanceof TemporaryError);
   console.error(`monitor entry: ${e.message}${fallback ? '; continuing with native Claude' : ''}`);
   if (fallback) passthrough(); else process.exitCode = 1;
 }

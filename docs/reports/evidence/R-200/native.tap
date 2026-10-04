@@ -1,0 +1,65 @@
+TAP version 13
+# Subtest: headless tasks and resumes get a sandbox even when prompt text names a utility
+ok 1 - headless tasks and resumes get a sandbox even when prompt text names a utility
+  ---
+  duration_ms: 0.738791
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 2 - each run gets short private fleet temp and all three temp variables
+  ---
+  duration_ms: 2.680708
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 3 - long and redirected temp roots refuse before creating a run
+  ---
+  duration_ms: 1.212708
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 4 - Codex uses native workspace roots, excludes system temp and retains hook transport
+  ---
+  duration_ms: 157.272917
+  ...
+# Subtest: legacy Codex uses writable roots with system temp excluded and refuses sandbox bypass
+ok 5 - legacy Codex uses writable roots with system temp excluded and refuses sandbox bypass
+  ---
+  duration_ms: 130.9435
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 6 - Claude gets per-session native write settings and keeps existing hooks
+  ---
+  duration_ms: 96.572
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 7 - extra directories are supplied through native options in canonical project config
+  ---
+  duration_ms: 100.940875
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 8 - unsupported harness runs with a visible warning and its own temp
+  ---
+  duration_ms: 125.57725
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 9 - assigned and headless adapters keep the checkout and run with native settings and temp
+  ---
+  duration_ms: 446.245375
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 10 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+  ---
+  duration_ms: 543.16025
+  ...
+# Subtest: real Codex native roots deny another project checkout, record and temp including symlinks
+ok 11 - real Codex native roots deny another project checkout, record and temp including symlinks
+  ---
+  duration_ms: 588.687833
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2227.726542

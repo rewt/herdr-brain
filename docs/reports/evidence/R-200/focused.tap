@@ -1,0 +1,272 @@
+TAP version 13
+# Subtest: provider selection refuses automatic Linux bubblewrap and retains explicit providers
+ok 1 - provider selection refuses automatic Linux bubblewrap and retains explicit providers
+  ---
+  duration_ms: 77.604834
+  ...
+# Subtest: alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+ok 2 - alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+  ---
+  duration_ms: 67.264709
+  ...
+# Subtest: Claude-only scratch installation does not require or install Codex
+ok 3 - Claude-only scratch installation does not require or install Codex
+  ---
+  duration_ms: 1224.962042
+  ...
+# Subtest: real alternative sandbox denies outside, symlink, metadata, record, rename and network writes
+ok 4 - real alternative sandbox denies outside, symlink, metadata, record, rename and network writes # SKIP set MONITOR_TEST_ALTERNATIVE to sandbox-exec or bwrap outside a nested sandbox
+  ---
+  duration_ms: 0.075084
+  ...
+# Subtest: real filters remain functional through allocation, commit, check and fast-forward promotion
+ok 5 - real filters remain functional through allocation, commit, check and fast-forward promotion # SKIP set MONITOR_TEST_ALTERNATIVE to exercise real bounded Git filters
+  ---
+  duration_ms: 0.111875
+  ...
+# Subtest: real main-mode alternative guard protects linked shared records and leaves the native runtime writable
+ok 6 - real main-mode alternative guard protects linked shared records and leaves the native runtime writable # SKIP set MONITOR_TEST_ALTERNATIVE for the main-mode guard regression
+  ---
+  duration_ms: 0.0415
+  ...
+# sandbox command exceeded 300 milliseconds
+# Subtest: bounded commands kill descendants before they can write after a deadline
+ok 7 - bounded commands kill descendants before they can write after a deadline
+  ---
+  duration_ms: 1832.78675
+  ...
+# Subtest: Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+ok 8 - Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+  ---
+  duration_ms: 46.341459
+  ...
+# Subtest: shared-state sandbox paths must come from the parent as absolute exclusions
+ok 9 - shared-state sandbox paths must come from the parent as absolute exclusions
+  ---
+  duration_ms: 0.983666
+  ...
+# Subtest: native validation denies record and coordination writes (default record)
+ok 10 - native validation denies record and coordination writes (default record)
+  ---
+  duration_ms: 2562.582208
+  ...
+# Subtest: native validation denies record and coordination writes (linked record and event log)
+ok 11 - native validation denies record and coordination writes (linked record and event log)
+  ---
+  duration_ms: 1352.478542
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: installed supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 12 - installed supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 586.539917
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 13 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1323.241417
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 14 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 925.552958
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 15 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 227.824625
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 16 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 488.195959
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 17 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 1900.621042
+  ...
+# monitor entry: keeping lane/entry-e3c4b9e25fd2 at /private/tmp/ml-qp7Ayz/lanes/lane-entry-e3c4b9e25fd2: modified, untracked or ignored files
+# Subtest: receipt publication hides a deliberately paused partial JSON write from the sweep reader
+ok 18 - receipt publication hides a deliberately paused partial JSON write from the sweep reader
+  ---
+  duration_ms: 1110.081709
+  ...
+# Subtest: close preserves ignored .env and .lane files and explains retention
+ok 19 - close preserves ignored .env and .lane files and explains retention
+  ---
+  duration_ms: 960.341083
+  ...
+# Subtest: codex entry forwards terminal hangup and cleans its untouched lane
+ok 20 - codex entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 913.772584
+  ...
+# Subtest: claude entry forwards terminal hangup and cleans its untouched lane
+ok 21 - claude entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 798.0985
+  ...
+# monitor entry: keeping lane/entry-4689772586df at /private/tmp/ml-iegYtW/lanes/lane-entry-4689772586df: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-3980a1d23b86 at /private/tmp/ml-5prmUd/lanes/lane-entry-3980a1d23b86: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-d82d4ebce42f at /private/tmp/ml-6Fo6LT/lanes/lane-entry-d82d4ebce42f: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-254b3ae09302 at /private/tmp/ml-S20nbY/lanes/lane-entry-254b3ae09302: commits beyond its creation base
+# monitor entry: keeping lane/entry-028b0aba0be9 at /private/tmp/ml-kybTC6/lanes/lane-entry-028b0aba0be9: commits beyond its creation base
+# monitor entry: keeping lane/entry-bca720e1defc at /private/tmp/ml-uy0fIQ/lanes/lane-entry-bca720e1defc: a run was started in this lane
+# monitor entry: keeping entry-27244ebc5a4f.json: external Git filters/drivers used by README.md require a native validation sandbox
+# Subtest: next entry sweeps killed untouched owners and preserves every form of work
+ok 22 - next entry sweeps killed untouched owners and preserves every form of work
+  ---
+  duration_ms: 6843.154375
+  ...
+# Subtest: sweep never removes a lane owned by a live parent or native child
+ok 23 - sweep never removes a lane owned by a live parent or native child
+  ---
+  duration_ms: 1093.874
+  ...
+# Subtest: a parent killed during ownership handoff cannot launch an unregistered native child
+ok 24 - a parent killed during ownership handoff cannot launch an unregistered native child
+  ---
+  duration_ms: 766.281625
+  ...
+# Subtest: symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+ok 25 - symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+  ---
+  duration_ms: 1005.053291
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 26 - each run gets short private fleet temp and all three temp variables
+  ---
+  duration_ms: 5.264041
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 27 - long and redirected temp roots refuse before creating a run
+  ---
+  duration_ms: 9.452375
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 28 - Codex uses native workspace roots, excludes system temp and retains hook transport
+  ---
+  duration_ms: 116.025333
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 29 - Claude gets per-session native write settings and keeps existing hooks
+  ---
+  duration_ms: 111.395292
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 30 - extra directories are supplied through native options in canonical project config
+  ---
+  duration_ms: 343.799
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 31 - unsupported harness runs with a visible warning and its own temp
+  ---
+  duration_ms: 177.240042
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 32 - assigned and headless adapters keep the checkout and run with native settings and temp
+  ---
+  duration_ms: 673.857667
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 33 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+  ---
+  duration_ms: 1256.853375
+  ...
+# Subtest: real Codex native roots deny another project checkout, record and temp including symlinks
+ok 34 - real Codex native roots deny another project checkout, record and temp including symlinks
+  ---
+  duration_ms: 71.275709
+  ...
+# monitor entry: keeping lane/entry-5b3067703733 at /private/tmp/ms-VNRE2E/lanes/lane-entry-5b3067703733: a run was started in this lane
+# monitor entry: keeping lane/entry-540d84319802 at /private/tmp/ms-Hu4oB9/lanes/lane-entry-540d84319802: a run was started in this lane
+# monitor entry: keeping lane/entry-61d9f0e1f582 at /private/tmp/ms-PP8QVS/lanes/lane-entry-61d9f0e1f582: a run was started in this lane
+# monitor entry: keeping lane/entry-6bf1b2c775eb at /private/tmp/ms-GQt7Me/lanes/lane-entry-6bf1b2c775eb: modified, untracked or ignored files
+# Subtest: explicit installed adapters leave opted-out projects and native arguments untouched
+ok 35 - explicit installed adapters leave opted-out projects and native arguments untouched
+  ---
+  duration_ms: 966.304792
+  ...
+# Subtest: automatic interactive adapters pass opted-out sessions straight through
+ok 36 - automatic interactive adapters pass opted-out sessions straight through
+  ---
+  duration_ms: 1803.767083
+  ...
+# Subtest: both transports deliver project settings, integration branch and instruction precedence
+ok 37 - both transports deliver project settings, integration branch and instruction precedence
+  ---
+  duration_ms: 1638.644125
+  ...
+# Subtest: main-checkout mode reaches both native harnesses without becoming a supervisor
+ok 38 - main-checkout mode reaches both native harnesses without becoming a supervisor
+  ---
+  duration_ms: 1433.344666
+  ...
+# Subtest: automatic interactive entry honors the project main-checkout mode
+ok 39 - automatic interactive entry honors the project main-checkout mode
+  ---
+  duration_ms: 1864.572667
+  ...
+# Subtest: worker mode validates and promotes to the declared integration branch
+ok 40 - worker mode validates and promotes to the declared integration branch
+  ---
+  duration_ms: 1641.182125
+  ...
+# Subtest: main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+ok 41 - main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+  ---
+  duration_ms: 700.552459
+  ...
+# Subtest: main-mode done reports require clean committed work and successful sandboxed validation
+ok 42 - main-mode done reports require clean committed work and successful sandboxed validation
+  ---
+  duration_ms: 2749.292667
+  ...
+# Subtest: entry-only configuration preserves the portable route suggestion and pending operator question
+ok 43 - entry-only configuration preserves the portable route suggestion and pending operator question
+  ---
+  duration_ms: 481.858167
+  ...
+# Subtest: entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+ok 44 - entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+  ---
+  duration_ms: 2438.277
+  ...
+# Subtest: undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+ok 45 - undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+  ---
+  duration_ms: 1718.843667
+  ...
+# Subtest: entry settings use canonical Git identity and do not inherit parent or worker config
+ok 46 - entry settings use canonical Git identity and do not inherit parent or worker config
+  ---
+  duration_ms: 670.403834
+  ...
+# Subtest: invalid enabled settings and mismatched integration branches fail before runtime creation
+ok 47 - invalid enabled settings and mismatched integration branches fail before runtime creation
+  ---
+  duration_ms: 178.263708
+  ...
+# Subtest: entry reserves bounded owner, wrapper, preparation and reply time for promotion
+ok 48 - entry reserves bounded owner, wrapper, preparation and reply time for promotion
+  ---
+  duration_ms: 0.893042
+  ...
+# monitor entry: keeping lane/entry-8759c68be83e at /private/tmp/md-kI3w7H/lanes/lane-entry-8759c68be83e: a run was started in this lane
+# Subtest: declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+ok 49 - declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+  ---
+  duration_ms: 12457.857584
+  ...
+1..49
+# tests 49
+# suites 0
+# pass 46
+# fail 0
+# cancelled 0
+# skipped 3
+# todo 0
+# duration_ms 18339.31475

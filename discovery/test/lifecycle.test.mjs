@@ -3,7 +3,6 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { createEntry, command } from '../runtime.mjs';
@@ -11,7 +10,7 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 
 const product = fileURLToPath(new URL('../../', import.meta.url));
 function fixture(t) {
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-lifecycle-test-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'ml-'));
   fixtureFleet(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'unrelated'); fs.mkdirSync(repo);
@@ -100,6 +99,7 @@ test('close preserves ignored .env and .lane files and explains retention', (t) 
 for (const kind of ['codex', 'claude']) test(`${kind} entry forwards terminal hangup and cleans its untouched lane`, { timeout: 15000 }, async (t) => {
   const f = fixture(t), native = path.join(f.scratch, 'native'), receipt = path.join(f.scratch, 'native.json'), hup = path.join(f.scratch, 'hangup');
   fs.writeFileSync(native, `#!${process.execPath}\nconst fs=require('fs');
+if(process.argv.includes('--help')||process.argv.includes('--version'))process.exit(0);
 process.on('SIGHUP',()=>{fs.writeFileSync(process.env.TEST_HUP,'forwarded');process.exit(0)});
 fs.writeFileSync(process.env.TEST_RECEIPT+'.tmp',JSON.stringify({cwd:process.cwd(),requests:process.env.MONITOR_REQUEST_DIR,pid:process.pid}));
 fs.renameSync(process.env.TEST_RECEIPT+'.tmp',process.env.TEST_RECEIPT);

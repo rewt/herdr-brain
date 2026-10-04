@@ -4,7 +4,6 @@ import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createEntry, command } from '../runtime.mjs';
 import { findOrgDir, initOrg, loadEvents } from '../../lib/store.mjs';
@@ -14,7 +13,7 @@ import { assertSupervisorEntry } from '../../acceptance/entry.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const root = new URL('../../', import.meta.url).pathname;
 const fixture = (t) => {
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-entry-test-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'me-'));
   fixtureFleet(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'unrelated'); fs.mkdirSync(repo);

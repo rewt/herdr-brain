@@ -2,13 +2,12 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { createEntry, command } from '../runtime.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { spawnSync } from 'node:child_process';
 const binary = process.env.MONITOR_TEST_SANDBOX;
 test('real native sandbox validates both lanes and promotion; outside writes and Git metadata stay denied', { skip: !binary && 'set MONITOR_TEST_SANDBOX to a native Codex executable for this offline sandbox check' }, (t) => {
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-sandbox-test-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'msb-'));
   fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => {

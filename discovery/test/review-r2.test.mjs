@@ -3,7 +3,6 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createEntry, command, quote } from '../runtime.mjs';
 import { sandboxCommand } from '../confinement.mjs';
@@ -15,7 +14,7 @@ const caseTest = (name, fn) => test(name, { timeout: 45000 }, (t) => {
   return fn(t);
 });
 function fixture(t) {
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-r90-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'mr2-'));
   fixtureFleet(t, scratch);
   const entries = [];
   t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });

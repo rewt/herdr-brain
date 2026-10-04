@@ -1,7 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { command } from '../runtime.mjs';
@@ -32,7 +31,7 @@ test('entry reserves bounded owner, wrapper, preparation and reply time for prom
 
 test('declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup', { timeout: 30000 }, async t => {
   process.env.ORG_ACTOR = 'entry-long-promotion-test';
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'entry-promotion-deadline-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'md-'));
   fixtureFleet(t, scratch);
   let entry;
   t.after(() => { entry?.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
@@ -98,7 +97,7 @@ setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(complete)},'complete
   for (const profile of args) {
     const filesystem = profile.find(arg => arg.startsWith('permissions.monitor-validation.filesystem='));
     assert.ok(filesystem.includes(`${JSON.stringify(path.join(repo, '.org'))}="read"`));
-    assert.ok(filesystem.includes('validation-tmp'));
+    assert.ok(filesystem.includes(`${current.tempRoot}/r-`));
   }
   await new Promise(resolve => setTimeout(resolve, 3000));
   assert.equal(fs.existsSync(late), false, 'neither timed-out nor successful validation may leave a descendant');

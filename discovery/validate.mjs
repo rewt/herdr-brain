@@ -4,7 +4,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { validationTemporary } from './paths.mjs';
+import { runTemporary, temporaryEnvironment } from './temporary.mjs';
+import { nativeSessionContext } from './native-sandbox.mjs';
+import { removePlainDirectory } from '../lib/files.mjs';
 import { lifetimeScope, closeScope, boundedArgs } from './lifetime.mjs';
 import { sandboxCommand } from './confinement.mjs';
 import { validationTimeout, validationStepTimeout, VALIDATION_WRAPPER_GRACE } from './deadlines.mjs';
@@ -35,15 +37,16 @@ try {
     if (typeof step !== 'string' || !step.trim()) throw new Error('invalid validation command');
     console.log(`sandboxed command (${commandSource}): ${step}`);
     const timeoutMs = validationStepTimeout(stepTier, process.env.MONITOR_VALIDATION_DEADLINE);
-    const temporary = validationTemporary(cwd, { create: true });
-    const scope = lifetimeScope(cwd);
+    const temporary = runTemporary(process.env.MONITOR_PROJECT_TEMP ?? nativeSessionContext(cwd)?.tempRoot);
+    let scope;
     let r;
     try {
-      const sandbox = sandboxCommand(binary, cwd, { sharedPaths, writablePaths: [temporary], lifetime: scope });
+      scope = lifetimeScope(cwd, { temporary });
+      const sandbox = sandboxCommand(binary, cwd, { sharedPaths, temporaryPaths: [temporary], lifetime: scope });
       r = spawnSync(process.execPath, [new URL('./bounded.mjs', import.meta.url).pathname,
         '--timeout-ms', String(timeoutMs), ...boundedArgs(scope, sandbox.binary, sandbox.args, ['/bin/sh', '-c', step])], { cwd, stdio: 'inherit', timeout: timeoutMs + VALIDATION_WRAPPER_GRACE, killSignal: 'SIGKILL',
-        env: { ...process.env, TMPDIR: temporary, LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '', MONITOR_VALIDATION_TIER: undefined, MONITOR_VALIDATION_DEADLINE: undefined } });
-    } finally { closeScope(scope); }
+        env: { ...process.env, ...temporaryEnvironment(temporary), LANE_CONFIG: '', LANE_VALIDATE: '', MONITOR_REQUEST_DIR: '', ORG_DIR: '', MONITOR_VALIDATION_TIER: undefined, MONITOR_VALIDATION_DEADLINE: undefined } });
+    } finally { closeScope(scope); removePlainDirectory(temporary); }
     if (r.error || r.status !== 0) throw new Error(r.error?.message ?? `sandboxed validation exited ${r.status}`);
   }
 } catch (e) { console.error(`monitor validation: ${e.message}`); process.exitCode = 1; }

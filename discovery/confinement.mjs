@@ -38,13 +38,13 @@ const resolved = (file) => {
   }
 };
 
-const toml = (value) => typeof value === 'object'
+export const toml = (value) => typeof value === 'object'
   ? `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`).join(',')}}`
   : JSON.stringify(value);
 
-export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], runtimePaths = [], lifetime = null, native = false, network = native }) {
+export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], temporaryPaths = [], runtimePaths = [], lifetime = null, native = false, network = native }) {
   if (!binary) throw new Error('a native sandbox is required for main-checkout workers');
-  if (!Array.isArray(sharedPaths) || !sharedPaths.length || [...sharedPaths, ...writablePaths, ...runtimePaths].some((file) => typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0'))) {
+  if (!Array.isArray(sharedPaths) || !sharedPaths.length || [...sharedPaths, ...writablePaths, ...temporaryPaths, ...runtimePaths].some((file) => typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0'))) {
     throw new Error('sandbox requires absolute shared-state paths from the session parent');
   }
   binary = selectSandbox(binary);
@@ -65,7 +65,7 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], r
   if (runtimePaths.length && !network) throw new Error('validation cannot grant external runtime writes');
   const workspaceWrites = writablePaths.map(checkedDirectory);
   if (!native && workspaceWrites.some((file) => !within(cwd, file))) throw new Error('sandbox writable exception must stay within the assigned checkout');
-  const writable = [...workspaceWrites, ...runtimePaths.map(checkedDirectory)];
+  const writable = [...workspaceWrites, ...temporaryPaths.map(checkedDirectory), ...runtimePaths.map(checkedDirectory)];
   const gitPaths = [path.join(cwd, '.git'), resolved(path.join(cwd, '.git'))];
   for (const file of writable) {
     if (gitPaths.some((git) => within(git, file) || within(file, git)) || protectedPaths.some((protectedPath) => within(file, protectedPath)))

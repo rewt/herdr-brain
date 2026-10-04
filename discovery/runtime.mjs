@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
-import { joinFleet } from '../lib/fleet.mjs';
+import { joinFleet, readFleet } from '../lib/fleet.mjs';
 import { plainDirectory, readPlainFile, removePlainDirectory, writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { withLock } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig } from '../lanes/routes.mjs';
@@ -13,7 +13,7 @@ import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { readReport } from '../lib/report.mjs';
 import { entryLifecycle, worktreeDirectory } from './lifecycle.mjs';
 import { projectEntrySettings } from './settings.mjs';
-import { sandboxCommand, selectSandbox } from './confinement.mjs';
+import { selectSandbox } from './confinement.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
 import { createHash } from 'node:crypto';
 import { DEFAULT_REQUEST_TIMEOUT, ENTRY_COMMAND_GRACE, entryValidationTimeout } from './deadlines.mjs';
@@ -211,6 +211,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
       ...boundedGitEnv(), LANE_CONFIG: configFile, LANE_VALIDATE: validation,
       MONITOR_PROJECT_CONFIG: path.join(project.canonical, '.lane.json'),
+      MONITOR_PROJECT_TEMP: fleet.project.temp,
       // This only selects a lifetime bound. Keep it out of the evidence key so
       // identical fast/promotion commands can still share a passing result.
       MONITOR_VALIDATION_TIER: tier,
@@ -222,7 +223,8 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     fleet: { file: fleet.file, project: fleet.name, session_limit: fleet.session_limit, advisory: true },
     branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,
     routing: initial.routing ? { parent: initial.routing.parent, question: initial.routing.question } : null,
-    suggestedRoutes: initial.routes.suggested === true, requests,
+    suggestedRoutes: initial.routes.suggested === true, requests, tempRoot: fleet.project.temp,
+    projects: Object.values(readFleet().projects).filter(p => p.identity !== project.identity),
     validation: resolveValidation({ root: project.canonical, config: lifecycle, env: {} }) });
   const dispatch = (request) => {
     if (!request || typeof request !== 'object' || Object.keys(request).some((k) => !['op', 'text'].includes(k))) throw new Error('unknown request fields');
@@ -352,10 +354,8 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     }
   };
   const nativeLaunch = (binary, args) => {
-    if (role !== 'worker' || workerLane) return { binary, args };
     verify('context');
-    const guarded = sandboxCommand(sandboxBinary, workspace, { sharedPaths, writablePaths: [requests], native: true });
-    return { binary: guarded.binary, args: [...guarded.args, binary, ...args] };
+    return { binary, args };
   };
   return { context, dispatch, poll, close, nativeLaunch, attachChild: lifecycleOwner.attachChild };
 }

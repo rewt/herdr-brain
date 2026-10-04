@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: settle only reviews code and never executes a configured suite
+ok 1 - settle only reviews code and never executes a configured suite # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.5545
+  ...
+# Subtest: retry recaptures moving main and keeps a completed independent review
+ok 2 - retry recaptures moving main and keeps a completed independent review # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042292
+  ...
+# Subtest: retry refuses dirty or conflicting lanes while main moves
+ok 3 - retry refuses dirty or conflicting lanes while main moves # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035333
+  ...
+# Subtest: review evidence retains inherited validation totals beyond eight KiB
+ok 4 - review evidence retains inherited validation totals beyond eight KiB # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032708
+  ...
+# Subtest: queued integration records report-to-main time on the authorized run
+ok 5 - queued integration records report-to-main time on the authorized run
+  ---
+  duration_ms: 5629.07425
+  ...
+# Subtest: batch rechecks current-run record readiness after its gate
+ok 6 - batch rechecks current-run record readiness after its gate
+  ---
+  duration_ms: 4758.345375
+  ...
+# Subtest: main moving while the reviewer runs retains its completed public evidence for retry
+ok 7 - main moving while the reviewer runs retains its completed public evidence for retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.064875
+  ...
+# Subtest: a batch holds one shared record lock for two authorized lanes
+ok 8 - a batch holds one shared record lock for two authorized lanes
+  ---
+  duration_ms: 6370.014041
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 5
+# todo 0
+# duration_ms 16802.159541

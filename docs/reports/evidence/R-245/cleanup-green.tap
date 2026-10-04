@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 1 - queued promotion waits before validation under low-memory pressure and proceeds when cleared # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.542125
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 2 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039916
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 3 - promotion notice queues during typing and delivers after clearing without repeating promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030458
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 4 - queue refuses a lane changed while pending behind another job before validation or integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044083
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 5 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03925
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 6 - expected head refuses an automatic rebase and post-preparation tip changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02725
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 7 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075208
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 8 - dirty refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031292
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 9 - red refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.106958
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 10 - conflict refusal is delivered; lane kept; next queued lane still promotes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.081917
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 11 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038083
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 12 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029875
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 13 - project override selects supervisor and duplicate pending lanes do not repeat # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060167
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 14 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.262417
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 15 - enqueue during the empty-worker handoff always starts a new drain # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.091334
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 16 - interrupted attempt emits a notice without retrying a gate or deleting its lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078375
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 17 - stale worker lock refuses startup while keeping the queued request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 18 - green gate that modifies its worktree is refused before fast-forward # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.1075
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 19 - recorded completed outcome resumes delivery without repeating promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.072333
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 20 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034458
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 21 - recovery: a failed velocity note still closes the finished tab and promoted lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049709
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 22 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1467.738
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 23 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1775.852959
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 24 - conditional close rechecks the promoted tip and base before any removal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065291
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 22
+# todo 0
+# duration_ms 3284.937959

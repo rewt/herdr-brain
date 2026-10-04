@@ -76,6 +76,10 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
   };
   const guards = jobs => jobs.map(job => ({ canonical, identity, ...job, expectedHead: job.sourceHead }));
   const result = (job, value) => { plan.results[job.id] = value; save(); };
+  // Batch phase is live telemetry; attempt.phase remains the recovery checkpoint.
+  // In particular, an in-flight gate still resumes from its prepared candidate.
+  const phase = value => { plan.phase = value; save(); };
+  plan.started_at ??= new Date().toISOString();
   plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)]; save();
   const canonicalReady = () => {
     try { canonicalCheck(); return true; }
@@ -86,6 +90,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
   };
   // A persisted integrated checkpoint never gates or fast-forwards twice.
   const finishIntegrated = attempt => {
+    phase('closing');
     if (git(['merge-base', attempt.tip, main]) !== attempt.tip) throw new Error('integrated train tip is no longer on main');
     for (const job of attempt.jobs) {
       if (plan.results[job.id]?.outcome === 'promoted') continue;
@@ -122,6 +127,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
   while (plan.groups.length) {
     const ids = plan.groups[0].filter(id => !plan.results[id]);
     if (!ids.length) { plan.groups.shift(); save(); continue; }
+    phase('preparing');
     if (!canonicalReady()) break;
     let attempt = plan.attempts.findLast(a => ['prepared', 'validated'].includes(a.phase) && JSON.stringify(a.ids) === JSON.stringify(ids));
     if (attempt && git(['rev-parse', main]) !== attempt.base) {
@@ -142,6 +148,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
       attempt = { ids: jobs.map(j => j.id), jobs, base, branch, scratch, tips: {}, phase: 'preparing' };
       plan.attempts.push(attempt); save();
       git(['worktree', 'add', '-b', branch, scratch, base]);
+      phase('rebasing');
       let tip = base;
       const kept = [];
       for (const job of jobs) {
@@ -191,6 +198,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
     clean(attempt.scratch);
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch changed');
     try {
+      phase('preparing');
       for (const step of prepare) {
         if (step.unless !== undefined && fs.existsSync(path.join(attempt.scratch, step.unless))) continue;
         const r = spawnSync(step.run, { cwd: attempt.scratch, env, shell: '/bin/sh', stdio: 'inherit' });
@@ -198,9 +206,21 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
       }
       if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch tip or branch changed during preparation');
       process.stdout.write(`validating in ${attempt.scratch}: ${validation.tiers.promotion.command}\n`);
+      // Publish the clock before the synchronous gate blocks. No exit code is
+      // present until validation returns, so this can never prove a green gate.
+      // A resumed validated attempt must also return to prepared before its
+      // old proof is replaced; validated always means a completed green gate.
+      attempt.phase = 'prepared';
+      attempt.gate = { command: validation.tiers.promotion.command, started_at: new Date().toISOString() };
+      phase('validating');
       attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command: validation.tiers.promotion.command,
         prepare, environment: validation.environment, env, label: 'train scratch' });
     } catch (error) {
+      if (attempt.gate && !attempt.gate.finished_at) {
+        attempt.gate.finished_at = new Date().toISOString();
+        attempt.gate.duration_s = Math.max(0, (Date.parse(attempt.gate.finished_at) - Date.parse(attempt.gate.started_at)) / 1000);
+        attempt.gate.error = error.message;
+      }
       attempt.phase = 'invalid'; attempt.error = error.message; plan.groups.shift();
       for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
       save(); continue;
@@ -227,6 +247,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation 
     if (invalid) { attempt.phase = 'invalid'; save(); continue; }
     clean(attempt.scratch);
     if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip) throw new Error('validated train tip changed');
+    phase('fast-forwarding');
     try { withPromotionGuards(guards(attempt.jobs), () => git(['merge', '--ff-only', attempt.tip])); }
     catch (error) {
       attempt.phase = 'invalid'; attempt.error = error.message;

@@ -124,6 +124,25 @@ override, lane configuration's promotion tier is resolved when promotion runs. `
 
 ## Evidence and recovery
 
+Each `promote/batches/ID/train.json` is replaced atomically. Its batch `phase`
+shows the current work: `preparing`, `rebasing`, `validating`,
+`fast-forwarding`, `closing`, then `complete`. `started_at` is the batch's
+first train invocation and stays fixed across resumes. The latest attempt's
+`gate.command` and `gate.started_at` are saved before validation begins, so a
+reader can show the running check and elapsed time while the train blocks.
+An unfinished gate has no `exit_code`, `finished_at` or `duration_s`. When the
+gate returns, its full validation receipt supplies those fields, including a
+red exit. Reused green evidence retains its original clock and `reused: true`.
+If validation throws instead of returning evidence, the unfinished clock is
+closed with `finished_at`, `duration_s` and `error`, without inventing an exit.
+
+Batch `phase` is display telemetry. The existing attempt `phase` remains the
+recovery checkpoint (`prepared` during a running check, `validated` during the
+fast-forward, `integrated` during bookkeeping). Readers should use batch
+`phase` for current activity and the latest attempt's `gate` for the check.
+An unfinished clock never proves a green gate; a resume revalidates the saved
+prepared candidate using the existing tree-keyed evidence rules.
+
 `GIT_COMMON_DIR/promote/queue.json` contains pending/current and interrupted batches, results,
 notice text, delivery receipts and errors. The directory also contains `worker.log`,
 batch receipts, full train logs and per-request cleanup JSONL. Each promoted

@@ -392,3 +392,156 @@ test('promotion lock contention delivers an interrupted notice and resumes after
   const r = f.drain(); assert.equal(r.status, 0, r.stderr);
   assert.equal(f.queue.load().results.at(-1).outcome, 'promoted'); assert.equal(f.runs(), 1);
 });
+
+// Observe the receipt from a separate process at real Git boundaries. The
+// checks themselves also read it, before returning any validation evidence.
+function telemetryProxy(f, { interrupt = false, realGit = f.exec('which', ['git']).stdout.trim() } = {}) {
+  const bin = path.join(f.root, 'bin');
+  const observations = path.join(f.root, 'telemetry.jsonl'), marker = path.join(f.root, 'telemetry-interrupted');
+  const proxy = path.join(f.root, 'telemetry-git.cjs');
+  fs.mkdirSync(bin, { recursive: true });
+  if (f.env.PATH.split(path.delimiter)[0] !== bin) f.env.PATH = `${bin}:${f.env.PATH}`;
+  fs.writeFileSync(proxy, `const fs=require('fs'),path=require('path'),cp=require('child_process'),args=process.argv.slice(2);
+const batches=${JSON.stringify(path.join(f.queue.directory, 'batches'))};
+if(fs.existsSync(batches))for(const name of fs.readdirSync(batches)){
+ const file=path.join(batches,name,'train.json');if(!fs.existsSync(file))continue;
+ const plan=JSON.parse(fs.readFileSync(file)),attempt=plan.attempts?.at(-1);
+ fs.appendFileSync(${JSON.stringify(observations)},JSON.stringify({args,plan})+'\\n');
+ if(${interrupt}&&plan.phase==='validating'&&args[2]==='status'&&args[1]===attempt.scratch&&!fs.existsSync(${JSON.stringify(marker)})){
+  fs.writeFileSync(${JSON.stringify(marker)},file);
+  const lock=${JSON.stringify(path.join(f.repo, '.git/lane-promote.lock'))};
+  if(JSON.parse(fs.readFileSync(lock+'/owner.json')).pid===process.ppid)fs.rmSync(lock,{recursive:true});
+  process.kill(process.ppid,'SIGKILL');
+ }
+}
+const r=cp.spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(r.status??1);`);
+  fs.writeFileSync(path.join(bin, 'git'), `#!/bin/sh\ncase "$3" in worktree|rebase|merge|rev-parse|status) exec '${process.execPath}' '${proxy}' "$@";; esac\nexec '${realGit}' "$@"\n`, { mode: 0o755 });
+  return () => fs.readFileSync(observations, 'utf8').trim().split('\n').map(JSON.parse);
+}
+
+test('batch telemetry publishes every running phase before its work and preserves recovery checkpoints', t => {
+  const f = fixture(t), preparation = path.join(f.root, 'prepare.cjs'), prepared = path.join(f.root, 'preparing.json');
+  const config = path.join(f.root, 'lane.json');
+  const receiptReader = `const fs=require('fs'),path=require('path');const dir=${JSON.stringify(path.join(f.queue.directory, 'batches'))};const file=path.join(dir,fs.readdirSync(dir)[0],'train.json');`;
+  fs.writeFileSync(preparation, receiptReader + `fs.writeFileSync(${JSON.stringify(prepared)},fs.readFileSync(file));`);
+  fs.writeFileSync(config, JSON.stringify({ prepare: [{ run: `${process.execPath} ${preparation}` }] }));
+  f.lane('first'); f.lane('second'); f.add('first', { laneConfig: config }); f.add('second', { laneConfig: config });
+  fs.writeFileSync(path.join(f.repo, 'upstream'), 'keep'); f.git(['add', '.']); f.git(['commit', '-qm', 'Advance main']);
+  const observed = telemetryProxy(f), checked = path.join(f.root, 'validating.json');
+  fs.writeFileSync(f.checker, receiptReader + `fs.writeFileSync(${JSON.stringify(checked)},fs.readFileSync(file));console.log('green');`);
+  const r = f.drain(); assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(f.queue.load().results.map(r => r.outcome), ['promoted', 'promoted']);
+  const rows = observed();
+  const preparationPlan = JSON.parse(fs.readFileSync(prepared)), checkPlan = JSON.parse(fs.readFileSync(checked));
+  assert.equal(preparationPlan.phase, 'preparing'); assert.equal(preparationPlan.attempts[0].phase, 'prepared');
+  assert.equal(checkPlan.phase, 'validating'); assert.equal(checkPlan.attempts[0].phase, 'prepared');
+  assert.equal(checkPlan.attempts[0].gate.command, `${process.execPath} ${f.checker}`);
+  assert.ok(Number.isFinite(Date.parse(checkPlan.attempts[0].gate.started_at)));
+  assert.equal(checkPlan.attempts[0].gate.finished_at, undefined);
+  assert.equal(checkPlan.attempts[0].gate.duration_s, undefined);
+  assert.equal(checkPlan.attempts[0].gate.exit_code, undefined);
+  assert.ok(rows.some(({ args, plan }) => args[2] === 'worktree' && args[3] === 'add' && plan.phase === 'preparing'));
+  assert.ok(rows.some(({ args, plan }) => args[2] === 'rebase' && plan.phase === 'rebasing' && plan.attempts[0].phase === 'preparing'));
+  const forwarding = rows.find(({ args }) => args[2] === 'merge' && args[3] === '--ff-only').plan;
+  assert.equal(forwarding.phase, 'fast-forwarding'); assert.equal(forwarding.attempts[0].phase, 'validated');
+  assert.equal(forwarding.attempts[0].gate.exit_code, 0);
+  assert.ok(Number.isFinite(Date.parse(forwarding.attempts[0].gate.finished_at)));
+  assert.ok(forwarding.attempts[0].gate.duration_s >= 0);
+  assert.ok(rows.some(({ plan }) => plan.phase === 'closing' && plan.attempts[0].phase === 'integrated'));
+  const final = JSON.parse(fs.readFileSync(f.queue.load().results[0].receipt));
+  assert.equal(final.phase, 'complete'); assert.equal(final.attempts[0].phase, 'complete');
+  assert.equal(final.started_at, checkPlan.started_at);
+  assert.deepEqual(final.attempts[0].gate, final.results[final.jobs[0].id].gate);
+  assert.deepEqual(final.jobs.map(j => j.topic), ['first', 'second']);
+});
+
+test('a paused check exposes its clock atomically while validation is still running', async t => {
+  const f = fixture(t); f.lane('alone'); f.add('alone');
+  const marker = path.join(f.root, 'running-check'), release = path.join(f.root, 'release-check');
+  const before = f.git(['rev-parse', 'main']);
+  fs.writeFileSync(f.checker, `const fs=require('fs');fs.writeFileSync(${JSON.stringify(marker)},'running');const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)})){clearInterval(timer);console.log('green');}},20);`);
+  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+  const done = waitForExit(worker);
+  try {
+    await until(() => fs.existsSync(marker));
+    const batch = f.queue.load().current, file = path.join(f.queue.directory, 'batches', batch.id, 'train.json');
+    const live = JSON.parse(fs.readFileSync(file)), gate = live.attempts[0].gate;
+    assert.equal(live.phase, 'validating'); assert.equal(gate.command, `${process.execPath} ${f.checker}`);
+    assert.ok(Date.parse(gate.started_at) <= Date.now()); assert.equal(gate.exit_code, undefined);
+    assert.equal(gate.finished_at, undefined); assert.equal(f.git(['rev-parse', 'main']), before);
+    fs.writeFileSync(release, 'finish');
+    const r = await done; assert.equal(r.status, 0, r.stderr);
+    const final = JSON.parse(fs.readFileSync(file));
+    assert.equal(final.phase, 'complete'); assert.equal(final.attempts[0].gate.exit_code, 0);
+    assert.ok(Date.parse(final.attempts[0].gate.finished_at) >= Date.parse(gate.started_at));
+    assert.ok(final.attempts[0].gate.duration_s > 0);
+  } finally { fs.writeFileSync(release, 'finish'); await done; }
+});
+
+test('resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock', t => {
+  const f = fixture(t); f.lane('alone'); f.add('alone');
+  const before = f.git(['rev-parse', 'main']); telemetryProxy(f, { interrupt: true });
+  const interrupted = f.drain(); assert.equal(interrupted.status, 0, interrupted.stderr);
+  const result = f.queue.load().results[0]; assert.equal(result.outcome, 'interrupted');
+  const live = JSON.parse(fs.readFileSync(result.receipt)), attempt = live.attempts[0];
+  assert.equal(live.phase, 'validating'); assert.equal(attempt.phase, 'prepared');
+  assert.equal(attempt.gate.finished_at, undefined); assert.equal(attempt.gate.exit_code, undefined);
+  assert.equal(f.runs(), 0); assert.equal(f.git(['rev-parse', 'main']), before);
+  const resumed = f.drain(); assert.equal(resumed.status, 0, resumed.stderr);
+  const final = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(final.phase, 'complete'); assert.equal(final.attempts.length, 1);
+  assert.equal(final.started_at, live.started_at); assert.equal(final.attempts[0].tip, attempt.tip);
+  assert.equal(final.attempts[0].gate.exit_code, 0); assert.equal(f.runs(), 1);
+  assert.ok(Date.parse(final.attempts[0].gate.started_at) >= Date.parse(attempt.gate.started_at));
+  assert.ok(Number.isFinite(final.attempts[0].gate.duration_s));
+  assert.equal(f.queue.load().results.at(-1).outcome, 'promoted');
+});
+
+test('red validation finishes the published clock and retains its real exit', t => {
+  const f = fixture(t); f.lane('alone', true); f.add('alone');
+  const before = f.git(['rev-parse', 'main']);
+  const r = f.drain(); assert.equal(r.status, 0, r.stderr);
+  const result = f.queue.load().results[0], final = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(result.outcome, 'refused'); assert.equal(final.phase, 'complete');
+  assert.equal(final.attempts[0].phase, 'red'); assert.equal(final.attempts[0].gate.exit_code, 1);
+  assert.ok(Date.parse(result.gate.finished_at) >= Date.parse(result.gate.started_at));
+  assert.ok(result.gate.duration_s >= 0); assert.equal(f.git(['rev-parse', 'main']), before);
+});
+
+test('resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock', t => {
+  const f = fixture(t); f.lane('alone'); f.add('alone');
+  const realGit = f.exec('which', ['git']).stdout.trim();
+  interruptAt(f, 'validated');
+  assert.equal(f.drain().status, 0);
+  const result = f.queue.load().results[0], validated = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(validated.attempts[0].phase, 'validated'); assert.equal(validated.attempts[0].gate.exit_code, 0);
+  telemetryProxy(f, { interrupt: true, realGit });
+  assert.equal(f.drain().status, 0);
+  const interrupted = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(interrupted.phase, 'validating'); assert.equal(interrupted.attempts[0].phase, 'prepared');
+  assert.equal(interrupted.attempts[0].gate.exit_code, undefined);
+  assert.equal(interrupted.attempts[0].tip, validated.attempts[0].tip);
+  assert.equal(f.drain().status, 0);
+  const final = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(final.attempts.length, 1); assert.equal(final.attempts[0].phase, 'complete');
+  assert.equal(final.attempts[0].gate.exit_code, 0); assert.equal(final.attempts[0].gate.reused, true);
+  assert.equal(f.runs(), 1, 'the completed identical-tree evidence remains reusable');
+  assert.equal(final.started_at, validated.started_at);
+  assert.equal(final.attempts[0].gate.started_at, validated.attempts[0].gate.started_at);
+  assert.equal(final.attempts[0].gate.duration_s, validated.attempts[0].gate.duration_s);
+  assert.equal(f.queue.load().results.at(-1).outcome, 'promoted');
+});
+
+test('validation that throws closes its telemetry clock without inventing green evidence', t => {
+  const f = fixture(t), workspace = f.lane('alone'); f.add('alone');
+  const before = f.git(['rev-parse', 'main']);
+  fs.writeFileSync(f.checker, "require('fs').writeFileSync('unreviewed','change');");
+  const r = f.drain(); assert.equal(r.status, 0, r.stderr);
+  const result = f.queue.load().results[0], final = JSON.parse(fs.readFileSync(result.receipt));
+  const attempt = final.attempts[0];
+  assert.equal(result.outcome, 'refused'); assert.equal(attempt.phase, 'invalid');
+  assert.match(attempt.gate.error, /worktree changed during validation/);
+  assert.ok(Date.parse(attempt.gate.finished_at) >= Date.parse(attempt.gate.started_at));
+  assert.ok(attempt.gate.duration_s >= 0); assert.equal(attempt.gate.exit_code, undefined);
+  assert.equal(f.git(['rev-parse', 'main']), before); assert.ok(fs.existsSync(workspace));
+});

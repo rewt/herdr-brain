@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { ptyCommand, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 import { nativeEntryReceipt, assertLessonEntry } from '../entry.mjs';
-import { lessonsEntryCase } from '../lessons.mjs';
+import { lessonsEntryCase, nativeUiReady } from '../lessons.mjs';
 import { cases, runCase } from '../cases.mjs';
 import { gateOutcome } from '../results.mjs';
 
@@ -34,7 +34,19 @@ test('skipped fresh lessons sessions keep the release gate pending without launc
   assert.equal(gateOutcome(results).ready, false);
 });
 
-function fixture(t, { activate = true } = {}) {
+test('native interactive readiness requires more than a retained banner', () => {
+  for (const kind of ['codex', 'claude']) {
+    const banner = kind === 'codex' ? 'OpenAI Codex' : 'Claude Code';
+    const prompt = kind === 'codex' ? '› Ask a question' : '❯ Try a command';
+    assert.equal(nativeUiReady(kind, `${banner}\nStartup failed`), false);
+    assert.equal(nativeUiReady(kind, prompt), false);
+    assert.equal(nativeUiReady(kind, `${banner}\n${prompt}`), true);
+  }
+  assert.equal(nativeUiReady('codex', 'Welcome to Codex\n1. Sign in with ChatGPT'), true);
+  assert.equal(nativeUiReady('claude', 'Welcome to Claude Code\nChoose the text style\nEnter to confirm'), true);
+});
+
+function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync('/tmp/lesson-gate-test-'));
   const scratchRoots = [root], discoveryRoots = [], evidence = path.join(root, 'evidence');
   fs.mkdirSync(evidence);
@@ -47,7 +59,10 @@ function fixture(t, { activate = true } = {}) {
   const binaries = {};
   for (const kind of ['codex', 'claude']) {
     binaries[kind] = path.join(root, `offline-${kind}`);
-    write(binaries[kind], `#!${process.execPath}\nif(process.argv.includes('--help')||process.argv.includes('--version'))process.exit(0);console.log(${JSON.stringify(kind === 'codex' ? 'OpenAI Codex offline UI' : 'Claude Code offline UI')});setInterval(()=>{},1000);\n`);
+    const banner = kind === 'codex' ? 'OpenAI Codex offline UI' : 'Claude Code offline UI';
+    const prompt = kind === 'codex' ? '› Ask a question' : '❯ Try a command';
+    const screen = kind !== exitKind || exitWithPrompt ? `${banner}\n${prompt}` : banner;
+    write(binaries[kind], `#!${process.execPath}\nif(process.argv.includes('--help')||process.argv.includes('--version'))process.exit(0);console.log(${JSON.stringify(screen)});${kind === exitKind ? `process.exit(${exitCode});` : 'setInterval(()=>{},1000);'}\n`);
     fs.chmodSync(binaries[kind], 0o755);
   }
   const children = [], screens = new Map(), closed = [];
@@ -116,6 +131,37 @@ test('a proposed canary cannot pass entry delivery and its fresh session still s
   const f = fixture(t, { activate: false });
   await assert.rejects(lessonsEntryCase(f.options), /Active lessons|planted active lesson/);
   assert.deepEqual(f.closed, ['w1']);
+  for (const child of f.children) await waitForExit(child);
+  assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
+});
+
+for (const kind of ['codex', 'claude']) for (const exitCode of [0, 1]) {
+  test(`${kind} banner then exit ${exitCode} fails the gate and closes its owned session`, { skip }, async t => {
+    const f = fixture(t, { exitKind: kind, exitCode });
+    const results = [{ ...cases.fixture, status: 'PASS' }];
+    await runCase(results, cases.lessons, () => lessonsEntryCase(f.options));
+    assert.equal(results[1].status, 'FAIL');
+    assert.match(results[1].detail, /entry exited before interactive readiness/);
+    assert.equal(gateOutcome(results).ready, false);
+    assert.deepEqual(f.closed, kind === 'codex' ? ['w1'] : ['w1', 'w2']);
+    const scratch = JSON.parse(f.read(path.join(f.root, 'ownership.json'))).creationRoots[0];
+    const planted = JSON.parse(f.read(path.join(f.evidence, 'lessons-planted.json')));
+    assertLessonEntry(JSON.parse(f.read(path.join(scratch, kind, 'entry.json'))), {
+      kind, installation: path.join(scratch, 'product'), lesson: planted.lesson,
+    });
+    const completion = JSON.parse(f.read(path.join(f.evidence, `lessons-${kind}.done.json`)));
+    assert.equal(completion.code, exitCode);
+    assert.equal(completion.signal, null);
+    assert.match(f.read(path.join(f.evidence, `lessons-${kind}.screen.txt`)), /offline UI/);
+    for (const child of f.children) await waitForExit(child);
+    assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
+  });
+}
+
+for (const kind of ['codex', 'claude']) test(`${kind} prompt then premature exit also fails interactive readiness`, { skip }, async t => {
+  const f = fixture(t, { exitKind: kind, exitWithPrompt: true });
+  await assert.rejects(lessonsEntryCase(f.options), /entry exited before interactive readiness/);
+  assert.deepEqual(f.closed, kind === 'codex' ? ['w1'] : ['w1', 'w2']);
   for (const child of f.children) await waitForExit(child);
   assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);
 });

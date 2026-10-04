@@ -5,6 +5,7 @@ import path from 'node:path';
 import { command, createEntry } from '../runtime.mjs';
 import { entryLessons } from '../lessons.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { runPTY, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 
 const product = path.resolve(import.meta.dirname, '../..');
 function fixture(t) {
@@ -82,4 +83,41 @@ test('both installed adapters deliver shared lessons for nested entry to native 
     assert.equal(entry.context().enteredPath, 'area/deep');
     assert.equal(entry.context().org, f.org);
   } finally { entry.close(); }
+});
+
+for (const populated of [false, true]) test(`installed adapters launch from literal bracket directories with ${populated ? 'matching lessons' : 'an empty lesson record'}`, { skip: PTY_SKIP_REASON }, t => {
+  const f = fixture(t), enteredPath = 'area/[slug]/deep', cwd = path.join(f.repo, enteredPath);
+  fs.mkdirSync(cwd, { recursive: true });
+  if (populated) {
+    f.lesson('Broad project lesson');
+    f.lesson('Tree lesson', ['--path', '.']);
+    f.lesson('Matching ancestor lesson', ['--path', 'area']);
+    f.lesson('Excluded sibling lesson', ['--path', 'areas']);
+    f.lesson('Excluded module lesson', ['--module', 'area']);
+  }
+  const bin = path.join(f.scratch, 'bin'), receipt = path.join(f.scratch, 'receipt.json'), native = path.join(f.scratch, 'native');
+  fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
+  command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--codex', native, '--claude', native], f.repo);
+  const env = { MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'worktrees') };
+  const lessonEvents = () => fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(event => event.type.startsWith('lesson.'));
+  const before = lessonEvents();
+  for (const kind of ['codex', 'claude']) {
+    // A fresh PTY ensures the automatic installed command enters the project.
+    fs.rmSync(receipt, { force: true });
+    const result = runPTY(path.join(bin, kind), [], { cwd, env: { ...process.env, ...env,
+      MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '', HERDR_INTEGRATION_ID: '' } });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const args = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+    const policy = kind === 'codex' ? JSON.parse(args.find(a => a.startsWith('developer_instructions=')).slice('developer_instructions='.length))
+      : args[args.indexOf('--append-system-prompt') + 1];
+    assert.equal(typeof policy, 'string', 'native launch received the entry policy');
+    if (populated) {
+      assert.ok(policy.includes(`entered area (${enteredPath})`));
+      for (const text of ['Broad project lesson', 'Tree lesson', 'Matching ancestor lesson']) assert.ok(policy.includes(text));
+      for (const text of ['Excluded sibling lesson', 'Excluded module lesson']) assert.ok(!policy.includes(text));
+      assert.ok(policy.indexOf('Matching ancestor lesson') < policy.indexOf('Tree lesson'));
+      assert.ok(policy.indexOf('Tree lesson') < policy.indexOf('Broad project lesson'));
+    } else assert.ok(!policy.includes('Active lessons'));
+  }
+  assert.deepEqual(lessonEvents(), before);
 });

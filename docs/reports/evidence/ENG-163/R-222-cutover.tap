@@ -1,0 +1,105 @@
+TAP version 13
+# Subtest: rollback restores every file byte and executable mode
+ok 1 - rollback restores every file byte and executable mode
+  ---
+  duration_ms: 6.394709
+  ...
+# Subtest: contrib cannot retire with an extra executable caller, and scans refuse symlinks
+ok 2 - contrib cannot retire with an extra executable caller, and scans refuse symlinks
+  ---
+  duration_ms: 3.477916
+  ...
+# Subtest: all eleven edits apply to relocated inventory scripts and refuse premise drift
+ok 3 - all eleven edits apply to relocated inventory scripts and refuse premise drift
+  ---
+  duration_ms: 6.022125
+  ...
+# Subtest: cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+ok 4 - cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+  ---
+  duration_ms: 5.80375
+  ...
+# Subtest: production notice contract accepts rewritten current documents and rejects missing obligations
+ok 5 - production notice contract accepts rewritten current documents and rejects missing obligations
+  ---
+  duration_ms: 9.669041
+  ...
+# Subtest: retirement scans nested Python, executable extensionless and notify entry callers
+ok 6 - retirement scans nested Python, executable extensionless and notify entry callers
+  ---
+  duration_ms: 3.597333
+  ...
+# Subtest: installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+ok 7 - installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+  ---
+  duration_ms: 557.477708
+  ...
+# Subtest: installed tidy recovers a bounded tail from each log including a late older run
+ok 8 - installed tidy recovers a bounded tail from each log including a late older run
+  ---
+  duration_ms: 417.444666
+  ...
+# Subtest: only unreferenced timestamped script backups qualify as historical material
+ok 9 - only unreferenced timestamped script backups qualify as historical material
+  ---
+  duration_ms: 3.830333
+  ...
+# Subtest: executable shell case arms cannot hide contrib callers or references to historical backups
+ok 10 - executable shell case arms cannot hide contrib callers or references to historical backups
+  ---
+  duration_ms: 2.893292
+  ...
+# Subtest: referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+ok 11 - referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+  ---
+  duration_ms: 4.202625
+  ...
+# Subtest: inserting a case anywhere leaves every production dependency and outcome unchanged
+ok 12 - inserting a case anywhere leaves every production dependency and outcome unchanged
+  ---
+  duration_ms: 13.139875
+  ...
+# Subtest: optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+ok 13 - optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+  ---
+  duration_ms: 0.344708
+  ...
+# Subtest: a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+ok 14 - a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+  ---
+  duration_ms: 0.202875
+  ...
+# Subtest: independent product and explicit safety failures retain precedence over genuine canary limits
+ok 15 - independent product and explicit safety failures retain precedence over genuine canary limits
+  ---
+  duration_ms: 0.1215
+  ...
+# Subtest: case keys are required and unique even when display names differ
+ok 16 - case keys are required and unique even when display names differ
+  ---
+  duration_ms: 0.415959
+  ...
+# Subtest: no configured existing project skips all five compatibility bodies visibly and permits a green gate
+ok 17 - no configured existing project skips all five compatibility bodies visibly and permits a green gate
+  ---
+  duration_ms: 0.399208
+  ...
+# Subtest: optional compatibility never hides other failures or pending live cases
+ok 18 - optional compatibility never hides other failures or pending live cases
+  ---
+  duration_ms: 0.317625
+  ...
+# Subtest: configured compatibility retains strict failures and prerequisites
+ok 19 - configured compatibility retains strict failures and prerequisites
+  ---
+  duration_ms: 0.348708
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1052.5045

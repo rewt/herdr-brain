@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fixture, inventory } from './cutover-fixture.mjs';
-import { switches, capture, restore, callers, retireContrib, switchedFiles, callerFiles, callerInventory } from '../cutover.mjs';
+import { switches, capture, restore, callers, retireContrib, switchedFiles, callerFiles, callerInventory, assertNoticeContract } from '../cutover.mjs';
 
 test('rollback restores every file byte and executable mode', (t) => {
   const root = fixture(t), original = capture(root);
@@ -58,6 +58,29 @@ test('cutover rewrites queued-notification cleanup ownership and refuses changed
   ]) {
     fs.writeFileSync(file, original.replace(before, after));
     assert.throws(() => switchedFiles(spec), /cutover premise drift/);
+  }
+});
+
+test('production notice contract accepts rewritten current documents and rejects missing obligations', (t) => {
+  const { copy, edits } = inventory(t);
+  for (const [key, file] of switches) fs.writeFileSync(path.join(copy, file), edits[key]);
+  const protocol = fs.readFileSync(path.join(copy, '.lane/supervisor/SETTLE.md'), 'utf8');
+  const grammar = fs.readFileSync(path.join(copy, '.lane/supervisor/WORK-PATTERN.md'), 'utf8');
+  assert.doesNotMatch(grammar, /Janitor/);
+  assertNoticeContract(protocol, grammar);
+  for (const clause of [
+    'One-shot cleanup owns finished-tab closure through close-finished-agents.sh',
+    'requires a recorded done or abandoned latest run',
+    'preserves blocked/needs_human, open, unknown and unrecorded workers',
+    '900',
+    '[watch-blocked]', '[watch-no-report]', '[watch-invalid-report]', '[watch-long-running]', '[watch-unavailable]',
+  ]) {
+    assert.ok(grammar.includes(clause));
+    assert.throws(() => assertNoticeContract(protocol, grammar.replaceAll(clause, 'Janitor')), { code: 'ERR_ASSERTION' }, clause);
+  }
+  for (const clause of ['Retain the original [org-report]', 'retry the same settle.sh']) {
+    assert.ok(protocol.includes(clause));
+    assert.throws(() => assertNoticeContract(protocol.replaceAll(clause, ''), grammar), { code: 'ERR_ASSERTION' }, clause);
   }
 });
 

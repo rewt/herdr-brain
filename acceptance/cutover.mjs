@@ -106,6 +106,16 @@ done
 export function capture(copy) {
   return switches.map(([key, file]) => ({ key, file, bytes: fs.readFileSync(path.join(copy, file)), mode: fs.statSync(path.join(copy, file)).mode & 0o777 }));
 }
+// Shared by the release harness and offline checks of the rewritten documents.
+export function assertNoticeContract(protocol, grammar) {
+  assert.match(protocol, /retain.*original.*org-report/i);
+  assert.match(protocol, /retry.*settle.sh/);
+  for (const prefix of ['watch-blocked', 'watch-no-report', 'watch-invalid-report', 'watch-long-running', 'watch-unavailable']) assert.ok(grammar.includes(`[${prefix}]`));
+  assert.match(grammar, /900/);
+  assert.match(grammar, /One-shot cleanup owns finished-tab closure through close-finished-agents\.sh/);
+  assert.match(grammar, /requires a recorded done or abandoned latest run/);
+  assert.match(grammar, /preserves blocked\/needs_human, open, unknown and unrecorded workers/);
+}
 export function restore(copy, originals) {
   for (const { file, bytes, mode } of originals) {
     fs.writeFileSync(path.join(copy, file), bytes); fs.chmodSync(path.join(copy, file), mode);

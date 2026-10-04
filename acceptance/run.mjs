@@ -20,7 +20,7 @@ import { cases, cutoverChecks, runCase } from './cases.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
 import { createOwnedTempRoot, createLiveSessionTemp } from './temp.mjs';
 import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
-import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
+import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory, assertNoticeContract } from './cutover.mjs';
 import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
 import { assertHousekeepingActions } from './housekeeping.mjs';
@@ -969,9 +969,7 @@ try {
     await check(cutoverChecks.notices, () => {
       const protocol = read(path.join(copy, '.lane/supervisor/SETTLE.md'));
       const grammar = read(path.join(copy, '.lane/supervisor/WORK-PATTERN.md'));
-      assert.match(protocol, /retain.*original.*org-report/i); assert.match(protocol, /retry.*settle.sh/);
-      for (const prefix of ['watch-blocked', 'watch-no-report', 'watch-invalid-report', 'watch-long-running', 'watch-unavailable']) assert.ok(grammar.includes(`[${prefix}]`));
-      assert.match(grammar, /900/); assert.match(grammar, /Janitor/);
+      assertNoticeContract(protocol, grammar);
       const probe = path.join(root, 'cutover-notices.mjs');
       write(probe, `import assert from 'node:assert/strict';import * as n from ${JSON.stringify(path.join(candidate, 'watch/notice.mjs'))};const v={run:'R-1',item:'ENG-1',agent:'worker',report:'/scratch/report',state:'idle',error:'probe',minutes:1};for(const [fn,prefix] of Object.entries({blockedNotice:'watch-blocked',noReportNotice:'watch-no-report',invalidReportNotice:'watch-invalid-report',longRunningNotice:'watch-long-running',unavailableNotice:'watch-unavailable'})){const line=n[fn](v);assert.ok(line.startsWith('['+prefix+']'));console.log(line);}const line=n.reportNotice({...v,outcome:'done',headline:'Canary',check:'pass'});assert.match(line,/outcome=done.*headline=.*check=pass.*report=/);assert.ok(!line.includes('verdict='));console.log(line);`);
       runCopy(process.execPath, [probe], { cwd: copy, extra: { ORG_DIR: org } });

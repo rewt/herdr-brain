@@ -20,4 +20,9 @@ child.on('spawn', () => {
 });
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => child.kill(signal));
 child.on('error', error => { console.error(error.message); process.exitCode = 1; });
+child.on('exit', (code, signal) => {
+  // Observe the actual UI child before transport/adapter cleanup. Capability
+  // probes must not overwrite the interactive session's termination evidence.
+  if (typeof receipt.policy === 'string') fs.writeFileSync(spec.nativeDone, JSON.stringify({ nativePid: child.pid, code, signal }));
+});
 child.on('close', code => { process.exitCode = code ?? 1; });

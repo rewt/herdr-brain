@@ -46,13 +46,20 @@ test('native interactive readiness requires more than a retained banner', () => 
   assert.equal(nativeUiReady('claude', 'Welcome to Claude Code\nChoose the text style\nEnter to confirm'), true);
 });
 
-function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = false } = {}) {
+function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = false, delayedCleanup = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync('/tmp/lesson-gate-test-'));
   const scratchRoots = [root], discoveryRoots = [], evidence = path.join(root, 'evidence');
   fs.mkdirSync(evidence);
   t.after(() => { for (const directory of scratchRoots) fs.rmSync(directory, { recursive: true, force: true }); });
   const write = (file, data) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, data); };
-  const read = file => fs.readFileSync(file, 'utf8');
+  const terminationObservations = [];
+  const read = file => {
+    if (delayedCleanup && file.endsWith(`/${exitKind}/native.done.json`)) terminationObservations.push({
+      cleanupBlocked: fs.existsSync(path.join(path.dirname(file), 'cleanup-blocked')),
+      adapterDone: fs.existsSync(path.join(root, 'live-jobs', `lessons-${exitKind}.done`)),
+    });
+    return fs.readFileSync(file, 'utf8');
+  };
   write(path.join(root, 'ownership.json'), JSON.stringify({ creationRoots: [] }));
   fs.copyFileSync(path.join(product, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
   fs.copyFileSync(path.join(product, 'acceptance/producers.mjs'), path.join(root, 'producers.mjs'));
@@ -72,12 +79,30 @@ function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = 
     assert.equal(result.status, 0, result.stderr || result.error?.message); return result;
   };
   const node = (file, args, options = {}) => {
-    if (file === path.join(root, 'herdr.mjs') && args[1] === 'read') return { stdout: screens.get(args[2]) ?? '' };
+    if (file === path.join(root, 'herdr.mjs') && args[1] === 'read') {
+      // Exiting stand-ins expose retained scrollback after native termination,
+      // rather than racing a legitimate observation while the UI is still alive.
+      if (exitKind && args[2] === (exitKind === 'codex' ? 'w1:p1' : 'w2:p1')) {
+        const scratch = JSON.parse(read(path.join(root, 'ownership.json'))).creationRoots[0];
+        if (!fs.existsSync(path.join(scratch, exitKind, 'native.done.json'))) return { stdout: '' };
+      }
+      return { stdout: screens.get(args[2]) ?? '' };
+    }
     if (!activate && args[0] === 'lesson' && args[1] === 'activate') return { stdout: '' };
     return run(process.execPath, [file, ...args], options);
   };
   const initRepo = repo => {
     fs.mkdirSync(repo);
+    if (delayedCleanup) {
+      // Hold the real installed adapter's cleanup until harness teardown asks
+      // it to stop. This is a gate, not a race against a chosen timeout.
+      const temp = path.join(path.dirname(repo), exitKind);
+      const adapter = path.join(path.dirname(repo), 'product/discovery/adapters', `${exitKind}.mjs`);
+      const source = fs.readFileSync(adapter, 'utf8');
+      assert.ok(source.includes('clearInterval(timer);'));
+      fs.writeFileSync(adapter, source.replace("import { spawn }", "import fsCleanup from 'node:fs';\nimport { spawn }").replaceAll('clearInterval(timer);',
+        `fsCleanup.writeFileSync(${JSON.stringify(path.join(temp, 'cleanup-blocked'))}, 'blocked'); while (!fsCleanup.existsSync(${JSON.stringify(path.join(temp, 'stop'))})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); clearInterval(timer);`));
+    }
     for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Lesson gate'], ['config', 'user.email', 'gate@example.invalid'],
       ['commit', '--allow-empty', '-qm', 'Seed']]) run('git', args, { cwd: repo });
   };
@@ -101,13 +126,20 @@ function fixture(t, { activate = true, exitKind, exitCode = 1, exitWithPrompt = 
   };
   const until = async (check, label) => {
     const deadline = Date.now() + 12000;
-    while (!check()) {
+    const exitReady = () => {
+      if (!exitKind || label !== `lessons-${exitKind} native entry receipt`) return true;
+      const scratch = JSON.parse(read(path.join(root, 'ownership.json'))).creationRoots[0];
+      const pane = exitKind === 'codex' ? 'w1:p1' : 'w2:p1';
+      return fs.existsSync(path.join(scratch, exitKind, 'native.done.json')) && (screens.get(pane) ?? '').includes('offline UI') &&
+        (!delayedCleanup || fs.existsSync(path.join(scratch, exitKind, 'cleanup-blocked')));
+    };
+    while (!exitReady() || !check()) {
       assert.ok(Date.now() < deadline, `${label}: ${[...screens.values()].join('\n')}`);
       await new Promise(resolve => setTimeout(resolve, 25));
     }
   };
   return { options: { root, scratchRoots, discoveryRoots, candidate: product, evidence, run, node, initRepo, h, until, write, read },
-    closed, children, read, evidence, root };
+    closed, children, read, evidence, root, terminationObservations };
 }
 
 const skip = process.platform !== 'darwin' ? 'entry UI canary uses macOS sandbox-exec' : PTY_SKIP_REASON;
@@ -121,6 +153,9 @@ test('release lesson case uses real installed automatic adapters and owned PTYs 
     assert.match(receipt.policy, /entered area \(area\)/);
     assert.ok(receipt.policy.includes(planted.lesson));
     assert.match(f.read(path.join(f.evidence, `lessons-${kind}.screen.txt`)), /offline UI/);
+    const completion = JSON.parse(f.read(path.join(f.evidence, `lessons-${kind}.native.done.json`)));
+    assert.equal(completion.nativePid, receipt.nativePid);
+    assert.equal(completion.signal, 'SIGTERM');
     assert.ok(receipt.cwd !== planted.repo);
   }
   for (const child of f.children) await waitForExit(child);
@@ -158,9 +193,18 @@ for (const kind of ['codex', 'claude']) for (const exitCode of [0, 1]) {
   });
 }
 
-for (const kind of ['codex', 'claude']) test(`${kind} prompt then premature exit also fails interactive readiness`, { skip }, async t => {
-  const f = fixture(t, { exitKind: kind, exitWithPrompt: true });
-  await assert.rejects(lessonsEntryCase(f.options), /entry exited before interactive readiness/);
+for (const kind of ['codex', 'claude']) for (const exitCode of [0, 1]) test(`${kind} prompt then exit ${exitCode} fails while adapter cleanup is blocked`, { skip }, async t => {
+  const f = fixture(t, { exitKind: kind, exitCode, exitWithPrompt: true, delayedCleanup: true });
+  const results = [{ ...cases.fixture, status: 'PASS' }];
+  await runCase(results, cases.lessons, () => lessonsEntryCase(f.options));
+  assert.equal(results[1].status, 'FAIL');
+  assert.match(results[1].detail, /entry exited before interactive readiness/);
+  assert.equal(gateOutcome(results).ready, false);
+  assert.deepEqual(f.terminationObservations[0], { cleanupBlocked: true, adapterDone: false });
+  const completion = JSON.parse(f.read(path.join(f.evidence, `lessons-${kind}.native.done.json`)));
+  assert.equal(completion.code, exitCode);
+  assert.equal(completion.signal, null);
+  assert.equal(nativeUiReady(kind, f.read(path.join(f.evidence, `lessons-${kind}.screen.txt`))), true);
   assert.deepEqual(f.closed, kind === 'codex' ? ['w1'] : ['w1', 'w2']);
   for (const child of f.children) await waitForExit(child);
   assert.deepEqual(fs.readdirSync(path.join(f.root, 'producers')), []);

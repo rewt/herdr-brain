@@ -50,8 +50,9 @@ export async function lessonsEntryCase({ opt = {}, root, scratchRoots, discovery
   for (const kind of ['codex', 'claude']) {
     const name = `lessons-${kind}`, temp = path.join(scratch, kind), bin = path.join(temp, 'bin');
     fs.mkdirSync(temp); const runtimeHome = path.join(temp, 'runtime'); fs.mkdirSync(runtimeHome);
-    const receipt = path.join(temp, 'entry.json'), nativeSpec = path.join(temp, 'native.json'), transport = path.join(temp, 'native');
-    write(nativeSpec, JSON.stringify({ kind, binary: binaries[kind], installation, receipt }));
+    const receipt = path.join(temp, 'entry.json'), nativeDone = path.join(temp, 'native.done.json');
+    const nativeSpec = path.join(temp, 'native.json'), transport = path.join(temp, 'native');
+    write(nativeSpec, JSON.stringify({ kind, binary: binaries[kind], installation, receipt, nativeDone }));
     write(transport, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(scratch, 'entry-native.mjs'))} ${quote(nativeSpec)} "$@"\n`); fs.chmodSync(transport, 0o755);
     const env = { ...sessionEnv(process.env, { temp, runtimeHome, path: `${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`, name }),
       HERDR_MONITOR_FLEET: path.join(scratch, 'f'), CLAUDE_CONFIG_DIR: path.join(temp, '.claude'),
@@ -67,19 +68,29 @@ export async function lessonsEntryCase({ opt = {}, root, scratchRoots, discovery
     const ws = h('workspace', 'create', '--cwd', repo, '--label', `acceptance-${name}`, '--no-focus');
     const pane = ws.root_pane.pane_id;
     const done = path.join(root, 'live-jobs', `${name}.done`);
+    let nativePid;
     const assertRunning = (screen = '') => {
-      if (!fs.existsSync(done)) return;
-      const completion = read(done);
-      write(path.join(evidence, `${name}.done.json`), completion);
-      throw commandFailure(`${kind} entry exited before interactive readiness: ${completion}\n${screen}`);
+      for (const [file, label] of [[nativeDone, 'native.done.json'], [done, 'done.json']]) {
+        if (!fs.existsSync(file)) continue;
+        const completion = read(file);
+        write(path.join(evidence, `${name}.${label}`), completion);
+        throw commandFailure(`${kind} entry exited before interactive readiness: ${completion}\n${screen}`);
+      }
+      if (nativePid) {
+        try { process.kill(nativePid, 0); }
+        catch (error) {
+          if (error.code !== 'ESRCH') throw error;
+          throw commandFailure(`${kind} entry exited before interactive readiness: native child ${nativePid} is absent\n${screen}`);
+        }
+      }
     };
     let launched = false;
     try {
       await until(() => h('pane', 'get', pane).pane.foreground_cwd === repo, `${name} fresh shell cwd`);
       h('pane', 'run', pane, [process.execPath, path.join(root, 'entry-session.mjs'), root, name].map(quote).join(' '));
       launched = true;
-      await until(() => fs.existsSync(receipt) || fs.existsSync(path.join(root, 'live-jobs', `${name}.done`)), `${name} native entry receipt`);
-      if (!fs.existsSync(receipt) || fs.existsSync(done)) {
+      await until(() => fs.existsSync(receipt) || fs.existsSync(nativeDone) || fs.existsSync(done), `${name} native entry receipt`);
+      if (!fs.existsSync(receipt) || fs.existsSync(nativeDone) || fs.existsSync(done)) {
         const failureScreen = node(path.join(root, 'herdr.mjs'), ['pane', 'read', pane, '--source', 'recent-unwrapped', '--format', 'text', '--lines', '100']).stdout;
         write(path.join(evidence, `${name}.screen.txt`), failureScreen);
         assertRunning(failureScreen);
@@ -88,17 +99,16 @@ export async function lessonsEntryCase({ opt = {}, root, scratchRoots, discovery
       const delivered = JSON.parse(read(receipt));
       write(path.join(evidence, `${name}.entry.json`), JSON.stringify(delivered, null, 2));
       assertLessonEntry(delivered, { kind, installation, lesson });
-      // Receipt precedes native startup, and PTY scrollback survives exit. Require
-      // interactive readiness across observations with no completion receipt.
-      let screen, readySince;
+      nativePid = delivered.nativePid;
+      // PTY scrollback survives exit. Check the native child itself around the
+      // UI observation; waiting for adapter cleanup cannot prove UI liveness.
+      let screen;
       await until(() => {
         assertRunning(screen);
         screen = node(path.join(root, 'herdr.mjs'), ['pane', 'read', pane, '--source', 'recent-unwrapped', '--format', 'text', '--lines', '100']).stdout;
         write(path.join(evidence, `${name}.screen.txt`), screen);
         assertRunning(screen);
-        if (!nativeUiReady(kind, screen)) { readySince = undefined; return false; }
-        readySince ??= Date.now();
-        return Date.now() - readySince >= 250;
+        return nativeUiReady(kind, screen);
       }, `${name} fresh native UI`);
       assertRunning();
     } finally {
@@ -107,6 +117,7 @@ export async function lessonsEntryCase({ opt = {}, root, scratchRoots, discovery
           write(stop, 'stop');
           await until(() => fs.existsSync(path.join(root, 'live-jobs', `${name}.done`)), `${name} native session stopped`);
           write(path.join(evidence, `${name}.done.json`), read(done));
+          if (fs.existsSync(nativeDone)) write(path.join(evidence, `${name}.native.done.json`), read(nativeDone));
         }
       } finally { h('workspace', 'close', ws.workspace.workspace_id); }
     }

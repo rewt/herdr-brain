@@ -6,8 +6,9 @@ import { createHash } from 'node:crypto';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, loadEvents, readConfig, now } from '../lib/store.mjs';
 import { fold, itemStatus, openRuns, isResolved, attention } from '../lib/state.mjs';
+import { lessonsJson } from '../lib/lessons.mjs';
 import { prioritiesJson, itemServes } from '../lib/priorities.mjs';
-import { describeEvent, approxTokens } from '../lib/render.mjs';
+import { describeEvent, approxTokens, renderLessonClaim } from '../lib/render.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { candidateRows } from '../lib/release-record.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
@@ -33,6 +34,9 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   if (!org) throw new Error('no record discovered; enter through discovery first');
   org = fs.realpathSync(org);
   const { events, tornTail } = loadEvents(org), state = fold(events);
+  // Lessons are record knowledge, independent of run checkout bindings and
+  // mechanical receipts. Keep this section separate from resource/footprint data.
+  const lessons = { active: lessonsJson(state), proposed: lessonsJson(state, { state: 'proposed' }).length };
   const through = events.at(-1)?.seq ?? 0;
   const directory = receiptDirectory(org, project.identity);
   const cursor = read(path.join(directory, 'cursor.json'));
@@ -153,7 +157,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   const config = readConfig(org), clock = now(env);
   const advisory = attention(state, config, clock).filter((a) => ids.has(a.id));
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
-    priorities, goals, running, reports, waiting, held, ready, decisions, next, recovery,
+    lessons, priorities, goals, running, reports, waiting, held, ready, decisions, next, recovery,
     approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release, housekeeping,
     footprint: projectFootprint(project, org),
     host: { memory, reason: memoryReason(memory), processes } };
@@ -184,6 +188,11 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
     section('Largest memory consumers (read-only host evidence)', processes.by_memory, processLine);
     section('Largest CPU consumers (read-only host evidence)', processes.by_cpu, processLine);
   }
+  if (doc.lessons) {
+    section('Lessons', doc.lessons.active, l => `${l.id} [${l.scope}] ${renderLessonClaim(l.text)} · evidence ${line(l.evidence.map(e => e.kind === 'event' ? `event:${e.seq}` : e.id).join(', '), 100)}`);
+    out.push(`  ${doc.lessons.proposed} proposed lessons awaiting activation; record lessons --state proposed.`);
+  }
+
   section('Operator priorities', doc.priorities, (p) => `${p.rank}. ${p.id} ${line(p.title, 80)}`);
   section('Running (record; no live pane inference)', doc.running, (r) => `${r.run} ${r.item} ${line(r.title, 65)} · ${r.route ?? '?'} / ${r.harness ?? '?'} / ${r.model ?? '?'} / ${r.effort ?? '?'} · lane ${r.lane ?? '?'} · ${r.agent ?? '?'}${r.pane ? ` @${r.pane}` : ''}${r.checkout_missing ? ' · checkout missing; inspect record' : r.report_file_present ? ' · file awaits final watch notice' : ''}${r.repository_binding === 'unknown' ? ' · repository binding unknown' : ''}`);
   section('Reports and settlement', doc.reports.slice().reverse(), (r) => `${r.run} ${r.item} · ${r.outcome ?? 'file; stop unconfirmed'} · ${r.promotion ? `promotion ${r.promotion.phase}` : r.settlement?.result ?? (r.recorded ? 'no settle receipt' : 'awaits final watch notice')}${r.checkout_missing ? ' · checkout missing; inspect disposition' : ''} · ${line(r.headline ?? r.settlement?.reason ?? r.title, 100)}${r.settlement?.handoff ? ` · ${r.settlement.handoff}` : ''}`);

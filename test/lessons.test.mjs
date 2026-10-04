@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { setupOrg } from './helpers.mjs';
 import * as state from '../lib/state.mjs';
 import * as render from '../lib/render.mjs';
+import { DEFAULT_CONFIG } from '../lib/store.mjs';
 import { fold as olderFold, itemStatus as olderStatus } from './fixtures/state-v0.mjs';
 
 const agent = { env: { ORG_ACTOR: 'run:R-226' } };
@@ -19,6 +20,89 @@ function fixture(t) {
 }
 const add = (f, text, options = []) => f.ok(['lesson', 'add', text, '--evidence=ENG-1', ...options], agent).trim();
 const activate = (f, id, options = []) => f.ok(['lesson', 'activate', id, ...options], agent);
+
+// Brief tests use the same folded entities as the CLI, with unrelated evidence
+// by default so selector matching cannot accidentally pass through evidence.
+const briefProposal = (id, extra = {}) => proposal(id, { evidence: [{ kind: 'item', id: 'ENG-99' }], ...extra });
+function lessonBrief(lessons, item = {}, notes = []) {
+  const events = stamp([
+    { type: 'item.added', id: 'ARCH-1', title: 'Parent', role: 'architect' },
+    { type: 'item.added', id: 'ENG-99', title: 'Other work', role: 'engineer' },
+    { type: 'item.added', id: 'ENG-1', title: 'Implement something', role: 'engineer', parent: 'ARCH-1', ...item },
+    ...notes.map(text => ({ type: 'note.added', id: 'ENG-1', text })),
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', report_path: '/scratch/report.md' },
+    ...lessons,
+  ]);
+  return render.renderBrief(state.fold(events), 'R-1', { config: DEFAULT_CONFIG, cli: 'record' });
+}
+const activeBrief = (id, extra) => [briefProposal(id, extra), { type: 'lesson.activated', id }];
+
+test('run brief omits Lessons when no active lesson matches, including retired and superseded claims', () => {
+  assert.doesNotMatch(lessonBrief([]), /## Lessons/);
+  const text = lessonBrief([
+    ...activeBrief('L-1', { paths: ['acceptance'] }), briefProposal('L-2'),
+    ...activeBrief('L-3'), { type: 'lesson.retired', id: 'L-3', reason: 'Obsolete' },
+    ...activeBrief('L-4'), { type: 'lesson.superseded', id: 'L-4', by_lesson: 'L-1', reason: 'Corrected' },
+  ]);
+  assert.doesNotMatch(text, /## Lessons|Claim L-/);
+});
+
+test('run brief selects broad, literal path/module and item/ancestor evidence matches deterministically', () => {
+  const lessons = [
+    ...activeBrief('L-1'),
+    ...activeBrief('L-2', { paths: ['lib'] }),
+    ...activeBrief('L-3', { modules: ['record'], scope: 'framework' }),
+    ...activeBrief('L-4', { paths: ['elsewhere'], evidence: [{ kind: 'item', id: 'ARCH-1' }] }),
+    ...activeBrief('L-5', { paths: ['elsewhere'], evidence: [{ kind: 'run', id: 'R-1' }] }),
+    ...activeBrief('L-6', { paths: ['acceptance'] }),
+    ...activeBrief('L-7', { modules: ['Record'] }),
+    ...activeBrief('L-8', { paths: ['elsewhere'], evidence: [{ kind: 'item', id: 'ENG-1' }] }),
+  ];
+  const item = { title: 'Change `./lib/state.mjs` and the record CLI' };
+  const text = lessonBrief(lessons, item);
+  assert.match(text, /## Lessons\n/);
+  assert.deepEqual([...text.matchAll(/^L-(\d+) \[/gm)].map(m => Number(m[1])), [2, 3, 4, 5, 8]);
+  assert.match(text, /1 more/);
+  assert.match(text, /Evidence: ARCH-1/);
+  assert.doesNotMatch(text, /Claim L-6|Claim L-7/);
+  assert.equal(text, lessonBrief(lessons, item));
+});
+
+test('run brief matches acceptance, reason and recorded ask notes but respects selector boundaries', () => {
+  const lessons = [
+    ...activeBrief('L-1', { paths: ['lib'] }), ...activeBrief('L-2', { modules: ['record'] }),
+    ...activeBrief('L-3', { paths: ['supervisor'] }), ...activeBrief('L-4', { paths: ['test'] }),
+  ];
+  const text = lessonBrief(lessons, { title: 'library and recording', why: 'Edit supervisor/context.mjs',
+    accept: ['Exercise test/lessons.test.mjs'] }, ['Ask: update record output.']);
+  assert.deepEqual([...text.matchAll(/^L-(\d+) \[/gm)].map(m => Number(m[1])), [2, 3, 4]);
+  assert.doesNotMatch(lessonBrief(lessons, { title: '/lib/state.mjs ../lib/state.mjs record_extra Record' }), /## Lessons/);
+  assert.match(lessonBrief([activeBrief('L-1', { modules: ['record'] })].flat(), { title: 'Update record.' }), /## Lessons/);
+  assert.match(lessonBrief([activeBrief('L-1', { paths: ['lib/state.mjs'] })].flat(), { title: 'Update lib/state.mjs.' }), /## Lessons/);
+});
+
+test('run brief bounds five claims and metadata and points to the remaining lessons', () => {
+  const lessons = Array.from({ length: 7 }, (_, i) => activeBrief(`L-${i + 1}`, {
+    text: '😀'.repeat(400), modules: i === 6 ? ['record'] : [],
+    evidence: Array.from({ length: 100 }, () => ({ kind: 'item', id: 'ENG-99' })),
+  })).flat();
+  const text = lessonBrief(lessons, { title: 'Change record' });
+  const section = text.split('## Lessons\n')[1]?.split('\n## ')[0] ?? '';
+  assert.equal(section.match(/^L-\d+ \[/gm)?.length, 5);
+  assert.match(section, /2 more.*record lessons --json/);
+  assert.ok(section.indexOf('L-7 ') < section.indexOf('L-1 '));
+  assert.ok(section.includes('😀'.repeat(400)));
+  assert.ok(section.length < 6000);
+});
+
+test('record start writes lessons into the saved brief for arbitrary harness metadata', t => {
+  const f = fixture(t);
+  activate(f, add(f, 'Every worker receives this lesson'));
+  f.ok(['start', 'ENG-1', '--harness=opaque-harness', '--model=opaque-model'], agent);
+  const saved = fs.readFileSync(`${f.dir}/runs/R-2/brief.md`, 'utf8');
+  assert.match(saved, /## Lessons[\s\S]*Every worker receives this lesson/);
+  assert.equal(f.ok(['brief', 'R-2']), saved);
+});
 
 test('lesson fold retains facts and derives proposal, activation, retirement and supersession', () => {
   const events = stamp([proposal('L-1'), { type: 'lesson.activated', id: 'L-1' },

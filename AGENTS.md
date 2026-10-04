@@ -39,6 +39,7 @@ Contract:
   the record inconsistent (unknown ids, cycles, a second different report for one run).
 - Status is derived from events. Do not add stored status.
 - Older folds must ignore event types they do not know.
+- `record lessons [--path P]` lists what earlier sessions learned.
 
 ## `lanes/`
 

@@ -13,6 +13,51 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 process.env.ORG_ACTOR = 'supervisor-test-reader';
 const invoke = (f, args, cwd = f.repo) => f.exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), ...args], cwd, { ORG_DIR: f.org });
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
+test('cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only', t => {
+  const f = fixture(t), run = f.start(), item = f.show(run).item;
+  const add = (text, extra = []) => f.record(['lesson', 'add', text, '--evidence', item, ...extra]);
+  for (let i = 1; i <= 7; i++) {
+    const id = add(`Active lesson ${i}`, ['--path', 'test']);
+    f.record(['lesson', 'activate', id]);
+  }
+  add('Awaiting activation'); add('Another proposal');
+  const retired = add('Retired claim'); f.record(['lesson', 'activate', retired]);
+  f.record(['lesson', 'retire', retired, '--reason', 'Outdated']);
+  const old = add('Superseded claim'); f.record(['lesson', 'activate', old]);
+  const replacement = add('Replacement claim', ['--scope', 'framework']);
+  f.record(['lesson', 'activate', replacement, '--supersedes', old]);
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  assert.equal(doc.lessons.active.length, 8);
+  assert.equal(doc.lessons.proposed, 2);
+  const section = renderColdStart(doc).split('Lessons (8):\n')[1]?.split('\nOperator priorities')[0] ?? '';
+  assert.equal(section.match(/^  L-\d+ /gm)?.length, 6);
+  assert.match(section, /\+2 more.*brief --json/);
+  assert.match(section, /2 proposed lessons awaiting activation/);
+  assert.doesNotMatch(section, /Awaiting activation|Another proposal|Retired claim|Superseded claim/);
+  assert.match(JSON.stringify(doc.lessons), /Replacement claim/);
+  assert.equal(renderColdStart(doc, { limit: 2 }).match(/^  L-\d+ /gm)?.length, 2);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  assert.equal(f.calls().length, 0);
+});
+
+test('cold start Lessons handles empty records and terminal controls in claims', t => {
+  const f = fixture(t);
+  let doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  assert.deepEqual(doc.lessons, { active: [], proposed: 0 });
+  assert.match(renderColdStart(doc), /Lessons \(0\):\n  none\n  0 proposed lessons awaiting activation/);
+  const run = f.start(), item = f.show(run).item;
+  const id = f.record(['lesson', 'add', '\x1b[31mSafe claim\x1b[0m', '--evidence', item]);
+  f.record(['lesson', 'activate', id]);
+  doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  assert.match(renderColdStart(doc), /Safe claim/);
+  assert.doesNotMatch(renderColdStart(doc), /\x1b/);
+  const unicode = f.record(['lesson', 'add', '😀'.repeat(400), '--evidence', item]);
+  f.record(['lesson', 'activate', unicode]);
+  doc = coldStart({ cwd: f.repo, org: f.org, env: f.env });
+  assert.ok(renderColdStart(doc).includes('😀'.repeat(400)), 'keep valid Unicode claims in full');
+});
+
 test('cold start surfaces host pressure and memory/CPU process evidence without changing record status', t => {
   const f = fixture(t), before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
   const row = { pid: 321, ppid: 123, rss_bytes: 1024 ** 3, cpu_percent: 99, command: 'node' };

@@ -176,18 +176,18 @@ export function createDetailReader({ fsApi = fs } = {}) {
     else if (descriptor.stage === 'candidate') {
       const candidate = status?.candidates?.find(c => c.id === (descriptor.candidate ?? selected?.open.candidate) && c.identity === project.repoKey);
       sections = [section('gate', 'Candidate gate', candidate ? [
-        `${candidate.id} · ${candidate.tag} · ${candidate.commit}`,
-        `Result: ${candidate.gate?.result ?? 'not recorded'} · ${candidate.status ?? 'unknown'}`,
+        `${candidate.id} \u00b7 ${candidate.tag} \u00b7 ${candidate.commit}`,
+        `Result: ${candidate.gate?.result ?? 'not recorded'} \u00b7 ${candidate.status ?? 'unknown'}`,
         candidate.gate?.detail ?? '', `Command: ${JSON.stringify(candidate.gate?.command ?? candidate.gate_command)}`,
       ].join('\n\n') : 'This landed commit is not in a recorded release candidate.'),
-      section('log', 'Gate output · tail', read(candidate?.gate?.log, { tail: true }) ?? 'Gate log not recorded.', { log: true }),
+      section('log', 'Gate output \u00b7 tail', read(candidate?.gate?.log, { tail: true }) ?? 'Gate log not recorded.', { log: true }),
       section('receipt', 'Candidate receipt', candidate ? JSON.stringify(candidate, null, 2) : 'No candidate recorded.', { code: true })];
     } else {
       const promotion = train.results?.find(r => r.run === descriptor.run);
       sections = [section('promotion', 'Promotion receipt', promotion ? JSON.stringify(promotion, null, 2) : 'No promotion recorded.', { code: true }),
         section('settlement', 'Settlement', saved?.result?.reason ?? 'No settlement recorded.')];
     }
-    return { title: `${selected?.label ?? descriptor.stage} · ${descriptor.run}`, sections: pipelineEvidence(selected, sections, facts.now) };
+    return { title: `${selected?.label ?? descriptor.stage} \u00b7 ${descriptor.run}`, sections: pipelineEvidence(selected, sections, facts.now) };
   }
   function trainDocument(descriptor, { project, train = {}, journal = [], now = Date.now() }) {
     const result = descriptor.kind === 'result' ? train.results?.find(r => r.id === descriptor.job) : null;
@@ -219,7 +219,7 @@ export function createDetailReader({ fsApi = fs } = {}) {
     ].filter(Boolean).join('\n'), { code: true, clock: { started: gate?.started_at ?? current?.checkStarted, duration: gate?.duration_s, finished: gate?.finished_at, complete, stopped },
       entries: jobs.map(j => entry(`lane:${j.id ?? j.topic}`, `${j.topic}${j.run ? ` · ${j.run}` : ''}`, j.run ? { kind: 'run', run: j.run } : { kind: 'lane', topic: j.topic, job: j.id, batch: batchId })) })];
     if (logs.length) sections.push(section('live-log', 'Live log · latest', read(logs[0], { tail: true })?.trimEnd().split('\n').slice(-8).join('\n') ?? 'Log unavailable.', { log: true }));
-    for (const [i, file] of logs.entries()) sections.push(section(`log:${i}`, file === checkLog ? 'Check log · tail' : 'Train log · tail',
+    for (const [i, file] of logs.entries()) sections.push(section(`log:${i}`, file === checkLog ? 'Check log \u00b7 tail' : 'Train log \u00b7 tail',
       read(file, { tail: true }) ?? 'Log unavailable.', { log: true }));
     if (!logs.length) sections.push(section('log', 'Log', 'No log recorded.'));
     const rawReceipt = read(receipt);
@@ -234,21 +234,21 @@ export function createDetailReader({ fsApi = fs } = {}) {
         // failure's messages can be earlier than the bounded latest tail.
         for (const [i, a] of (batch?.attempts ?? []).entries()) if (a.gate) {
           const file = a === attempt ? checkLog : a.gate.log, output = read(file, { tail: true });
-          evidenceSections.push(section(`check:${i}`, `Check ${i + 1} · ${a.gate.command ?? 'unknown'}`, [
-            `Exit: ${a.gate.exit_code ?? 'not recorded'} · ${a.phase} · ${detailDuration(a.gate.duration_s)}`,
+          evidenceSections.push(section(`check:${i}`, `Check ${i + 1} \u00b7 ${a.gate.command ?? 'unknown'}`, [
+            `Exit: ${a.gate.exit_code ?? 'not recorded'} \u00b7 ${a.phase} \u00b7 ${detailDuration(a.gate.duration_s)}`,
             a.error ?? a.gate.error ?? '',
           ].filter(Boolean).join('\n'), { code: true }));
           if (a.gate.exit_code != null && a.gate.exit_code !== 0) evidenceSections.push(section(`failures:${i}`, 'Failing tests and messages',
             failureOutput(file) ?? 'Failure output unavailable.', { log: true }));
-          evidenceSections.push(section(`output:${i}`, 'Check output · tail', output ?? 'Check output not yet recorded.', { log: true }));
+          evidenceSections.push(section(`output:${i}`, 'Check output \u00b7 tail', output ?? 'Check output not yet recorded.', { log: true }));
         }
-        if (!evidenceSections.length) evidenceSections.push(section('output', 'Check output · tail', read(checkLog ?? logs[0], { tail: true }) ?? 'No check output recorded.', { log: true }));
+        if (!evidenceSections.length) evidenceSections.push(section('output', 'Check output \u00b7 tail', read(checkLog ?? logs[0], { tail: true }) ?? 'No check output recorded.', { log: true }));
       } else if (descriptor.stage === 'notify') evidenceSections.push(section('notices', 'Notice delivery', notices.filter(n => deliveredResults.some(r => r.delivery_id === n.id))
-        .map(n => `${n.at} · ${n.delivery}\n${n.message}`).join('\n\n') || 'No notice delivery recorded.', { code: true }));
+        .map(n => `${n.at} \u00b7 ${n.delivery}\n${n.message}`).join('\n\n') || 'No notice delivery recorded.', { code: true }));
       else if (descriptor.stage === 'queued') evidenceSections.push(section('jobs', 'Queued lanes', JSON.stringify(jobs, null, 2), { code: true }));
       else evidenceSections.push(...sections.filter(s => ['batch', 'log:0'].includes(s.id)));
       evidenceSections.push(sections.find(s => s.id === 'receipt'));
-      return { title: `${selected?.label ?? descriptor.stage} · ${batchId}`, sections: pipelineEvidence(selected, evidenceSections, now) };
+      return { title: `${selected?.label ?? descriptor.stage} \u00b7 ${batchId}`, sections: pipelineEvidence(selected, evidenceSections, now) };
     }
     return { title: `${descriptor.kind === 'result' ? 'Train result' : 'Train'} · ${result?.topic ?? batchId ?? 'unavailable'}`, sections };
   }
@@ -257,7 +257,7 @@ export function createDetailReader({ fsApi = fs } = {}) {
     if (!raw) return null;
     const lines = text(raw).split('\n'), output = [];
     for (let i = 0; i < lines.length; i++) {
-      if (!/^\s*(?:not ok\b|FAIL\b|✖|×|(?:error|Error|AssertionError):)/.test(lines[i])) continue;
+      if (!/^\s*(?:not ok\b|FAIL\b|\u2716|\u00d7|(?:error|Error|AssertionError):)/.test(lines[i])) continue;
       const start = i;
       // TAP diagnostic YAML retains expected/actual, stack and test messages.
       while (i + 1 < lines.length && !/^\s*(?:ok\b|not ok\b|# Subtest:)/.test(lines[i + 1])) {

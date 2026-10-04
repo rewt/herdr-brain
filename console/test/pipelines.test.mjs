@@ -101,8 +101,8 @@ const settlements = new Map([
 test('multi-round lifecycle follows explicit correction receipts in either direction and excludes unrelated runs', () => {
   assert.deepEqual(lifecycleRuns(runs[1], runs, settlements).map(r => r.id), ['R-1', 'R-2', 'R-3']);
   const links = runPipeline({ run: runs[1], runs, settlements });
-  assert.deepEqual(links.map(l => l.label), ['Dispatch', 'Engineering', 'Report', 'Review', 'Fix 1 · R-2', 'Report · R-2', 'Review 2',
-    'Fix 2 · R-3', 'Report · R-3', 'Review 3', 'Train', 'Landed', 'Release candidate']);
+  assert.deepEqual(links.map(l => l.label), ['Dispatch', 'Engineering', 'Report', 'Review', 'Fix 1 \u00b7 R-2', 'Report \u00b7 R-2', 'Review 2',
+    'Fix 2 \u00b7 R-3', 'Report \u00b7 R-3', 'Review 3', 'Train', 'Landed', 'Release candidate']);
   assert.equal(links.find(l => l.id === 'run:R-1:review').status, 'failed');
   assert.equal(links.find(l => l.id === 'run:R-2:review').status, 'failed');
   assert.equal(pipelineDuration(links.find(l => l.id === 'run:R-2:review'), now), '20s');

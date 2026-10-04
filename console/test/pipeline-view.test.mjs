@@ -14,7 +14,7 @@ test('every batch link opens its evidence by Enter or click, with nested Back an
   const f = pipelineFixture(t), session = createMinimalSession({ config: f.config, deps: { ...f.deps,
     controlTerminal() { assert.fail('Pipeline navigation must be read-only'); } }, env: { NO_COLOR: '1' } });
   t.after(() => session.stop()); await session.refresh(); session.frame(116, 40); await session.activate('train:current');
-  assert.match(output(session), /✓ Queued.*→.*✓ Rebase.*→.*● CI.*→.*○ Fast-forward/);
+  assert.match(output(session), /\u2713 Queued.*\u2192.*\u2713 Rebase.*\u2192.*\u25cf CI.*\u2192.*\u25cb Fast-forward/);
   assert.equal(session.ui.detailFocus, 'batch:queued');
   for (const stage of ['queued', 'rebase', 'ci', 'fast-forward', 'close', 'notify']) {
     const before = output(session), frame = session.frame(116, 40);
@@ -42,7 +42,7 @@ test('active run pipelines are available through p and a stage click, without ta
     controlTerminal() { assert.fail('Opening the stage must not open an agent'); } }, env: { NO_COLOR: '1' } });
   t.after(() => session.stop()); await session.refresh(); session.frame(100, 40);
   assert.equal(session.ui.focus, 'run:R-1'); await session.key('p');
-  assert.equal(session.ui.detail.run, 'R-1'); assert.match(output(session), /● Engineering/);
+  assert.equal(session.ui.detail.run, 'R-1'); assert.match(output(session), /\u25cf Engineering/);
   session.frame(116, 40); await session.activate('run:R-1:engineering');
   assert.equal(session.ui.detail.kind, 'run-link'); assert.match(output(session), /Brief/);
   await session.activate('back'); session.frame(100, 40); await session.activate('back');
@@ -56,8 +56,8 @@ test('active run pipelines are available through p and a stage click, without ta
 test('chains use horizontal bands on wide panes and vertical links on narrow panes, with reachable repeated fixes', async t => {
   const f = pipelineFixture(t, 'multi'), session = createMinimalSession({ config: f.config, deps: f.deps, env: { NO_COLOR: '1' } });
   t.after(() => session.stop()); await session.refresh(); session.frame(116, 40); await session.activate('run:R-2');
-  const wide = output(session); assert.match(wide, /→/); assert.match(wide, /Fix 1 · R-3/); assert.match(wide, /Fix 2 · R-4/);
-  const narrow = output(session, 60, 40); assert.doesNotMatch(narrow.split('\n').slice(0, -1).join('\n'), /→/); assert.match(narrow, /│/);
+  const wide = output(session); assert.match(wide, /\u2192/); assert.match(wide, /Fix 1 \u00b7 R-3/); assert.match(wide, /Fix 2 \u00b7 R-4/);
+  const narrow = output(session, 60, 40); assert.doesNotMatch(narrow.split('\n').slice(0, -1).join('\n'), /\u2192/); assert.match(narrow, /\u2502/);
   for (const cols of [20, 40, 60, 100, 116, 140]) for (const rows of [8, 18, 40]) {
     const frame = session.frame(cols, rows);
     assert.equal(frame.lines.length, rows); assert.ok(frame.lines.every(l => tableCellWidth(lineText(l)) === cols));
@@ -90,7 +90,7 @@ test('running CI tails only the temporary log explicitly owned by this batch, th
   f.queue.current = null; f.queue.interrupted = [{ id: f.batch.id, jobs: f.batch.jobs }];
   f.queue.results.push({ id: 'job-1', batch: f.batch.id, outcome: 'interrupted' });
   fs.writeFileSync(f.queueFile, JSON.stringify(f.queue)); await session.refresh(); clock += 5000;
-  assert.match(output(session), /× failed/); assert.match(output(session), /Elapsed: unknown/);
+  assert.match(output(session), /\u00d7 failed/); assert.match(output(session), /Elapsed: unknown/);
 });
 
 test('real --print snapshots cover running, red, refused, interrupted and repeated-fix chains at two widths', t => {
@@ -112,9 +112,9 @@ test('real --print snapshots cover running, red, refused, interrupted and repeat
     const result = spawnSync(process.execPath, ['--import', clock, 'console/app.mjs', '--config', config, '--project', 'Workshop', '--print', `${cols}x${rows}`, '--select', select, '--keys', keys],
       { encoding: 'utf8', env: { ...process.env, HERDR_BIN_PATH: herdr, HERDR_ORG_BIN: record, ORG_FLEET_DIR: path.join(f.root, 'no-fleet'), TZ: 'UTC', NO_COLOR: '1' } });
     assert.equal(result.status, 0, result.stderr); assert.match(result.stdout, /Train batch|Run lifecycle/);
-    if (state === 'failed' || state === 'interrupted') assert.match(result.stdout, /× CI/);
-    if (state === 'refused') assert.match(result.stdout, /× Fast-forward/);
-    if (state === 'multi') assert.match(result.stdout, /Fix 2 · R-4/);
+    if (state === 'failed' || state === 'interrupted') assert.match(result.stdout, /\u00d7 CI/);
+    if (state === 'refused') assert.match(result.stdout, /\u00d7 Fast-forward/);
+    if (state === 'multi') assert.match(result.stdout, /Fix 2 \u00b7 R-4/);
     const fixture = new URL(`./fixtures/pipeline-${state}-${cols}x${rows}.txt`, import.meta.url);
     if (process.env.UPDATE_CONSOLE_SNAPSHOTS === '1') fs.writeFileSync(fixture, result.stdout);
     assert.equal(result.stdout, fs.readFileSync(fixture, 'utf8'));

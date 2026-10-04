@@ -42,7 +42,7 @@ test('release candidate links open the exact candidate gate and foreign dispatch
   for (const descriptor of [candidate.open, pending]) {
     const opened = reader.document(descriptor, facts(f));
     const content = opened.sections.map(s => s.content).join('\n');
-    assert.match(content, /RC-1 · candidate-1/); assert.match(content, /release suite failed/);
+    assert.match(content, /RC-1 \u00b7 candidate-1/); assert.match(content, /release suite failed/);
   }
   const request = path.join(f.root, 'dispatch.json');
   f.status.runs[1].meta.dispatch_journal = request;

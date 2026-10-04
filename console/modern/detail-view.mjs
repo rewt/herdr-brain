@@ -13,8 +13,8 @@ function chainLines(links, inner, now) {
   const lines = [];
   if (inner < 86) {
     for (const [i, link] of links.entries()) {
-      if (i) lines.push({ text: '│', dim: true });
-      const value = `${PIPELINE_MARKS[link.status]} ${link.label} · ${link.status} · ${pipelineDuration(link, now)}`;
+      if (i) lines.push({ text: '\u2502', dim: true });
+      const value = `${PIPELINE_MARKS[link.status]} ${link.label} \u00b7 ${link.status} \u00b7 ${pipelineDuration(link, now)}`;
       for (const text of wrap(value, inner)) lines.push({ ...link, text, link: true, section: 'pipeline', color: colors[link.status] });
     }
   } else {
@@ -25,7 +25,7 @@ function chainLines(links, inner, now) {
         used += sizes[end] + (end > offset ? 3 : 0); end++;
       }
       if (end === offset) end++;
-      if (offset) lines.push({ text: '↓', dim: true });
+      if (offset) lines.push({ text: '\u2193', dim: true });
       for (let row = 0; row < 3; row++) {
         const cells = []; let x = 0;
         for (let i = offset; i < end; i++) {
@@ -37,7 +37,7 @@ function chainLines(links, inner, now) {
             color: colors[link.status] });
           x += size;
         }
-        lines.push({ cells, connector: row === 0 ? ' → ' : '   ', text: cells.map(c => c.text).join(row === 0 ? ' → ' : '   ') });
+        lines.push({ cells, connector: row === 0 ? ' \u2192 ' : '   ', text: cells.map(c => c.text).join(row === 0 ? ' \u2192 ' : '   ') });
       }
       offset = end;
     }
@@ -63,7 +63,7 @@ export function detailLayout(document, cols, rows, now = Date.now()) {
     if (section.clock) {
       const c = section.clock, start = Date.parse(c.started), end = c.complete || c.stopped ? Date.parse(c.finished) : now;
       const duration = Number.isFinite(c.duration) && c.duration >= 0 ? c.duration : Number.isFinite(start) && Number.isFinite(end) && end >= start ? (end - start) / 1000 : null;
-      source = source.replace(/^Elapsed:.*$/m, `Elapsed: ${section.id === 'link' ? pipelineDuration({ status: c.complete ? 'done' : 'running', duration_s: duration }, now) : detailDuration(duration)}${c.complete && section.id !== 'link' ? ' · finished' : ''}`);
+      source = source.replace(/^Elapsed:.*$/m, `Elapsed: ${section.id === 'link' ? pipelineDuration({ status: c.complete ? 'done' : 'running', duration_s: duration }, now) : detailDuration(duration)}${c.complete && section.id !== 'link' ? ' \u00b7 finished' : ''}`);
     }
     const content = section.log || section.code ? source.trimEnd().split('\n').flatMap(line => {
       const indent = ' '.repeat(Math.min(inner - 1, /^ */.exec(line)[0].length));
@@ -100,9 +100,9 @@ export function detailTree(document, state, cols, rows, { noColor = false, now }
     h(Panel, { width, title: document.title }, ...visible.map((line, i) => h(Spans, { key: i, width: Math.max(0, width - 2), noColor,
       selected: line.id && line.id === state.detailFocus, dim: line.dim,
       spans: line.cells ? [{ text: '  ' }, ...line.cells.flatMap((cell, j) => [
-        ...(j ? [{ text: line.connector, dim: true }] : []), { text: (cell.id === state.detailFocus && cell.labelRow ? '›' : ' ') + cell.text.slice(1), color: cell.color, underline: true, bold: cell.id === state.detailFocus,
+        ...(j ? [{ text: line.connector, dim: true }] : []), { text: (cell.id === state.detailFocus && cell.labelRow ? '\u203a' : ' ') + cell.text.slice(1), color: cell.color, underline: true, bold: cell.id === state.detailFocus,
           inverse: cell.id === state.detailFocus },
-      ])] : [{ text: line.id === state.detailFocus ? '› ' : '  ' }, { text: line.text, color: line.color, bold: line.bold, underline: Boolean(line.open) }] }))),
-    h(Spans, { width, dim: true, spans: [{ text: `↑↓ scroll/links · ←→ links · Tab · Enter · ${scroll + 1}–${Math.min(lines.length, scroll + capacity)}/${lines.length}` }] }));
+      ])] : [{ text: line.id === state.detailFocus ? '\u203a ' : '  ' }, { text: line.text, color: line.color, bold: line.bold, underline: Boolean(line.open) }] }))),
+    h(Spans, { width, dim: true, spans: [{ text: `\u2191\u2193 scroll/links \u00b7 \u2190\u2192 links \u00b7 Tab \u00b7 Enter \u00b7 ${scroll + 1}\u2013${Math.min(lines.length, scroll + capacity)}/${lines.length}` }] }));
   return { tree, ...layout, scroll, hits, controls };
 }

@@ -1,0 +1,1634 @@
+TAP version 13
+# Subtest: every Herdr agent is a row in its repository group, with all six columns filled or unknown
+ok 1 - every Herdr agent is a row in its repository group, with all six columns filled or unknown
+  ---
+  duration_ms: 8.32825
+  ...
+# Subtest: an org run whose agent is gone stays one hour, and Herdr being down shows unknown, never gone
+ok 2 - an org run whose agent is gone stays one hour, and Herdr being down shows unknown, never gone
+  ---
+  duration_ms: 1.5835
+  ...
+# Subtest: SESSION and DOING never show codes
+ok 3 - SESSION and DOING never show codes
+  ---
+  duration_ms: 0.76625
+  ...
+# Subtest: groups follow their most urgent session, then name; worktrees join their main repository
+ok 4 - groups follow their most urgent session, then name; worktrees join their main repository
+  ---
+  duration_ms: 0.674208
+  ...
+# Subtest: refreshes keep groups and rows in place; a scope narrows what is shown
+ok 5 - refreshes keep groups and rows in place; a scope narrows what is shown
+  ---
+  duration_ms: 1.01325
+  ...
+# Subtest: the Context of a session names where everything is
+ok 6 - the Context of a session names where everything is
+  ---
+  duration_ms: 0.217542
+  ...
+# Subtest: an idle agent whose org run already finished is named after that run, and a finished run never adds a row
+ok 7 - an idle agent whose org run already finished is named after that run, and a finished run never adds a row
+  ---
+  duration_ms: 0.243209
+  ...
+# Subtest: an unregistered lane session is named from its worktree instead of a raw Herdr name
+ok 8 - an unregistered lane session is named from its worktree instead of a raw Herdr name
+  ---
+  duration_ms: 0.137292
+  ...
+# Subtest: a lane review session is named from the lane session registry
+ok 9 - a lane review session is named from the lane session registry
+  ---
+  duration_ms: 0.239208
+  ...
+# Subtest: choosing a repository narrows Waiting on you to what its sessions left, with org questions on the project checkout
+ok 10 - choosing a repository narrows Waiting on you to what its sessions left, with org questions on the project checkout
+  ---
+  duration_ms: 0.709166
+  ...
+# Subtest: a reply the operator typed but never sent outranks every other kind
+ok 11 - a reply the operator typed but never sent outranks every other kind
+  ---
+  duration_ms: 1.209667
+  ...
+# Subtest: a result with no digest still lands, categorized by the session state
+ok 12 - a result with no digest still lands, categorized by the session state
+  ---
+  duration_ms: 0.084625
+  ...
+# Subtest: the recommendation names the option the operator would press
+ok 13 - the recommendation names the option the operator would press
+  ---
+  duration_ms: 0.103416
+  ...
+# Subtest: a row never says "your reply" without saying which reply
+ok 14 - a row never says "your reply" without saying which reply
+  ---
+  duration_ms: 0.073625
+  ...
+# Subtest: a long reply is cut, and only its first line is used
+ok 15 - a long reply is cut, and only its first line is used
+  ---
+  duration_ms: 0.132042
+  ...
+# Subtest: results come before org questions, and org rows are untouched
+ok 16 - results come before org questions, and org rows are untouched
+  ---
+  duration_ms: 1.632125
+  ...
+# Subtest: a result title preserves run codes, commit hashes and possessive codes
+ok 17 - a result title preserves run codes, commit hashes and possessive codes
+  ---
+  duration_ms: 0.353917
+  ...
+# Subtest: no brain configured leaves the board exactly as it was
+ok 18 - no brain configured leaves the board exactly as it was
+  ---
+  duration_ms: 0.273416
+  ...
+# Subtest: Waiting on you shows this project plus unmatched results and counts configured projects waiting elsewhere
+ok 19 - Waiting on you shows this project plus unmatched results and counts configured projects waiting elsewhere
+  ---
+  duration_ms: 2.732042
+  ...
+# Subtest: the queue child uses the exact configuration file loaded by the console
+ok 20 - the queue child uses the exact configuration file loaded by the console
+  ---
+  duration_ms: 26.004042
+  ...
+# Subtest: an overflowing priority confirmation supports keyboard review at 80x20 without saving
+ok 21 - an overflowing priority confirmation supports keyboard review at 80x20 without saving
+  ---
+  duration_ms: 910.123375
+  ...
+# Subtest: Priorities invites the operator, groups work, reviews CLI ranks and retains stale or cancelled drafts
+ok 22 - Priorities invites the operator, groups work, reviews CLI ranks and retains stale or cancelled drafts
+  ---
+  duration_ms: 1540.192375
+  ...
+# Subtest: Priorities --print confirmation remains read only for both additions and ranks
+ok 23 - Priorities --print confirmation remains read only for both additions and ranks
+  ---
+  duration_ms: 880.792583
+  ...
+# Subtest: a project with no console config discovers its record, answers and edits routes through the actual CLI
+ok 24 - a project with no console config discovers its record, answers and edits routes through the actual CLI
+  ---
+  duration_ms: 1342.35775
+  ...
+# Subtest: route editor owns typing and clicks, cancels, and refuses a stale review without changing disk
+ok 25 - route editor owns typing and clicks, cancels, and refuses a stale review without changing disk
+  ---
+  duration_ms: 723.319167
+  ...
+# Subtest: CLI overrides preserve inherited routes, policy and project lifecycle fields; reject malformed and redirected writes
+ok 26 - CLI overrides preserve inherited routes, policy and project lifecycle fields; reject malformed and redirected writes
+  ---
+  duration_ms: 783.473625
+  ...
+# Subtest: route CLI uses the canonical Git project, ignores launch override paths, and passes model text without shell interpretation
+ok 27 - route CLI uses the canonical Git project, ignores launch override paths, and passes model text without shell interpretation
+  ---
+  duration_ms: 411.843791
+  ...
+# Subtest: decisions include older notes and automatic answers, retain provenance, and never mine narrative
+ok 28 - decisions include older notes and automatic answers, retain provenance, and never mine narrative
+  ---
+  duration_ms: 0.16125
+  ...
+# Subtest: --print stays read only even when keys confirm an answer or a route change
+ok 29 - --print stays read only even when keys confirm an answer or a route change
+  ---
+  duration_ms: 1024.195584
+  ...
+# Subtest: structured ingested report fields appear in Decided and Asked without inventing waiting questions
+ok 30 - structured ingested report fields appear in Decided and Asked without inventing waiting questions
+  ---
+  duration_ms: 578.652125
+  ...
+# Subtest: an org-only selection launched in another repository cannot read or edit that repository routes
+ok 31 - an org-only selection launched in another repository cannot read or edit that repository routes
+  ---
+  duration_ms: 372.545959
+  ...
+# Subtest: route editor sends partial CLI patches and retains absent harness model and effort defaults
+ok 32 - route editor sends partial CLI patches and retains absent harness model and effort defaults
+  ---
+  duration_ms: 1313.453667
+  ...
+# Subtest: real answer, overrule and reopen retain each decision note with its original provenance
+ok 33 - real answer, overrule and reopen retain each decision note with its original provenance
+  ---
+  duration_ms: 1679.385875
+  ...
+# Subtest: legacy answer summaries remain available without hiding unrelated earlier answer notes
+ok 34 - legacy answer summaries remain available without hiding unrelated earlier answer notes
+  ---
+  duration_ms: 0.143084
+  ...
+# Subtest: partial route CLI edits preserve dispatch inheritance rather than pinning defaults
+ok 35 - partial route CLI edits preserve dispatch inheritance rather than pinning defaults
+  ---
+  duration_ms: 586.450083
+  ...
+# Subtest: unchanged configured route saves do not write or pin an omitted kind
+ok 36 - unchanged configured route saves do not write or pin an omitted kind
+  ---
+  duration_ms: 656.394125
+  ...
+# Subtest: unchanged ancestor-only routes are never copied into project config
+ok 37 - unchanged ancestor-only routes are never copied into project config
+  ---
+  duration_ms: 816.341792
+  ...
+# Subtest: unchanged suggested presets are explicitly adopted once, then configured saves write nothing
+ok 38 - unchanged suggested presets are explicitly adopted once, then configured saves write nothing
+  ---
+  duration_ms: 754.465292
+  ...
+# Subtest: console route display, editor and review use launch resolution for legacy route and dispatch arguments
+ok 39 - console route display, editor and review use launch resolution for legacy route and dispatch arguments
+  ---
+  duration_ms: 5177.863458
+  ...
+# Subtest: the controller streams frames and sends input, resize, scroll and release as Herdr commands
+ok 40 - the controller streams frames and sends input, resize, scroll and release as Herdr commands
+  ---
+  duration_ms: 3.993916
+  ...
+# Subtest: the controller refuses non-pane targets and reports a closed terminal once
+ok 41 - the controller refuses non-pane targets and reports a closed terminal once
+  ---
+  duration_ms: 0.729583
+  ...
+# Subtest: typed input goes to the session except mouse reports and everything from Ctrl+] on
+ok 42 - typed input goes to the session except mouse reports and everything from Ctrl+] on
+  ---
+  duration_ms: 0.216708
+  ...
+# Subtest: the decoder follows cursor visibility
+ok 43 - the decoder follows cursor visibility
+  ---
+  duration_ms: 0.335209
+  ...
+# Subtest: Enter on a session peeks at it without leaving; g goes there; on a question it opens the summary
+ok 44 - Enter on a session peeks at it without leaving; g goes there; on a question it opens the summary
+  ---
+  duration_ms: 1.394708
+  ...
+# Subtest: s opens the summary; inside it 1-3 switch tabs, keys scroll, Enter goes, Esc closes
+ok 45 - s opens the summary; inside it 1-3 switch tabs, keys scroll, Enter goes, Esc closes
+  ---
+  duration_ms: 0.554041
+  ...
+# Subtest: approving from the summary or the list needs Enter to confirm, and Esc cancels
+ok 46 - approving from the summary or the list needs Enter to confirm, and Esc cancels
+  ---
+  duration_ms: 0.293542
+  ...
+# Subtest: declining needs a one-line reason, then confirmation; n elsewhere says task launching comes next round
+ok 47 - declining needs a one-line reason, then confirmation; n elsewhere says task launching comes next round
+  ---
+  duration_ms: 0.196875
+  ...
+# Subtest: m and a right click open the row menu; its items depend on the row
+ok 48 - m and a right click open the row menu; its items depend on the row
+  ---
+  duration_ms: 0.452125
+  ...
+# Subtest: a left click on a session row peeks at it; on a question it opens the summary; releases do nothing
+ok 49 - a left click on a session row peeks at it; on a question it opens the summary; releases do nothing
+  ---
+  duration_ms: 0.118458
+  ...
+# Subtest: the wheel scrolls the list, or the open summary
+ok 50 - the wheel scrolls the list, or the open summary
+  ---
+  duration_ms: 0.100583
+  ...
+# Subtest: h swaps in the history; / and the rail choose a scope; ! and w toggle views
+ok 51 - h swaps in the history; / and the rail choose a scope; ! and w toggle views
+  ---
+  duration_ms: 0.418583
+  ...
+# Subtest: picking a repository that is another project's checkout switches the project and keeps the scope
+ok 52 - picking a repository that is another project's checkout switches the project and keeps the scope
+  ---
+  duration_ms: 0.254291
+  ...
+# Subtest: Escape never quits, q quits only from the list or history, and ? shows help
+ok 53 - Escape never quits, q quits only from the list or history, and ? shows help
+  ---
+  duration_ms: 0.567625
+  ...
+# Subtest: desks are inspectable without setup and every confirmed setting lands through record desks
+ok 54 - desks are inspectable without setup and every confirmed setting lands through record desks
+  ---
+  duration_ms: 1235.512042
+  ...
+# Subtest: desks show canonical tracked validation tiers without changing configuration
+ok 55 - desks show canonical tracked validation tiers without changing configuration
+  ---
+  duration_ms: 418.126083
+  ...
+# Subtest: stale, invalid and redirected desk edits preserve bytes; parent settings use whole-object precedence
+ok 56 - stale, invalid and redirected desk edits preserve bytes; parent settings use whole-object precedence
+  ---
+  duration_ms: 2113.275583
+  ...
+# Subtest: route addition, primary pool, task selection and launch settings save via validating CLI
+ok 57 - route addition, primary pool, task selection and launch settings save via validating CLI
+  ---
+  duration_ms: 4318.936292
+  ...
+# Subtest: new route confirmation resolves blank model and effort with dispatch defaults and launch arguments
+ok 58 - new route confirmation resolves blank model and effort with dispatch defaults and launch arguments
+  ---
+  duration_ms: 1710.293875
+  ...
+# Subtest: generic always-arguments confirmation compares the entered kind with its captured arguments before CLI replacement
+ok 59 - generic always-arguments confirmation compares the entered kind with its captured arguments before CLI replacement
+  ---
+  duration_ms: 871.385417
+  ...
+# Subtest: worktrees edit only their canonical project; record-only selections and plain folders cannot save
+ok 60 - worktrees edit only their canonical project; record-only selections and plain folders cannot save
+  ---
+  duration_ms: 420.158417
+  ...
+# Subtest: --print cannot commit new desk or route controls even after review confirmation
+ok 61 - --print cannot commit new desk or route controls even after review confirmation
+  ---
+  duration_ms: 788.196583
+  ...
+# Subtest: introducing a policy retains the implicit review route and long confirmations can be inspected before saving
+ok 62 - introducing a policy retains the implicit review route and long confirmations can be inspected before saving
+  ---
+  duration_ms: 874.166667
+  ...
+# Subtest: landed, blocked and finished run rows open details; Esc and mouse Back restore selection and panel scroll
+ok 63 - landed, blocked and finished run rows open details; Esc and mouse Back restore selection and panel scroll
+  ---
+  duration_ms: 173.061042
+  ...
+# Subtest: Tab changes panels and remembers each row; report opens with its review and nested Back retains detail scroll
+ok 64 - Tab changes panels and remembers each row; report opens with its review and nested Back retains detail scroll
+  ---
+  duration_ms: 104.9945
+  ...
+# Subtest: Shift reverses only Tab; shifted arrows and j/k keep their row direction
+ok 65 - Shift reverses only Tab; shifted arrows and j/k keep their row direction
+  ---
+  duration_ms: 61.0205
+  ...
+# Subtest: live train views work with and without clocks and follow their batch to a refusal without opening an agent
+ok 66 - live train views work with and without clocks and follow their batch to a refusal without opening an agent
+  ---
+  duration_ms: 89.246
+  ...
+# Subtest: detail source errors retain the last good document
+ok 67 - detail source errors retain the last good document
+  ---
+  duration_ms: 47.76525
+  ...
+# Subtest: read-only details fit narrow and wide panes; arrows, wheel and section navigation keep links reachable
+ok 68 - read-only details fit narrow and wide panes; arrows, wheel and section navigation keep links reachable
+  ---
+  duration_ms: 89.433917
+  ...
+# Subtest: a report-only dashboard starts in Reports, and Context is keyboard reachable with safe session Back
+ok 69 - a report-only dashboard starts in Reports, and Context is keyboard reachable with safe session Back
+  ---
+  duration_ms: 35.5275
+  ...
+# Subtest: live train output stays quiet when unchanged and updates its tail in place
+ok 70 - live train output stays quiet when unchanged and updates its tail in place
+  ---
+  duration_ms: 168.830333
+  ...
+# Subtest: the current check clock advances between polls and a finished clock stays fixed
+ok 71 - the current check clock advances between polls and a finished clock stays fixed
+  ---
+  duration_ms: 37.885
+  ...
+# Subtest: the real --print path opens run, report and train details and matches readable snapshots
+ok 72 - the real --print path opens run, report and train details and matches readable snapshots
+  ---
+  duration_ms: 1235.680792
+  ...
+# [?25h
+# Subtest: historical runs retain readable reports, all findings, promotions, decisions and honest stage timings
+ok 73 - historical runs retain readable reports, all findings, promotions, decisions and honest stage timings
+  ---
+  duration_ms: 23.638458
+  ...
+# Subtest: report views include the archived body and review; watcher exceptions explain an absent report
+ok 74 - report views include the archived body and review; watcher exceptions explain an absent report
+  ---
+  duration_ms: 19.436208
+  ...
+# Subtest: details reject foreign settlements and altered report or review bytes
+ok 75 - details reject foreign settlements and altered report or review bytes
+  ---
+  duration_ms: 14.206709
+  ...
+# Subtest: train details read running telemetry and bounded log tails, then retain the same batch after completion
+ok 76 - train details read running telemetry and bounded log tails, then retain the same batch after completion
+  ---
+  duration_ms: 36.089125
+  ...
+# Subtest: notice delivery includes explicit autopilot handling without claiming a sent prompt
+ok 77 - notice delivery includes explicit autopilot handling without claiming a sent prompt
+  ---
+  duration_ms: 0.572875
+  ...
+# Subtest: feed uses record headlines and explicit watch checks, newest first including closed items
+ok 78 - feed uses record headlines and explicit watch checks, newest first including closed items
+  ---
+  duration_ms: 0.997458
+  ...
+# Subtest: watch exceptions are deduplicated, readable after delivery, and superseded by final ingestion
+ok 79 - watch exceptions are deduplicated, readable after delivery, and superseded by final ingestion
+  ---
+  duration_ms: 0.230375
+  ...
+# Subtest: recent feed is bounded but keeps unresolved exceptions and drops superseded attention
+ok 80 - recent feed is bounded but keeps unresolved exceptions and drops superseded attention
+  ---
+  duration_ms: 0.175292
+  ...
+# Subtest: train merges queue and receipts, shows waiting, active CI and interrupted work without invented clocks
+ok 81 - train merges queue and receipts, shows waiting, active CI and interrupted work without invented clocks
+  ---
+  duration_ms: 0.194834
+  ...
+# Subtest: optional read sources are cached, reject wrong identities and malformed lines, ignore only a torn journal tail
+ok 82 - optional read sources are cached, reject wrong identities and malformed lines, ignore only a torn journal tail
+  ---
+  duration_ms: 3.089125
+  ...
+# Subtest: a final resumed receipt wins over an older interrupted queue row, before and after delivery
+ok 83 - a final resumed receipt wins over an older interrupted queue row, before and after delivery
+  ---
+  duration_ms: 0.109541
+  ...
+# Subtest: batch start survives atomic receipt replacement and honours explicit timestamps
+ok 84 - batch start survives atomic receipt replacement and honours explicit timestamps
+  ---
+  duration_ms: 1.694333
+  ...
+# Subtest: train projection carries finished check clocks and durations during delivery
+ok 85 - train projection carries finished check clocks and durations during delivery
+  ---
+  duration_ms: 0.109541
+  ...
+# Subtest: at 140 × 40 the screen has the segment header, Waiting, grouped sessions with six columns, the launch bar and footer
+ok 86 - at 140 × 40 the screen has the segment header, Waiting, grouped sessions with six columns, the launch bar and footer
+  ---
+  duration_ms: 3.907375
+  ...
+# Subtest: at 100 columns WHERE goes; at 80 WHERE and UP go and DOING takes a second line
+ok 87 - at 100 columns WHERE goes; at 80 WHERE and UP go and DOING takes a second line
+  ---
+  duration_ms: 2.130917
+  ...
+# Subtest: the rail appears only at 180 columns, and its choices are clickable
+ok 88 - the rail appears only at 180 columns, and its choices are clickable
+  ---
+  duration_ms: 1.543125
+  ...
+# Subtest: clicks map to the rows under them, including both lines of a narrow row
+ok 89 - clicks map to the rows under them, including both lines of a narrow row
+  ---
+  duration_ms: 1.074125
+  ...
+# Subtest: plain glyphs and NO_COLOR give a readable screen with no character outside ASCII
+ok 90 - plain glyphs and NO_COLOR give a readable screen with no character outside ASCII
+  ---
+  duration_ms: 21.426083
+  ...
+# Subtest: s shows the summary over a dimmed screen; tabs, scrolling and the Context codes stay inside it
+ok 91 - s shows the summary over a dimmed screen; tabs, scrolling and the Context codes stay inside it
+  ---
+  duration_ms: 4.222708
+  ...
+# Subtest: the menu opens at its row; the scope and help popups list their choices
+ok 92 - the menu opens at its row; the scope and help popups list their choices
+  ---
+  duration_ms: 1.855875
+  ...
+# Subtest: history replaces the session list; Esc or h returns
+ok 93 - history replaces the session list; Esc or h returns
+  ---
+  duration_ms: 0.356083
+  ...
+# Subtest: the list scrolls to the selection, shows more above and below, and the wheel moves it freely
+ok 94 - the list scrolls to the selection, shows more above and below, and the wheel moves it freely
+  ---
+  duration_ms: 0.674459
+  ...
+# Subtest: messages and prompts take the footer; a long title never hides the reason or keys
+ok 95 - messages and prompts take the footer; a long title never hides the reason or keys
+  ---
+  duration_ms: 0.822375
+  ...
+# Subtest: an empty or scoped board says why nothing is shown, and a small terminal only asks for more room
+ok 96 - an empty or scoped board says why nothing is shown, and a small terminal only asks for more room
+  ---
+  duration_ms: 0.60525
+  ...
+# Subtest: housekeeping CLI reads without writes, validates tracked overrides, pauses, resets and targets canonical Git identity
+ok 97 - housekeeping CLI reads without writes, validates tracked overrides, pauses, resets and targets canonical Git identity
+  ---
+  duration_ms: 877.243375
+  ...
+# Subtest: status distinguishes running, stale and malformed owners and isolates repositories sharing a record
+ok 98 - status distinguishes running, stale and malformed owners and isolates repositories sharing a record
+  ---
+  duration_ms: 554.504125
+  ...
+# Subtest: unreadable activity, invalid config, symlinks, hardlinks and concurrent writers remain explicit and leave targets intact
+ok 99 - unreadable activity, invalid config, symlinks, hardlinks and concurrent writers remain explicit and leave targets intact
+  ---
+  duration_ms: 485.071958
+  ...
+# Subtest: console renders activity at all widths and reviews actual CLI pause and overrides, including cancellation and stale edits
+ok 100 - console renders activity at all widths and reviews actual CLI pause and overrides, including cancellation and stale edits
+  ---
+  duration_ms: 1720.368708
+  ...
+# Subtest: housekeeping --print renders fixture and stays read only even when pause or override saves are confirmed
+ok 101 - housekeeping --print renders fixture and stays read only even when pause or override saves are confirmed
+  ---
+  duration_ms: 1005.928583
+  ...
+# Subtest: an unconfigured Git project can inspect defaults and save a tracked override without creating a record or schedule
+ok 102 - an unconfigured Git project can inspect defaults and save a tracked override without creating a record or schedule
+  ---
+  duration_ms: 501.065875
+  ...
+# Subtest: console retains failed housekeeping reads with explicit stale state and prevents editing until recovery
+ok 103 - console retains failed housekeeping reads with explicit stale state and prevents editing until recovery
+  ---
+  duration_ms: 740.631958
+  ...
+# Subtest: a discovered Git project without a record opens and edits housekeeping through the real console CLI adapters
+ok 104 - a discovered Git project without a record opens and edits housekeeping through the real console CLI adapters
+  ---
+  duration_ms: 1399.055458
+  ...
+# Subtest: housekeeping close failures show both the actual error and planned reason in console and text CLI renders
+ok 105 - housekeeping close failures show both the actual error and planned reason in console and text CLI renders
+  ---
+  duration_ms: 692.441333
+  ...
+# Subtest: Enter opens the selected row, Esc returns without pane input, and Back preserves selection
+ok 106 - Enter opens the selected row, Esc returns without pane input, and Back preserves selection
+  ---
+  duration_ms: 61.10675
+  ...
+# Subtest: interrupt key sends Esc, ordinary typing and arrows retain bytes, mouse is never sent
+ok 107 - interrupt key sends Esc, ordinary typing and arrows retain bytes, mouse is never sent
+  ---
+  duration_ms: 4.918459
+  ...
+# Subtest: click targets survive compact rows; reports and train open details without controlling an agent
+ok 108 - click targets survive compact rows; reports and train open details without controlling an agent
+  ---
+  duration_ms: 42.425792
+  ...
+# Subtest: reused panes, foreign repositories, source failure and stale callbacks cannot take over input
+ok 109 - reused panes, foreign repositories, source failure and stale callbacks cannot take over input
+  ---
+  duration_ms: 9.826041
+  ...
+# Subtest: snapshot activation never opens a control stream
+ok 110 - snapshot activation never opens a control stream
+  ---
+  duration_ms: 5.449625
+  ...
+# Subtest: bare, repeated, partial and encoded Esc return without any pane input
+ok 111 - bare, repeated, partial and encoded Esc return without any pane input
+  ---
+  duration_ms: 49.021625
+  ...
+# Subtest: Meta keys retain every byte and the session opens at its full viewport width immediately
+ok 112 - Meta keys retain every byte and the session opens at its full viewport width immediately
+  ---
+  duration_ms: 6.924709
+  ...
+# Subtest: minimal provider uses the live harness; metadata supplies the known model and actual launch
+ok 113 - minimal provider uses the live harness; metadata supplies the known model and actual launch
+  ---
+  duration_ms: 1.701708
+  ...
+# Subtest: minimal stages come from structured roles, correction origins and established session names
+ok 114 - minimal stages come from structured roles, correction origins and established session names
+  ---
+  duration_ms: 0.105958
+  ...
+# Subtest: durations retain minutes, handle days, and never invent unknown or future starts
+ok 115 - durations retain minutes, handle days, and never invent unknown or future starts
+  ---
+  duration_ms: 0.104083
+  ...
+# Subtest: working first then newest, stable ties, canonical scope and live cwd win over workspace labels
+ok 116 - working first then newest, stable ties, canonical scope and live cwd win over workspace labels
+  ---
+  duration_ms: 0.49925
+  ...
+# Subtest: finished workers drop off when settled, idle chats stay, working and blocked reports remain visible
+ok 117 - finished workers drop off when settled, idle chats stay, working and blocked reports remain visible
+  ---
+  duration_ms: 0.246417
+  ...
+# Subtest: a replacement session cannot inherit a report or model tied to another session ID
+ok 118 - a replacement session cannot inherit a report or model tied to another session ID
+  ---
+  duration_ms: 0.113458
+  ...
+# Subtest: minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged
+ok 119 - minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged
+  ---
+  duration_ms: 38.233917
+  ...
+# Subtest: minimal refresh retains last good sources and has no record or scheduling effects
+ok 120 - minimal refresh retains last good sources and has no record or scheduling effects
+  ---
+  duration_ms: 17.642041
+  ...
+# Subtest: profile preferences validate, are read without creation, and explicit full overrides minimal
+ok 121 - profile preferences validate, are read without creation, and explicit full overrides minimal
+  ---
+  duration_ms: 1.388583
+  ...
+# Subtest: --print snapshot works for the flag and configured profile; action keys issue only reads
+ok 122 - --print snapshot works for the flag and configured profile; action keys issue only reads
+  ---
+  duration_ms: 2108.600417
+  ...
+# Subtest: a pane replacement cannot inherit another named agent run; immutable IDs can match a renamed occupant
+ok 123 - a pane replacement cannot inherit another named agent run; immutable IDs can match a renamed occupant
+  ---
+  duration_ms: 0.159417
+  ...
+# Subtest: duplicate project labels select the requested stable ID and repository, including current-workspace discovery
+ok 124 - duplicate project labels select the requested stable ID and repository, including current-workspace discovery
+  ---
+  duration_ms: 0.245167
+  ...
+# Subtest: work purpose uses item titles; reviewer subject never inherits the reported worker lifecycle
+ok 125 - work purpose uses item titles; reviewer subject never inherits the reported worker lifecycle
+  ---
+  duration_ms: 0.086958
+  ...
+# Subtest: feed source failure retains last good data and recovers independently
+ok 126 - feed source failure retains last good data and recovers independently
+  ---
+  duration_ms: 8.986292
+  ...
+# Subtest: narrow and wide frames show active CI, check clocks and refusals with sparse state colour
+ok 127 - narrow and wide frames show active CI, check clocks and refusals with sparse state colour
+  ---
+  duration_ms: 21.777875
+  ...
+# Subtest: Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history
+ok 128 - Runs is an aligned table with short titles, local starts, frozen landed time and dimmed history
+  ---
+  duration_ms: 30.715167
+  ...
+# Subtest: configured cwd without org or ID selects its catalog entry and discovers the record
+ok 129 - configured cwd without org or ID selects its catalog entry and discovers the record
+  ---
+  duration_ms: 39.907708
+  ...
+# Subtest: finished check duration freezes while delivery waits; a running check advances
+ok 130 - finished check duration freezes while delivery waits; a running check advances
+  ---
+  duration_ms: 5.82575
+  ...
+# Subtest: rows use plain language and mark records without it
+ok 131 - rows use plain language and mark records without it
+  ---
+  duration_ms: 1.595875
+  ...
+# Subtest: stripping codes keeps the sentence readable
+ok 132 - stripping codes keeps the sentence readable
+  ---
+  duration_ms: 0.0865
+  ...
+# Subtest: only codes the organization issues are stripped; real names with numbers stay
+ok 133 - only codes the organization issues are stripped; real names with numbers stay
+  ---
+  duration_ms: 0.541959
+  ...
+# Subtest: a possessive record code does not leave a broken question title
+ok 134 - a possessive record code does not leave a broken question title
+  ---
+  duration_ms: 0.21925
+  ...
+# Subtest: a decision summary is shown without codes, and marked when it had some
+ok 135 - a decision summary is shown without codes, and marked when it had some
+  ---
+  duration_ms: 0.426375
+  ...
+# Subtest: the Summary after a no says what happened to each dependent
+ok 136 - the Summary after a no says what happened to each dependent
+  ---
+  duration_ms: 0.645375
+  ...
+# Subtest: the fallback viewer always opens a text editor, never the file itself
+ok 137 - the fallback viewer always opens a text editor, never the file itself
+  ---
+  duration_ms: 0.155625
+  ...
+# Subtest: waiting rows keep the ranking org today gives
+ok 138 - waiting rows keep the ranking org today gives
+  ---
+  duration_ms: 0.216375
+  ...
+# Subtest: rows keep their places, and selection its row or nearest neighbour
+ok 139 - rows keep their places, and selection its row or nearest neighbour
+  ---
+  duration_ms: 0.205208
+  ...
+# Subtest: no codes appear outside the Context tab, except a waiting row's own id as its handle
+ok 140 - no codes appear outside the Context tab, except a waiting row's own id as its handle
+  ---
+  duration_ms: 16.261792
+  ...
+# Subtest: transcripts are found by agent name across config dirs and give the last assistant text
+ok 141 - transcripts are found by agent name across config dirs and give the last assistant text
+  ---
+  duration_ms: 1.558625
+  ...
+# Subtest: a growing transcript is read only from where the last read stopped
+ok 142 - a growing transcript is read only from where the last read stopped
+  ---
+  duration_ms: 2.379083
+  ...
+# Subtest: the ledger, Herdr output and note paths parse
+ok 143 - the ledger, Herdr output and note paths parse
+  ---
+  duration_ms: 0.309083
+  ...
+# Subtest: document paths follow the row kind
+ok 144 - document paths follow the row kind
+  ---
+  duration_ms: 1.096125
+  ...
+# Subtest: markdown renders headings, lists, tables and code within the width
+ok 145 - markdown renders headings, lists, tables and code within the width
+  ---
+  duration_ms: 0.643375
+  ...
+# Subtest: a long title never hides the reason, its cursor or the keys
+ok 146 - a long title never hides the reason, its cursor or the keys
+  ---
+  duration_ms: 1.12975
+  ...
+# Subtest: agent text cannot drive the terminal
+ok 147 - agent text cannot drive the terminal
+  ---
+  duration_ms: 2.214041
+  ...
+# Subtest: completed work category flags stay visible on overview and Needs you and open the source item
+ok 148 - completed work category flags stay visible on overview and Needs you and open the source item
+  ---
+  duration_ms: 12.476084
+  ...
+# Subtest: project discovery uses Git identity, deduplicates worktrees, never repo basenames
+ok 149 - project discovery uses Git identity, deduplicates worktrees, never repo basenames
+  ---
+  duration_ms: 4.767959
+  ...
+# Subtest: live scope keeps the exact sessions, run relationships and active work only
+ok 150 - live scope keeps the exact sessions, run relationships and active work only
+  ---
+  duration_ms: 2.163708
+  ...
+# Subtest: activity keeps item lifecycle moments and item pages explain agent-created work
+ok 151 - activity keeps item lifecycle moments and item pages explain agent-created work
+  ---
+  duration_ms: 4.492167
+  ...
+# Subtest: an answered question has one answered activity moment, not a duplicate decision
+ok 152 - an answered question has one answered activity moment, not a duplicate decision
+  ---
+  duration_ms: 0.105959
+  ...
+# Subtest: a dropped question reads as dropped, not answered
+ok 153 - a dropped question reads as dropped, not answered
+  ---
+  duration_ms: 0.060833
+  ...
+# Subtest: output reads the selected pane, history restores task and its keyboard focus
+ok 154 - output reads the selected pane, history restores task and its keyboard focus
+  ---
+  duration_ms: 1.368834
+  ...
+# Subtest: same-view navigation does not accumulate Back entries
+ok 155 - same-view navigation does not accumulate Back entries
+  ---
+  duration_ms: 0.589208
+  ...
+# Subtest: split tab requires a specific agent and shell tabs do not borrow other output
+ok 156 - split tab requires a specific agent and shell tabs do not borrow other output
+  ---
+  duration_ms: 2.810375
+  ...
+# Subtest: source failure retains last good data with an error and cannot focus stale sessions
+ok 157 - source failure retains last good data with an error and cannot focus stale sessions
+  ---
+  duration_ms: 1.486208
+  ...
+# Subtest: a disappeared agent retains its last output but cannot be focused as live
+ok 158 - a disappeared agent retains its last output but cannot be focused as live
+  ---
+  duration_ms: 0.773875
+  ...
+# Subtest: late output cannot overwrite a newer selection
+ok 159 - late output cannot overwrite a newer selection
+  ---
+  duration_ms: 5.110708
+  ...
+# Subtest: scope switch during a pending refresh never leaks the previous project
+ok 160 - scope switch during a pending refresh never leaks the previous project
+  ---
+  duration_ms: 1.110834
+  ...
+# Subtest: frame is cell-exact and source text cannot inject terminal escapes at target sizes
+ok 161 - frame is cell-exact and source text cannot inject terminal escapes at target sizes
+  ---
+  duration_ms: 4.382792
+  ...
+# Subtest: mouse hits open the intended live session and Back/Forward use the same history
+ok 162 - mouse hits open the intended live session and Back/Forward use the same history
+  ---
+  duration_ms: 1.387916
+  ...
+# Subtest: fresh installation reads no config into existence; goals and org are optional
+ok 163 - fresh installation reads no config into existence; goals and org are optional
+  ---
+  duration_ms: 1.715209
+  ...
+# Subtest: opening a directory without Git creates no project files and can return to the previous scope
+ok 164 - opening a directory without Git creates no project files and can return to the previous scope
+  ---
+  duration_ms: 15.0685
+  ...
+# Subtest: canonical discovery groups an actual worktree and a symlink, keeping same-named repos distinct
+ok 165 - canonical discovery groups an actual worktree and a symlink, keeping same-named repos distinct
+  ---
+  duration_ms: 84.540916
+  ...
+# Subtest: future-stage and deferred questions remain reachable without inflating Needs you
+ok 166 - future-stage and deferred questions remain reachable without inflating Needs you
+  ---
+  duration_ms: 1.974
+  ...
+# Subtest: list shortcuts focus the first actionable item and Enter drills in
+ok 167 - list shortcuts focus the first actionable item and Enter drills in
+  ---
+  duration_ms: 2.109084
+  ...
+# Subtest: narrow lists keep work state readable and narrow sessions retain full state
+ok 168 - narrow lists keep work state readable and narrow sessions retain full state
+  ---
+  duration_ms: 2.335875
+  ...
+# Subtest: output PageUp reads older lines and PageDown returns to latest
+ok 169 - output PageUp reads older lines and PageDown returns to latest
+  ---
+  duration_ms: 1.12725
+  ...
+# Subtest: plugin/caller workspace selects its canonical project without relying on labels
+ok 170 - plugin/caller workspace selects its canonical project without relying on labels
+  ---
+  duration_ms: 0.239416
+  ...
+# Subtest: appearance changes preserve navigation and unsupported preview actions have an honest handoff
+ok 171 - appearance changes preserve navigation and unsupported preview actions have an honest handoff
+  ---
+  duration_ms: 0.271375
+  ...
+# Subtest: Tab changes regions, arrows stay within them, and central tabs support Left/Right
+ok 172 - Tab changes regions, arrows stay within them, and central tabs support Left/Right
+  ---
+  duration_ms: 1.861833
+  ...
+# Subtest: scope dropdown preserves background, cancels cleanly, and same-project selection is a no-op
+ok 173 - scope dropdown preserves background, cancels cleanly, and same-project selection is a no-op
+  ---
+  duration_ms: 1.667792
+  ...
+# Subtest: Herdr companion starts without a duplicate rail, but checkouts can be opened on demand
+ok 174 - Herdr companion starts without a duplicate rail, but checkouts can be opened on demand
+  ---
+  duration_ms: 1.068584
+  ...
+# Subtest: goal readers put current descendant sessions first and render acceptance as actual criteria
+ok 175 - goal readers put current descendant sessions first and render acceptance as actual criteria
+  ---
+  duration_ms: 1.38325
+  ...
+# Subtest: native observer keeps latest rows visible, pans locally, and cancels on routes and stop
+ok 176 - native observer keeps latest rows visible, pans locally, and cancels on routes and stop
+  ---
+  duration_ms: 10.242792
+  ...
+# Subtest: observer retry rejects previous callbacks even for the same pane
+ok 177 - observer retry rejects previous callbacks even for the same pane
+  ---
+  duration_ms: 1.235208
+  ...
+# Subtest: goals and tasks render without a selected project instead of crashing
+ok 178 - goals and tasks render without a selected project instead of crashing
+  ---
+  duration_ms: 1.021875
+  ...
+# Subtest: a discovered project whose last workspace closed falls back to a current project
+ok 179 - a discovered project whose last workspace closed falls back to a current project
+  ---
+  duration_ms: 9.3495
+  ...
+# Subtest: Needs keeps Brain results in the checkout their session ran in, never by label alone
+ok 180 - Needs keeps Brain results in the checkout their session ran in, never by label alone
+  ---
+  duration_ms: 1.351417
+  ...
+# Subtest: agents are discoverable by their own checkout even when no workspace belongs to it
+ok 181 - agents are discoverable by their own checkout even when no workspace belongs to it
+  ---
+  duration_ms: 12.723541
+  ...
+# Subtest: o opens only the session on screen, fixed at the keypress
+ok 182 - o opens only the session on screen, fixed at the keypress
+  ---
+  duration_ms: 3.281084
+  ...
+# Subtest: Needs folds session results that the org resolved, replaced, only reported, or left unowned
+ok 183 - Needs folds session results that the org resolved, replaced, only reported, or left unowned
+  ---
+  duration_ms: 3.428792
+  ...
+# Subtest: opening a session types into it here, and Ctrl+] or Back releases it and returns
+ok 184 - opening a session types into it here, and Ctrl+] or Back releases it and returns
+  ---
+  duration_ms: 3.366708
+  ...
+# Subtest: a controller Herdr hands elsewhere drops back to watching with a way to retype
+ok 185 - a controller Herdr hands elsewhere drops back to watching with a way to retype
+  ---
+  duration_ms: 1.021958
+  ...
+# Subtest: project screen: counts, the work block and its tasks, then numbered sessions under their checkout
+ok 186 - project screen: counts, the work block and its tasks, then numbered sessions under their checkout
+  ---
+  duration_ms: 1.348209
+  ...
+# Subtest: a session number opens it, a task link opens the task, and Back restores the link
+ok 187 - a session number opens it, a task link opens the task, and Back restores the link
+  ---
+  duration_ms: 3.707292
+  ...
+# Subtest: clicking a session name renames its pane label, never the agent
+ok 188 - clicking a session name renames its pane label, never the agent
+  ---
+  duration_ms: 3.019042
+  ...
+# Subtest: the prompt bar adds a task or starts a chat on one Enter, and says which before
+ok 189 - the prompt bar adds a task or starts a chat on one Enter, and says which before
+  ---
+  duration_ms: 4.892917
+  ...
+# Subtest: a folder without an organization offers chats only
+ok 190 - a folder without an organization offers chats only
+  ---
+  duration_ms: 1.689208
+  ...
+# Subtest: a Needs you item is answered from its page: choices, reply, later, and org questions
+ok 191 - a Needs you item is answered from its page: choices, reply, later, and org questions
+  ---
+  duration_ms: 6.800792
+  ...
+# Subtest: the overview says quiet when no session works and nothing was recorded for 20 minutes
+ok 192 - the overview says quiet when no session works and nothing was recorded for 20 minutes
+  ---
+  duration_ms: 1.806542
+  ...
+# Subtest: the model-name table turns IDs into words, and an unmapped ID is shown as it is
+ok 193 - the model-name table turns IDs into words, and an unmapped ID is shown as it is
+  ---
+  duration_ms: 0.945709
+  ...
+# Subtest: WHO comes from the org run first, then Herdr and the transcript, else says unknown
+ok 194 - WHO comes from the org run first, then Herdr and the transcript, else says unknown
+  ---
+  duration_ms: 0.455584
+  ...
+# Subtest: UP counts minutes, hours, then days, and says unknown without a start
+ok 195 - UP counts minutes, hours, then days, and says unknown without a start
+  ---
+  duration_ms: 0.10275
+  ...
+# Subtest: DOING is at most ten words, cut at a word boundary, from the first usable source
+ok 196 - DOING is at most ten words, cut at a word boundary, from the first usable source
+  ---
+  duration_ms: 0.897209
+  ...
+# Subtest: mouse reports parse as SGR events, and anything else is not a mouse event
+ok 197 - mouse reports parse as SGR events, and anything else is not a mouse event
+  ---
+  duration_ms: 0.158958
+  ...
+# Subtest: a worktree belongs to its main repository, and a folder outside git stands alone
+ok 198 - a worktree belongs to its main repository, and a folder outside git stands alone
+  ---
+  duration_ms: 0.251333
+  ...
+# Subtest: plain glyphs are ASCII, and folding makes the screen's own symbols ASCII
+ok 199 - plain glyphs are ASCII, and folding makes the screen's own symbols ASCII
+  ---
+  duration_ms: 0.226917
+  ...
+# Subtest: the painter writes only changed rows, in place, and never erases
+ok 200 - the painter writes only changed rows, in place, and never erases
+  ---
+  duration_ms: 1.045417
+  ...
+# Subtest: spans become truecolor SGR and cannot smuggle control characters
+ok 201 - spans become truecolor SGR and cannot smuggle control characters
+  ---
+  duration_ms: 0.143458
+  ...
+# Subtest: red CI shows earlier failing test diagnostics even when they have scrolled out of the tail
+ok 202 - red CI shows earlier failing test diagnostics even when they have scrolled out of the tail
+  ---
+  duration_ms: 23.17825
+  ...
+# Subtest: a bisected batch keeps each check output tied to its own attempt even when opened through an earlier result
+ok 203 - a bisected batch keeps each check output tied to its own attempt even when opened through an earlier result
+  ---
+  duration_ms: 15.28625
+  ...
+# Subtest: release candidate links open the exact candidate gate and foreign dispatch evidence is rejected
+ok 204 - release candidate links open the exact candidate gate and foreign dispatch evidence is rejected
+  ---
+  duration_ms: 15.828916
+  ...
+# Subtest: a handled promotion notice completes the notify link after an earlier undelivered receipt
+ok 205 - a handled promotion notice completes the notify link after an earlier undelivered receipt
+  ---
+  duration_ms: 17.460083
+  ...
+# Subtest: every batch link opens its evidence by Enter or click, with nested Back and no agent input
+ok 206 - every batch link opens its evidence by Enter or click, with nested Back and no agent input
+  ---
+  duration_ms: 326.433583
+  ...
+# Subtest: active run pipelines are available through p and a stage click, without taking over the live session
+ok 207 - active run pipelines are available through p and a stage click, without taking over the live session
+  ---
+  duration_ms: 53.043458
+  ...
+# Subtest: chains use horizontal bands on wide panes and vertical links on narrow panes, with reachable repeated fixes
+ok 208 - chains use horizontal bands on wide panes and vertical links on narrow panes, with reachable repeated fixes
+  ---
+  duration_ms: 114.395291
+  ...
+# Subtest: running CI tails only the temporary log explicitly owned by this batch, then freezes on interruption
+ok 209 - running CI tails only the temporary log explicitly owned by this batch, then freezes on interruption
+  ---
+  duration_ms: 69.734958
+  ...
+# Subtest: real --print snapshots cover running, red, refused, interrupted and repeated-fix chains at two widths
+ok 210 - real --print snapshots cover running, red, refused, interrupted and repeated-fix chains at two widths
+  ---
+  duration_ms: 3509.910458
+  ...
+# Subtest: a delivered green batch chains all stages, with only recorded clocks
+ok 211 - a delivered green batch chains all stages, with only recorded clocks
+  ---
+  duration_ms: 1.072083
+  ...
+# Subtest: real prepared checkpoints use the live batch phase and advance only an in-flight check
+ok 212 - real prepared checkpoints use the live batch phase and advance only an in-flight check
+  ---
+  duration_ms: 0.225875
+  ...
+# Subtest: queued and legacy batches do not invent start clocks
+ok 213 - queued and legacy batches do not invent start clocks
+  ---
+  duration_ms: 0.093917
+  ...
+# Subtest: red CI and rebase refusals sit on the refusing link and skip unreached integration
+ok 214 - red CI and rebase refusals sit on the refusing link and skip unreached integration
+  ---
+  duration_ms: 0.259917
+  ...
+# Subtest: a post-CI refusal marks fast-forward; mixed batches retain both failure and successful downstream links
+ok 215 - a post-CI refusal marks fast-forward; mixed batches retain both failure and successful downstream links
+  ---
+  duration_ms: 0.108625
+  ...
+# Subtest: interrupted gates stop counting and resumed batches supersede stale interruption notices
+ok 216 - interrupted gates stop counting and resumed batches supersede stale interruption notices
+  ---
+  duration_ms: 0.085
+  ...
+# Subtest: close and delivery receipts remain distinct from integration, including retained lanes and undelivered notices
+ok 217 - close and delivery receipts remain distinct from integration, including retained lanes and undelivered notices
+  ---
+  duration_ms: 0.483333
+  ...
+# Subtest: multi-round lifecycle follows explicit correction receipts in either direction and excludes unrelated runs
+ok 218 - multi-round lifecycle follows explicit correction receipts in either direction and excludes unrelated runs
+  ---
+  duration_ms: 0.308166
+  ...
+# Subtest: dispatch journals join correction rounds; cycles and other items never extend the chain
+ok 219 - dispatch journals join correction rounds; cycles and other items never extend the chain
+  ---
+  duration_ms: 0.1975
+  ...
+# Subtest: run links open matching evidence, exact candidate membership and failed or interrupted gate results
+ok 220 - run links open matching evidence, exact candidate membership and failed or interrupted gate results
+  ---
+  duration_ms: 0.225792
+  ...
+# Subtest: pending dispatch, running review and abandoned engineering have distinct statuses and honest durations
+ok 221 - pending dispatch, running review and abandoned engineering have distinct statuses and honest durations
+  ---
+  duration_ms: 0.105667
+  ...
+# Subtest: run lifecycle follows a resumed or newly queued train instead of its stale interrupted or refused result
+ok 222 - run lifecycle follows a resumed or newly queued train instead of its stale interrupted or refused result
+  ---
+  duration_ms: 0.230459
+  ...
+# Subtest: bare Esc returns without any agent bytes
+ok 223 - bare Esc returns without any agent bytes
+  ---
+  duration_ms: 0.855208
+  ...
+# Subtest: double Esc in one chunk returns without any agent bytes
+ok 224 - double Esc in one chunk returns without any agent bytes
+  ---
+  duration_ms: 0.062166
+  ...
+# Subtest: repeated Esc returns without any agent bytes
+ok 225 - repeated Esc returns without any agent bytes
+  ---
+  duration_ms: 0.083875
+  ...
+# Subtest: double Esc followed by typing returns without any agent bytes
+ok 226 - double Esc followed by typing returns without any agent bytes
+  ---
+  duration_ms: 0.504875
+  ...
+# Subtest: typing before Esc returns without any agent bytes
+ok 227 - typing before Esc returns without any agent bytes
+  ---
+  duration_ms: 0.15725
+  ...
+# Subtest: Meta before bare Esc returns without any agent bytes
+ok 228 - Meta before bare Esc returns without any agent bytes
+  ---
+  duration_ms: 0.058209
+  ...
+# Subtest: interrupt before bare Esc returns without any agent bytes
+ok 229 - interrupt before bare Esc returns without any agent bytes
+  ---
+  duration_ms: 0.083584
+  ...
+# Subtest: partial CSI returns without any agent bytes
+ok 230 - partial CSI returns without any agent bytes
+  ---
+  duration_ms: 0.045875
+  ...
+# Subtest: partial CSI parameters returns without any agent bytes
+ok 231 - partial CSI parameters returns without any agent bytes
+  ---
+  duration_ms: 0.118834
+  ...
+# Subtest: partial SS3 returns without any agent bytes
+ok 232 - partial SS3 returns without any agent bytes
+  ---
+  duration_ms: 0.106875
+  ...
+# Subtest: partial Alt arrow returns without any agent bytes
+ok 233 - partial Alt arrow returns without any agent bytes
+  ---
+  duration_ms: 0.077
+  ...
+# Subtest: partial Alt SS3 returns without any agent bytes
+ok 234 - partial Alt SS3 returns without any agent bytes
+  ---
+  duration_ms: 0.035208
+  ...
+# Subtest: CSI-u Esc returns without any agent bytes
+ok 235 - CSI-u Esc returns without any agent bytes
+  ---
+  duration_ms: 0.124
+  ...
+# Subtest: CSI-u unmodified Esc returns without any agent bytes
+ok 236 - CSI-u unmodified Esc returns without any agent bytes
+  ---
+  duration_ms: 0.180333
+  ...
+# Subtest: CSI-u Esc press returns without any agent bytes
+ok 237 - CSI-u Esc press returns without any agent bytes
+  ---
+  duration_ms: 0.037958
+  ...
+# Subtest: CSI-u Esc repeat returns without any agent bytes
+ok 238 - CSI-u Esc repeat returns without any agent bytes
+  ---
+  duration_ms: 0.085
+  ...
+# Subtest: CSI-u Esc release returns without any agent bytes
+ok 239 - CSI-u Esc release returns without any agent bytes
+  ---
+  duration_ms: 0.0345
+  ...
+# Subtest: CSI-u modified Esc returns without any agent bytes
+ok 240 - CSI-u modified Esc returns without any agent bytes
+  ---
+  duration_ms: 0.106125
+  ...
+# Subtest: CSI-u Esc with text returns without any agent bytes
+ok 241 - CSI-u Esc with text returns without any agent bytes
+  ---
+  duration_ms: 0.035125
+  ...
+# Subtest: modifyOtherKeys Esc returns without any agent bytes
+ok 242 - modifyOtherKeys Esc returns without any agent bytes
+  ---
+  duration_ms: 0.06825
+  ...
+# Subtest: Alt CSI-u Esc returns without any agent bytes
+ok 243 - Alt CSI-u Esc returns without any agent bytes
+  ---
+  duration_ms: 0.028833
+  ...
+# Subtest: typing around encoded Esc returns without any agent bytes
+ok 244 - typing around encoded Esc returns without any agent bytes
+  ---
+  duration_ms: 0.028291
+  ...
+# Subtest: Ctrl+] key returns without any agent bytes
+ok 245 - Ctrl+] key returns without any agent bytes
+  ---
+  duration_ms: 0.022625
+  ...
+# Subtest: typing before Ctrl+] returns without any agent bytes
+ok 246 - typing before Ctrl+] returns without any agent bytes
+  ---
+  duration_ms: 0.023708
+  ...
+# Subtest: CSI-u Ctrl+] returns without any agent bytes
+ok 247 - CSI-u Ctrl+] returns without any agent bytes
+  ---
+  duration_ms: 0.022708
+  ...
+# Subtest: CSI-u Ctrl+] repeat returns without any agent bytes
+ok 248 - CSI-u Ctrl+] repeat returns without any agent bytes
+  ---
+  duration_ms: 0.021125
+  ...
+# Subtest: ordinary UTF-8 typing retains every byte
+ok 249 - ordinary UTF-8 typing retains every byte
+  ---
+  duration_ms: 0.075667
+  ...
+# Subtest: Meta Enter retains every byte
+ok 250 - Meta Enter retains every byte
+  ---
+  duration_ms: 0.026625
+  ...
+# Subtest: Meta word movement retains every byte
+ok 251 - Meta word movement retains every byte
+  ---
+  duration_ms: 0.024834
+  ...
+# Subtest: Meta backspace retains every byte
+ok 252 - Meta backspace retains every byte
+  ---
+  duration_ms: 0.023583
+  ...
+# Subtest: Meta ordinary key retains every byte
+ok 253 - Meta ordinary key retains every byte
+  ---
+  duration_ms: 0.02425
+  ...
+# Subtest: Meta UTF-8 typing retains every byte
+ok 254 - Meta UTF-8 typing retains every byte
+  ---
+  duration_ms: 0.206375
+  ...
+# Subtest: CSI arrows retains every byte
+ok 255 - CSI arrows retains every byte
+  ---
+  duration_ms: 0.361167
+  ...
+# Subtest: modified CSI arrow retains every byte
+ok 256 - modified CSI arrow retains every byte
+  ---
+  duration_ms: 0.057875
+  ...
+# Subtest: CSI function key retains every byte
+ok 257 - CSI function key retains every byte
+  ---
+  duration_ms: 0.0395
+  ...
+# Subtest: SS3 arrow and function key retains every byte
+ok 258 - SS3 arrow and function key retains every byte
+  ---
+  duration_ms: 0.032667
+  ...
+# Subtest: CSI-u ordinary key retains every byte
+ok 259 - CSI-u ordinary key retains every byte
+  ---
+  duration_ms: 0.078708
+  ...
+# Subtest: Alt arrow retains every byte
+ok 260 - Alt arrow retains every byte
+  ---
+  duration_ms: 0.062875
+  ...
+# Subtest: Alt SS3 function key retains every byte
+ok 261 - Alt SS3 function key retains every byte
+  ---
+  duration_ms: 0.03425
+  ...
+# Subtest: Alt modified arrow among typing retains every byte
+ok 262 - Alt modified arrow among typing retains every byte
+  ---
+  duration_ms: 0.026083
+  ...
+# Subtest: binary input is not decoded or re-encoded as UTF-8
+ok 263 - binary input is not decoded or re-encoded as UTF-8
+  ---
+  duration_ms: 0.081
+  ...
+# Subtest: mouse reports remain local while surrounding session bytes retain order
+ok 264 - mouse reports remain local while surrounding session bytes retain order
+  ---
+  duration_ms: 0.060292
+  ...
+# Subtest: only explicit interrupt keys translate to a bare Esc
+ok 265 - only explicit interrupt keys translate to a bare Esc
+  ---
+  duration_ms: 0.139916
+  ...
+# Subtest: approving and declining from the console record the operator's answers
+ok 266 - approving and declining from the console record the operator's answers
+  ---
+  duration_ms: 911.585625
+  ...
+# Subtest: Enter and a click peek at a live session; g goes; a gone one says so; Herdr down says so
+ok 267 - Enter and a click peek at a live session; g goes; a gone one says so; Herdr down says so
+  ---
+  duration_ms: 438.563959
+  ...
+# Subtest: go-to-session runs herdr with an argument array: the agent by name, else its tab
+ok 268 - go-to-session runs herdr with an argument array: the agent by name, else its tab
+  ---
+  duration_ms: 162.726625
+  ...
+# Subtest: open suspends for an editor, a failed read keeps the last data, and the header shows the version
+ok 269 - open suspends for an editor, a failed read keeps the last data, and the header shows the version
+  ---
+  duration_ms: 288.910584
+  ...
+# Subtest: NO_COLOR draws plain glyphs, and a scope narrows the list and prefills nothing else
+ok 270 - NO_COLOR draws plain glyphs, and a scope narrows the list and prefills nothing else
+  ---
+  duration_ms: 293.634834
+  ...
+# Subtest: overruling from the history records the opposite answer
+ok 271 - overruling from the history records the opposite answer
+  ---
+  duration_ms: 429.46325
+  ...
+# Subtest: a text document opens from a private file that is removed afterwards
+ok 272 - a text document opens from a private file that is removed afterwards
+  ---
+  duration_ms: 316.565
+  ...
+# Subtest: answers are passed as an argument array
+ok 273 - answers are passed as an argument array
+  ---
+  duration_ms: 0.147625
+  ...
+# Subtest: a missing configuration becomes an example that must be edited
+ok 274 - a missing configuration becomes an example that must be edited
+  ---
+  duration_ms: 0.955958
+  ...
+# Subtest: DOING for a run with no usable title comes from the work in the brief org start wrote, never its fixed opening
+ok 275 - DOING for a run with no usable title comes from the work in the brief org start wrote, never its fixed opening
+  ---
+  duration_ms: 426.494
+  ...
+# Subtest: transcripts are looked up by name from the run's start, else from local midnight
+ok 276 - transcripts are looked up by name from the run's start, else from local midnight
+  ---
+  duration_ms: 353.384333
+  ...
+# Subtest: a named project switch lands on that project and keeps the repository scope
+ok 277 - a named project switch lands on that project and keeps the repository scope
+  ---
+  duration_ms: 359.598541
+  ...
+# Subtest: Claude project folders and agent-name entries keep their observed on-disk shape
+ok 278 - Claude project folders and agent-name entries keep their observed on-disk shape
+  ---
+  duration_ms: 0.936958
+  ...
+# Subtest: Herdr agents keep their tool, title and session id; tabs keep their labels
+ok 279 - Herdr agents keep their tool, title and session id; tabs keep their labels
+  ---
+  duration_ms: 0.231792
+  ...
+# Subtest: a transcript is found by session id, in its folder or any other, and gives model, start and last message
+ok 280 - a transcript is found by session id, in its folder or any other, and gives model, start and last message
+  ---
+  duration_ms: 1.689958
+  ...
+# Subtest: a missing session id is not searched for again until the folders change
+ok 281 - a missing session id is not searched for again until the folders change
+  ---
+  duration_ms: 0.370292
+  ...
+# Subtest: a transcript looked up by agent name reads only transcripts written since the lower bound
+ok 282 - a transcript looked up by agent name reads only transcripts written since the lower bound
+  ---
+  duration_ms: 0.942375
+  ...
+# Subtest: a live lane session record is found by name or transcript id; completed records are ignored
+ok 283 - a live lane session record is found by name or transcript id; completed records are ignored
+  ---
+  duration_ms: 4.918167
+  ...
+# Subtest: immutable lane session ID outranks earlier same-name records and rejects mismatched occupants
+ok 284 - immutable lane session ID outranks earlier same-name records and rejects mismatched occupants
+  ---
+  duration_ms: 0.939042
+  ...
+# Subtest: Ink Table has bounded borders, aligned columns, header rules and cell truncation
+ok 285 - Ink Table has bounded borders, aligned columns, header rules and cell truncation
+  ---
+  duration_ms: 29.443708
+  ...
+# Subtest: Ink Table handles empty rows and strips controls from labels and cells
+ok 286 - Ink Table handles empty rows and strips controls from labels and cells
+  ---
+  duration_ms: 1.35775
+  ...
+# Subtest: Ink rendering writes nothing for unchanged facts and resizes between narrow and wide tables
+ok 287 - Ink rendering writes nothing for unchanged facts and resizes between narrow and wide tables
+  ---
+  duration_ms: 247.311
+  ...
+# Subtest: short panes allocate whole entries, retain panel headings and keep selected history visible
+ok 288 - short panes allocate whole entries, retain panel headings and keep selected history visible
+  ---
+  duration_ms: 126.015125
+  ...
+# Subtest: table truncation preserves joined emoji, flags and combining glyphs as whole cells
+ok 289 - table truncation preserves joined emoji, flags and combining glyphs as whole cells
+  ---
+  duration_ms: 2.429584
+  ...
+# [?25h
+# Subtest: observer frame preserves absolute positions, blank lines, padding and RGB harness styling
+ok 290 - observer frame preserves absolute positions, blank lines, padding and RGB harness styling
+  ---
+  duration_ms: 1.610333
+  ...
+# Subtest: differential frames retain unaffected cells and do not mutate previously delivered grids
+ok 291 - differential frames retain unaffected cells and do not mutate previously delivered grids
+  ---
+  duration_ms: 0.437584
+  ...
+# Subtest: a differential gap or unexpected resize fails; a later full frame resynchronizes
+ok 292 - a differential gap or unexpected resize fails; a later full frame resynchronizes
+  ---
+  duration_ms: 0.247042
+  ...
+# Subtest: OSC clipboard/link/image strings and terminal modes never escape into visible spans
+ok 293 - OSC clipboard/link/image strings and terminal modes never escape into visible spans
+  ---
+  duration_ms: 0.193167
+  ...
+# Subtest: C1 controls, bidirectional overrides, invalid UTF8 and incomplete escapes are contained
+ok 294 - C1 controls, bidirectional overrides, invalid UTF8 and incomplete escapes are contained
+  ---
+  duration_ms: 0.222584
+  ...
+# Subtest: wide glyphs, combining accents and joined emoji keep their cell positions through updates
+ok 295 - wide glyphs, combining accents and joined emoji keep their cell positions through updates
+  ---
+  duration_ms: 0.2765
+  ...
+# Subtest: terminal styles use resets, inverse, conceal, indexed colors and colon RGB
+ok 296 - terminal styles use resets, inverse, conceal, indexed colors and colon RGB
+  ---
+  duration_ms: 0.181625
+  ...
+# Subtest: cursor moves, erase, CR/LF and tab act on the bounded grid
+ok 297 - cursor moves, erase, CR/LF and tab act on the bounded grid
+  ---
+  duration_ms: 0.334417
+  ...
+# Subtest: invalid dimensions, colors, record formats and unsupported controls fail honestly
+ok 298 - invalid dimensions, colors, record formats and unsupported controls fail honestly
+  ---
+  duration_ms: 0.216
+  ...
+# Subtest: observer owns an exact read-only argv with closed stdin and decodes split NDJSON chunks
+ok 299 - observer owns an exact read-only argv with closed stdin and decodes split NDJSON chunks
+  ---
+  duration_ms: 3.750333
+  ...
+# Subtest: observer protocol failure stops its own subprocess once and suppresses later callbacks
+ok 300 - observer protocol failure stops its own subprocess once and suppresses later callbacks
+  ---
+  duration_ms: 0.426333
+  ...
+# (node:88445) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: server terminal.closed and unexpected EOF are visible; stopping never closes target panes
+ok 301 - server terminal.closed and unexpected EOF are visible; stopping never closes target panes
+  ---
+  duration_ms: 0.429042
+  ...
+# Subtest: observer rejects non-pane targets before spawning and reports spawn errors
+ok 302 - observer rejects non-pane targets before spawning and reports spawn errors
+  ---
+  duration_ms: 0.137541
+  ...
+# Subtest: observer times out a silent initial connection but an idle delivered frame stays valid
+ok 303 - observer times out a silent initial connection but an idle delivered frame stays valid
+  ---
+  duration_ms: 0.967917
+  ...
+# Subtest: a stubborn observer is killed after a bounded grace period, with no repeated cancellation
+ok 304 - a stubborn observer is killed after a bounded grace period, with no repeated cancellation
+  ---
+  duration_ms: 0.2285
+  ...
+# Subtest: local horizontal crop preserves grapheme cells and styles, replacing clipped wide halves with spaces
+ok 305 - local horizontal crop preserves grapheme cells and styles, replacing clipped wide halves with spaces
+  ---
+  duration_ms: 0.230167
+  ...
+# Subtest: native-size observer reads exact pane geometry and follows real size without cropping at console dimensions
+ok 306 - native-size observer reads exact pane geometry and follows real size without cropping at console dimensions
+  ---
+  duration_ms: 9.676208
+  ...
+# Subtest: native geometry lookup failure never falls back to a misleading cropped observer
+ok 307 - native geometry lookup failure never falls back to a misleading cropped observer
+  ---
+  duration_ms: 0.379
+  ...
+# Subtest: stopping during native geometry discovery cancels only the owned query and emits no later error
+ok 308 - stopping during native geometry discovery cancels only the owned query and emits no later error
+  ---
+  duration_ms: 0.21925
+  ...
+# Subtest: an established live screen survives transient geometry failures but not persistent ones
+ok 309 - an established live screen survives transient geometry failures but not persistent ones
+  ---
+  duration_ms: 1.060833
+  ...
+# Subtest: a geometry failure before the first live screen still fails at once
+ok 310 - a geometry failure before the first live screen still fails at once
+  ---
+  duration_ms: 0.249375
+  ...
+# Subtest: a dialog is answered by its own keys; a finished question by sending the chosen words
+ok 311 - a dialog is answered by its own keys; a finished question by sending the chosen words
+  ---
+  duration_ms: 3.206708
+  ...
+# Subtest: the list holds what needs you now; saved and parked items fold into one line each
+ok 312 - the list holds what needs you now; saved and parked items fold into one line each
+  ---
+  duration_ms: 0.602083
+  ...
+# Subtest: each row carries only the verbs that apply to it
+ok 313 - each row carries only the verbs that apply to it
+  ---
+  duration_ms: 0.436375
+  ...
+# Subtest: a number picks a choice after a confirmation that says exactly what will happen
+ok 314 - a number picks a choice after a confirmation that says exactly what will happen
+  ---
+  duration_ms: 0.847042
+  ...
+# Subtest: y sends Claude's draft when there is one, else takes the recommendation; n takes the no
+ok 315 - y sends Claude's draft when there is one, else takes the recommendation; n takes the no
+  ---
+  duration_ms: 0.450958
+  ...
+# Subtest: r replies in the operator's words; l saves for later at once; x asks before dropping
+ok 316 - r replies in the operator's words; l saves for later at once; x asks before dropping
+  ---
+  duration_ms: 0.719708
+  ...
+# Subtest: Enter on a fold opens it; Enter on a live result peeks; the peek keeps the verbs
+ok 317 - Enter on a fold opens it; Enter on a live result peeks; the peek keeps the verbs
+  ---
+  duration_ms: 0.550959
+  ...
+# Subtest: the screen shows each choice under its row, Claude's draft, and a click on a choice picks it
+ok 318 - the screen shows each choice under its row, Claude's draft, and a click on a choice picks it
+  ---
+  duration_ms: 3.24525
+  ...
+# Subtest: answering goes through the brain CLI, refreshes, and the peek moves to the session
+ok 319 - answering goes through the brain CLI, refreshes, and the peek moves to the session
+  ---
+  duration_ms: 44.935125
+  ...
+# Subtest: d sends a question to a new session with a plain brief, on the project's checkout, and notes it in org
+ok 320 - d sends a question to a new session with a plain brief, on the project's checkout, and notes it in org
+  ---
+  duration_ms: 42.45175
+  ...
+# Subtest: summoned as a Herdr popup, going to a session closes the console so the session is what shows
+ok 321 - summoned as a Herdr popup, going to a session closes the console so the session is what shows
+  ---
+  duration_ms: 43.8125
+  ...
+# Subtest: rows read like the operator reads work: the id, a quoted gist, what is at stake, then actions
+ok 322 - rows read like the operator reads work: the id, a quoted gist, what is at stake, then actions
+  ---
+  duration_ms: 0.921667
+  ...
+# Subtest: i records an instruction for the whole project where its sessions read direction first
+ok 323 - i records an instruction for the whole project where its sessions read direction first
+  ---
+  duration_ms: 53.992958
+  ...
+# Subtest: the header says whether the loop is alive, and L turns it off or on after asking
+ok 324 - the header says whether the loop is alive, and L turns it off or on after asking
+  ---
+  duration_ms: 1.880458
+  ...
+1..324
+# tests 324
+# suites 0
+# pass 324
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 19611.51675

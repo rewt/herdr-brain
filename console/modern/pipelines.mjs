@@ -1,7 +1,7 @@
 // Display-only chains derived from record facts and durable receipts. No Ink.
 import { sanitize } from '../lib/text.mjs';
 
-export const PIPELINE_MARKS = { done: '✓', running: '●', failed: '×', waiting: '○', skipped: '–' };
+export const PIPELINE_MARKS = { done: '\u2713', running: '\u25cf', failed: '\u00d7', waiting: '\u25cb', skipped: '\u2013' };
 const clean = value => sanitize(value ?? '');
 const stamp = value => Date.parse(value);
 export const pipelineSeconds = (start, finish) => {
@@ -102,9 +102,9 @@ export function runPipeline({ run, runs = [], settlements = new Map(), dispatche
     if (!i) links.push(link(`run:${r.id}:dispatch`, 'Dispatch', dispatch && dispatch.stage !== 'complete' ? 'running' : 'done', evidence(r, 'dispatch'),
       { started_at: dispatch?.started_at, finished_at: dispatch?.finished_at ?? sent?.at }));
     const engineering = r.abandoned || r.report?.outcome === 'failed' ? 'failed' : r.report ? 'done' : dispatch && dispatch.stage !== 'complete' ? 'waiting' : 'running';
-    links.push(link(`run:${r.id}:engineering`, i ? `Fix ${i} · ${r.id}` : 'Engineering', engineering, evidence(r, 'engineering'),
+    links.push(link(`run:${r.id}:engineering`, i ? `Fix ${i} \u00b7 ${r.id}` : 'Engineering', engineering, evidence(r, 'engineering'),
       { started_at: sent?.at ?? r.started?.at, finished_at: r.report?.at ?? r.abandoned?.at }, r.abandoned ? 'Run abandoned' : ''));
-    links.push(link(`run:${r.id}:report`, i ? `Report · ${r.id}` : 'Report', r.report ? ['failed', 'blocked', 'needs_human'].includes(r.report.outcome) ? 'failed' : 'done'
+    links.push(link(`run:${r.id}:report`, i ? `Report \u00b7 ${r.id}` : 'Report', r.report ? ['failed', 'blocked', 'needs_human'].includes(r.report.outcome) ? 'failed' : 'done'
       : r.abandoned ? 'skipped' : 'waiting', { kind: 'report', run: r.id }, {}, r.report && r.report.outcome !== 'done' ? r.report.outcome : ''));
     const verdict = saved?.review?.verdict;
     const reviewing = ['review', 'reviewing', 'commit-review'].includes(saved?.stage);

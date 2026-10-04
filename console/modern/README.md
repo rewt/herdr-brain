@@ -81,11 +81,11 @@ each recorded correction's fix/report/review links, train, landed and release
 candidate. Press `p` on any Runs row or click its stage to inspect its chain,
 including a worker that is still active; Enter on the run keeps opening its
 session. Batch details show queued, rebase, CI, fast-forward, close lanes and
-notify. `✓` done, `●` running, `×` failed, `○` waiting and `–` skipped remain
-readable without colour. Wide views chain links horizontally, wrapping long
+notify. Marks use `\u2713` for done, `\u25cf` for running, `\u00d7` for failed,
+`\u25cb` for waiting and `\u2013` for skipped. They remain readable without colour. Wide views chain links horizontally, wrapping long
 lifecycles into connected bands; narrow views stack them vertically. Arrows
 select links, Enter or a click opens their brief, report, review, check output,
-promotion receipt or candidate gate. Esc and ‹ Back restore the selected link
+promotion receipt or candidate gate. Esc and Back restore the selected link
 and scroll. The CI view includes each attempted check, a bounded live tail and
 structured failing tests with their diagnostic messages from the full log.
 

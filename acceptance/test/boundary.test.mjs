@@ -63,6 +63,17 @@ test('model launch requests are always replaced by the scratch worker script', (
     assert.ok(trace.some((row) => row.id === call.id && row.type === 'end'));
   } finally { f.close(); }
 });
+test('entry canary launch is confined to its fixed worker path and owned pane', () => {
+  const f = fixture();
+  try {
+    const quote = s => "'" + s.replaceAll("'", "'\\''") + "'";
+    const command = [process.execPath, path.join(f.root, 'entry-session.mjs'), f.root, 'lessons-codex'].map(quote).join(' ');
+    assert.equal(f.call('pane', 'run', 'own:p1', command).status, 0);
+    assert.notEqual(f.call('pane', 'run', 'other:p1', command).status, 0);
+    assert.notEqual(f.call('pane', 'run', 'own:p1', command.replace('entry-session.mjs', 'arbitrary.mjs')).status, 0);
+    assert.equal(f.calls().filter(a => a[0] === 'pane' && a[1] === 'run').length, 1);
+  } finally { f.close(); }
+});
 test('parent-focusing worktree removal is refused before any native mutation', () => {
   const f = fixture();
   try {

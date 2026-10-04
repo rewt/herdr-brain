@@ -230,6 +230,14 @@ present. The generic workflow explicitly yields to the project's own instruction
 where they conflict, and tells agents to read applicable directory instructions.
 Project text does not change the adapter's fixed capabilities or lifecycle checks.
 
+Both transports also receive
+active lessons from the selected project record, matched to the original entered
+directory (also from a linked checkout). Shared model-free entry code uses the
+record selector and bounded view: up to five lessons with evidence and a count
+of further matches. The section is omitted when none match; unrelated areas,
+proposals, retired and superseded lessons are excluded. Module selectors are
+not inferred from directories.
+
 Entry preferences come only from the canonical project's `.lane.json`, using
 Git common-directory identity. Parent configuration, `LANE_CONFIG`, and a linked
 worktree's edited config cannot opt a project out or change its mode. Existing

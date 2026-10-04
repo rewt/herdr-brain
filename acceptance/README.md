@@ -5,6 +5,17 @@ Run from a Herdr pane, with Node 20+, Git, Bash, zsh, ripgrep (`rg`), Python 3
 Startup probes every required executable; missing tools produce a named PENDING
 result before executing candidate or copied code.
 
+The `lessons-entry` gate case also requires the installed native Claude CLI. It
+plants an active area lesson in a scratch record, then opens fresh Codex and
+Claude UIs through the candidate's installed automatic entry. The shared receipt
+machinery retains the actual native prompt arguments and policy source; native
+UI screens prove each executable started. The canary uses scratch homes, no
+operator credentials, no task prompt, no model turn and a kernel boundary that
+denies network and writes outside scratch/terminal devices. Created panes and
+processes use the gate's existing ownership and producer cleanup. Evidence is
+`lessons-planted.json`, `lessons-{codex,claude}.entry.json` and corresponding
+`.screen.txt` files. Missing native tools or `--skip-live` keep the gate pending.
+
 The installed native entry canary is also runnable independently:
 
 ```sh

@@ -28,6 +28,7 @@ export const cases = Object.freeze({
   retirement: spec('contrib-retirement', 'ENG-64: final contrib removal and restoration', ['cutover-switches'], compatibility),
   discovery: spec('discovery-concurrent', 'Real discovery: concurrent lanes and promotion'),
   routingQuestion: spec('discovery-routing', 'Real discovery: routing question waits and answer applies'),
+  lessons: spec('lessons-entry', 'Active lesson reaches fresh Codex and Claude at installed entry', ['herdr-fixture']),
   defaultCycle: spec('default-cycle', 'New project: default supervisor dispatch/watch/ingest cycle', ['herdr-fixture']),
   settle: spec('settle-cycle', 'New project: report/settle/fix/settle/promotable without config'),
   supervisor: spec('supervisor-cycle', 'New project: fresh/history supervisor, notices, fix, promotion and record completion'),

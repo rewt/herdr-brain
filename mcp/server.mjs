@@ -36,7 +36,7 @@ async function main() {
   if (values.org !== undefined) env.ORG_DIR = path.resolve(cwd, values.org);
   const cli = createCli({ cwd, env });
   const server = new McpServer({ name: 'herdr-record', version: '0.1.0' }, {
-    instructions: 'Read record://snapshot for context, use record_ready to find work, record_show for details, and record_start to record a run and receive its brief. Finish with record_check then record_ingest using Markdown report text or a local file. Question policy and validation belong to the record CLI; asking with wait keeps the question pending. Answers are attributed to the configured caller; answer only when authorized. The server does not launch workers or models. Interrupted writes may have committed; inspect before retrying.',
+    instructions: 'Read record://snapshot for context and record_lessons for active lessons (optionally filtered by project-relative path or exact module). Use record_ready to find work, record_show for details, and record_start to record a run and receive its brief. Finish with record_check then record_ingest using Markdown report text or a local file. Question policy and validation belong to the record CLI; asking with wait keeps the question pending. Answers are attributed to the configured caller; answer only when authorized. The server does not launch workers or models. Interrupted writes may have committed; inspect before retrying.',
   });
   function tool(name, description, shape, readOnly, callback, idempotent = readOnly) {
     server.registerTool(name, {
@@ -65,6 +65,10 @@ async function main() {
   tool('record_show', 'Show an item or run, including history and reports; json returns the CLI JSON view.',
     { id: text, json: z.boolean().optional() }, true,
     (input, signal) => cli.run(['show', ...flags(input, { json: 'json' }), '--', input.id], signal));
+  tool('record_lessons', 'Read active lessons by default, with optional project-relative path, exact module, scope and lifecycle state filters. Text is bounded; json returns every match and its evidence.',
+    { path: optionalText, module: optionalText, scope: z.enum(['project', 'fleet', 'framework']).optional(),
+      state: z.enum(['proposed', 'active', 'retired', 'superseded', 'all']).optional(), json: z.boolean().optional() }, true,
+    (input, signal) => cli.run(['lessons', ...flags(input, { path: 'path', module: 'module', scope: 'scope', state: 'state', json: 'json' })], signal));
   tool('record_add', 'Add work or a goal through the CLI. IDs, parents, blockers and metadata are validated there.',
     { title: text, goal: z.boolean().optional(), role: optionalText, capability: optionalText, parent: optionalText,
       blocked_by: strings, accept: strings, priority: z.number().finite().optional(), budget: pairs, meta: pairs }, false,
@@ -118,7 +122,7 @@ async function main() {
   // Normalize valid name-only ready calls before the SDK validates against the
   // advertised strict object schema, preserving its optional role filter.
   transport.onmessage = (message, extra) => {
-    if (message.method === 'tools/call' && message.params?.name === 'record_ready' && message.params.arguments === undefined) {
+    if (message.method === 'tools/call' && ['record_ready', 'record_lessons'].includes(message.params?.name) && message.params.arguments === undefined) {
       message = { ...message, params: { ...message.params, arguments: {} } };
     }
     receive(message, extra);

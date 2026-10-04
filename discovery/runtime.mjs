@@ -29,6 +29,7 @@ export function command(binary, args, cwd, env = {}, timeout = DEFAULT_REQUEST_T
 
 export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, worktreeRoot, sandboxBinary }) {
   const project = gitProject(cwd);
+  const enteredPath = path.relative(project.checkout, fs.realpathSync(cwd)).split(path.sep).join('/') || '.';
   const settings = projectEntrySettings(project);
   if (!settings.enabled) return null;
   if (!['worker', 'supervisor'].includes(role)) throw new Error('role must be worker or supervisor');
@@ -222,6 +223,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     }, timeout);
   };
   const context = () => ({ role, canonical: project.canonical, identity: project.identity, workspace,
+    enteredPath,
     fleet: { file: fleet.file, project: fleet.name, session_limit: fleet.session_limit, advisory: true },
     branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,
     routing: initial.routing ? { parent: initial.routing.parent, question: initial.routing.question } : null,

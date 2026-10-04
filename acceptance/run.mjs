@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
+import { lessonsEntryCase } from './lessons.mjs';
 import { auditCopies, relocate, within, copiedSandbox, workspaceIdentityCutover } from './security.mjs';
 import { HarnessLimit, Pending, commandFailure, withCommandContext, requirePrerequisite, requireSuccessfulChecks } from './limits.mjs';
 import { installSignalCleanup, removeCredentials } from './signal-cleanup.mjs';
@@ -1068,6 +1069,7 @@ try {
     return 'negative caller probe refused; zero-caller retirement executed; split launcher tests ran without contrib; blob restored before all legacy callers';
   };
   await runCutoverCases({ results, test, switches: switchCase, retirement: retirementCase, scratchRoots });
+  await test(cases.lessons, () => lessonsEntryCase({ opt, root, scratchRoots, discoveryRoots, candidate, evidence, run, node, initRepo, h, until, write, read }));
   await discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, authHome, test, pending, initRepo, run, node, git, h, until, write, read });
   await test(cases.defaultCycle, async () => {
     for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs', 'discovery/adapters/codex.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);

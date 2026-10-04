@@ -20,6 +20,7 @@ an unchanged copy of `lib/deadline.mjs` beside their other runtime modules.
 | `herdr.mjs`: cwd, stand-in registration, PTY acknowledgement, shell startup | 50/60/100 attempts at 100ms (nominal 5/6/10/10s) | Converted to elapsed, load-scaled deadlines. Cwd and registration probes cap each read-only native call at the remaining time, kill it at expiry, and reject late successful replies; sleep also consumes that same deadline. |
 | `worker.mjs`: scripted commands and TERM-to-KILL grace | 90s default; Git add/commit 15s; grace 1s | All scale on invocation. |
 | `live-worker.mjs`: real session runtime and termination grace | 180s; stop grace 1s | Both scale. Runtime expiry now also escalates to SIGKILL after the grace, including sessions that ignore TERM. |
+| `entry-session.mjs`: fresh UI runtime and termination grace | 45s; stop grace 1s | Both scale; the lessons case uses the runner's load-aware waits and stops each owned session before closing its workspace. Stop observation is a 50ms cadence. |
 | `focus.mjs`: IPC ready/stop waits and replay startup | 70/7/60s | Already load-aware; retained. |
 | `focus.mjs`: destination creation receipt and subscription-ready waits | 3s each | Converted to load-aware allowances. |
 | `probe.mjs`: generated direct-socket denial proof | 2s | Generated immediately before native execution with a sampled load-aware allowance. Permission failures remain product failures. |

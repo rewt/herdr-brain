@@ -90,7 +90,7 @@ test('stdio exposes every tool and resource and completes the record workflow of
   s.org(['init']);
   const client = await connect(t, s);
   const listed = (await client.request('tools/list')).result.tools;
-  assert.deepEqual(listed.map(tool => tool.name).sort(), ['add', 'answer', 'ask', 'check', 'ingest', 'ready', 'show', 'start'].map(name => `record_${name}`).sort());
+  assert.deepEqual(listed.map(tool => tool.name).sort(), ['add', 'answer', 'ask', 'check', 'ingest', 'lessons', 'ready', 'show', 'start'].map(name => `record_${name}`).sort());
   assert.equal(listed.find(tool => tool.name === 'record_ready').annotations.readOnlyHint, true);
   assert.equal(listed.find(tool => tool.name === 'record_add').inputSchema.additionalProperties, false);
   const resources = (await client.request('resources/list')).result.resources;
@@ -127,6 +127,34 @@ test('stdio exposes every tool and resource and completes the record workflow of
   assert.equal(events.find(event => event.type === 'run.started').by, 'arch14-test-agent');
   assert.ok(!fs.readdirSync(s.root).some(name => name.startsWith('record-mcp-report-')));
   assert.equal(client.stderr(), '');
+});
+
+test('lessons exposes literal CLI filters and lifecycle JSON through a read-only strict tool', { timeout: 30000 }, async t => {
+  const s = scratch(t); s.org(['init']); s.org(['add', 'Lesson evidence', '--role', 'engineer']);
+  const add = (claim, args = []) => s.org(['lesson', 'add', claim, '--evidence', 'ENG-1', ...args]).trim();
+  const broad = add('Broad lesson'), area = add('Area lesson', ['--path', 'mcp', '--module', 'adapter', '--scope', 'framework']);
+  const proposal = add('Proposed lesson'), retired = add('Retired lesson');
+  for (const id of [broad, area, retired]) s.org(['lesson', 'activate', id]);
+  s.org(['lesson', 'retire', retired, '--reason', 'Outdated']);
+  const client = await connect(t, s);
+  const tool = (await client.request('tools/list')).result.tools.find(t => t.name === 'record_lessons');
+  assert.equal(tool.annotations.readOnlyHint, true); assert.equal(tool.annotations.destructiveHint, false);
+  assert.equal(tool.inputSchema.additionalProperties, false);
+  const before = fs.readFileSync(path.join(s.root, '.org/events.jsonl'), 'utf8');
+  assert.deepEqual((await client.request('tools/call', { name: 'record_lessons' })).result, await client.call('lessons'));
+  assert.match(body(await client.call('lessons')), /Broad lesson/);
+  const filtered = await client.call('lessons', { path: 'mcp/server.mjs', scope: 'framework', json: true });
+  assert.equal(body(filtered), s.org(['lessons', '--path=mcp/server.mjs', '--scope=framework', '--json']));
+  assert.deepEqual(JSON.parse(body(filtered)).map(l => l.id), [area]);
+  assert.deepEqual(JSON.parse(body(await client.call('lessons', { module: 'adapter', json: true }))).map(l => l.id), [area, broad]);
+  assert.deepEqual(JSON.parse(body(await client.call('lessons', { state: 'proposed', json: true }))).map(l => l.id), [proposal]);
+  assert.deepEqual(JSON.parse(body(await client.call('lessons', { state: 'retired', json: true }))).map(l => l.id), [retired]);
+  assert.equal(JSON.parse(body(await client.call('lessons', { state: 'all', json: true }))).length, 4);
+  await client.call('lessons', { module: '$(touch INJECTED) `touch INJECTED2`' });
+  for (const file of ['INJECTED', 'INJECTED2']) assert.ok(!fs.existsSync(path.join(s.root, file)));
+  for (const input of [{ path: '../escape' }, { scope: 'other' }, { state: 'invalid' }, { json: 'yes' }, { unknown: true }])
+    await client.call('lessons', input, { error: true });
+  assert.equal(fs.readFileSync(path.join(s.root, '.org/events.jsonl'), 'utf8'), before);
 });
 
 test('ready accepts omitted arguments while advertising and enforcing its strict role schema', { timeout: 20000 }, async t => {

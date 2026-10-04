@@ -159,7 +159,7 @@ try {
   else if (group === 'pane' && ['get', 'read', 'run', 'report-agent', 'release-agent'].includes(verb)) {
     await ownedPane(target);
     if (verb === 'run' && !isLaneEnvironmentCommand(argv[3], root) &&
-        !['worker.mjs', 'live-worker.mjs'].some((f) => argv[3].startsWith(`${quote(process.execPath)} ${quote(path.join(root, f))} `))) {
+        !['worker.mjs', 'live-worker.mjs', 'entry-session.mjs'].some((f) => argv[3].startsWith(`${quote(process.execPath)} ${quote(path.join(root, f))} `))) {
       throw new CapabilityRefusal('pane run permits only the scripted stand-in or private lane environment handoff');
     }
   } else if (group === 'agent' && verb === 'list') { /* filtered below */ }

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { releaseSettings } from '../release/config.mjs';
 import path from 'node:path';
 import { supervisorPolicy } from '../supervisor/protocol.mjs';
+import { entryLessons } from './lessons.mjs';
 export function entryPolicy(context, root) {
   const monitor = `${quote(process.execPath)} ${quote(`${root}/discovery/client.mjs`)}`;
   const record = `ORG_DIR=${quote(context.org)} ${quote(process.execPath)} ${quote(`${root}/bin/org.mjs`)}`;
@@ -39,6 +40,7 @@ Routing: ${context.suggestedRoutes ? 'The installed portable preset is suggested
 ${context.routing ? `Question ${context.routing.question} in the record proposes Codex gpt-6.1-sol high for engineering and Claude opus high for independent review, with the full portable route preset. It is category other and must wait for the operator. Do not answer on their behalf and do not invent preferences. If the task is routing, inspect it with ${record} show ${context.routing.question}; leave the single question pending and report needs_human. After an actual operator answer, a worker uses ${monitor} apply-routes to write the approved config into the ${mainMode ? 'assigned integration checkout; commit, check and finish it' : 'worker lane; commit, check and promote it'}. A text answer must be complete route JSON; a no requires further human guidance.` : ''}
 The task prompt carries work, not workflow setup. The installed adapter supplies this policy even in a project with no policy or configuration files.
 ${context.entry?.policy ? `Project policy additions from ${context.entry.source} (entry.policy):\n${context.entry.policy}\n` : ''}
+${entryLessons(context)}
 ${instructions}
 `;
 }

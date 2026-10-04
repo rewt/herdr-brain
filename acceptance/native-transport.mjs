@@ -8,6 +8,7 @@ import { within, permissionArgs } from './security.mjs';
 import { validationTransport } from './validation.mjs';
 import { assertScratchHomes } from './environment.mjs';
 import { fleetPath } from '../lib/fleet.mjs';
+import { nativeEntryReceipt } from './entry.mjs';
 const [root, name, ...args] = process.argv.slice(2);
 // A bypass request has its own refusal, even when the entry also leaks
 // capabilities. Check every argument before the environment/root guards.
@@ -32,7 +33,7 @@ if (instruction) {
   const policy = JSON.parse(instruction.slice('developer_instructions='.length));
   const source = path.join(spec.installation, 'discovery/policy.mjs');
   assert.ok(policy.includes(source), 'product policy must name its installed source');
-  fs.writeFileSync(path.join(root, 'evidence', `${name}.entry.json`), JSON.stringify({ source, policy, args, cwd: process.cwd() }, null, 2));
+  fs.writeFileSync(path.join(root, 'evidence', `${name}.entry.json`), JSON.stringify(nativeEntryReceipt('codex', args, spec.installation, process.cwd()), null, 2));
 }
 // Validation launches supplied by the product must retain this gate's read and
 // write boundary too, rather than restoring a root-readable native profile.

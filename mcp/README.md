@@ -49,13 +49,14 @@ the process and cancel active CLI calls. stdout contains MCP messages only.
 Every tool advertises a strict JSON schema. Text is literal, including leading
 dashes, shell syntax and newlines; no shell interprets client input. Optional
 arguments map to their corresponding CLI flags; underscores map to hyphens.
-Clients may omit the `arguments` member for `record_ready`, which is equivalent
-to an empty object. Its optional `role` filter and strict schema still apply.
+Clients may omit the `arguments` member for `record_ready` and `record_lessons`,
+which is equivalent to an empty object. Their strict schemas still apply.
 
 | Tool | Required input | CLI behavior |
 | --- | --- | --- |
 | `record_ready` | none (optional `role`) | `status --json`, filtered to ready work excluding goals/human questions, preserving CLI order; structured JSON contains `org`, `events`, `as_of`, `items` |
 | `record_show` | `id` | `show`, optional `json` |
+| `record_lessons` | none | Read-only `lessons`; optional `path`, `module`, `scope`, `state`, `json`; active by default, bounded text or full JSON with evidence |
 | `record_add` | `title` | `add`; supports `goal`, `role`, `capability`, `parent`, `blocked_by`, `accept`, `priority`, `budget`, `meta` |
 | `record_ask` | `question`, `parent`, `category`, `recommend`, `why` | `ask`; supports `wait`, `on_yes`, `on_no`, `memo`, `blocks`, `priority` |
 | `record_answer` | `id`, `answer` | `answer`; supports `note`, `overrule`; a no answer keeps dependents blocked |

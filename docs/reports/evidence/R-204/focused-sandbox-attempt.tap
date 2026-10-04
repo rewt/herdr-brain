@@ -1,0 +1,399 @@
+TAP version 13
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 1 - offline fleet fixtures keep default run temp within the Unix socket budget
+  ---
+  duration_ms: 5.525208
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 2 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 368.413958
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 3 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 358.86375
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 4 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 1351.633875
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 5 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1235.725666
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 6 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 1821.282209
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 7 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1564.346875
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 8 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 1717.796209
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 9 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1835.094125
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 10 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1324.048916
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 11 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 12871.830209
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 12 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1623.443666
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 13 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1442.240083
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 14 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 1173.794875
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 15 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1143.341375
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 16 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 1857.68175
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 17 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1092.211834
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 18 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1100.644625
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 19 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1342.744041
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 20 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1281.450333
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 21 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1242.193458
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 22 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1313.646917
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 23 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1533.396166
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 24 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1340.068
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 25 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1604.773292
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 26 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 1858.952625
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 27 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 4143.017542
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 28 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 485.390416
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 29 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1319.741375
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 30 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1515.328
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 31 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2540.405833
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 32 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 2290.400083
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 33 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3313.194417
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 34 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 375.844542
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 35 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 2224.907208
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 36 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 2558.142542
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 37 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2318.683875
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 38 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1183.303208
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 39 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1248.258833
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 40 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 1731.240375
+  ...
+# Subtest: Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+ok 41 - Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+  ---
+  duration_ms: 3.417667
+  ...
+# Subtest: bare bubblewrap and renamed symlink aliases require experimental selection
+ok 42 - bare bubblewrap and renamed symlink aliases require experimental selection
+  ---
+  duration_ms: 1.758083
+  ...
+# Subtest: explicit experimental selection survives repeated selection and builds the gated provider command
+ok 43 - explicit experimental selection survives repeated selection and builds the gated provider command
+  ---
+  duration_ms: 2.133292
+  ...
+# Subtest: direct bubblewrap launcher requires opt-in before launching a provider
+ok 44 - direct bubblewrap launcher requires opt-in before launching a provider
+  ---
+  duration_ms: 211.679208
+  ...
+# Subtest: Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+ok 45 - Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+  ---
+  duration_ms: 134.698666
+  ...
+# Subtest: installation requires and preserves experimental selection while Codex installs keep their native default
+ok 46 - installation requires and preserves experimental selection while Codex installs keep their native default
+  ---
+  duration_ms: 114.6345
+  ...
+# Subtest: macOS copies nonempty files and refuses a redirected temporary root after profile construction
+ok 47 - macOS copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.067917
+  ...
+# Subtest: Codex copies nonempty files and refuses a redirected temporary root after profile construction
+ok 48 - Codex copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.108791
+  ...
+# monitor entry: keeping lane/entry-b9dc4b882daf at /private/tmp/ms-BxIvQf/lanes/lane-entry-b9dc4b882daf: a run was started in this lane
+# monitor entry: keeping lane/entry-873dfe5c6463 at /private/tmp/ms-xLG7UC/lanes/lane-entry-873dfe5c6463: a run was started in this lane
+# monitor entry: keeping lane/entry-6ce6d25ed2a0 at /private/tmp/ms-8UAr1D/lanes/lane-entry-6ce6d25ed2a0: a run was started in this lane
+# monitor entry: keeping lane/entry-174dcd6c4cb5 at /private/tmp/ms-scf81K/lanes/lane-entry-174dcd6c4cb5: modified, untracked or ignored files
+# Subtest: explicit installed adapters leave opted-out projects and native arguments untouched
+ok 49 - explicit installed adapters leave opted-out projects and native arguments untouched
+  ---
+  duration_ms: 731.6065
+  ...
+# Subtest: automatic interactive adapters pass opted-out sessions straight through
+ok 50 - automatic interactive adapters pass opted-out sessions straight through
+  ---
+  duration_ms: 1162.559458
+  ...
+# Subtest: both transports deliver project settings, integration branch and instruction precedence
+ok 51 - both transports deliver project settings, integration branch and instruction precedence
+  ---
+  duration_ms: 1674.63725
+  ...
+# Subtest: main-checkout mode reaches both native harnesses without becoming a supervisor
+ok 52 - main-checkout mode reaches both native harnesses without becoming a supervisor
+  ---
+  duration_ms: 1559.2165
+  ...
+# Subtest: automatic interactive entry honors the project main-checkout mode
+ok 53 - automatic interactive entry honors the project main-checkout mode
+  ---
+  duration_ms: 2010.650791
+  ...
+# Subtest: worker mode validates and promotes to the declared integration branch
+not ok 54 - worker mode validates and promotes to the declared integration branch
+  ---
+  duration_ms: 1642.991708
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/ms-BxIvQf/lanes/lane-entry-b9dc4b882daf/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/ms-BxIvQf/project/.lane.json)): node --test
+    sandbox-exec: sandbox_apply: Operation not permitted
+    monitor validation: sandboxed validation exited 71
+    GATE 3ef95cedb80a321c692eaf8d982b5010c04b79a2 exit=1 (0.508s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:25:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:211:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:290:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/settings.test.mjs:157:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+ok 55 - main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+  ---
+  duration_ms: 1163.012
+  ...
+# Subtest: main-mode done reports require clean committed work and successful sandboxed validation
+not ok 56 - main-mode done reports require clean committed work and successful sandboxed validation
+  ---
+  duration_ms: 3046.283
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/ms-23FVni/project/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/ms-23FVni/project/.lane.json)): node --test
+    sandbox-exec: sandbox_apply: Operation not permitted
+    monitor validation: sandboxed validation exited 71
+    GATE 89b91c405c78928dd25b3b64aa47ae4c5581a1e0 exit=1 (0.375s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:25:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:211:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:310:11)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/settings.test.mjs:196:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: entry-only configuration preserves the portable route suggestion and pending operator question
+ok 57 - entry-only configuration preserves the portable route suggestion and pending operator question
+  ---
+  duration_ms: 560.512583
+  ...
+# Subtest: entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+not ok 58 - entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+  ---
+  duration_ms: 1397.606375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/ms-xLG7UC/lanes/lane-entry-873dfe5c6463/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/ms-xLG7UC/project/.lane.json)): fast-check
+    sandbox-exec: sandbox_apply: Operation not permitted
+    monitor validation: sandboxed validation exited 71
+    GATE 72976e006cc660d326c2ad3ed45dfed65eee3e22 exit=1 (0.492s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:25:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:211:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:290:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/settings.test.mjs:226:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+not ok 59 - undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+  ---
+  duration_ms: 1287.702416
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/ms-8UAr1D/lanes/lane-entry-6ce6d25ed2a0/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/ms-8UAr1D/project/.lane.json)): node --test
+    sandbox-exec: sandbox_apply: Operation not permitted
+    monitor validation: sandboxed validation exited 71
+    GATE 43175476706449d62b1ff96f3c5aedb918054902 exit=1 (0.479s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:25:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:211:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/runtime.mjs:290:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/settings.test.mjs:243:22
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: entry settings use canonical Git identity and do not inherit parent or worker config
+ok 60 - entry settings use canonical Git identity and do not inherit parent or worker config
+  ---
+  duration_ms: 723.664375
+  ...
+# Subtest: invalid enabled settings and mismatched integration branches fail before runtime creation
+ok 61 - invalid enabled settings and mismatched integration branches fail before runtime creation
+  ---
+  duration_ms: 162.447042
+  ...
+1..61
+# tests 61
+# suites 0
+# pass 55
+# fail 4
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 72698.622916

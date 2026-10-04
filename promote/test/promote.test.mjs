@@ -3,7 +3,6 @@ import { spawnChild, waitForExit, childProcessEntry } from '../../test/helpers/c
 import { registerProcess, killProcess, lookupProcess } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +25,7 @@ async function until(fn) {
   assert.fail('timed out waiting for queue evidence');
 }
 function fixture(t) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'promote-test-')));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'pt-'));
   const repo = path.join(root, 'project'); fs.mkdirSync(repo);
   const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     npm_config_cache: path.join(root, 'cache'), npm_config_update_notifier: 'false' };

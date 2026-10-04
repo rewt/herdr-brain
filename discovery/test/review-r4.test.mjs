@@ -2,7 +2,6 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { sandboxCommand, selectSandbox, EXPERIMENTAL_BUBBLEWRAP } from '../confinement.mjs';
@@ -13,7 +12,7 @@ const actorTest = (name, fn, options = {}) => test(name, { timeout: 20000, ...op
   return fn(t);
 });
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-r99-'));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'mr4-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const repo = path.join(root, 'repo'), bin = path.join(root, 'bin'), outside = path.join(root, 'outside');
   for (const dir of [repo, bin, outside, path.join(repo, '.git'), path.join(repo, '.org')]) fs.mkdirSync(dir);
@@ -66,7 +65,9 @@ actorTest('Linux preparation, validation and Git filters refuse default bubblewr
   const command = [process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(called)},'unsafe')`].map(quote).join(' ');
   fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ validate: command, prepare: [{ run: command }] }));
   for (const provider of ['auto', f.bwrap]) {
-    const validation = invoke([...linuxImport, path.join(product, 'discovery/validate.mjs'), provider, f.repo, JSON.stringify([path.join(f.repo, '.org')])], { cwd: f.repo });
+    const validation = invoke([...linuxImport, path.join(product, 'discovery/validate.mjs'), provider, f.repo, JSON.stringify([path.join(f.repo, '.org')])], {
+      cwd: f.repo, env: { ...process.env, MONITOR_PROJECT_TEMP: path.join(f.root, 'temp') },
+    });
     assert.notEqual(validation.status, 0); assert.match(validation.stderr, /disabled by default/u);
     const filter = invoke([...linuxImport, path.join(product, 'discovery/git-driver.mjs'), provider, JSON.stringify([path.join(f.repo, '.org')]), Buffer.from(command).toString('base64')], { cwd: f.repo, input: 'bytes' });
     assert.notEqual(filter.status, 0); assert.match(filter.stderr, /disabled by default/u);

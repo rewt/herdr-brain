@@ -11,8 +11,23 @@ import { releaseEnvironment } from './helpers/release-environment.mjs';
 import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 import { spawnChild, waitForExit, killChild } from './helpers/child.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
+import { fixtureFleet } from './helpers/offline-herdr.mjs';
+import { runTemporary } from '../discovery/temporary.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
+test('offline fleet fixtures keep default run temp within the Unix socket budget', t => {
+  const check = () => {
+    const temp = runTemporary(path.join(process.env.HERDR_MONITOR_FLEET, 't', '0'.repeat(16)));
+    assert.ok(Buffer.byteLength(temp) <= 60, temp);
+    fs.rmSync(temp, { recursive: true, force: true });
+  };
+  check(); // Covers both direct execution and the bounded runner's inherited root.
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-long-fleet-fixture-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  fixtureFleet(t, scratch);
+  check(); // A long project scratch root must still get a short, isolated fleet.
+  assert.throws(() => runTemporary(path.join(scratch, 'x'.repeat(61))), /maximum is 60/u);
+});
 function assertNativeSupervisorEntry(native, runtime) {
   const policy = JSON.parse(native.args.find((arg) => arg.startsWith('developer_instructions=')).slice('developer_instructions='.length));
   assertSupervisorEntry(policy);

@@ -1,0 +1,319 @@
+TAP version 13
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 1 - offline fleet fixtures keep default run temp within the Unix socket budget
+  ---
+  duration_ms: 6.122166
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 2 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 402.292125
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 3 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 367.133084
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 4 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 1288.269708
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 5 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1205.776459
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 6 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 1194.496083
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 7 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1333.997292
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 8 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 1433.294334
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 9 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1371.844875
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 10 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1351.127083
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 11 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 12757.012459
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 12 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1532.658208
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 13 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1318.941916
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 14 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 970.054041
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 15 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1008.212625
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 16 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 1888.520667
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 17 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1225.207125
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 18 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1159.417458
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 19 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1302.733458
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 20 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1458.589833
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 21 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1308.418209
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 22 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1322.609833
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 23 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1370.429125
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 24 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1383.556833
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 25 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1675.958792
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 26 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 1899.666
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 27 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 4104.649291
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 28 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 496.5355
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 29 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1463.79575
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 30 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1352.268042
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 31 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2959.010666
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 32 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 4232.076459
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 33 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 8213.0795
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 34 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 1120.71125
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 35 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 6340.758
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 36 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 6164.072292
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 37 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 3834.994709
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 38 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1348.763291
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 39 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1533.662416
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 40 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 1835.594166
+  ...
+# Subtest: Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+ok 41 - Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+  ---
+  duration_ms: 3.731084
+  ...
+# Subtest: bare bubblewrap and renamed symlink aliases require experimental selection
+ok 42 - bare bubblewrap and renamed symlink aliases require experimental selection
+  ---
+  duration_ms: 2.164583
+  ...
+# Subtest: explicit experimental selection survives repeated selection and builds the gated provider command
+ok 43 - explicit experimental selection survives repeated selection and builds the gated provider command
+  ---
+  duration_ms: 2.236666
+  ...
+# Subtest: direct bubblewrap launcher requires opt-in before launching a provider
+ok 44 - direct bubblewrap launcher requires opt-in before launching a provider
+  ---
+  duration_ms: 219.79
+  ...
+# Subtest: Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+ok 45 - Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+  ---
+  duration_ms: 137.18925
+  ...
+# Subtest: installation requires and preserves experimental selection while Codex installs keep their native default
+ok 46 - installation requires and preserves experimental selection while Codex installs keep their native default
+  ---
+  duration_ms: 116.210083
+  ...
+# Subtest: macOS copies nonempty files and refuses a redirected temporary root after profile construction
+ok 47 - macOS copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.0705
+  ...
+# Subtest: Codex copies nonempty files and refuses a redirected temporary root after profile construction
+ok 48 - Codex copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.157792
+  ...
+# monitor entry: keeping lane/entry-a5b2ccb3c8c0 at /private/tmp/ms-ZlgL6W/lanes/lane-entry-a5b2ccb3c8c0: a run was started in this lane
+# monitor entry: keeping lane/entry-e2f757a489ef at /private/tmp/ms-q4qRf2/lanes/lane-entry-e2f757a489ef: a run was started in this lane
+# monitor entry: keeping lane/entry-28e10e51a46f at /private/tmp/ms-elKvJj/lanes/lane-entry-28e10e51a46f: a run was started in this lane
+# monitor entry: keeping lane/entry-c69f744c0a3a at /private/tmp/ms-UYbR9M/lanes/lane-entry-c69f744c0a3a: modified, untracked or ignored files
+# Subtest: explicit installed adapters leave opted-out projects and native arguments untouched
+ok 49 - explicit installed adapters leave opted-out projects and native arguments untouched
+  ---
+  duration_ms: 786.608583
+  ...
+# Subtest: automatic interactive adapters pass opted-out sessions straight through
+ok 50 - automatic interactive adapters pass opted-out sessions straight through
+  ---
+  duration_ms: 1349.502208
+  ...
+# Subtest: both transports deliver project settings, integration branch and instruction precedence
+ok 51 - both transports deliver project settings, integration branch and instruction precedence
+  ---
+  duration_ms: 1870.699791
+  ...
+# Subtest: main-checkout mode reaches both native harnesses without becoming a supervisor
+ok 52 - main-checkout mode reaches both native harnesses without becoming a supervisor
+  ---
+  duration_ms: 1505.844167
+  ...
+# Subtest: automatic interactive entry honors the project main-checkout mode
+ok 53 - automatic interactive entry honors the project main-checkout mode
+  ---
+  duration_ms: 1959.357458
+  ...
+# Subtest: worker mode validates and promotes to the declared integration branch
+ok 54 - worker mode validates and promotes to the declared integration branch
+  ---
+  duration_ms: 2187.8565
+  ...
+# Subtest: main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+ok 55 - main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+  ---
+  duration_ms: 1036.234042
+  ...
+# Subtest: main-mode done reports require clean committed work and successful sandboxed validation
+ok 56 - main-mode done reports require clean committed work and successful sandboxed validation
+  ---
+  duration_ms: 3469.302375
+  ...
+# Subtest: entry-only configuration preserves the portable route suggestion and pending operator question
+ok 57 - entry-only configuration preserves the portable route suggestion and pending operator question
+  ---
+  duration_ms: 543.515667
+  ...
+# Subtest: entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+ok 58 - entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+  ---
+  duration_ms: 2534.57925
+  ...
+# Subtest: undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+ok 59 - undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+  ---
+  duration_ms: 1752.503042
+  ...
+# Subtest: entry settings use canonical Git identity and do not inherit parent or worker config
+ok 60 - entry settings use canonical Git identity and do not inherit parent or worker config
+  ---
+  duration_ms: 730.225958
+  ...
+# Subtest: invalid enabled settings and mismatched integration branches fail before runtime creation
+ok 61 - invalid enabled settings and mismatched integration branches fail before runtime creation
+  ---
+  duration_ms: 188.678042
+  ...
+1..61
+# tests 61
+# suites 0
+# pass 59
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 88584.584333

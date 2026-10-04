@@ -2,7 +2,6 @@ import test from './helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { findOrgDir, initOrg } from '../lib/store.mjs';
@@ -19,7 +18,7 @@ import { entryPolicy } from '../discovery/policy.mjs';
 const root = new URL('../', import.meta.url).pathname;
 const client = path.join(root, 'discovery/client.mjs');
 function fixture(t) {
-  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'fleet-test-'));
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'ft-'));
   const fleetHome = path.join(scratch, 'fleet'), consoleFile = path.join(scratch, 'console.json');
   const env = { ...process.env, HERDR_MONITOR_FLEET: fleetHome, HERDR_ORG_CONSOLE_CONFIG: consoleFile, ORG_DIR: '', MONITOR_REQUEST_DIR: '' };
   const before = { ...process.env };

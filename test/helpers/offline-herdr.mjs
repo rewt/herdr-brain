@@ -1,14 +1,19 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 // Disposable projects must not inherit stale mappings from earlier fixtures.
 export function fixtureFleet(t, scratch) {
   const before = process.env.HERDR_MONITOR_FLEET;
-  process.env.HERDR_MONITOR_FLEET = path.join(scratch, 'fleet');
+  // Default project temp adds /t/<16-byte hash>/r-XXXXXX. Keep that
+  // resolved path within the production 60-byte budget, even on macOS.
+  const fleet = path.join(fs.realpathSync(scratch), 'fleet');
+  const short = Buffer.byteLength(path.join(fleet, 't', '0'.repeat(16), 'r-XXXXXX')) > 60
+    ? fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'of-')) : null;
+  process.env.HERDR_MONITOR_FLEET = short ?? fleet;
   t.after(() => {
     if (before === undefined) delete process.env.HERDR_MONITOR_FLEET;
     else process.env.HERDR_MONITOR_FLEET = before;
+    if (short) fs.rmSync(short, { recursive: true, force: true });
   });
 }
 
@@ -17,14 +22,14 @@ export function fixtureFleet(t, scratch) {
 export function offlineHerdr() {
   if (process.env.HERDR_TEST_OFFLINE_ROOT) {
     // Each test file gets its own machine registry; product children inherit it.
-    process.env.HERDR_MONITOR_FLEET = path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `fleet-${process.pid}`);
+    process.env.HERDR_MONITOR_FLEET = path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `f${process.pid}`);
     return () => {};
   }
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'org-offline-herdr-'));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'oh-'));
   fs.writeFileSync(path.join(root, 'herdr'), '#!/bin/sh\necho "offline tests: provide a fake Herdr CLI" >&2\nexit 1\n', { mode: 0o755 });
   for (const name of Object.keys(process.env)) if (name.startsWith('HERDR_') && !name.startsWith('HERDR_TEST_')) delete process.env[name];
   process.env.HERDR_TEST_OFFLINE_ROOT = root;
-  process.env.HERDR_MONITOR_FLEET = path.join(root, `fleet-${process.pid}`);
+  process.env.HERDR_MONITOR_FLEET = path.join(root, `f${process.pid}`);
   process.env.HERDR_SOCKET_PATH = path.join(root, 'absent.sock');
   process.env.PATH = `${root}:${process.env.PATH ?? ''}`;
   process.env.ORG_ACTOR = `offline-test-${process.pid}`;

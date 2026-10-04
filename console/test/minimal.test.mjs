@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { duration, minimalRows, minimalFrame, sessionStage } from '../modern/minimal.mjs';
 import { createMinimalSession } from '../modern/minimal-session.mjs';
 import { consoleProfile, normalizeConfig } from '../lib/config.mjs';
-import { createPainter } from '../modern/paint.mjs';
+import { minimalLayout, checkElapsed } from '../modern/minimal-view.mjs';
+import { createIdentityReader } from '../modern/model.mjs';
 import { cellWidth } from '../lib/text.mjs';
 
 const now = Date.parse('2026-10-04T17:00:00Z');
@@ -83,14 +84,10 @@ test('minimal frame is bounded, safe with Unicode, clear about overflow and quie
     assert.match(text(frame), /Reports/);
     assert.match(text(frame), /Train/);
   }
-  let writes = 0;
-  const painter = createPainter({ write: () => writes++, color: () => undefined });
-  const frame = minimalFrame({ project, sessions, now }, 100, 12);
-  painter.paint(frame.lines); painter.paint(frame.lines);
-  assert.equal(writes, 1);
+  assert.equal(text(minimalFrame({ project, sessions, now }, 100, 12)), text(minimalFrame({ project, sessions, now }, 100, 12)));
 });
 
-test('minimal refresh retains last good sources, recovers, accepts only quit and has no action effects', async () => {
+test('minimal refresh retains last good sources and has no record or scheduling effects', async () => {
   let fail = false, stopped = false, calls = [];
   const config = { projects: [{ name: 'Project', cwd: '/project', org: '/org' }], refresh_seconds: 10 };
   const session = createMinimalSession({ config, env: {}, deps: { identity, now: () => now, details: () => ({}),
@@ -150,13 +147,14 @@ console.log(JSON.stringify({ result }));
     fs.mkdirSync(path.join(dir, 'supervisor'));
     fs.writeFileSync(path.join(dir, 'supervisor/inbox.log'), JSON.stringify({ type: 'notice', id: 'n', message: '[org-report] run=R-2 item=ENG-2 check=pass', at: '2020-01-02T12:30:00Z' }) + '\n');
     const env = { ...process.env, HERDR_BIN_PATH: herdr, HERDR_ORG_BIN: record, ORG_FLEET_DIR: path.join(dir, 'no-fleet'), TZ: 'UTC' };
-    for (const flags of [[], ['--minimal'], ['--profile', 'minimal']]) {
-      const result = spawnSync(process.execPath, ['--import', clock, 'console/app.mjs', ...flags, '--config', config, '--project', 'Snapshot', '--print', '100x14', '--keys', 'ny\\ncPSHy\\n'], { env, encoding: 'utf8' });
+    for (const [width, height] of [[40, 24], [100, 24]]) for (const flags of [[], ['--minimal'], ['--profile', 'minimal']]) {
+      const result = spawnSync(process.execPath, ['--import', clock, 'console/app.mjs', ...flags, '--config', config, '--project', 'Snapshot', '--print', `${width}x${height}`, '--keys', 'ny\\ncPSHy\\n'], { env, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, fs.readFileSync(new URL('./fixtures/minimal-100x14.txt', import.meta.url), 'utf8'));
-      assert.match(result.stdout, /R-1\s+ENG-1 Compact console/);
+      const fixture = new URL(`./fixtures/minimal-${width}x${height}.txt`, import.meta.url);
+      assert.equal(result.stdout, fs.readFileSync(fixture, 'utf8'));
+      assert.match(result.stdout, /R-1\s+│ ENG-1 Compac/);
       assert.match(result.stdout, /done \/ pass/);
-      assert.match(result.stdout, /The headline comes from the record/);
+      assert.match(result.stdout, width === 40 ? /The headline comes from the recor/ : /The headline comes from the record/);
     }
     const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
     assert.ok(calls.every(args => (['agent', 'workspace', 'pane', 'tab'].includes(args[0]) && args[1] === 'list') || (args[0] === 'status' && args[1] === '--json')));
@@ -218,10 +216,10 @@ test('narrow and wide frames show active CI, check clocks, refusals and log path
   for (const width of [40, 60, 80, 100, 140]) {
     const frame = minimalFrame({ project, reports, train, now }, width, 25);
     assert.match(text(frame), /one, two/); assert.match(text(frame), /Waiting · waiting/);
-    assert.match(text(frame), /refused/); assert.match(text(frame), /validation failed/);
-    assert.match(text(frame), /train.log/); assert.match(text(frame), /check started unknown/);
+    assert.match(text(frame), /refused/); assert.match(text(frame), /validation fail/);
+    assert.match(text(frame), /train.log/); assert.match(text(frame), /Check unknown/);
     assert.match(text(frame), /invalid \/ fail/);
-    assert.ok(frame.lines.flatMap(l => l.spans).some(s => s.fg === 'amber' && s.text.includes('fail')));
+    assert.equal(minimalLayout({ project, reports, train, now }, width, 25).groups[1][0].lines[0].find(s => s.text.includes('fail')).color, 'yellow');
     assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
   }
 });
@@ -235,15 +233,40 @@ test('Runs is an aligned table with short titles, local starts, frozen landed ti
   for (const width of [40, 60, 80, 100, 140]) {
     const frame = minimalFrame({ project, runs, now }, width, 25), output = text(frame);
     assert.match(output, /Runs · 2 open · 1 landed/); assert.doesNotMatch(output, /Now|details|\x1b/);
-    assert.match(output, /RUN/); assert.match(output, /STAGE/); assert.match(output, /START/); assert.match(output, /RUNNING/);
+    assert.match(output, /Run/); assert.match(output, /Stage/); if (width >= 90) { assert.match(output, /Start/); assert.match(output, /Elapsed/); }
     assert.match(output, /10\/02/); assert.match(output, /40m/);
     assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
-    assert.ok(frame.lines.flatMap(l => l.spans).some(s => s.dim && s.text.includes('R-238')));
+    assert.equal(minimalLayout({ project, runs, now }, width, 25).groups[0].at(-1).dim, true);
     if (width >= 60) {
-      const lines = output.split('\n').filter(l => /^R-/.test(l));
+      const lines = output.split('\n').filter(l => /^│ R-/.test(l));
       assert.equal(lines.length, 3);
       const stages = ['engineering', 'review', 'landed'];
       assert.equal(new Set(lines.map((l, i) => cellWidth(l.slice(0, l.indexOf(stages[i]))))).size, 1);
     }
   }
+});
+
+test('configured cwd without org or ID selects its catalog entry and discovers the record', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'minimal-project-'));
+  try {
+    assert.equal(spawnSync('git', ['init', '-q', root]).status, 0);
+    const org = path.join(root, '.org'); fs.mkdirSync(org); fs.writeFileSync(path.join(org, 'events.jsonl'), '');
+    const visited = [];
+    const session = createMinimalSession({ config: { projects: [{ name: 'Local', cwd: root }] }, env: {}, deps: {
+      identity: createIdentityReader(), now: () => now, details: () => ({}), herdrAgents: async () => ({ ok: true, agents: [] }),
+      herdrList: async () => [], orgStatus: async p => { visited.push(p.org); return { runs: [] }; },
+      journal: () => [], train: () => ({}), runs: () => ({ lanes: [] }),
+    } });
+    await session.refresh();
+    assert.equal(session.project.id, 'configured:Local'); assert.equal(session.project.org, fs.realpathSync(org));
+    assert.deepEqual(visited, [fs.realpathSync(org)]); assert.match(text(session.frame(80, 24)), /Local/); session.stop();
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('finished check duration freezes while delivery waits; a running check advances', () => {
+  const check = { checkStarted: iso(10), checkFinished: iso(8), checkComplete: true, checkDurationSeconds: 120 };
+  assert.equal(checkElapsed(check, now), '2m'); assert.equal(checkElapsed(check, now + 3600000), '2m');
+  assert.equal(checkElapsed({ ...check, checkDurationSeconds: null }, now + 3600000), '2m');
+  assert.equal(checkElapsed({ ...check, checkComplete: false }, now + 60000), '11m');
+  for (const time of [now, now + 3600000]) assert.match(text(minimalFrame({ now: time, train: { current: { lanes: ['lane'], command: 'node check', ...check } } }, 60, 24)), /2m · finished/);
 });

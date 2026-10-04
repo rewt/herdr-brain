@@ -79,13 +79,22 @@ export function trainFacts(queue, batches = []) {
       at: result.integrated_at ?? result.gate?.finished_at ?? b.updated_at,
       log: result.log ?? b.log, receipt: b.receipt });
   }
-  for (const r of queue?.results ?? []) results.set(r.id, { ...results.get(r.id), ...r, at: r.finished ?? r.integrated_at ?? r.gate?.finished_at ?? results.get(r.id)?.at });
+  for (const r of queue?.results ?? []) {
+    const saved = results.get(r.id);
+    // A resumed receipt can finish before its replacement delivery is queued.
+    // The old interrupted notice must not turn that final result backwards.
+    if (r.outcome === 'interrupted' && ['promoted', 'refused'].includes(saved?.outcome)) continue;
+    results.set(r.id, { ...saved, ...r, at: r.finished ?? r.integrated_at ?? r.gate?.finished_at ?? saved?.at });
+  }
   return {
     waiting: queue?.pending ?? [], interrupted: queue?.interrupted ?? [],
     current: current ? { id: current.id, lanes: (attempt?.jobs ?? current.jobs ?? [current]).map(j => j.topic),
       phase: current.phase === 'batching' ? (attempt?.phase === 'prepared' && batch?.command && !attempt.gate ? 'validating' : attempt?.phase ?? batch?.phase ?? current.phase) : current.phase,
       started: batch?.started_at ?? batch?.created_at ?? null,
       checkStarted: attempt?.gate?.started_at ?? null,
+      checkFinished: attempt?.gate?.finished_at ?? null,
+      checkDurationSeconds: attempt?.gate?.duration_s ?? null,
+      checkComplete: Boolean(attempt?.gate && (attempt.gate.finished_at || attempt.gate.exit_code != null)),
       command: attempt?.gate?.command ?? batch?.command ?? null, log: batch?.log ?? current.log } : null,
     results: [...results.values()].sort(newest),
   };
@@ -128,6 +137,8 @@ export function createFeedReader({ fsApi = fs } = {}) {
         if (!b) continue;
         if (b.identity !== project.repoKey) throw Error('Train receipt repository identity changed');
         const st = fsApi.statSync(receipt);
+        // Unlike train.json, the batch directory is not atomically replaced.
+        const directoryStat = fsApi.statSync(path.dirname(receipt));
         const log = path.join(root, name, 'train.log');
         // The current receipt writer records its creation, not a running gate's
         // clock. Preserve that distinction. The validating line names the CI.
@@ -137,7 +148,7 @@ export function createFeedReader({ fsApi = fs } = {}) {
           command = validating?.filter(v => !b.attempts?.at(-1)?.scratch || v.scratch === b.attempts.at(-1).scratch).at(-1)?.command ?? null;
         }
         batches.push({ ...b, command, log, receipt,
-          created_at: st.birthtimeMs > 0 ? new Date(st.birthtimeMs).toISOString() : null,
+          created_at: b.created_at ?? (directoryStat.birthtimeMs > 0 ? new Date(directoryStat.birthtimeMs).toISOString() : null),
           updated_at: new Date(st.mtimeMs).toISOString() });
       }
       return trainFacts(queue, batches);

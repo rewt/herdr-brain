@@ -83,3 +83,48 @@ test('optional read sources are cached, reject wrong identities and malformed li
     fs.writeFileSync(receipt, '{'); assert.throws(() => reader.train(project), SyntaxError);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a final resumed receipt wins over an older interrupted queue row, before and after delivery', () => {
+  for (const outcome of ['promoted', 'refused']) {
+    const batches = [{ id: 'batch', jobs: [{ id: 'job', topic: 'lane' }], results: { job: { outcome, integrated_at: at(3), reason: 'final' } } }];
+    const stale = { id: 'job', topic: 'lane', outcome: 'interrupted', finished: at(1) };
+    assert.equal(trainFacts({ results: [stale] }, batches).results[0].outcome, outcome);
+    const delivered = { id: 'job', outcome, finished: at(4), delivered: true };
+    const result = trainFacts({ results: [stale, delivered] }, batches).results;
+    assert.equal(result.length, 1); assert.equal(result[0].outcome, outcome); assert.equal(result[0].at, at(4));
+  }
+});
+
+test('batch start survives atomic receipt replacement and honours explicit timestamps', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'console-train-clock-'));
+  try {
+    const repoKey = path.join(root, '.git'), directory = path.join(repoKey, 'promote/batches/b');
+    fs.mkdirSync(directory, { recursive: true });
+    const file = path.join(directory, 'train.json'), queue = path.join(repoKey, 'promote/queue.json');
+    const value = { id: 'b', identity: repoKey, attempts: [{ phase: 'prepared' }] };
+    fs.writeFileSync(file, JSON.stringify(value));
+    fs.writeFileSync(queue, JSON.stringify({ identity: repoKey, current: { id: 'b', phase: 'batching', jobs: [{ topic: 'one' }] } }));
+    let revision = 1;
+    const fsApi = { ...fs, statSync(p) {
+      const st = fs.statSync(p);
+      if (p === file) return { ...st, mtimeMs: revision * 1000, birthtimeMs: revision * 1000 };
+      if (p === directory) return { ...st, birthtimeMs: Date.parse(at(1)) };
+      return st;
+    } };
+    const reader = createFeedReader({ fsApi }), project = { repoKey, git: true };
+    assert.equal(reader.train(project).current.started, at(1));
+    const replacement = path.join(directory, 'next.json');
+    fs.writeFileSync(replacement, JSON.stringify(value)); fs.renameSync(replacement, file); revision++;
+    assert.equal(reader.train(project).current.started, at(1));
+    fs.writeFileSync(file, JSON.stringify({ ...value, created_at: at(2) })); revision++;
+    assert.equal(reader.train(project).current.started, at(2));
+    fs.writeFileSync(file, JSON.stringify({ ...value, started_at: at(3), created_at: at(2) })); revision++;
+    assert.equal(reader.train(project).current.started, at(3));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('train projection carries finished check clocks and durations during delivery', () => {
+  const gate = { command: 'node check', started_at: at(1), finished_at: at(3), duration_s: 120, exit_code: 0 };
+  const result = trainFacts({ current: { id: 'b', phase: 'batch-delivering' } }, [{ id: 'b', attempts: [{ gate }] }]).current;
+  assert.equal(result.checkFinished, at(3)); assert.equal(result.checkDurationSeconds, 120); assert.equal(result.checkComplete, true);
+});

@@ -1,6 +1,6 @@
 // Display-only session facts. Ownership always comes from canonical Git identity.
 import { workspaceIdentity } from './model.mjs';
-import { pad, sanitize, cellWidth, clipStart } from '../lib/text.mjs';
+import { sanitize } from '../lib/text.mjs';
 
 const clean = value => sanitize(value).replace(/\s+/g, ' ').trim();
 const timestamp = value => {
@@ -89,114 +89,5 @@ export function shortModel(model) {
   return value.replace(/^claude-|^gpt-/i, '');
 }
 
-export function minimalFrame({ project, sessions = [], runs = [], reports = [], train = {}, errors = {}, loading = false, now = Date.now() }, cols, height) {
-  const width = Math.max(1, cols), rows = Math.max(1, height), content = Math.min(width, 116);
-  const fit = (text, n) => pad(sanitize(text), n);
-  const line = (parts, bold = false) => {
-    if (typeof parts === 'string') parts = [{ text: parts, fg: 'text' }];
-    let remaining = width;
-    const spans = parts.map(part => {
-      const text = fit(part.text, Math.min(remaining, cellWidth(sanitize(part.text))));
-      remaining -= cellWidth(text);
-      return { ...part, text, bg: 'bg', bold };
-    });
-    if (remaining) spans.push({ text: ' '.repeat(remaining), fg: 'text', bg: 'bg' });
-    return { spans };
-  };
-  const muted = text => line([{ text, fg: 'muted' }]);
-  const work = runs;
-  const open = work.filter(r => r.stage !== 'landed');
-  const context = sessions.filter(s => ['supervisor', 'chat'].includes(s.stage));
-  const provider = s => `${s.provider}${s.model ? ` ${shortModel(s.model)}` : ''}`;
-  const blocks = [[], [], []];
-  const compact = content < 90;
-  const stacked = content < 54;
-  const runW = Math.max(5, ...work.map(r => cellWidth(clean(r.run))));
-  const stageW = 11, providerW = content < 80 ? 11 : 14, startedW = 5, runningW = 7;
-  const itemW = Math.max(1, content - runW - stageW - providerW - startedW - runningW - 5);
-  const running = r => duration(new Date(now - r.running_seconds * 1000).toISOString(), now);
-  const started = r => {
-    const ms = timestamp(r.started);
-    if (ms === null) return '?';
-    const d = new Date(ms);
-    return d.toDateString() === new Date(now).toDateString()
-      ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-      : `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
-  };
-  const runProvider = r => `${/claude/i.test(r.provider ?? '') ? 'Claude' : /codex/i.test(r.provider ?? '') ? 'Codex' : clean(r.provider) || '?'}${r.model ? ` ${shortModel(r.model)}` : ''}`;
-  const cells = (r, header = false) => {
-    const fg = r.stage === 'blocked' ? 'amber' : header || r.stage === 'landed' ? 'muted' : 'text';
-    const dim = r.stage === 'landed';
-    const values = header ? ['RUN', 'ITEM', 'STAGE', 'PROVIDER', 'START', 'RUNNING']
-      : [r.run, `${r.item} ${shortTitle(r.title)}`, r.stage, runProvider(r), started(r), running(r)];
-    if (stacked) return [
-      line([{ text: fit(header ? 'RUN / ITEM' : `${r.run} ${values[1]}`, content), fg, dim }]),
-      line([{ text: [fit(values[2], stageW), fit(values[3], 11), fit(values[4], startedW), fit(values[5], runningW)].join(' '), fg, dim }]),
-    ];
-    return [line([{ text: values.map((v, i) => fit(v, [runW, itemW, stageW, providerW, startedW, runningW][i])).join(' '), fg, dim }])];
-  };
-  if (work.length) blocks[0].push(...cells({}, true), ...work.flatMap(r => cells(r)));
-  else blocks[0].push(muted(loading ? 'Reading runs…' : 'No open runs'));
-  for (const r of reports) {
-    const meta = `${startText(r.at, now)}  ${r.run ?? '?'} ${r.item ?? '?'}  `;
-    const result = `${r.outcome} / ${r.check}`;
-    const state = [{ text: meta, fg: 'muted' }, { text: result, fg: r.attention || r.check === 'fail' ? 'amber' : r.check === 'pass' ? 'teal' : 'muted' }];
-    if (compact) {
-      blocks[1].push(line(state));
-      blocks[1].push(line(fit(`  ${clean(r.headline)}`, content)));
-    } else {
-      const metaW = Math.min(57, Math.max(44, cellWidth(meta + result) + 2));
-      blocks[1].push(line([...state, { text: ' '.repeat(Math.max(2, metaW - cellWidth(meta + result))) + fit(clean(r.headline), content - metaW), fg: 'text' }]));
-    }
-  }
-  if (!reports.length) blocks[1].push(muted(loading ? 'Reading reports…' : 'No recent reports'));
-  const c = train.current;
-  if (c) {
-    blocks[2].push(line(`Batch · ${c.lanes.join(', ')} · ${c.phase}`));
-    blocks[2].push(muted(`  started ${startText(c.started, now)} · ${duration(c.started, now)} · CI ${c.command ?? 'unknown'}`));
-    if (c.command) blocks[2].push(muted(`  check started ${startText(c.checkStarted, now)} · ${duration(c.checkStarted, now)}`));
-  } else blocks[2].push(muted('No batch running'));
-  blocks[2].push(muted(`Waiting · ${train.waiting?.length ? train.waiting.map(j => j.topic).join(', ') : 'none'}`));
-  for (const b of train.interrupted ?? []) blocks[2].push(line([{ text: `! interrupted · ${(b.jobs ?? []).map(j => j.topic).join(', ')} · inspect receipt`, fg: 'amber' }]));
-  for (const r of (train.results ?? []).slice(0, 3)) {
-    blocks[2].push(line([{ text: `${startText(r.at, now)}  ${r.topic ?? '?'}  `, fg: 'muted' },
-      { text: r.outcome, fg: r.outcome === 'promoted' ? 'teal' : 'amber' },
-      { text: r.outcome === 'promoted' ? '' : ` · ${clean(r.reason)}`, fg: 'text' }]));
-    if (r.outcome !== 'promoted') blocks[2].push(muted(`  log ${clipStart(r.log ?? r.receipt ?? 'unknown', content - 6)}`));
-  }
-  const contextText = context.length ? `Context · ${[
-    ...context.filter(s => s.stage === 'supervisor').map(s => `supervisor ${provider(s)}`),
-    context.some(s => s.stage === 'chat') ? `${context.filter(s => s.stage === 'chat').length} chats` : null,
-  ].filter(Boolean).join(' · ')}` : '';
-  const messages = Object.keys(errors).map(source => muted(`${source} unavailable · showing last known data`));
-  const lines = [line(`${project?.name ?? 'Project'} · ${open.length} open · ${reports.filter(r => r.attention).length} need attention`, true)];
-  if (contextText) lines.push(muted(contextText));
-  // Give each section space before spending spare rows on recent history. A
-  // small pane always retains all three headings and counts omitted lines.
-  const separated = rows >= 18;
-  const available = Math.max(0, rows - lines.length - (separated ? 6 : 3) - messages.length - 1);
-  const caps = blocks.map(() => 0);
-  const minimums = [work.length ? (stacked ? 4 : 2) : 1, compact ? 2 : 1, c ? 3 : 2];
-  let left = available;
-  for (let pass = 0; pass < Math.max(...minimums) && left; pass++) for (let i = 0; i < 3 && left; i++) {
-    if (caps[i] < Math.min(blocks[i].length, minimums[i])) { caps[i]++; left--; }
-  }
-  while (left && caps.some((cap, i) => cap < blocks[i].length)) for (const i of [0, 1, 2]) {
-    if (left && caps[i] < blocks[i].length) { caps[i]++; left--; }
-  }
-  if (compact) {
-    if (work.length && stacked) caps[0] -= caps[0] % 2;
-    if (reports.length) caps[1] -= caps[1] % 2;
-  }
-  const headings = [`Runs · ${open.length} open${work.length > open.length ? ` · ${work.length - open.length} landed` : ''}`, `Reports · recent ${reports.length} · outcome / check`, 'Train'];
-  for (let i = 0; i < 3; i++) {
-    const hidden = blocks[i].length - caps[i];
-    if (separated) lines.push(muted(''));
-    lines.push(line(`${headings[i]}${hidden ? ` · +${hidden} lines` : ''}`, true), ...blocks[i].slice(0, caps[i]));
-  }
-  lines.push(...messages);
-  while (lines.length < rows - 1) lines.push(muted(''));
-  const bounded = lines.slice(0, rows - 1);
-  bounded.push(muted('q quit'));
-  return { lines: bounded, hits: [], controls: [] };
-}
+// The live view and --print share this Ink tree.
+export { minimalFrame, minimalTree, minimalLayout } from './minimal-view.mjs';

@@ -50,7 +50,8 @@ usage: record console [--project NAME] [--modern]
        node console/app.mjs [--modern] [--project NAME | --folder PATH] [--config FILE] [--print COLSxROWS [--select N] [--keys KEYS]]
 
 --modern opens the project console. Answers, routes, desks, priorities and housekeeping use validating record commands.
---minimal shows read-only work, reports and the merge train; q quits. Config: "profile": "minimal".
+--minimal shows work, reports and the merge train; Enter/click opens a live session. Config: "profile": "minimal".
+Minimal session: Esc or ‹ Back returns; Ctrl+\\ sends Esc to interrupt the agent.
 --profile full overrides the configured minimal profile; combine with --modern for the full project console.
 --print is read only, including confirmed answers, project settings and priority changes.
 --keys sends characters in order: literal \\n means Enter and \\e means Escape.
@@ -120,7 +121,7 @@ if (opt.print) {
     orgHousekeepingSet: async () => ({ ok: false, error: '--print does not change housekeeping' }),
     orgRouteSet: async () => ({ ok: false, error: '--print does not change routes' }),
     orgPriorityChange: async () => ({ ok: false, error: '--print does not change priorities' }),
-    brainAct: async () => ({ ok: false, error: '--print does not act on the queue' }) } : {};
+    brainAct: async () => ({ ok: false, error: '--print does not act on the queue' }), allowSessionInput: false } : {};
   const session = createConsole({ config, configFile: loadedConfigPath, projectIndex, deps });
   await session.refresh({ reorder: true });
   const [cols, rows] = [Number(m[1]), Number(m[2])];
@@ -165,7 +166,7 @@ const PANE = process.env.HERDR_PANE_ID || null;
 // The terminal's modes, taken and given back as a pair. Giving back is safe to repeat.
 function takeTerminal() {
   terminalTaken = true;
-  process.stdout.write(`${ALT_ON}${NO_COLOR ? '' : `${background()}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}${opt.modern ? '\x1b[?7l\x1b[?25l' : ''}`);
+  process.stdout.write(`${ALT_ON}${minimal ? '\x1b[2J' : NO_COLOR ? '' : `${background()}\x1b[2J`}\x1b[H\x1b[0m${MOUSE_ON}${opt.modern ? '\x1b[?7l\x1b[?25l' : ''}`);
   painter?.invalidate();
   // The modern trial has no right-click menu, so Herdr keeps its own.
   if (!opt.modern) herdrRightClick(PANE, 'pane');
@@ -212,7 +213,7 @@ function color(token) {
   return NO_COLOR ? undefined : (opt.modern ? MODERN_PALETTES[session.ui.appearance][token] : PALETTE[token]);
 }
 
-painter = opt.modern ? createPainter({ write: (text) => process.stdout.write(text), color: (token) => color(token) }) : null;
+painter = opt.modern && !minimal ? createPainter({ write: (text) => process.stdout.write(text), color: (token) => color(token) }) : null;
 
 function Line({ spans }) {
   return h(Text, { wrap: 'truncate-end' }, ...spans.map((s, j) => h(Text, {
@@ -292,10 +293,27 @@ function ModernConsole() {
   return null;
 }
 
+// Minimal is an Ink component tree. Ink's incremental renderer leaves an
+// unchanged screen alone and updates changed rows without a whole-frame erase.
+function MinimalConsole() {
+  const { exit } = useApp();
+  const [, setTick] = useState(0);
+  const [dims, setDims] = useState(size());
+  useEffect(() => {
+    const bump = () => setTick(t => t + 1);
+    const resize = () => setDims(size());
+    listeners.add(bump); process.stdout.on('resize', resize);
+    const clock = setInterval(bump, 1000);
+    return () => { listeners.delete(bump); process.stdout.off('resize', resize); clearInterval(clock); };
+  }, []);
+  useInput((input, key) => handleInput(input, key, exit));
+  return session.tree(dims.cols, Math.max(1, dims.rows - 1));
+}
+
 // Ink exits on q and on Ctrl-C; an unmount for an editor is not an exit.
 remount = () => {
   // Ctrl-C belongs to a session while typing into it, so the console handles it itself.
-  instance = render(h(opt.modern ? ModernConsole : Console), { exitOnCtrlC: !opt.modern, patchConsole: false });
+  instance = render(h(minimal ? MinimalConsole : opt.modern ? ModernConsole : Console), { exitOnCtrlC: !opt.modern, patchConsole: false, incrementalRendering: minimal });
   instance.waitUntilExit().then(() => {
     if (!suspending) finish(0);
   }, () => finish(1));

@@ -2,7 +2,7 @@
 
 ## Minimal profile
 
-For a single read-only screen of the project's live sessions, including the
+For one compact screen of the project's live sessions, including the
 canonical checkout and its lanes:
 
 ```sh
@@ -16,8 +16,9 @@ the default. `--profile full --modern` opens the full project console again;
 never written by the console. `--minimal` and `--profile minimal` also work
 without `--modern`, including with `--folder`.
 
-The minimal screen has three compact parts. **Now** names active work by run,
-item and short purpose, followed by stage, short provider/model and duration.
+The minimal screen has three bordered Ink panels. **Runs** is an in-house table
+with a header, column separators and aligned cells: run, work, stage, provider,
+start and elapsed time. Landed runs retain their final duration and are dimmed.
 Reviews show the latest run in their recorded lane as their subject without
 inheriting that worker's lifecycle. Supervisors and operator chats occupy one
 quiet Context line. Immutable session IDs take precedence over names; a pane
@@ -41,25 +42,40 @@ showing waiting lanes, current batch members/phase, batch start and elapsed time
 CI command, interrupted batches and the three latest results. Refusals include
 reason and log path (the end of long paths remains visible in narrow panes).
 The current writer only persists a gate clock after validation finishes. Batch
-creation time comes from the receipt's file birth time when no explicit start
-exists; the current CI command comes from its `train.log` validating line. A
-missing check start stays `unknown`, rather than borrowing the batch/queue time.
+creation time comes from the stable batch directory's birth time when no explicit
+start exists; atomic receipt saves do not reset it. The current CI command comes
+from its `train.log` validating line. A missing check start stays `unknown`;
+finished checks use their recorded duration or finish time while delivery waits.
+Final promoted/refused receipts supersede old interrupted queue rows after resume.
 No promotion, validation, scheduling or model calls are issued by this view.
 
 At 90 columns and above, rows fit within a 116-cell reading width; wider panes
 do not stretch the spacing. Narrow panes use two lines per work/report entry.
-Each section receives a minimum share of the height; omitted lines are counted
-in its heading. Times are HH:MM today and MM/DD HH:MM earlier, consistently across
-sections. Amber marks exceptions and failed checks, teal marks explicit passes
-and promotions; the rest is neutral. Refresh follows `refresh_seconds`; the
-painter writes only changed rows and duration text advances once per minute.
+Each panel receives space for whole entries; omitted entries are counted
+in its heading. Selection scrolls older entries into view. Times are HH:MM today
+and MM/DD HH:MM earlier, consistently across sections. Colour marks only stage
+and outcome: cyan engineering, magenta review, amber
+fixes/exceptions, green completed results; the rest is neutral. Refresh follows
+`refresh_seconds`; Ink's incremental renderer writes no bytes for unchanged
+output, and duration text advances once per minute. `--print` renders the same
+Ink tree to a string and never takes control of a session. The full profile
+continues to use its existing painter.
 
 Idle chats and supervisors remain visible while Herdr lists them. Reported or
 abandoned workers drop off once they stop working or blocking. Source failures
 retain the last good data with a source notice; changing repository clears old
 source data. Optional missing journals/queues are normal and create no files.
-Only `q` and Ctrl-C exit; action keys and mouse clicks do nothing. Launch-pending
-shells appear only after agent detection. Release candidate gates are omitted
+Use ↑/↓ (or j/k) to select a row, then Enter, or click a row to read and type
+into its live agent session here. Underlined run IDs have live targets; historical
+rows without a current session explain that on Enter. Reports and train entries
+also link when their run/lane has a current agent. Each activation rechecks the
+exact occupant and canonical repository. The embedded view reuses the full
+console's native terminal grid and Herdr control stream. **Esc** or the top-left
+**‹ Back** button releases control and restores the table selection; Esc is never
+sent to the pane. **Ctrl+\** deliberately sends Esc to interrupt the agent and
+is labelled in the footer. Ctrl+] also returns. Ordinary typing belongs to the
+agent; q and Ctrl-C quit only from the dashboard. There are no other write paths.
+Launch-pending shells appear only after agent detection. Release candidate gates are omitted
 from this compact profile.
 
 This is the native-spaces design connected to live org and Herdr data, with

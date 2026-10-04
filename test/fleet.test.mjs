@@ -11,7 +11,7 @@ import { catalog, createIdentityReader } from '../console/modern/model.mjs';
 import { createEntry } from '../discovery/runtime.mjs';
 import { projectRows } from '../console/modern/project.mjs';
 import { createModernSession } from '../console/modern/session.mjs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { recover } from '../herdr/entry-transaction.mjs';
 import { entryPolicy } from '../discovery/policy.mjs';
 
@@ -396,7 +396,7 @@ test('a moved checkout can explicitly replace its stale mapping while retaining 
   const parent = path.join(f.scratch, 'relocated'); fs.mkdirSync(parent);
   const moved = path.join(parent, 'app'); fs.renameSync(cwd, moved);
   const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file);
-  const unowned = f.repo('relocated-again/app');
+  const unowned = f.repo('relocated-again/unrelated');
   const automatic = f.join(unowned);
   assert.notEqual(automatic.name, 'app'); assert.equal(automatic.project.record, path.join(unowned, '.org'));
   const afterAutomatic = fs.readFileSync(file);
@@ -417,4 +417,108 @@ test('a moved checkout can explicitly replace its stale mapping while retaining 
   f.join(moved, ['--replace', 'app']); f.join(moved);
   assert.deepEqual(fs.readFileSync(file), repairedBytes); assert.equal(fs.statSync(file).mtimeMs, mtime);
   assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+});
+
+for (const change of ['moved', 're-cloned']) test(`fleet repair: automatic entry suggests the stale external record for a ${change} checkout`, t => {
+  const f = fixture(t), cwd = f.repo("agent's app"), record = path.join(f.scratch, "record's home"); initOrg(record);
+  const original = f.join(cwd, ['--record', record]).project;
+  const backup = path.join(f.scratch, 'backup'); fs.renameSync(cwd, backup);
+  const entered = path.join(f.scratch, 'relocated', "agent's app"); fs.mkdirSync(path.dirname(entered));
+  if (change === 'moved') fs.renameSync(backup, entered);
+  else f.git(f.scratch, ['clone', '-q', backup, entered]);
+  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file), recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+  let message;
+  assert.throws(() => createEntry({ cwd: entered, role: 'supervisor' }), error => {
+    message = error.message; return /stale fleet project/.test(message);
+  });
+  const quoted = value => "'" + value.replaceAll("'", "'\\''") + "'";
+  const command = `monitor fleet join --replace ${quoted("agent's app")} --record ${quoted(record)}`;
+  assert.ok(message.includes(command), message);
+  assert.ok(message.includes(cwd), 'suggestion identifies the stale checkout');
+  assert.equal(JSON.parse(f.run(f.scratch, ['show']).stdout).projects["agent's app"].stale, true);
+  assert.deepEqual(fs.readFileSync(file), before);
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+  assert.equal(fs.existsSync(path.join(entered, '.org')), false);
+  assert.equal(fs.existsSync(path.join(entered, '.lane')), false);
+  // Run exactly the printed command, including its shell quoting.
+  const repaired = spawnSync('/bin/sh', ['-c', command.replace(/^monitor/, '"$FLEET_TEST_NODE" "$FLEET_TEST_CLIENT"')], {
+    cwd: entered, env: { ...f.env, FLEET_TEST_NODE: process.execPath, FLEET_TEST_CLIENT: client }, encoding: 'utf8',
+  });
+  assert.equal(repaired.status, 0, repaired.stderr);
+  const joined = JSON.parse(repaired.stdout);
+  assert.equal(joined.name, "agent's app"); assert.equal(joined.project.checkout, entered);
+  for (const key of ['record', 'worktrees', 'temp', 'layers']) assert.deepEqual(joined.project[key], original[key]);
+  assert.deepEqual(Object.keys(f.read().projects), ["agent's app"]);
+  assert.equal(fs.existsSync(path.join(entered, '.org')), false);
+});
+
+test('fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record', t => {
+  const f = fixture(t), cwd = f.repo('app'), record = path.join(f.scratch, 'external-record'); initOrg(record);
+  const original = f.join(cwd, ['--record', record]).project;
+  const entered = path.join(f.scratch, 'relocated/app'); fs.mkdirSync(path.dirname(entered)); fs.renameSync(cwd, entered);
+  // Reproduce the fleet left by automatic entry in an older installation.
+  const hash = createHash('sha256').update(fs.realpathSync(path.join(entered, '.git'))).digest('hex').slice(0, 16);
+  const duplicateName = `app-${hash}`, local = path.join(entered, '.org'); initOrg(local);
+  const file = path.join(f.fleetHome, 'fleet.json'), fleet = f.read();
+  fleet.projects[duplicateName] = { ...original, identity: fs.realpathSync(path.join(entered, '.git')), checkout: entered, record: local,
+    worktrees: path.join(f.fleetHome, 'p', hash, 'worktrees'), temp: path.join(f.fleetHome, 't', hash), layers: [] };
+  fs.writeFileSync(file, JSON.stringify(fleet));
+  const recordBytes = fs.readFileSync(path.join(record, 'events.jsonl')), localBytes = fs.readFileSync(path.join(local, 'events.jsonl'));
+  // A live mapping with work in its record must not be mistaken for a fresh
+  // automatic entry, even when its name and paths otherwise match exactly.
+  execFileSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Keep this work'], {
+    cwd: entered, env: { ...f.env, ORG_DIR: local, ORG_ACTOR: 'fleet-test' },
+  });
+  const before = fs.readFileSync(file), populated = fs.readFileSync(path.join(local, 'events.jsonl'));
+  const refused = f.run(entered, ['join', '--replace', 'app', '--record', record]);
+  assert.notEqual(refused.status, 0); assert.match(refused.stderr, /already belongs/);
+  assert.deepEqual(fs.readFileSync(file), before);
+  assert.deepEqual(fs.readFileSync(path.join(local, 'events.jsonl')), populated);
+  fs.writeFileSync(path.join(local, 'events.jsonl'), localBytes);
+  const repaired = f.join(entered, ['--replace', 'app', '--record', record]);
+  assert.equal(repaired.name, 'app'); assert.equal(repaired.project.checkout, entered);
+  assert.deepEqual(Object.keys(f.read().projects), ['app']);
+  for (const key of ['record', 'worktrees', 'temp', 'layers']) assert.deepEqual(repaired.project[key], original[key]);
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+  assert.deepEqual(fs.readFileSync(path.join(local, 'events.jsonl')), localBytes);
+  assert.equal(findOrgDir({ cwd: entered, env: f.env }), record);
+});
+
+test('fleet repair: live same-name external mappings join separately; multiple stale matches only suggest', t => {
+  const f = fixture(t), a = f.repo('first/app'), b = f.repo('second/app');
+  const records = ['first-record', 'second-record'].map(name => path.join(f.scratch, name));
+  for (const record of records) initOrg(record);
+  const first = f.join(a, ['--record', records[0]]);
+  fs.writeFileSync(f.consoleFile, JSON.stringify({ projects: [{ cwd: b, org: records[1] }] }));
+  const second = f.join(b);
+  assert.notEqual(second.name, first.name); assert.equal(second.project.record, records[1]);
+  fs.renameSync(a, path.join(f.scratch, 'old-first')); fs.renameSync(b, path.join(f.scratch, 'old-second'));
+  const entered = f.repo('third/app'), file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file);
+  const result = f.run(entered, ['join']);
+  assert.notEqual(result.status, 0);
+  for (const joined of [first, second]) {
+    assert.ok(result.stderr.includes(`stale fleet project ${joined.name}:`));
+    assert.ok(result.stderr.includes(`monitor fleet join --replace '${joined.name}' --record '${joined.project.record}'`));
+  }
+  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(entered, '.org')), false);
+});
+
+test('fleet repair: unknown names, live records, and overlapping roots remain refused before writes', t => {
+  const f = fixture(t), cwd = f.repo('app'), record = path.join(f.scratch, 'external-record'); initOrg(record);
+  f.join(cwd, ['--record', record]);
+  const other = f.repo('other'), ownedRecord = f.join(other).project.record;
+  const entered = path.join(f.scratch, 'relocated/app'); fs.mkdirSync(path.dirname(entered)); fs.renameSync(cwd, entered);
+  const file = path.join(f.fleetHome, 'fleet.json'), before = fs.readFileSync(file);
+  for (const args of [ ['--replace', 'missing', '--record', record], ['--replace', 'app', '--record', ownedRecord],
+    ['--replace', 'other', '--record', record] ]) {
+    const result = f.run(entered, ['join', ...args]); assert.notEqual(result.status, 0, result.stdout);
+    assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(entered, '.org')), false);
+  }
+  const nested = f.repo('other/nested');
+  const result = f.run(nested, ['join', '--replace', 'app', '--record', record]);
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /overlap/);
+  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(nested, '.org')), false);
+  const ordinaryJoin = f.run(nested, ['join']);
+  assert.notEqual(ordinaryJoin.status, 0); assert.match(ordinaryJoin.stderr, /overlap/);
+  assert.deepEqual(fs.readFileSync(file), before); assert.equal(fs.existsSync(path.join(nested, '.org')), false);
 });

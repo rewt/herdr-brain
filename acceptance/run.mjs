@@ -39,6 +39,13 @@ export function harnessEnvironment(input, root) {
   return assertScratchHomes(env, [root], { realHome: input.HOME, fleetFile: fleetPath(env) });
 }
 
+export function initializeHerdrOwnership(root, { binary, socketPath, fleetRoot }) {
+  // Unconfigured entry puts worktrees in the separately owned short fleet.
+  // Grant its creation paths and live pane cwds before starting PTY workers.
+  fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath,
+    creationRoots: [fs.realpathSync(fleetRoot)], workspaces: [], tabs: [], panes: [] }));
+}
+
 export async function runCutoverCases({ results, test, switches, retirement, scratchRoots }) {
   await test(cases.switches, async () => {
     const checks = [];
@@ -385,7 +392,7 @@ try {
     if (process.env.HERDR_ENV !== '1') throw new HarnessLimit('run inside Herdr (HERDR_ENV=1); no session inspected');
     if (focusError) throw focusError;
     const binary = run('which', ['herdr']).stdout.trim();
-    write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
+    initializeHerdrOwnership(root, { binary, socketPath: liveSocket(process.env), fleetRoot });
     fs.copyFileSync(path.join(SOURCE, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
     for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs', 'environment.mjs', 'poll.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
     write(path.join(root, 'test-slot-env.json'), JSON.stringify(testSlotEnvironment(env)));

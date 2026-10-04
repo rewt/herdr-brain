@@ -1,0 +1,39 @@
+TAP version 13
+# Subtest: real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused
+not ok 1 - real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused
+  ---
+  duration_ms: 1878.557791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    /Users/rewt/.nvm/versions/node/v20.19.4/bin/node: 1: dispatch: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node dispatch: lane: herdr shows no open workspace for /private/tmp/as-pASlXI/f/p/84ec2cde5b3350c4/worktrees/lane-default-cycle and could not open one from the /private/tmp/ac-EC6t53/default-cycle workspace
+    request: /private/tmp/ac-EC6t53/default-cycle/.org/dispatch/9a89b05a-f618-4da0-aef5-0015c20cfa07.json
+    
+    {"argv":["worktree","open","--cwd","/private/tmp/ac-EC6t53/default-cycle","--path","/private/tmp/as-pASlXI/f/p/84ec2cde5b3350c4/worktrees/lane-default-cycle","--label","ac-EC6t53/default-cycle:lane-default-cycle","--no-focus"],"error":"path outside scratch: /private/tmp/as-pASlXI/f/p/84ec2cde5b3350c4/worktrees/lane-default-cycle"}
+    
+    + actual - expected
+    
+    + '/Users/rewt/.nvm/versions/node/v20.19.4/bin/node: 1: dispatch: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node dispatch: lane: herdr shows no open workspace for /private/tmp/as-pASlXI/f/p/84ec2cde5b3350c4/worktrees/lane-default-cycle and could not open one from the /private/tmp/ac-EC6t53/default-cycle workspace\n' +
+    +   'request: /private/tmp/ac-EC6t53/default-cycle/.org/dispatch/9a89b05a-f618-4da0-aef5-0015c20cfa07.json\n'
+    - undefined
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  actual: |-
+    /Users/rewt/.nvm/versions/node/v20.19.4/bin/node: 1: dispatch: /Users/rewt/.nvm/versions/node/v20.19.4/bin/node dispatch: lane: herdr shows no open workspace for /private/tmp/as-pASlXI/f/p/84ec2cde5b3350c4/worktrees/lane-default-cycle and could not open one from the /private/tmp/ac-EC6t53/default-cycle workspace
+    request: /private/tmp/ac-EC6t53/default-cycle/.org/dispatch/9a89b05a-f618-4da0-aef5-0015c20cfa07.json
+    
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/default-cycle.test.mjs:135:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1913.023416

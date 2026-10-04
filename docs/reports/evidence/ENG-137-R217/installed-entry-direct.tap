@@ -1,0 +1,45 @@
+TAP version 13
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+ok 1 - real live discovery setup confines a short fleet temp with no project configuration
+  ---
+  duration_ms: 775.492042
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 2 - real live-worker arguments reach the installed adapter with its supported private temp grant
+  ---
+  duration_ms: 1149.042208
+  ...
+# Subtest: fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+ok 3 - fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+  ---
+  duration_ms: 47.793708
+  ...
+# Subtest: candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+ok 4 - candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+  ---
+  duration_ms: 0.344709
+  ...
+# Subtest: cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+ok 5 - cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+  ---
+  duration_ms: 1.015792
+  ...
+# Subtest: ordinary product entry and source-attribution gaps fail without a safety or harness marker
+ok 6 - ordinary product entry and source-attribution gaps fail without a safety or harness marker
+  ---
+  duration_ms: 0.235917
+  ...
+# Subtest: dependent cutover/default-cycle cases preserve prerequisite causes and origins
+ok 7 - dependent cutover/default-cycle cases preserve prerequisite causes and origins
+  ---
+  duration_ms: 0.300709
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1955.402709

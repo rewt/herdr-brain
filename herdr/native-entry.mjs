@@ -10,6 +10,7 @@ import { supervisorBinding } from '../supervisor/session-binding.mjs';
 import { enterSupervisor } from '../supervisor/entry.mjs';
 import { openProjectControls } from './project-entry.mjs';
 import { quote } from '../discovery/runtime.mjs';
+import { projectEntrySettings } from '../discovery/settings.mjs';
 
 try {
   const { values } = parseArgs({ options: { bin: { type: 'string' }, fleet: { type: 'string' } } });
@@ -21,7 +22,7 @@ try {
     if (input.hook_event_name !== 'SessionStart' || !['startup', 'resume', 'clear', 'compact'].includes(input.source)) throw new Error('unrecognized SessionStart input');
     let project;
     try { project = gitProject(input.cwd); } catch { /* Outside a repository: leave the native session alone. */ }
-    if (project) {
+    if (project && projectEntrySettings(project).enabled) {
       const fleet = joinFleet({ cwd: input.cwd });
       const binding = supervisorBinding(project, env.HERDR_PANE_ID);
       if (binding) enterSupervisor({ cwd: project.canonical, org: binding.org, role: 'supervisor', to: binding.to || 'supervisor-herdr' });

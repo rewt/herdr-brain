@@ -61,7 +61,8 @@ function fixture(t) {
   fs.writeFileSync(path.join(nativeBin, 'herdr'), '#!/bin/sh\necho "plugin fixture: Herdr is offline" >&2\nexit 1\n', { mode: 0o755 });
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));\n`, { mode: 0o755 });
   fs.symlinkSync(native, path.join(nativeBin, 'claude'));
-  const env = releaseEnvironment(process.env, { HOME: home, ZDOTDIR: home, ORG_ACTOR: `eng80-r97-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
+  const env = releaseEnvironment(process.env, { HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
+    ORG_ACTOR: `eng80-r97-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
     PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: path.join(nativeBin, 'claude'), HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
     RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', MONITOR_INSTALL_BUILD_ONLY: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
@@ -140,7 +141,7 @@ test('release tests preserve a separate installation inherited through the paren
   const f = fixture(t);
   fs.writeFileSync(path.join(f.home, '.zshrc'), '# Parent shell\n', { mode: 0o600 });
   assert.equal(f.driver('--snapshot').status, 0);
-  const files = [...fs.readdirSync(f.bin).map((name) => path.join(f.bin, name)), ...['.zshenv', '.zshrc', '.bashrc', '.bash_profile'].map((name) => path.join(f.home, name))];
+  const files = [...fs.readdirSync(f.bin).map((name) => path.join(f.bin, name)), ...['.zshenv', '.zshrc', '.bashrc', '.bash_profile', '.codex/hooks.json', '.claude/settings.json'].map((name) => path.join(f.home, name))];
   const before = files.map((file) => ({ file, content: fs.readFileSync(file), mode: fs.statSync(file).mode & 0o777 }));
   const childEnv = { ...f.env }; delete childEnv.NODE_TEST_CONTEXT;
   const child = spawnChild(t, process.execPath, [path.join(source, 'test/helpers/run.mjs'), '--file-timeout=45000', '--suite-timeout=50000', path.join(source, 'test/release.test.mjs')], {

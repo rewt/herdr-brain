@@ -529,7 +529,8 @@ try {
     write(path.join(home, 'before/lane'), path.join(candidate, 'lanes/lane.mjs') + '\n');
     const userHome = path.join(root, 'release-user-home'); fs.mkdirSync(userHome);
     const native = run('which', ['true']).stdout.trim();
-    const extra = { HOME: userHome, ZDOTDIR: userHome, ORG_ACTOR: 'acceptance-release-install', HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: '-',
+    const extra = { HOME: userHome, ZDOTDIR: userHome, CODEX_HOME: path.join(userHome, '.codex'), CLAUDE_CONFIG_DIR: path.join(userHome, '.claude'),
+      ORG_ACTOR: 'acceptance-release-install', HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: '-',
       HERDR_MONITOR_REPO: repo, HERDR_MONITOR_HOME: home, HERDR_MONITOR_BIN: bin, HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
       RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', RELEASE_NO_NPM: '1' };
     const release = (...a) => run('bash', [script, ...a], { extra });

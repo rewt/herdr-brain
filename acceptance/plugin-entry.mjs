@@ -23,7 +23,7 @@ const root = fs.mkdtempSync('/private/tmp/e80-native-');
 const evidence = path.join(root, 'evidence'); fs.mkdirSync(evidence);
 const home = path.join(root, 'home'), source = path.join(root, 'source'), project = path.join(root, 'project'), nativeBin = path.join(root, 'native-bin');
 for (const dir of [home, source, project, nativeBin]) fs.mkdirSync(dir);
-const env = { ...process.env, HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), TMPDIR: path.join(root, 'tmp'),
+const env = { ...process.env, HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'), TMPDIR: path.join(root, 'tmp'),
   ORG_ACTOR: `eng80-native-${process.pid}`, ORG_DIR: '', OPENAI_API_KEY: 'scratch-ui-no-network',
   PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'),
   HERDR_MONITOR_CODEX: path.join(nativeBin, 'codex'), HERDR_MONITOR_CLAUDE: '-', HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),

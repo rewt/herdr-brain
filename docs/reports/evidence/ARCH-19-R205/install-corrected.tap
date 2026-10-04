@@ -1,0 +1,100 @@
+TAP version 13
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 1 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1951.554458
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 2 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1897.640625
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 3 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 2478.268167
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 4 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 86.062625
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 5 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 73.42425
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 6 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 255.537
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 7 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 567.6785
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 8 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 549.936875
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 9 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 2917.151042
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 10 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1990.286167
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 11 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 2029.353041
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 12 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1730.123166
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 13 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1653.270916
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 14 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 1719.832708
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 15 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 3145.031083
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 16 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.294041
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 17 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 1000.220458
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 18 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 2631.691541
+  ...
+1..18
+# tests 18
+# suites 0
+# pass 18
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 26713.664833

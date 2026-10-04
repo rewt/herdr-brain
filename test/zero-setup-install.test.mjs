@@ -103,6 +103,32 @@ test('native hooks survive relocation, join an unconfigured project and open two
   assert.equal(fs.readFileSync(f.calls,'utf8').trim().split('\n').length,calls.length);
 });
 
+for (const kind of ['codex', 'claude']) for (const source of ['startup', 'resume']) test(`${kind} native ${source} honors canonical project opt-out without state or panes`, t => {
+  const f = fixture(t, [kind]); f.ok(f.driver());
+  const config = path.join(kind === 'codex' ? f.env.CODEX_HOME : f.env.CLAUDE_CONFIG_DIR, kind === 'codex' ? 'hooks.json' : 'settings.json');
+  const hook = JSON.parse(fs.readFileSync(config)).hooks.SessionStart[0].hooks[0].command;
+  const project = path.join(f.root, 'disabled'); fs.mkdirSync(project);
+  const git = args => f.ok(spawnSync('git', args, { cwd: project, env: f.env, encoding: 'utf8' }));
+  git(['init', '-qb', 'main']);
+  git(['-c', 'user.name=Install test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-qm', 'Initial']);
+  f.write(path.join(project, '.lane.json'), JSON.stringify({ entry: { enabled: false } }));
+  let checkout = project;
+  if (source === 'resume') {
+    checkout = path.join(f.root, 'linked');
+    git(['worktree', 'add', '-qb', 'lane/disabled', checkout]);
+    f.write(path.join(checkout, '.lane.json'), JSON.stringify({ entry: { enabled: true } }));
+  }
+  const cwd = path.join(checkout, 'nested'); fs.mkdirSync(cwd);
+  const result = f.ok(spawnSync('/bin/sh', ['-c', hook], { cwd, env: { ...f.env, HERDR_WORKSPACE_ID: 'w-scratch' },
+    input: JSON.stringify({ hook_event_name: 'SessionStart', source, cwd }), encoding: 'utf8' }));
+  assert.equal(result.stdout, '', 'disabled entry supplies no join or adapter guidance');
+  assert.equal(result.stderr, '');
+  assert.equal(fs.existsSync(f.calls), false, 'disabled entry makes no Herdr calls');
+  assert.equal(fs.existsSync(f.env.HERDR_MONITOR_FLEET), false, 'disabled entry creates no fleet state');
+  for (const directory of [project, checkout]) for (const name of ['.org', '.lane', '.herdr-monitor']) assert.equal(fs.existsSync(path.join(directory, name)), false, name);
+  assert.equal(fs.existsSync(path.join(project, '.git/monitor-controls')), false);
+});
+
 test('uninstall preserves unrelated harness edits and refuses a changed managed hook', t => {
   const f = fixture(t, ['claude']); f.ok(f.driver());
   const file = path.join(f.env.CLAUDE_CONFIG_DIR,'settings.json'), settings=JSON.parse(fs.readFileSync(file));
@@ -143,9 +169,13 @@ test('native configuration writes roll back with the rest of an interrupted inst
   assert.equal(fs.existsSync(path.join(f.bin,'monitor-claude')),false);
 });
 
-test('the plugin build checks before dependency writes and a repeated build installs nothing', t => {
+test('the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm', t => {
   const f=fixture(t,['claude']);
   copyProduct(source,f.product,{includeApps:true});
+  // Node 20.0-20.10 has import.meta.url but no dirname. Exercise that shape
+  // through the actual build, including dependency receipts and repeat reuse.
+  const dependencies = path.join(f.product, 'herdr/dependencies.mjs');
+  f.write(dependencies, fs.readFileSync(dependencies, 'utf8').replace(/^(#![^\n]*\n)/u, '$1delete import.meta.dirname;\n'));
   const calls=path.join(f.root,'npm.jsonl');
   f.write(path.join(f.tools,'npm'),`#!${process.execPath}
 const fs=require('fs'),path=require('path'),args=process.argv.slice(2);

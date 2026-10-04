@@ -242,9 +242,22 @@ test('installed monitor command joins without a session and removal restores its
 test('stable machine installation carries monitor and recovery can restore its launcher', t => {
   const f = fixture(t), cwd = f.repo('app'), home = path.join(f.scratch, 'home'), bin = path.join(f.scratch, 'bin'), native = path.join(f.scratch, 'native');
   fs.mkdirSync(home); fs.writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-  const env = { ...f.env, HOME: home, ZDOTDIR: home, HERDR_MONITOR_HOME: path.join(home, 'install'), HERDR_MONITOR_ENTRY_BIN: bin, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: '-' };
+  // Simulate an inherited account entirely within scratch, never the operator's
+  // actual destinations. Its bytes must survive install, recovery and removal.
+  const inherited = path.join(f.scratch, 'inherited-account'), originals = new Map();
+  for (const [name, file] of [['CODEX_HOME', 'hooks.json'], ['CLAUDE_CONFIG_DIR', 'settings.json']]) {
+    const directory = path.join(inherited, name); fs.mkdirSync(directory, { recursive: true });
+    f.env[name] = directory;
+    const destination = path.join(directory, file), bytes = Buffer.from('{ "theme": "inherited", "hooks": { "Stop": [] } }\r\n');
+    fs.writeFileSync(destination, bytes, { mode: 0o640 }); originals.set(destination, bytes);
+  }
+  const env = { ...f.env, HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
+    HERDR_MONITOR_HOME: path.join(home, 'install'), HERDR_MONITOR_ENTRY_BIN: bin, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: '-' };
   const installer = path.join(root, 'herdr/entry-install.mjs');
   execFileSync(process.execPath, [installer, '--snapshot'], { env });
+  const preserved = () => { for (const [file, bytes] of originals) { assert.deepEqual(fs.readFileSync(file), bytes, file); assert.equal(fs.statSync(file).mode & 0o777, 0o640); } };
+  preserved();
+  assert.ok(fs.existsSync(path.join(home, '.codex/hooks.json')), 'hook belongs to the scratch account');
   const launcher = path.join(bin, 'monitor'), bytes = fs.readFileSync(launcher);
   const output = execFileSync(launcher, ['fleet', 'join'], { cwd, env, encoding: 'utf8' });
   assert.equal(JSON.parse(output).name, 'app');
@@ -257,6 +270,7 @@ test('stable machine installation carries monitor and recovery can restore its l
   assert.deepEqual(fs.readFileSync(launcher), bytes);
   execFileSync(process.execPath, [installer, '--remove'], { env });
   assert.equal(fs.existsSync(launcher), false);
+  preserved();
 });
 
 test('an already-open console reads new joins and adjusted advisory limits on refresh', async t => {

@@ -1,0 +1,1224 @@
+TAP version 13
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 1 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.568583
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 2 - concurrent first entries publish one complete fleet with both projects # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.046417
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 3 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031167
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 4 - moved checkout remains stale in fleet and console instead of being guessed by name # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030417
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 5 - a moved default-record checkout joins automatically without claiming the stale same-name entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075875
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 6 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027167
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 7 - explicit replacement remaps the default checkout record by its relative path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027584
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 8 - a re-clone in place can explicitly replace a missing native record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037458
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 9 - an unedited example console configuration is rejected with a fleet present # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.112958
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 10 - malformed fleet fails before entry or discovery touches any record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.086208
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 11 - fleet advisory and stale checkout are visible in the project view # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042542
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 12 - installed monitor command joins without a session and removal restores its bin # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06425
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+not ok 13 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1847.184209
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/fleet-test-SfR6le/inherited-account/CODEX_HOME/hooks.json
+    + actual - expected ... Lines skipped
+    
+    + Buffer(718) [Uint8Array] [
+    - Buffer(51) [Uint8Array] [
+        123,
+    +   10,
+    +   32,
+    +   32,
+    +   34,
+    +   116,
+    +   104,
+    -   32,
+    -   34,
+    -   116,
+    -   104,
+    -   101,
+    -   109,
+        101,
+    +   109,
+    +   101,
+    +   34,
+    +   58,
+    +   32,
+    +   34,
+    +   105,
+    +   110,
+    +   104,
+    +   101,
+    +   114,
+    +   105,
+    +   116,
+    +   101,
+    +   100,
+    +   34,
+    +   44,
+    +   10,
+    ...
+    -   34,
+    -   58,
+    -   32,
+    -   34,
+    -   105,
+    -   110,
+    -   104,
+    -   101,
+    -   114,
+    -   105,
+    -   116,
+    -   101,
+    -   100,
+    -   34,
+    -   44,
+    -   32,
+    -   34,
+    -   104,
+    ...
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 123
+    1: 32
+    2: 34
+    3: 116
+    4: 104
+    5: 101
+    6: 109
+    7: 101
+    8: 34
+    9: 58
+    10: 32
+    11: 34
+    12: 105
+    13: 110
+    14: 104
+    15: 101
+    16: 114
+    17: 105
+    18: 116
+    19: 101
+    20: 100
+    21: 34
+    22: 44
+    23: 32
+    24: 34
+    25: 104
+    26: 111
+    27: 111
+    28: 107
+    29: 115
+    30: 34
+    31: 58
+    32: 32
+    33: 123
+    34: 32
+    35: 34
+    36: 83
+    37: 116
+    38: 111
+    39: 112
+    40: 34
+    41: 58
+    42: 32
+    43: 91
+    44: 93
+    45: 32
+    46: 125
+    47: 32
+    48: 125
+    49: 13
+    50: 10
+  actual:
+    0: 123
+    1: 10
+    2: 32
+    3: 32
+    4: 34
+    5: 116
+    6: 104
+    7: 101
+    8: 109
+    9: 101
+    10: 34
+    11: 58
+    12: 32
+    13: 34
+    14: 105
+    15: 110
+    16: 104
+    17: 101
+    18: 114
+    19: 105
+    20: 116
+    21: 101
+    22: 100
+    23: 34
+    24: 44
+    25: 10
+    26: 32
+    27: 32
+    28: 34
+    29: 104
+    30: 111
+    31: 111
+    32: 107
+    33: 115
+    34: 34
+    35: 58
+    36: 32
+    37: 123
+    38: 10
+    39: 32
+    40: 32
+    41: 32
+    42: 32
+    43: 34
+    44: 83
+    45: 116
+    46: 111
+    47: 112
+    48: 34
+    49: 58
+    50: 32
+    51: 91
+    52: 93
+    53: 44
+    54: 10
+    55: 32
+    56: 32
+    57: 32
+    58: 32
+    59: 34
+    60: 83
+    61: 101
+    62: 115
+    63: 115
+    64: 105
+    65: 111
+    66: 110
+    67: 83
+    68: 116
+    69: 97
+    70: 114
+    71: 116
+    72: 34
+    73: 58
+    74: 32
+    75: 91
+    76: 10
+    77: 32
+    78: 32
+    79: 32
+    80: 32
+    81: 32
+    82: 32
+    83: 123
+    84: 10
+    85: 32
+    86: 32
+    87: 32
+    88: 32
+    89: 32
+    90: 32
+    91: 32
+    92: 32
+    93: 34
+    94: 109
+    95: 97
+    96: 116
+    97: 99
+    98: 104
+    99: 101
+    100: 114
+    101: 34
+    102: 58
+    103: 32
+    104: 34
+    105: 94
+    106: 40
+    107: 115
+    108: 116
+    109: 97
+    110: 114
+    111: 116
+    112: 117
+    113: 112
+    114: 124
+    115: 114
+    116: 101
+    117: 115
+    118: 117
+    119: 109
+    120: 101
+    121: 124
+    122: 99
+    123: 108
+    124: 101
+    125: 97
+    126: 114
+    127: 124
+    128: 99
+    129: 111
+    130: 109
+    131: 112
+    132: 97
+    133: 99
+    134: 116
+    135: 41
+    136: 36
+    137: 34
+    138: 44
+    139: 10
+    140: 32
+    141: 32
+    142: 32
+    143: 32
+    144: 32
+    145: 32
+    146: 32
+    147: 32
+    148: 34
+    149: 104
+    150: 111
+    151: 111
+    152: 107
+    153: 115
+    154: 34
+    155: 58
+    156: 32
+    157: 91
+    158: 10
+    159: 32
+    160: 32
+    161: 32
+    162: 32
+    163: 32
+    164: 32
+    165: 32
+    166: 32
+    167: 32
+    168: 32
+    169: 123
+    170: 10
+    171: 32
+    172: 32
+    173: 32
+    174: 32
+    175: 32
+    176: 32
+    177: 32
+    178: 32
+    179: 32
+    180: 32
+    181: 32
+    182: 32
+    183: 34
+    184: 116
+    185: 121
+    186: 112
+    187: 101
+    188: 34
+    189: 58
+    190: 32
+    191: 34
+    192: 99
+    193: 111
+    194: 109
+    195: 109
+    196: 97
+    197: 110
+    198: 100
+    199: 34
+    200: 44
+    201: 10
+    202: 32
+    203: 32
+    204: 32
+    205: 32
+    206: 32
+    207: 32
+    208: 32
+    209: 32
+    210: 32
+    211: 32
+    212: 32
+    213: 32
+    214: 34
+    215: 99
+    216: 111
+    217: 109
+    218: 109
+    219: 97
+    220: 110
+    221: 100
+    222: 34
+    223: 58
+    224: 32
+    225: 34
+    226: 39
+    227: 47
+    228: 85
+    229: 115
+    230: 101
+    231: 114
+    232: 115
+    233: 47
+    234: 114
+    235: 101
+    236: 119
+    237: 116
+    238: 47
+    239: 46
+    240: 110
+    241: 118
+    242: 109
+    243: 47
+    244: 118
+    245: 101
+    246: 114
+    247: 115
+    248: 105
+    249: 111
+    250: 110
+    251: 115
+    252: 47
+    253: 110
+    254: 111
+    255: 100
+    256: 101
+    257: 47
+    258: 118
+    259: 50
+    260: 48
+    261: 46
+    262: 49
+    263: 57
+    264: 46
+    265: 52
+    266: 47
+    267: 98
+    268: 105
+    269: 110
+    270: 47
+    271: 110
+    272: 111
+    273: 100
+    274: 101
+    275: 39
+    276: 32
+    277: 39
+    278: 47
+    279: 112
+    280: 114
+    281: 105
+    282: 118
+    283: 97
+    284: 116
+    285: 101
+    286: 47
+    287: 118
+    288: 97
+    289: 114
+    290: 47
+    291: 102
+    292: 111
+    293: 108
+    294: 100
+    295: 101
+    296: 114
+    297: 115
+    298: 47
+    299: 115
+    300: 116
+    301: 47
+    302: 103
+    303: 99
+    304: 112
+    305: 98
+    306: 107
+    307: 102
+    308: 100
+    309: 106
+    310: 49
+    311: 104
+    312: 98
+    313: 98
+    314: 54
+    315: 49
+    316: 56
+    317: 118
+    318: 103
+    319: 99
+    320: 102
+    321: 53
+    322: 57
+    323: 106
+    324: 51
+    325: 119
+    326: 48
+    327: 48
+    328: 48
+    329: 48
+    330: 103
+    331: 110
+    332: 47
+    333: 84
+    334: 47
+    335: 102
+    336: 108
+    337: 101
+    338: 101
+    339: 116
+    340: 45
+    341: 116
+    342: 101
+    343: 115
+    344: 116
+    345: 45
+    346: 83
+    347: 102
+    348: 82
+    349: 54
+    350: 108
+    351: 101
+    352: 47
+    353: 104
+    354: 111
+    355: 109
+    356: 101
+    357: 47
+    358: 105
+    359: 110
+    360: 115
+    361: 116
+    362: 97
+    363: 108
+    364: 108
+    365: 47
+    366: 101
+    367: 110
+    368: 116
+    369: 114
+    370: 121
+    371: 47
+    372: 114
+    373: 117
+    374: 110
+    375: 116
+    376: 105
+    377: 109
+    378: 101
+    379: 115
+    380: 47
+    381: 51
+    382: 48
+    383: 49
+    384: 57
+    385: 101
+    386: 98
+    387: 48
+    388: 56
+    389: 54
+    390: 57
+    391: 101
+    392: 57
+    393: 100
+    394: 52
+    395: 54
+    396: 53
+    397: 55
+    398: 49
+    399: 55
+    400: 100
+    401: 99
+    402: 49
+    403: 102
+    404: 49
+    405: 98
+    406: 98
+    407: 101
+    408: 52
+    409: 101
+    410: 50
+    411: 98
+    412: 56
+    413: 55
+    414: 56
+    415: 99
+    416: 56
+    417: 54
+    418: 99
+    419: 97
+    420: 101
+    421: 97
+    422: 55
+    423: 98
+    424: 101
+    425: 55
+    426: 53
+    427: 48
+    428: 54
+    429: 97
+    430: 97
+    431: 49
+    432: 48
+    433: 49
+    434: 99
+    435: 51
+    436: 101
+    437: 99
+    438: 101
+    439: 55
+    440: 97
+    441: 50
+    442: 99
+    443: 49
+    444: 55
+    445: 47
+    446: 104
+    447: 101
+    448: 114
+    449: 100
+    450: 114
+    451: 47
+    452: 110
+    453: 97
+    454: 116
+    455: 105
+    456: 118
+    457: 101
+    458: 45
+    459: 101
+    460: 110
+    461: 116
+    462: 114
+    463: 121
+    464: 46
+    465: 109
+    466: 106
+    467: 115
+    468: 39
+    469: 32
+    470: 45
+    471: 45
+    472: 98
+    473: 105
+    474: 110
+    475: 32
+    476: 39
+    477: 47
+    478: 112
+    479: 114
+    480: 105
+    481: 118
+    482: 97
+    483: 116
+    484: 101
+    485: 47
+    486: 118
+    487: 97
+    488: 114
+    489: 47
+    490: 102
+    491: 111
+    492: 108
+    493: 100
+    494: 101
+    495: 114
+    496: 115
+    497: 47
+    498: 115
+    499: 116
+    500: 47
+    501: 103
+    502: 99
+    503: 112
+    504: 98
+    505: 107
+    506: 102
+    507: 100
+    508: 106
+    509: 49
+    510: 104
+    511: 98
+    512: 98
+    513: 54
+    514: 49
+    515: 56
+    516: 118
+    517: 103
+    518: 99
+    519: 102
+    520: 53
+    521: 57
+    522: 106
+    523: 51
+    524: 119
+    525: 48
+    526: 48
+    527: 48
+    528: 48
+    529: 103
+    530: 110
+    531: 47
+    532: 84
+    533: 47
+    534: 102
+    535: 108
+    536: 101
+    537: 101
+    538: 116
+    539: 45
+    540: 116
+    541: 101
+    542: 115
+    543: 116
+    544: 45
+    545: 83
+    546: 102
+    547: 82
+    548: 54
+    549: 108
+    550: 101
+    551: 47
+    552: 98
+    553: 105
+    554: 110
+    555: 39
+    556: 32
+    557: 45
+    558: 45
+    559: 102
+    560: 108
+    561: 101
+    562: 101
+    563: 116
+    564: 32
+    565: 39
+    566: 47
+    567: 112
+    568: 114
+    569: 105
+    570: 118
+    571: 97
+    572: 116
+    573: 101
+    574: 47
+    575: 118
+    576: 97
+    577: 114
+    578: 47
+    579: 102
+    580: 111
+    581: 108
+    582: 100
+    583: 101
+    584: 114
+    585: 115
+    586: 47
+    587: 115
+    588: 116
+    589: 47
+    590: 103
+    591: 99
+    592: 112
+    593: 98
+    594: 107
+    595: 102
+    596: 100
+    597: 106
+    598: 49
+    599: 104
+    600: 98
+    601: 98
+    602: 54
+    603: 49
+    604: 56
+    605: 118
+    606: 103
+    607: 99
+    608: 102
+    609: 53
+    610: 57
+    611: 106
+    612: 51
+    613: 119
+    614: 48
+    615: 48
+    616: 48
+    617: 48
+    618: 103
+    619: 110
+    620: 47
+    621: 84
+    622: 47
+    623: 102
+    624: 108
+    625: 101
+    626: 101
+    627: 116
+    628: 45
+    629: 116
+    630: 101
+    631: 115
+    632: 116
+    633: 45
+    634: 83
+    635: 102
+    636: 82
+    637: 54
+    638: 108
+    639: 101
+    640: 47
+    641: 102
+    642: 108
+    643: 101
+    644: 101
+    645: 116
+    646: 39
+    647: 34
+    648: 44
+    649: 10
+    650: 32
+    651: 32
+    652: 32
+    653: 32
+    654: 32
+    655: 32
+    656: 32
+    657: 32
+    658: 32
+    659: 32
+    660: 32
+    661: 32
+    662: 34
+    663: 116
+    664: 105
+    665: 109
+    666: 101
+    667: 111
+    668: 117
+    669: 116
+    670: 34
+    671: 58
+    672: 32
+    673: 51
+    674: 48
+    675: 10
+    676: 32
+    677: 32
+    678: 32
+    679: 32
+    680: 32
+    681: 32
+    682: 32
+    683: 32
+    684: 32
+    685: 32
+    686: 125
+    687: 10
+    688: 32
+    689: 32
+    690: 32
+    691: 32
+    692: 32
+    693: 32
+    694: 32
+    695: 32
+    696: 93
+    697: 10
+    698: 32
+    699: 32
+    700: 32
+    701: 32
+    702: 32
+    703: 32
+    704: 125
+    705: 10
+    706: 32
+    707: 32
+    708: 32
+    709: 32
+    710: 93
+    711: 10
+    712: 32
+    713: 32
+    714: 125
+    715: 10
+    716: 125
+    717: 10
+  operator: 'deepStrictEqual'
+  stack: |-
+    preserved (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/fleet.test.mjs:258:77)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/fleet.test.mjs:259:3
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 14 - an already-open console reads new joins and adjusted advisory limits on refresh # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.117459
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 15 - explicit adoption maps paths and settings; record ownership cannot be duplicated # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.084333
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 16 - without a fleet file legacy ancestor discovery and console configuration are unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040041
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 17 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.126042
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 18 - entry worktree roots are session overrides and never freeze the fleet mapping # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.047417
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 19 - console merges unjoined configured projects with fleet entries across refresh and adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066791
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 20 - explicit ORG_DIR validates the fleet without launching Git on record commands # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.04225
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 21 - a moved checkout can explicitly replace its stale mapping while retaining its external record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025208
+  ...
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 22 - codex install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.599917
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 23 - claude install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044292
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 24 - codex and claude install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033916
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 25 - missing harness refuses before shell or harness configuration changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.071875
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 26 - missing npm names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0365
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 27 - missing git names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0285
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 28 - missing python3 names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027666
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 29 - missing herdr names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.064459
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 30 - native hooks survive relocation, join an unconfigured project and open two panes once without focus # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.499042
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+not ok 31 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 2375.76175
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    disabled entry supplies no join or adapter guidance
+    + actual - expected
+    
+    + 'Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/disabled/.org; session limit 6 (advisory).\n' +
+    +   "Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/home/monitor/entry/bin/monitor-codex' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.\n" +
+    +   '\n'
+    - ''
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ''
+  actual: |-
+    Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/disabled/.org; session limit 6 (advisory).
+    Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/home/monitor/entry/bin/monitor-codex' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-QHp88X/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.
+    
+    
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:124:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+not ok 32 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1483.178291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    disabled entry supplies no join or adapter guidance
+    + actual - expected
+    
+    + 'Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/disabled/.org; session limit 6 (advisory).\n' +
+    +   "Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/home/monitor/entry/bin/monitor-codex' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.\n" +
+    +   '\n'
+    - ''
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ''
+  actual: |-
+    Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/disabled/.org; session limit 6 (advisory).
+    Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/home/monitor/entry/bin/monitor-codex' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-dsFxC7/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.
+    
+    
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:124:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+not ok 33 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1338.273292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    disabled entry supplies no join or adapter guidance
+    + actual - expected
+    
+    + 'Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/disabled/.org; session limit 6 (advisory).\n' +
+    +   "Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/home/monitor/entry/bin/monitor-claude' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.\n" +
+    +   '\n'
+    - ''
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ''
+  actual: |-
+    Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/disabled/.org; session limit 6 (advisory).
+    Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/home/monitor/entry/bin/monitor-claude' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-2c0U0B/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.
+    
+    
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:124:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+not ok 34 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1426.949709
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    disabled entry supplies no join or adapter guidance
+    + actual - expected
+    
+    + 'Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/disabled/.org; session limit 6 (advisory).\n' +
+    +   "Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/home/monitor/entry/bin/monitor-claude' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.\n" +
+    +   '\n'
+    - ''
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ''
+  actual: |-
+    Herdr Monitor: project disabled joined /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/home/fleet/fleet.json; record /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/disabled/.org; session limit 6 (advisory).
+    Read this project's AGENTS.md and CLAUDE.md. This native hook does not allocate a worker checkout or grant a supervisor role. Before making changes, enter through '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/home/monitor/entry/bin/monitor-claude' --repo '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-fUpIEN/disabled'. Those adapters supply the bounded worker workflow and promotion checks. Use the plugin supervisor to coordinate work; only its canonical supervisor entry starts default housekeeping.
+    
+    
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:124:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 35 - uninstall preserves unrelated harness edits and refuses a changed managed hook # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.179625
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 36 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043667
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 37 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029333
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 38 - native configuration writes roll back with the rest of an interrupted installation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031125
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+not ok 39 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 616.073459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-EBcypE/product/herdr/dependencies.mjs:2
+    #!/usr/bin/env node
+    ^
+    
+    SyntaxError: Invalid or unexpected token
+        at compileSourceTextModule (node:internal/modules/esm/utils:354:16)
+        at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:90:18)
+        at #translate (node:internal/modules/esm/loader:437:20)
+        at afterLoad (node:internal/modules/esm/loader:505:29)
+        at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:510:12)
+        at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:563:36)
+        at afterResolve (node:internal/modules/esm/loader:610:52)
+        at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:616:12)
+        at node:internal/modules/esm/loader:635:32
+        at TracingChannel.tracePromise (node:diagnostics_channel:539:22)
+    
+    Node.js v26.4.0
+    install: npm 10.0.0 checked
+    install: git 2.54.0 checked
+    install: python3 3.9.6 checked
+    entry: checked machine entry at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/monitor-zero-setup-EBcypE/home/monitor/entry/bin
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    compileSourceTextModule (node:internal/modules/esm/utils:354:16)
+    ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:90:18)
+    #translate (node:internal/modules/esm/loader:437:20)
+    afterLoad (node:internal/modules/esm/loader:505:29)
+    ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:510:12)
+    #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:563:36)
+    afterResolve (node:internal/modules/esm/loader:610:52)
+    ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:616:12)
+    node:internal/modules/esm/loader:635:32
+    TracingChannel.tracePromise (node:diagnostics_channel:539:22)
+    Object.ok (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:42:33)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/zero-setup-install.test.mjs:188:5
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+1..39
+# tests 39
+# suites 0
+# pass 0
+# fail 6
+# cancelled 0
+# skipped 33
+# todo 0
+# duration_ms 7291.033041

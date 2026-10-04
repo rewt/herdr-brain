@@ -84,7 +84,12 @@ test('real live discovery setup confines a short fleet temp with no project conf
 
 test('real live-worker arguments reach the installed adapter with its supported private temp grant', async t => {
   const { root, evidence, spec } = await fixture(t);
-  const result = spawnSync(process.execPath, [path.join(source, 'acceptance/live-worker.mjs'), root, spec.name], { encoding: 'utf8' });
+  // The real gate launches live-worker without the test runner's preload,
+  // which would re-add offline Herdr capabilities after sessionEnv scrubs them.
+  // env execs in the same bounded suite group; the fake native still refuses
+  // inference and the product transport retains every capability leak guard.
+  const result = spawnSync('/usr/bin/env', ['-u', 'NODE_OPTIONS', process.execPath,
+    path.join(source, 'acceptance/live-worker.mjs'), root, spec.name], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   const done = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs', `${spec.name}.done`), 'utf8'));
   assert.equal(done.code, 0, fs.readFileSync(path.join(evidence, `${spec.name}.stderr`), 'utf8'));

@@ -10,6 +10,7 @@ import { quote } from '../discovery/runtime.mjs';
 import { state, same, bytes, writable, recover, transact } from './entry-transaction.mjs';
 import { snapshot } from './entry-runtime.mjs';
 import { withInstallationLock } from './entry-lock.mjs';
+import { planNativeHooks } from './native-hooks.mjs';
 
 const { values } = parseArgs({ options: { product: { type: 'string' }, remove: { type: 'boolean' }, check: { type: 'boolean' }, snapshot: { type: 'boolean' }, recover: { type: 'boolean' } } });
 const product = path.resolve(values.product ?? fileURLToPath(new URL('../', import.meta.url)));
@@ -48,8 +49,8 @@ function stageInstaller(runtime, args) {
 }
 function native(kind, prior) {
   const supplied = process.env[`HERDR_MONITOR_${kind.toUpperCase()}`];
-  if (kind === 'claude' && supplied === '-') {
-    if (prior?.claudeNative) throw new Error('retain Claude when upgrading its managed installation');
+  if (supplied === '-') {
+    if (prior?.[kind === 'codex' ? 'native' : 'claudeNative']) throw new Error(`retain ${kind} when upgrading its managed installation`);
     return undefined;
   }
   const candidates = supplied ? [supplied] : [prior?.[kind === 'codex' ? 'native' : 'claudeNative'],
@@ -59,17 +60,18 @@ function native(kind, prior) {
     try {
       fs.accessSync(candidate, fs.constants.X_OK);
       if (!fs.statSync(candidate).isFile()) continue;
-    } catch (e) { if (supplied) throw e; continue; }
+    } catch (e) { if (supplied) throw new Error(`install native ${kind} or correct HERDR_MONITOR_${kind.toUpperCase()}: ${e.message}`); continue; }
     const receipt = path.join(path.dirname(candidate), '.monitor-entry.json');
     if (exists(receipt)) {
       const original = JSON.parse(read(receipt))[kind === 'codex' ? 'native' : 'claudeNative'];
-      if (!original || !path.isAbsolute(original) || path.dirname(original) === bin) throw new Error(`invalid native ${kind} receipt`);
+      if (!original) continue; // The other harness may be the only managed one.
+      if (!path.isAbsolute(original) || path.dirname(original) === bin) throw new Error(`invalid native ${kind} receipt`);
       fs.accessSync(original, fs.constants.X_OK);
       return original;
     }
     return fs.realpathSync(candidate);
   }
-  if (kind === 'codex') throw new Error('native Codex not found on PATH; install Codex before Monitor or set HERDR_MONITOR_CODEX');
+  if (supplied) throw new Error(`install native ${kind} or correct HERDR_MONITOR_${kind.toUpperCase()}`);
 }
 function hooks() {
   const home = path.resolve(process.env.HOME);
@@ -133,10 +135,13 @@ try {
     let runtime, entry;
     if (!values.remove) {
       const codex = native('codex', priorEntry), claude = native('claude', priorEntry);
-      const args = ['--codex', codex, ...(claude ? ['--claude', claude] : [])];
+      if (!codex && !claude) throw new Error('install native Codex and/or Claude and put it on PATH before installing Monitor');
+      const args = [...(codex ? ['--codex', codex] : []), ...(claude ? ['--claude', claude] : [])];
       if (values.snapshot) runtime = snapshot(product, runtimeRoot, owner.token);
       entry = stageInstaller(runtime?.directory ?? product, args);
     }
+    const cleanupNativeDirectories = planNativeHooks({ bin, runtime: runtime?.directory ?? product,
+      kinds: entry && exists(path.join(product, 'herdr/native-entry.mjs')) ? [entry.native && 'codex', entry.claudeNative && 'claude'].filter(Boolean) : [], inspect, change });
     for (const name of names) change(path.join(bin, name), entry?.files[name] === undefined ? null : { content: Buffer.from(entry.files[name]), mode: 0o755 });
     change(entryFile, entry ? { content: Buffer.from(JSON.stringify(entry, null, 2) + '\n'), mode: 0o600 } : null);
     for (const receipt of receipts) {
@@ -153,6 +158,8 @@ try {
       if (!same(state(file), before)) throw new Error(`machine file changed during planning: ${file}`);
     }
     if (!values.check && (changes.length || runtime?.created)) transact(journal, bin, runtimeRoot, changes, runtime, owner);
+    if (!values.check) cleanupNativeDirectories();
     console.log(`entry: ${values.check ? 'checked' : values.remove ? 'restored' : 'installed'} machine entry at ${bin}`);
+    if (!values.check && !values.remove && entry?.native) console.log('entry: review the Monitor user SessionStart hook in Codex /hooks before native-path or desktop entry; hook trust stays under your control');
   });
 } catch (error) { console.error(`entry: ${error.message}`); process.exitCode = 1; }

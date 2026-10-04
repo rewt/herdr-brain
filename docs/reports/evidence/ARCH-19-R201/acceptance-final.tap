@@ -1,0 +1,80 @@
+TAP version 13
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 1 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1187.547833
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 2 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1190.779042
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 3 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1268.009708
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 4 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 56.610416
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 5 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 48.457666
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 6 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 164.845
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 7 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 240.521541
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 8 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 328.563291
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 9 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 1635.031667
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 10 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 1410.095167
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 11 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 1976.830459
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 12 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.366667
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 13 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 827.511417
+  ...
+# Subtest: the plugin build checks before dependency writes and a repeated build installs nothing
+ok 14 - the plugin build checks before dependency writes and a repeated build installs nothing
+  ---
+  duration_ms: 1700.210167
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12069.493834

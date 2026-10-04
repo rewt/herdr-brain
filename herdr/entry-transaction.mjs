@@ -52,16 +52,18 @@ export function recover(journal, bin, runtimeRoot) {
   const receipt = state(journal);
   if (!receipt) return;
   const plan = JSON.parse(receipt.content.toString('utf8'));
-  const names = ['codex', 'claude', 'monitor-codex', 'monitor-claude', 'monitor', '.monitor-entry.json', '.monitor-shell.json'];
+  const names = ['codex', 'claude', 'monitor-codex', 'monitor-claude', 'monitor', '.monitor-entry.json', '.monitor-shell.json', '.monitor-native-hooks.json'];
   const shells = ['.zshenv', '.zshrc', '.bashrc', '.bash_profile', '.bash_login', '.profile'];
   const valid = (value) => value === null || (typeof value?.content === 'string' && Number.isInteger(value.mode) && value.mode >= 0 && value.mode <= 0o777);
   if (plan.version !== 2 || typeof plan.token !== 'string' || !/^[a-f0-9-]{36}$/u.test(plan.token) || plan.bin !== bin || !Number.isInteger(plan.pid) || plan.pid < 1 || !Array.isArray(plan.changes) || plan.changes.some((change) =>
-    !path.isAbsolute(change.file) || !(path.dirname(change.file) === bin ? names.includes(path.basename(change.file)) : shells.includes(path.basename(change.file))) ||
+    !path.isAbsolute(change.file) || !(path.dirname(change.file) === bin ? names.includes(path.basename(change.file)) : [...shells, 'hooks.json', 'settings.json'].includes(path.basename(change.file))) ||
     !valid(change.before) || !valid(change.after) || typeof change.started !== 'boolean' ||
     (change.temporary !== null && (typeof change.temporary !== 'string' || !change.temporary.startsWith(`${change.file}.`) || !/^[a-f0-9-]{36}\.tmp$/u.test(change.temporary.slice(change.file.length + 1))))) ||
     (plan.runtime && (path.dirname(plan.runtime.directory) !== runtimeRoot || !/^[a-f0-9]{64}$/u.test(path.basename(plan.runtime.directory)) ||
       plan.runtime.token !== plan.token || plan.runtime.temporary !== path.join(runtimeRoot, `.runtime-${plan.token}.tmp`)))) throw new Error('invalid or older entry recovery receipt; retain it for its original installer');
   for (const change of plan.changes) { change.before = decode(change.before); change.after = decode(change.after); }
+  if (plan.directories !== undefined && (!Array.isArray(plan.directories) || plan.directories.some(directory =>
+    !path.isAbsolute(directory) || !plan.changes.some(change => change.file.startsWith(`${directory}${path.sep}`))))) throw new Error('invalid entry recovery directories');
   if (plan.pid !== process.pid) {
     try { process.kill(plan.pid, 0); throw new Error(`entry installation still running as pid ${plan.pid}`); }
     catch (error) { if (error.code !== 'ESRCH') throw error; }
@@ -93,6 +95,10 @@ export function recover(journal, bin, runtimeRoot) {
       syncDirectory(runtimeRoot);
     }
   }
+  for (const directory of [...(plan.directories ?? [])].sort((a,b) => b.length-a.length)) {
+    try { fs.rmdirSync(directory); }
+    catch (error) { if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error; }
+  }
   fs.unlinkSync(journal); syncDirectory(path.dirname(journal));
 }
 export function transact(journal, bin, runtimeRoot, changes, runtime, owner) {
@@ -107,7 +113,12 @@ export function transact(journal, bin, runtimeRoot, changes, runtime, owner) {
   writable(journal);
   // A fully written, synced file is linked exclusively into place, so another
   // installer cannot overwrite a live transaction's recovery receipt.
-  const plan = { version: 2, bin, pid: process.pid, token: owner.token, changes,
+  const directories = new Set();
+  for (const change of changes) {
+    let directory = path.dirname(change.file);
+    while (!fs.existsSync(directory)) { directories.add(directory); directory = path.dirname(directory); }
+  }
+  const plan = { version: 2, bin, pid: process.pid, token: owner.token, changes, directories: [...directories],
     runtime: runtime?.created ? { directory: runtime.directory, temporary: runtime.temporary, token: owner.token } : null };
   save(journal, plan, true);
   try {

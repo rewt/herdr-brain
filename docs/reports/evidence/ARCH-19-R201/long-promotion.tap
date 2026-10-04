@@ -1,0 +1,21 @@
+TAP version 13
+# Subtest: entry reserves bounded owner, wrapper, preparation and reply time for promotion
+ok 1 - entry reserves bounded owner, wrapper, preparation and reply time for promotion
+  ---
+  duration_ms: 0.817916
+  ...
+# monitor entry: keeping lane/entry-eb66d557d476 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-6NPdhb/lanes/lane-entry-eb66d557d476: a run was started in this lane
+# Subtest: declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+ok 2 - declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+  ---
+  duration_ms: 11590.561458
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11626.810875

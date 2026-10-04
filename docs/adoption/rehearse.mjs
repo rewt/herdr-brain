@@ -1,22 +1,27 @@
 #!/usr/bin/env node
-// The adoption guide's repeatable scratch exercise. No inference or live Herdr.
+// The guide's mechanical rehearsal. --fresh-account uses a real macOS login.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
+import { freshAccount } from './account.mjs';
 
-const { values } = parseArgs({ options: { 'native-codex': { type: 'string' }, 'npm-cache': { type: 'string' } } });
-if (!values['native-codex'] || !path.isAbsolute(values['native-codex'])) throw new Error('supply --native-codex ABSOLUTE_NATIVE_EXECUTABLE');
-const native = fs.realpathSync(values['native-codex']);
+const { values } = parseArgs({ options: { 'native-codex': { type: 'string' }, 'native-claude': { type: 'string' }, 'fresh-account': { type: 'boolean' }, 'npm-cache': { type: 'string' }, evidence: { type: 'string' } } });
+if (values['native-codex'] && values['native-claude']) throw new Error('select one harness per rehearsal; installer acceptance tests cover both together');
+const kind = values['native-codex'] ? 'codex' : 'claude';
+if (!values[`native-${kind}`] || !path.isAbsolute(values[`native-${kind}`])) throw new Error('supply --native-codex or --native-claude ABSOLUTE_NATIVE_EXECUTABLE');
+if (kind === 'claude' && process.platform !== 'darwin') throw new Error('Claude-only rehearsal currently requires the native macOS validation provider');
+const account = values['fresh-account'] ? freshAccount() : null;
+const native = fs.realpathSync(values[`native-${kind}`]);
 fs.accessSync(native, fs.constants.X_OK);
 const source = path.resolve(import.meta.dirname, '../..');
 const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'monitor-adoption-'));
-const home = path.join(root, 'home'), product = path.join(root, 'product');
+const home = account?.home ?? path.join(root, 'home'), product = path.join(root, 'product');
 // The unrelated project has its own parent: it cannot inherit product config.
 const projects = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'adopter-projects-'));
-const project = path.join(projects, 'hello'), evidence = path.join(root, 'evidence');
+const project = path.join(projects, 'hello'), evidence = path.resolve(values.evidence ?? path.join(root, 'evidence'));
 for (const dir of [home, product, project, evidence]) fs.mkdirSync(dir, { recursive: true });
 const calls = [];
 // A child-only home and clean environment; never overwrite the operator's HOME.
@@ -28,12 +33,13 @@ Object.assign(env, {
   XDG_DATA_HOME: path.join(home, '.local/share'),
   ORG_ACTOR: `adoption-rehearsal-${process.pid}`, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
   HERDR_MONITOR_HOME: path.join(home, '.local/share/herdr-monitor'),
-  HERDR_MONITOR_BIN: path.join(home, '.local/bin'), HERDR_MONITOR_CLAUDE: '-',
+  HERDR_MONITOR_BIN: path.join(home, '.local/bin'), HERDR_MONITOR_CLAUDE: '-', HERDR_MONITOR_CODEX: '-',
+  HERDR_MONITOR_FLEET: path.join(home, '.herdr-monitor'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
   HERDR_MONITOR_REPO: product, RELEASE_NO_LAUNCHD: '1',
   MONITOR_RUNTIME_DIR: path.join(home, 'entry-queue'), MONITOR_WORKTREE_ROOT: path.join(projects, 'lanes'),
   npm_config_cache: path.join(home, '.npm'),
 });
-fs.mkdirSync(env.CODEX_HOME);
+fs.mkdirSync(env.CODEX_HOME, { recursive: true });
 const write = (file, content, mode) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, content, mode ? { mode } : undefined); };
 function run(file, args, cwd = project, extra = {}, timeout = 180_000) {
   const result = spawnSync(file, args, { cwd, env: { ...env, ...extra }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout, killSignal: 'SIGKILL', maxBuffer: 8 * 1024 * 1024 });
@@ -60,14 +66,19 @@ try {
 const fs = require('fs'), assert = require('assert/strict');
 const args = process.argv.slice(2), state = ${JSON.stringify(pluginState)};
 fs.appendFileSync(${JSON.stringify(path.join(evidence, 'herdr-commands.jsonl'))}, JSON.stringify(args)+'\\n');
+if(args[0]==='--version') { console.log('herdr 0.8.2'); process.exit(0); }
 if (args[0] !== 'plugin') { console.log(JSON.stringify({result:[]})); process.exit(0); }
 if (args[1] === 'list') console.log(JSON.stringify({result:{plugins:fs.existsSync(state) ? [{plugin_root:fs.readFileSync(state,'utf8')}] : []}}));
 else if (args[1] === 'link') { assert.ok(!fs.existsSync(state), 'unlink existing registration before linking'); fs.writeFileSync(state,fs.realpathSync(args[2])); }
 else if (args[1] === 'unlink') { assert.ok(fs.existsSync(state)); fs.unlinkSync(state); }
 else throw new Error('unsupported scratch plugin command');
 `, 0o755);
-  env.HERDR_BIN_PATH = scratchHerdr;
-  const registered = () => fs.readFileSync(pluginState, 'utf8');
+  // Account mode exercises registration on that account's real Herdr server.
+  // Start Herdr in the logged-in account before running the rehearsal.
+  if (!account) env.HERDR_BIN_PATH = scratchHerdr;
+  const registered = () => account ? JSON.parse(run('herdr', ['plugin','list','--plugin','rewt.herdr-monitor','--json'], product)).result.plugins[0]?.plugin_root
+    : fs.existsSync(pluginState) ? fs.readFileSync(pluginState, 'utf8') : undefined;
+  if (account && registered()) throw new Error('fresh account already has the Monitor plugin; use a new account');
   // Optional cached tarballs are copied by integrity from pinned lockfiles only.
   // This reads no account/configuration files and never writes the input cache.
   if (values['npm-cache']) {
@@ -101,11 +112,15 @@ else throw new Error('unsupported scratch plugin command');
   write(path.join(project, 'hello.mjs'), "export const greeting = 'Hello';\n");
   write(path.join(project, 'test/hello.test.mjs'), "import test from 'node:test'; import assert from 'node:assert/strict'; import {greeting} from '../hello.mjs'; test('greeting', () => assert.equal(greeting, 'Hello'));\n");
   git(project, 'add', '.'); git(project, 'commit', '-qm', 'Initial unrelated project');
-  const original = Buffer.from('# Existing scratch shell bytes\n');
-  write(path.join(home, '.zshrc'), original, 0o600);
+  if (!account) write(path.join(home, '.zshrc'), Buffer.from('# Existing scratch shell bytes\n'), 0o600);
+  const machineFiles = ['.zshenv','.zshrc','.bashrc','.bash_profile','.bash_login','.profile','.codex/hooks.json','.claude/settings.json'];
+  const originals = new Map(machineFiles.map(name => {
+    const file = path.join(home, name);
+    return [file, fs.existsSync(file) ? { data:fs.readFileSync(file), mode:fs.statSync(file).mode & 0o777 } : null];
+  }));
   // A scripted worker at the native boundary. Sandbox requests go to actual
   // native Codex. The worker uses only the policy's supplied command prefix.
-  const scripted = path.join(root, 'native-codex.cjs');
+  const scripted = path.join(root, `native-${kind}.cjs`);
   write(scripted, `#!${process.execPath}
 const fs = require('fs'), path = require('path'), cp = require('child_process'), assert = require('assert/strict');
 const args = process.argv.slice(2);
@@ -116,8 +131,8 @@ if (args[0] === 'sandbox' || args.includes('--version')) {
   process.exit(result.status ?? 1);
 }
 const policyArg = args.find(a => a.startsWith('developer_instructions='));
-assert.ok(policyArg, 'installed entry must supply policy');
-const policy = JSON.parse(policyArg.slice('developer_instructions='.length));
+const policy = policyArg ? JSON.parse(policyArg.slice('developer_instructions='.length)) : args[args.indexOf('--append-system-prompt')+1];
+assert.ok(policy, 'installed entry must supply policy');
 fs.writeFileSync(${JSON.stringify(path.join(evidence, 'worker-policy.txt'))}, policy);
 assert.ok(policy.includes('You are a worker'));
 assert.ok(policy.includes('Never start project housekeeping'));
@@ -140,20 +155,23 @@ const checked = cp.spawnSync(process.execPath, [record,'check',c.report], {encod
 assert.equal(checked.status,0,checked.stderr);
 monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('promote'); monitor('finish');
 `, 0o755);
-  env.HERDR_MONITOR_CODEX = scripted;
+  env[`HERDR_MONITOR_${kind.toUpperCase()}`] = scripted;
   release('build', 'adoption-a');
-  assert.equal(fs.existsSync(path.join(home, '.zshenv')), false, 'build must not install entry');
+  assert.deepEqual(fs.existsSync(path.join(home, '.zshenv')) ? fs.readFileSync(path.join(home, '.zshenv')) : null, originals.get(path.join(home,'.zshenv'))?.data ?? null, 'build must not install entry');
   release('activate', 'adoption-a'); release('status');
   assert.equal(registered(), path.join(env.HERDR_MONITOR_HOME, 'releases/adoption-a'));
   const entryBin = path.join(env.HERDR_MONITOR_HOME, 'entry/bin');
-  const discovered = run('zsh', ['-ic', 'command -v codex; command -v monitor-codex']);
-  assert.equal(discovered, `${entryBin}/codex\n${entryBin}/monitor-codex`);
+  const discovered = run('zsh', ['-ic', `command -v ${kind}; command -v monitor-${kind}`]);
+  assert.equal(discovered, `${entryBin}/${kind}\n${entryBin}/monitor-${kind}`);
+  const repeated = fs.readFileSync(path.join(entryBin, '.monitor-native-hooks.json'));
+  release('activate', 'adoption-a');
+  assert.deepEqual(fs.readFileSync(path.join(entryBin, '.monitor-native-hooks.json')), repeated, 'second activation is a no-op');
   for (const file of ['AGENTS.md', 'CLAUDE.md', '.lane.json', '.org']) assert.equal(fs.existsSync(path.join(project, file)), false, `pristine ${file}`);
   // Automatic entry requires a terminal; an interactive shell with piped stdio
   // is deliberately a passthrough. BSD/util-linux script supplies the real PTY.
-  const shell = ['zsh', '-ic', 'codex'];
+  const shell = ['zsh', '-ic', kind];
   const pty = process.platform === 'darwin' ? ['-q', '/dev/null', ...shell]
-    : ['-q', '-e', '-c', "zsh -ic 'codex'", '/dev/null'];
+    : ['-q', '-e', '-c', `zsh -ic '${kind}'`, '/dev/null'];
   run('script', pty, project, {}, 240_000);
   context = JSON.parse(fs.readFileSync(path.join(evidence, 'worker-context.json')));
   assert.match(fs.readFileSync(path.join(project, 'hello.mjs'), 'utf8'), /Bonjour/);
@@ -186,20 +204,22 @@ monitor('commit','Change the greeting to Bonjour'); monitor('check'); monitor('p
   assert.equal(fs.realpathSync(path.join(env.HERDR_MONITOR_HOME, 'current')), active);
   assert.equal(registered(), active);
   release('restore');
-  assert.equal(fs.existsSync(pluginState), false, 'restore must discover and unlink the release plugin');
-  assert.deepEqual(fs.readFileSync(path.join(home, '.zshrc')), original);
-  assert.equal(fs.statSync(path.join(home, '.zshrc')).mode & 0o777, 0o600);
-  for (const file of ['.zshenv', '.bashrc', '.bash_profile']) assert.equal(fs.existsSync(path.join(home, file)), false);
-  for (const file of ['codex', 'monitor-codex']) assert.equal(fs.existsSync(path.join(entryBin, file)), false);
+  assert.equal(registered(), undefined, 'restore must discover and unlink the release plugin');
+  for (const [file, original] of originals) {
+    if (original) { assert.deepEqual(fs.readFileSync(file), original.data); assert.equal(fs.statSync(file).mode & 0o777,original.mode); }
+    else assert.equal(fs.existsSync(file),false,file);
+  }
+  for (const file of ['codex', 'monitor-codex','claude','monitor-claude']) assert.equal(fs.existsSync(path.join(entryBin, file)), false);
   for (const file of ['record', 'org', 'lane']) assert.equal(fs.existsSync(path.join(env.HERDR_MONITOR_BIN, file)), false);
   assert.equal(git(project, 'rev-parse', 'HEAD'), head);
   assert.ok(fs.existsSync(path.join(project, '.org/events.jsonl')));
   outcome = 'passed';
 } catch (error) { failure = error.stack; }
-write(path.join(evidence, 'summary.json'), JSON.stringify({ outcome, failure, root, project, head, run: context?.run,
+write(path.join(evidence, 'summary.json'), JSON.stringify({ outcome, failure, root, product, project, head, run: context?.run,
+  mode: account ? 'fresh-macos-account' : 'scratch-home', account, harness: kind,
   source_commit: sourceCommit,
-  coverage: 'bundled owner/Python prerequisite checks, scratch install and pinned dependencies, activation, Python-backed plugin discovery/relink/unlink against a local fixture, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, console, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell restoration',
-  excluded: ['model judgment', 'live Herdr transport', 'GitHub distribution', 'launchd', 'Linux and desktop/remote transport'],
+  coverage: `${account ? 'real macOS account install and live Herdr plugin registration' : 'scratch HOME install and fixture plugin registration'}, bundled owner/Python prerequisite checks, pinned dependencies, repeated activation, fresh shell auto-entry, scripted task, actual native sandbox check and local promotion, record ingestion, console, supervisor cold start, dry-run housekeeping, scripted reviewed cycle, upgrade, rollback, shell and native hook restoration`,
+  excluded: ['model judgment', ...(account ? ['live agent panes (only plugin registration is live)'] : ['live Herdr transport']), 'GitHub distribution', 'launchd', 'Linux and desktop/remote transport'],
 }, null, 2) + '\n');
 console.log(`${outcome.toUpperCase()}: ${path.join(evidence, 'summary.json')}`);
 if (failure) { console.error(failure); process.exitCode = 1; }

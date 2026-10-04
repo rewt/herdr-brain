@@ -16,6 +16,10 @@ Python remains required for release plugin discovery and restoration. Native Cod
 `sandbox --permission-profile`. Pass the actual native executable, rather than a
 Monitor PATH wrapper. No native credentials or user configuration are needed.
 
+On macOS, `--native-claude /absolute/path/to/claude` also works without Codex;
+validation uses the OS provider. Both variants use a scripted worker and never
+call a model.
+
 ```sh
 ORG_ACTOR=adoption-rehearsal node docs/adoption/rehearse.mjs \
   --native-codex /absolute/path/to/native/codex
@@ -68,6 +72,32 @@ needed an empty scratch CODEX_HOME, validation fd 3 forwarding, and the supporte
 `record status --json` command; those are harness corrections, not product fixes.
 The routing question's pending state is checked by absence of a closed/answer
 receipt, rather than expecting a needs-human *report* status on a question item.
+
+## Operator fresh-account rehearsal
+
+Create a new macOS user and log in as that user. Install the normal prerequisites,
+start Herdr there, and make the inspected candidate readable in that account.
+Run:
+
+```sh
+node docs/adoption/rehearse.mjs --fresh-account \
+  --native-claude /absolute/path/to/native/claude \
+  --evidence /Users/ADOPTER/monitor-install-proof
+```
+
+`--native-codex` selects the Codex variant. The runner verifies macOS account
+identity and UID, refuses a replaced HOME, root and existing Monitor state, and
+uses that user's actual home and real Herdr plugin registry. It records the
+account, candidate commit, command output, task/report and restoration receipts.
+The worker and reviewed cycle remain scripted. After restoration, activate the
+retained `adoption-a` candidate again with the actual native harness on PATH, then
+enter the retained hello project in Herdr to observe live agent panes and default
+housekeeping. The product path is in `summary.json`. Review the user hook through Codex `/hooks`
+when using native Codex. The lane runs only offline fixture tests, never this
+account mode or a live release harness. Keep the proof directory with the release
+acceptance evidence. If a step fails, `summary.json` and `commands.json` name it;
+the candidate's `release.sh restore` reverses managed machine entry. Project
+records, joined fleet and immutable release copies remain available for inspection.
 
 Every child has a finite timeout (at most four minutes; product checks also have
 their own shorter bounds). Failures keep their scratch evidence/lanes for

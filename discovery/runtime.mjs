@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
 import { joinFleet, readFleet } from '../lib/fleet.mjs';
+import { openProjectControls } from '../herdr/project-entry.mjs';
 import { plainDirectory, readPlainFile, removePlainDirectory, writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { withLock } from '../lib/store.mjs';
 import { loadDiscoveredRoutes, validateRoutesConfig } from '../lanes/routes.mjs';
@@ -52,6 +53,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   command('git', ['-C', project.canonical, 'rev-parse', '--verify', 'HEAD']);
   // Never inherit a different project's record into an unrelated session.
   const fleet = joinFleet({ cwd });
+  if (role === 'worker') openProjectControls({ project });
   let org = fleet.project.record;
   const recordAlias = org;
   env.ORG_DIR = org; gitEnv.ORG_DIR = org;

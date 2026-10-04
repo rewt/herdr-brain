@@ -16,11 +16,12 @@ URL. The commands below do not push or publish.
 
 The operator or supervisor owns installation. Requirements: Node.js 20+, npm,
 Git 2.38+, Bash, Python 3 available as `python3`, Herdr 0.8.0+ (the native UI proof used 0.8.2), and an installed
-native Codex executable. Claude is optional. Codex must support the native
-`sandbox --permission-profile` interface used for validation. The default install
-requires Codex even when you plan to use Claude workers. Configure and authenticate
+native Codex executable, Claude executable, or both. On macOS, Claude-only installs
+use the OS validation provider and need no Codex. Linux validation currently needs
+native Codex's `sandbox --permission-profile` interface. Configure and authenticate
 your native harness normally before adopting; Monitor does not replace its
-account, permissions, model, effort or user settings.
+account, permissions, model or effort. The installer checks prerequisites before
+changing entry or installing dependencies; a failure names what to install.
 
 No C compiler is needed on macOS or Linux on arm64 or x64. Monitor ships the
 native process lifetime owner for those targets, verifies its binary and source
@@ -84,11 +85,20 @@ for record/lane commands, or add that launcher directory yourself.
 
 Confirm the fresh shell's `command -v codex` points into the entry directory and
 `command -v monitor-codex` exists. `codex --help`/`--version` still reach native
-Codex. A later PATH reset, shell alias or function can bypass the adapter.
+Codex. For Claude-only use, check `claude` and `monitor-claude` instead.
+
+Installation also adds a reversible user `SessionStart` hook in
+`$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and/or
+`$CLAUDE_CONFIG_DIR/settings.json` (default `~/.claude/settings.json`). Existing
+settings and hooks are preserved. In Codex, review the new Monitor hook through
+`/hooks`; new or changed user hooks run only after native trust review. This is
+required by [Codex's hook interface](https://learn.chatgpt.com/docs/hooks).
+[Claude's native hook](https://code.claude.com/docs/en/hooks) uses the same
+startup, resume, clear and compact events. No project hook file is installed.
 
 Optional machine destinations/native executable overrides are
 `HERDR_MONITOR_HOME`, `HERDR_MONITOR_BIN`, `HERDR_MONITOR_ENTRY_BIN`,
-`HERDR_MONITOR_CODEX` and `HERDR_MONITOR_CLAUDE` (`-` skips Claude). Keep these
+`HERDR_MONITOR_CODEX` and `HERDR_MONITOR_CLAUDE` (`-` skips either harness). Keep these
 consistent during build, activate, rollback and removal; do not put machine
 paths or account data in tracked project routes. [Installation details](../herdr/README.md)
 cover ownership checks, interruption recovery and native executable receipts.
@@ -164,9 +174,21 @@ Monitor-assigned dispatches pass through. `monitor-codex -- exec ...` and
 empty repos or the wrong integration branch warn and pass through automatically;
 explicit entry fails on invalid project settings. Absolute native binary paths,
 desktop/remote sessions, custom shells and later PATH overrides need their own
-supported transport. Install entry on a remote host for sessions running there.
+native user hooks. On supported local CLI/desktop hosts, those hooks join the
+fleet and supply entry guidance even when PATH adapters are bypassed. They do
+not allocate a worker lane or change a running session's sandbox: use the installed
+`monitor-codex`/`monitor-claude` adapter for bounded worker operations. Install
+Monitor on the remote host for sessions running there; local hooks cannot install
+scripts into a cloud execution environment.
 Linux uses native Codex validation; the bubblewrap alternative is experimental,
 disabled by default, and documented for scratch only in [Discovery](../discovery/README.md).
+
+The first entry in a Herdr project workspace opens the console and the supervisor
+with `--no-focus`. Subsequent entries reuse the panes identified by their launch
+receipts. Outside Herdr, entry still joins the fleet; open the project in Herdr
+to use the plugin controls. The supervisor uses Codex when installed, otherwise
+Claude; `HERDR_MONITOR_SUPERVISOR_HARNESS=claude` selects Claude when both exist.
+Its native supervisor entry starts default housekeeping. Workers never start it.
 
 ## Project overrides
 
@@ -413,3 +435,26 @@ GitHub fetching with a local repository and omits dependency downloads. Neither
 proof claims GitHub distribution, Linux/desktop/remote coverage, live review
 quality or automatic release readiness. [Walkthrough evidence](adoption/WALKTHROUGH.md)
 records the actual result and remaining limits.
+
+For the operator's fresh-account acceptance, create and log in to a new macOS
+user account. Install Herdr and Node/npm, Git, Python and at least one native
+harness there, and start Herdr in that account. Run from the inspected candidate:
+
+```sh
+node docs/adoption/rehearse.mjs --fresh-account \
+  --native-claude /absolute/path/to/native/claude \
+  --evidence /Users/ADOPTER/monitor-install-proof
+```
+
+Use `--native-codex` instead for Codex. This mode verifies the actual OS account
+identity, refuses a substituted HOME or existing Monitor installation, installs
+into that account's real home, and registers/unregisters the plugin through its
+real Herdr server. It checks a scripted task with native OS validation, repeated
+activation and exact restoration of shell and native hook files. The summary
+records account, UID, source commit and harness. It retains releases, the joined
+fleet, project and record for inspection. For the UI observation, activate the
+retained `adoption-a` candidate again with your real native harness on PATH (the
+product path is in the summary), then enter the retained project in Herdr to
+observe the console, supervisor and housekeeping. Model
+judgment and live agent panes remain the operator's UI check. This lane does not
+run that account rehearsal or the live release harness.

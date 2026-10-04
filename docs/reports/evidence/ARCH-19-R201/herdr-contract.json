@@ -1,0 +1,231 @@
+{
+  "source": "installed herdr api schema --json (local schema; no server call)",
+  "verified_docs": [
+    "https://herdr.dev/docs/cli-reference/",
+    "https://learn.chatgpt.com/docs/hooks",
+    "https://code.claude.com/docs/en/hooks"
+  ],
+  "PaneInfo": {
+    "properties": {
+      "agent": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "agent_session": {
+        "anyOf": [
+          {
+            "$ref": "#/schemas/success_response/$defs/AgentSessionInfo"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "agent_status": {
+        "$ref": "#/schemas/success_response/$defs/AgentStatus"
+      },
+      "cwd": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "display_agent": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "focused": {
+        "type": "boolean"
+      },
+      "foreground_cwd": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "label": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "pane_id": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "scroll": {
+        "anyOf": [
+          {
+            "$ref": "#/schemas/success_response/$defs/PaneScrollInfo"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "state_labels": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "tab_id": {
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      },
+      "terminal_title": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "terminal_title_stripped": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "tokens": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "maxProperties": 32,
+        "propertyNames": {
+          "pattern": "^[A-Za-z0-9_-]{1,32}$"
+        },
+        "type": "object"
+      },
+      "workspace_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "pane_id",
+      "terminal_id",
+      "workspace_id",
+      "tab_id",
+      "focused",
+      "agent_status",
+      "revision"
+    ],
+    "type": "object"
+  },
+  "PluginPaneInfo": {
+    "properties": {
+      "entrypoint": {
+        "type": "string"
+      },
+      "pane": {
+        "$ref": "#/schemas/success_response/$defs/PaneInfo"
+      },
+      "plugin_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "plugin_id",
+      "entrypoint",
+      "pane"
+    ],
+    "type": "object"
+  },
+  "PluginPaneOpenParams": {
+    "properties": {
+      "cwd": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "direction": {
+        "anyOf": [
+          {
+            "$ref": "#/schemas/request/$defs/SplitDirection"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "entrypoint": {
+        "type": "string"
+      },
+      "env": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "focus": {
+        "default": false,
+        "type": "boolean"
+      },
+      "height": {
+        "anyOf": [
+          {
+            "$ref": "#/schemas/request/$defs/PopupSize"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "placement": {
+        "anyOf": [
+          {
+            "$ref": "#/schemas/request/$defs/PluginPanePlacement"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "plugin_id": {
+        "type": "string"
+      },
+      "target_pane_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "width": {
+        "anyOf": [
+          {
+            "$ref": "#/schemas/request/$defs/PopupSize"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workspace_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "plugin_id",
+      "entrypoint"
+    ],
+    "type": "object"
+  }
+}

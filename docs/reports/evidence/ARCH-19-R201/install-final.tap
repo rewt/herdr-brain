@@ -1,0 +1,275 @@
+TAP version 13
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 1 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1344.738292
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 2 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1599.682958
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 3 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1826.206916
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 4 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 138.665625
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 5 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 281.329542
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 6 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 465.770417
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 7 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 278.382541
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 8 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 456.338
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 9 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 2420.133583
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 10 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 2005.32425
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 11 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 2742.47825
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 12 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.341333
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 13 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 935.253916
+  ...
+# Subtest: the plugin build checks before dependency writes and a repeated build installs nothing
+ok 14 - the plugin build checks before dependency writes and a repeated build installs nothing
+  ---
+  duration_ms: 2461.001542
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 15 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 1007.02175
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 16 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 681.60825
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 17 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 2627.470541
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 18 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1482.688667
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 19 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 1970.411208
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 20 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1820.65325
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 21 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 2783.323834
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 22 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1325.335959
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 23 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 2692.902666
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 24 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 12502.328583
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 25 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1508.341708
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 26 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1399.863917
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 27 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 941.694083
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 28 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1089.912083
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 29 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 2006.885334
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 30 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1176.907833
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 31 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1205.0815
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 32 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1315.737209
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 33 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1332.969167
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 34 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1333.985875
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 35 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1403.35925
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 36 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1411.514708
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 37 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1384.6605
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 38 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1507.749625
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 39 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 1958.430791
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 40 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 3770.45725
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 41 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 601.041083
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 42 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1492.023375
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 43 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1476.2895
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 44 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2494.302458
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 45 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 2105.502542
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 46 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3477.710541
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 47 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 286.596209
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 48 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 2359.173166
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 49 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 2353.2895
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 50 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2545.302625
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 51 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1319.118083
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 52 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1446.647458
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 53 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 1889.889709
+  ...
+1..53
+# tests 53
+# suites 0
+# pass 53
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 77525.136708

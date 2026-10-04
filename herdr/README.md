@@ -32,18 +32,22 @@ content-addressed directory under `$HERDR_MONITOR_HOME/entry/runtimes` before
 installing adapters. The runtime remains usable when Herdr relocates or removes
 the checkout. Release activation instead pins the final immutable release.
 
-Native Codex must already be available; Claude is optional and uses Codex for
-worker validation. The installer resolves native executables from PATH and
-retains their receipts across upgrades, without replacing them. No harness user
-configuration is changed. Defaults require no project or machine settings:
+Install native Codex, Claude, or both. On macOS, Claude-only worker validation
+uses the existing OS provider; Linux validation currently requires Codex.
+The installer checks Node/npm, Git, Python and Herdr before changing entry or
+installing pinned dependencies. Repeating the same build reuses dependencies
+with matching lockfile, Node ABI and platform receipts. It resolves native executables from PATH and
+retains their receipts across upgrades, without replacing them. Existing harness
+settings are retained alongside a reversible user SessionStart hook. Defaults require no project or machine settings:
 
 | Environment override | Default |
 | --- | --- |
 | `HERDR_MONITOR_HOME` | `$HOME/.local/share/herdr-monitor` |
 | `HERDR_MONITOR_BIN` | `$HOME/.local/bin` (record/org/lane) |
 | `HERDR_MONITOR_ENTRY_BIN` | `$HERDR_MONITOR_HOME/entry/bin` |
-| `HERDR_MONITOR_CODEX` | Native Codex found on PATH |
+| `HERDR_MONITOR_CODEX` | Native Codex found on PATH; `-` skips it |
 | `HERDR_MONITOR_CLAUDE` | Native Claude found on PATH; `-` skips it |
+| `HERDR_MONITOR_SUPERVISOR_HARNESS` | Codex if installed, otherwise Claude |
 
 Entry installs `codex`, `monitor-codex`, and, when available, `claude` and
 `monitor-claude`, plus the `monitor` command, into its dedicated directory. It appends a removable PATH snippet
@@ -62,6 +66,19 @@ removes originally absent files when empty, and preserves edits outside the
 unchanged snippet. An edited snippet/adapter or file symlink refuses preflight
 before the release pointer or removal changes. Original native CLIs stay intact.
 Immutable release copies and durable project records remain available.
+
+Native user hooks are installed in `$CODEX_HOME/hooks.json` and/or
+`$CLAUDE_CONFIG_DIR/settings.json`, defaulting to `~/.codex` and `~/.claude`.
+Only the managed SessionStart group is added or removed. Removal restores original
+bytes when the rest of the document is unchanged; later settings edits are kept.
+Changed managed hooks refuse preflight. These config writes share entry's journal
+and rollback. Originally missing config directories are removed only when empty.
+Codex users review new/changed hooks through `/hooks`, as required by
+[native hook trust](https://learn.chatgpt.com/docs/hooks); installation never writes
+trust records. No project hook or project setup file is installed.
+Hooks join the fleet and provide adapter guidance for native-path/desktop sessions;
+the bounded worker parent still comes from `monitor-codex` or `monitor-claude`.
+Scripts must be installed on the host running the session.
 
 Entry holds one installation lock before recovery, machine-state reads, runtime
 existence checks and planning, through completion or rollback. Concurrent calls
@@ -109,6 +126,11 @@ Its installed policy directs that supervisor to start default housekeeping;
 ordinary fresh native Herdr starts are workers, whose policy forbids the loop.
 Installation and shell startup never start a project scheduler. Running sessions
 and schedules retain their own lifetime when entry is restored or rolled back.
+The first entered project in an existing Herdr workspace opens the console and
+supervisor without focus. Launch receipts compare pane and terminal IDs for reuse;
+they supply no worker or supervisor authority. Workspace Git identity must match
+the entered project before opening controls. A Claude-only installation opens a
+Claude supervisor with the same existing SessionStart recovery transport.
 
 See [project entry](../discovery/README.md) for project overrides and launch
 coverage, and [the native canary](../acceptance/README.md) for the bounded scratch

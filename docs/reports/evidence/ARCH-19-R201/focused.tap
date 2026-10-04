@@ -1,0 +1,364 @@
+TAP version 13
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 1 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1330.050459
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 2 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1584.325625
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 3 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 2038.071542
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 4 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 303.105375
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 5 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 290.384125
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 6 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 356.635791
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 7 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 314.651875
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 8 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 625.19675
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 9 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 2180.78725
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 10 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 2036.139166
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 11 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 2706.646667
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 12 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.346917
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 13 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 954.069417
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 14 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 1005.951125
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 15 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 689.191125
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 16 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 2767.949041
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 17 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1414.149417
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 18 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 1930.412375
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 19 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1990.3975
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 20 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 2813.843042
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 21 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1325.80375
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 22 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1864.508209
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 23 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 12515.641542
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 24 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1541.360209
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 25 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1386.761458
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 26 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 950.919958
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 27 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1093.647458
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 28 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 2079.24575
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 29 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1209.743583
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 30 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1200.532542
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 31 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1330.259458
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 32 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1340.807875
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 33 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1316.674625
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 34 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1379.474042
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 35 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1388.316833
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 36 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1356.918375
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 37 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1497.161
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 38 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 1930.57225
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 39 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 3728.438542
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+not ok 40 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 422.664958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    install: install npm with Node.js; npm 1+ is required and must be on PATH
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Object.ok (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/plugin-install.test.mjs:55:90)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/plugin-install.test.mjs:397:5
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 41 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1494.69775
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 42 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1483.998166
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 43 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2561.194125
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 44 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 2206.459958
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 45 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3580.388334
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 46 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 295.428083
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 47 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 2371.339083
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 48 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 2401.897916
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 49 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2515.598417
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+not ok 50 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1225.404583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      [
+    +   '.claude',
+    +   '.codex',
+        'monitor'
+      ]
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'monitor'
+  actual:
+    0: '.claude'
+    1: '.codex'
+    2: 'monitor'
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/plugin-install.test.mjs:563:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 51 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1363.075875
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 52 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 1920.051208
+  ...
+# Subtest: entry reserves bounded owner, wrapper, preparation and reply time for promotion
+ok 53 - entry reserves bounded owner, wrapper, preparation and reply time for promotion
+  ---
+  duration_ms: 0.897667
+  ...
+# monitor entry: keeping lane/entry-1eda5ca90529 at /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-iKqUMn/lanes/lane-entry-1eda5ca90529: a run was started in this lane
+# Subtest: declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+not ok 54 - declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+  ---
+  duration_ms: 1796.8605
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'fast owner must still enforce its shorter bound'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+  error: |-
+    prepare source: lane /private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-iKqUMn/lanes/lane-entry-1eda5ca90529/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-iKqUMn/repo/.lane.json)): /Users/rewt/.nvm/versions/node/v20.19.4/bin/node slow.cjs
+    sandbox-exec: sandbox_apply: Operation not permitted
+    monitor validation: sandboxed validation exited 71
+    GATE 7a111a153ad1e776c0a5e1313004b2931ccc315c exit=1 (0.638s)
+  stack: |-
+    command (file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-iKqUMn/product/discovery/runtime.mjs:26:40)
+    lane (file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-iKqUMn/product/discovery/runtime.mjs:213:12)
+    Object.dispatch (file:///private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/entry-promotion-deadline-iKqUMn/product/discovery/runtime.mjs:290:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/discovery/test/validation-deadlines.test.mjs:77:29
+    getActual (node:assert:498:5)
+    Function.throws (node:assert:644:24)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/discovery/test/validation-deadlines.test.mjs:77:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  operator: 'throws'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-install/discovery/test/validation-deadlines.test.mjs:77:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..54
+# tests 54
+# suites 0
+# pass 51
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 76929.387833

@@ -408,7 +408,7 @@ test('build installs pinned console and MCP dependencies with offline preference
   const f = fixture(t), calls = path.join(f.root, 'npm-calls.jsonl');
   copyProduct(source, f.repo, { includeApps: true });
   const npm = path.join(path.dirname(f.native), 'npm');
-  fs.writeFileSync(npm, `#!${process.execPath}\nrequire('fs').appendFileSync(${JSON.stringify(calls)},JSON.stringify(process.argv.slice(2))+'\\n');\n`, { mode: 0o755 });
+  fs.writeFileSync(npm, `#!${process.execPath}\nconst fs=require('fs'),path=require('path'),args=process.argv.slice(2);if(args[0]==='--version')console.log('10.0.0');else{fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');fs.mkdirSync(path.join(args[1],'node_modules'),{recursive:true});}\n`, { mode: 0o755 });
   const build = ['bash', [path.join(f.repo, 'herdr/install.sh')], f.repo];
   f.ok(...build, { RELEASE_NO_NPM: '', MONITOR_INSTALL_BUILD_ONLY: '1' });
   const expected = ['console', 'mcp'].map((module) => ['--prefix', path.join(f.repo, module), 'ci', '--no-audit', '--no-fund', '--prefer-offline']);

@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { planTidy, isShellOnly } from '../supervisor/tidy-tabs.mjs';
+import { planTidy, isShellOnly, matchingRun, waitingOnRecord } from '../supervisor/tidy-tabs.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
@@ -66,21 +66,7 @@ function executablePath(command) {
   throw new Error(`record CLI is missing or not executable: ${command}`);
 }
 
-export function matchingRun(agent, runs) {
-  const matches = runs.filter((r) => r.meta?.agent === agent.name);
-  // Reused names: the newest run owns this worker, including an open fix round.
-  matches.sort((a, b) => (b.started?.seq ?? 0) - (a.started?.seq ?? 0));
-  if (!matches.length || (matches[1] && matches[0].started?.seq === matches[1].started?.seq)) return null;
-  const run = matches[0];
-  const meta = run.meta;
-  if (!run.workspace || !meta.pane || meta.pane !== agent.pane_id ||
-      (meta.worker_workspace && meta.worker_workspace !== agent.workspace_id) ||
-      (meta.terminal_id && meta.terminal_id !== agent.terminal_id) ||
-      (meta.agent_session_id && meta.agent_session_id !== agent.agent_session?.value) ||
-      (!meta.terminal_id && !meta.agent_session_id)) return null;
-  if (!agent.cwd || canonicalPath(agent.cwd) !== canonicalPath(run.workspace)) return null;
-  return run;
-}
+export { matchingRun } from '../supervisor/tidy-tabs.mjs';
 
 export function resumeKey(run, agent) {
   return JSON.stringify([run.id, agent.pane_id, agent.terminal_id, agent.agent_session?.value, agent.state_change_seq]);
@@ -153,16 +139,6 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     const state = recordState();
     return { workspaces: owned, tabs, panes, agents, runs: state.runs, items: state.items };
   }
-  function waiting(snapshot, run) {
-    const item = snapshot.items.find((i) => i.id === run.item);
-    return !item || ['blocked', 'needs_human'].includes(item.status) ||
-      ['blocked', 'needs_human'].includes(run.report?.outcome) ||
-      (item.blocked_by ?? []).some((id) => {
-        const blocker = snapshot.items.find((i) => i.id === id);
-        return !blocker || !['done', 'dropped'].includes(blocker.status) ||
-          (blocker.closed && blocker.meta?.answer === 'no');
-      });
-  }
   function settled(run, workspace) {
     const topic = run.meta?.lane;
     if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic ?? '') || !workspace?.worktree.is_linked_worktree ||
@@ -183,17 +159,18 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     try { git(['merge-base', '--is-ancestor', tip, `refs/heads/${main}`]); return true; } catch { return false; }
   }
   function eligibility(snapshot) {
-    const allowed = new Map();
+    const allowed = new Map(), denied = new Set();
     for (const agent of snapshot.agents) {
       if (!FINISHED.has(agent.agent_status)) continue;
       const run = matchingRun(agent, snapshot.runs);
       const workspace = snapshot.workspaces.find((w) => w.workspace_id === agent.workspace_id);
       const openLaneRun = snapshot.runs.some((r) => r.workspace && agent.cwd &&
         canonicalPath(r.workspace) === canonicalPath(agent.cwd) && !r.report && !r.abandoned);
-      if (run && !openLaneRun && !waiting(snapshot, run) && (run.report || run.abandoned) && settled(run, workspace)) {
+      if (run && !openLaneRun && !waitingOnRecord(snapshot, run) && (run.report || run.abandoned) && settled(run, workspace)) {
         allowed.set(agent.pane_id, `${run.id} recorded ${run.report ? 'report' : 'abandonment'}; lane promoted or archived`);
-      }
+      } else denied.add(agent.pane_id);
     }
+    for (const pane of denied) allowed.delete(pane);
     return allowed;
   }
   function tidy(snapshot) {
@@ -205,7 +182,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
     if (agent.agent !== 'codex' || !FINISHED.has(agent.agent_status) || !Number.isInteger(agent.state_change_seq)) return null;
     const run = matchingRun(agent, snapshot.runs);
     const ws = snapshot.workspaces.find((w) => w.workspace_id === agent.workspace_id);
-    if (!run || waiting(snapshot, run) || run.report || run.abandoned || !ws?.worktree.is_linked_worktree ||
+    if (!run || waitingOnRecord(snapshot, run) || run.report || run.abandoned || !ws?.worktree.is_linked_worktree ||
         canonicalPath(ws.worktree.checkout_path) !== canonicalPath(run.workspace) || agent.tab_id === selfTab) return null;
     // A report on disk may be awaiting ingestion: don't restart finished work.
     if (run.report_path && fs.existsSync(run.report_path)) return null;
@@ -240,7 +217,7 @@ export function createHousekeeping({ cwd, org, main = 'main', herdr = 'herdr', r
         const occupant = checked.agents.find((a) => a.pane_id === agent.pane_id);
         const currentRun = occupant && matchingRun(occupant, checked.runs);
         if (!currentRun || currentRun.id !== run.id || currentRun.report || currentRun.abandoned ||
-            waiting(checked, currentRun) || !FINISHED.has(occupant.agent_status) ||
+            waitingOnRecord(checked, currentRun) || !FINISHED.has(occupant.agent_status) ||
             resumeKey(run, occupant) !== key || (currentRun.report_path && fs.existsSync(currentRun.report_path))) {
           log({ action: 'skip-resume', run: run.id, pane: agent.pane_id, why: 'worker or record changed after clearing wheel junk' });
           continue;

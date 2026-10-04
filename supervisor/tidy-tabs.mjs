@@ -26,6 +26,46 @@ const SESSION_LABEL = /^(settle R-\d+|executive|plan|audit)$/;
 const SESSION_AGENT = /^(settle|exec|plan|audit)-/;
 const FINISHED = new Set(['idle', 'done']);
 const SHELLS = new Set(['zsh', '-zsh', 'bash', '-bash', 'sh', '-sh', 'fish', '-fish']);
+const canonicalPath = (file) => fs.existsSync(file) ? fs.realpathSync(file) : path.resolve(file);
+
+// Names locate the newest record; pane, workspace, cwd and immutable occupant
+// identity prove that it belongs to the live worker. Session metadata cannot
+// supply missing record evidence.
+export function matchingRun(agent, runs) {
+  const matches = runs.filter((r) => r.meta?.agent === agent.name);
+  matches.sort((a, b) => (b.started?.seq ?? 0) - (a.started?.seq ?? 0));
+  if (!matches.length || (matches[1] && matches[0].started?.seq === matches[1].started?.seq)) return null;
+  const run = matches[0], meta = run.meta;
+  if (!run.workspace || !meta.pane || meta.pane !== agent.pane_id ||
+      !meta.worker_workspace || meta.worker_workspace !== agent.workspace_id ||
+      (meta.terminal_id && meta.terminal_id !== agent.terminal_id) ||
+      (meta.agent_session_id && meta.agent_session_id !== agent.agent_session?.value) ||
+      (!meta.terminal_id && !meta.agent_session_id)) return null;
+  if (!agent.cwd || canonicalPath(agent.cwd) !== canonicalPath(run.workspace)) return null;
+  return run;
+}
+
+export function waitingOnRecord(snapshot, run) {
+  const item = snapshot.items.find((i) => i.id === run.item);
+  return !item || ['blocked', 'needs_human'].includes(item.status) ||
+    ['blocked', 'needs_human'].includes(run.report?.outcome) ||
+    (item.blocked_by ?? []).some((id) => {
+      const blocker = snapshot.items.find((i) => i.id === id);
+      return !blocker || !['done', 'dropped'].includes(blocker.status) ||
+        (blocker.closed && blocker.meta?.answer === 'no');
+    });
+}
+
+export function reportedAgentsFromRecords(agents, runs, items) {
+  const eligible = new Set(), ineligible = new Set();
+  for (const agent of agents) {
+    const run = matchingRun(agent, runs);
+    (run?.report && !waitingOnRecord({ items }, run) ? eligible : ineligible).add(agent.name);
+  }
+  // Duplicate observations of a reused name must all match the record; one
+  // valid occupant cannot authorize a mismatched second occupant.
+  return new Set([...eligible].filter((name) => !ineligible.has(name)));
+}
 
 // Pure: decide which tabs to close from one observation of Herdr, org and the ledger.
 // snapshot = { tabs: [{tab_id, label, workspace_id, lane}], panes: [{pane_id, tab_id, shellOnly}],
@@ -44,10 +84,19 @@ export function planTidy(snapshot) {
     const skip = (why) => keep.push({ tab_id: tab.tab_id, label: tab.label, why });
     if (tab.tab_id === selfTab) { skip('this tab'); continue; }
     const tabPanes = panes.filter((p) => p.tab_id === tab.tab_id);
-    const tabAgents = agents.filter((a) => tabPanes.some((p) => p.pane_id === a.pane_id));
+    const tabAgents = agents.filter((a) => a.tab_id === tab.tab_id || tabPanes.some((p) => p.pane_id === a.pane_id));
     if (!tabPanes.length) { skip('no panes observed'); continue; }
     if (tabAgents.some((a) => !a.name)) { skip('an unnamed agent (an operator chat) is here'); continue; }
     if (tabAgents.some((a) => !FINISHED.has(a.status))) { skip('an agent here is still active'); continue; }
+    // Herdr enumerations are separate calls. A later agent can reveal a new
+    // pane or a moved pane that was absent from the earlier topology.
+    if (tabAgents.some((a) => !tabPanes.some((p) => p.pane_id === a.pane_id) ||
+        (a.tab_id && a.tab_id !== tab.tab_id) ||
+        (a.workspace_id && a.workspace_id !== tab.workspace_id)) ||
+        tabPanes.some((p) => (p.workspace_id && p.workspace_id !== tab.workspace_id) ||
+          panes.some((other) => other.pane_id === p.pane_id && other.tab_id !== tab.tab_id))) {
+      skip('agent and pane topology disagree'); continue;
+    }
     const bareShells = tabPanes.filter((p) => !agents.some((a) => a.pane_id === p.pane_id));
     if (bareShells.some((p) => !p.shellOnly)) { skip('a program is still running here'); continue; }
 
@@ -101,7 +150,7 @@ export function reviewedAgentsFromRecords(sessions, reviewRecords) {
     newest.set(r.topic, Math.max(newest.get(r.topic) ?? -Infinity, r.mtimeMs));
   }
   return new Set(sessions
-    .filter((s) => s?.role === 'review' && s?.name && s?.topic && Number.isFinite(Date.parse(s.created_at)))
+    .filter((s) => /^review(?:-[a-z0-9][a-z0-9-]*)?$/.test(s?.role ?? '') && s?.name && s?.topic && Number.isFinite(Date.parse(s.created_at)))
     .filter((s) => (newest.get(s.topic) ?? -Infinity) > Date.parse(s.created_at))
     .map((s) => s.name));
 }
@@ -216,21 +265,20 @@ function main() {
       }
     }
     const agents = array(herdr(['agent', 'list']).agents, 'agents').map((a) => ({ ...a, status: a.agent_status }));
-    let reportedAgents = new Set();
+    let reportedAgents = new Set(), recordedNames = new Set();
     if (opt.org) {
       const data = JSON.parse(invoke(opt['org-cli'], [...opt['org-cli-arg'], 'status', '--json'], { ...process.env, ORG_DIR: opt.org }));
       if (data.error) throw new Error(JSON.stringify(data.error));
       const runs = array((data.result ?? data).runs, 'record runs');
-      // A reused worker name belongs to the newest run, including an open fix round.
-      const newest = new Map();
-      for (const run of runs) {
-        const name = run.meta?.agent;
-        if (name && (!newest.has(name) || (run.started?.seq ?? 0) >= (newest.get(name).started?.seq ?? 0))) newest.set(name, run);
-      }
-      reportedAgents = new Set([...newest].filter(([, run]) => run.report).map(([name]) => name));
+      const items = array((data.result ?? data).items, 'record items');
+      reportedAgents = reportedAgentsFromRecords(agents, runs, items);
+      // A review file cannot override a waiting/open run or a failed identity
+      // match for a recorded worker with the same name.
+      recordedNames = new Set(runs.map((run) => run.meta?.agent));
     }
-    const reviewedAgents = reviewedAgentsFromRecords(laneSessions(checkout),
-      reviewRecords([checkout, ...mine.filter((w) => w.worktree.is_linked_worktree).map((w) => w.worktree.checkout_path)]));
+    const reviewedAgents = new Set([...reviewedAgentsFromRecords(laneSessions(checkout),
+      reviewRecords([checkout, ...mine.filter((w) => w.worktree.is_linked_worktree).map((w) => w.worktree.checkout_path)]))]
+      .filter((name) => !recordedNames.has(name)));
     const ledgerDir = opt['ledger-dir'] ?? path.join(checkout, '.lane/supervisor');
     const ledgers = [];
     try {

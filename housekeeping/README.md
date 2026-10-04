@@ -50,11 +50,16 @@ no supervisor context is consumed after that.
 
 ## Evidence before action
 
-- A live worker must match the newest run for its name, recorded pane and cwd,
+- A live worker must match the newest run for its name, recorded pane, workspace and cwd,
   and at least one recorded occupant identity (`terminal_id` or `agent_session_id`).
-  Workspace and both identities are also checked when recorded. Legacy runs
-  without occupant identity are preserved; session registry data cannot fill it in.
-- Closing requires a recorded report or abandonment, no open run in the same lane,
+  Both identities are checked when recorded. Legacy runs missing pane, workspace,
+  cwd or occupant identity are preserved; session registry data cannot fill it in.
+- Per-tick worker closing requires a recorded report, no unresolved blocking item
+  or waiting report, and an idle/done worker. Blocked and needs_human reports stay
+  even when Herdr reports an idle worker. Review routes (`review`, `review-codex`,
+  `review-max` and other `review-*` routes) require a newer verdict for their topic;
+  that evidence never overrides a recorded worker's missing identity or waiting run.
+- Settled-lane cleanup requires a recorded report or abandonment, no open run in the same lane,
   no unresolved blocking item or waiting report, and an idle/done worker. Git
   must show its clean attached lane tip contained in the base branch, or an absent
   lane branch/worktree with its `archive/lane/TOPIC` tag. Unmerged work stays
@@ -62,7 +67,9 @@ no supervisor context is consumed after that.
 - Every agent in a tab must qualify. Unnamed/operator chats, blocked/working/unknown
   agents, running extra programs, unknown sessions and a foreground timer's own tab stay.
   A detached timer clears inherited pane/tab/workspace IDs; it has no terminal to protect.
-  Topology, processes, record and Git are reread before each close. The slower
+  Agents identifying a tab directly are included even when their pane is absent
+  from the earlier pane list; inconsistent tab/pane/workspace observations preserve
+  the tab. Topology, processes, record and Git are reread before each close. The slower
   settled-lane cleanup uses `supervisor/tidy-tabs.mjs`'s shared planner in strict
   mode. The separate per-tick finished-tab command retains its existing
   report/review-verdict policy without requiring lane promotion or archival.

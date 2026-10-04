@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { configureCliFixture } from './helpers/cli-fixture.mjs';
 import { tidyFinishedTabs } from '../housekeeping.mjs';
+import { planTidy, reviewedAgentsFromRecords } from '../../supervisor/tidy-tabs.mjs';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-tidy-'));
@@ -19,20 +20,25 @@ function fixture(t) {
     const r = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
   }
-  const f = configureCliFixture({ root, repo });
+  const f = configureCliFixture({ root, repo, lane });
   fs.writeFileSync(f.config, JSON.stringify({ enabled: true, resume: false, tick_seconds: 1, cleanup_seconds: 600 }));
   const common = fs.realpathSync(path.join(repo, '.git'));
   const state = { workspaces: [
     { workspace_id: 'main', worktree: { checkout_path: repo, repo_root: repo, repo_key: common, is_linked_worktree: false } },
     { workspace_id: 'lane', worktree: { checkout_path: lane, repo_root: repo, repo_key: common, is_linked_worktree: true } },
-  ], tabs: [], panes: [], agents: [], runs: [], actions: [], agentReads: 0 };
+  ], tabs: [], panes: [], agents: [], runs: [], items: [], actions: [], agentReads: 0 };
   f.add = (id, name, status = 'idle', workspace = 'lane', label = 'worker') => {
     state.tabs.push({ tab_id: id, workspace_id: workspace, label });
     state.panes.push({ pane_id: `${id}:p`, tab_id: id, workspace_id: workspace });
     state.agents.push({ name, agent: 'codex', agent_status: status, pane_id: `${id}:p`, tab_id: id,
-      workspace_id: workspace, cwd: workspace === 'lane' ? lane : repo, terminal_id: id });
-    state.runs.push({ id: `R-${state.runs.length + 1}`, started: { seq: state.runs.length + 1 },
-      workspace: workspace === 'lane' ? lane : repo, meta: { agent: name }, report: { outcome: 'done' } });
+      workspace_id: workspace, cwd: workspace === 'lane' ? lane : repo, terminal_id: id,
+      agent_session: { value: `${id}:session` } });
+    const item = `ENG-${state.runs.length + 1}`;
+    state.runs.push({ id: `R-${state.runs.length + 1}`, item, started: { seq: state.runs.length + 1 },
+      workspace: workspace === 'lane' ? lane : repo,
+      meta: { agent: name, pane: `${id}:p`, worker_workspace: workspace, lane: 'topic',
+        terminal_id: id, agent_session_id: `${id}:session` }, report: { outcome: 'done' } });
+    state.items.push({ id: item, status: 'active', blocked_by: [] });
   };
   f.add('finished', 'lane-topic-worker');
   const file = path.join(root, 'fake-state.json');
@@ -45,7 +51,7 @@ const file = ${JSON.stringify(file)}, s = JSON.parse(fs.readFileSync(file, 'utf8
 const save = () => fs.writeFileSync(file, JSON.stringify(s));
 const out = (result) => console.log(JSON.stringify({result}));
 if (s.fail === a.slice(0, 2).join(' ')) { console.error('injected tidy failure'); process.exit(1); }
-if (a[0] === 'status') out({ runs: s.runs, items: [] });
+if (a[0] === 'status') out({ runs: s.runs, items: s.incompleteItems ? undefined : s.items });
 else if (a[0] === 'workspace') out({ workspaces: s.workspaces });
 else if (a[0] === 'tab' && a[1] === 'list') out({ tabs: s.tabs.filter(t => t.workspace_id === a.at(-1)) });
 else if (a[0] === 'pane' && a[1] === 'list') out(s.incomplete ? {} : { panes: s.panes.filter(p => p.workspace_id === a.at(-1)) });
@@ -53,6 +59,9 @@ else if (a[0] === 'pane' && a[1] === 'process-info') out({ process_info: { shell
 else if (a[0] === 'agent' && a[1] === 'list') {
   s.agentReads++;
   if (s.change && s.agentReads >= 2) s.agents[0].agent_status = s.change;
+  if (s.newOccupant && s.agentReads >= 2) s.agents.push(s.newOccupant);
+  if (s.replacement && s.agentReads >= 2) Object.assign(s.agents[0], s.replacement);
+  if (s.waitingReport && s.agentReads >= 2) s.runs[0].report.outcome = s.waitingReport;
   save(); out({ agents: s.agents });
 } else if (a[0] === 'tab' && a[1] === 'close') {
   s.actions.push(a); s.tabs = s.tabs.filter(t => t.tab_id !== a[2]);
@@ -97,6 +106,93 @@ test('a working or blocked change at the final recheck preserves the finished ta
   }
 });
 
+test('new occupants revealed after the final pane list preserve their tab', t => {
+  const f = fixture(t);
+  for (const [name, status] of [['lane-new', 'working'], ['lane-new', 'blocked'], [null, 'idle'], ['lane-new', 'idle']]) {
+    f.stateData.agentReads = 0;
+    f.stateData.newOccupant = { ...f.stateData.agents[0], name, agent_status: status, pane_id: 'new-pane' };
+    f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
+    assert.equal(f.read().agentReads, 2, 'the new occupant appears only in the final observation');
+  }
+});
+
+test('conflicting agent tab/workspace and duplicate pane topology cannot authorize a close', () => {
+  const tabs = [{ tab_id: 'tab', label: 'worker', lane: true, workspace_id: 'lane' }];
+  const panes = [{ pane_id: 'pane', tab_id: 'tab', shellOnly: true }];
+  const agent = { name: 'lane-worker', status: 'idle', pane_id: 'pane', tab_id: 'tab', workspace_id: 'lane' };
+  for (const snapshot of [
+    { agents: [{ ...agent, tab_id: 'other' }], panes },
+    { agents: [{ ...agent, workspace_id: 'other' }], panes },
+    { agents: [agent], panes: [...panes, { ...panes[0], tab_id: 'other' }] },
+    { agents: [agent], panes: [{ ...panes[0], workspace_id: 'other' }] },
+  ]) {
+    const plan = planTidy({ tabs, ...snapshot, reportedAgents: new Set([agent.name]) });
+    assert.deepEqual(plan.close, []); assert.match(plan.keep[0].why, /topology disagree/);
+  }
+});
+
+test('housekeeping --once preserves waiting reports, blocking items and missing item evidence', t => {
+  const f = fixture(t), original = structuredClone(f.stateData);
+  for (const variant of ['blocked-report', 'needs-human-report', 'blocked-item', 'needs-human-item',
+    'open-blocker', 'missing-blocker', 'declined-blocker', 'missing-item', 'incomplete-items']) {
+    Object.assign(f.stateData, structuredClone(original));
+    const s = f.stateData;
+    if (variant.endsWith('-report')) s.runs[0].report.outcome = variant === 'blocked-report' ? 'blocked' : 'needs_human';
+    if (variant.endsWith('-item') && variant !== 'missing-item') s.items[0].status = variant === 'blocked-item' ? 'blocked' : 'needs_human';
+    if (variant.endsWith('-blocker')) {
+      s.items[0].blocked_by = ['HUM-1'];
+      if (variant !== 'missing-blocker') s.items.push({ id: 'HUM-1', status: variant === 'open-blocker' ? 'ready' : 'done',
+        closed: {}, meta: { answer: variant === 'declined-blocker' ? 'no' : 'yes' } });
+    }
+    if (variant === 'missing-item') s.items = [];
+    if (variant === 'incomplete-items') s.incompleteItems = true;
+    f.save();
+    const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
+    assert.equal(r.status, variant === 'incomplete-items' ? 1 : 0, `${variant}: ${r.stderr}`);
+    assert.deepEqual(f.read().actions, [], variant);
+    if (variant === 'incomplete-items') assert.match(r.stdout, /tidy-failed/);
+  }
+  // A resolved blocker allows the completed worker to close before promotion.
+  Object.assign(f.stateData, structuredClone(original)); delete f.stateData.incompleteItems;
+  f.stateData.items[0].blocked_by = ['HUM-1']; f.stateData.items.push({ id: 'HUM-1', status: 'done' });
+  f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, [['tab', 'close', 'finished']]);
+});
+
+test('automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity', t => {
+  const f = fixture(t), original = structuredClone(f.stateData);
+  for (const variant of ['pane', 'cwd', 'workspace', 'terminal', 'session', 'missing-live-terminal',
+    'missing-live-session', 'missing-live-cwd', 'missing-record-pane', 'missing-record-workspace',
+    'missing-record-cwd', 'missing-record-identities', 'tied-newest']) {
+    Object.assign(f.stateData, structuredClone(original));
+    const agent = f.stateData.agents[0], run = f.stateData.runs[0];
+    if (variant === 'pane') run.meta.pane = 'previous-pane';
+    if (variant === 'cwd') agent.cwd = f.repo;
+    if (variant === 'workspace') run.meta.worker_workspace = 'previous-workspace';
+    if (variant === 'terminal') agent.terminal_id = 'replacement-terminal';
+    if (variant === 'session') agent.agent_session.value = 'replacement-session';
+    if (variant === 'missing-live-terminal') delete agent.terminal_id;
+    if (variant === 'missing-live-session') delete agent.agent_session;
+    if (variant === 'missing-live-cwd') delete agent.cwd;
+    if (variant === 'missing-record-pane') delete run.meta.pane;
+    if (variant === 'missing-record-workspace') delete run.meta.worker_workspace;
+    if (variant === 'missing-record-cwd') delete run.workspace;
+    if (variant === 'missing-record-identities') { delete run.meta.terminal_id; delete run.meta.agent_session_id; }
+    if (variant === 'tied-newest') f.stateData.runs.push({ ...run, id: 'R-2' });
+    f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, [], variant);
+  }
+});
+
+test('replacement identity and a waiting report at the final observation prevent closing', t => {
+  const f = fixture(t), original = structuredClone(f.stateData);
+  for (const change of [{ replacement: { terminal_id: 'new-terminal' } },
+    { replacement: { agent_session: { value: 'new-session' } } }, { waitingReport: 'blocked' }, { waitingReport: 'needs_human' }]) {
+    for (const key of ['replacement', 'waitingReport']) delete f.stateData[key];
+    Object.assign(f.stateData, structuredClone(original), change);
+    f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
+    assert.equal(f.read().agentReads, 2);
+  }
+});
+
 test('a reused worker name with a newer open run and an extra unnamed occupant never close', t => {
   const f = fixture(t);
   f.stateData.runs.push({ ...f.stateData.runs[0], id: 'R-2', started: { seq: 2 }, report: null });
@@ -104,6 +200,14 @@ test('a reused worker name with a newer open run and an extra unnamed occupant n
   f.stateData.runs.pop();
   f.stateData.agents.push({ ...f.stateData.agents[0], name: null });
   f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
+});
+
+test('a matching worker cannot authorize another occupant reusing its name', t => {
+  const f = fixture(t);
+  f.stateData.agents.push({ ...f.stateData.agents[0], terminal_id: 'replacement' });
+  f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
+  const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
+  assert.equal(r.status, 0, r.stderr); assert.deepEqual(f.read().actions, []);
 });
 
 test('only this Git project is tidied and the caller tab is preserved', t => {
@@ -132,6 +236,51 @@ test('finished reviews and old settle sessions use the existing tidy policy', t 
   fs.writeFileSync(path.join(ledger, 'sessions-2026-10-03.log'), '12:00:00 settle-r-9-old settle R-9\n13:00:00 settle-r-10-new settle R-10\n');
   f.save(); assert.equal(f.tidy(), true);
   assert.deepEqual(f.read().actions.map(a => a[2]).sort(), ['finished', 'review-old', 'settle-old']);
+});
+
+test('three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round', t => {
+  const f = fixture(t);
+  const registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.lane, 'docs/reviews/topic');
+  fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
+  for (let round = 1; round <= 3; round++) {
+    if (round > 1) f.add(`worker-${round}`, `lane-topic-worker-${round}`);
+    const name = `lane-topic-review-${round}`;
+    f.add(`review-${round}`, name);
+    f.stateData.runs.pop(); // Lane reviewers have verdict evidence, no worker reports.
+    fs.writeFileSync(path.join(registry, `${name}.json`), JSON.stringify({ name, topic: 'topic', role: 'review-codex',
+      created_at: `2020-01-0${round}T00:00:00Z` }));
+    const file = path.join(reviews, `round-${round}.md`);
+    fs.writeFileSync(file, `**${round < 3 ? 'NEEDS-WORK' : 'PASS'}**\nTopic: topic\nRound: ${round}\n`);
+    fs.utimesSync(file, new Date(`2020-01-0${round}T01:00:00Z`), new Date(`2020-01-0${round}T01:00:00Z`));
+  }
+  f.add('working-round', 'lane-topic-working', 'working'); f.stateData.runs.at(-1).report = null;
+  f.save();
+  const r = spawnSync(process.execPath, [...f.args, '--once'], { encoding: 'utf8', env: f.env });
+  assert.equal(r.status, 0, r.stderr);
+  const remaining = f.read();
+  assert.deepEqual(remaining.tabs.map(tab => tab.tab_id), ['working-round']);
+  assert.deepEqual(remaining.actions.map(a => a[2]).sort(), ['finished', 'review-1', 'review-2', 'review-3', 'worker-2', 'worker-3']);
+});
+
+test('supported review routes need a matching topic verdict newer than their session', () => {
+  const sessions = ['review', 'review-codex', 'review-max', 'review-custom', 'engineer'].map(role => ({
+    role, name: `lane-topic-${role}`, topic: 'topic', created_at: '2020-01-01T00:00:00Z',
+  }));
+  sessions.push({ ...sessions[0], name: 'lane-topic-new-review', created_at: '2020-01-03T00:00:00Z' });
+  sessions.push({ ...sessions[0], name: 'lane-other-review', topic: 'other' });
+  const records = [{ topic: 'topic', verdict: 'FAIL', mtimeMs: Date.parse('2020-01-02T00:00:00Z') }];
+  assert.deepEqual([...reviewedAgentsFromRecords(sessions, records)],
+    ['lane-topic-review', 'lane-topic-review-codex', 'lane-topic-review-max', 'lane-topic-review-custom']);
+});
+
+test('review evidence cannot override a recorded worker waiting on a blocker', t => {
+  const f = fixture(t), registry = path.join(f.repo, '.lane/sessions.json.d'), reviews = path.join(f.repo, 'docs/reviews/topic');
+  fs.mkdirSync(registry, { recursive: true }); fs.mkdirSync(reviews, { recursive: true });
+  fs.writeFileSync(path.join(registry, 'worker.json'), JSON.stringify({ name: 'lane-topic-worker',
+    topic: 'topic', role: 'review-codex', created_at: '2020-01-01T00:00:00Z' }));
+  fs.writeFileSync(path.join(reviews, 'verdict.md'), '**PASS**\n');
+  f.stateData.runs[0].report.outcome = 'blocked';
+  f.save(); assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
 });
 
 test('failed and incomplete reads close nothing and are logged without stopping housekeeping', t => {

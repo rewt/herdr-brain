@@ -53,6 +53,7 @@ function fixture(t) {
     spawnSync('chmod', ['-R', 'u+w', root], { timeout: loadTimeout(5000) });
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
+  fixtureFleet(t, root);
   const repo = path.join(root, 'source'), home = path.join(root, 'user'), nativeBin = path.join(root, 'native');
   for (const dir of [repo, home, nativeBin]) fs.mkdirSync(dir);
   copyProduct(source, repo);
@@ -63,7 +64,8 @@ function fixture(t) {
   fs.symlinkSync(native, path.join(nativeBin, 'claude'));
   const env = releaseEnvironment(process.env, { HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
     ORG_ACTOR: `eng80-r97-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
-    PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
+    PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET,
+    HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: path.join(nativeBin, 'claude'), HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
     RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', MONITOR_INSTALL_BUILD_ONLY: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
     HERDR_ENV: '', HERDR_SOCKET_PATH: path.join(root, 'absent.sock'), HERDR_WORKSPACE_ID: '', HERDR_TAB_ID: '', HERDR_INTEGRATION_ID: '', HERDR_PANE_ID: '', HERDR_PLUGIN_ROOT: '', HERDR_PLUGIN_CONTEXT_JSON: '', MONITOR_RUNTIME_DIR: path.join(root, 'queue'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'), ENTRY_TEST_RECEIPT: receipt,

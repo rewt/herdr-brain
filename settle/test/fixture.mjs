@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { repositorySeed } from '../../test/helpers/git-seed.mjs';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,12 +16,16 @@ const rootTool = fileURLToPath(new URL('../../', import.meta.url));
 let copyInitialRepository;
 export function fixture(t, { source = rootTool, actor = 'settle-test-agent', execute = spawnSync } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'settle-test-')));
+  fixtureFleet(t, root);
   const repo = path.join(root, 'project'), workspace = path.join(root, 'lane'), bin = path.join(root, 'bin');
   fs.mkdirSync(bin);
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, SETTLE_TEST_ROOT: root,
     HOME: path.join(root, 'home'), XDG_CONFIG_HOME: path.join(root, 'xdg'),
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|MONITOR_)/.test(key) || (key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'].includes(key))) delete env[key];
+  // HOME only protects children. Imported product calls and nested entry/join
+  // commands must share this fixture's fleet even outside the bounded runner.
+  env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   // Reset project/session inputs without sending offline fixture gates to the
   // real host lock. Each fixture owns its temporary slot and nested commands.
   env.MONITOR_TEST_SLOT_PATH = path.join(root, 'test-slot.lock');
@@ -100,7 +105,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   };
   // A supplied command hook owns only this fixture's scratch tree. Do not send
   // it shared seed operations or change the setup-failure boundary it scripts.
-  if (execute === spawnSync) {
+  if (execute === spawnSync && process.env.HERDR_TEST_OFFLINE_ROOT) {
     copyInitialRepository ??= repositorySeed(process.env.HERDR_TEST_OFFLINE_ROOT, initializeRepository);
     copyInitialRepository(repo);
   } else {

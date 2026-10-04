@@ -134,9 +134,12 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
     write(path.join(evidence, 'discovery-commands.txt'), commands);
     for (const worker of workers) assert.ok(worker.sources?.length, worker.attributionError);
     assert.match(workers.flatMap((w) => w.sources.map((s) => s.excerpt)).join('\n'), /(?:fast.forward|rebase|promot)/i, 'product policy must teach promotion');
+    // The accepted minimal fleet build retains the canonical checkout's .org;
+    // entry worktrees share that record rather than creating worker records.
     assert.ok(fs.existsSync(path.join(repo, '.org/events.jsonl')), 'entering agents did not discover/populate a project record');
     const events = read(path.join(repo, '.org/events.jsonl')).split('\n').filter(Boolean).map(JSON.parse);
-    assert.ok(events.filter((e) => e.type === 'run.started').length >= 2, 'record must hold each concurrent agent’s run');
+    assert.ok(events.filter((e) => e.type === 'run.started').length >= 2,
+      `record must hold each concurrent agent’s run: ${workers.map(w => w.answer.result).join('; ')}`);
     assert.ok(workers.every((w) => w.answer.branch.startsWith('lane/')), 'each real agent must show its own discovered lane');
     assert.notEqual(workers[0].answer.checkout, workers[1].answer.checkout, 'workers need distinct checkouts');
     assert.ok(workers.every((w) => w.answer.checkout !== repo), 'workers must not edit the main checkout');
@@ -176,8 +179,12 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
     assert.match(context, /gpt-6\.1-sol/); assert.match(context, /opus/i);
     record(['answer', question.id, 'yes', '--note', 'Scripted acceptance operator approves the proposed defaults'], { ORG_ACTOR: 'human' });
     const apply = await live(repo, 'discovery-routing-apply', `The operator answered yes to ${question.id}. Continue the recorded work and apply the approved configuration, then validate it.`);
-    await apply();
-    const routes = JSON.parse(read(path.join(repo, '.lane.json'))).routes;
+    const applied = await apply();
+    // Approved routes are edited in the entry lane, then validated and promoted
+    // to this canonical project file. A missing file means integration failed.
+    const routeFile = path.join(repo, '.lane.json');
+    assert.ok(fs.existsSync(routeFile), `approved routes did not reach the integration checkout: ${applied.answer.result}`);
+    const routes = JSON.parse(read(routeFile)).routes;
     assert.equal(routes.engineer.model, 'gpt-6.1-sol'); assert.equal(routes.engineer.effort, 'high'); assert.match(routes.review.model, /opus/i);
     return `${question.id}: category=${question.meta.category}, waited for a human, scripted yes applied by real agent`;
   });

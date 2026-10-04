@@ -4,12 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { spawnSync } from 'node:child_process';
+import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { discovery } from '../live.mjs';
 import { cases } from '../cases.mjs';
 import { sessionEnv } from '../security.mjs';
 import { runTemporary } from '../../discovery/temporary.mjs';
+import { createLiveSessionTemp } from '../temp.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
+const nativeCodex = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout?.trim();
 
 // Execute discovery's real setup through installation, stopping at the first
 // Herdr call. Only the boundary probe/native model executable are stand-ins.
@@ -59,7 +62,7 @@ else {
     read: file => fs.readFileSync(file, 'utf8'), h: () => { throw stopped; },
   }), error => error === stopped);
   const spec = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs/discovery-french.json'), 'utf8'));
-  return { root, evidence, spec };
+  return { root, evidence, spec, scratchRoots, discoveryRoots };
 }
 
 test('real live discovery setup confines a short fleet temp with no project configuration', async t => {
@@ -114,3 +117,109 @@ test('real live-worker arguments reach the installed adapter with its supported 
   assert.equal(entry.source, path.join(spec.installation, 'discovery/policy.mjs'));
   assert.ok(entry.policy.includes('Herdr Monitor installed project-entry policy'));
 });
+
+test('installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline',
+  { skip: process.platform !== 'darwin' || !nativeCodex, timeout: 90000 }, async t => {
+    const { root, evidence, spec: seed, scratchRoots, discoveryRoots } = await fixture(t);
+    const native = fs.realpathSync(nativeCodex);
+    // This executable accepts only capability queries, native sandbox commands
+    // and a fixed offline driver in place of exec. It never invokes inference.
+    fs.writeFileSync(seed.binary, `#!${process.execPath}
+const path=require('path'),{spawnSync}=require('child_process'),args=process.argv.slice(2);
+let result;
+if(args.includes('--help')) {console.log('--sandbox --add-dir --permission-profile');process.exit(0);}
+if(args.includes('--version')) {console.log('codex offline');process.exit(0);}
+if(args[0]==='sandbox') result=spawnSync(${JSON.stringify(native)},args,{stdio:args.includes('--enter')?['inherit','inherit','inherit',3]:'inherit'});
+else {
+  if(!args.includes('exec')) throw Error('offline stand-in refuses inference');
+  const configs=[];
+  for(let i=0;i<args.length;i++) if(args[i]==='-c' && /^(default_permissions|permissions\\.acceptance\\.)/.test(args[i+1])) configs.push(args[i],args[i+1]);
+  const task=path.basename(args[args.indexOf('-o')+1],'.txt');
+  result=spawnSync(${JSON.stringify(native)},['sandbox','-C',process.cwd(),'-P','acceptance',...configs,'--',${JSON.stringify(process.execPath)},path.join(process.env.HOME,'offline-worker.cjs'),${JSON.stringify(seed.installation)},task],{stdio:'inherit'});
+}
+if(result.error) throw result.error;process.exit(result.status??1);
+`, { mode: 0o755 });
+    const jobs = [];
+    function job(name) {
+      const spec = { ...seed, name, temp: createLiveSessionTemp(scratchRoots, discoveryRoots), probeGit: undefined,
+        runtimeHome: path.join(root, `runtime-${name}`), toolRoots: [path.resolve(path.dirname(process.execPath), '..'), path.resolve(path.dirname(native), '..'), '/opt/homebrew'] };
+      fs.mkdirSync(spec.runtimeHome);
+      spec.worktreeRoot = path.join(spec.temp, 'entry-worktrees');
+      const transport = path.join(root, `transport-${name}`), bin = path.join(spec.installation, `bin-${name}`);
+      fs.writeFileSync(transport, `#!/bin/sh\nexec '${process.execPath}' '${path.join(root, 'transport/acceptance/native-transport.mjs')}' '${root}' '${name}' "$@"\n`, { mode: 0o755 });
+      const installed = spawnSync(process.execPath, [path.join(spec.installation, 'discovery/install.mjs'), '--bin', bin, '--codex', transport],
+        { cwd: spec.repo, env: sessionEnv({}, spec), encoding: 'utf8' });
+      assert.equal(installed.status, 0, installed.stderr);
+      spec.entryBinary = path.join(bin, 'monitor-codex');
+      fs.copyFileSync(path.join(source, 'acceptance/test/helpers/discovery-worker.cjs'), path.join(spec.temp, 'offline-worker.cjs'));
+      fs.writeFileSync(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
+      const child = spawnScenarioChild(t, '/usr/bin/env', ['-u', 'NODE_OPTIONS', process.execPath,
+        path.join(source, 'acceptance/live-worker.mjs'), root, name], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const finished = waitForExit(child);
+      const finish = async () => {
+        const result = await finished;
+        assert.equal(result.code, 0, result.stderr);
+        const done = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs', `${name}.done`), 'utf8'));
+        assert.equal(done.code, 0, fs.readFileSync(path.join(evidence, `${name}.stderr`), 'utf8'));
+        return JSON.parse(fs.readFileSync(path.join(evidence, `${name}.jsonl`), 'utf8'));
+      };
+      const created = { spec, finish, finished };
+      finished.then(result => { created.result = result; }, error => { created.error = error; });
+      jobs.push(created); return created;
+    }
+    const ready = spec => {
+      const tempRoot = path.join(spec.temp, 'f/t');
+      if (!fs.existsSync(tempRoot)) return;
+      for (const project of fs.readdirSync(tempRoot)) for (const run of fs.readdirSync(path.join(tempRoot, project))) {
+        const directory = path.join(tempRoot, project, run);
+        if (fs.existsSync(path.join(directory, 'ready'))) return directory;
+      }
+    };
+    try {
+      const a = job('french'), b = job('german');
+      const deadline = Date.now() + 20000;
+      while (!ready(a.spec) || !ready(b.spec)) {
+        for (const j of jobs) if (j.error) throw j.error;
+        for (const j of jobs) if (j.result) assert.fail(`offline worker exited before its barrier: ${j.result.stdout}${j.result.stderr}`);
+        assert.ok(Date.now() < deadline, jobs.map(j => fs.existsSync(path.join(evidence, `${j.spec.name}.stderr`)) ? fs.readFileSync(path.join(evidence, `${j.spec.name}.stderr`), 'utf8') : '').join('\n'));
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      const record = (args, actor = 'offline-reader') => {
+        const result = spawnSync(process.execPath, [path.join(seed.installation, 'bin/org.mjs'), ...args],
+          { cwd: seed.repo, env: { ...sessionEnv({}, a.spec), ORG_DIR: path.join(seed.repo, '.org'), ORG_ACTOR: actor }, encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stderr); return result.stdout;
+      };
+      const concurrent = JSON.parse(record(['status', '--json']));
+      assert.equal(concurrent.runs.length, 2, 'both installed sessions recorded runs before integration');
+      // Both entered on the same base; the product serializes their promotion.
+      for (const j of [a, b]) fs.writeFileSync(path.join(ready(j.spec), 'release'), 'go');
+      const results = await Promise.allSettled([a.finish(), b.finish()]);
+      for (const result of results) if (result.status === 'rejected') throw result.reason;
+      const [first, second] = results.map(result => result.value);
+      assert.notEqual(first.context.workspace, second.context.workspace);
+      const questionJob = job('routing'); const question = await questionJob.finish();
+      const state = JSON.parse(record(['status', '--json']));
+      assert.equal(state.items.filter(i => i.role === 'human' && !i.closed).length, 1);
+      assert.ok(!fs.existsSync(path.join(seed.repo, '.lane.json')));
+      record(['answer', question.context.routing.question, 'yes'], 'human');
+      const applied = await job('routing-apply').finish();
+      assert.equal(applied.context.org, first.context.org);
+      const routes = JSON.parse(fs.readFileSync(path.join(seed.repo, '.lane.json'), 'utf8')).routes;
+      assert.equal(routes.engineer.model, 'gpt-6.1-sol'); assert.equal(routes.review.model, 'opus');
+      const final = JSON.parse(record(['status', '--json']));
+      assert.equal(final.runs.length, 4);
+      assert.deepEqual(final.runs.map(r => r.report.outcome), ['done', 'done', 'needs_human', 'done']);
+      for (const language of ['french', 'german']) assert.ok(fs.existsSync(path.join(seed.repo, `${language}.mjs`)));
+      const git = args => spawnSync('git', ['-C', seed.repo, ...args], { encoding: 'utf8' });
+      assert.equal(git(['status', '--porcelain']).stdout, '');
+      assert.equal(git(['rev-list', '--merges', 'main']).stdout, '');
+    } finally {
+      // Release a surviving partner before fixture teardown even when its peer
+      // fails; every launched worker is awaited before scratch roots disappear.
+      for (const j of jobs) {
+        const directory = ready(j.spec);
+        if (directory) fs.writeFileSync(path.join(directory, 'release'), 'go');
+      }
+      await Promise.allSettled(jobs.map(j => j.finished));
+    }
+  });

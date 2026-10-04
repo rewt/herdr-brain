@@ -87,12 +87,18 @@ export function permissionFilesystem({ repo, temp, installation, toolRoots, entr
     ':tmpdir': validation ? 'read' : 'write', ':workspace_roots': { '.': projectWrites ? 'write' : 'read', '.git': 'read' }, [installation]: 'read', [temp]: 'read' };
   for (const directory of toolRoots) filesystem[directory] = 'read';
   if (entryBinary) filesystem[repo] = 'read'; // lane cwd stays writable; shared record is readable
+  // Entry moves TMPDIR into a private fleet run directory. Its request queue
+  // remains a sibling, so :tmpdir no longer grants the client write access.
+  // The harness fixes this root in live-worker; project validation gets none.
+  const requestRoot = entryBinary && !validation ? path.join(temp, 'entry-requests') : undefined;
   // Every extra grant is inside the session's existing project/temp roots.
-  for (const target of [gitCommon, worktreeRoot, probeGit].filter(Boolean)) {
+  for (const target of [gitCommon, worktreeRoot, probeGit, requestRoot].filter(Boolean)) {
     let ancestor = target;
     while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
     if (!(within(repo, ancestor) || within(temp, ancestor))) throw new Error(`Git permission escaped session roots: ${target}`);
-    filesystem[target] = target === worktreeRoot ? (validation ? 'read' : 'write') : gitAccess;
+    if (target === requestRoot && (!within(temp, ancestor) || fs.realpathSync(ancestor) !== ancestor))
+      throw new Error(`entry request permission escaped session roots: ${target}`);
+    filesystem[target] = target === worktreeRoot ? (validation ? 'read' : 'write') : target === requestRoot ? 'write' : gitAccess;
   }
   return filesystem;
 }

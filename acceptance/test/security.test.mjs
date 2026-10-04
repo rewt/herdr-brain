@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { auditCopies, relocate, sessionEnv, permissionArgs, policyWitness, copiedSandbox, workspaceIdentityCutover } from '../security.mjs';
+import { auditCopies, relocate, sessionEnv, permissionArgs, permissionFilesystem, policyWitness, copiedSandbox, workspaceIdentityCutover } from '../security.mjs';
 
 test('workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets', () => {
   const candidate = '/scratch/candidate';
@@ -59,9 +59,24 @@ test('scratch Git grants permit direct writes, preserve installed-parent protect
   const installed = permissionArgs({ ...spec, entryBinary: '/installed/monitor-codex' }).join(' ');
   assert.ok(installed.includes(`${JSON.stringify(spec.gitCommon)}="read"`));
   assert.ok(installed.includes(`${JSON.stringify(spec.worktreeRoot)}="write"`));
+  const queue = path.join(temp, 'entry-requests');
+  const installedSpec = { ...spec, entryBinary: '/installed/monitor-codex' };
+  assert.equal(permissionFilesystem(installedSpec)[queue], 'write', 'entry requests remain writable after TMPDIR moves into the fleet');
+  assert.equal(permissionFilesystem(installedSpec)[temp], 'read');
+  assert.equal(permissionFilesystem(installedSpec)[repo], 'read');
+  assert.equal(permissionFilesystem(installedSpec)[spec.gitCommon], 'read');
+  assert.equal(permissionFilesystem(installedSpec, { validation: true })[queue], undefined, 'project checks cannot write session requests');
+  assert.equal(permissionFilesystem(spec)[queue], undefined, 'direct sessions have no entry queue');
   assert.throws(() => permissionArgs({ ...spec, gitCommon: foreign }), /escaped session roots/);
   fs.symlinkSync(foreign, path.join(temp, 'escape'));
   assert.throws(() => permissionArgs({ ...spec, worktreeRoot: path.join(temp, 'escape/lanes') }), /escaped session roots/);
+  fs.symlinkSync(foreign, queue);
+  assert.throws(() => permissionArgs(installedSpec), /escaped session roots/);
+  fs.unlinkSync(queue); fs.symlinkSync(repo, queue);
+  assert.throws(() => permissionArgs(installedSpec), /escaped session roots/, 'queue cannot grant canonical project writes');
+  fs.unlinkSync(queue);
+  const otherQueue = path.join(temp, 'other-queue'); fs.mkdirSync(otherQueue); fs.symlinkSync(otherQueue, queue);
+  assert.throws(() => permissionArgs(installedSpec), /escaped session roots/, 'queue aliases are refused even inside scratch');
 });
 
 test('missing ripgrep is named pending before executing any candidate code', () => {

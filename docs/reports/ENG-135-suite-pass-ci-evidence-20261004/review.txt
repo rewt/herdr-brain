@@ -1,0 +1,6 @@
+The complete ENG-116 memory-promotion test body is byte-identical to main.
+The fix restores its removed waitForCondition helper with a load-aware deadline.
+No product code or test expectations changed.
+Completed offline rerun: exit 0; 143 passed, 0 failed, 0 cancelled, 0 skipped; 387.392 seconds.
+The initial sandbox attempt passed the memory-promotion regression but failed the real-shell test because /bin/ps was denied; it was cancelled through the identified runner's SIGTERM cleanup handler. Its partial TAP is retained.
+The real-shell test passed unchanged on the rerun with process-inspection access.

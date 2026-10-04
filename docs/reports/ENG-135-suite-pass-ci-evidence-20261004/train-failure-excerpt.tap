@@ -1,0 +1,21 @@
+# Subtest: promote waits before the lock and completes fast-forward if memory pressure appears during validation
+not ok 17 - promote waits before the lock and completes fast-forward if memory pressure appears during validation
+  ---
+  duration_ms: 362.83025
+  location: '/Users/rewt/development/rewt/herdr-brain/.git/promote/batches/819852e8-0bb6-40a3-95ee-9d14a0c4b66e/scratch-0/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'waitForCondition is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    file:///Users/rewt/development/rewt/herdr-brain/.git/promote/batches/819852e8-0bb6-40a3-95ee-9d14a0c4b66e/scratch-0/lanes/test/lane.test.mjs:740:7
+    file:///Users/rewt/development/rewt/herdr-brain/.git/promote/batches/819852e8-0bb6-40a3-95ee-9d14a0c4b66e/scratch-0/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/herdr-brain/.git/promote/batches/819852e8-0bb6-40a3-95ee-9d14a0c4b66e/scratch-0/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...

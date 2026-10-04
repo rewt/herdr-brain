@@ -1,0 +1,373 @@
+TAP version 13
+# Subtest: git helpers isolate the operator's global excludes file
+ok 1 - git helpers isolate the operator's global excludes file
+  ---
+  duration_ms: 53.199625
+  ...
+# Subtest: open creates a lane and refuses duplicate, invalid, and unresolved inputs
+ok 2 - open creates a lane and refuses duplicate, invalid, and unresolved inputs
+  ---
+  duration_ms: 270.342958
+  ...
+# Subtest: status reports distance, dirtiness, and files shared by lanes
+ok 3 - status reports distance, dirtiness, and files shared by lanes
+  ---
+  duration_ms: 370.668542
+  ...
+# Subtest: promote refuses a dirty lane worktree
+ok 4 - promote refuses a dirty lane worktree
+  ---
+  duration_ms: 174.464458
+  ...
+# Subtest: promote leaves main unchanged when validation fails
+ok 5 - promote leaves main unchanged when validation fails
+  ---
+  duration_ms: 294.044083
+  ...
+# Switched to a new branch 'merged-history-side'
+# Switched to branch 'lane/merged-history'
+# Switched to a new branch 'merged-behind-side'
+# Switched to branch 'lane/merged-behind'
+# Switched to a new branch 'merged-current-side'
+# Switched to branch 'lane/merged-current'
+# HEAD is now at 6b9f7c8 ignore lane state
+# Subtest: promote waits before the lock and completes fast-forward if memory pressure appears during validation
+ok 6 - promote waits before the lock and completes fast-forward if memory pressure appears during validation
+  ---
+  duration_ms: 5459.519208
+  ...
+# Subtest: promote rebases a clean lane behind main and fast-forwards
+ok 7 - promote rebases a clean lane behind main and fast-forwards
+  ---
+  duration_ms: 574.18875
+  ...
+# Subtest: promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes
+ok 8 - promote refuses to linearize a merge-bearing lane while the equivalent linear lane promotes
+  ---
+  duration_ms: 1040.723125
+  ...
+# Subtest: promote accepts a gitignored session registry in the canonical checkout
+ok 9 - promote accepts a gitignored session registry in the canonical checkout
+  ---
+  duration_ms: 485.112083
+  ...
+# Subtest: promote refuses a conflicting rebase and names the file
+ok 10 - promote refuses a conflicting rebase and names the file
+  ---
+  duration_ms: 463.418417
+  ...
+# Subtest: promote refuses when main moves during validation
+ok 11 - promote refuses when main moves during validation
+  ---
+  duration_ms: 366.767875
+  ...
+# Subtest: close deletes a merged branch
+ok 12 - close deletes a merged branch
+  ---
+  duration_ms: 541.422125
+  ...
+# Subtest: close retires a background workspace without worktree.remove and preserves the archive
+ok 13 - close retires a background workspace without worktree.remove and preserves the archive
+  ---
+  duration_ms: 513.020958
+  ...
+# Subtest: close refuses a dirty worktree
+ok 14 - close refuses a dirty worktree
+  ---
+  duration_ms: 299.000375
+  ...
+# Subtest: close preserves a locked worktree and its workspace when Git removal refuses
+ok 15 - close preserves a locked worktree and its workspace when Git removal refuses
+  ---
+  duration_ms: 658.22375
+  ...
+# Subtest: rebase-check exits zero when clean and one with files on conflict
+ok 16 - rebase-check exits zero when clean and one with files on conflict
+  ---
+  duration_ms: 587.612666
+  ...
+# Subtest: rebase-check and status refuse a merge-bearing lane only when it is behind main
+ok 17 - rebase-check and status refuse a merge-bearing lane only when it is behind main
+  ---
+  duration_ms: 850.799958
+  ...
+# Subtest: prepare runs needed steps and skips steps whose unless path exists
+ok 18 - prepare runs needed steps and skips steps whose unless path exists
+  ---
+  duration_ms: 345.204292
+  ...
+# Subtest: check records configured validation against the current HEAD
+ok 19 - check records configured validation against the current HEAD
+  ---
+  duration_ms: 509.698875
+  ...
+# Subtest: check honors LANE_VALIDATE and --cmd precedence and returns a failed gate exit
+ok 20 - check honors LANE_VALIDATE and --cmd precedence and returns a failed gate exit
+  ---
+  duration_ms: 536.207167
+  ...
+# Subtest: check defaults to npm test and refuses a dirty current worktree
+ok 21 - check defaults to npm test and refuses a dirty current worktree
+  ---
+  duration_ms: 486.282916
+  ...
+# Subtest: check runs configured prepare steps before validation
+ok 22 - check runs configured prepare steps before validation
+  ---
+  duration_ms: 376.518625
+  ...
+# Subtest: check records signal termination using the shell exit convention
+ok 23 - check records signal termination using the shell exit convention
+  ---
+  duration_ms: 136.863667
+  ...
+# Subtest: check refuses a detached HEAD without replacing an existing gate
+ok 24 - check refuses a detached HEAD without replacing an existing gate
+  ---
+  duration_ms: 93.881917
+  ...
+# Subtest: check rejects unknown options and missing or empty --cmd values
+ok 25 - check rejects unknown options and missing or empty --cmd values
+  ---
+  duration_ms: 170.8025
+  ...
+# Subtest: routes prints configured routes with resolved dispatch defaults
+ok 26 - routes prints configured routes with resolved dispatch defaults
+  ---
+  duration_ms: 220.755167
+  ...
+# Subtest: named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call
+ok 27 - named dispatch refuses copied metadata and reserved CLI arguments before any Herdr call
+  ---
+  duration_ms: 6152.057625
+  ...
+# Subtest: always_args sees the canonical model and effort that dispatch emits
+ok 28 - always_args sees the canonical model and effort that dispatch emits
+  ---
+  duration_ms: 2513.698417
+  ...
+# Subtest: always_args rejects a non-object value
+ok 29 - always_args rejects a non-object value
+  ---
+  duration_ms: 46.924666
+  ...
+# Subtest: always_args rejects a list whose first token is not an option
+ok 30 - always_args rejects a list whose first token is not an option
+  ---
+  duration_ms: 49.855916
+  ...
+# Subtest: config attributes always_args to the file that supplied it
+ok 31 - config attributes always_args to the file that supplied it
+  ---
+  duration_ms: 54.036
+  ...
+# Subtest: config layers the nearest parent and canonical repository with attributed replacement semantics
+ok 32 - config layers the nearest parent and canonical repository with attributed replacement semantics
+  ---
+  duration_ms: 210.237792
+  ...
+# Subtest: config escapes route names so every TSV record remains one line with three fields
+ok 33 - config escapes route names so every TSV record remains one line with three fields
+  ---
+  duration_ms: 113.017667
+  ...
+# Subtest: worktree roots honor parent-relative, parent-default, legacy, and caller-relative environment precedence
+ok 34 - worktree roots honor parent-relative, parent-default, legacy, and caller-relative environment precedence
+  ---
+  duration_ms: 610.673791
+  ...
+# Subtest: home is a configuration discovery boundary
+ok 35 - home is a configuration discovery boundary
+  ---
+  duration_ms: 61.367125
+  ...
+# Subtest: LANE_CONFIG selects one caller-relative file and bypasses discovered layers
+ok 36 - LANE_CONFIG selects one caller-relative file and bypasses discovered layers
+  ---
+  duration_ms: 149.558875
+  ...
+# Subtest: linked invocations use canonical repository config for explanation, check, and promote
+ok 37 - linked invocations use canonical repository config for explanation, check, and promote
+  ---
+  duration_ms: 583.206375
+  ...
+# Subtest: bare repositories with only linked worktrees allow reads and refuse mutations clearly
+ok 38 - bare repositories with only linked worktrees allow reads and refuse mutations clearly
+  ---
+  duration_ms: 231.081666
+  ...
+# Subtest: same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities
+ok 39 - same-named repositories in equal-labeled roots keep distinct paths, labels, agents, and git identities
+  ---
+  duration_ms: 1504.437583
+  ...
+# Subtest: long Unicode workspace labels retain graphemes and fragments within 64 code points
+ok 40 - long Unicode workspace labels retain graphemes and fragments within 64 code points
+  ---
+  duration_ms: 814.060083
+  ...
+# Subtest: open refuses symlink escapes and destinations inside repository checkouts before mutation
+ok 41 - open refuses symlink escapes and destinations inside repository checkouts before mutation
+  ---
+  duration_ms: 677.723584
+  ...
+# Subtest: registered paths are rejected when their on-disk repository identity changes
+ok 42 - registered paths are rejected when their on-disk repository identity changes
+  ---
+  duration_ms: 227.222209
+  ...
+# Subtest: a missing registered worktree names git worktree prune
+ok 43 - a missing registered worktree names git worktree prune
+  ---
+  duration_ms: 165.1875
+  ...
+# Subtest: stale Herdr checkout metadata is not used for dispatch or close
+ok 44 - stale Herdr checkout metadata is not used for dispatch or close
+  ---
+  duration_ms: 912.02825
+  ...
+# Subtest: linked invocation creates labeled children under the canonical repository workspace
+ok 45 - linked invocation creates labeled children under the canonical repository workspace
+  ---
+  duration_ms: 400.591459
+  ...
+# Subtest: open refreshes Herdr workspaces after a failed create before accepting fallback metadata
+ok 46 - open refreshes Herdr workspaces after a failed create before accepting fallback metadata
+  ---
+  duration_ms: 326.856584
+  ...
+# Subtest: dispatch refreshes Herdr workspaces before accepting newly visible metadata
+ok 47 - dispatch refreshes Herdr workspaces before accepting newly visible metadata
+  ---
+  duration_ms: 726.562292
+  ...
+# Subtest: dispatch opens a single agent tab in the initial pane and keeps fix rounds background
+ok 48 - dispatch opens a single agent tab in the initial pane and keeps fix rounds background
+  ---
+  duration_ms: 1372.270375
+  ...
+# Subtest: dispatch opens a one-tab lane without a project workspace (linked caller: false)
+ok 49 - dispatch opens a one-tab lane without a project workspace (linked caller: false)
+  ---
+  duration_ms: 1051.8105
+  ...
+# Subtest: dispatch opens a one-tab lane without a project workspace (linked caller: true)
+ok 50 - dispatch opens a one-tab lane without a project workspace (linked caller: true)
+  ---
+  duration_ms: 1280.131292
+  ...
+# Subtest: dispatch retains the recorded session after a rejected final rename without replay
+ok 51 - dispatch retains the recorded session after a rejected final rename without replay
+  ---
+  duration_ms: 1000.463666
+  ...
+# Subtest: dispatch uses the pane POSIX shell despite SHELL=fish (rc child: false)
+ok 52 - dispatch uses the pane POSIX shell despite SHELL=fish (rc child: false)
+  ---
+  duration_ms: 1073.879417
+  ...
+# Subtest: dispatch uses the pane POSIX shell despite SHELL=fish (rc child: true)
+not ok 53 - dispatch uses the pane POSIX shell despite SHELL=fish (rc child: true)
+  ---
+  duration_ms: 703.761792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-suite-pass/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'w-lane:p2'
+    - 'w-lane:p1'
+               ^
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'w-lane:p1'
+  actual: 'w-lane:p2'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-suite-pass/lanes/test/lane.test.mjs:2131:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-suite-pass/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-suite-pass/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: dispatch leaves earlier and concurrently opened workspace shells untouched
+ok 54 - dispatch leaves earlier and concurrently opened workspace shells untouched
+  ---
+  duration_ms: 1223.484791
+  ...
+# Subtest: dispatch retains initial tabs on environment and agent cwd failures
+ok 55 - dispatch retains initial tabs on environment and agent cwd failures
+  ---
+  duration_ms: 35462.094875
+  ...
+# Subtest: dispatch waits for shell readiness beyond five seconds
+ok 56 - dispatch waits for shell readiness beyond five seconds
+  ---
+  duration_ms: 6718.490708
+  ...
+# Subtest: dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish
+ok 57 - dispatch falls back to a separate agent tab for /opt/homebrew/bin/fish
+  ---
+  duration_ms: 619.377792
+  ...
+# Subtest: dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu
+ok 58 - dispatch falls back to a separate agent tab for /opt/homebrew/bin/nu
+  ---
+  duration_ms: 589.090625
+  ...
+# Subtest: dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks
+ok 59 - dispatch records canonical session metadata with fenced-heading, prose, inline, and empty fallbacks
+  ---
+  duration_ms: 5396.694209
+  ...
+# Subtest: dispatch persists immutable occupant evidence as display-only optional metadata
+ok 60 - dispatch persists immutable occupant evidence as display-only optional metadata
+  ---
+  duration_ms: 544.05375
+  ...
+# Subtest: dispatch does not write a claim when the prompted occupant is replaced
+ok 61 - dispatch does not write a claim when the prompted occupant is replaced
+  ---
+  duration_ms: 550.414917
+  ...
+# Subtest: one exported Herdr socket-path helper supplies the Herdr client and dispatch records
+ok 62 - one exported Herdr socket-path helper supplies the Herdr client and dispatch records
+  ---
+  duration_ms: 2.312333
+  ...
+# Subtest: dispatch refuses unsafe registries and unreadable briefs before every Herdr call
+ok 63 - dispatch refuses unsafe registries and unreadable briefs before every Herdr call
+  ---
+  duration_ms: 891.247166
+  ...
+# Subtest: dispatch checks tracked registry state in the canonical checkout from a lane
+ok 64 - dispatch checks tracked registry state in the canonical checkout from a lane
+  ---
+  duration_ms: 208.438625
+  ...
+# Subtest: dispatch reports repository containment before an external symlink
+ok 65 - dispatch reports repository containment before an external symlink
+  ---
+  duration_ms: 183.519833
+  ...
+# Subtest: dispatch symlink refusal names the repository-local correction
+ok 66 - dispatch symlink refusal names the repository-local correction
+  ---
+  duration_ms: 178.263958
+  ...
+# Subtest: dispatch unwritable-sidecar refusal names both corrections
+ok 67 - dispatch unwritable-sidecar refusal names both corrections
+  ---
+  duration_ms: 192.076458
+  ...
+# Subtest: dispatch writes no record on cwd, start, or prompt failure and reports post-prompt persistence as partial success
+ok 68 - dispatch writes no record on cwd, start, or prompt failure and reports post-prompt persistence as partial success
+  ---
+  duration_ms: 13811.601083
+  ...

@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
 import { repositorySeed } from '../../test/helpers/git-seed.mjs';
 import { waitForFile } from '../../test/helpers/file-wait.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -192,6 +193,13 @@ function laneProcess(fixture, args, options = {}) {
   };
 }
 
+async function waitForCondition(predicate, message, timeoutMs = 2_000) {
+  const deadline = Date.now() + loadTimeout(timeoutMs);
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${message}`);
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+  }
+}
 
 function discoveredEnv(fixture, overrides = {}) {
   const env = { ...fixture.env };

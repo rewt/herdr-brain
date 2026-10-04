@@ -1,0 +1,10 @@
+Initial sandbox attempt (cancelled after /bin/ps-dependent shell test failed):
+node test/helpers/run.mjs lanes/test/lane.test.mjs
+
+Offline rerun with process-inspection access:
+node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 lanes/test/lane.test.mjs
+
+Final command after checked report commit:
+node lanes/lane.mjs check --cmd "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 lanes/test/lane.test.mjs"
+
+No full tier or host test-slot acquisition. The final check retains the default fast tier and explicitly selects this one file.

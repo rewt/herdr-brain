@@ -14,6 +14,16 @@ import { autopilotSettings } from './autopilot.mjs';
 import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { approvalPolicy } from '../lib/discernment.mjs';
 
+const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const timestamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
+const optionalTimestamp = value => value === undefined || timestamp(value);
+function validActionReceipt(saved) {
+  return object(saved) && typeof saved.key === 'string' && typeof saved.policy === 'string' &&
+    timestamp(saved.started) && optionalTimestamp(saved.finished) && Array.isArray(saved.actions) &&
+    saved.actions.every(a => object(a) && typeof a.name === 'string' && typeof a.phase === 'string' &&
+      timestamp(a.at) && optionalTimestamp(a.finished));
+}
+
 export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', agents, now = new Date().toISOString() } = {}) {
   const project = gitProject(cwd), warnings = [];
   org = org ?? findOrgDir({ cwd });
@@ -78,8 +88,8 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
     if (binding && binding !== project.identity) continue;
     if (!binding) warnings.push(`${run.id}: repository binding unavailable; inspect ${run.workspace ?? 'record-only lane'}`);
     const stage = job?.outcome === 'promoted' ? 'landed' : job ? 'train'
-      : fixes.has(run.id) || ['fix', 'dispatching'].includes(saved?.stage) || saved?.result?.result === 'fix_round' ? 'fix'
-        : saved || run.report ? 'review' : 'engineering';
+      : ['fix', 'dispatching'].includes(saved?.stage) || saved?.result?.result === 'fix_round' ? 'fix'
+        : saved || run.report ? 'review' : fixes.has(run.id) ? 'fix' : 'engineering';
     if (item.closed && stage !== 'landed') continue;
     const candidates = agents.filter(a => a.cwd === run.workspace);
     const reviewing = stage === 'review' && ['review', 'reviewing', 'commit-review', 'decide'].includes(saved?.stage);
@@ -100,10 +110,14 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
   const actionDir = path.join(receiptDirectory(org, project.identity), 'autopilot');
   const actions = files(actionDir).map(name => ({ receipt: path.join(actionDir, name), saved: read(path.join(actionDir, name)) }))
     .filter(({ saved }) => saved?.project?.identity === project.identity && saved.project.org === org)
-    .sort((a, b) => (b.saved.finished ?? b.saved.started).localeCompare(a.saved.finished ?? a.saved.started)).slice(0, 10)
+    .filter(({ receipt, saved }) => {
+      if (validActionReceipt(saved)) return true;
+      warnings.push(`Damaged autopilot action receipt: ${receipt}; display omits it.`); return false;
+    })
+    .sort((a, b) => Date.parse(b.saved.finished ?? b.saved.started) - Date.parse(a.saved.finished ?? a.saved.started)).slice(0, 10)
     .map(({ receipt, saved }) => ({ receipt, key: saved.key, at: saved.finished ?? saved.started, policy: saved.policy,
       disposition: saved.disposition ?? 'uncertain', reason: saved.reason ?? 'inspect started sequence',
-      actions: (saved.actions ?? []).map(a => ({ name: a.name, phase: a.phase, at: a.finished ?? a.at })) }));
+      actions: saved.actions.map(a => ({ name: a.name, phase: a.phase, at: a.finished ?? a.at })) }));
   let enabled = false, reason;
   try {
     enabled = autopilotSettings(project.canonical).enabled;

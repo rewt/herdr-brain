@@ -6,7 +6,8 @@ import { fixture } from '../../settle/test/fixture.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { fileURLToPath } from 'node:url';
 import { supervisorStatus, renderStatus } from '../status.mjs';
-import { autopilotNotice } from '../autopilot.mjs';
+import { autopilotNotice, POLICY } from '../autopilot.mjs';
+import { receiptDirectory } from '../context.mjs';
 
 test('status derives all lane stages and timing without record mutations or model calls', t => {
   const f = fixture(t), run = f.start(), project = gitProject(f.repo);
@@ -42,6 +43,57 @@ test('status shows correction runs as fix and retains recent autopilot receipts'
   assert.equal(doc.autopilot.actions[0].receipt, receipt.receipt);
   assert.match(renderStatus(doc), /autopilot/i);
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+});
+test('a correction moves from fix to its own review and displays the active reviewer metadata', t => {
+  const f = fixture(t), original = f.start(); f.report(original); f.record(['ingest', f.show(original).report_path]);
+  const p = gitProject(f.repo), correction = f.start(), settleDir = path.join(f.org, 'settle');
+  fs.mkdirSync(settleDir, { recursive: true });
+  fs.writeFileSync(path.join(settleDir, `${original}.json`), JSON.stringify({ common: p.identity, run: original, stage: 'complete', result: { result: 'fix_round', fix: { run: correction } } }));
+  const sessions = path.join(f.repo, '.lane/sessions.json.d'); fs.mkdirSync(sessions, { recursive: true });
+  for (const [name, route, harness, model, created_at] of [
+    ['original', 'engineer', 'claude', 'engineer-model', '2026-10-04T10:00:00Z'],
+    ['reviewer', 'review', 'codex', 'review-model', '2026-10-04T11:00:00Z'],
+  ]) fs.writeFileSync(path.join(sessions, `${name}.json`), JSON.stringify({ repo_id: p.identity, name, route, harness, model, created_at }));
+  const get = () => supervisorStatus({ cwd: f.repo, org: f.org, now: '2026-10-04T11:05:00Z', agents: [
+    { name: 'original', agent: 'claude', cwd: f.workspace, agent_status: 'done' },
+    { name: 'reviewer', agent: 'codex', cwd: f.workspace, agent_status: 'working' },
+  ] });
+  assert.equal(get().lanes[0].stage, 'fix');
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  fs.writeFileSync(path.join(settleDir, `${correction}.json`), JSON.stringify({ run: correction, common: p.identity, stage: 'reviewing' }));
+  const row = get().lanes[0];
+  assert.equal(row.run, correction); assert.equal(row.stage, 'review');
+  assert.equal(row.agent, 'reviewer'); assert.equal(row.live_status, 'working');
+  assert.equal(row.provider, 'codex'); assert.equal(row.model, 'review-model');
+  assert.equal(row.started, '2026-10-04T11:00:00Z'); assert.equal(row.running_seconds, 300);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+});
+test('status warns and omits structurally damaged action receipts before sorting or mapping', t => {
+  const f = fixture(t); f.start(); const p = gitProject(f.repo);
+  const directory = path.join(receiptDirectory(f.org, p.identity), 'autopilot'); fs.mkdirSync(directory, { recursive: true });
+  const at = '2026-10-04T11:00:00Z';
+  const good = { policy: POLICY, key: 'notice:good', project: { identity: p.identity, org: f.org }, started: at,
+    actions: [{ name: 'handle', phase: 'started', at }] };
+  const damaged = [
+    { actions: {} }, { actions: 'bad' }, { actions: null }, { actions: undefined },
+    { actions: [null] }, { actions: [{}] }, { actions: [{ name: 'handle', phase: 'started', at: false }] },
+    { started: undefined }, { started: 123 }, { started: 'bad' },
+    { finished: {} }, { finished: 'bad' },
+    { actions: [{ name: 'handle', phase: 'acknowledged', at, finished: 'bad' }] },
+  ];
+  const save = (name, data) => fs.writeFileSync(path.join(directory, name), JSON.stringify(data));
+  save('good.json', good);
+  save('finished.json', { ...good, key: 'notice:finished', finished: '2026-10-04T11:01:00Z', disposition: 'handled',
+    actions: [{ name: 'handle', phase: 'acknowledged', at, finished: '2026-10-04T11:01:00Z' }] });
+  damaged.forEach((changes, i) => save(`damaged-${i}.json`, { ...good, ...changes }));
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const bytes = fs.readdirSync(directory).map(name => [name, fs.readFileSync(path.join(directory, name))]);
+  const doc = supervisorStatus({ cwd: f.repo, org: f.org, agents: [] });
+  assert.deepEqual(doc.autopilot.actions.map(a => a.key), ['notice:finished', 'notice:good']);
+  damaged.forEach((_, i) => assert.ok(doc.warnings.some(w => w.includes(`damaged-${i}.json`) && /damaged/i.test(w))));
+  assert.equal(doc.autopilot.actions[1].disposition, 'uncertain'); assert.match(renderStatus(doc), /damaged/i);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  for (const [name, content] of bytes) assert.deepEqual(fs.readFileSync(path.join(directory, name)), content);
 });
 test('unavailable Herdr and malformed receipts are visible without changing state', t => {
   const f = fixture(t); f.start();

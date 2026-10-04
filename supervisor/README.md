@@ -11,10 +11,10 @@ workers recover pending policy through the same durable action receipts.
 
 | Evidence | Policy action |
 | --- | --- |
-| Recorded `[org-report]` done | `supervisor handle RUN`, using the project's review route |
+| Run-bound `[org-report]` done | Preflight the immutable report or worker file, then `supervisor handle RUN` for conditional intake and the project's review route |
 | `promotable`, independent PASS | `promote RUN --why 'notice-autopilot/v1: PASS promotes …'` |
 | `fix_round` | Leave the dispatched, watched correction in flight |
-| Exact settle "base branch moved" escalation | One `handle RUN --retry`; a second escalation wakes |
+| Exact settle "base branch moved" escalation | One `handle RUN --retry` using the saved request, without `--to`; a second escalation wakes |
 | Capped `promotable_with_findings`, parsed Moderate/Minor only | One engineer follow-up containing all findings, then `promote --accept-findings` with the follow-up and policy in its reason |
 | `[promote-queue]` promoted | `handle --notice TEXT` closes the bound item, or no action if already closed |
 | Anything else | Wake with a bounded one-line reason and the action receipt path |
@@ -39,10 +39,18 @@ blockers, unclassified decisions and category warnings wake for judgment. No
 operator question is answered, and no publish, priority or other reserved action
 is executed by this policy. Authority, STOP and pause are re-read before each CLI
 command; settle/promotion retain their existing lifecycle safety checks.
+On the first done notice, the worker file at the record's report path must parse
+and name that run, with the same outcome, question, blocker and category guards
+as an immutable report. Autopilot does not ingest it: `handle` performs conditional
+intake. Retry, follow-up and promotion require the immutable report afterward.
 
 Action receipts live under `ORG/supervisor/REPOSITORY_KEY/autopilot/`. Their key is
 the report run or promotion job, so different delivery IDs cannot create duplicate
 follow-ups. Each command's argv, intent and acknowledged result are retained.
+Native command receipts also retain exit status, stderr and signal evidence.
+The exact structured base-movement refusal can be acknowledged despite exit one
+only when its run and journal match the retained project-bound settlement and
+error. Every other nonzero exit wakes with its evidence and cannot authorize retry.
 A lost reply or interrupted sequence wakes instead of replaying commands. The
 inbox retains the complete original notice and records its handled/wake disposition
 and receipt. Exceptions retain the fixed report envelope for foreground `handle`
@@ -200,10 +208,15 @@ and elapsed time, followed by the last ten policy receipts and their actions.
 [status.mjs](status.mjs) exports the same read-only JSON projection for a future
 minimal console profile. Stage comes from the event fold, verified settle receipts
 and promotion queue; Herdr's agent list and optional lane session receipts supply
-display fields only. Provider/model metadata never authorizes work. Elapsed time
-stops at integration for landed lanes. Missing Herdr data or damaged receipts
+display fields only. Provider/model metadata never authorizes work. A correction's
+own settlement overrides the earlier fix ancestry; review displays the active
+reviewer's provider, model and session timing. Elapsed time stops at integration
+for landed lanes. Missing Herdr data or damaged receipts
 produce warnings rather than fabricated live status. This path does not render a
 cold start, inspect transcripts, run a model, or write record/checkpoint events.
+Action receipts must have an actions array, valid action fields and valid start,
+finish and action timestamps before they enter the table. Damaged rows are omitted
+with a warning and the source files remain untouched.
 
 From a project checkout, or with `--repo PROJECT --org RECORD`:
 

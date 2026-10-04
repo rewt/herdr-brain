@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
 import { loadEvents, readConfig, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
+import { readReport } from '../lib/report.mjs';
 import { approvalPolicy, reportCategoryFlags } from '../lib/discernment.mjs';
 import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { receiptDirectory } from './context.mjs';
@@ -32,12 +33,10 @@ export function autopilotSettings(repo) {
 }
 
 function execute(file, args, options) {
-  const r = spawnSync(process.execPath, [file, ...args], { ...options, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-  if (r.error || r.status !== 0) throw Error(`${path.basename(file)}: ${r.stderr || r.error?.message || `exit ${r.status}`}`);
-  return r.stdout;
+  return spawnSync(process.execPath, [file, ...args], { ...options, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 }
 
-function authority(project, runId) {
+function authority(project, runId, { pendingReport = false } = {}) {
   const live = gitProject(project.repo);
   if (live.identity !== project.identity || live.canonical !== project.repo || fs.realpathSync(project.org) !== project.org) throw Error('autopilot project binding changed');
   if (!autopilotSettings(project.repo).enabled) throw Error('autopilot disabled in project config');
@@ -54,11 +53,20 @@ function authority(project, runId) {
       (item.meta.category && approvalPolicy(config, item.meta.category) !== 'auto')) throw Error('operator-reserved item or category');
   if (item.closed && (item.closed.as !== 'done' || item.closed.seq < (run.report?.seq ?? Infinity))) throw Error('item closure requires inspection');
   if (!item.closed && events.some(e => e.type === 'item.closed' && e.id === item.id && e.seq > (run.report?.seq ?? Infinity))) throw Error('item reopened after completion');
-  if (!run.report || run.report.outcome !== 'done' || fields(run.report, 'questions').length || entries(run.report.blockers).length) throw Error('worker outcome, questions or blockers need judgment');
-  for (const decision of fields(run.report, 'decisions')) {
+  // Watch checks the worker file; handle owns conditional, immutable intake.
+  // Only that first handle may use a preflight of the run-bound file. Every
+  // subsequent mutation must have an immutable report in the event fold.
+  let report = run.report;
+  if (!report && pendingReport) {
+    const parsed = readReport(fs.readFileSync(run.report_path, 'utf8'));
+    if (parsed.errors.length || parsed.report.run !== runId) throw Error(`invalid report for ${runId}: ${parsed.errors.join('; ') || 'run field mismatch'}`);
+    report = parsed.report;
+  }
+  if (!report || report.outcome !== 'done' || fields(report, 'questions').length || entries(report.blockers).length) throw Error('worker outcome, questions or blockers need judgment');
+  for (const decision of fields(report, 'decisions')) {
     if (!decision?.category || ['publish', 'priorities'].includes(decision.category) || approvalPolicy(config, decision.category) !== 'auto') throw Error('report decision needs operator judgment');
   }
-  if (reportCategoryFlags(config, run.report).length) throw Error('report category evidence needs inspection');
+  if (reportCategoryFlags(config, report).length) throw Error('report category evidence needs inspection');
   let identity;
   try { identity = run.workspace && gitProject(run.workspace).identity; }
   catch {
@@ -109,7 +117,7 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     if (report) {
       if (report[3] !== 'done') return finish('wake', `worker reported ${report[3]}`);
       runId = report[1];
-      const { run } = authority(project, runId);
+      const { run } = authority(project, runId, { pendingReport: true });
       if (run.item !== report[2]) throw Error('notice item differs from record');
     } else if (promotion) {
       if (promotion[3] !== 'promoted') return finish('wake', `promotion ${promotion[3]}`);
@@ -125,15 +133,31 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     if (receipt.actions.length && !receipt.disposition) return finish('wake', 'interrupted autopilot sequence; inspect acknowledged actions');
     if (receipt.disposition) return { disposition: receipt.disposition, receipt: file,
       summary: summary(receipt.reason) };
-    const command = (name, file, args, json = true) => {
-      authority(project, runId); // Re-read STOP, pause, authority and record.
+    const command = (name, file, args, { json = true, pendingReport = false } = {}) => {
+      authority(project, runId, { pendingReport }); // Re-read STOP, pause, authority and record.
       const action = { name, file, args, phase: 'started', at: new Date().toISOString() };
       receipt.actions.push(action); save();
-      const stdout = call(file, args, { cwd: project.repo, env: { ...process.env, ORG_DIR: project.org, ORG_ACTOR: 'supervisor-autopilot' } });
+      const reply = call(file, args, { cwd: project.repo, env: { ...process.env, ORG_DIR: project.org, ORG_ACTOR: 'supervisor-autopilot' } });
+      // Legacy/injected executors return stdout for successful calls. The
+      // native executor retains the exit and streams, including refusals.
+      const r = typeof reply === 'string' ? { status: 0, stdout: reply } : reply;
+      action.exit_code = r.status ?? null; action.stderr = r.stderr ?? ''; action.signal = r.signal ?? null;
+      if (r.error) action.error = r.error.message;
+      const stdout = r.stdout ?? '';
       let result;
       try { result = json ? JSON.parse(stdout) : stdout.trim(); }
       catch (error) { action.output = stdout; save(); throw error; }
-      action.phase = 'acknowledged'; action.result = result; action.finished = new Date().toISOString(); save();
+      action.result = result;
+      if (r.error || r.signal || r.status !== 0) {
+        action.output = stdout; save();
+        const journal = path.join(project.org, 'settle', `${runId}.json`);
+        const saved = json && !promotion && args[0] === 'handle' && moved(result) && result.run === runId && result.journal === journal ? read(journal) : null;
+        // Settle exits one for this precise recoverable refusal. Bind it to
+        // the retained receipt; arbitrary exit-one JSON is never authority.
+        if (r.error || r.signal || r.status !== 1 || saved?.common !== project.identity || saved.run !== runId || saved.org !== project.org || saved.error !== result.reason)
+          throw Error(`${path.basename(file)}: ${r.stderr || r.error?.message || `exit ${r.status}`}`);
+      }
+      action.phase = 'acknowledged'; action.finished = new Date().toISOString(); save();
       return result;
     };
     const args = ['--repo', project.repo, '--org', project.org, '--role', 'supervisor', '--to', entry.to];
@@ -144,11 +168,11 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     }
     const saved = read(path.join(project.org, 'settle', `${runId}.json`));
     if (saved && (saved.common !== project.identity || saved.run !== runId || (saved.stage !== 'complete' && !moved(saved.result)))) throw Error('uncertain or interrupted settlement; inspect retained receipt');
-    let result = command('handle done report', supervisor, ['handle', runId, ...args]);
+    let result = command('handle done report', supervisor, ['handle', runId, ...args], { pendingReport: true });
     if (result.review?.verdict === 'FAIL') return finish('wake', 'review FAIL');
     if (moved(result) && !receipt.retry_used) {
       receipt.retry_used = true; save();
-      result = command('retry base movement once', supervisor, ['handle', runId, '--retry', ...args]);
+      result = command('retry base movement once', supervisor, ['handle', runId, '--retry', '--repo', project.repo, '--org', project.org, '--role', 'supervisor']);
     }
     if (result.review?.verdict === 'FAIL') return finish('wake', 'review FAIL');
     const settled = read(path.join(project.org, 'settle', `${runId}.json`));
@@ -164,7 +188,7 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     if (accepted && (result.review?.verdict !== 'NEEDS-WORK' || !findings(result.findings) || !(policy?.cap > 0 && policy.round >= policy.cap))) return finish('wake', 'capped findings are not proved Moderate/Minor');
     if (accepted) {
       receipt.follow_up = command('file findings follow-up', local('../bin/org.mjs'), ['add', `Review follow-up for ${runId}`, '--parent', report[2],
-        '--role', 'engineer', '--capability', 'tooling', '--meta', `autopilot_key=${key}`, `--accept=${result.findings}`], false);
+        '--role', 'engineer', '--capability', 'tooling', '--meta', `autopilot_key=${key}`, `--accept=${result.findings}`], { json: false });
       if (!/^ENG-\d+$/.test(receipt.follow_up)) throw Error('follow-up response is uncertain');
     }
     const why = `${POLICY}: ${accepted ? `accept capped Moderate/Minor findings; follow-up ${receipt.follow_up}` : 'PASS promotes'}; project tooling authority is auto; settle and queue recheck readiness`;

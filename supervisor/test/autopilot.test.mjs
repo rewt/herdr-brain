@@ -10,9 +10,10 @@ import { promptSupervisor, readInbox } from '../prompt-supervisor.mjs';
 import { noticeLock } from '../notice-lock.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 
-function setup(t, results = []) {
+function setup(t, results = [], { ingest = true } = {}) {
   const f = fixture(t), run = f.start();
-  f.report(run); f.record(['ingest', f.show(run).report_path]);
+  f.report(run);
+  if (ingest) f.record(['ingest', f.show(run).report_path]);
   const config = JSON.parse(fs.readFileSync(path.join(f.org, 'config.json')));
   config.approvals.categories.tooling = 'auto';
   fs.writeFileSync(path.join(f.org, 'config.json'), JSON.stringify(config));
@@ -52,6 +53,7 @@ test('base movement gets exactly one handle retry', t => {
   const f = setup(t, [{ result: 'escalate', reason: 'base branch moved; use --retry to recapture and rebase' }, pass, { phase: 'acknowledged' }]);
   assert.equal(f.apply().disposition, 'handled');
   assert.ok(f.calls[1].args.includes('--retry'));
+  assert.ok(!f.calls[1].args.includes('--to'));
 });
 test('repeated base movement wakes and never repeats the retry', t => {
   const moved = { result: 'escalate', reason: 'base branch moved; use --retry to recapture and rebase' };
@@ -59,6 +61,28 @@ test('repeated base movement wakes and never repeats the retry', t => {
   assert.equal(f.apply().disposition, 'wake'); assert.equal(f.calls.length, 2);
   assert.equal(f.apply().disposition, 'wake'); assert.equal(f.calls.length, 2);
 });
+for (const kind of ['unknown', 'wrong-run', 'wrong-journal', 'wrong-receipt', 'wrong-exit', 'signal'])
+  test(`exit-one ${kind} refusal retains evidence and never authorizes a retry`, t => {
+    const f = setup(t), journal = path.join(f.org, 'settle', `${f.run}.json`);
+    const reason = 'base branch moved; use --retry to recapture and rebase';
+    const data = { result: 'escalate', run: f.run, journal, reason };
+    if (kind === 'unknown') data.reason = 'some other refusal';
+    if (kind === 'wrong-run') data.run = 'R-999';
+    if (kind === 'wrong-journal') data.journal = path.join(f.root, 'foreign.json');
+    let calls = 0;
+    const call = () => {
+      calls++;
+      fs.mkdirSync(path.dirname(journal), { recursive: true });
+      fs.writeFileSync(journal, JSON.stringify({ run: f.run, common: f.entry.project.identity, org: f.org,
+        stage: 'commit-review', error: kind === 'wrong-receipt' ? 'unrelated' : data.reason }));
+      return { status: kind === 'wrong-exit' ? 2 : 1, stdout: JSON.stringify(data), stderr: 'retained refusal', signal: kind === 'signal' ? 'SIGTERM' : null };
+    };
+    const result = autopilotNotice(f.entry, { execute: call });
+    assert.equal(result.disposition, 'wake'); assert.equal(calls, 1);
+    const saved = JSON.parse(fs.readFileSync(result.receipt));
+    assert.equal(saved.retry_used, undefined); assert.equal(saved.actions[0].phase, 'started');
+    assert.equal(saved.actions[0].stderr, 'retained refusal'); assert.deepEqual(saved.actions[0].result, data);
+  });
 test('Moderate and Minor findings file one follow-up before accepting promotion', t => {
   const findings = minor + '\n- [Moderate] supervisor/y.mjs:2 - Missing detail; Fix: add detail';
   const f = setup(t, [{ result: 'promotable_with_findings', review: { verdict: 'NEEDS-WORK' }, findings, review_policy: { cap: 1, round: 1 } }, 'ENG-999\n', { phase: 'acknowledged' }]);
@@ -127,6 +151,29 @@ test('reserved report decisions wake even when the work item has no category', t
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('proposals: []', 'decisions: [{text: "Change license", category: licensing, why: "New terms"}]\nproposals: []'));
   f.record(['ingest', file]); f.entry.message = f.entry.message.replace(f.run, run);
   assert.equal(f.apply().disposition, 'wake'); assert.equal(f.calls.length, 0);
+});
+for (const kind of ['missing', 'malformed', 'wrong-run', 'blocked', 'needs_human', 'failed', 'questions', 'blockers', 'reserved-decision', 'uncategorized-decision', 'category-evidence'])
+  test(`un-ingested ${kind} report wakes before intake`, t => {
+    const f = setup(t, [], { ingest: false }), file = f.show(f.run).report_path;
+    const data = { run: f.run, outcome: 'done', summary: 'Work complete', headline: 'Work complete', blockers: [], proposals: [] };
+    if (kind === 'wrong-run') data.run = 'R-999';
+    if (['blocked', 'needs_human', 'failed'].includes(kind)) data.outcome = kind;
+    if (kind === 'questions') data.questions = [{ question: 'Proceed?', category: 'tooling' }];
+    if (kind === 'blockers') data.blockers = ['Need a scope decision'];
+    if (kind === 'reserved-decision') data.decisions = [{ text: 'Change license', category: 'licensing' }];
+    if (kind === 'uncategorized-decision') data.decisions = [{ text: 'Needs judgment' }];
+    if (kind === 'category-evidence') data.decisions = [{ text: 'Deploy the change', category: 'tooling' }];
+    fs.writeFileSync(file, kind === 'malformed' ? 'incomplete' : `---\n${JSON.stringify(data)}\n---\n`);
+    if (kind === 'missing') fs.unlinkSync(file);
+    const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+    assert.equal(f.apply().disposition, 'wake'); assert.equal(f.calls.length, 0);
+    assert.equal(f.show(f.run).report, null);
+    assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  });
+test('a pending report cannot authorize promotion if handle did not perform intake', t => {
+  const f = setup(t, [pass], { ingest: false });
+  assert.equal(f.apply().disposition, 'wake'); assert.equal(f.calls.length, 1);
+  assert.equal(f.show(f.run).report, null);
 });
 test('a pause appearing after handle prevents promotion', t => {
   const f = setup(t, [pass]);
@@ -202,9 +249,8 @@ test('a busy chat drain cannot prevent a routine policy action', async t => {
   } finally { release(); }
 });
 for (const withFindings of [false, true]) test(`actual handle and promotion commands ${withFindings ? 'file findings and accept them' : 'settle PASS and enqueue'} offline`, t => {
-  const f = setup(t); f.commit('correct\n');
-  // The worker report was recorded before the commit only to keep setup small;
-  // settle still reads the actual clean lane and independent scripted reviewer.
+  const f = setup(t, [], { ingest: false }); f.commit('correct\n');
+  assert.equal(f.show(f.run).report, null, 'first notice arrives before report ingestion');
   if (withFindings) {
     fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"settle":{"review_round_cap":1}}');
     f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Configure capped review']);
@@ -220,6 +266,7 @@ for (const withFindings of [false, true]) test(`actual handle and promotion comm
   const result = autopilotNotice(f.entry, { execute: call });
   assert.equal(result.disposition, 'handled', fs.readFileSync(result.receipt, 'utf8'));
   const saved = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(f.show(f.run).report.outcome, 'done', 'handle conditionally ingested the worker report');
   assert.equal(saved.actions[0].result.result, withFindings ? 'promotable_with_findings' : 'promotable');
   if (withFindings) {
     assert.ok(saved.follow_up); assert.deepEqual(f.show(saved.follow_up).accept, [minor]);
@@ -231,13 +278,12 @@ for (const withFindings of [false, true]) test(`actual handle and promotion comm
   assert.deepEqual(f.herdrCalls(), calls);
 });
 test('automatic PASS reaches the real queue, lands and closes without waking the supervisor', { timeout: 30000 }, async t => {
-  const f = setup(t); f.commit('correct\n');
-  const call = (file, args) => {
-    const r = f.exec(process.execPath, [file, ...args]);
-    if (r.status !== 0) throw Error(r.stderr || r.stdout);
-    return r.stdout;
-  };
-  const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id: 'automatic-cycle', executeAutopilot: call, waitSeconds: 0 });
+  const f = setup(t, [], { ingest: false }); f.commit('correct\n');
+  assert.equal(f.show(f.run).report, null, 'first notice has no immutable report');
+  const runner = path.join(f.root, 'first-notice.mjs');
+  fs.writeFileSync(runner, `import {promptSupervisor} from ${JSON.stringify(path.join(f.source, 'supervisor/prompt-supervisor.mjs'))};\nconsole.log(JSON.stringify(await promptSupervisor(${JSON.stringify(f.entry.to)},${JSON.stringify(f.entry.message)},${JSON.stringify({ org: f.org, cwd: f.repo, id: 'automatic-cycle', waitSeconds: 0 })})));\n`);
+  const r = f.exec(process.execPath, [runner]); assert.equal(r.status, 0, r.stderr);
+  const result = JSON.parse(r.stdout);
   assert.equal(result.handled, true, result.autopilot?.summary);
   const directory = path.join(f.entry.project.identity, 'promote'), deadline = Date.now() + loadTimeout(20000);
   let closed = false;
@@ -254,4 +300,49 @@ test('automatic PASS reaches the real queue, lands and closes without waking the
   const notices = readInbox(result.inbox); assert.equal(notices.length, 2);
   assert.ok(notices.every(entry => entry.state === 'handled'));
   assert.ok(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt').every(a => a[3].includes('Private record file:')));
+});
+test('real CLIs retry an exit-one base-moved refusal with the saved request and land once', { timeout: 30000 }, async t => {
+  const f = setup(t); f.commit('correct\n');
+  const herdr = path.join(f.root, 'bin/herdr'), original = `${herdr}-original`, marker = path.join(f.root, 'base-moved');
+  fs.renameSync(herdr, original);
+  // Only the offline reviewer transport moves main. All handle, intake, retry,
+  // rebase and promotion responses below come from the actual product CLIs.
+  fs.writeFileSync(herdr, `#!${process.execPath}
+import fs from 'node:fs'; import {spawnSync,execFileSync} from 'node:child_process';
+const args=process.argv.slice(2),r=spawnSync(${JSON.stringify(original)},args,{stdio:'inherit'});
+if(r.status===0&&args[0]==='agent'&&args[1]==='prompt'&&args[3]?.includes('Private record file: ')&&!fs.existsSync(${JSON.stringify(marker)})){
+ fs.writeFileSync(${JSON.stringify(path.join(f.repo, 'upstream'))},'new main\\n');
+ execFileSync('git',['-C',${JSON.stringify(f.repo)},'add','upstream']);
+ execFileSync('git',['-C',${JSON.stringify(f.repo)},'commit','-qm','Move main during review']);
+ fs.writeFileSync(${JSON.stringify(marker)},'moved');
+}
+process.exit(r.status??1);`, { mode: 0o755 });
+  const runner = path.join(f.root, 'autopilot.mjs');
+  fs.writeFileSync(runner, `import {autopilotNotice} from ${JSON.stringify(path.join(f.source, 'supervisor/autopilot.mjs'))};\nconsole.log(JSON.stringify(autopilotNotice(${JSON.stringify(f.entry)})));\n`);
+  const r = f.exec(process.execPath, [runner]); assert.equal(r.status, 0, r.stderr);
+  const result = JSON.parse(r.stdout);
+  assert.equal(result.disposition, 'handled', fs.readFileSync(result.receipt, 'utf8'));
+  const saved = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(saved.retry_used, true); assert.equal(saved.actions.length, 3);
+  const [first, retry] = saved.actions;
+  assert.equal(first.exit_code, 1); assert.equal(first.phase, 'acknowledged');
+  assert.equal(first.result.result, 'escalate'); assert.match(first.stderr, /base branch moved/);
+  assert.equal(first.result.journal, path.join(f.org, 'settle', `${f.run}.json`));
+  assert.ok(fs.existsSync(first.result.handoff));
+  assert.equal(retry.exit_code, 0); assert.equal(retry.result.result, 'promotable');
+  assert.ok(retry.args.includes('--retry')); assert.ok(!retry.args.includes('--to'));
+  const settled = JSON.parse(fs.readFileSync(first.result.journal));
+  assert.equal(settled.to, f.entry.to); assert.equal(settled.recaptures.length, 1);
+  assert.equal(settled.review.verdict, 'PASS');
+  assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'start').length, 1, 'retry reuses independent review');
+  const directory = path.join(f.entry.project.identity, 'promote'), deadline = Date.now() + loadTimeout(20000);
+  while (Date.now() < deadline && (!f.show(f.item).closed || fs.existsSync(path.join(directory, 'worker.lock')))) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(f.show(f.item).closed?.as, 'done'); assert.ok(!fs.existsSync(path.join(directory, 'worker.lock')));
+  assert.equal(fs.readFileSync(path.join(f.repo, 'upstream'), 'utf8'), 'new main\n');
+  assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
+  const queue = JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')));
+  assert.equal(queue.results.length, 1); assert.equal(queue.results[0].outcome, 'promoted');
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  assert.equal(JSON.parse(f.exec(process.execPath, [runner]).stdout).disposition, 'handled');
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
 });

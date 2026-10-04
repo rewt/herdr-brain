@@ -889,15 +889,25 @@ try {
       const report = path.join(root, `cutover-${stage}.md`), ask = path.join(root, `cutover-${stage}-ask.md`);
       write(ask, `You are run R-RUN. Write the report to ${report}; commit a scratch file.\n`);
       write(path.join(root, 'mode'), mode);
-      const consumer = stage === 'legacy' ? await startLegacyConsumer({ root, copy, org,
-        herdr: path.join(root, 'bin/herdr'), target: supervisor.name, env, evidence, load,
-        onStart: handle => legacyConsumers.add(handle),
-        launch(command, args, options) {
-          const call = copyInvocation(command, args, { cwd: copy, extra: { ORG_DIR: org }, isolatedEnv: options.env });
-          return spawn(call.command, call.args, { ...options, env: checkHomes(call.options.isolatedEnv) });
-        },
-      }) : undefined;
+      const composerReceipt = path.join(root, 'script-composers', supervisor.pane);
+      const setComposer = async mode => {
+        h('agent', 'prompt', supervisor.name, `acceptance-composer ${mode}`);
+        await until(() => fs.existsSync(composerReceipt) && JSON.parse(read(composerReceipt)).mode === mode,
+          `scratch supervisor ${mode} composer`);
+      };
+      let consumer;
       try {
+        if (stage === 'legacy') {
+          await setComposer('legacy');
+          consumer = await startLegacyConsumer({ root, copy, org,
+            herdr: path.join(root, 'bin/herdr'), target: supervisor.name, env, evidence, load,
+            onStart: handle => legacyConsumers.add(handle),
+            launch(command, args, options) {
+              const call = copyInvocation(command, args, { cwd: copy, extra: { ORG_DIR: org }, isolatedEnv: options.env });
+              return spawn(call.command, call.args, { ...options, env: checkHomes(call.options.isolatedEnv) });
+            },
+          });
+        }
         const dispatched = execute('.lane/supervisor/dispatch.sh', [item, topic, 'engineer', 'codex', 'scripted', 'low', ask, report], { timeout: 90_000 });
         const runId = dispatched.stdout.match(/(R-\d+) .*agent=/)?.[1]; assert.ok(runId, 'legacy dispatch receipt missing');
         const watchReceipt = dispatched.stdout.split('\n').find((line) => line.startsWith('{'));
@@ -934,7 +944,10 @@ try {
         rec(['check', report]); rec(['ingest', report, '--run', runId]);
         fs.copyFileSync(log, path.join(evidence, `cutover-${stage}-watch.log`));
         return job;
-      } finally { await consumer?.stop(); }
+      } finally {
+        try { await consumer?.stop(); }
+        finally { if (stage === 'legacy' && !stopping) await setComposer('shaded'); }
+      }
     }
     await check(cutoverChecks.canary, async () => {
       cutoverCanary = await legacyCanary('switched');

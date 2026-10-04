@@ -50,12 +50,21 @@ async function command(binary, args, options = {}, timeout = 90_000) {
 }
 const call = (...args) => command(process.execPath, [path.join(root, 'herdr.mjs'), ...args], { env: { ...env, ACCEPTANCE_CALLER: 'harness' } });
 let seq = 0;
+let composerMode = 'shaded', composerText = '';
 function emptyComposer() {
   // Actual PTY chrome, not an adapter read override: production's screen gate
   // sees the same padded shaded Codex box as it does in a native session.
   const shade = '\x1b[48;2;72;76;92m', reset = '\x1b[0m';
   const width = Math.max(12, Math.min(process.stdout.columns ?? 60, 80) - 1);
   const top = Math.max(1, (process.stdout.rows ?? 24) - 4);
+  if (composerMode === 'legacy') {
+    // The restored snapshot consumer reads between the last two footer rules.
+    // Render these in the actual supervisor PTY only for the rollback canary.
+    process.stdout.write(`\x1b[2J\x1b[${top};1H` +
+      `${'─'.repeat(width)}\n❯ ${composerText}\n${'─'.repeat(width)}\n` +
+      `scripted · ${root} · ${role}\n`);
+    return;
+  }
   // The production notice gate reads the last fourteen rendered rows.
   process.stdout.write(`\x1b[2J\x1b[${top};1H` +
     `${shade}${' '.repeat(width)}${reset}\n` +
@@ -118,6 +127,7 @@ for await (const raw of input) {
   const line = raw.replace(/\x1b\[200~|\x1b\[201~/g, '').trim();
   if (!line) continue;
   const requested = line.match(/^acceptance-state (working|idle)$/)?.[1];
+  const composer = role === 'supervisor' && line.match(/^acceptance-composer (legacy|shaded)(?: (.*))?$/);
   const match = line.match(/You are run (R-\d+).*Write the report to ([^;]+);/);
   // Legacy briefs contain many lines. Only the task line changes a worker's
   // lifecycle; acknowledgements still cover the complete PTY transport.
@@ -127,6 +137,16 @@ for await (const raw of input) {
   }
   await state('working');
   fs.appendFileSync(path.join(root, `${role}-input.jsonl`), JSON.stringify({ pane, name, line }) + '\n');
+  if (composer) {
+    [, composerMode, composerText = ''] = composer;
+    await state('idle');
+    const directory = path.join(root, 'script-composers');
+    fs.mkdirSync(directory, { recursive: true });
+    const file = path.join(directory, pane);
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify({ mode: composerMode, text: composerText }));
+    fs.renameSync(`${file}.tmp`, file);
+    continue;
+  }
   if (requested) { await state(requested); continue; }
   if (role === 'supervisor') {
     console.log(line);

@@ -1,0 +1,100 @@
+TAP version 13
+# Subtest: rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+ok 1 - rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+  ---
+  duration_ms: 2009.151
+  ...
+# Subtest: legacy consumer defers a queued report while the scratch supervisor input is busy
+ok 2 - legacy consumer defers a queued report while the scratch supervisor input is busy
+  ---
+  duration_ms: 1235.312792
+  ...
+# Subtest: inherited live consumer settings cannot select its queues, target or fixed port
+ok 3 - inherited live consumer settings cannot select its queues, target or fixed port
+  ---
+  duration_ms: 967.593125
+  ...
+# Subtest: an exited or unready consumer fails startup and remains receipted for cleanup
+ok 4 - an exited or unready consumer fails startup and remains receipted for cleanup
+  ---
+  duration_ms: 2307.828333
+  ...
+# Subtest: failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+ok 5 - failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+  ---
+  duration_ms: 479.079833
+  ...
+# Subtest: consumer refuses outside or symlinked scratch paths before spawning
+ok 6 - consumer refuses outside or symlinked scratch paths before spawning
+  ---
+  duration_ms: 15.255916
+  ...
+# Subtest: the real queued transport delivers inside the independent copied-code sandbox
+ok 7 - the real queued transport delivers inside the independent copied-code sandbox
+  ---
+  duration_ms: 903.680916
+  ...
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+ok 8 - the real scripted supervisor presents an empty composer before publishing idle and after each notice
+  ---
+  duration_ms: 1145.845792
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+ok 9 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+  ---
+  duration_ms: 44.956917
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 10 - native polling bounds each call and rejects nonresponse at the real deadline
+  ---
+  duration_ms: 0.4805
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 11 - native polling bounds each call and rejects late success at the real deadline
+  ---
+  duration_ms: 0.0595
+  ...
+# Subtest: run.mjs cutover wiring propagates quiet FAIL into retirement
+ok 12 - run.mjs cutover wiring propagates quiet FAIL into retirement
+  ---
+  duration_ms: 0.677584
+  ...
+# Subtest: run.mjs cutover wiring propagates loaded PENDING into retirement
+ok 13 - run.mjs cutover wiring propagates loaded PENDING into retirement
+  ---
+  duration_ms: 0.246167
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 14 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+  ---
+  duration_ms: 199.238542
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+ok 15 - product tidy preserves a focused finished tab while closing the same tab in the background
+  ---
+  duration_ms: 0.982666
+  ...
+# Subtest: the real adapter bounds a slow cwd native read by the polling deadline
+ok 16 - the real adapter bounds a slow cwd native read by the polling deadline
+  ---
+  duration_ms: 1526.778041
+  ...
+# Subtest: the real adapter bounds a slow registration native read by the polling deadline
+ok 17 - the real adapter bounds a slow registration native read by the polling deadline
+  ---
+  duration_ms: 1749.953667
+  ...
+# Subtest: failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+ok 18 - failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+  ---
+  duration_ms: 1.643
+  ...
+1..18
+# tests 18
+# suites 0
+# pass 18
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7949.615708

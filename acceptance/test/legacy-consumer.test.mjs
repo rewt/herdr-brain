@@ -10,11 +10,14 @@ import { copiedSandbox } from '../security.mjs';
 import { inventory } from './cutover-fixture.mjs';
 import { startLegacyConsumer } from '../legacy-consumer.mjs';
 import { waitUntil } from '../load.mjs';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { composerEmpty } from '../../supervisor/composer.mjs';
 
-function setup(t) {
-  const handles = [];
+function setup(t, { rendered = false } = {}) {
+  const handles = [], cleanups = [];
   const f = inventory({ after: cleanup => t.after(async () => {
     for (const handle of handles) await handle.stop();
+    for (const stop of cleanups) await stop();
     cleanup();
   }) }), { root, copy, spec } = f;
   const bin = path.join(root, 'bin'), org = path.join(root, 'record');
@@ -37,7 +40,9 @@ fs.appendFileSync(${JSON.stringify(path.join(root, 'calls.jsonl'))}, JSON.string
 if (a[0] === 'agent' && a[1] === 'wait') {}
 else if (a[0] === 'agent' && a[1] === 'get') console.log(JSON.stringify({result:{agent:{agent_status:'idle'}}}));
 else if (a[0] === 'agent' && a[1] === 'list') console.log(JSON.stringify({result:{agents:[{name:'foreign',pane_id:'foreign:p1'},{name:${JSON.stringify(spec.legacyTarget)},pane_id:'scratch:p1'}]}}));
-else if (a[0] === 'pane' && a[1] === 'read' && a[2] === 'scratch:p1') console.log('────\\n❯ '+(fs.existsSync(${JSON.stringify(path.join(root, 'busy'))}) ? 'operator text' : '')+'\\n────');
+else if (a[0] === 'pane' && a[1] === 'read' && a[2] === 'scratch:p1') ${rendered
+    ? `process.stdout.write(fs.readFileSync(${JSON.stringify(path.join(root, 'supervisor-screen'))}, 'utf8'));`
+    : "console.log('────\\n❯ \\n────');"}
 else if (a[0] === 'agent' && a[1] === 'prompt' && a[2] === 'scratch:p1') { fs.appendFileSync(${JSON.stringify(received)}, JSON.stringify({pane:a[2],line:a[3]})+'\\n'); console.log('{}'); }
 else process.exit(92);
 `, { mode: 0o755 });
@@ -49,11 +54,49 @@ else process.exit(92);
     const r = spawnSync('/bin/bash', [path.join(copy, '.lane/supervisor/notify-watch.sh'), 'R-1', '--to', spec.legacyTarget], { cwd: copy, env, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /queued for legacy-target/);
   };
-  return { ...f, options, notify, received, rows: () => fs.existsSync(received) ? fs.readFileSync(received, 'utf8').trim().split('\n').map(JSON.parse) : [] };
+  return { ...f, options, notify, received, cleanups, rows: () => fs.existsSync(received) ? fs.readFileSync(received, 'utf8').trim().split('\n').map(JSON.parse) : [] };
+}
+
+async function renderedSupervisor(t, text = '') {
+  const f = setup(t, { rendered: true }), screen = path.join(f.root, 'supervisor-screen');
+  const worker = spawnChild(t, process.execPath, [path.resolve(import.meta.dirname, '../worker.mjs'), f.root, 'supervisor', 'offline-supervisor'],
+    { env: { ...process.env, HERDR_PANE_ID: 'scratch:p1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  f.cleanups.push(async () => { worker.kill('SIGTERM'); await waitForExit(worker); });
+  // Only the transport is emulated: pane reads return the actual worker's ANSI
+  // output, never a separately authored approximation of its composer.
+  let output = '';
+  worker.stdout.on('data', bytes => {
+    output += bytes;
+    fs.writeFileSync(screen, output.slice(output.lastIndexOf('\x1b[2J')));
+  });
+  fs.writeFileSync(path.join(f.root, 'herdr.mjs'), "console.log('{}');");
+  await waitUntil(() => fs.existsSync(path.join(f.root, 'script-panes/scratch:p1')), 'scripted supervisor ready', 2000);
+  const prompted = f.rows;
+  let forwarded = 0;
+  const transport = setInterval(() => {
+    for (const row of prompted().slice(forwarded)) { worker.stdin.write(row.line + '\n'); forwarded++; }
+  }, 10);
+  f.cleanups.unshift(() => clearInterval(transport));
+  worker.stdin.write(`acceptance-composer legacy${text ? ' ' + text : ''}\n`);
+  await waitUntil(() => fs.readFileSync(screen, 'utf8').includes('────'), 'legacy composer rendered', 2000);
+  if (text) assert.ok(fs.readFileSync(screen, 'utf8').includes(text));
+  return { ...f, prompts: prompted, restore: async () => {
+    worker.stdin.write('acceptance-composer shaded\n');
+    const receipt = path.join(f.root, 'script-composers/scratch:p1');
+    await waitUntil(() => fs.existsSync(receipt) && JSON.parse(fs.readFileSync(receipt)).mode === 'shaded', 'shaded composer restored', 2500);
+    const output = fs.readFileSync(screen, 'utf8');
+    assert.match(output, /\x1b\[48;2;72;76;92m/);
+    assert.equal(composerEmpty(output, 'codex'), true);
+    assert.equal(output.includes('────'), false);
+  }, rows: () => {
+    const file = path.join(f.root, 'supervisor-input.jsonl');
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse)
+      .filter(row => row.line.startsWith('[org-report]')) : [];
+  } };
 }
 
 test('rollback done report reaches the scratch supervisor exactly once through the real outbox consumer', async (t) => {
-  const f = setup(t);
+  const f = await renderedSupervisor(t);
   f.notify();
   const outbox = path.join(f.copy, '.lane/supervisor/outbox');
   assert.equal(fs.readdirSync(outbox).filter(n => n.endsWith('.msg')).length, 1);
@@ -66,6 +109,7 @@ test('rollback done report reaches the scratch supervisor exactly once through t
   fs.writeFileSync(path.join(outbox, 'RETRY'), '');
   await consumer.stop();
   assert.equal(f.rows().length, 1);
+  assert.equal(f.prompts().length, 1);
   assert.equal(f.rows()[0].pane, 'scratch:p1');
   assert.match(f.rows()[0].line, /\[org-report\] run=R-1 item=ENG-offline outcome=done verdict=PASS .*delivered by notify-watch/);
   assert.match(fs.readFileSync(path.join(f.copy, '.lane/supervisor/notify-log.tsv'), 'utf8'), /supervisor-events\tsent\t\[org-report\]/);
@@ -76,16 +120,17 @@ test('rollback done report reaches the scratch supervisor exactly once through t
   const port = net.createServer();
   port.listen(receipt.port, '127.0.0.1'); await once(port, 'listening');
   port.close(); await once(port, 'close');
+  await f.restore();
 });
 
 test('legacy consumer defers a queued report while the scratch supervisor input is busy', async (t) => {
-  const f = setup(t), busy = path.join(f.root, 'busy');
-  fs.writeFileSync(busy, '');
+  const f = await renderedSupervisor(t, 'operator text');
   const consumer = await startLegacyConsumer(f.options); t.after(() => consumer.stop());
   f.notify();
   const log = path.join(f.copy, '.lane/supervisor/watch-logs/supervisor-events.log');
   await waitUntil(() => fs.readFileSync(log, 'utf8').includes('input box busy'), 'busy delivery deferred', 2000);
   assert.deepEqual(f.rows(), []);
+  assert.deepEqual(f.prompts(), []);
   assert.equal(fs.readdirSync(path.join(f.copy, '.lane/supervisor/outbox')).filter(n => n.endsWith('.msg')).length, 1);
   await consumer.stop();
 });

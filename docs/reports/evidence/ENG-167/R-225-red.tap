@@ -1,0 +1,67 @@
+TAP version 13
+# Subtest: rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+not ok 1 - rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+  ---
+  duration_ms: 2341.42325
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timeout: legacy composer rendered'
+  code: 'ERR_TEST_FAILURE'
+  name: 'LoadTimeout'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/load.mjs:53:9)
+    async renderedSupervisor (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/test/legacy-consumer.test.mjs:74:3)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/test/legacy-consumer.test.mjs:80:13
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: legacy consumer defers a queued report while the scratch supervisor input is busy
+not ok 2 - legacy consumer defers a queued report while the scratch supervisor input is busy
+  ---
+  duration_ms: 2336.77475
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timeout: legacy composer rendered'
+  code: 'ERR_TEST_FAILURE'
+  name: 'LoadTimeout'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/load.mjs:53:9)
+    async renderedSupervisor (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/test/legacy-consumer.test.mjs:74:3)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rollback-canary/acceptance/test/legacy-consumer.test.mjs:106:13
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: inherited live consumer settings cannot select its queues, target or fixed port
+ok 3 - inherited live consumer settings cannot select its queues, target or fixed port # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.428917
+  ...
+# Subtest: an exited or unready consumer fails startup and remains receipted for cleanup
+ok 4 - an exited or unready consumer fails startup and remains receipted for cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.151167
+  ...
+# Subtest: failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+ok 5 - failed lifecycle writes still stop the owned consumer before reporting cleanup failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.090833
+  ...
+# Subtest: consumer refuses outside or symlinked scratch paths before spawning
+ok 6 - consumer refuses outside or symlinked scratch paths before spawning # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.08125
+  ...
+# Subtest: the real queued transport delivers inside the independent copied-code sandbox
+ok 7 - the real queued transport delivers inside the independent copied-code sandbox # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0485
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 5
+# todo 0
+# duration_ms 4714.647875

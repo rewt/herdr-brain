@@ -19,7 +19,7 @@ test('tier selection covers every current test once in promotion or release and 
   assert.ok(release.includes('test/deadline-boundaries.test.mjs'));
   assert.ok(release.includes('settle/test/ref-wallclock.test.mjs'));
   assert.ok(release.includes('test/pty-cache.test.mjs'));
-  for (const file of ['test/file-wait.test.mjs', 'test/git-seed.test.mjs', 'test/tier-plan.test.mjs', 'discovery/test/entry.test.mjs']) assert.ok(promotion.includes(file));
+  for (const file of ['test/file-wait.test.mjs', 'test/git-seed.test.mjs', 'test/tier-plan.test.mjs', 'discovery/test/entry.test.mjs', 'supervisor/test/autopilot.test.mjs']) assert.ok(promotion.includes(file));
   assert.ok(!tierFiles('fast', root).includes('lanes/test/validation.test.mjs'));
   assert.ok(tierFiles('fast', root).every(file => promotion.includes(file)));
   assert.throws(() => tierFiles('unknown', root), /unknown test tier/);

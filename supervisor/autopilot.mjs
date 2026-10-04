@@ -95,23 +95,31 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
   const file = path.join(receiptDirectory(project.org, project.identity), 'autopilot', `${digest(key)}.json`);
   let receipt = { policy: POLICY, key, project, notice: entry.message, notice_id: entry.id, actions: [], started: new Date().toISOString() }, release;
   const save = () => writeFileAtomic(file, JSON.stringify(receipt, null, 2) + '\n', 0o600);
-  // Foreground handle callers need the complete original notice. Append policy
-  // evidence on its own line without rewriting the envelope or narrative.
-  const summary = reason => `${entry.message}\n[autopilot] ${report?.[1] ?? promotion?.[1] ?? 'notice'} ${line(reason)} receipt=${file}`;
-  const finish = (disposition, reason) => {
+  // Classified report/promotion exceptions retain foreground policy evidence.
+  // Every other notice and classification failure keeps the original payload.
+  const summary = reason => report || promotion
+    ? `${entry.message}\n[autopilot] ${report?.[1] ?? promotion?.[1]} ${line(reason)} receipt=${file}`
+    : entry.message;
+  const finish = (disposition, reason, unchanged = false) => {
     receipt.disposition = disposition; receipt.reason = line(reason); receipt.finished = new Date().toISOString(); save();
-    return { disposition, receipt: file, summary: summary(reason) };
+    return { disposition, receipt: file, summary: unchanged ? entry.message : summary(reason) };
   };
+  // If the action receipt cannot safely be written, the inbox journals this
+  // diagnostic with the policy result while delivery still uses only summary.
+  const retained = reason => ({ disposition: 'wake', receipt: file, reason: line(reason), summary: entry.message });
   let runId;
   try {
     release = noticeLock(`${file}.lock`);
     let prior;
     try { prior = read(file); }
-    catch (error) { return { disposition: 'wake', receipt: file, summary: summary(`unreadable action receipt: ${error.message}`) }; }
+    catch (error) { return retained(`unreadable action receipt: ${error.message}`); }
     if (prior) {
-      if (prior.key !== key || prior.policy !== POLICY || JSON.stringify(prior.project) !== JSON.stringify(project)) return { disposition: 'wake', receipt: file, summary: summary('autopilot receipt binding changed') };
+      if (prior.key !== key || prior.policy !== POLICY || JSON.stringify(prior.project) !== JSON.stringify(project)) return retained('autopilot receipt binding changed');
       receipt = prior;
     }
+    // Intermediate and unknown notices need no record or status projection.
+    // Policy diagnostics belong only in their receipt, never in the payload.
+    if (!report && !promotion) return finish('wake', `unrecognised notice: ${line(entry.message)}`);
     authority(project);
     if (report) {
       if (report[3] !== 'done') return finish('wake', `worker reported ${report[3]}`);
@@ -127,11 +135,11 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
       runId = job.run;
       const { item } = authority(project, runId);
       if (item.closed?.as === 'done') return finish('handled', 'promotion already closed');
-    } else return finish('wake', `unrecognised notice: ${line(entry.message)}`);
+    }
     if (receipt.actions.some(a => a.phase !== 'acknowledged')) return finish('wake', 'uncertain autopilot command; inspect before recovery');
     if (receipt.actions.length && !receipt.disposition) return finish('wake', 'interrupted autopilot sequence; inspect acknowledged actions');
     if (receipt.disposition) return { disposition: receipt.disposition, receipt: file,
-      summary: summary(receipt.reason) };
+      summary: receipt.error ? entry.message : summary(receipt.reason) };
     const command = (name, file, args, { json = true, pendingReport = false } = {}) => {
       authority(project, runId, { pendingReport }); // Re-read STOP, pause, authority and record.
       const action = { name, file, args, phase: 'started', at: new Date().toISOString() };
@@ -196,8 +204,8 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     return finish('handled', accepted ? `findings filed in ${receipt.follow_up}; promotion queued` : 'PASS promotion queued');
   } catch (error) {
     // A contending/live owner must retain its receipt untouched.
-    if (!release) return { disposition: 'wake', receipt: file, summary: `[autopilot] ${line(error.message)} receipt=${file}` };
+    if (!release) return retained(error.message);
     receipt.error = error.message; // Keep full diagnostic evidence behind the compact wake.
-    return finish('wake', error.message);
+    return finish('wake', error.message, true);
   } finally { release?.(); }
 }

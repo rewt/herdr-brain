@@ -1,0 +1,15 @@
+TAP version 13
+# Subtest: tier selection covers every current test once in promotion or release and excludes support modules
+ok 1 - tier selection covers every current test once in promotion or release and excludes support modules
+  ---
+  duration_ms: 2.1605
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 29.671958

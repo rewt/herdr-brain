@@ -1,0 +1,590 @@
+TAP version 13
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 1 - done handles, PASS promotes with named policy, and duplicate notices do no work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.603625
+  ...
+# Subtest: fix_round is left in flight
+ok 2 - fix_round is left in flight # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 3 - base movement gets exactly one handle retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036416
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 4 - repeated base movement wakes and never repeats the retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033458
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 5 - exit-one unknown refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040834
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 6 - exit-one wrong-run refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0315
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 7 - exit-one wrong-journal refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078958
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 8 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0365
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 9 - exit-one wrong-exit refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.118
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 10 - exit-one signal refusal retains evidence and never authorizes a retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0955
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 11 - Moderate and Minor findings file one follow-up before accepting promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.047916
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 12 - unknown result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031958
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 13 - uncertain result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066916
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 14 - interrupted result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029667
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 15 - refusal result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065584
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 16 - fail result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066209
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 17 - cappedMajor result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033083
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 18 - unparsed result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.125959
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 19 - noPASS result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.073958
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 20 - cappedUnknown result wakes with the original notice, reason and receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030959
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 21 - STOP disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062125
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 22 - paused disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032333
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 23 - kill disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024625
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 24 - invalidConfig disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021958
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 25 - nullConfig disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020959
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 26 - nullPolicy disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020542
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 27 - reserved disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022583
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 28 - category disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020709
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 29 - questions disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021375
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 30 - blocked disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02175
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 31 - foreign disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020959
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 32 - torn disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.059541
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 33 - superseded disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067875
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 34 - incomplete disables automatic mutations and wakes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0225
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 35 - an unacknowledged action wakes on replay instead of running again # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036375
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 36 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03425
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 37 - a corrupted action receipt wakes and preserves the evidence bytes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021791
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 38 - reserved report decisions wake even when the work item has no category # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018667
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 39 - un-ingested missing report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020208
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 40 - un-ingested malformed report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018666
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 41 - un-ingested wrong-run report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01975
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 42 - un-ingested blocked report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019709
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 43 - un-ingested needs_human report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019792
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 44 - un-ingested failed report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.348416
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 45 - un-ingested questions report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020792
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 46 - un-ingested blockers report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028417
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 47 - un-ingested reserved-decision report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018875
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 48 - un-ingested uncategorized-decision report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01825
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 49 - un-ingested category-evidence report wakes before intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030833
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 50 - a pending report cannot authorize promotion if handle did not perform intake # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045167
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 51 - a pause appearing after handle prevents promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.051666
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 52 - reopening after a handled notice wakes and retains the operator change # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029333
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 53 - promotion refusal and every unknown notice wake without commands # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023333
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+not ok 54 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 325.458292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+      '[watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m\n' +
+    +   'Detail with trailing spaces.  \n' +
+    +   '[autopilot] notice unrecognised notice: [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine still-running=2m Detail with trailing spaces. receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-PzxuA3/project/.org/supervisor/57aeea8f0d5c8b2dc96b/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json'
+    -   'Detail with trailing spaces.  '
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+  actual: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+    [autopilot] notice unrecognised notice: [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine still-running=2m Detail with trailing spaces. receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-PzxuA3/project/.org/supervisor/57aeea8f0d5c8b2dc96b/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:215:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+not ok 55 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 273.374875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+      '[watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m\n' +
+    +   'Detail with trailing spaces.  \n' +
+    +   "[autopilot] notice ENOENT: no such file or directory, open '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-GJbsLE/project/.org/events.jsonl' receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-GJbsLE/project/.org/supervisor/0bfc6903398c4597a645/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json"
+    -   'Detail with trailing spaces.  '
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+  actual: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+    [autopilot] notice ENOENT: no such file or directory, open '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-GJbsLE/project/.org/events.jsonl' receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-GJbsLE/project/.org/supervisor/0bfc6903398c4597a645/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:215:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+not ok 56 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 270.756417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+      '[watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m\n' +
+    +   'Detail with trailing spaces.  \n' +
+    +   '[autopilot] notice EISDIR: illegal operation on a directory, read receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-S9ybcE/project/.org/supervisor/40bfa4161cfd2731f76b/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json'
+    -   'Detail with trailing spaces.  '
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+  actual: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+    [autopilot] notice EISDIR: illegal operation on a directory, read receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-S9ybcE/project/.org/supervisor/40bfa4161cfd2731f76b/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:215:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+not ok 57 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 276.150458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+      '[watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m\n' +
+    +   'Detail with trailing spaces.  \n' +
+    +   '[autopilot] notice events.jsonl line 1 is not valid JSON; the record needs manual repair receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-FmecQY/project/.org/supervisor/6847b051485e9a603aab/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json'
+    -   'Detail with trailing spaces.  '
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+  actual: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine  still-running=2m
+    Detail with trailing spaces.  
+    [autopilot] notice events.jsonl line 1 is not valid JSON; the record needs manual repair receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-FmecQY/project/.org/supervisor/6847b051485e9a603aab/autopilot/f4dee6c2d85b2fe5eea183f841aeacb0f3baaf3d026210bfe061722d4d74cb4e.json
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:215:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+not ok 58 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 270.31925
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done\n' +
+    +   "[autopilot] R-1 ENOENT: no such file or directory, open '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-k3PUfk/project/.org/events.jsonl' receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-k3PUfk/project/.org/supervisor/59ee2899450384f5802f/autopilot/dd7d6628a33ed98750b7315843afce961b8ee74c44cadae3d7c4bf660eabcc60.json"
+    - '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done'
+  actual: |-
+    [org-report] run=R-1 item=ENG-1 outcome=done headline=Done
+    [autopilot] R-1 ENOENT: no such file or directory, open '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-k3PUfk/project/.org/events.jsonl' receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-k3PUfk/project/.org/supervisor/59ee2899450384f5802f/autopilot/dd7d6628a33ed98750b7315843afce961b8ee74c44cadae3d7c4bf660eabcc60.json
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:229:52
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+not ok 59 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 269.305292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done\n' +
+    +   '[autopilot] R-1 EISDIR: illegal operation on a directory, read receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-9PEUY9/project/.org/supervisor/48c99c8bade959229dcc/autopilot/dd7d6628a33ed98750b7315843afce961b8ee74c44cadae3d7c4bf660eabcc60.json'
+    - '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done'
+  actual: |-
+    [org-report] run=R-1 item=ENG-1 outcome=done headline=Done
+    [autopilot] R-1 EISDIR: illegal operation on a directory, read receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-9PEUY9/project/.org/supervisor/48c99c8bade959229dcc/autopilot/dd7d6628a33ed98750b7315843afce961b8ee74c44cadae3d7c4bf660eabcc60.json
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:229:52
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+not ok 60 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 269.667458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done\n' +
+    +   '[autopilot] R-1 events.jsonl line 1 is not valid JSON; the record needs manual repair receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-kjGSN8/project/.org/supervisor/851a3944be12a68ba6c1/autopilot/dd7d6628a33ed98750b7315843afce961b8ee74c44cadae3d7c4bf660eabcc60.json'
+    - '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '[org-report] run=R-1 item=ENG-1 outcome=done headline=Done'
+  actual: |-
+    [org-report] run=R-1 item=ENG-1 outcome=done headline=Done
+    [autopilot] R-1 events.jsonl line 1 is not valid JSON; the record needs manual repair receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-kjGSN8/project/.org/supervisor/851a3944be12a68ba6c1/autopilot/dd7d6628a33ed98750b7315843afce961b8ee74c44cadae3d7c4bf660eabcc60.json
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:229:52
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 61 - promoted queue notice handles its bound run and a closed item is a no-op # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033458
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 62 - inbox consumes routine results before any Herdr delivery and retains original notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0265
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 63 - report exception delivery preserves the exact original notice through the existing input gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021084
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 64 - promotion exception delivery preserves the exact original notice through the existing input gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01725
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 65 - unknown exception delivery preserves the exact original notice through the existing input gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016666
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+not ok 66 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 789.33075
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '[watch-long-running] run=R-1 item=ENG-1 worker=lane-nine still-running=2m\n' +
+    +   "[autopilot] notice ENOENT: no such file or directory, open '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-hwUyu8/project/.org/events.jsonl' receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-hwUyu8/project/.org/supervisor/2e8bb3c0270e8e3ee4e7/autopilot/0b7cae44237c3bf95a213c57a5f939178bd6be89764e4577ace1e70569a3732f.json notice-id=exception"
+    - '[watch-long-running] run=R-1 item=ENG-1 worker=lane-nine still-running=2m notice-id=exception'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '[watch-long-running] run=R-1 item=ENG-1 worker=lane-nine still-running=2m notice-id=exception'
+  actual: |-
+    [watch-long-running] run=R-1 item=ENG-1 worker=lane-nine still-running=2m
+    [autopilot] notice ENOENT: no such file or directory, open '/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-hwUyu8/project/.org/events.jsonl' receipt=/private/var/folders/st/gcpbkfdj1hbb618vgcf59j3w0000gn/T/settle-test-hwUyu8/project/.org/supervisor/2e8bb3c0270e8e3ee4e7/autopilot/0b7cae44237c3bf95a213c57a5f939178bd6be89764e4577ace1e70569a3732f.json notice-id=exception
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-passthrough/supervisor/test/autopilot.test.mjs:280:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 67 - a busy chat drain cannot prevent a routine policy action # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.120459
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 68 - actual handle and promotion commands settle PASS and enqueue offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025083
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 69 - actual handle and promotion commands file findings and accept them offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019125
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 70 - automatic PASS reaches the real queue, lands and closes without waking the supervisor # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028667
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 71 - real CLIs retry an exit-one base-moved refusal with the saved request and land once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028541
+  ...
+1..71
+# tests 71
+# suites 0
+# pass 0
+# fail 8
+# cancelled 0
+# skipped 63
+# todo 0
+# duration_ms 2798.005875

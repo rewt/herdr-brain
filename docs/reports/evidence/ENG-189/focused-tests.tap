@@ -1,0 +1,530 @@
+TAP version 13
+# Subtest: every terminal condition has a distinct, compact supervisor notice
+ok 1 - every terminal condition has a distinct, compact supervisor notice
+  ---
+  duration_ms: 0.809542
+  ...
+# Subtest: spawn resolves the cwd workspace when it is run outside a Herdr pane
+ok 2 - spawn resolves the cwd workspace when it is run outside a Herdr pane
+  ---
+  duration_ms: 260.5805
+  ...
+# Subtest: a valid report is checked and delivered without Herdr being present
+ok 3 - a valid report is checked and delivered without Herdr being present
+  ---
+  duration_ms: 552.047625
+  ...
+# Subtest: final watch notice waits for fake operator typing, then sends once across watcher restart
+ok 4 - final watch notice waits for fake operator typing, then sends once across watcher restart
+  ---
+  duration_ms: 819.507042
+  ...
+# Subtest: a capped final watcher exits while its owned notice later delivers without another watcher
+ok 5 - a capped final watcher exits while its owned notice later delivers without another watcher
+  ---
+  duration_ms: 827.637708
+  ...
+# Subtest: a report landing wakes the watcher without polling Herdr
+ok 6 - a report landing wakes the watcher without polling Herdr
+  ---
+  duration_ms: 689.071834
+  ...
+# Subtest: a valid report also waits while the worker state is unknown
+ok 7 - a valid report also waits while the worker state is unknown
+  ---
+  duration_ms: 588.941875
+  ...
+# Subtest: a mismatched report is invalid even when org check passes
+ok 8 - a mismatched report is invalid even when org check passes
+  ---
+  duration_ms: 944.218208
+  ...
+# Subtest: a vanished worker delivers exited-without-report and stops
+ok 9 - a vanished worker delivers exited-without-report and stops
+  ---
+  duration_ms: 570.777
+  ...
+# Subtest: an initially idle worker is not terminal until it has worked
+ok 10 - an initially idle worker is not terminal until it has worked
+  ---
+  duration_ms: 935.178
+  ...
+# Subtest: idle grace waits for a late report before sending a no-report notice
+ok 11 - idle grace waits for a late report before sending a no-report notice
+  ---
+  duration_ms: 664.5415
+  ...
+# Subtest: idle grace does not start before the worker has been seen working
+ok 12 - idle grace does not start before the worker has been seen working
+  ---
+  duration_ms: 936.209542
+  ...
+# Subtest: idle grace notices a blocked worker immediately and keeps watching
+ok 13 - idle grace notices a blocked worker immediately and keeps watching
+  ---
+  duration_ms: 939.700916
+  ...
+# Subtest: idle, working, idle without a report delivers both stop notices
+ok 14 - idle, working, idle without a report delivers both stop notices
+  ---
+  duration_ms: 1191.185708
+  ...
+# Subtest: a blocked worker delivers its distinct notice
+ok 15 - a blocked worker delivers its distinct notice
+  ---
+  duration_ms: 917.518083
+  ...
+# Subtest: a valid report stays intermediate while blocked and is final only after idle
+ok 16 - a valid report stays intermediate while blocked and is final only after idle
+  ---
+  duration_ms: 796.224458
+  ...
+# Subtest: a refused intermediate delivery stays first in the inbox and recovers before the final report
+ok 17 - a refused intermediate delivery stays first in the inbox and recovers before the final report
+  ---
+  duration_ms: 980.952625
+  ...
+# Subtest: a still-working worker delivers the long-running notice
+ok 18 - a still-working worker delivers the long-running notice
+  ---
+  duration_ms: 928.085708
+  ...
+# Subtest: a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+ok 19 - a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+  ---
+  duration_ms: 1127.094375
+  ...
+# Subtest: a Herdr outage is delivered after Herdr recovers, never reported as gone
+ok 20 - a Herdr outage is delivered after Herdr recovers, never reported as gone
+  ---
+  duration_ms: 949.634042
+  ...
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 21 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 498.739083
+  ...
+# Subtest: fix_round is left in flight
+ok 22 - fix_round is left in flight
+  ---
+  duration_ms: 379.285292
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 23 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 433.226333
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 24 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 477.322125
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 25 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 375.93075
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 26 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 375.257375
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 27 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 356.487917
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 28 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 373.703375
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 29 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 367.843292
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 30 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 364.28625
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 31 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 487.468083
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 32 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 364.38375
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 33 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 371.581
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 34 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 347.399167
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 35 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 373.009125
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 36 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 356.843917
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 37 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 352.177
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 38 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 355.985791
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 39 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 367.629917
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 40 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 362.573959
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 41 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 300.994584
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 42 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 297.50425
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 43 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 290.268125
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 44 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 280.179041
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 45 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 291.96975
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 46 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 312.654083
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 47 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 346.110792
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 48 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 341.02825
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 49 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 533.508834
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 50 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 284.004375
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 51 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 292.316292
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 52 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 296.166958
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 53 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 345.351416
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 54 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 343.870458
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 55 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 440.018792
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 56 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 436.16825
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 57 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 405.533875
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 58 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 425.258292
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 59 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 320.598541
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 60 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 299.473042
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 61 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 282.994333
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 62 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 311.131
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 63 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 311.044167
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 64 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 291.284125
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 65 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 276.198458
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 66 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 280.303375
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 67 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 276.915
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 68 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 276.406583
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 69 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 282.882125
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 70 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 309.998167
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 71 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 339.726208
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 72 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 456.479875
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 73 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 281.532667
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 74 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 272.91
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 75 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 274.316583
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 76 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 284.296709
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 77 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 275.856542
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 78 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 269.362333
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 79 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 268.7925
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 80 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 270.35825
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 81 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 455.802791
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 82 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 426.677792
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 83 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 830.492583
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 84 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 786.025833
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 85 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 763.439916
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 86 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 715.907917
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 87 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 430.618916
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 88 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 4591.925167
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 89 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 5074.406292
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 90 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 5697.377
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 91 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 6952.93175
+  ...
+# Subtest: status derives all lane stages and timing without record mutations or model calls
+ok 92 - status derives all lane stages and timing without record mutations or model calls
+  ---
+  duration_ms: 400.302459
+  ...
+# Subtest: status shows correction runs as fix and retains recent autopilot receipts
+ok 93 - status shows correction runs as fix and retains recent autopilot receipts
+  ---
+  duration_ms: 322.031708
+  ...
+# Subtest: a correction moves from fix to its own review and displays the active reviewer metadata
+ok 94 - a correction moves from fix to its own review and displays the active reviewer metadata
+  ---
+  duration_ms: 368.659125
+  ...
+# Subtest: status warns and omits structurally damaged action receipts before sorting or mapping
+ok 95 - status warns and omits structurally damaged action receipts before sorting or mapping
+  ---
+  duration_ms: 198.967625
+  ...
+# Subtest: unavailable Herdr and malformed receipts are visible without changing state
+ok 96 - unavailable Herdr and malformed receipts are visible without changing state
+  ---
+  duration_ms: 191.172375
+  ...
+# Subtest: status CLI is read-only from a linked checkout and does not require a supervisor role
+ok 97 - status CLI is read-only from a linked checkout and does not require a supervisor role
+  ---
+  duration_ms: 452.104708
+  ...
+# Subtest: review display uses matching session provider/model and excludes foreign session metadata
+ok 98 - review display uses matching session provider/model and excludes foreign session metadata
+  ---
+  duration_ms: 179.814583
+  ...
+# Subtest: removed completed legacy lanes are history rather than active review lanes
+ok 99 - removed completed legacy lanes are history rather than active review lanes
+  ---
+  duration_ms: 257.437584
+  ...
+# Subtest: the current reviewer matches the configured opaque route and verified occupant, working before idle
+ok 100 - the current reviewer matches the configured opaque route and verified occupant, working before idle
+  ---
+  duration_ms: 279.206458
+  ...
+# Subtest: recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+ok 101 - recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+  ---
+  duration_ms: 414.354208
+  ...
+# Subtest: open runs precede only today’s landed runs and refused promotion is blocked
+ok 102 - open runs precede only today’s landed runs and refused promotion is blocked
+  ---
+  duration_ms: 522.412125
+  ...
+# Subtest: a blocked report with no live session keeps its completed duration instead of counting idle hours
+ok 103 - a blocked report with no live session keeps its completed duration instead of counting idle hours
+  ---
+  duration_ms: 377.818667
+  ...
+# Subtest: tier selection covers every current test once in promotion or release and excludes support modules
+ok 104 - tier selection covers every current test once in promotion or release and excludes support modules
+  ---
+  duration_ms: 2.542333
+  ...
+1..104
+# tests 104
+# suites 0
+# pass 104
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 47282.674

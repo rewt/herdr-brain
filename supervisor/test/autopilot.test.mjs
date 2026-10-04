@@ -143,7 +143,9 @@ test('a sequence interrupted after acknowledged actions wakes without repeating 
 test('a corrupted action receipt wakes and preserves the evidence bytes', t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]), file = f.apply().receipt;
   fs.writeFileSync(file, '{broken');
-  assert.equal(f.apply().disposition, 'wake'); assert.equal(f.calls.length, 2);
+  const result = f.apply();
+  assert.equal(result.disposition, 'wake'); assert.equal(f.calls.length, 2);
+  assert.equal(result.summary, f.entry.message); assert.match(result.reason, /unreadable action receipt/);
   assert.equal(fs.readFileSync(file, 'utf8'), '{broken');
 });
 test('reserved report decisions wake even when the work item has no category', t => {
@@ -201,6 +203,39 @@ test('promotion refusal and every unknown notice wake without commands', t => {
   }
   assert.equal(f.calls.length, 0);
 });
+for (const record of ['healthy', 'missing', 'unreadable', 'malformed'])
+test(`intermediate notices pass through unchanged with a ${record} record`, t => {
+  const f = setup(t), log = path.join(f.org, 'events.jsonl');
+  if (record === 'missing') fs.unlinkSync(log);
+  if (record === 'unreadable') { fs.unlinkSync(log); fs.mkdirSync(log); }
+  if (record === 'malformed') fs.writeFileSync(log, 'invalid JSON\n');
+  for (const kind of ['watch-long-running', 'watch-blocked', 'watch-no-report', 'watch-invalid-report', 'watch-unavailable', 'new-notice']) {
+    f.entry.id = `watch:${f.run}:${kind}`;
+    f.entry.message = `[${kind}] run=${f.run} item=${f.item} worker=lane-nine  still-running=2m\nDetail with trailing spaces.  `;
+    const result = f.apply();
+    assert.equal(result.disposition, 'wake');
+    assert.equal(result.summary, f.entry.message);
+    const saved = JSON.parse(fs.readFileSync(result.receipt));
+    assert.equal(saved.notice, f.entry.message); assert.equal(saved.notice_id, f.entry.id);
+    assert.match(saved.reason, /unrecognised notice/); assert.deepEqual(saved.actions, []);
+  }
+  assert.equal(f.calls.length, 0);
+});
+for (const record of ['missing', 'unreadable', 'malformed'])
+test(`a ${record} record prevents classification without changing a report notice`, t => {
+  const f = setup(t), log = path.join(f.org, 'events.jsonl');
+  const before = fs.readFileSync(log);
+  fs.unlinkSync(log);
+  if (record === 'unreadable') fs.mkdirSync(log);
+  if (record === 'malformed') fs.writeFileSync(log, 'invalid JSON\n');
+  const result = f.apply(), saved = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(result.disposition, 'wake'); assert.equal(result.summary, f.entry.message);
+  assert.ok(saved.error); assert.ok(saved.reason); assert.deepEqual(saved.actions, []);
+  if (record === 'unreadable') fs.rmdirSync(log);
+  fs.writeFileSync(log, before);
+  assert.equal(f.apply().summary, f.entry.message, 'replay after record recovery preserves the original payload');
+  assert.equal(f.calls.length, 0);
+});
 test('promoted queue notice handles its bound run and a closed item is a no-op', t => {
   const f = setup(t, [{ result: 'recorded_promotion' }]), project = f.entry.project;
   fs.mkdirSync(path.join(project.identity, 'promote'), { recursive: true });
@@ -223,27 +258,35 @@ test('inbox consumes routine results before any Herdr delivery and retains origi
   assert.equal(entry.message, f.entry.message); assert.equal(entry.state, 'handled');
   assert.ok(entry.autopilot.receipt.startsWith(receiptDirectory(f.org, f.entry.project.identity)));
 });
-for (const notice of ['report', 'promotion', 'unknown'])
+for (const notice of ['report', 'promotion', 'unknown', 'missing-record-intermediate'])
 test(`${notice} exception delivery preserves the exact original notice through the existing input gate`, async t => {
   const f = setup(t, [{ result: 'something-new', reason: 'Unrecognised result' }]);
   if (notice === 'report') f.entry.message += ' with  repeated spaces\nOriginal report detail.';
   if (notice === 'promotion') f.entry.message = '[promote-queue] id=job lane=topic outcome=promoted reason="landed; lane close: held lane-promote.lock"\nOriginal cleanup detail.';
   if (notice === 'unknown') f.entry.message = '[new-notice]  Original text\nDetails with trailing spaces.  ';
+  if (notice === 'missing-record-intermediate') {
+    f.entry.message = `[watch-long-running] run=${f.run} item=${f.item} worker=lane-nine still-running=2m`;
+    fs.unlinkSync(path.join(f.org, 'events.jsonl'));
+  }
   const herdr = path.join(f.root, 'delivery-herdr.mjs');
   fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';
 const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(f.root, 'calls'))},JSON.stringify(args)+'\\n');
 if(args[0]==='agent'&&args[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',pane_id:'fake:p1',agent_status:'idle'}}}));
 else if(args[0]==='pane'&&args[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log('{}');\n`, { mode: 0o755 });
-  const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id: 'exception',
+  const id = notice === 'missing-record-intermediate' ? `watch:${f.run}:long-running` : 'exception';
+  const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id,
     herdr, executeAutopilot: f.execute, waitSeconds: 2, confirmSeconds: 0, pollSeconds: 0.01 });
   assert.equal(result.delivered, true);
   const entry = readInbox(result.inbox)[0], prompts = f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt');
   assert.ok(prompts.length >= 1);
-  assert.equal(prompts[0][3], `${entry.autopilot.summary} notice-id=exception`);
+  assert.equal(prompts[0][3], `${entry.autopilot.summary} notice-id=${id}`);
   const delivered = prompts[0][3];
   assert.equal(delivered.slice(0, f.entry.message.length), f.entry.message);
-  assert.match(delivered.slice(f.entry.message.length), /^\n\[autopilot\] [^\n]+ receipt=\S+ notice-id=exception$/);
+  if (notice !== 'report')
+    assert.equal(delivered, `${f.entry.message} notice-id=${id}`);
+  else assert.match(delivered.slice(f.entry.message.length), /^\n\[autopilot\] [^\n]+ receipt=\S+ notice-id=exception$/);
+  if (notice === 'promotion') assert.match(JSON.parse(fs.readFileSync(entry.autopilot.receipt)).reason, /promotion queue binding/);
   assert.equal(entry.autopilot.disposition, 'wake');
   assert.equal(entry.message, f.entry.message);
 });

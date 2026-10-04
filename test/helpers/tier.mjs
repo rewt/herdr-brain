@@ -55,6 +55,7 @@ const promotion = [
   'settle/test/record-recovery.test.mjs',
   'settle/test/record-safety.test.mjs',
   'settle/test/train.test.mjs',
+  'supervisor/test/autopilot.test.mjs',
   'test/approvals.test.mjs',
   'test/discernment.test.mjs',
   'test/file-wait.test.mjs',

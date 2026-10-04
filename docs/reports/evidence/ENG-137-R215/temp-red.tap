@@ -1,0 +1,30 @@
+TAP version 13
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+not ok 1 - real live discovery setup confines a short fleet temp with no project configuration
+  ---
+  duration_ms: 713.690042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'run temp root /private/tmp/herdr-session-asXffy/.herdr-monitor/t/91aa75c51b2dc87a needs 76 bytes; maximum is 60 for Unix socket paths; select a shorter fleet temp root'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    runTemporary (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/discovery/temporary.mjs:16:25)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/live-session.test.mjs:74:21
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 2 - real live-worker arguments reach the installed adapter with its supported private temp grant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.059875
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 746.427792

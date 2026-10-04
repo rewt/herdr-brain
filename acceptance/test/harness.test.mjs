@@ -27,13 +27,17 @@ const until = async fn => {
 
 test('the real scripted supervisor presents an empty composer before publishing idle and after each notice', async t => {
   const root = scratch(t);
-  for (const file of ['worker.mjs', 'producers.mjs']) fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
+  for (const file of ['worker.mjs', 'producers.mjs', 'environment.mjs']) fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
   fs.copyFileSync(path.join(source, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
-  fs.writeFileSync(path.join(root, 'herdr.mjs'), `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(path.join(root, 'states'))},process.argv.join(' ')+'\\n');console.log('{"result":{}}');`);
+  fs.writeFileSync(path.join(root, 'herdr.mjs'), `import fs from 'node:fs';fs.writeFileSync(${JSON.stringify(path.join(root, 'worker-environment.json'))},JSON.stringify(process.env));fs.appendFileSync(${JSON.stringify(path.join(root, 'states'))},process.argv.join(' ')+'\\n');console.log('{"result":{}}');`);
   const child = spawnChild(t, process.execPath, [path.join(root, 'worker.mjs'), root, 'supervisor', 'offline-supervisor'],
     { env: { ...process.env, HERDR_PANE_ID: 'owned:pane' }, stdio: ['pipe', 'pipe', 'pipe'] });
   let output = ''; child.stdout.on('data', bytes => { output += bytes; });
   await until(() => fs.existsSync(path.join(root, 'script-panes/owned:pane')));
+  const workerEnv = JSON.parse(fs.readFileSync(path.join(root, 'worker-environment.json'), 'utf8'));
+  assert.equal(workerEnv.HERDR_MONITOR_FLEET, path.join(root, 'f'));
+  assert.equal(workerEnv.HOME, path.join(root, 'home'));
+  assert.equal(workerEnv.CODEX_HOME, path.join(root, 'home/.codex'));
   assert.equal(composerEmpty(output, 'codex'), true, output);
   child.stdin.write('[org-report] run=R-1 report=/scratch/report\n');
   await until(() => output.includes('[org-report]'));

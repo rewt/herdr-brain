@@ -1,0 +1,64 @@
+TAP version 13
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+not ok 1 - real live discovery setup confines a short fleet temp with no project configuration
+  ---
+  duration_ms: 655.635917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: "ENOENT: no such file or directory, open '/private/tmp/oh-jGF6xx/f52189/fleet.json'"
+  code: 'ENOENT'
+  stack: |-
+    Object.readFileSync (node:fs:449:20)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/live-session.test.mjs:70:31
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 2 - real live-worker arguments reach the installed adapter with its supported private temp grant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060584
+  ...
+# Subtest: entry case environment bootstraps only the scratch fleet despite inherited operator homes
+not ok 3 - entry case environment bootstraps only the scratch fleet despite inherited operator homes
+  ---
+  duration_ms: 2.333708
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + '/private/tmp/oh-Z8YuP9/f52225/fleet.json'
+    - '/private/tmp/ah-c4UfQY/scratch/f/fleet.json'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '/private/tmp/ah-c4UfQY/scratch/f/fleet.json'
+  actual: '/private/tmp/oh-Z8YuP9/f52225/fleet.json'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/product-homes.test.mjs:22:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: case guard refuses real-home fleet resolution and symlink redirects before product execution
+ok 4 - case guard refuses real-home fleet resolution and symlink redirects before product execution # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.099667
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 689.925041

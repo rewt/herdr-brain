@@ -9,6 +9,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { quote } from '../discovery/runtime.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
+import { scratchProductHomes, assertScratchHomes } from './environment.mjs';
+import { fleetPath } from '../lib/fleet.mjs';
 
 const { values } = parseArgs({ options: { candidate: { type: 'string' }, 'native-codex': { type: 'string' } } });
 if (!values.candidate || !values['native-codex']) throw new Error('usage: node acceptance/plugin-entry.mjs --candidate FINAL_PRODUCT_DIRECTORY --native-codex ABSOLUTE_NATIVE_CODEX');
@@ -23,7 +25,7 @@ const root = fs.mkdtempSync('/private/tmp/e80-native-');
 const evidence = path.join(root, 'evidence'); fs.mkdirSync(evidence);
 const home = path.join(root, 'home'), source = path.join(root, 'source'), project = path.join(root, 'project'), nativeBin = path.join(root, 'native-bin');
 for (const dir of [home, source, project, nativeBin]) fs.mkdirSync(dir);
-const env = { ...process.env, HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'), TMPDIR: path.join(root, 'tmp'),
+const env = { ...process.env, ...scratchProductHomes(root, home), HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'), TMPDIR: path.join(root, 'tmp'),
   ORG_ACTOR: `eng80-native-${process.pid}`, ORG_DIR: '', OPENAI_API_KEY: 'scratch-ui-no-network',
   PATH: `${nativeBin}:${process.env.PATH}`, HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'),
   HERDR_MONITOR_CODEX: path.join(nativeBin, 'codex'), HERDR_MONITOR_CLAUDE: '-', HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
@@ -32,6 +34,7 @@ const env = { ...process.env, HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(h
   GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SHELL: '/bin/zsh',
   XDG_CONFIG_HOME: path.join(home, '.config'), XDG_STATE_HOME: path.join(home, '.local/state'), XDG_DATA_HOME: path.join(home, '.local/share'),
   HERDR_CONFIG_PATH: path.join(home, '.config/herdr/config.toml') };
+assertScratchHomes(env, [root], { realHome: process.env.HOME, fleetFile: fleetPath(env) });
 for (const key of ['HERDR_SOCKET_PATH', 'HERDR_WORKSPACE_ID', 'HERDR_TAB_ID', 'HERDR_PANE_ID', 'HERDR_PLUGIN_ROOT', 'HERDR_PLUGIN_CONTEXT_JSON', 'HERDR_SESSION_NAME', 'HERDR_BIN_PATH']) delete env[key];
 fs.mkdirSync(env.TMPDIR); fs.mkdirSync(env.CODEX_HOME);
 fs.mkdirSync(path.dirname(env.HERDR_CONFIG_PATH), { recursive: true }); fs.writeFileSync(env.HERDR_CONFIG_PATH, '');

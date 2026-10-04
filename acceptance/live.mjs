@@ -7,11 +7,11 @@ import { permissionArgs, sessionEnv, policyWitness } from './security.mjs';
 import { boundaryScript, liveSocket } from './probe.mjs';
 import { HarnessLimit, isHarnessBoundary, isProductBoundary, commandFailure } from './limits.mjs';
 import { createVerification } from './verify.mjs';
-import { createOwnedTempRoot } from './temp.mjs';
+import { createOwnedTempRoot, createLiveSessionTemp } from './temp.mjs';
 import { copyNativeTransport } from './transport.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
 
-export async function discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
+export async function discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, authHome = process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex'), test, pending, initRepo, run, node, git: trustedGit, h, until, write, read }) {
   const model = opt['discovery-model'] ?? 'gpt-5.6-luna', effort = opt['discovery-effort'] ?? 'low';
   const usage = [];
   const verifiers = new Map();
@@ -40,14 +40,15 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
     ...Object.fromEntries(['checkout', 'branch', 'work_id', 'run_id', 'question_id', 'result'].map((name) => [name, { type: 'string' }])),
   } }));
   fs.copyFileSync(path.join(import.meta.dirname, 'security.mjs'), path.join(root, 'security.mjs'));
+  fs.copyFileSync(path.join(import.meta.dirname, 'environment.mjs'), path.join(root, 'environment.mjs'));
   const nativeTransport = copyNativeTransport(root);
 
   const live = async (repo, name, task) => {
     const binary = fs.realpathSync(run('which', ['codex'], { extra: { PATH: process.env.PATH } }).stdout.trim());
-    const temp = createOwnedTempRoot('/private/tmp/herdr-session-', scratchRoots, discoveryRoots);
+    const temp = createLiveSessionTemp(scratchRoots, discoveryRoots);
     const runtimeHome = path.join(root, 'codex-runtime', name);
     fs.mkdirSync(runtimeHome, { recursive: true, mode: 0o700 });
-    const auth = path.join(process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex'), 'auth.json');
+    const auth = path.join(authHome, 'auth.json');
     if (!fs.existsSync(auth)) throw new HarnessLimit('file-based Codex authentication unavailable for isolated discovery runtime');
     fs.copyFileSync(auth, path.join(runtimeHome, 'auth.json'));
     fs.chmodSync(path.join(runtimeHome, 'auth.json'), 0o600);

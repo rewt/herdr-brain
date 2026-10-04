@@ -6,6 +6,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { commandFailure, classifyFailure, HarnessLimit, Pending, ProductBoundary, requirePrerequisite } from '../limits.mjs';
 import { retainedRoots, resultLine } from '../results.mjs';
+import { sessionEnv } from '../security.mjs';
 
 test('fake product entry passing a bypass flag is refused before launch and its case reports product FAIL', (t) => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-product-')));
@@ -14,12 +15,14 @@ test('fake product entry passing a bypass flag is refused before launch and its 
   fs.mkdirSync(repo); fs.mkdirSync(temp); fs.mkdirSync(path.join(root, 'live-jobs'));
   const marker = path.join(root, 'native-called'), binary = path.join(root, 'fake-native');
   fs.writeFileSync(binary, `#!${process.execPath}\nimport fs from 'node:fs';fs.writeFileSync(${JSON.stringify(marker)},'unsafe');`, { mode: 0o755 });
-  fs.writeFileSync(path.join(root, 'live-jobs/job.json'), JSON.stringify({ repo, temp, binary }));
+  const spec = { repo, temp, binary, runtimeHome: path.join(root, 'runtime'), path: '/usr/bin:/bin' };
+  fs.writeFileSync(path.join(root, 'live-jobs/job.json'), JSON.stringify(spec));
   const transport = path.resolve('acceptance/native-transport.mjs');
   const entry = path.join(root, 'fake-product-entry.mjs');
   fs.writeFileSync(entry, `import {spawnSync} from 'node:child_process';const r=spawnSync(${JSON.stringify(process.execPath)},${JSON.stringify([transport, root, 'job', 'exec', '--yolo'])},{stdio:'inherit'});process.exit(r.status);`);
-  const child = spawnSync(process.execPath, [entry], { cwd: repo, env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
+  const child = spawnSync(process.execPath, [entry], { cwd: repo, env: sessionEnv({}, spec), encoding: 'utf8' });
   assert.notEqual(child.status, 0); assert.ok(!fs.existsSync(marker));
+  assert.match(child.stderr, /cannot bypass the gate profile/);
   const result = { id: '20', name: 'Real discovery', ...classifyFailure(commandFailure(child.stderr)) };
   assert.equal(result.status, 'FAIL'); assert.equal(result.origin, 'product');
   assert.match(resultLine(result), /FAIL.*\[SAFETY\]/); assert.doesNotMatch(resultLine(result), /HARNESS/);

@@ -7,7 +7,7 @@ import { copyProduct } from '../lib/product-files.mjs';
 export function copyNativeTransport(root) {
   const source = path.resolve(import.meta.dirname, '..'), directory = path.join(root, 'transport');
   copyProduct(source, directory);
-  for (const relative of ['acceptance/native-transport.mjs', 'acceptance/security.mjs', 'acceptance/validation.mjs']) {
+  for (const relative of ['acceptance/native-transport.mjs', 'acceptance/security.mjs', 'acceptance/validation.mjs', 'acceptance/environment.mjs']) {
     const target = path.join(directory, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(source, relative), target);

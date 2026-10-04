@@ -1,0 +1,110 @@
+TAP version 13
+# Subtest: retry context and cutover aggregate preserve heavy-load PENDING
+ok 1 - retry context and cutover aggregate preserve heavy-load PENDING
+  ---
+  duration_ms: 1.432875
+  ...
+# Subtest: retry context and cutover aggregate preserve normal-load FAIL
+ok 2 - retry context and cutover aggregate preserve normal-load FAIL
+  ---
+  duration_ms: 0.30875
+  ...
+# Subtest: a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+ok 3 - a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure
+  ---
+  duration_ms: 48.994042
+  ...
+# Subtest: settle bounded child timeout is PENDING with its operation samples
+ok 4 - settle bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 319.390666
+  ...
+# Subtest: settle report deadline is PENDING with its own wait samples
+ok 5 - settle report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 6699.855584
+  ...
+# Subtest: settle bounded child timeout is FAIL with its operation samples
+ok 6 - settle bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 305.539792
+  ...
+# Subtest: settle report deadline is FAIL with its own wait samples
+ok 7 - settle report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 5340.317417
+  ...
+# Subtest: settle independent child assertion failure stays FAIL under heavy load
+ok 8 - settle independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 204.821542
+  ...
+# Subtest: supervisor bounded child timeout is PENDING with its operation samples
+ok 9 - supervisor bounded child timeout is PENDING with its operation samples
+  ---
+  duration_ms: 972.17425
+  ...
+# Subtest: supervisor report deadline is PENDING with its own wait samples
+ok 10 - supervisor report deadline is PENDING with its own wait samples
+  ---
+  duration_ms: 7834.807208
+  ...
+# Subtest: supervisor bounded child timeout is FAIL with its operation samples
+ok 11 - supervisor bounded child timeout is FAIL with its operation samples
+  ---
+  duration_ms: 994.810875
+  ...
+# Subtest: supervisor report deadline is FAIL with its own wait samples
+ok 12 - supervisor report deadline is FAIL with its own wait samples
+  ---
+  duration_ms: 6678.522084
+  ...
+# Subtest: supervisor independent child assertion failure stays FAIL under heavy load
+ok 13 - supervisor independent child assertion failure stays FAIL under heavy load
+  ---
+  duration_ms: 886.1455
+  ...
+# Subtest: supervisor queue deadline is PENDING with queue-operation samples
+ok 14 - supervisor queue deadline is PENDING with queue-operation samples
+  ---
+  duration_ms: 14378.844208
+  ...
+# Subtest: supervisor queue deadline is FAIL with queue-operation samples
+ok 15 - supervisor queue deadline is FAIL with queue-operation samples
+  ---
+  duration_ms: 12619.358917
+  ...
+# Subtest: delegated fixture setup timeout also cleans its owned root before returning
+ok 16 - delegated fixture setup timeout also cleans its owned root before returning
+  ---
+  duration_ms: 106.0635
+  ...
+# Subtest: entry case environment bootstraps only the scratch fleet despite inherited operator homes
+ok 17 - entry case environment bootstraps only the scratch fleet despite inherited operator homes
+  ---
+  duration_ms: 395.144709
+  ...
+# Subtest: case guard refuses real-home fleet resolution and symlink redirects before product execution
+ok 18 - case guard refuses real-home fleet resolution and symlink redirects before product execution
+  ---
+  duration_ms: 7.236917
+  ...
+# Subtest: delegated scratch cases restore product homes after their fixture scrubs machine variables
+ok 19 - delegated scratch cases restore product homes after their fixture scrubs machine variables
+  ---
+  duration_ms: 1.326333
+  ...
+# Subtest: in-process cases use the real fleetPath under scratch homes and restore the caller after failure
+ok 20 - in-process cases use the real fleetPath under scratch homes and restore the caller after failure
+  ---
+  duration_ms: 1.914958
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 57426.914084

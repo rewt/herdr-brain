@@ -35,6 +35,6 @@ export function boundaryScript({ repo, temp, candidate, root, socket, gitProbe }
     const head=git('rev-parse','acceptance-git-proof');git('update-ref','refs/acceptance/probe',head);assert.equal(git('rev-parse','refs/acceptance/probe'),head);
     const connection=net.createConnection(${literal(socket)});
     await new Promise((resolve,reject)=>{const t=setTimeout(()=>{connection.destroy();reject(Error('socket probe timed out'))},${loadTimeout(2000)});connection.once('connect',()=>{clearTimeout(t);connection.destroy();reject(Error('direct live Herdr socket allowed'))});connection.once('error',e=>{clearTimeout(t);if(['EPERM','EACCES'].includes(e.code))resolve();else reject(e)})});
-    assert.ok(!Object.keys(process.env).some(k=>/^(HERDR|ACCEPTANCE)/.test(k)));
+    assert.ok(!Object.keys(process.env).some(k=>/^(HERDR|ACCEPTANCE)/.test(k)&&!${JSON.stringify(['HERDR_MONITOR_FLEET', 'HERDR_MONITOR_HOME', 'HERDR_MONITOR_BIN', 'HERDR_MONITOR_ENTRY_BIN', 'HERDR_MONITOR_PLIST', 'HERDR_ORG_CONSOLE_CONFIG'])}.includes(k)));
     console.log(JSON.stringify({blocked:[...blocked,'live-herdr-socket'],git:{commit:head,worktree,ref:'refs/acceptance/probe'},writable:[${literal(repo)},${literal(temp)}],socket:${literal(socket)}}));`;
 }

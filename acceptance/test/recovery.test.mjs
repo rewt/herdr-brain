@@ -210,7 +210,7 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
 test('stopping an individual idle PTY worker leaves the run admission barrier open', async t => {
   const root = scratch(t);
   fs.copyFileSync(path.join(here, '../lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
-  for (const file of ['worker.mjs', 'producers.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
+  for (const file of ['worker.mjs', 'producers.mjs', 'environment.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
   fs.writeFileSync(path.join(root, 'herdr.mjs'), "console.log('{\"result\":{}}');");
   const child = spawnChild(t, process.execPath, [path.join(root, 'worker.mjs'), root, 'worker', 'offline-worker'], {
     stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, HERDR_PANE_ID: 'owned:pane', ORG_ACTOR: 'eng107-r131-idle-worker' },

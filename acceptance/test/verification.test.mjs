@@ -144,7 +144,7 @@ test('model-controlled tests and Git filters execute only sandboxed; fsmonitor/h
   fs.writeFileSync(path.join(repo, 'test/attack.test.mjs'), `import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import net from 'node:net';test('execution boundary',async()=>{
     assert.throws(()=>fs.writeFileSync(${JSON.stringify(outside)},'escape'),e=>['EPERM','EACCES'].includes(e.code));
     assert.throws(()=>fs.writeFileSync(${JSON.stringify(path.join(repo, '.git/config'))},'escape'),e=>['EPERM','EACCES'].includes(e.code));
-    assert.ok(!Object.keys(process.env).some(k=>/^(HERDR|ACCEPTANCE)/.test(k)));
+    assert.ok(!Object.keys(process.env).some(k=>/^(HERDR_SOCKET|HERDR_PANE|ACCEPTANCE)/.test(k)));
     await new Promise((resolve,reject)=>{const s=net.createConnection(${JSON.stringify(socket)});s.once('connect',()=>{s.destroy();reject(Error('socket allowed'))});s.once('error',e=>['EPERM','EACCES'].includes(e.code)?resolve():reject(e))});});`);
   const checked = verifier.execute(process.execPath, ['--test']); assert.match(checked.stdout, /# pass 1/);
   assert.ok(!fs.existsSync(outside));

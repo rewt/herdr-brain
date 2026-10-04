@@ -13,7 +13,7 @@ const log = path.join(root, 'evidence', `${name}.jsonl`);
 const errors = path.join(root, 'evidence', `${name}.stderr`);
 const out = fs.openSync(log, 'w'), err = fs.openSync(errors, 'w');
 const child = spawn(spec.entryBinary ?? spec.binary, [...(spec.entryBinary ? ['--'] : ['--no-daemon']), 'exec',
-  '--ephemeral', '--ignore-user-config', '--ignore-rules', '--add-dir', spec.temp, '--json',
+  '--ephemeral', '--ignore-user-config', '--ignore-rules', ...(spec.entryBinary ? [] : ['--add-dir', spec.temp]), '--json',
   ...permissionArgs(spec), '--output-schema', spec.schema,
   ...(spec.entryBinary ? [] : ['-C', spec.repo]), '--model', spec.model, '-c', `model_reasoning_effort=${spec.effort}`,
   '-c', `log_dir=${JSON.stringify(path.join(root, 'codex-logs'))}`,

@@ -99,7 +99,9 @@ test('real session environment removes capability, identity and credential overr
   const spec = { temp: '/scratch/session', runtimeHome: '/readonly/runtime', repo: '/scratch/project', installation: '/readonly/product', path: '/readonly/bin:/usr/bin', name: 'worker', toolRoots: ['/usr'] };
   const clean = sessionEnv({ HERDR_ENV: '1', HERDR_SOCKET: 'live', ACCEPTANCE_ROOT: 'ledger', OPENAI_API_KEY: 'secret', ORG_DIR: 'live', LANE_CONFIG: 'live', LANG: 'C' }, spec);
   assert.equal(clean.TMPDIR, spec.temp); assert.equal(clean.HOME, spec.temp);
-  assert.ok(!Object.keys(clean).some((k) => /^(HERDR|ACCEPTANCE|OPENAI|LANE)/.test(k)));
+  assert.ok(!Object.keys(clean).some((k) => /^(ACCEPTANCE|OPENAI|LANE)/.test(k)));
+  assert.equal(clean.HERDR_MONITOR_FLEET, path.join(spec.temp, 'f'));
+  assert.equal(clean.HERDR_SOCKET, undefined); assert.equal(clean.HERDR_ENV, undefined);
   assert.ok(!('ORG_DIR' in clean));
   const profile = permissionArgs(spec).join(' ');
   assert.match(profile, /":root"="deny"/); assert.match(profile, /":slash_tmp"="deny"/);

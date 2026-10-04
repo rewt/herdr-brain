@@ -8,15 +8,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { fixture } from '../settle/test/fixture.mjs';
 import { loadAwareCommand } from './commands.mjs';
 import { waitUntil } from './load.mjs';
+import { scratchFixtureCommand, scratchProductHomes, enterScratchHomes } from './environment.mjs';
 
 export async function supervisorCase(candidate, { load, execute = spawnSync,
   until = (fn, label, ms) => waitUntil(fn, label, ms, { load }) } = {}) {
   const cleanup = [], receipts = [];
   const previousActor = process.env.ORG_ACTOR;
+  let restoreHomes;
   process.env.ORG_ACTOR = 'supervisor-acceptance-entry';
   try {
     const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate,
-      actor: 'supervisor-acceptance-worker', execute: loadAwareCommand(execute, load) });
+      actor: 'supervisor-acceptance-worker', execute: scratchFixtureCommand(loadAwareCommand(execute, load)) });
+    restoreHomes = enterScratchHomes(scratchProductHomes(f.root, f.env.HOME), [f.root]);
     const { createEntry } = await import(pathToFileURL(path.join(candidate, 'discovery/runtime.mjs')));
     const { entryPolicy } = await import(pathToFileURL(path.join(candidate, 'discovery/policy.mjs')));
     const command = (args) => {
@@ -113,6 +116,7 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     return { receipts, calls: f.calls(), final_policy: finalPolicy,
       detail: `${run} -> ${handled.fix.run}: fresh/history/restarted supervisor entry; actual watch -> settle -> independent finding -> watched fix -> PASS -> supervisor judgment -> queue gate/FF/close -> guarded record completion; duplicate original reports return supersession, correction reports reuse receipts; queue and final-report replays preserve explicit reopening; no config or model` };
   } finally {
+    restoreHomes?.();
     if (previousActor === undefined) delete process.env.ORG_ACTOR; else process.env.ORG_ACTOR = previousActor;
     for (const fn of cleanup) await fn();
   }

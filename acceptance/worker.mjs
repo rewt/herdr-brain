@@ -6,6 +6,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn } from 'node:child_process';
 import { registerProducer, assertProducing, producersStopping } from './producers.mjs';
+import { scratchProductHomes, assertScratchHomes } from './environment.mjs';
 const [root, role, name] = process.argv.slice(2);
 const producer = registerProducer(root, `script-${role}`);
 let activeChild, workerStopping = false;
@@ -21,12 +22,16 @@ const pane = process.env.HERDR_PANE_ID;
 // dispatch environment files inside the same scratch capability boundary.
 const slotFile = path.join(root, 'test-slot-env.json');
 const slotEnv = fs.existsSync(slotFile) ? JSON.parse(fs.readFileSync(slotFile)) : {};
-const env = { ...process.env, ...slotEnv, ACCEPTANCE_ROOT: root, TMPDIR: root };
+const homesFile = path.join(root, 'product-home-env.json');
+const homes = fs.existsSync(homesFile) ? JSON.parse(fs.readFileSync(homesFile)) : { realHome: process.env.HOME, homes: scratchProductHomes(root) };
+const env = { ...process.env, ...slotEnv, ...homes.homes, ACCEPTANCE_ROOT: root, TMPDIR: root, TMP: root, TEMP: root };
+const checkHomes = selected => assertScratchHomes(selected, homes.roots ?? [root], { realHome: homes.realHome });
+checkHomes(env);
 async function command(binary, args, options = {}, timeout = 90_000) {
   if (workerStopping) throw new Error('scripted worker stopped; no further commands allowed');
   assertProducing(root);
   return await new Promise((resolve, reject) => {
-    const child = activeChild = spawn(binary, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = activeChild = spawn(binary, args, { ...options, env: checkHomes(options.env ?? env), stdio: ['ignore', 'pipe', 'pipe'] });
     producer.child(child.pid);
     let stdout = '', stderr = '', killTimer, spawnError;
     child.stdout.on('data', value => { stdout += value; });
@@ -73,6 +78,8 @@ function defaultCycle() {
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(scoped)) if (/^(ORG_|LANE_|MONITOR_|HERDR_)/.test(key)) delete scoped[key];
   Object.assign(scoped, slotEnv);
+  Object.assign(scoped, scratchProductHomes(root, spec.home));
+  scoped.HERDR_MONITOR_FLEET = env.HERDR_MONITOR_FLEET;
   scoped.ORG_ACTOR = name;
   const node = (file, args, extra = {}) => command(process.execPath, [path.join(root, 'candidate', file), ...args], {
     cwd: spec.repo, env: { ...scoped, ...extra },

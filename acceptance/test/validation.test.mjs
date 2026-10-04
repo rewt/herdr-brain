@@ -8,25 +8,28 @@ import { sandboxCommand } from '../../discovery/confinement.mjs';
 import { lifetimeScope, closeScope } from '../../discovery/lifetime.mjs';
 import { validationTransport } from '../validation.mjs';
 import { copyNativeTransport } from '../transport.mjs';
-import { joinFleet } from '../../lib/fleet.mjs';
+import { createLiveSessionTemp } from '../temp.mjs';
+import { sessionEnv } from '../security.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
 const discovered = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout?.trim();
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'av-')));
-  const entries = [];
+  const entries = [], scratchRoots = [];
+  const temp = createLiveSessionTemp(scratchRoots);
   t.after(() => {
     try { for (const entry of entries) entry.close(); }
-    finally { fs.rmSync(root, { recursive: true, force: true }); }
+    finally { for (const directory of [...scratchRoots, root]) fs.rmSync(directory, { recursive: true, force: true }); }
   });
-  const repo = path.join(root, 'project'), temp = path.join(root, 'h');
-  fs.mkdirSync(repo); fs.mkdirSync(temp);
+  const repo = path.join(root, 'project');
+  fs.mkdirSync(repo);
   for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Test'], ['config', 'user.email', 'test@example.invalid']]) command('git', args, repo);
   fs.mkdirSync(path.join(repo, 'test'));
   fs.writeFileSync(path.join(repo, 'test/green.test.mjs'), "import test from 'node:test';test('green',()=>{});\n");
   command('git', ['add', '.'], repo); command('git', ['commit', '-qm', 'Seed'], repo);
-  const spec = { name: 'offline', repo, temp, installation: source, toolRoots: [],
+  const spec = { name: 'offline', repo, temp, runtimeHome: path.join(root, 'runtime-home'), path: process.env.PATH, installation: source, toolRoots: [],
     entryBinary: '/installed/monitor-codex', gitCommon: path.join(repo, '.git'), worktreeRoot: path.join(temp, 'lanes') };
+  fs.mkdirSync(spec.runtimeHome);
   return { root, repo, temp, spec, entries };
 }
 
@@ -102,19 +105,14 @@ test('actual native transport validates and promotes work and approved routes of
     const previous = { ...process.env };
     for (const key of Object.keys(process.env)) if (/^(ORG_|LANE_|MONITOR_|GIT_|HERDR_|ACCEPTANCE_)/u.test(key)) delete process.env[key];
     delete process.env.NODE_TEST_CONTEXT;
-    // The native transport rejects every HERDR_ capability. Use a scratch home
-    // for default fleet/console discovery while preserving that exact boundary.
-    Object.assign(process.env, { HOME: temp, TMPDIR: temp,
-      GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', OPENSSL_CONF: '/dev/null' });
+    // Use exactly the live session's short home/fleet and scrubbed environment.
+    Object.assign(process.env, sessionEnv(previous, spec));
     t.after(() => { for (const key of Object.keys(process.env)) delete process.env[key]; Object.assign(process.env, previous); });
-    // Keep the actual per-run path within the native 60-byte socket budget
-    // without leaking HERDR_ capabilities into the validation transport.
-    joinFleet({ cwd: repo, temp: path.join(temp, 't') });
     const outside = path.join(root, 'private-canary'); fs.writeFileSync(outside, 'private');
     const options = { cwd: repo, sandboxBinary: native, runtimeDir: path.join(temp, 'runtime'), worktreeRoot: spec.worktreeRoot };
     for (const taskName of ['work', 'routes']) {
       const entry = createEntry(options); entries.push(entry);
-      const fleet = JSON.parse(fs.readFileSync(path.join(temp, '.herdr-monitor/fleet.json'), 'utf8'));
+      const fleet = JSON.parse(fs.readFileSync(path.join(temp, 'f/fleet.json'), 'utf8'));
       assert.deepEqual(Object.keys(fleet.projects), ['project']);
       assert.equal(fleet.projects.project.checkout, repo);
       assert.equal(fleet.projects.project.record, path.join(repo, '.org'));
@@ -127,7 +125,8 @@ test('actual native transport validates and promotes work and approved routes of
       fs.writeFileSync(path.join(task.workspace, 'test/confinement.test.mjs'), `import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import net from 'node:net';import path from 'node:path';
         test('gate and product boundaries',async()=>{
           const runtimeTemp=fs.realpathSync(process.env.TMPDIR);
-          assert.equal(path.dirname(runtimeTemp),${JSON.stringify(path.join(temp, 't'))});
+          assert.equal(path.dirname(runtimeTemp),${JSON.stringify(fleet.projects.project.temp)});
+          assert.ok(Buffer.byteLength(runtimeTemp)<=60);
           assert.match(path.basename(runtimeTemp),/^r-[A-Za-z0-9]{6}$/);
           assert.equal(process.env.TMP,runtimeTemp);assert.equal(process.env.TEMP,runtimeTemp);
           const temporary=fs.mkdtempSync(path.join(process.env.TMPDIR,'gate-proof-'));

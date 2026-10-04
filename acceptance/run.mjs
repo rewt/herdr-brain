@@ -2,6 +2,7 @@
 // Explicit local release gate; deliberately outside npm test.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -17,7 +18,7 @@ import { retainedRoots, resultLine, gateOutcome } from './results.mjs';
 import { liveSocket } from './probe.mjs';
 import { cases, cutoverChecks, runCase } from './cases.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
-import { createOwnedTempRoot } from './temp.mjs';
+import { createOwnedTempRoot, createLiveSessionTemp } from './temp.mjs';
 import { assertLaunchRefused, assertLaunchPrompted, launchCreations } from './launch.mjs';
 import { switches, switchedFiles, capture, restore, callers, retireContrib, callerInventory } from './cutover.mjs';
 import { settleCase } from './settle.mjs';
@@ -25,16 +26,17 @@ import { supervisorCase } from './supervisor.mjs';
 import { assertSupervisorEntry } from './entry.mjs';
 import { startFocusMonitor, assertFocus } from './focus.mjs';
 import { cleanupWorkspaces, cleanupInboxes } from './cleanup.mjs';
-import { testSlotEnvironment } from './environment.mjs';
+import { testSlotEnvironment, scratchProductHomes, assertScratchHomes, enterScratchHomes } from './environment.mjs';
+import { fleetPath } from '../lib/fleet.mjs';
 import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 
 export function harnessEnvironment(input, root) {
   const env = { ...input };
   for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_)/.test(key)) delete env[key];
-  Object.assign(env, testSlotEnvironment(input), { ACCEPTANCE_ROOT: root, TMPDIR: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+  Object.assign(env, testSlotEnvironment(input), scratchProductHomes(root), { ACCEPTANCE_ROOT: root, TMPDIR: root, TMP: root, TEMP: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     ORG_ACTOR: 'release-acceptance-setup', npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
-  return env;
+  return assertScratchHomes(env, [root], { realHome: input.HOME, fleetFile: fleetPath(env) });
 }
 
 export async function runCutoverCases({ results, test, switches, retirement, scratchRoots }) {
@@ -74,6 +76,7 @@ const { values: opt } = parseArgs({ options: {
 } });
 if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--bch-cloak LIVE_REPO] [--keep]'); process.exit(2); }
 const scratchRoots = [];
+const realHome = os.homedir(), authHome = process.env.CODEX_HOME ?? path.join(realHome, '.codex');
 const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-'), scratchRoots);
 const evidence = path.join(root, 'evidence');
 fs.mkdirSync(evidence);
@@ -86,6 +89,12 @@ let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
 const discoveryRoots = [];
 const env = harnessEnvironment(process.env, root);
+// General cases also enter native validation. Keep their machine fleet short,
+// separately owned and included in the same cleanup registry.
+const fleetRoot = createLiveSessionTemp(scratchRoots, discoveryRoots);
+env.HERDR_MONITOR_FLEET = path.join(fleetRoot, 'f');
+fs.mkdirSync(env.HOME, { recursive: true });
+const checkHomes = selected => assertScratchHomes(selected, scratchRoots, { realHome, fleetFile: fleetPath(selected) });
 const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value); };
 const read = (file) => fs.readFileSync(file, 'utf8');
 const json = (text) => { const v = JSON.parse(text); return v.result ?? v; };
@@ -99,7 +108,7 @@ const executeCommand = loadAwareCommand((command, args, options) => {
 }, load, { scratchRoots });
 function run(command, args, { cwd = root, extra = {}, ok = true, timeout = 60_000, input, binary = false, isolatedEnv, duringCleanup = false } = {}) {
   if (stopping && !duringCleanup) throw new Pending('run interrupted; no further candidate commands allowed');
-  const r = executeCommand(command, args, { cwd, env: isolatedEnv ?? { ...env, ...extra }, encoding: binary ? undefined : 'utf8',
+  const r = executeCommand(command, args, { cwd, env: checkHomes(isolatedEnv ?? { ...env, ...extra }), encoding: binary ? undefined : 'utf8',
     input, maxBuffer: 32 * 1024 * 1024, timeout });
   if (ok && r.status !== 0) {
     const diagnostic = ((binary ? '' : String(r.stdout ?? '')) + String(r.stderr ?? '')).trim();
@@ -111,11 +120,12 @@ const scratchHome = path.join(root, 'copy-home'); fs.mkdirSync(scratchHome);
 const copiedPolicy = path.join(root, 'copied.sb');
 // Independent kernel write boundary: copied code cannot escape through a
 // dynamically computed record path even if a textual audit misses its spelling.
-write(copiedPolicy, copiedSandbox(root, [fs.realpathSync(path.join(path.dirname(process.execPath), '..'))]));
+write(copiedPolicy, copiedSandbox(root, [fs.realpathSync(path.join(path.dirname(process.execPath), '..'))])
+  + `(allow file-read* file-write* (subpath ${JSON.stringify(fleetRoot)}))\n`);
 let liveCopyReady = false, copy, live;
 function runCopy(command, args, options = {}) {
   if (!liveCopyReady) throw new Error('copied scripts were not successfully relocated/audited');
-  auditCopies(copy, { live, home: process.env.HOME });
+  auditCopies(copy, { live, home: realHome });
   const org = options.extra?.ORG_DIR;
   if (!org || !fs.existsSync(org) || !within(root, org)) throw new Error('copied invocation requires an explicit scratch ORG_DIR');
   // Allow the installed native Herdr executable only as a tool for the scoped
@@ -134,6 +144,10 @@ const requireCandidate = (file) => { if (!present(file)) pending(`candidate lack
 async function test(definition, fn) {
   if (stopping && ![cases.cleanup.key, cases.focus.key].includes(definition.key)) throw new Pending('run interrupted');
   const previousActor = env.ORG_ACTOR;
+  checkHomes(env);
+  // Some offline cases call product modules in this process. Give them the
+  // same machine homes as subprocesses, restoring operator context afterward.
+  const restoreHomes = enterScratchHomes(env, scratchRoots, { realHome, fleetFile: fleetPath(env) });
   env.ORG_ACTOR = `release-acceptance-${definition.key}`;
   const window = load.begin();
   const id = String(results.length + 1).padStart(2, '0');
@@ -148,7 +162,10 @@ async function test(definition, fn) {
     result.load = load.snapshot(window);
     result.evidence = `${id}.jsonl`;
     return result;
-  } finally { logFile = undefined; env.ORG_ACTOR = previousActor; }
+  } finally {
+    logFile = undefined; env.ORG_ACTOR = previousActor;
+    restoreHomes();
+  }
 }
 async function until(fn, label, ms = 25_000) {
   return waitUntil(() => {
@@ -372,6 +389,7 @@ try {
     fs.copyFileSync(path.join(SOURCE, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
     for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs', 'environment.mjs', 'poll.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
     write(path.join(root, 'test-slot-env.json'), JSON.stringify(testSlotEnvironment(env)));
+    write(path.join(root, 'product-home-env.json'), JSON.stringify({ realHome, roots: [...scratchRoots], homes: Object.fromEntries(Object.keys(scratchProductHomes(root)).map(key => [key, env[key]])) }));
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     write(path.join(bin, 'herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'herdr.mjs'))} "$@"\n`); fs.chmodSync(path.join(bin, 'herdr'), 0o755);
     for (const name of ['codex', 'claude', 'ai', 'cmem-domain', 'launchctl']) {
@@ -637,12 +655,12 @@ try {
       for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
         const file = path.join(directory, entry.name);
         if (entry.isDirectory()) { transform(file); continue; }
-        write(file, relocate(read(file), { live, home: process.env.HOME, scratchHome, copy, candidate, root,
+        write(file, relocate(read(file), { live, home: realHome, scratchHome, copy, candidate, root,
           launcher: file === path.join(copy, 'scripts/lane/launch-supervisor.mjs') })
           .replaceAll('wFN', supervisor.workspace).replaceAll('supervisor-opus', supervisor.name).replaceAll('supervisor-fable', supervisor.name));
       }
     };
-    transform(copy); auditCopies(copy, { live, home: process.env.HOME }); liveCopyReady = true;
+    transform(copy); auditCopies(copy, { live, home: realHome }); liveCopyReady = true;
     return 'live launcher already uses current/contrib; extra callers: dispatch, notify, tidy, settle, stage and promotion/desks (inventory retained)';
   });
   const existingReady = () => { requirePrerequisite(results, cases.copy.key); requirePrerequisite(results, cases.fixture.key); };
@@ -775,7 +793,7 @@ try {
     const base = switchedFiles({ copy, candidate, workspace: supervisor.workspace, target, legacyTarget: supervisor.name, home: scratchHome });
     cutover = { originals, base, target, pane, org, rec };
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
-    auditCopies(copy, { live, home: process.env.HOME });
+    auditCopies(copy, { live, home: realHome });
     const execute = (rel, args = [], options = {}) => runCopy(rel.endsWith('.mjs') ? process.execPath : '/bin/zsh',
       [...(rel.endsWith('.mjs') ? [] : ['-f']), path.join(copy, rel), ...args], { cwd: copy, extra: { ORG_DIR: org, HERDR_PANE_ID: pane }, ...options });
     const persona = path.join(root, 'cutover-persona');
@@ -996,7 +1014,7 @@ try {
     return 'negative caller probe refused; zero-caller retirement executed; split launcher tests ran without contrib; blob restored before all legacy callers';
   };
   await runCutoverCases({ results, test, switches: switchCase, retirement: retirementCase, scratchRoots });
-  await discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
+  await discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, authHome, test, pending, initRepo, run, node, git, h, until, write, read });
   await test(cases.defaultCycle, async () => {
     for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs', 'discovery/adapters/codex.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);
     requirePrerequisite(results, cases.fixture.key);

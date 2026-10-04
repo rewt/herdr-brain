@@ -9,13 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { fixture } from '../settle/test/fixture.mjs';
 import { loadAwareCommand } from './commands.mjs';
 import { waitUntil } from './load.mjs';
+import { scratchFixtureCommand } from './environment.mjs';
 
 export async function settleCase(candidate, { load, execute = spawnSync,
   until = (fn, label, ms) => waitUntil(fn, label, ms, { load }) } = {}) {
   const cleanup = [], receipts = [];
   try {
     const f = fixture({ after: (fn) => cleanup.push(fn) }, { source: candidate,
-      actor: 'settle-acceptance-worker', execute: loadAwareCommand(execute, load) });
+      actor: 'settle-acceptance-worker', execute: scratchFixtureCommand(loadAwareCommand(execute, load)) });
     const run = f.start(); f.commit('wrong\n'); f.report(run);
     const first = f.settle(run); assert.equal(first.status, 0, first.stderr);
     const fix = JSON.parse(first.stdout); receipts.push(fix);

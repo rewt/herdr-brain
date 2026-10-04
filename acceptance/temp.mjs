@@ -13,3 +13,7 @@ export function createOwnedTempRoot(prefix, scratchRoots, cleanupRoots) {
   if (cleanupRoots) cleanupRoots[cleanupRoots.length - 1] = canonical;
   return canonical;
 }
+
+// Leave room for the default fleet's /t/<16-byte identity>/r-XXXXXX layout.
+export const createLiveSessionTemp = (scratchRoots, cleanupRoots) =>
+  createOwnedTempRoot('/tmp/as-', scratchRoots, cleanupRoots);

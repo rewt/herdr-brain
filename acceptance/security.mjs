@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { scratchProductHomes, assertScratchHomes } from './environment.mjs';
 
 export const within = (root, target) => {
   const relative = path.relative(fs.realpathSync(root), fs.realpathSync(target));
@@ -71,9 +72,9 @@ export function sessionEnv(inherited, spec) {
   // Explicit allowlist: no Herdr/socket/capability variables or inherited
   // credentials, shell startup, routing, record or approval overrides.
   for (const key of ['LANG', 'LC_ALL', 'TERM']) if (inherited[key]) env[key] = inherited[key];
-  Object.assign(env, { HOME: spec.temp, TMPDIR: spec.temp, CODEX_HOME: spec.runtimeHome,
+  Object.assign(env, scratchProductHomes(spec.temp, spec.temp), { TMPDIR: spec.temp, CODEX_HOME: spec.runtimeHome,
     PATH: spec.path, ORG_ACTOR: spec.name, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', OPENSSL_CONF: '/dev/null' });
-  return env;
+  return assertScratchHomes(env, [spec.temp, spec.runtimeHome]);
 }
 
 export function permissionFilesystem({ repo, temp, installation, toolRoots, entryBinary, gitCommon, worktreeRoot, probeGit }, { gitWrites = !entryBinary, projectWrites = true, validation = false } = {}) {
@@ -83,7 +84,7 @@ export function permissionFilesystem({ repo, temp, installation, toolRoots, entr
     'MERGE_HEAD', 'MERGE_MSG', 'MERGE_MODE', 'AUTO_MERGE', 'worktrees',
   ].map((name) => [name, 'write'])), 'worktrees/**/config*': 'deny', 'worktrees/**/hooks': 'deny' } : 'read';
   const filesystem = { ':root': 'deny', ':minimal': 'read', ':slash_tmp': 'deny',
-    ':tmpdir': validation ? 'read' : 'write', ':workspace_roots': { '.': projectWrites ? 'write' : 'read', '.git': 'read' }, [installation]: 'read' };
+    ':tmpdir': validation ? 'read' : 'write', ':workspace_roots': { '.': projectWrites ? 'write' : 'read', '.git': 'read' }, [installation]: 'read', [temp]: 'read' };
   for (const directory of toolRoots) filesystem[directory] = 'read';
   if (entryBinary) filesystem[repo] = 'read'; // lane cwd stays writable; shared record is readable
   // Every extra grant is inside the session's existing project/temp roots.

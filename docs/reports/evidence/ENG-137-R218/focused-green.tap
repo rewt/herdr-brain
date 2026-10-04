@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+ok 1 - fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+  ---
+  duration_ms: 46.319041
+  ...
+# Subtest: candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+ok 2 - candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+  ---
+  duration_ms: 0.318875
+  ...
+# Subtest: cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+ok 3 - cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+  ---
+  duration_ms: 0.668542
+  ...
+# Subtest: ordinary product entry and source-attribution gaps fail without a safety or harness marker
+ok 4 - ordinary product entry and source-attribution gaps fail without a safety or harness marker
+  ---
+  duration_ms: 0.196458
+  ...
+# Subtest: dependent cutover/default-cycle cases preserve prerequisite causes and origins
+ok 5 - dependent cutover/default-cycle cases preserve prerequisite causes and origins
+  ---
+  duration_ms: 0.229458
+  ...
+# Subtest: native transport prioritizes bypass refusal and still blocks capability leaks before launch
+ok 6 - native transport prioritizes bypass refusal and still blocks capability leaks before launch
+  ---
+  duration_ms: 125.426917
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 153.52

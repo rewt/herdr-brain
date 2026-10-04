@@ -9,6 +9,11 @@ import { validationTransport } from './validation.mjs';
 import { assertScratchHomes } from './environment.mjs';
 import { fleetPath } from '../lib/fleet.mjs';
 const [root, name, ...args] = process.argv.slice(2);
+// A bypass request has its own refusal, even when the entry also leaks
+// capabilities. Check every argument before the environment/root guards.
+for (const arg of args) {
+  assert.ok(!/^(?:--dangerously|--yolo|--sandbox|--full-auto)/.test(arg), 'acceptance_product_boundary: product entry cannot bypass the gate profile');
+}
 const spec = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs', `${name}.json`), 'utf8'));
 try { assertScratchHomes(process.env, [spec.temp, spec.runtimeHome], { fleetFile: fleetPath(process.env) }); }
 catch (error) { throw new Error(`acceptance_product_boundary: ${error.message}`); }
@@ -16,7 +21,6 @@ assert.ok(within(spec.repo, process.cwd()) || within(spec.temp, process.cwd()), 
 assert.equal(process.env.HERDR_MONITOR_FLEET, path.join(spec.temp, 'f'), 'acceptance_product_boundary: product entry redirected fleet');
 assert.ok(!Object.keys(process.env).some((k) => /^(HERDR|ACCEPTANCE)/.test(k) && !['HERDR_MONITOR_FLEET', 'HERDR_MONITOR_HOME', 'HERDR_MONITOR_BIN', 'HERDR_MONITOR_ENTRY_BIN', 'HERDR_MONITOR_PLIST', 'HERDR_ORG_CONSOLE_CONFIG'].includes(k)), 'acceptance_product_boundary: product entry leaked capabilities');
 for (let i = 0; i < args.length; i++) {
-  assert.ok(!/^(?:--dangerously|--yolo|--sandbox|--full-auto)/.test(args[i]), 'acceptance_product_boundary: product entry cannot bypass the gate profile');
   const equals = args[i].match(/^(?:--cd|--add-dir)=(.*)$/);
   const short = args[i].match(/^-C(.+)$/);
   if (!equals && !short && !['-C', '--cd', '--add-dir'].includes(args[i])) continue;

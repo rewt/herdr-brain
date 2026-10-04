@@ -2,6 +2,7 @@
 // existing console; every interactive label has both a key focus and a hit box.
 import path from 'node:path';
 import { cropTerminalSpans } from './terminal.mjs';
+import { sessionScreenRows } from './session-screen.mjs';
 import { cutSpans } from '../lib/frame.mjs';
 import { pad, clip, wrap, sanitize, cellWidth } from '../lib/text.mjs';
 import { projectRows, composeModes, currentBlock, checkoutName } from './project.mjs';
@@ -521,14 +522,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     const screen = s.terminalFrame;
     if (!screen) row(' Taking the terminal from Herdr…', { fg: 'terminalFg', bg: 'terminalBg' });
     else {
-      const start = Math.max(0, screen.height - available), shownWidth = Math.min(screen.width, width), cursor = screen.cursor;
-      screen.lines.slice(start).forEach((line, i) => {
-        let grid = cropTerminalSpans(line.spans, 0, shownWidth);
-        if (cursor?.visible && cursor.y === start + i && cursor.x < shownWidth) {
-          grid = [...cutSpans(grid, 0, cursor.x), ...cutSpans(grid, cursor.x, cursor.x + 1).map(c => ({ ...c, inverse: !c.inverse })), ...cutSpans(grid, cursor.x + 1, shownWidth)];
-        }
-        row('', { bg: 'terminalBg', native: true, spans: [...grid, ...(width > shownWidth ? [ss(' '.repeat(width - shownWidth), 'terminalFg', 'terminalBg')] : [])] });
-      });
+      sessionScreenRows(screen, width, available).forEach(spans => row('', { bg: 'terminalBg', native: true, spans }));
     }
   } else if (s.view === 'output') {
     const agents = m.sessions.filter(a => a.tab === s.tab), active = agents.find(a => a.pane === s.pane);

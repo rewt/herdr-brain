@@ -99,10 +99,11 @@ for (const [name, value] of Object.entries({
   unparsed: { result: 'promotable_with_findings', review: { verdict: 'NEEDS-WORK' }, findings: 'uncertain severity' },
   noPASS: { result: 'promotable' },
   cappedUnknown: { result: 'fix_round', review: { verdict: 'NEEDS-WORK' }, review_policy: { cap: 1, round: 1 } },
-})) test(`${name} result wakes with a compact summary and receipt`, t => {
+})) test(`${name} result wakes with the original notice, reason and receipt`, t => {
   const f = setup(t, [value]), result = f.apply();
   assert.equal(result.disposition, 'wake'); assert.ok(fs.existsSync(result.receipt));
-  assert.ok(!result.summary.includes('\n')); assert.ok(result.summary.includes(result.receipt));
+  assert.ok(result.summary.startsWith(`${f.entry.message}\n[autopilot] `));
+  assert.ok(result.summary.includes(result.receipt));
   assert.equal(f.calls.length, 1);
 });
 for (const kind of ['STOP', 'paused', 'kill', 'invalidConfig', 'nullConfig', 'nullPolicy', 'reserved', 'category', 'questions', 'blocked', 'foreign', 'torn', 'superseded', 'incomplete'])
@@ -222,8 +223,12 @@ test('inbox consumes routine results before any Herdr delivery and retains origi
   assert.equal(entry.message, f.entry.message); assert.equal(entry.state, 'handled');
   assert.ok(entry.autopilot.receipt.startsWith(receiptDirectory(f.org, f.entry.project.identity)));
 });
-test('exception delivery uses the compact summary and receipt through the existing input gate', async t => {
+for (const notice of ['report', 'promotion', 'unknown'])
+test(`${notice} exception delivery preserves the exact original notice through the existing input gate`, async t => {
   const f = setup(t, [{ result: 'something-new', reason: 'Unrecognised result' }]);
+  if (notice === 'report') f.entry.message += ' with  repeated spaces\nOriginal report detail.';
+  if (notice === 'promotion') f.entry.message = '[promote-queue] id=job lane=topic outcome=promoted reason="landed; lane close: held lane-promote.lock"\nOriginal cleanup detail.';
+  if (notice === 'unknown') f.entry.message = '[new-notice]  Original text\nDetails with trailing spaces.  ';
   const herdr = path.join(f.root, 'delivery-herdr.mjs');
   fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';
 const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(f.root, 'calls'))},JSON.stringify(args)+'\\n');
@@ -236,8 +241,10 @@ else console.log('{}');\n`, { mode: 0o755 });
   const entry = readInbox(result.inbox)[0], prompts = f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt');
   assert.ok(prompts.length >= 1);
   assert.equal(prompts[0][3], `${entry.autopilot.summary} notice-id=exception`);
-  assert.ok(prompts[0][3].includes('receipt='));
-  assert.ok(prompts[0][3].startsWith(`[org-report] run=${f.run} `));
+  const delivered = prompts[0][3];
+  assert.equal(delivered.slice(0, f.entry.message.length), f.entry.message);
+  assert.match(delivered.slice(f.entry.message.length), /^\n\[autopilot\] [^\n]+ receipt=\S+ notice-id=exception$/);
+  assert.equal(entry.autopilot.disposition, 'wake');
   assert.equal(entry.message, f.entry.message);
 });
 test('a busy chat drain cannot prevent a routine policy action', async t => {

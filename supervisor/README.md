@@ -53,8 +53,8 @@ only when its run and journal match the retained project-bound settlement and
 error. Every other nonzero exit wakes with its evidence and cannot authorize retry.
 A lost reply or interrupted sequence wakes instead of replaying commands. The
 inbox retains the complete original notice and records its handled/wake disposition
-and receipt. Exceptions retain the fixed report envelope for foreground `handle`
-compatibility; their narrative is replaced by the compact reason and receipt.
+and receipt. Exceptions deliver the complete original notice unchanged for
+foreground `handle`, followed by the autopilot reason and receipt on their own line.
 Legacy/custom inbox entries without a project binding keep their delivery path.
 
 For exceptions, the helper aligns with bch-cloak's `prompt-supervisor.sh` and

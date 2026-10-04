@@ -95,10 +95,9 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
   const file = path.join(receiptDirectory(project.org, project.identity), 'autopilot', `${digest(key)}.json`);
   let receipt = { policy: POLICY, key, project, notice: entry.message, notice_id: entry.id, actions: [], started: new Date().toISOString() }, release;
   const save = () => writeFileAtomic(file, JSON.stringify(receipt, null, 2) + '\n', 0o600);
-  // Keep the fixed report envelope so existing foreground handle callers can
-  // route an exception; narrative is replaced by bounded policy evidence.
-  const summary = reason => report ? `[org-report] run=${report[1]} item=${report[2]} outcome=${report[3]} headline=autopilot: ${line(reason)} receipt=${file}`
-    : `[autopilot] ${promotion?.[1] ?? 'notice'} ${line(reason)} receipt=${file}`;
+  // Foreground handle callers need the complete original notice. Append policy
+  // evidence on its own line without rewriting the envelope or narrative.
+  const summary = reason => `${entry.message}\n[autopilot] ${report?.[1] ?? promotion?.[1] ?? 'notice'} ${line(reason)} receipt=${file}`;
   const finish = (disposition, reason) => {
     receipt.disposition = disposition; receipt.reason = line(reason); receipt.finished = new Date().toISOString(); save();
     return { disposition, receipt: file, summary: summary(reason) };

@@ -38,10 +38,11 @@ do not reach chat. The action receipts retain commands and acknowledgements;
 without model calls or writes. See [README.md](README.md) for the kill switch and
 receipt paths. STOP or paused housekeeping disables automatic actions.
 
-Exceptions wake with one line and a receipt path: FAIL, capped Major, refusals,
+Exceptions wake with the complete original notice unchanged, followed by the
+autopilot reason and receipt path on their own line: FAIL, capped Major, refusals,
 train/release failures or gate results, non-done/no-report workers, questions,
 unknown or uncertain results, and operator-reserved categories. Read the receipt
-and its retained original notice before choosing a recovery command. An
+before choosing a recovery command. An
 interrupted policy command is never automatically replayed. The policy does not
 answer operator questions, publish, rank priorities, or start housekeeping.
 

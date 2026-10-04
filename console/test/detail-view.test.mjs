@@ -52,6 +52,31 @@ test('Tab changes panels and remembers each row; report opens with its review an
   await session.key('', { escape: true }); assert.equal(session.ui.detail.kind, 'run'); assert.equal(session.ui.detailScroll, scroll); assert.equal(output(session), before);
 });
 
+test('Shift reverses only Tab; shifted arrows and j/k keep their row direction', async t => {
+  const f = actionableFixture(t);
+  f.queue.pending.push({ id: 'second', topic: 'another-lane', run: 'R-4', queued: at(1) });
+  fs.writeFileSync(f.queueFile, JSON.stringify(f.queue));
+  const session = createMinimalSession({ config: f.config, deps: f.deps, env: { NO_COLOR: '1' } });
+  t.after(() => session.stop()); await session.refresh(); session.frame(100, 30); await session.activate('run:R-2');
+  session.frame(100, 18);
+  for (const [input, key, scroll] of [
+    ['', { downArrow: true, shift: true }, 1], ['j', { shift: true }, 2],
+    ['', { upArrow: true, shift: true }, 1], ['k', { shift: true }, 0],
+  ]) {
+    await session.key(input, key); assert.equal(session.ui.detailScroll, scroll); session.frame(100, 18);
+  }
+  await session.key('', { tab: true }); session.frame(100, 30); assert.equal(session.ui.detailFocus, 'report');
+  await session.key('', { tab: true, shift: true }); session.frame(100, 30); assert.equal(session.ui.detailFocus, 'overview');
+  // Exercise link focus as well as the text scrolling above.
+  await session.activate('back'); session.frame(100, 30); await session.activate('train:waiting'); session.frame(100, 30);
+  const first = session.ui.detailFocus;
+  await session.key('', { downArrow: true, shift: true }); const second = session.ui.detailFocus;
+  assert.notEqual(second, first);
+  await session.key('k', { shift: true }); assert.equal(session.ui.detailFocus, first);
+  await session.key('j', { shift: true }); assert.equal(session.ui.detailFocus, second);
+  await session.key('', { upArrow: true, shift: true }); assert.equal(session.ui.detailFocus, first);
+});
+
 test('live train views work with and without clocks and follow their batch to a refusal without opening an agent', async t => {
   for (const telemetry of [true, false]) {
     const f = actionableFixture(t, { telemetry });

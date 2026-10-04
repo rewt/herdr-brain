@@ -91,6 +91,10 @@ and React load dynamically only when the minimal profile prepares its renderer;
 other `--print` profiles and their tests do not need them. Install optional UI
 dependencies with `npm --prefix console ci`. Tests requiring Ink visibly skip
 when the packages are absent; run them in an installed checkout to validate views.
+The dependency-free `session-input.mjs` parser handles Esc, Meta, CSI and SS3
+before any bytes reach a session. Bare or repeated Esc and partial CSI/SS3
+return without forwarding the chunk; complete Alt+arrow sequences retain their
+bytes. Its tests run in the promotion tier even when Ink and React are absent.
 
 This is the native-spaces design connected to live org and Herdr data, with
 the September 20 operator-study repairs. It is a live trial whose only writes

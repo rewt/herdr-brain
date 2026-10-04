@@ -6,6 +6,7 @@
 import { spawn } from 'node:child_process';
 import { sanitize } from '../lib/text.mjs';
 import { createTerminalDecoder, track, validPane, MAX_LINE } from './terminal.mjs';
+export { BACK_KEY, splitInput } from './session-input.mjs';
 
 const fits = (cols, rows) => Number.isSafeInteger(cols) && Number.isSafeInteger(rows) && cols > 0 && rows > 0 && cols <= 400 && rows <= 160;
 
@@ -59,17 +60,4 @@ export function controlTerminal({ pane, cols, rows, onFrame, onError, onClose, b
     scroll(direction, lines = 3) { send({ type: 'terminal.scroll', direction: direction === 'up' ? 'up' : 'down', lines }); },
     release, stop: release,
   };
-}
-
-// Mouse reports belong to the console (Back, tabs, the wheel); everything else
-// the operator types goes to the session, except the key that returns.
-export const BACK_KEY = '\x1d'; // Ctrl+]
-const MOUSE = /\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[M[\s\S]{3}/g;
-export function splitInput(data) {
-  // A Buffer keeps its exact bytes through latin1; a decoded string is UTF-8.
-  const encoding = Buffer.isBuffer(data) ? 'latin1' : 'utf8';
-  const text = Buffer.isBuffer(data) ? data.toString('latin1') : String(data);
-  const back = text.includes(BACK_KEY);
-  const before = back ? text.slice(0, text.indexOf(BACK_KEY)) : text;
-  return { back, bytes: Buffer.from(before.replace(MOUSE, ''), encoding) };
 }

@@ -102,11 +102,11 @@ test('snapshot activation never opens a control stream', async () => {
   finally { session.stop(); }
 });
 
-test('Esc encoded by extended keyboard protocols returns without interrupting the pane', async () => {
+test('bare, repeated, partial and encoded Esc return without any pane input', async () => {
   const { session, controllers } = fixture();
   try {
     await session.refresh();
-    for (const escape of ['\x1b', '\x1b[27u', '\x1b[27;1u', '\x1b[27;1:1u', '\x1b[27;1;27~']) {
+    for (const escape of ['\x1b', '\x1b\x1b', '\x1b\x1bhello', 'hello\x1b', '\x1b[', '\x1bO', '\x1b[27u', '\x1b[27;1u', '\x1b[27;1:1u', '\x1b[27;1;27~']) {
       session.frame(80, 24); await session.key('', { return: true });
       const c = controllers.at(-1); await session.input(Buffer.from(escape));
       assert.equal(session.ui.view, 'table'); assert.equal(c.inputs.length, 0); assert.equal(c.stopped, true);
@@ -121,7 +121,7 @@ test('Meta keys retain every byte and the session opens at its full viewport wid
   try {
     await session.refresh(); session.frame(180, 40); await session.key('', { return: true });
     const c = controllers[0]; assert.deepEqual([c.cols, c.rows], [180, 38]); assert.deepEqual(c.sizes, []);
-    for (const input of ['\x1b\r', '\x1bb', '\x1bf', '\x1b\x7f', '\x1bq', '\x1b会話', '\x1b[']) {
+    for (const input of ['\x1b\r', '\x1bb', '\x1bf', '\x1b\x7f', '\x1bq', '\x1b会話', '\x1b\x1b[A', '\x1b\x1bOP']) {
       await session.input(Buffer.from(input)); assert.deepEqual(c.inputs.at(-1), Buffer.from(input)); assert.equal(session.ui.view, 'output');
     }
     await session.input(Buffer.from('\x1b')); assert.equal(session.ui.view, 'table');

@@ -35,6 +35,7 @@ const promotion = [
   'console/test/modern.test.mjs',
   'console/test/names.test.mjs',
   'console/test/paint.test.mjs',
+  'console/test/session-input.test.mjs',
   'console/test/sources.test.mjs',
   'console/test/terminal.test.mjs',
   'console/test/waiting.test.mjs',

@@ -5,7 +5,8 @@ import { herdrAgents, herdrList, orgStatus } from '../lib/cli.mjs';
 import { createSessionReader } from '../lib/sources.mjs';
 import { catalog, createIdentityReader, workspaceIdentity } from './model.mjs';
 import { minimalRows } from './minimal.mjs';
-import { controlTerminal, splitInput } from './control.mjs';
+import { controlTerminal } from './control.mjs';
+import { parseSessionInput } from './session-input.mjs';
 import { createFeedReader, reportFeed } from './feed.mjs';
 import { createDetailReader } from './details.mjs';
 import { loadMinimalRenderer } from './minimal-renderer.mjs';
@@ -217,12 +218,13 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       if (ui.view === 'detail') {
         const l = lastDetail;
         if (!l) return false;
-        const step = key.upArrow || input === 'k' || key.shift ? -1 : 1;
         if (key.tab) {
+          const step = key.shift ? -1 : 1;
           const index = l.sections.findLastIndex(s => s.index <= ui.detailScroll || s.id === ui.detailFocus);
           const next = l.sections[(index + step + l.sections.length) % l.sections.length];
           ui.detailFocus = next.id; ui.detailScroll = next.index;
         } else if (key.upArrow || key.downArrow || input === 'j' || input === 'k') {
+          const step = key.upArrow || input === 'k' ? -1 : 1;
           const focused = l.lines.find(line => line.id === ui.detailFocus), panel = focused?.section ?? ui.detailFocus;
           const links = l.lines.filter(line => line.link && (ui.document.list || line.section === panel));
           if (links.length) {
@@ -282,27 +284,9 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
     },
     async input(data) {
       if (ui.view !== 'output' || !ui.interactive) return false;
-      const { back: returnKey, bytes } = splitInput(data);
-      const text = bytes.toString('latin1');
-      let forwarded = '', leave = returnKey;
-      for (let i = 0; i < text.length; i++) {
-        if (text[i] === '\x1c') { if (forwarded) controller?.input(Buffer.from(forwarded, 'latin1')); forwarded = ''; controller?.input(Buffer.from('\x1b')); }
-        else if (text[i] === '\x1b') {
-          // Preserve arrows/function keys and Meta/Alt pairs. Only a bare,
-          // chunk-final Esc (or the explicit Esc encodings) returns.
-          const sequence = /^(?:\x1b\[[0-?]*[ -/]*[@-~]|\x1bO[ -~])/.exec(text.slice(i))?.[0];
-          if (/^\x1b\[27(?:;[\d:]+)*u$|^\x1b\[27;\d+;27~$|^\x1b\[93;5(?::[12])?u$/.test(sequence ?? '')) { leave = true; break; }
-          if (/^\x1b\[(?:28(?:;1)?|92;5(?::[12])?)u$/.test(sequence ?? '')) {
-            if (forwarded) controller?.input(Buffer.from(forwarded, 'latin1'));
-            forwarded = ''; controller?.input(Buffer.from('\x1b')); i += sequence.length - 1;
-          }
-          else if (sequence) { forwarded += sequence; i += sequence.length - 1; }
-          else if (i + 1 < text.length) { forwarded += text.slice(i, i + 2); i++; }
-          else { leave = true; break; }
-        } else forwarded += text[i];
-      }
-      if (forwarded) controller?.input(Buffer.from(forwarded, 'latin1'));
+      const { back: leave, bytes } = parseSessionInput(data);
       if (leave) back();
+      else if (bytes.length) controller?.input(bytes);
       return true;
     },
     tree(cols, rows) { return view(cols, rows).tree; },

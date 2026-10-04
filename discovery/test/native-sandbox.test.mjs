@@ -19,6 +19,13 @@ function fixture(t) {
   const context = { workspace: own.checkout, canonical: own.checkout, org: own.record, tempRoot: own.temp, projects: [other] };
   const binary = path.join(root, 'native');
   fs.writeFileSync(binary, '#!/bin/sh\nif [ "$1" = --help ] || [ "$2" = --help ]; then echo "--sandbox --add-dir --settings --permission-profile"; elif [ "$1" = --version ]; then echo "2.1.284"; fi\n', { mode: 0o755 });
+  const codexHome = path.join(root, 'codex'); fs.mkdirSync(codexHome);
+  const claudeHome = path.join(root, 'claude'); fs.mkdirSync(claudeHome);
+  // Fixtures never inherit the operator's real permission choices.
+  for (const [key, value] of Object.entries({ CODEX_HOME: codexHome, CLAUDE_CONFIG_DIR: claudeHome })) {
+    const before = process.env[key]; process.env[key] = value;
+    t.after(() => { if (before === undefined) delete process.env[key]; else process.env[key] = before; });
+  }
   return { root, own, other, context, binary };
 }
 
@@ -62,10 +69,10 @@ test('Codex uses native workspace roots, excludes system temp and retains hook t
   assert.equal(launch.env.TMPDIR, launch.env.TMP); assert.equal(launch.env.TMP, launch.env.TEMP);
 });
 
-test('legacy Codex uses writable roots with system temp excluded and refuses sandbox bypass', t => {
+test('legacy Codex uses writable roots with system temp excluded', t => {
   const f = fixture(t);
   fs.writeFileSync(f.binary, '#!/bin/sh\nif [ "$1" = --help ]; then echo "--sandbox --add-dir"; fi\n', { mode: 0o755 });
-  const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: ['--sandbox', 'workspace-write', 'Task'], context: f.context });
+  const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: ['Task'], context: f.context });
   t.after(launch.close);
   assert.ok(launch.args.includes('sandbox_mode="workspace-write"'));
   assert.ok(!launch.args.includes('--sandbox'));
@@ -73,7 +80,6 @@ test('legacy Codex uses writable roots with system temp excluded and refuses san
   assert.deepEqual(roots, [f.own.record, launch.env.TMPDIR]);
   assert.ok(launch.args.includes('sandbox_workspace_write.exclude_slash_tmp=true'));
   assert.ok(launch.args.includes('sandbox_workspace_write.exclude_tmpdir_env_var=true'));
-  assert.throws(() => nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: ['--dangerously-bypass-approvals-and-sandbox'], context: f.context }), /bypass/u);
 });
 
 test('Claude gets per-session native write settings and keeps existing hooks', t => {
@@ -115,6 +121,115 @@ test('unsupported harness runs with a visible warning and its own temp', t => {
   assert.deepEqual(launch.args, ['Task']); assert.equal(warnings.length, 1);
   assert.match(warnings[0], /WARNING.*native sandbox.*unconfined/u);
   assert.equal(path.dirname(launch.env.TMPDIR), f.own.temp);
+});
+
+test('Codex respects inherited and CLI sandbox choices with one source-naming warning', t => {
+  const f = fixture(t), file = path.join(process.env.CODEX_HOME, 'config.toml');
+  fs.writeFileSync(file, 'sandbox_mode = "danger-full-access"\n');
+  const choices = [
+    { args: ['Task'], source: file },
+    { args: ['-c', 'sandbox_mode="danger-full-access"', 'Task'], source: '-c' },
+    { args: ['-c', 'sandbox_mode=danger-full-access', 'Task'], source: '-c' },
+    { args: ['-csandbox_mode="danger-full-access"', 'Task'], source: '-c' },
+    { args: ['--config=sandbox_mode="danger-full-access"', 'Task'], source: '--config' },
+    { args: ['--sandbox', 'danger-full-access', 'Task'], source: '--sandbox' },
+    { args: ['--yolo', 'Task'], source: '--yolo' },
+    { args: ['--dangerously-bypass-approvals-and-sandbox', 'Task'], source: '--dangerously-bypass-approvals-and-sandbox' },
+  ];
+  for (const choice of choices) {
+    const warnings = [];
+    const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: choice.args, context: f.context, warn: s => warnings.push(s) });
+    t.after(launch.close);
+    assert.deepEqual(launch.args, choice.args, 'the operator sandbox choice remains untouched');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /WARNING.*sandbox_mode.*danger-full-access/u);
+    assert.ok(warnings[0].includes(choice.source), warnings[0]);
+  }
+  fs.writeFileSync(file, '# no base override\n');
+  const profile = path.join(process.env.CODEX_HOME, 'weaker.config.toml');
+  fs.writeFileSync(profile, 'sandbox_mode = "danger-full-access"\n');
+  const warnings = [], args = ['--profile', 'weaker', 'Task'];
+  const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args, context: f.context, warn: s => warnings.push(s) }); t.after(launch.close);
+  assert.deepEqual(launch.args, args); assert.equal(warnings.length, 1); assert.ok(warnings[0].includes(profile));
+});
+
+test('Claude preserves interpreter exclusions from loaded settings and names their source once', t => {
+  const f = fixture(t), file = path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json');
+  fs.writeFileSync(file, JSON.stringify({ sandbox: { excludedCommands: ['node'] } }));
+  for (const args of [['Task'], ['--settings', JSON.stringify({ sandbox: { excludedCommands: ['python'] } }), 'Task']]) {
+    const warnings = [];
+    const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args, context: f.context, warn: s => warnings.push(s) });
+    t.after(launch.close);
+    const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+    assert.ok(!settings.sandbox.excludedCommands || settings.sandbox.excludedCommands.includes('python'));
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).sandbox.excludedCommands, ['node']);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /WARNING.*sandbox.excludedCommands/u);
+    assert.ok(warnings[0].includes(file));
+    if (args.includes('--settings')) assert.ok(warnings[0].includes('--settings'));
+  }
+});
+
+test('Claude preserves undeclared directories and sibling temp grants with one source-naming warning', t => {
+  const f = fixture(t), file = path.join(f.own.checkout, '.claude/settings.local.json');
+  fs.mkdirSync(path.dirname(file));
+  const inherited = { permissions: { additionalDirectories: [f.root] }, sandbox: { filesystem: { allowWrite: [f.own.temp] } } };
+  fs.writeFileSync(file, JSON.stringify(inherited));
+  const warnings = [], hooks = { Stop: [{ hooks: [{ type: 'command', command: 'herdr-agent-state.sh' }] }] };
+  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: ['--settings', JSON.stringify({ hooks, permissions: { additionalDirectories: [f.other.temp] }, sandbox: { filesystem: { allowWrite: [f.own.temp] } } }), 'Task'], context: f.context, warn: s => warnings.push(s) });
+  t.after(launch.close);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file)), inherited);
+  const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+  assert.deepEqual(settings.permissions.additionalDirectories, [f.other.temp]);
+  assert.ok(settings.sandbox.filesystem.allowWrite.includes(f.own.temp), 'the supplied sibling temp grant is preserved');
+  assert.deepEqual(settings.hooks, hooks);
+  assert.equal(warnings.length, 1);
+  for (const setting of ['permissions.additionalDirectories', 'sandbox.filesystem.allowWrite', file, '--settings']) assert.ok(warnings[0].includes(setting), warnings[0]);
+});
+
+test('nested fleet roots refuse before launch in both Codex paths and Claude', t => {
+  const f = fixture(t);
+  for (const kind of ['codex', 'claude']) for (const modern of [true, false]) {
+    fs.writeFileSync(f.binary, `#!/bin/sh\nif [ "$1" = --help ] || [ "$2" = --help ]; then echo "--sandbox --add-dir --settings ${modern ? '--permission-profile' : ''}"; elif [ "$1" = --version ]; then echo "2.1.284"; fi\n`, { mode: 0o755 });
+    for (const own of [f.own.checkout, f.own.record, f.own.temp, f.own.worktrees]) for (const key of ['checkout', 'record', 'temp', 'worktrees']) {
+      const nested = path.join(own, `peer-${key}`); fs.mkdirSync(nested, { recursive: true });
+      const context = { ...f.context, worktrees: f.own.worktrees, projects: [{ ...f.other, [key]: nested }] };
+      assert.throws(() => nativeSandboxLaunch({ kind, binary: f.binary, args: [], context }), /overlapping fleet.*peer-/u);
+    }
+    assert.throws(() => nativeSandboxLaunch({ kind, binary: f.binary, args: [], context: { ...f.context, projects: [{ ...f.other, checkout: f.root }] } }), /overlapping fleet/u);
+  }
+});
+
+test('workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside', t => {
+  const f = fixture(t), protectedPath = path.join(f.own.checkout, '.lane/discovery');
+  fs.mkdirSync(protectedPath, { recursive: true });
+  const requests = path.join(f.own.temp, 'queue'); fs.mkdirSync(requests);
+  const context = { ...f.context, role: 'worker', requests };
+  const codex = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: [], context }); t.after(codex.close);
+  assert.ok(codex.args.find(a => a.startsWith('permissions.monitor-worker.filesystem=')).includes(`${JSON.stringify(protectedPath)}="read"`));
+  for (const role of ['worker', 'supervisor']) {
+    const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...context, role } }); t.after(launch.close);
+    const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+    assert.equal(settings.sandbox.filesystem.denyWrite.includes(protectedPath), role === 'worker');
+    assert.equal(settings.sandbox.filesystem.denyWrite.includes(path.dirname(protectedPath)), role === 'worker');
+    assert.equal(settings.permissions.deny.includes(`Edit(/${protectedPath}/**)`), role === 'worker');
+    assert.ok(settings.sandbox.filesystem.allowWrite.includes(requests));
+  }
+  assert.throws(() => nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...context, requests: protectedPath } }), /request queue.*coordination/u);
+  if (process.env.MONITOR_TEST_SANDBOX) {
+    const binary = process.env.MONITOR_TEST_SANDBOX;
+    const launch = nativeSandboxLaunch({ kind: 'codex', binary, args: [], context }); t.after(launch.close);
+    const receipt = path.join(protectedPath, 'receipt.json'); fs.writeFileSync(receipt, 'trusted');
+    const script = `const fs=require('fs'),assert=require('assert');
+assert.throws(()=>fs.writeFileSync(${JSON.stringify(receipt)},'tampered'),e=>['EPERM','EACCES'].includes(e.code));
+assert.throws(()=>fs.renameSync(${JSON.stringify(path.dirname(protectedPath))},${JSON.stringify(path.join(f.own.checkout, 'moved'))}),e=>['EPERM','EACCES'].includes(e.code));
+fs.writeFileSync(${JSON.stringify(path.join(requests, 'ok'))},'ok');`;
+    const result = spawnSync(binary, ['sandbox', '--permission-profile', 'monitor-worker', '-C', f.own.checkout, ...launch.args, '--', process.execPath, '-e', script], { cwd: f.own.checkout, env: launch.env, encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(fs.readFileSync(receipt, 'utf8'), 'trusted');
+  }
+  fs.writeFileSync(f.binary, '#!/bin/sh\nif [ "$1" = --help ]; then echo "--sandbox --add-dir"; fi\n', { mode: 0o755 });
+  assert.throws(() => nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: [], context }), /cannot protect.*coordination/u);
 });
 
 test('assigned and headless adapters keep the checkout and run with native settings and temp', t => {

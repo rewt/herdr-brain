@@ -223,7 +223,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     fleet: { file: fleet.file, project: fleet.name, session_limit: fleet.session_limit, advisory: true },
     branch: workerLane ? `lane/${topic}` : main, main, entry: { ...settings, mode }, org, topic, run, item, report,
     routing: initial.routing ? { parent: initial.routing.parent, question: initial.routing.question } : null,
-    suggestedRoutes: initial.routes.suggested === true, requests, tempRoot: fleet.project.temp,
+    suggestedRoutes: initial.routes.suggested === true, requests, tempRoot: fleet.project.temp, worktrees: fleet.project.worktrees,
     projects: Object.values(readFleet().projects).filter(p => p.identity !== project.identity),
     validation: resolveValidation({ root: project.canonical, config: lifecycle, env: {} }) });
   const dispatch = (request) => {

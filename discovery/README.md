@@ -170,8 +170,11 @@ project choosing this mode also chooses to coordinate concurrent edits there.
 Both harnesses use their own native sandbox; entry adds no outer wrapper. Codex
 uses a named permission profile when supported, with filesystem writes to the
 worktree, selected record, request queue and run temp. The workflow and harness
-config directories remain protected. Older Codex builds use native workspace-write
-roots with system temp excluded. Claude receives a per-session settings file that
+config directories remain protected. Workers also have native write exclusions
+for canonical `.lane` coordination receipts; the request queue stays outside
+that tree. Older Codex builds use native workspace-write roots with system temp
+excluded, and refuse main-mode workers when they cannot protect those receipts.
+Claude receives a per-session settings file that
 enables its sandbox, refuses unavailable containment and unsandboxed command
 retries, and grants the same write paths. Other fleet projects' checkout, record,
 worktrees and temp have native write denies and matching file-edit deny rules.
@@ -179,6 +182,16 @@ Existing CLI settings and hooks are merged into the session file; Herdr's socket
 environment and native socket settings are preserved. Claude's native OS sandbox
 covers shell commands; its file tools and hooks retain Claude's native permission
 behavior. No live model is needed to test the launch settings.
+
+An inherited or CLI Codex permission selector is respected, including
+`sandbox_mode`, configuration profiles and `--yolo`. One visible warning names
+the selected setting and its file or CLI source. Claude keeps user, project,
+local and supplied settings, including command exclusions, additional directories
+and filesystem write grants; one warning names settings and sources that weaken
+the generated policy. Native settings and hooks keep their harness behavior.
+These explicit native choices can weaken confinement. Overlapping fleet areas
+are refused before either harness launches, including peers nested beneath a
+checkout, record, worktree area or temp root.
 An explicit `--role supervisor` always uses the canonical checkout and its existing
 supervisor workflow, unless the project opts out.
 

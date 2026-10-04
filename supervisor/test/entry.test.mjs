@@ -10,6 +10,7 @@ import { ownerAlive, ownerIdentity } from '../../lib/process-owner.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { housekeepingSnapshot } from '../../housekeeping/command.mjs';
 import { gitProject } from '../../lib/project.mjs';
+import { joinFleet } from '../../lib/fleet.mjs';
 import { coldStart, renderColdStart, receiptDirectory } from '../context.mjs';
 import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
@@ -283,25 +284,32 @@ test('housekeeping resume recovers a confirmed dead matching owner and repeated 
   assert.equal(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'), before);
 });
 
-for (const kind of ['claude', 'codex']) for (const role of ['supervisor', 'worker']) test(`${kind} adapter binds ${role} and supplies native hooks only to supervisors`, t => {
-  const f = fixture(t), receipt = path.join(f.root, 'native.json'), fake = path.join(f.root, 'native');
-  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
-  fs.writeFileSync(fake, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({args:process.argv.slice(2),role:process.env.MONITOR_SESSION_ROLE,bypass:process.env.MONITOR_ENTRY_BYPASS,repo:process.env.MONITOR_SUPERVISOR_REPO,identity:process.env.MONITOR_SUPERVISOR_IDENTITY,org:process.env.MONITOR_SUPERVISOR_ORG,entry:process.env.MONITOR_SUPERVISOR_ENTRY}));\n`, { mode: 0o755 });
-  const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--role', role,
-    '--binary', fake, '--validator', fake, '--runtime-dir', path.join(f.root, 'runtime'), '--worktree-root', path.join(f.root, 'worktrees'), '--', '--model', 'opaque-model'], f.repo, { ...f.binding, HERDR_PANE_ID: 'wTest:pSupervisor' });
-  good(r); const native = JSON.parse(fs.readFileSync(receipt)); assert.equal(native.role, role); assert.ok(native.args.includes('opaque-model'));
-  assert.equal(native.bypass, role === 'supervisor' ? '0' : '1');
-  if (role === 'supervisor') {
-    assert.equal(native.repo, f.repo); assert.equal(native.identity, f.project.identity); assert.equal(native.org, path.join(f.repo, '.org'));
-    assert.equal(native.entry, path.join(root, 'supervisor/session-start.mjs'));
-    const hook = kind === 'claude' ? JSON.parse(native.args[native.args.indexOf('--settings') + 1]).hooks.SessionStart[0] : native.args.find(a => a.startsWith('hooks.SessionStart='));
-    assert.match(JSON.stringify(hook), /startup.*resume.*clear.*compact/); assert.match(JSON.stringify(hook), /session-start.mjs/);
-    const resumed = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo, { HERDR_PANE_ID: 'wTest:pSupervisor' },
-      JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
-    good(resumed); assert.match(resumed.stdout, /Supervisor cold start/);
-  } else {
-    assert.equal(native.repo, ''); assert.equal(native.identity, ''); assert.equal(native.entry, '');
-    assert.ok(!native.args.some(a => a.includes('hooks.SessionStart='))); assert.ok(!native.args.includes('--settings'));
+test('adapters use short fleet temp and bind both roles with native supervisor hooks', t => {
+  for (const kind of ['claude', 'codex']) for (const role of ['supervisor', 'worker']) {
+    const f = fixture(t), receipt = path.join(f.root, 'native.json'), fake = path.join(f.root, 'native');
+    const temporary = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'se-'));
+    t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+    joinFleet({ cwd: f.repo, temp: temporary });
+    fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+    fs.writeFileSync(fake, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({args:process.argv.slice(2),temp:process.env.TMPDIR,role:process.env.MONITOR_SESSION_ROLE,bypass:process.env.MONITOR_ENTRY_BYPASS,repo:process.env.MONITOR_SUPERVISOR_REPO,identity:process.env.MONITOR_SUPERVISOR_IDENTITY,org:process.env.MONITOR_SUPERVISOR_ORG,entry:process.env.MONITOR_SUPERVISOR_ENTRY}));\n`, { mode: 0o755 });
+    const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--role', role,
+      '--binary', fake, '--validator', fake, '--runtime-dir', path.join(f.root, 'runtime'), '--worktree-root', path.join(f.root, 'worktrees'), '--', '--model', 'opaque-model'], f.repo, { ...f.binding, HERDR_PANE_ID: 'wTest:pSupervisor' });
+    good(r); const native = JSON.parse(fs.readFileSync(receipt)); assert.equal(native.role, role); assert.ok(native.args.includes('opaque-model'));
+    assert.equal(path.dirname(native.temp), temporary);
+    assert.ok(Buffer.byteLength(native.temp) <= 60);
+    assert.equal(native.bypass, role === 'supervisor' ? '0' : '1');
+    if (role === 'supervisor') {
+      assert.equal(native.repo, f.repo); assert.equal(native.identity, f.project.identity); assert.equal(native.org, path.join(f.repo, '.org'));
+      assert.equal(native.entry, path.join(root, 'supervisor/session-start.mjs'));
+      const hook = kind === 'claude' ? JSON.parse(native.args[native.args.indexOf('--settings') + 1]).hooks.SessionStart[0] : native.args.find(a => a.startsWith('hooks.SessionStart='));
+      assert.match(JSON.stringify(hook), /startup.*resume.*clear.*compact/); assert.match(JSON.stringify(hook), /session-start.mjs/);
+      const resumed = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo, { HERDR_PANE_ID: 'wTest:pSupervisor' },
+        JSON.stringify({ cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume' }));
+      good(resumed); assert.match(resumed.stdout, /Supervisor cold start/);
+    } else {
+      assert.equal(native.repo, ''); assert.equal(native.identity, ''); assert.equal(native.entry, '');
+      assert.ok(!native.args.some(a => a.includes('hooks.SessionStart='))); assert.ok(!native.args.includes('--settings'));
+    }
   }
 });
 

@@ -1,0 +1,216 @@
+TAP version 13
+# Subtest: headless tasks and resumes get a sandbox even when prompt text names a utility
+ok 1 - headless tasks and resumes get a sandbox even when prompt text names a utility # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.520291
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 2 - each run gets short private fleet temp and all three temp variables # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039542
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 3 - long and redirected temp roots refuse before creating a run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032416
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 4 - Codex uses native workspace roots, excludes system temp and retains hook transport # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026417
+  ...
+# Subtest: legacy Codex uses writable roots with system temp excluded and refuses sandbox bypass
+ok 5 - legacy Codex uses writable roots with system temp excluded and refuses sandbox bypass # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034291
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 6 - Claude gets per-session native write settings and keeps existing hooks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029333
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 7 - extra directories are supplied through native options in canonical project config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065333
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 8 - unsupported harness runs with a visible warning and its own temp # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034917
+  ...
+# Subtest: Codex respects inherited and CLI sandbox choices with one source-naming warning
+not ok 9 - Codex respects inherited and CLI sandbox choices with one source-naming warning
+  ---
+  duration_ms: 166.61175
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    the operator sandbox choice remains untouched
+    + actual - expected
+    
+      [
+        'Task',
+    +   '-c',
+    +   'default_permissions="monitor-worker"',
+    +   '-c',
+    +   'permissions.monitor-worker.filesystem={":root"="read",":workspace_roots"={"."="write",".git"="read",".lane"="read",".codex"="read",".claude"="read"},"/private/tmp/a18-keDs3J/ar"="write","/private/tmp/a18-keDs3J/at/r-txJ6sM"="write"}',
+    +   '-c',
+    +   'permissions.monitor-worker.network.enabled=true'
+      ]
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'Task'
+  actual:
+    0: 'Task'
+    1: '-c'
+    2: 'default_permissions="monitor-worker"'
+    3: '-c'
+    4: 'permissions.monitor-worker.filesystem={":root"="read",":workspace_roots"={"."="write",".git"="read",".lane"="read",".codex"="read",".claude"="read"},"/private/tmp/a18-keDs3J/ar"="write","/private/tmp/a18-keDs3J/at/r-txJ6sM"="write"}'
+    5: '-c'
+    6: 'permissions.monitor-worker.network.enabled=true'
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:141:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: Claude preserves interpreter exclusions from loaded settings and names their source once
+not ok 10 - Claude preserves interpreter exclusions from loaded settings and names their source once
+  ---
+  duration_ms: 158.056792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:158:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+not ok 11 - Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+  ---
+  duration_ms: 98.650625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:177:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: nested fleet roots refuse before launch in both Codex paths and Claude
+not ok 12 - nested fleet roots refuse before launch in both Codex paths and Claude
+  ---
+  duration_ms: 99.936042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:188:14
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+not ok 13 - workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+  ---
+  duration_ms: 96.499042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+    
+      assert.ok(codex.args.find(a => a.startsWith('permissions.monitor-worker.filesystem=')).includes(`${JSON.stringify(protectedPath)}="read"`))
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:199:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 14 - assigned and headless adapters keep the checkout and run with native settings and temp # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0665
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 15 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043375
+  ...
+# Subtest: real Codex native roots deny another project checkout, record and temp including symlinks
+ok 16 - real Codex native roots deny another project checkout, record and temp including symlinks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036875
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 0
+# fail 5
+# cancelled 0
+# skipped 11
+# todo 0
+# duration_ms 665.487625

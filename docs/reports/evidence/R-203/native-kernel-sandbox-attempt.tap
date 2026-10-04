@@ -1,0 +1,129 @@
+TAP version 13
+# Subtest: headless tasks and resumes get a sandbox even when prompt text names a utility
+ok 1 - headless tasks and resumes get a sandbox even when prompt text names a utility # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.500916
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 2 - each run gets short private fleet temp and all three temp variables # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036459
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 3 - long and redirected temp roots refuse before creating a run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0305
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 4 - Codex uses native workspace roots, excludes system temp and retains hook transport # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027708
+  ...
+# Subtest: legacy Codex uses writable roots with system temp excluded
+ok 5 - legacy Codex uses writable roots with system temp excluded # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031459
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 6 - Claude gets per-session native write settings and keeps existing hooks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026208
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 7 - extra directories are supplied through native options in canonical project config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.061791
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 8 - unsupported harness runs with a visible warning and its own temp # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028208
+  ...
+# Subtest: Codex respects inherited and CLI sandbox choices with one source-naming warning
+ok 9 - Codex respects inherited and CLI sandbox choices with one source-naming warning # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.103916
+  ...
+# Subtest: Claude preserves interpreter exclusions from loaded settings and names their source once
+ok 10 - Claude preserves interpreter exclusions from loaded settings and names their source once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.080625
+  ...
+# Subtest: Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+ok 11 - Claude preserves undeclared directories and sibling temp grants with one source-naming warning # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034125
+  ...
+# Subtest: nested fleet roots refuse before launch in both Codex paths and Claude
+ok 12 - nested fleet roots refuse before launch in both Codex paths and Claude # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028209
+  ...
+# Subtest: workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+not ok 13 - workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+  ---
+  duration_ms: 187.063125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    
+    
+    71 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:217:12
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 14 - assigned and headless adapters keep the checkout and run with native settings and temp # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058833
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 15 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066833
+  ...
+# Subtest: real Codex native roots deny another project checkout, record and temp including symlinks
+not ok 16 - real Codex native roots deny another project checkout, record and temp including symlinks
+  ---
+  duration_ms: 18.26525
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'uncaughtException'
+  error: 'listen EPERM: operation not permitted /private/tmp/a18-eodkR6/herdr.sock'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1886:21)
+    listenInCluster (node:net:1965:12)
+    Server.listen (node:net:2084:5)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:284:39
+    new Promise (<anonymous>)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/discovery/test/native-sandbox.test.mjs:284:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-native-sandbox/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 14
+# todo 0
+# duration_ms 245.441333

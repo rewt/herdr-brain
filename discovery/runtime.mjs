@@ -141,7 +141,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       const parent = record(['add', 'Choose model routing for this project', '--role', 'architect']).split('\n')[0];
       const question = record(['ask', 'Adopt the suggested model routes, or reply with your preferred routes?', '--parent', parent,
         '--category', 'other', '--wait', '--recommend', 'yes', '--why',
-        'Engineering uses Codex gpt-6.1-sol high; independent review uses Claude opus high (Codex gpt-6-astra xhigh is an alternative). The portable preset also includes chore, monitor, planning, settle and executive routes. Reply yes to adopt it, or give a complete route configuration; no personal paths or accounts are copied.']).split('\n')[0];
+        'Engineering uses Codex gpt-6.1-sol high; independent review uses Claude opus high (Codex gpt-6.1-sol xhigh is an alternative). The portable preset also includes chore, monitor, planning, settle and executive routes. Reply yes to adopt it, or give a complete route configuration; no personal paths or accounts are copied.']).split('\n')[0];
       routing = { parent, question, preset: structuredClone(ROUTE_PRESET) };
       writeAgentFileAtomic(stateFile, JSON.stringify(routing, null, 2) + '\n');
     }

@@ -5,9 +5,14 @@ import test from '../../test/helpers/bounded-test.mjs';
 import { fileURLToPath } from "node:url";
 
 import { readRoutesConfig, resolveLaunchRoute, resolveRoute, selectRoute, validateRoutesConfig } from "../routes.mjs";
+import { ROUTE_PRESET } from "../preset.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const KIT = resolve(HERE, "../../kit/bch-cloak-20261001/lane/routing.json");
+
+test("planning and Codex review default to Sol xhigh", () => {
+  assert.deepEqual(["unblock", "review-codex"].map((route) => { const { model, effort } = resolveLaunchRoute(ROUTE_PRESET, { route }); return [model, effort]; }), [["gpt-6.1-sol", "xhigh"], ["gpt-6.1-sol", "xhigh"]]);
+});
 
 test("the bch-cloak route table loads without losing project fields", () => {
   const raw = JSON.parse(readFileSync(KIT, "utf8"));

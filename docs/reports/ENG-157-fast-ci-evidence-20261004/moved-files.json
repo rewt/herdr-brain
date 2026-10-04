@@ -1,24 +1,13 @@
 [
   "acceptance/test/boundary.test.mjs",
-  "acceptance/test/cleanup.test.mjs",
-  "acceptance/test/cutover.test.mjs",
-  "acceptance/test/focus.test.mjs",
-  "acceptance/test/load-round2.test.mjs",
-  "acceptance/test/recovery.test.mjs",
   "acceptance/test/validation.test.mjs",
   "acceptance/test/verification.test.mjs",
-  "console/test/session.test.mjs",
   "discovery/test/acceptance.test.mjs",
   "discovery/test/entry.test.mjs",
   "discovery/test/lifecycle.test.mjs",
-  "discovery/test/owner.test.mjs",
-  "discovery/test/review-r2.test.mjs",
-  "discovery/test/review-r3.test.mjs",
   "discovery/test/review.test.mjs",
   "discovery/test/sandbox.test.mjs",
   "discovery/test/settings.test.mjs",
-  "dispatch/test/dispatch.test.mjs",
-  "housekeeping/test/auto-tidy.test.mjs",
   "lanes/test/workspace-native.test.mjs",
   "release/test/release.test.mjs",
   "settle/test/config.test.mjs",
@@ -40,6 +29,5 @@
   "test/release.test.mjs",
   "test/settle-watch.test.mjs",
   "test/startup-deadlines.test.mjs",
-  "test/test-hangs.test.mjs",
-  "watch/test/watch.test.mjs"
+  "test/test-hangs.test.mjs"
 ]

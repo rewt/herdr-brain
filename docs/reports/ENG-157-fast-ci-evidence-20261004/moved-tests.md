@@ -1,6 +1,6 @@
 # Tests retained in release
 
-Every case in these 43 files runs via the unchanged full-suite commands in `test:release:steps`. Titles below describe the protected behavior; interpolated titles retain all their existing matrix values. File-level reasons appear in `docs/validation-tiers.md`.
+Every case below remains release-only and runs via the unchanged full-suite commands in `test:release:steps`. This inventory covers 31 whole files plus expensive cases from 12 newly mixed files, the existing seven mixed files and the lane lifecycle file. Interpolated titles retain their existing matrix values. File-level behavior and cost reasons appear in `docs/validation-tiers.md`. The original measured logs remain historical evidence; the correction audit is in `logic-audit-R-206.md`.
 
 ## acceptance/test/boundary.test.mjs
 
@@ -25,26 +25,14 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 
 ## acceptance/test/cleanup.test.mjs
 
-- cleanup closes main and linked workspaces after ${mode}, including an unfurled creation receipt (line 33)
-- failed inventory still attempts every owned receipt and audits the actual residue by ID and label (line 46)
-- unreceipted scratch workspace is named by the raw audit without gaining closure authority (line 61)
 - ${shape} linked creation receipt survives a failed pane-layout read (line 67)
-- cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost (line 79)
-- a malformed journal entry does not prevent closing other receipt-owned workspaces (line 90)
 - ${signal} closes receipt-owned main and linked workspaces before emitting summary (line 98)
 - adapter records the implicit main workspace as well as the explicit linked creation reply (line 112)
 
 ## acceptance/test/cutover.test.mjs
 
-- rollback restores every file byte and executable mode (line 9)
-- contrib cannot retire with an extra executable caller, and scans refuse symlinks (line 15)
-- all eleven edits apply to relocated inventory scripts and refuse premise drift (line 29)
-- retirement scans nested Python, executable extensionless and notify entry callers (line 40)
 - installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility (line 54)
 - installed tidy recovers a bounded tail from each log including a late older run (line 82)
-- only unreferenced timestamped script backups qualify as historical material (line 96)
-- executable shell case arms cannot hide contrib callers or references to historical backups (line 113)
-- referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement (line 130)
 
 ## acceptance/test/focus.test.mjs
 
@@ -54,7 +42,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 - continuous operator focus starts without silence and an immediate transient harness move still fails (line 103)
 - continuous operator activity alone passes after bounded replay (line 126)
 - a busy stream from an unknown server never assumes the verified replay bound (line 136)
-- owned changes need no correlated call and incomplete monitoring never passes (line 141)
 - external sampled and transient event moves are recorded and re-baseline without failing (line 151)
 - an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup (line 170)
 - external moves during unrelated active and completed calls re-baseline without failing (line 188)
@@ -68,7 +55,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 
 ## acceptance/test/load-round2.test.mjs
 
-- retry context and cutover aggregate preserve ${heavy ? 'heavy-load PENDING' : 'normal-load FAIL'} (line 26)
 - a successful TAP test named ETIMEDOUT cannot hide an unrelated assertion failure (line 45)
 - handles ETIMEDOUT (line 49)
 - independent product behaviour (line 49)
@@ -82,8 +68,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 
 - ${signal} drains an active ${form} and recovers its lost reply (line 32)
 - cleanup refuses snapshots until every registered producer acknowledges stop (line 105)
-- cleanup reconciles again when a lost-reply workspace appears after the first inventory (line 116)
-- a matching caller label with a foreign native path never grants recovery authority (line 128)
 - cleanup stops and awaits a supervisor executing dispatch before reading ownership (line 140)
 - stopping an individual idle PTY worker leaves the run admission barrier open (line 207)
 
@@ -113,8 +97,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 - NO_COLOR draws plain glyphs, and a scope narrows the list and prefills nothing else (line 256)
 - overruling from the history records the opposite answer (line 269)
 - a text document opens from a private file that is removed afterwards (line 293)
-- answers are passed as an argument array (line 328)
-- a missing configuration becomes an example that must be edited (line 335)
 - DOING for a run with no usable title comes from the work in the brief org start wrote, never its fixed opening (line 353)
 - transcripts are looked up by name from the run\'s start, else from local midnight (line 374)
 - a named project switch lands on that project and keeps the repository scope (line 391)
@@ -145,13 +127,36 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 
 ## discovery/test/owner.test.mjs
 
+- validation runs with no compiler and ignores CC, flags and TMPDIR overrides (line 58)
+- installed runtime snapshot carries the verified owner and validates without a compiler (line 82)
+- ${name} uses only the bounded source-build fallback (line 107)
+- unavailable bundle and ${compiler} compiler refuse project execution (line 118)
+- owner verification rejects a checksummed binary for the wrong architecture (line 125)
+- no compiler preserves detached descendant cleanup after ${mode} (line 136)
 
 ## discovery/test/review-r2.test.mjs
 
-- project gate (line 26)
+- all providers reject ${location} writable symlink components (line 59)
+- sandbox grants reject redirected workspaces, queues and external runtime paths (line 69)
+- sandbox exceptions cannot override a protected record, Git tree or nested record target (line 81)
+- Git filter refuses a temporary symlink to ${target} before execution (line 91)
+- disabled ${Object.keys(settings).join('/')} filters preserve binary bytes across integration (line 107)
+- ${direction}-only required filters preserve the missing direction as identity (line 115)
+- required configured filters cannot fall back to identity after a command failure (line 125)
+- Claude live cases stay pending without authorized authentication and never launch the native binary (line 134)
 
 ## discovery/test/review-r3.test.mjs
 
+- detached double-fork descendants are gone after completion; unrelated same-group processes survive (line 49)
+- detached double-fork descendants are gone after deadline; unrelated same-group processes survive (line 49)
+- descendants are cleaned after the JavaScript wrapper is killed (line 49)
+- macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary (line 58)
+- validation cannot signal an owner outside its inherited kernel boundary (line 71)
+- pending Claude probe emits Linux evidence without a platform guard (${flags.length ? 'skip-live' : 'no-auth'}) (line 96)
+- acceptance setup failure removes its installed snapshot and keeps only evidence (line 105)
+- acceptance allocation failure removes the first temporary root (line 112)
+- acceptance evidence directory failure still removes its installed snapshot (line 118)
+- Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection (line 127)
 
 ## discovery/test/review.test.mjs
 
@@ -194,7 +199,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 
 ## dispatch/test/dispatch.test.mjs
 
-- ${source} refuses PID reuse before registration and retains ownership across retries (line 77)
 - Linux dispatch watcher receipt and journal round-trip as strings through record set (line 154)
 - dispatch waits under simulated swap pressure before opening a lane and resumes the same request (line 184)
 - STOP during dispatch ${stage} memory wait retains the request without a worker launch (line 202)
@@ -227,7 +231,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 - dry-run previews finished tabs and never closes, including through housekeeping --once (line 98)
 - a working or blocked change at the final recheck preserves the finished tab (line 107)
 - new occupants revealed after the final pane list preserve their tab (line 115)
-- conflicting agent tab/workspace and duplicate pane topology cannot authorize a close (line 125)
 - housekeeping --once preserves waiting reports, blocking items and missing item evidence (line 140)
 - automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity (line 167)
 - replacement identity and a waiting report at the final observation prevent closing (line 191)
@@ -236,7 +239,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 - only this Git project is tidied and the caller tab is preserved (line 219)
 - finished reviews and old settle sessions use the existing tidy policy (line 229)
 - three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round (line 247)
-- supported review routes need a matching topic verdict newer than their session (line 271)
 - automatic review tidy preserves missing or mismatched occupant evidence without worker runs (line 282)
 - replacement reviewers at the final observation keep their tabs without worker runs (line 337)
 - review evidence cannot override a recorded worker waiting on a blocker (line 354)
@@ -503,7 +505,6 @@ Every case in these 43 files runs via the unchanged full-suite commands in `test
 
 ## watch/test/watch.test.mjs
 
-- every terminal condition has a distinct, compact supervisor notice (line 106)
 - spawn resolves the cwd workspace when it is run outside a Herdr pane (line 119)
 - a valid report is checked and delivered without Herdr being present (line 136)
 - final watch notice waits for fake operator typing, then sends once across watcher restart (line 163)
@@ -654,7 +655,7 @@ The other 123 lane cases cover workspace/Herdr startup, transport and configurat
 
 ## Exact runtime titles moved from logic
 
-The other 137 cases cover native waits, installed adapters, syscall/sandbox/network checks, process delivery and scheduler recovery. Fast logic and refusal safety retain 30 cases; the seven files and reasons are mapped in validation-tiers.md.
+The other 137 cases cover native waits, installed adapters, syscall/sandbox/network checks, process delivery and scheduler recovery. These seven original mixed files retain 30 cases. The R-206 correction adds 32 cases from the 12 newly mixed files listed above; all 19 files and reasons are mapped in validation-tiers.md.
 
 - promotion validation can read Git after the old injected 15-second command deadline
 - load 24 admits a start reply beyond the former fifteen-second ref-transaction deadline

@@ -18,32 +18,22 @@ readiness, clean replay, compare-and-swap, clean fast-forward or recoverable
 archives. Most installed-adapter, PTY, copied-product, reviewer/dispatch cycle,
 wall-clock, sandbox and fake-server integration runs move to release.
 
-Whole files moved from CI are listed below. The full lane file still runs in
-release; only the merge-critical titles listed afterward remain in promotion.
+The 31 whole files moved from CI are listed below; the mixed-file tables identify
+fast cases retained from the other files. The full lane file still runs in release;
+only the merge-critical titles listed afterward remain in promotion.
 All new test files must be assigned deliberately to promotion or release.
 
 | File moved to release | Behavior protected | Reason |
 | --- | --- | --- |
 | `acceptance/test/boundary.test.mjs` | Confined native adapter preserves socket identity, ownership, no-focus rules and explicit refusal attribution. | Native confinement, socket, focus, load or release cleanup integration. |
-| `acceptance/test/cleanup.test.mjs` | Cleanup closes only receipt-owned resources and reports residue despite malformed journals or failed inventory. | Native confinement, socket, focus, load or release cleanup integration. |
-| `acceptance/test/cutover.test.mjs` | Cutover and rollback preserve exact bytes; transitive executable callers prevent premature contrib retirement. | Native confinement, socket, focus, load or release cleanup integration. |
-| `acceptance/test/focus.test.mjs` | Continuous focus evidence distinguishes operator activity from transient owned moves and refuses incomplete monitoring. | Native confinement, socket, focus, load or release cleanup integration. |
-| `acceptance/test/load-round2.test.mjs` | Operation-scoped contention may classify timeouts as pending, while independent assertions and safety failures remain failures. | Native confinement, socket, focus, load or release cleanup integration. |
-| `acceptance/test/recovery.test.mjs` | Signals stop producers before ownership snapshots and recover late or lost replies without granting foreign authority. | Native confinement, socket, focus, load or release cleanup integration. |
 | `acceptance/test/validation.test.mjs` | Confined native validation and promotion protect Git/shared state while allowing only proved scratch writes. | Native confinement, socket, focus, load or release cleanup integration. |
 | `acceptance/test/verification.test.mjs` | Kernel-confined verification permits authorized refs/worktrees but denies config, hooks and redirected record writes. | Native confinement, socket, focus, load or release cleanup integration. |
-| `console/test/session.test.mjs` | Session interaction routes answers through the CLI, preserves modal input and distinguishes gone from unavailable sessions. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `discovery/test/acceptance.test.mjs` | Copied Codex and Claude workflows validate, guard, promote and finish both worker and approved-routing changes offline. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `discovery/test/entry.test.mjs` | Installed supervisor entry completes the unconfigured cold-start and notice contract using real record and lanes. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `discovery/test/lifecycle.test.mjs` | Atomic lifecycle receipts and conservative close rules retain ignored files, working sessions and unconfirmed process evidence. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `discovery/test/owner.test.mjs` | Bundled native ownership binaries match source/architecture and preserve independent bounded cleanup without compiler overrides. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `discovery/test/review-r2.test.mjs` | Provider guards refuse writable symlink escapes and preserve PTY argument, shell, filter and validation boundaries. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `discovery/test/review-r3.test.mjs` | Kernel syscall/network guards and detached cleanup retain immutable ownership evidence and protect unrelated processes. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `discovery/test/review.test.mjs` | Automatic entry, route adoption and validation guard preserve project opt-out, canonical records and refusal safety. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `discovery/test/sandbox.test.mjs` | Optional real native sandbox supports authorized validation/promotion while denying external writes and Git metadata. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `discovery/test/settings.test.mjs` | Installed interactive adapters honor opt-out, explicit assignment, project settings and conservative entry cleanup. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `dispatch/test/dispatch.test.mjs` | Dispatch validates priorities, startup, identity and reports; lost replies, STOP, refused ownership and PID reuse never duplicate or authorize work. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
-| `housekeeping/test/auto-tidy.test.mjs` | finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay; dry-run previews finished tabs and never closes, including through housekeeping --once; a working or blocked change at the final recheck preserves the finished tab | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `lanes/test/workspace-native.test.mjs` | native dispatch opens a one-tab lane from a project with no Herdr workspace and preserves focus | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `release/test/release.test.mjs` | Release state machine binds immutable candidates, records/retries gate evidence and refuses stale main or failed preflight without executing ship. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `settle/test/config.test.mjs` | Settle intake and canonical review use validated project settings and independent reviewer routes. | Full review/correction, recovery or transport integration; rebase and current-record guards remain in CI. |
@@ -66,7 +56,6 @@ All new test files must be assigned deliberately to promotion or release.
 | `test/settle-watch.test.mjs` | Retained settle-watch compatibility launcher keeps its flags, route arguments and acting-session record. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 | `test/startup-deadlines.test.mjs` | Module startup handshakes receive measured-load allowances without starting real project background services. | Real elapsed response, watchdog or descendant-cleanup integration. |
 | `test/test-hangs.test.mjs` | Native watchdog/ownership cleanup survives blocked event loops, cancellation, nested runners and detached descendants without touching replacements. | Real elapsed response, watchdog or descendant-cleanup integration. |
-| `watch/test/watch.test.mjs` | Real detached watcher derives report/worker terminal states, wakes on file events and delivers durable notices once across typing, restart and transport outage. | Process/transport, installed-product or lifecycle integration; merge invariants retain focused coverage. |
 
 Lane merge checks retained in promotion (`test:promotion:lanes`):
 
@@ -114,3 +103,24 @@ Mixed files retain fast logic and safety checks via `test:promotion:logic`:
 | `supervisor/test/delivery.test.mjs` | Captured composer/ANSI parsing, wrapping and placeholder ambiguity. | Quiet-read waits, fake Herdr transport, durable delivery/replay and inbox teardown run in release. |
 | `housekeeping/test/housekeeping.test.mjs` | Interruption/composer parsing. | Native Git lifecycle, process/startup, schedule recovery and fake Herdr action scenarios run in release. |
 | `supervisor/test/entry.test.mjs` | Repository hook policy. | Installed adapters, startup/recovery and durable pane/owner integrations run in release. |
+
+The R-206 audit restores the following fast cases to the existing logic selector.
+These use assertions, small file fixtures or injected operations; they launch no
+real child process and wait for no elapsed deadline. All cases also remain in
+the full release globs. See [the audit](reports/ENG-157-fast-ci-evidence-20261004/logic-audit-R-206.md)
+for exact retained titles and the audit of every whole-file deferral.
+
+| Partial file | Kept in promotion | Moved behavior and cost |
+| --- | --- | --- |
+| `console/test/session.test.mjs` | Answer argument safety and configuration defaults/refusals. | Real record CLI setup/answers, Herdr transport and session interaction. |
+| `acceptance/test/load-round2.test.mjs` | Both injected-load cutover aggregation classifications. | Real TAP children, delegated fixtures and elapsed receipt/queue deadlines. |
+| `acceptance/test/cleanup.test.mjs` | Receipt ownership, failed inventory, unreceipted refusal, lost-reply recovery and malformed journals (six cases). | Native adapter reply/layout processes and signal cleanup children. |
+| `acceptance/test/cutover.test.mjs` | Byte/mode rollback, eleven edit premises and transitive caller/backup retirement (seven cases). | Executing copied cleanup and tidy scripts against CLI transports. |
+| `acceptance/test/focus.test.mjs` | Owned-change failure and incomplete-monitor refusal. | Real socket monitor processes, native events and elapsed sampling/replay. |
+| `acceptance/test/recovery.test.mjs` | Late inventory reconciliation and foreign-path authority refusal. | Signal/producer processes, elapsed producer drain and supervisor cleanup. |
+| `discovery/test/owner.test.mjs` | Bundled checksum/architecture, private scratch modes and lifetime protocol composition. | Copied products, source fallback subprocesses and detached descendant cleanup. |
+| `discovery/test/review-r2.test.mjs` | Retained unauthenticated discovery evidence classification. | Git fixtures, provider guards, native filters and copied/installed probes. |
+| `discovery/test/review-r3.test.mjs` | Both ABI seccomp instruction evaluations and redirected lifetime-marker refusal. | Real detached children, kernel sandbox/syscalls/network and probe subprocesses. |
+| `dispatch/test/dispatch.test.mjs` | Both injected watcher receipt/journal PID reuse and retry ownership checks. | Real record/Git/dispatch/watch CLI lifecycles, waits and process recovery. |
+| `housekeeping/test/auto-tidy.test.mjs` | Topology authority refusal and review-route/topic/verdict freshness. | CLI and fake-server tidy actions, current occupant/record rechecks and scheduling. |
+| `watch/test/watch.test.mjs` | Distinct compact notices for every terminal condition. | Detached watchers, record/Herdr delivery, real file events and elapsed grace windows. |

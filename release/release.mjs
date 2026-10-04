@@ -12,6 +12,7 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { releaseSettings, releaseArgv } from './config.mjs';
 import { runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { readMemory, memoryReason } from '../lib/memory.mjs';
+import { pruneSnapshots } from './retention.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const RECORD = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -59,6 +60,8 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
     return JSON.parse(result.stdout);
   }
   const unlock = acquireLock(path.join(project.identity, 'lane-promote.lock'));
+  let record, cycleResult;
+  const finish = value => { cycleResult = value; return value; };
   try {
     // Queue/load/STOP are checked again under the same lock as every promotion.
     const lockedReason = quietPoint(project, declaration.config, sample());
@@ -70,17 +73,17 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
     org = org ? path.resolve(org) : findOrgDir({ cwd: project.canonical, env });
     // Discovery initializes an unconfigured project's record through the CLI.
     const recordEnv = { ...env, ORG_DIR: org ?? '', ORG_ACTOR: env.ORG_ACTOR || 'release-supervisor' };
-    const record = args => JSON.parse(invoke(process.execPath, [RECORD, ...args], { cwd: project.canonical, env: recordEnv }));
+    record = args => JSON.parse(invoke(process.execPath, [RECORD, ...args], { cwd: project.canonical, env: recordEnv }));
     const rows = record(['releases', '--json', '--identity', project.identity]).candidates;
     const existing = rows.find(c => c.commit === commit);
     if (existing?.gate) {
       if (git(project.canonical, ['rev-parse', `refs/tags/${existing.tag}^{commit}`]) !== existing.commit) throw new Error('recorded candidate tag moved; inspect before shipping');
-      return { result: existing.status, candidate: existing };
+      return finish({ result: existing.status, candidate: existing });
     }
-    if (existing?.started) return { result: 'inspect', reason: 'gate already started without a durable result; never replay it', candidate: existing };
+    if (existing?.started) return finish({ result: 'inspect', reason: 'gate already started without a durable result; never replay it', candidate: existing });
     // Never cut a second candidate while an earlier operator decision is pending.
     const pending = rows.find(c => c.status === 'awaiting-operator' || c.status === 'inspect-interrupted' || c.status === 'pending-gate');
-    if (pending && pending.id !== existing?.id) return { result: 'deferred', reason: 'earlier candidate needs an operator decision or recovery', candidate: pending };
+    if (pending && pending.id !== existing?.id) return finish({ result: 'deferred', reason: 'earlier candidate needs an operator decision or recovery', candidate: pending });
     const previous = rows.at(-1)?.commit ?? null;
     if (previous && spawnSync('git', ['-C', project.canonical, 'merge-base', '--is-ancestor', previous, commit]).status !== 0) throw new Error('release base history no longer descends from the previous candidate; inspect');
     tag = existing?.tag ?? tag ?? `rc-${new Date().toISOString().replace(/[-:.]/g, '')}-${commit.slice(0, 10)}`;
@@ -106,8 +109,8 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
       const r = spawnSync(preflight[0], preflight.slice(1), { cwd: project.canonical, env: recordEnv, encoding: 'utf8' });
       const detail = [r.stdout, r.stderr, r.error?.message, r.signal ? `preflight interrupted by ${r.signal}` : ''].filter(Boolean).join('\n').trim();
       fs.appendFileSync(log, `${new Date().toISOString()} ${JSON.stringify(preflight)}\n${detail}\n`);
-      if (r.error || r.status !== 0) return { result: 'setup-required', candidate: existing ?? null, commit, tag, command: preflight, log,
-        reason: detail || `preflight exited ${r.status}`, next: 'correct machine setup and retry; the current release base will be cut and gated' };
+      if (r.error || r.status !== 0) return finish({ result: 'setup-required', candidate: existing ?? null, commit, tag, command: preflight, log,
+        reason: detail || `preflight exited ${r.status}`, next: 'correct machine setup and retry; the current release base will be cut and gated' });
       if (git(project.canonical, ['rev-parse', 'HEAD']) !== commit || git(project.canonical, ['status', '--porcelain', '--untracked-files=normal'])) throw new Error('preflight changed the canonical checkout; inspect before claiming the gate');
     }
     // Record before cutting the tag, so interruption can recover the exact intent.
@@ -117,7 +120,7 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
       if (!existing || git(project.canonical, ['rev-parse', `refs/tags/${tag}^{commit}`]) !== commit) throw new Error('candidate tag already exists; inspect before any gate');
     } else git(project.canonical, ['tag', tag, commit]);
     const claimed = record(['release', 'start', candidate.id]);
-    if (!claimed.started) return { result: 'inspect', candidate: claimed.candidate };
+    if (!claimed.started) return finish({ result: 'inspect', candidate: claimed.candidate });
     const log = path.join(directory, `${candidate.id}.log`);
     let gate = { result: 'failed', stage: 'snapshot', exit_code: null, command: null, log, detail: '' };
     try {
@@ -154,9 +157,19 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
       fs.appendFileSync(log, error.message + '\n');
     }
     const saved = record(['release', 'result', candidate.id, '--file', receipt(gate)]);
-    return { result: gate.result === 'passed' ? 'awaiting-operator' : 'gate-failed', candidate: saved,
-      next: gate.result === 'passed' ? `Operator answers ${saved.question}; ship/activation is never automatic` : 'inspect gate evidence; a new promoted commit can become a new candidate' };
-  } finally { unlock(); }
+    return finish({ result: gate.result === 'passed' ? 'awaiting-operator' : 'gate-failed', candidate: saved,
+      next: gate.result === 'passed' ? `Operator answers ${saved.question}; ship/activation is never automatic` : 'inspect gate evidence; a new promoted commit can become a new candidate' });
+  } finally {
+    try {
+      if (record) {
+        const retention = pruneSnapshots({ project, candidates: record(['releases', '--json', '--identity', project.identity]).candidates, env });
+        if (cycleResult) cycleResult.retention = retention;
+      }
+    } catch (error) {
+      if (cycleResult) cycleResult.retention = { advisory: error.message };
+      process.stderr.write(`release: retention advisory: ${error.message}\n`);
+    } finally { unlock(); }
+  }
 }
 
 export function main(argv = process.argv.slice(2)) {
@@ -169,7 +182,23 @@ export function main(argv = process.argv.slice(2)) {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
     once: { type: 'boolean' }, tag: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'skip-live': { type: 'boolean' },
     'max-load-per-cpu': { type: 'string' },
+    prune: { type: 'boolean' }, 'active-tag': { type: 'string' },
   } });
+  if (opt.prune) {
+    if (positionals.length || opt.once || opt.tag || opt['skip-live'] || opt['max-load-per-cpu']) throw new Error('usage: release.mjs --prune [--dry-run] [--active-tag TAG] [--repo DIR] [--org DIR]; pruning requires --role supervisor');
+    const project = gitProject(opt.repo);
+    if (!opt['dry-run'] && (opt.role !== 'supervisor' || project.checkout !== project.canonical)) throw new Error('pruning requires --role supervisor from the canonical checkout');
+    if (!opt['dry-run'] && fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists');
+    const org = opt.org ? path.resolve(opt.org) : findOrgDir({ cwd: project.canonical });
+    if (!org) throw new Error('no record discovered');
+    const unlock = opt['dry-run'] ? () => {} : acquireLock(path.join(project.identity, 'lane-promote.lock'));
+    try {
+      const candidates = JSON.parse(invoke(process.execPath, [RECORD, 'releases', '--json', '--identity', project.identity], { cwd: project.canonical, env: { ...process.env, ORG_DIR: org } })).candidates;
+      process.stdout.write(JSON.stringify(pruneSnapshots({ project, candidates, dryRun: opt['dry-run'], activeTag: opt['active-tag'] })) + '\n');
+    } finally { unlock(); }
+    return;
+  }
+  if (opt['active-tag']) throw new Error('--active-tag requires --prune');
   if (positionals.length || (opt['skip-live'] || opt['max-load-per-cpu']) && !opt['dry-run']) throw new Error('usage: release.mjs --once --role supervisor [--repo DIR] [--org DIR] [--tag TAG]; --dry-run [--skip-live] [--max-load-per-cpu N] uses only scratch');
   if (opt['dry-run']) {
     const project = gitProject(opt.repo);

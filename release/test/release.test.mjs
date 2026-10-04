@@ -259,6 +259,9 @@ test('low load, drained promotion queue, clean base and supervisor ownership are
 test('red gate is durable, never repeated, and a later promotion may become a new candidate', t => {
   const f = fixture(t, { gate: ['node', 'gate.cjs'] }); f.env.RELEASE_TEST_EXIT = '3';
   const first = f.attempt({ tag: 'rc-red' }); assert.equal(first.result, 'gate-failed');
+  assert.equal(fs.existsSync(first.candidate.snapshot), false, 'recorded failure drops only its generated snapshot');
+  assert.deepEqual(first.retention.removed.map(c => c.id), [first.candidate.id]);
+  assert.ok(fs.existsSync(first.candidate.gate.log));
   assert.equal(first.candidate.question, null); assert.equal(first.candidate.gate.exit_code, 3);
   assert.equal(f.attempt().candidate.id, first.candidate.id); assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
   f.env.RELEASE_TEST_EXIT = '0'; const promoted = f.commit('fix');
@@ -378,6 +381,7 @@ test('preparation env is scoped and a signaled gate records interruption without
   });
   const c = f.attempt().candidate;
   assert.equal(c.gate.result, 'interrupted'); assert.equal(c.gate.signal, 'SIGTERM'); assert.equal(c.question, null);
+  assert.ok(fs.existsSync(c.snapshot), 'interrupted evidence remains available for recovery');
   assert.equal(f.attempt().candidate.id, c.id); assert.equal(f.record(['releases', '--json']).candidates.length, 1);
 });
 
@@ -425,4 +429,42 @@ test('a held host slot defers release before cutting or claiming a candidate', a
   assert.equal(result.result, 'awaiting-operator');
   assert.equal(fs.readFileSync(f.count, 'utf8'), 'gate\n');
   processHolder.kill('SIGTERM'); await waitForExit(processHolder);
+});
+
+test('result recovery preserves an interrupted claim until the actual result is durable and never replays its gate', t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] });
+  const commit = f.git(['rev-parse', 'HEAD']), tag = 'rc-result-recovery';
+  const snapshot = path.join(f.project.identity, 'release/candidates', tag);
+  const input = path.join(f.root, 'recovery.json');
+  fs.writeFileSync(input, JSON.stringify({ identity: f.project.identity, tag, base: 'main', commit,
+    tree: f.git(['rev-parse', 'HEAD^{tree}']), snapshot, previous: null, commits: [commit], gate_command: ['node', 'gate.cjs'], prepare: null, ship: null, parent: null }));
+  const c = f.record(['release', 'cut', '--file', input]);
+  f.git(['tag', tag, commit]); f.record(['release', 'start', c.id]);
+  fs.mkdirSync(snapshot, { recursive: true });
+  fs.writeFileSync(path.join(snapshot, '.release-commit'), commit + '\n');
+  fs.writeFileSync(path.join(snapshot, '.release-build.json'), '{"proof":"actual build"}\n');
+  const log = path.join(f.project.identity, 'release', `${c.id}.log`);
+  fs.writeFileSync(log, 'actual gate exited 7 before the recorder stopped\n');
+  assert.equal(f.attempt().result, 'inspect');
+  assert.ok(fs.existsSync(snapshot)); assert.equal(fs.existsSync(f.count), false);
+  const gate = { result: 'failed', stage: 'gate', exit_code: 7, command: c.gate_command, log, detail: 'Recovered actual result' };
+  fs.writeFileSync(input, JSON.stringify(gate)); f.record(['release', 'result', c.id, '--file', input]);
+  const recovered = f.attempt();
+  assert.equal(recovered.candidate.gate.exit_code, 7);
+  assert.equal(recovered.retention.removed[0].id, c.id);
+  assert.equal(fs.existsSync(snapshot), false);
+  assert.equal(fs.existsSync(f.count), false, 'recovery and retention never replay a gate');
+  assert.equal(fs.readFileSync(path.join(recovered.retention.removed[0].evidence, '.release-build.json'), 'utf8'), '{"proof":"actual build"}\n');
+  assert.equal(f.git(['rev-parse', tag]), commit);
+  assert.equal(fs.readFileSync(log, 'utf8'), 'actual gate exited 7 before the recorder stopped\n');
+  assert.equal(f.record(['release', 'result', c.id, '--file', input]).gate.exit_code, 7, 'duplicate results still recover after snapshot removal');
+  const before = fs.readFileSync(path.join(f.repo, '.org/events.jsonl'));
+  const preview = JSON.parse(f.ok(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--prune', '--dry-run']));
+  assert.equal(preview.dry_run, true); assert.equal(preview.removed.length, 0);
+  assert.deepEqual(fs.readFileSync(path.join(f.repo, '.org/events.jsonl')), before);
+  assert.match(f.exec(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--prune', '--role', 'worker']).stderr, /supervisor/);
+  fs.mkdirSync(path.join(f.repo, '.lane/supervisor'), { recursive: true });
+  fs.writeFileSync(path.join(f.repo, '.lane/supervisor/STOP'), 'inspect only');
+  assert.match(f.exec(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--prune', '--role', 'supervisor']).stderr, /STOP/);
+  assert.equal(f.exec(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--prune', '--dry-run']).status, 0, 'STOP permits read-only inspection');
 });

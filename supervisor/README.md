@@ -302,3 +302,11 @@ Internal response waits adapt to measured machine load; see the
 
 Cold-start briefs show [host memory pressure and process usage](../docs/reference/memory-gate.md),
 including the largest memory and CPU consumers, as read-only diagnostic evidence.
+
+The cold-start brief also prints four storage advisory lines: the record,
+release candidates/evidence, lane validation, and promote batches. Paths use the
+project's canonical Git common directory, including when read from a lane.
+`brief --json` exposes allocated and apparent bytes and measurement warnings.
+Measurements deduplicate hardlinks, exclude symlink targets, and stop at 100,000
+entries or one second per area; incomplete measurements are labeled as lower
+bounds. Storage size never refuses work or changes record status.

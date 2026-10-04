@@ -14,6 +14,7 @@ import { housekeepingSnapshot } from '../housekeeping/command.mjs';
 import { releaseSettings } from '../release/config.mjs';
 import { readMemory, memoryReason, processUsage } from '../lib/memory.mjs';
 import { queueJobs } from '../promote/promote.mjs';
+import { projectFootprint, formatBytes } from './footprint.mjs';
 
 export const receiptDirectory = (org, identity) => path.join(org, 'supervisor', createHash('sha256').update(identity).digest('hex').slice(0, 20));
 const read = (file) => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
@@ -154,6 +155,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, env = process.en
   return { project: { ...project, org, as_of: clock.toISOString(), through, after, stopped, torn_tail: tornTail },
     priorities, goals, running, reports, waiting, held, ready, decisions, next, recovery,
     approvals: config.approvals, advisory, promotion_queue: queueFile, candidates, release, housekeeping,
+    footprint: projectFootprint(project, org),
     host: { memory, reason: memoryReason(memory), processes } };
 }
 
@@ -162,6 +164,7 @@ export function renderColdStart(doc, { limit = 6 } = {}) {
   if (doc.housekeeping) out.push(`Housekeeping: ${doc.housekeeping.process}${doc.housekeeping.pid ? ` (pid ${doc.housekeeping.pid})` : ''}; enabled=${doc.housekeeping.config?.enabled ?? '?'} resume=${doc.housekeeping.config?.resume ?? '?'}${doc.housekeeping.configError ? `; ${line(doc.housekeeping.configError)}` : ''}${doc.housekeeping.warnings.length ? `; ${line(doc.housekeeping.warnings.join('; '))}` : ''}`);
   if (doc.project.stopped) out.push('STOP exists: inspect only; do not dispatch, settle or promote.');
   if (doc.project.torn_tail) out.push('Record has an incomplete final event; inspect before writes.');
+  for (const area of doc.footprint ?? []) out.push(`Storage advisory: ${area.area} ${formatBytes(area.bytes)} on disk (${formatBytes(area.apparent_bytes)} apparent)${area.warning ? `; ${line(area.warning)}` : ''}.`);
   const section = (name, rows, format) => {
     out.push(`${name} (${rows.length}):`);
     if (!rows.length) out.push('  none');

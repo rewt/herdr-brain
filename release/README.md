@@ -151,3 +151,53 @@ A busy or unknown holder defers release without consuming its once-only gate
 claim. Its CLI emits the coded refusal and exits 75. Only a recognized gate
 timeout under measured load retries once within the held slot; preparation,
 candidate creation, claim and interrupted-release recovery never replay.
+
+## Snapshot retention
+
+At the end of a release cycle, under the promotion/release lock, retention drops
+snapshots whose results are durable. It keeps the active release, candidates
+awaiting an operator decision, pending or interrupted gates (including recorded
+signal interruptions), and the most recent passed candidate. An already recorded
+result can be returned after its snapshot has gone; no gate or preparation is
+replayed. Recover a missing result through `record release result` first. Its
+snapshot stays available until then.
+
+Inspect the existing project's retention plan without running a gate or writing
+anything, including from a lane:
+
+```sh
+node release/release.mjs --prune --dry-run --repo /project --org /record
+# The canonical supervisor can apply the same policy without cutting a candidate:
+node release/release.mjs --prune --role supervisor --repo /project --org /record
+```
+
+This is separate from the scratch release-cycle `--dry-run` above. The JSON
+report lists kept, refused, removed and would-remove candidates, with reasons.
+The standard `HERDR_MONITOR_HOME/current/.release-commit` identifies the active
+installed release by commit. Projects with another activation scheme supply
+`RELEASE_ACTIVE_TAG` to their supervisor environment or `--active-tag TAG` to
+`--prune`; it must name a recorded candidate. An existing activation pointer with
+an unreadable or malformed commit marker refuses retention.
+
+Only a recorded candidate's exact `GIT_COMMON_DIR/release/candidates/TAG`
+directory can be deleted. Its `.release-commit` must match both the record and the
+surviving Git tag, so `git archive TAG` can reconstruct the source. Candidate-root
+and ancestor symlinks, foreign paths, ownership mismatches, moved/missing tags,
+conflicting retained evidence and special files are refused. Unrecorded paths and
+partial extractions are left for inspection. Within generated dependency/cache
+trees, links are unlinked with the disposable tree and never followed; other
+snapshot symlinks are refused.
+
+Every external gate/setup log and receipt stays in place. Before deletion,
+retention copies the snapshot's `.release-build.json`, `.release-commit`, logs,
+JSONL, receipt/evidence files and directories, and JSON outside generated
+dependency/cache trees into `release/evidence/TAG/`, preserving relative paths and
+bytes. Dependencies, cache contents and source copies are disposable.
+Byte-identical copies of committed historical evidence stay recoverable in the
+tag; Git blob hashes are checked so they need no additional local copy. New or
+changed evidence is always copied. The
+append-only `release/retention.jsonl` records a synced removal intent after
+preserving evidence, followed by a synced removal receipt. A stopped deletion
+can be retried; conflicting evidence refuses the retry. Retention advisories do
+not change a recorded gate result. Installed releases, Git tags, record history,
+and committed reports are never pruned by this command.

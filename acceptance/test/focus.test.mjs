@@ -315,3 +315,22 @@ test('the monitor retains forbidden attempts even when every sample remains unch
   assert.deepEqual(summary.forbiddenAttempts, [receipt]);
   assert.throws(() => assertFocus(summary), /forbidden focus attempt.*worktree remove/);
 });
+
+test('unattributed owned focus failures retain the previous operator pane and nearest harness and product calls', async t => {
+  const { root, monitor, change } = await fixture(t, { panes: ['scratch:p2'], workspaces: ['scratch'] });
+  const at = Date.now() - 5000;
+  const calls = [
+    { type: 'start', id: 'harness', at, origin: 'harness', args: ['tab', 'create', '--workspace', 'other'], requested: ['tab', 'create', '--workspace', 'other'] },
+    { type: 'end', id: 'harness', at: at + 10 },
+    { type: 'start', id: 'product', at: at + 20, origin: 'product', args: ['tab', 'close', 'other:t1'], requested: ['tab', 'close', 'other:t1'] },
+    { type: 'end', id: 'product', at: at + 30 },
+  ];
+  fs.writeFileSync(path.join(root, 'focus-calls.jsonl'), calls.map(JSON.stringify).join('\n') + '\n');
+  change(['scratch:p2', 'operator:p7']);
+  spawnSync(process.execPath, ['-e', 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100)']);
+  const summary = await monitor.stop(), first = summary.changes[0];
+  assert.deepEqual(first.calls, [], 'nearest diagnostics must not create correlation');
+  assert.equal(first.previousPane, 'operator:p7'); assert.equal(first.previousOwnership, 'operator');
+  assert.equal(first.nearestCalls.harness.id, 'harness'); assert.equal(first.nearestCalls.product.id, 'product');
+  assert.throws(() => assertFocus(summary), /previous pane operator:p7 \(operator-owned\).*nearest harness: tab create.*nearest product: tab close/);
+});

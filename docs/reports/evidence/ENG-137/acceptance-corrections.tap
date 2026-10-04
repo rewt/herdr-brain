@@ -1,0 +1,190 @@
+TAP version 13
+# Subtest: native adapter pins the original socket despite an isolated HOME or caller override
+ok 1 - native adapter pins the original socket despite an isolated HOME or caller override
+  ---
+  duration_ms: 147.670916
+  ...
+# Subtest: foreign pane/workspace targets and symlink escapes never reach mutation APIs
+ok 2 - foreign pane/workspace targets and symlink escapes never reach mutation APIs
+  ---
+  duration_ms: 333.850959
+  ...
+# Subtest: model launch requests are always replaced by the scratch worker script
+ok 3 - model launch requests are always replaced by the scratch worker script
+  ---
+  duration_ms: 255.993625
+  ...
+# Subtest: parent-focusing worktree removal is refused before any native mutation
+ok 4 - parent-focusing worktree removal is refused before any native mutation
+  ---
+  duration_ms: 29.425083
+  ...
+# Subtest: the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+ok 5 - the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+  ---
+  duration_ms: 108.189083
+  ...
+# Subtest: creation receipts grant the only new targets and force no-focus
+ok 6 - creation receipts grant the only new targets and force no-focus
+  ---
+  duration_ms: 576.923042
+  ...
+# Subtest: explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+ok 7 - explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+  ---
+  duration_ms: 100.502416
+  ...
+# Subtest: agent send-keys requires an owned target and checks its live cwd
+ok 8 - agent send-keys requires an owned target and checks its live cwd
+  ---
+  duration_ms: 5308.75925
+  ...
+# Subtest: named-agent mutation receipts retain the pane resolved by native identity lookup
+ok 9 - named-agent mutation receipts retain the pane resolved by native identity lookup
+  ---
+  duration_ms: 256.683125
+  ...
+# Subtest: late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+ok 10 - late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+  ---
+  duration_ms: 295.929042
+  ...
+# Subtest: non-zero native Herdr replies are harness failures through both body and forwarding paths
+ok 11 - non-zero native Herdr replies are harness failures through both body and forwarding paths
+  ---
+  duration_ms: 635.3625
+  ...
+# Subtest: stand-in registration timeout is harness pending without a safety marker
+ok 12 - stand-in registration timeout is harness pending without a safety marker
+  ---
+  duration_ms: 6209.858875
+  ...
+# Subtest: scripted PTY acknowledgement timeout is harness pending without a safety marker
+ok 13 - scripted PTY acknowledgement timeout is harness pending without a safety marker
+  ---
+  duration_ms: 10313.711208
+  ...
+# Subtest: actual capability refusals stay product FAIL even when wrapped by cleanup
+ok 14 - actual capability refusals stay product FAIL even when wrapped by cleanup
+  ---
+  duration_ms: 5174.893875
+  ...
+# Subtest: missing live pane cwd receipt is a harness limit, not a candidate capability violation
+ok 15 - missing live pane cwd receipt is a harness limit, not a candidate capability violation
+  ---
+  duration_ms: 205.683042
+  ...
+# Subtest: native transport pins the original socket when copied HOME changes
+ok 16 - native transport pins the original socket when copied HOME changes
+  ---
+  duration_ms: 186.660959
+  ...
+# Subtest: final tab rename is allowed only for receipt-owned tabs
+ok 17 - final tab rename is allowed only for receipt-owned tabs
+  ---
+  duration_ms: 198.895167
+  ...
+# Subtest: private lane environment preparation reaches only an owned pane with a live scratch cwd
+ok 18 - private lane environment preparation reaches only an owned pane with a live scratch cwd
+  ---
+  duration_ms: 5272.53575
+  ...
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+ok 19 - the real scripted supervisor presents an empty composer before publishing idle and after each notice
+  ---
+  duration_ms: 1140.348792
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+ok 20 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+  ---
+  duration_ms: 49.724042
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 21 - native polling bounds each call and rejects nonresponse at the real deadline
+  ---
+  duration_ms: 0.548083
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 22 - native polling bounds each call and rejects late success at the real deadline
+  ---
+  duration_ms: 0.079708
+  ...
+# Subtest: run.mjs cutover wiring propagates quiet FAIL into retirement
+ok 23 - run.mjs cutover wiring propagates quiet FAIL into retirement
+  ---
+  duration_ms: 0.749917
+  ...
+# Subtest: run.mjs cutover wiring propagates loaded PENDING into retirement
+ok 24 - run.mjs cutover wiring propagates loaded PENDING into retirement
+  ---
+  duration_ms: 0.324792
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 25 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+  ---
+  duration_ms: 134.843167
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+ok 26 - product tidy preserves a focused finished tab while closing the same tab in the background
+  ---
+  duration_ms: 1.462416
+  ...
+# Subtest: the real adapter bounds a slow cwd native read by the polling deadline
+ok 27 - the real adapter bounds a slow cwd native read by the polling deadline
+  ---
+  duration_ms: 1530.930083
+  ...
+# Subtest: the real adapter bounds a slow registration native read by the polling deadline
+ok 28 - the real adapter bounds a slow registration native read by the polling deadline
+  ---
+  duration_ms: 1711.550958
+  ...
+# monitor entry: keeping lane/entry-77a4c0184dff at /private/tmp/av-KLA0Zz/h/lanes/lane-entry-77a4c0184dff: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 29 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 50.313459
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 30 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 51.454166
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 31 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 49.803041
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+not ok 32 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 998.427208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/av-KLA0Zz/h/lanes/lane-entry-77a4c0184dff/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/av-KLA0Zz/project/.lane.json)): node --test
+    monitor validation: run temp root /private/tmp/av-KLA0Zz/h/.herdr-monitor/t/aa5f8fcbc1d5cd7c needs 67 bytes; maximum is 60 for Unix socket paths; select a shorter fleet temp root
+    GATE 47a9daf1cfa0cfccaf6c88cfe6a542a0c3e27d4d exit=1 (0.031s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/discovery/runtime.mjs:26:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/discovery/runtime.mjs:213:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/discovery/runtime.mjs:292:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/validation.test.mjs:140:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+1..32
+# tests 32
+# suites 0
+# pass 31
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 35653.966

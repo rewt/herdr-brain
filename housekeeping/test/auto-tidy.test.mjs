@@ -399,3 +399,14 @@ test('every tick tidies despite the ten-minute cleanup interval and a tidy failu
   assert.deepEqual(logs.filter(e => e.action === 'scan').map(e => e.cleanup), [true, false, false]);
   assert.deepEqual(f.read().actions, [['tab', 'close', 'finished']]);
 });
+
+test('auto-tidy preserves a focused finished worker at initial and final observation', t => {
+  const f = fixture(t);
+  f.stateData.panes[0].focused = true; f.save();
+  assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
+  f.stateData.panes[0].focused = false; f.stateData.agentReads = 0; f.save();
+  // The operator enters the tab during the final observation, after planning.
+  const code = fs.readFileSync(f.fake, 'utf8').replace("const save = () =>", "if(a[0]==='pane'&&a[1]==='list'&&s.agentReads>=1)s.panes[0].focused=true;\nconst save = () =>");
+  fs.writeFileSync(f.fake, code);
+  assert.equal(f.tidy(), true); assert.deepEqual(f.read().actions, []);
+});

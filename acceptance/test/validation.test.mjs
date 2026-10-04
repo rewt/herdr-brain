@@ -1,7 +1,6 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createEntry, command } from '../../discovery/runtime.mjs';
@@ -9,17 +8,18 @@ import { sandboxCommand } from '../../discovery/confinement.mjs';
 import { lifetimeScope, closeScope } from '../../discovery/lifetime.mjs';
 import { validationTransport } from '../validation.mjs';
 import { copyNativeTransport } from '../transport.mjs';
+import { joinFleet } from '../../lib/fleet.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
 const discovered = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout?.trim();
 function fixture(t) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-validation-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'av-')));
   const entries = [];
   t.after(() => {
     try { for (const entry of entries) entry.close(); }
     finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
-  const repo = path.join(root, 'project'), temp = path.join(root, 'session');
+  const repo = path.join(root, 'project'), temp = path.join(root, 'h');
   fs.mkdirSync(repo); fs.mkdirSync(temp);
   for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'Test'], ['config', 'user.email', 'test@example.invalid']]) command('git', args, repo);
   fs.mkdirSync(path.join(repo, 'test'));
@@ -107,6 +107,9 @@ test('actual native transport validates and promotes work and approved routes of
     Object.assign(process.env, { HOME: temp, TMPDIR: temp,
       GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', OPENSSL_CONF: '/dev/null' });
     t.after(() => { for (const key of Object.keys(process.env)) delete process.env[key]; Object.assign(process.env, previous); });
+    // Keep the actual per-run path within the native 60-byte socket budget
+    // without leaking HERDR_ capabilities into the validation transport.
+    joinFleet({ cwd: repo, temp: path.join(temp, 't') });
     const outside = path.join(root, 'private-canary'); fs.writeFileSync(outside, 'private');
     const options = { cwd: repo, sandboxBinary: native, runtimeDir: path.join(temp, 'runtime'), worktreeRoot: spec.worktreeRoot };
     for (const taskName of ['work', 'routes']) {
@@ -123,7 +126,10 @@ test('actual native transport validates and promotes work and approved routes of
       }
       fs.writeFileSync(path.join(task.workspace, 'test/confinement.test.mjs'), `import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import net from 'node:net';import path from 'node:path';
         test('gate and product boundaries',async()=>{
-          assert.equal(fs.realpathSync(process.env.TMPDIR),path.join(process.cwd(),'.lane/validation-tmp'));
+          const runtimeTemp=fs.realpathSync(process.env.TMPDIR);
+          assert.equal(path.dirname(runtimeTemp),${JSON.stringify(path.join(temp, 't'))});
+          assert.match(path.basename(runtimeTemp),/^r-[A-Za-z0-9]{6}$/);
+          assert.equal(process.env.TMP,runtimeTemp);assert.equal(process.env.TEMP,runtimeTemp);
           const temporary=fs.mkdtempSync(path.join(process.env.TMPDIR,'gate-proof-'));
           try {
             const file=path.join(temporary,'probe');fs.writeFileSync(file,'temporary data',{flag:'wx'});
@@ -146,3 +152,20 @@ test('actual native transport validates and promotes work and approved routes of
     assert.equal(JSON.parse(fs.readFileSync(path.join(repo, '.lane.json'))).routes.engineer.model, 'gpt-6.1-sol');
     assert.equal(command('git', ['rev-list', '--merges', 'main'], repo), '');
   });
+
+test('native per-run validation temp is admitted only by its private identity and exact environment handoff', t => {
+  const { repo, temp, spec } = fixture(t);
+  const temporary = fs.mkdtempSync(path.join(temp, 'r-')); fs.chmodSync(temporary, 0o700);
+  const sandbox = sandboxCommand('/native/codex', repo, { sharedPaths: [path.join(repo, '.org')], temporaryPaths: [temporary] });
+  const args = [...sandbox.args, '/bin/true'];
+  const env = { TMPDIR: temporary, TMP: temporary, TEMP: temporary };
+  const composed = validationTransport(spec, args, repo, { env }).args.join(' ');
+  assert.ok(composed.includes(`${JSON.stringify(temporary)}="write"`));
+  for (const wrong of [{}, { ...env, TMP: repo }, { ...env, TMPDIR: path.dirname(temporary) }])
+    assert.throws(() => validationTransport(spec, args, repo, { env: wrong }), /external writes/);
+  fs.chmodSync(temporary, 0o755);
+  assert.throws(() => validationTransport(spec, args, repo, { env }), /private validation temp/);
+  fs.chmodSync(temporary, 0o700);
+  fs.renameSync(temporary, `${temporary}-moved`); fs.symlinkSync(`${temporary}-moved`, temporary);
+  assert.throws(() => validationTransport(spec, args, repo, { env }), /writable path redirected/);
+});

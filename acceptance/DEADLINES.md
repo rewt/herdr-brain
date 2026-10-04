@@ -17,7 +17,7 @@ an unchanged copy of `lib/deadline.mjs` beside their other runtime modules.
 | `run.mjs`: busy-refusal elapsed assertion and native `agent wait --timeout` | 10s each | Both scale; the elapsed assertion freezes its allowance before invocation. |
 | `herdr.mjs`: ownership lock | 10s | Scaled; receipt persistence and cleanup authority unchanged. |
 | `herdr.mjs`: each native child and TERM-to-KILL grace | 35s + 1s | Both scale; forceful termination remains finite. |
-| `herdr.mjs`: cwd, stand-in registration, PTY acknowledgement, shell startup | 50/60/100 attempts at 100ms (nominal 5/6/10/10s) | Converted to elapsed, load-scaled deadlines. Native probes have their own bounded response allowance. |
+| `herdr.mjs`: cwd, stand-in registration, PTY acknowledgement, shell startup | 50/60/100 attempts at 100ms (nominal 5/6/10/10s) | Converted to elapsed, load-scaled deadlines. Cwd and registration probes cap each read-only native call at the remaining time, kill it at expiry, and reject late successful replies; sleep also consumes that same deadline. |
 | `worker.mjs`: scripted commands and TERM-to-KILL grace | 90s default; Git add/commit 15s; grace 1s | All scale on invocation. |
 | `live-worker.mjs`: real session runtime and termination grace | 180s; stop grace 1s | Both scale. Runtime expiry now also escalates to SIGKILL after the grace, including sessions that ignore TERM. |
 | `focus.mjs`: IPC ready/stop waits and replay startup | 70/7/60s | Already load-aware; retained. |

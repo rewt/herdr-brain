@@ -24,10 +24,44 @@ import { settleCase } from './settle.mjs';
 import { supervisorCase } from './supervisor.mjs';
 import { assertSupervisorEntry } from './entry.mjs';
 import { startFocusMonitor, assertFocus } from './focus.mjs';
-import { cleanupWorkspaces } from './cleanup.mjs';
+import { cleanupWorkspaces, cleanupInboxes } from './cleanup.mjs';
+import { testSlotEnvironment } from './environment.mjs';
 import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 
+export function harnessEnvironment(input, root) {
+  const env = { ...input };
+  for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_)/.test(key)) delete env[key];
+  Object.assign(env, testSlotEnvironment(input), { ACCEPTANCE_ROOT: root, TMPDIR: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+    ORG_ACTOR: 'release-acceptance-setup', npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
+  return env;
+}
+
+export async function runCutoverCases({ results, test, switches, retirement, scratchRoots }) {
+  await test(cases.switches, async () => {
+    const checks = [];
+    const detail = await switches((definition, fn) => runCase(checks, definition, fn, { scratchRoots }), checks);
+    requireSuccessfulChecks(checks);
+    return detail;
+  });
+  await test(cases.retirement, () => {
+    requirePrerequisite(results, cases.switches.key);
+    return retirement();
+  });
+}
+
+export async function abandonWatcher(job, { record, h, until, read, close }) {
+  record(['abandon', job.run, '--note', 'Acceptance failure path complete']);
+  // Notice confirmation may still be running when the PTY receipt arrives.
+  // Hold working until the watcher actually observes abandonment, so its next
+  // agent.wait cannot miss a transient 300ms pulse while confirming delivery.
+  h('pane', 'report-agent', job.pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', 'working', '--seq', '100');
+  try { await until(() => read(job.watcher.log).includes('was abandoned; stopping'), 'abandoned watcher stops'); }
+  finally { h('pane', 'report-agent', job.pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', 'idle', '--seq', '101'); }
+  close(job.lane);
+}
+
+async function main() {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.dirname(HERE);
 const { values: opt } = parseArgs({ options: {
@@ -51,10 +85,7 @@ let focusMonitor, focusError;
 let stopping = false, cleanupPromise, focusPromise;
 const pids = new Set();
 const discoveryRoots = [];
-const env = { ...process.env };
-for (const key of Object.keys(env)) if (/^(ORG_|LANE_|HERDR_|RELEASE_|ACCEPTANCE_|MONITOR_)/.test(key)) delete env[key];
-Object.assign(env, { ACCEPTANCE_ROOT: root, TMPDIR: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
-  ORG_ACTOR: 'release-acceptance-setup', npm_config_cache: path.join(root, 'npm-cache'), npm_config_update_notifier: 'false' });
+const env = harnessEnvironment(process.env, root);
 const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value); };
 const read = (file) => fs.readFileSync(file, 'utf8');
 const json = (text) => { const v = JSON.parse(text); return v.result ?? v; };
@@ -125,7 +156,7 @@ async function until(fn, label, ms = 25_000) {
     return fn();
   }, label, ms, { load });
 }
-const h = (...args) => json(node(path.join(root, 'herdr.mjs'), args).stdout);
+const h = (...args) => json(node(path.join(root, 'herdr.mjs'), args, { extra: { ACCEPTANCE_CALLER: 'harness' } }).stdout);
 const record = (args, options = {}) => node(path.join(candidate, 'bin/org.mjs'), args, { cwd: fixture.repo, extra: { ORG_DIR: fixture.org }, ...options }).stdout;
 const lane = (args, cwd = fixture.repo, options = {}) => node(path.join(candidate, 'lanes/lane.mjs'), args, { cwd, ...options }).stdout;
 const inbox = () => fs.existsSync(path.join(root, 'supervisor-input.jsonl')) ? read(path.join(root, 'supervisor-input.jsonl')) : '';
@@ -172,15 +203,7 @@ async function final(job, { ingest = true } = {}) {
     assert.ok(json(record(['show', job.run, '--json'])).report);
   }
 }
-async function stopWatcher(job) {
-  record(['abandon', job.run, '--note', 'Acceptance failure path complete']);
-  // A waiting watcher wakes on the real reported state transition.
-  h('pane', 'report-agent', job.pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', 'working', '--seq', '100');
-  await new Promise((r) => setTimeout(r, 300));
-  h('pane', 'report-agent', job.pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', 'idle', '--seq', '101');
-  await until(() => read(job.watcher.log).includes('was abandoned; stopping'), 'abandoned watcher stops');
-  lane(['close', job.lane]);
-}
+const stopWatcher = job => abandonWatcher(job, { record, h, until, read, close: topic => lane(['close', topic]) });
 
 function cleanupScope() {
   return cleanupPromise ??= closeScope();
@@ -216,10 +239,19 @@ async function closeScope() {
       if (Date.now() >= deadline) throw new HarnessLimit('owned watchers did not stop; cleanup snapshots refused');
       await new Promise(resolve => setTimeout(resolve, 25));
     }
+    try { await cleanupInboxes({ root, candidate, evidence }); }
+    catch (error) { errors.push(error.message); }
     if (fs.existsSync(path.join(root, 'ownership.json'))) {
       const state = JSON.parse(read(path.join(root, 'ownership.json')));
-      const cleaned = await cleanupWorkspaces({ root, evidence, native: (args) =>
-        json(run(state.binary, args, { extra: { HERDR_SOCKET_PATH: state.socketPath }, duringCleanup: true }).stdout) });
+      const cleaned = await cleanupWorkspaces({ root, evidence, native: (args) => {
+        const id = `cleanup:${crypto.randomUUID()}`;
+        const trace = type => fs.appendFileSync(path.join(evidence, 'focus-calls.jsonl'), JSON.stringify({
+          type, id, at: Date.now(), args, requested: args, origin: 'harness', actor: 'release-acceptance-cleanup',
+        }) + '\n');
+        trace('start');
+        try { return json(run(state.binary, args, { extra: { HERDR_SOCKET_PATH: state.socketPath }, duringCleanup: true }).stdout); }
+        finally { trace('end'); }
+      } });
       errors.push(...cleaned.errors);
       for (const file of ['creation-intents.jsonl', 'creations.jsonl', 'herdr.jsonl', 'denied.jsonl', 'supervisor-input.jsonl', 'worker-input.jsonl', 'notifications.jsonl']) {
         if (fs.existsSync(path.join(root, file))) fs.copyFileSync(path.join(root, file), path.join(evidence, file));
@@ -338,7 +370,8 @@ try {
     const binary = run('which', ['herdr']).stdout.trim();
     write(path.join(root, 'ownership.json'), JSON.stringify({ binary, socketPath: liveSocket(process.env), workspaces: [], tabs: [], panes: [] }));
     fs.copyFileSync(path.join(SOURCE, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
-    for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs', 'environment.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
+    for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'worker.mjs', 'environment.mjs', 'poll.mjs']) fs.copyFileSync(path.join(HERE, file), path.join(root, file));
+    write(path.join(root, 'test-slot-env.json'), JSON.stringify(testSlotEnvironment(env)));
     const bin = path.join(root, 'bin'); fs.mkdirSync(bin);
     write(path.join(bin, 'herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'herdr.mjs'))} "$@"\n`); fs.chmodSync(path.join(bin, 'herdr'), 0o755);
     for (const name of ['codex', 'claude', 'ai', 'cmem-domain', 'launchctl']) {
@@ -726,7 +759,7 @@ try {
     return 'copied close status parser plus actual apply-settle org add/ingest through PATH; intentional missing Draft stops before review desk';
   });
   let cutover, cutoverCanary;
-  await test(cases.switches, async () => {
+  const switchCase = async (check, checks) => {
     existingReady();
     for (const file of ['watch/watch.mjs', 'supervisor/open-session.mjs']) assert.ok(present(file), `cutover candidate lacks ${file}`);
     const originals = capture(copy);
@@ -743,8 +776,6 @@ try {
     cutover = { originals, base, target, pane, org, rec };
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
     auditCopies(copy, { live, home: process.env.HOME });
-    const checks = [];
-    const check = (definition, fn) => runCase(checks, definition, fn, { scratchRoots });
     const execute = (rel, args = [], options = {}) => runCopy(rel.endsWith('.mjs') ? process.execPath : '/bin/zsh',
       [...(rel.endsWith('.mjs') ? [] : ['-f']), path.join(copy, rel), ...args], { cwd: copy, extra: { ORG_DIR: org, HERDR_PANE_ID: pane }, ...options });
     const persona = path.join(root, 'cutover-persona');
@@ -940,11 +971,9 @@ try {
     });
     write(path.join(evidence, 'cutover-switches.json'), JSON.stringify({ files: switches, checks, rollback: originals.map(({ key, file, mode }) => ({ key, file, mode, exact: true })) }, null, 2));
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
-    requireSuccessfulChecks(checks);
     return `${switches.length} switches applied, executed and restored; detailed receipts in cutover-switches.json`;
-  });
-  await test(cases.retirement, () => {
-    requirePrerequisite(results, cases.switches.key);
+  };
+  const retirementCase = () => {
     assert.ok(cutover, 'passed switch case has no fixture receipt');
     const compat = path.join(candidate, 'contrib/settle-watch.mjs');
     assert.ok(fs.existsSync(compat), 'candidate compatibility entry missing before retirement');
@@ -965,7 +994,8 @@ try {
     assert.deepEqual(fs.readFileSync(compat), saved); assert.equal(fs.statSync(compat).mode & 0o777, mode);
     assert.ok(callers(copy, 'contrib/settle-watch.mjs').length, 'rollback must restore the old caller after the blob');
     return 'negative caller probe refused; zero-caller retirement executed; split launcher tests ran without contrib; blob restored before all legacy callers';
-  });
+  };
+  await runCutoverCases({ results, test, switches: switchCase, retirement: retirementCase, scratchRoots });
   await discovery({ root, scratchRoots, discoveryRoots, evidence, candidate, opt, env, test, pending, initRepo, run, node, git, h, until, write, read });
   await test(cases.defaultCycle, async () => {
     for (const file of ['dispatch/dispatch.mjs', 'watch/watch.mjs', 'discovery/adapters/codex.mjs']) assert.ok(present(file), `default cycle candidate lacks ${file}`);
@@ -1022,3 +1052,6 @@ try {
   await finishFocus();
   emitSummary();
 }
+
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

@@ -1,0 +1,77 @@
+TAP version 13
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+ok 1 - the real scripted supervisor presents an empty composer before publishing idle and after each notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.563542
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+ok 2 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044792
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 3 - native polling bounds each call and rejects nonresponse at the real deadline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037708
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 4 - native polling bounds each call and rejects late success at the real deadline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032125
+  ...
+# Subtest: run.mjs cutover wiring propagates quiet FAIL into retirement
+ok 5 - run.mjs cutover wiring propagates quiet FAIL into retirement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.088917
+  ...
+# Subtest: run.mjs cutover wiring propagates loaded PENDING into retirement
+ok 6 - run.mjs cutover wiring propagates loaded PENDING into retirement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028958
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 7 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027166
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+not ok 8 - product tidy preserves a focused finished tab while closing the same tab in the background
+  ---
+  duration_ms: 4.56025
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + [
+    +   {
+    +     label: 'finished',
+    +     tab_id: 'worker',
+    +     why: 'worker finished and its result is recorded (lane-worker)'
+    +   }
+    + ]
+    - []
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0:
+      tab_id: 'worker'
+      label: 'finished'
+      why: 'worker finished and its result is recorded (lane-worker)'
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/harness.test.mjs:108:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 7
+# todo 0
+# duration_ms 43.734417

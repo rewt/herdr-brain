@@ -1,0 +1,98 @@
+TAP version 13
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+ok 1 - the real scripted supervisor presents an empty composer before publishing idle and after each notice # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.491459
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+ok 2 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038625
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 3 - native polling bounds each call and rejects nonresponse at the real deadline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033208
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 4 - native polling bounds each call and rejects late success at the real deadline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029125
+  ...
+# Subtest: run.mjs cutover wiring propagates quiet FAIL into retirement
+ok 5 - run.mjs cutover wiring propagates quiet FAIL into retirement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031125
+  ...
+# Subtest: run.mjs cutover wiring propagates loaded PENDING into retirement
+ok 6 - run.mjs cutover wiring propagates loaded PENDING into retirement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025834
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 7 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.064208
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+ok 8 - product tidy preserves a focused finished tab while closing the same tab in the background # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026041
+  ...
+# Subtest: the real adapter bounds a slow cwd native read by the polling deadline
+not ok 9 - the real adapter bounds a slow cwd native read by the polling deadline
+  ---
+  duration_ms: 4310.983708
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'late idle must not start/rename the stand-in'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 0
+  operator: 'notStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/.adapter-before.test.mjs:126:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: the real adapter bounds a slow registration native read by the polling deadline
+not ok 10 - the real adapter bounds a slow registration native read by the polling deadline
+  ---
+  duration_ms: 4290.373166
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'late idle must not start/rename the stand-in'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 0
+  operator: 'notStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/.adapter-before.test.mjs:126:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 8
+# todo 0
+# duration_ms 8643.425

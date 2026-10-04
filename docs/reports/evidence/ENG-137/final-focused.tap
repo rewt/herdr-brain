@@ -1,0 +1,365 @@
+TAP version 13
+# Subtest: focus sampling continues while the acceptance parent blocks and spans cleanup
+ok 1 - focus sampling continues while the acceptance parent blocks and spans cleanup
+  ---
+  duration_ms: 672.317875
+  ...
+# Subtest: native pane_focused events catch a transient change between unchanged samples and name both calls
+ok 2 - native pane_focused events catch a transient change between unchanged samples and name both calls
+  ---
+  duration_ms: 568.592583
+  ...
+# Subtest: native startup replay settles before the baseline and subsequent transient owned moves still fail
+ok 3 - native startup replay settles before the baseline and subsequent transient owned moves still fail
+  ---
+  duration_ms: 794.247917
+  ...
+# Subtest: continuous operator focus starts without silence and an immediate transient harness move still fails
+ok 4 - continuous operator focus starts without silence and an immediate transient harness move still fails
+  ---
+  duration_ms: 6683.396417
+  ...
+# Subtest: continuous operator activity alone passes after bounded replay
+ok 5 - continuous operator activity alone passes after bounded replay
+  ---
+  duration_ms: 831.889833
+  ...
+# Subtest: a busy stream from an unknown server never assumes the verified replay bound
+ok 6 - a busy stream from an unknown server never assumes the verified replay bound
+  ---
+  duration_ms: 699.505
+  ...
+# Subtest: owned changes need no correlated call and incomplete monitoring never passes
+ok 7 - owned changes need no correlated call and incomplete monitoring never passes
+  ---
+  duration_ms: 0.22975
+  ...
+# Subtest: external sampled and transient event moves are recorded and re-baseline without failing
+ok 8 - external sampled and transient event moves are recorded and re-baseline without failing
+  ---
+  duration_ms: 699.489833
+  ...
+# Subtest: an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+ok 9 - an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+  ---
+  duration_ms: 699.278333
+  ...
+# Subtest: external moves during unrelated active and completed calls re-baseline without failing
+ok 10 - external moves during unrelated active and completed calls re-baseline without failing
+  ---
+  duration_ms: 811.334875
+  ...
+# Subtest: a move to the pane targeted by a concurrent call fails after an external re-baseline
+ok 11 - a move to the pane targeted by a concurrent call fails after an external re-baseline
+  ---
+  duration_ms: 716.283667
+  ...
+# Subtest: workspace destinations correlate only with their matching call despite a newer unrelated completion
+ok 12 - workspace destinations correlate only with their matching call despite a newer unrelated completion
+  ---
+  duration_ms: 576.575833
+  ...
+# Subtest: a resolved agent target receipt correlates a named call without guessing pane IDs
+ok 13 - a resolved agent target receipt correlates a named call without guessing pane IDs
+  ---
+  duration_ms: 576.008709
+  ...
+# Subtest: a creation receipt attributes a transient move before ownership is registered
+ok 14 - a creation receipt attributes a transient move before ownership is registered
+  ---
+  duration_ms: 615.107333
+  ...
+# Subtest: a focus event after a slow completed call names that call using its completion time
+ok 15 - a focus event after a slow completed call names that call using its completion time
+  ---
+  duration_ms: 1697.557625
+  ...
+# Subtest: an unreachable read-only focus socket is an explicit harness limitation
+ok 16 - an unreachable read-only focus socket is an explicit harness limitation
+  ---
+  duration_ms: 21.455083
+  ...
+# Subtest: the monitor retains forbidden attempts even when every sample remains unchanged
+ok 17 - the monitor retains forbidden attempts even when every sample remains unchanged
+  ---
+  duration_ms: 470.891792
+  ...
+# Subtest: unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+ok 18 - unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+  ---
+  duration_ms: 568.28725
+  ...
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+ok 19 - the real scripted supervisor presents an empty composer before publishing idle and after each notice
+  ---
+  duration_ms: 1139.942208
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+ok 20 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+  ---
+  duration_ms: 41.401375
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 21 - native polling bounds each call and rejects nonresponse at the real deadline
+  ---
+  duration_ms: 0.487916
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 22 - native polling bounds each call and rejects late success at the real deadline
+  ---
+  duration_ms: 0.067167
+  ...
+# Subtest: run.mjs cutover wiring propagates quiet FAIL into retirement
+ok 23 - run.mjs cutover wiring propagates quiet FAIL into retirement
+  ---
+  duration_ms: 0.71875
+  ...
+# Subtest: run.mjs cutover wiring propagates loaded PENDING into retirement
+ok 24 - run.mjs cutover wiring propagates loaded PENDING into retirement
+  ---
+  duration_ms: 0.32125
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 25 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+  ---
+  duration_ms: 128.151042
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+ok 26 - product tidy preserves a focused finished tab while closing the same tab in the background
+  ---
+  duration_ms: 1.315
+  ...
+# Subtest: the real adapter bounds a slow cwd native read by the polling deadline
+ok 27 - the real adapter bounds a slow cwd native read by the polling deadline
+  ---
+  duration_ms: 1536.695833
+  ...
+# Subtest: the real adapter bounds a slow registration native read by the polling deadline
+ok 28 - the real adapter bounds a slow registration native read by the polling deadline
+  ---
+  duration_ms: 1692.640584
+  ...
+# Subtest: SIGINT drains an active workspace and recovers its lost reply
+ok 29 - SIGINT drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 601.791375
+  ...
+# Subtest: SIGINT drains an active create-cwd and recovers its lost reply
+ok 30 - SIGINT drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 643.369917
+  ...
+# Subtest: SIGINT drains an active open-cwd and recovers its lost reply
+ok 31 - SIGINT drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 623.902083
+  ...
+# Subtest: SIGINT drains an active create-workspace and recovers its lost reply
+ok 32 - SIGINT drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 583.036583
+  ...
+# Subtest: SIGINT drains an active open-workspace and recovers its lost reply
+ok 33 - SIGINT drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 610.395584
+  ...
+# Subtest: SIGTERM drains an active workspace and recovers its lost reply
+ok 34 - SIGTERM drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 569.59075
+  ...
+# Subtest: SIGTERM drains an active create-cwd and recovers its lost reply
+ok 35 - SIGTERM drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 715.216833
+  ...
+# Subtest: SIGTERM drains an active open-cwd and recovers its lost reply
+ok 36 - SIGTERM drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 636.60325
+  ...
+# Subtest: SIGTERM drains an active create-workspace and recovers its lost reply
+ok 37 - SIGTERM drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 581.368875
+  ...
+# Subtest: SIGTERM drains an active open-workspace and recovers its lost reply
+ok 38 - SIGTERM drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 610.655291
+  ...
+# Subtest: cleanup refuses snapshots until every registered producer acknowledges stop
+ok 39 - cleanup refuses snapshots until every registered producer acknowledges stop
+  ---
+  duration_ms: 60.648792
+  ...
+# Subtest: cleanup reconciles again when a lost-reply workspace appears after the first inventory
+ok 40 - cleanup reconciles again when a lost-reply workspace appears after the first inventory
+  ---
+  duration_ms: 13.712875
+  ...
+# Subtest: a matching caller label with a foreign native path never grants recovery authority
+ok 41 - a matching caller label with a foreign native path never grants recovery authority
+  ---
+  duration_ms: 9.042792
+  ...
+# Subtest: cleanup stops and awaits a supervisor executing dispatch before reading ownership
+ok 42 - cleanup stops and awaits a supervisor executing dispatch before reading ownership
+  ---
+  duration_ms: 732.537916
+  ...
+# Subtest: stopping an individual idle PTY worker leaves the run admission barrier open
+ok 43 - stopping an individual idle PTY worker leaves the run admission barrier open
+  ---
+  duration_ms: 90.580209
+  ...
+# Subtest: finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+ok 44 - finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+  ---
+  duration_ms: 1656.101083
+  ...
+# Subtest: dry-run previews finished tabs and never closes, including through housekeeping --once
+ok 45 - dry-run previews finished tabs and never closes, including through housekeeping --once
+  ---
+  duration_ms: 967.72275
+  ...
+# Subtest: a working or blocked change at the final recheck preserves the finished tab
+ok 46 - a working or blocked change at the final recheck preserves the finished tab
+  ---
+  duration_ms: 1013.281834
+  ...
+# Subtest: new occupants revealed after the final pane list preserve their tab
+ok 47 - new occupants revealed after the final pane list preserve their tab
+  ---
+  duration_ms: 1845.421042
+  ...
+# Subtest: conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+ok 48 - conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+  ---
+  duration_ms: 0.358125
+  ...
+# Subtest: housekeeping --once preserves waiting reports, blocking items and missing item evidence
+ok 49 - housekeeping --once preserves waiting reports, blocking items and missing item evidence
+  ---
+  duration_ms: 4685.388708
+  ...
+# Subtest: automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+ok 50 - automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+  ---
+  duration_ms: 2768.28425
+  ...
+# Subtest: replacement identity and a waiting report at the final observation prevent closing
+ok 51 - replacement identity and a waiting report at the final observation prevent closing
+  ---
+  duration_ms: 1680.438833
+  ...
+# Subtest: a reused worker name with a newer open run and an extra unnamed occupant never close
+ok 52 - a reused worker name with a newer open run and an extra unnamed occupant never close
+  ---
+  duration_ms: 658.077667
+  ...
+# Subtest: a matching worker cannot authorize another occupant reusing its name
+ok 53 - a matching worker cannot authorize another occupant reusing its name
+  ---
+  duration_ms: 949.123792
+  ...
+# Subtest: only this Git project is tidied and the caller tab is preserved
+ok 54 - only this Git project is tidied and the caller tab is preserved
+  ---
+  duration_ms: 578.138708
+  ...
+# Subtest: finished reviews and old settle sessions use the existing tidy policy
+ok 55 - finished reviews and old settle sessions use the existing tidy policy
+  ---
+  duration_ms: 1191.93325
+  ...
+# Subtest: three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+ok 56 - three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+  ---
+  duration_ms: 2345.37025
+  ...
+# Subtest: supported review routes need a matching topic verdict newer than their session
+ok 57 - supported review routes need a matching topic verdict newer than their session
+  ---
+  duration_ms: 0.24775
+  ...
+# Subtest: automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+ok 58 - automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+  ---
+  duration_ms: 10417.534875
+  ...
+# Subtest: replacement reviewers at the final observation keep their tabs without worker runs
+ok 59 - replacement reviewers at the final observation keep their tabs without worker runs
+  ---
+  duration_ms: 5090.535375
+  ...
+# Subtest: review evidence cannot override a recorded worker waiting on a blocker
+ok 60 - review evidence cannot override a recorded worker waiting on a blocker
+  ---
+  duration_ms: 424.665584
+  ...
+# Subtest: failed and incomplete reads close nothing and are logged without stopping housekeeping
+ok 61 - failed and incomplete reads close nothing and are logged without stopping housekeeping
+  ---
+  duration_ms: 1652.593292
+  ...
+# Subtest: every tick tidies despite the ten-minute cleanup interval and a tidy failure
+ok 62 - every tick tidies despite the ten-minute cleanup interval and a tidy failure
+  ---
+  duration_ms: 4797.421583
+  ...
+# Subtest: auto-tidy preserves a focused finished worker at initial and final observation
+ok 63 - auto-tidy preserves a focused finished worker at initial and final observation
+  ---
+  duration_ms: 779.870416
+  ...
+# Subtest: closes exited watchers and old finished sessions, keeps the newest session
+ok 64 - closes exited watchers and old finished sessions, keeps the newest session
+  ---
+  duration_ms: 2.371375
+  ...
+# Subtest: never closes active, unnamed or still-running tabs, or its own tab
+ok 65 - never closes active, unnamed or still-running tabs, or its own tab
+  ---
+  duration_ms: 0.129125
+  ...
+# Subtest: an operator chat (unnamed agent) is kept even in a session or lane tab
+ok 66 - an operator chat (unnamed agent) is kept even in a session or lane tab
+  ---
+  duration_ms: 0.099959
+  ...
+# Subtest: closes lane worker tabs only when every worker there has a recorded report
+ok 67 - closes lane worker tabs only when every worker there has a recorded report
+  ---
+  duration_ms: 0.145084
+  ...
+# Subtest: a newer lane review verdict finishes its idle review tab, but an older verdict does not
+ok 68 - a newer lane review verdict finishes its idle review tab, but an older verdict does not
+  ---
+  duration_ms: 0.210916
+  ...
+# Subtest: a FAIL review record on its first nonempty line finishes an older review session
+ok 69 - a FAIL review record on its first nonempty line finishes an older review session
+  ---
+  duration_ms: 0.158208
+  ...
+# Subtest: a watcher label in a lane workspace or with an agent inside is left alone
+ok 70 - a watcher label in a lane workspace or with an agent inside is left alone
+  ---
+  duration_ms: 0.123792
+  ...
+# Subtest: shell-only detection
+ok 71 - shell-only detection
+  ---
+  duration_ms: 0.065833
+  ...
+1..71
+# tests 71
+# suites 0
+# pass 71
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 43544.64825

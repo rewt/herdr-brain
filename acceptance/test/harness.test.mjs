@@ -1,0 +1,159 @@
+import test from '../../test/helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { composerEmpty } from '../../supervisor/composer.mjs';
+import { harnessEnvironment, runCutoverCases, abandonWatcher } from '../run.mjs';
+import { pollNative } from '../poll.mjs';
+import { cleanupInboxes } from '../cleanup.mjs';
+import { acquireHostTestSlot } from '../../test-slot/test-slot.mjs';
+import { createLoadMonitor, LoadTimeout } from '../load.mjs';
+import { cases, cutoverChecks, runCase } from '../cases.mjs';
+import { withCommandContext } from '../limits.mjs';
+
+const source = path.resolve(import.meta.dirname, '../..');
+function scratch(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-harness-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  return root;
+}
+const until = async fn => {
+  const end = Date.now() + 10000;
+  while (!fn()) { assert.ok(Date.now() < end, 'fixture ready'); await new Promise(r => setTimeout(r, 20)); }
+};
+
+test('the real scripted supervisor presents an empty composer before publishing idle and after each notice', async t => {
+  const root = scratch(t);
+  for (const file of ['worker.mjs', 'producers.mjs']) fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
+  fs.copyFileSync(path.join(source, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
+  fs.writeFileSync(path.join(root, 'herdr.mjs'), `import fs from 'node:fs';fs.appendFileSync(${JSON.stringify(path.join(root, 'states'))},process.argv.join(' ')+'\\n');console.log('{"result":{}}');`);
+  const child = spawnChild(t, process.execPath, [path.join(root, 'worker.mjs'), root, 'supervisor', 'offline-supervisor'],
+    { env: { ...process.env, HERDR_PANE_ID: 'owned:pane' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  let output = ''; child.stdout.on('data', bytes => { output += bytes; });
+  await until(() => fs.existsSync(path.join(root, 'script-panes/owned:pane')));
+  assert.equal(composerEmpty(output, 'codex'), true, output);
+  child.stdin.write('[org-report] run=R-1 report=/scratch/report\n');
+  await until(() => output.includes('[org-report]'));
+  await until(() => fs.readFileSync(path.join(root, 'states'), 'utf8').match(/--state idle/g)?.length === 2);
+  assert.equal(composerEmpty(output, 'codex'), true, output);
+  child.kill('SIGTERM'); assert.equal((await waitForExit(child)).code, 0);
+});
+
+test('scratch promotion inherits the actual gate slot while project and session metadata are scrubbed', async t => {
+  const root = scratch(t);
+  const inherited = { ...process.env, MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'compat'),
+    ORG_DIR: '/foreign/record', HERDR_PANE_ID: 'foreign:pane', MONITOR_ENTRY: 'foreign' };
+  const slot = await acquireHostTestSlot('offline gate', { env: inherited });
+  t.after(slot.release);
+  inherited.MONITOR_TEST_SLOT_TOKEN = slot.token;
+  inherited.BCH_CLOAK_TEST_SLOT_TOKEN = slot.token;
+  const env = harnessEnvironment(inherited, root);
+  assert.equal(env.ORG_DIR, undefined); assert.equal(env.HERDR_PANE_ID, undefined); assert.equal(env.MONITOR_ENTRY, undefined);
+  const code = `import {acquireHostTestSlot} from ${JSON.stringify(path.join(source, 'test-slot/test-slot.mjs'))};const slot=await acquireHostTestSlot('nested promotion');console.log(slot.nested);slot.release();`;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { env, encoding: 'utf8', timeout: 10000 });
+  assert.equal(child.status, 0, child.stderr); assert.equal(child.stdout.trim(), 'true');
+  assert.ok(fs.existsSync(inherited.MONITOR_TEST_SLOT_PATH));
+});
+
+for (const late of [false, true]) test(`native polling bounds each call and rejects ${late ? 'late success' : 'nonresponse'} at the real deadline`, async () => {
+  let now = 0; const deadlines = [];
+  await assert.rejects(pollNative(async deadline => {
+    deadlines.push(deadline); now += 80; return late && now >= 100;
+  }, 'stand-in did not register', 100, { now: () => now, allowance: ms => ms, sleep: async ms => { now += ms; }, intervalMs: 10 }), /stand-in did not register/);
+  assert.deepEqual(deadlines, [100, 100]); assert.equal(now, 170);
+});
+
+for (const heavy of [false, true]) test(`run.mjs cutover wiring propagates ${heavy ? 'loaded PENDING' : 'quiet FAIL'} into retirement`, async t => {
+  const load = createLoadMonitor({ cpus: 2, read: () => heavy ? [28, 25, 22] : [1, 1, 1] }); t.after(load.stop);
+  const results = [{ ...cases.copy, status: 'PASS' }];
+  const original = new LoadTimeout('timeout: same-request child', load.snapshot());
+  let retired = false;
+  await runCutoverCases({ results,
+    test: (definition, fn) => runCase(results, definition, fn),
+    switches: async check => {
+      await check(cutoverChecks.retry, () => withCommandContext('busy refusal passed; same-request retry failed', () => { throw original; }));
+    }, retirement: () => { retired = true; }, scratchRoots: [],
+  });
+  assert.equal(retired, false);
+  for (const result of results.slice(1)) {
+    assert.equal(result.status, heavy ? 'PENDING' : 'FAIL'); assert.match(result.detail, /same-request retry failed/);
+    if (heavy) assert.match(result.detail, /28\.00\/25\.00\/22\.00/);
+  }
+});
+
+test('harness cleanup stops only verified inbox owners under its scratch root and retains receipts', async t => {
+  const root = scratch(t), candidate = path.join(root, 'candidate'), org = path.join(root, 'record');
+  const script = path.join(candidate, 'supervisor/prompt-supervisor.mjs'), file = path.join(org, 'supervisor/inbox.log');
+  fs.mkdirSync(path.dirname(script), { recursive: true }); fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(script, `import fs from 'node:fs';const file=process.argv[process.argv.indexOf('--inbox')+1];fs.mkdirSync(file+'.owner.lock');fs.writeFileSync(file+'.owner.lock/owner.json',JSON.stringify({pid:process.pid,argv:[process.execPath,...process.argv.slice(1)]}));setInterval(()=>{},1000);`);
+  const gitInbox = path.join(root, 'project/.git/supervisor/inbox.log');
+  fs.mkdirSync(path.dirname(gitInbox), { recursive: true });
+  const foreignRoot = scratch(t), foreignInbox = path.join(foreignRoot, 'inbox.log');
+  const files = [file, gitInbox, foreignInbox];
+  const children = files.map(file => spawnChild(t, process.execPath, [script, '--inbox', file, '--owner-worker', '--settings', '{}'], { detached: true }));
+  await until(() => files.every(file => fs.existsSync(`${file}.owner.lock/owner.json`)));
+  fs.symlinkSync(foreignRoot, path.join(root, 'foreign-alias'));
+  fs.mkdirSync(path.join(root, 'alias-project/.git'), { recursive: true });
+  fs.symlinkSync(foreignRoot, path.join(root, 'alias-project/.git/supervisor'));
+  const evidence = path.join(root, 'evidence'); fs.mkdirSync(evidence);
+  await cleanupInboxes({ root, candidate, evidence });
+  for (const child of children.slice(0, 2)) assert.equal((await waitForExit(child)).signal, 'SIGKILL');
+  assert.doesNotThrow(() => process.kill(children[2].pid, 0), 'symlinked foreign inbox owner must remain alive');
+  children[2].kill('SIGTERM'); await waitForExit(children[2]);
+  const receipts = JSON.parse(fs.readFileSync(path.join(evidence, 'inbox-cleanup.json')));
+  assert.deepEqual(receipts.map(receipt => receipt.pid).sort(), children.slice(0, 2).map(child => child.pid).sort());
+  for (const child of children.slice(0, 2)) assert.throws(() => process.kill(child.pid, 0), { code: 'ESRCH' });
+});
+
+test('product tidy preserves a focused finished tab while closing the same tab in the background', async () => {
+  const { planTidy } = await import('../../supervisor/tidy-tabs.mjs');
+  const snapshot = { tabs: [{ tab_id: 'worker', workspace_id: 'lane', lane: true, label: 'finished' }],
+    panes: [{ pane_id: 'worker:pane', tab_id: 'worker', workspace_id: 'lane', shellOnly: true, focused: true }],
+    agents: [{ name: 'lane-worker', status: 'idle', pane_id: 'worker:pane', tab_id: 'worker', workspace_id: 'lane' }],
+    reportedAgents: new Set(['lane-worker']) };
+  assert.deepEqual(planTidy(snapshot).close, []);
+  snapshot.panes[0].focused = false;
+  assert.equal(planTidy(snapshot).close.length, 1);
+});
+
+for (const phase of ['cwd', 'registration']) test(`the real adapter bounds a slow ${phase} native read by the polling deadline`, t => {
+  const root = scratch(t), binary = path.join(root, 'native.mjs');
+  for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs', 'poll.mjs'])
+    fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
+  // Shrink only the two poll windows, independently of the per-call allowance.
+  fs.writeFileSync(path.join(root, 'deadline.mjs'), 'export const loadTimeout=ms=>[5000,6000].includes(ms)?1500:ms;');
+  fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: ['owned'], panes: ['owned:pane'], tabs: [] }));
+  fs.writeFileSync(binary, `#!${process.execPath}
+    import fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');
+    if((a[0]==='pane'&&a[1]==='get'&&${JSON.stringify(phase)}==='cwd')||(a[0]==='agent'&&a[1]==='get'&&${JSON.stringify(phase)}==='registration'))await new Promise(r=>setTimeout(r,4000));
+    console.log(JSON.stringify({result:a[0]==='pane'&&a[1]==='get'?{pane:{foreground_cwd:${JSON.stringify(root)}}}:a[0]==='agent'?{agent:{agent_status:'idle',pane_id:'owned:pane'}}:{}}));`, { mode: 0o755 });
+  const result = spawnSync(process.execPath, [path.join(root, 'herdr.mjs'), 'agent', 'start', 'offline', '--pane', 'owned:pane'],
+    { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8', timeout: 12000 });
+  assert.notEqual(result.status, 0, 'late idle must not start/rename the stand-in');
+  assert.match(result.stderr, /native poll deadline expired/);
+  const calls = fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(!calls.some(a => a[0]==='agent'&&a[1]==='rename'));
+  assert.equal(calls.filter(a => a[0]===(phase==='cwd'?'pane':'agent')&&a[1]==='get').length, 1);
+});
+
+
+test('failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed', async () => {
+  let state = 'idle', abandoned = false, closed = false;
+  const job = { run: 'R-2', pane: 'owned:pane', lane: 'missing', watcher: { log: '/scratch/watch.log' } };
+  await abandonWatcher(job, {
+    record: args => { assert.deepEqual(args.slice(0, 2), ['abandon', 'R-2']); abandoned = true; },
+    h: (...args) => { state = args[args.indexOf('--state') + 1]; },
+    read: () => { assert.equal(abandoned, true); return 'R-2 was abandoned; stopping'; },
+    until: async predicate => {
+      // The watcher is still confirming its delivered notice. The transition
+      // must remain observable when it later arms agent.wait --until working.
+      for (let i = 0; i < 3; i++) { assert.equal(state, 'working'); await new Promise(resolve => setImmediate(resolve)); }
+      assert.equal(predicate(), true);
+    },
+    close: topic => { assert.equal(state, 'idle'); assert.equal(topic, 'missing'); closed = true; },
+  });
+  assert.equal(closed, true);
+});

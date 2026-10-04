@@ -1,0 +1,117 @@
+TAP version 13
+# Subtest: focus sampling continues while the acceptance parent blocks and spans cleanup
+ok 1 - focus sampling continues while the acceptance parent blocks and spans cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.534166
+  ...
+# Subtest: native pane_focused events catch a transient change between unchanged samples and name both calls
+ok 2 - native pane_focused events catch a transient change between unchanged samples and name both calls # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.041375
+  ...
+# Subtest: native startup replay settles before the baseline and subsequent transient owned moves still fail
+ok 3 - native startup replay settles before the baseline and subsequent transient owned moves still fail # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029542
+  ...
+# Subtest: continuous operator focus starts without silence and an immediate transient harness move still fails
+ok 4 - continuous operator focus starts without silence and an immediate transient harness move still fails # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030708
+  ...
+# Subtest: continuous operator activity alone passes after bounded replay
+ok 5 - continuous operator activity alone passes after bounded replay # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034292
+  ...
+# Subtest: a busy stream from an unknown server never assumes the verified replay bound
+ok 6 - a busy stream from an unknown server never assumes the verified replay bound # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025625
+  ...
+# Subtest: owned changes need no correlated call and incomplete monitoring never passes
+ok 7 - owned changes need no correlated call and incomplete monitoring never passes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065667
+  ...
+# Subtest: external sampled and transient event moves are recorded and re-baseline without failing
+ok 8 - external sampled and transient event moves are recorded and re-baseline without failing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028542
+  ...
+# Subtest: an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+ok 9 - an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.115625
+  ...
+# Subtest: external moves during unrelated active and completed calls re-baseline without failing
+ok 10 - external moves during unrelated active and completed calls re-baseline without failing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.080125
+  ...
+# Subtest: a move to the pane targeted by a concurrent call fails after an external re-baseline
+ok 11 - a move to the pane targeted by a concurrent call fails after an external re-baseline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036125
+  ...
+# Subtest: workspace destinations correlate only with their matching call despite a newer unrelated completion
+ok 12 - workspace destinations correlate only with their matching call despite a newer unrelated completion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032042
+  ...
+# Subtest: a resolved agent target receipt correlates a named call without guessing pane IDs
+ok 13 - a resolved agent target receipt correlates a named call without guessing pane IDs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.082083
+  ...
+# Subtest: a creation receipt attributes a transient move before ownership is registered
+ok 14 - a creation receipt attributes a transient move before ownership is registered # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026875
+  ...
+# Subtest: a focus event after a slow completed call names that call using its completion time
+ok 15 - a focus event after a slow completed call names that call using its completion time # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.05825
+  ...
+# Subtest: an unreachable read-only focus socket is an explicit harness limitation
+ok 16 - an unreachable read-only focus socket is an explicit harness limitation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056417
+  ...
+# Subtest: the monitor retains forbidden attempts even when every sample remains unchanged
+ok 17 - the monitor retains forbidden attempts even when every sample remains unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028958
+  ...
+# Subtest: unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+not ok 18 - unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+  ---
+  duration_ms: 591.605584
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + undefined
+    - 'operator:p7'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'operator:p7'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/.focus-before.test.mjs:333:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..18
+# tests 18
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 17
+# todo 0
+# duration_ms 626.080709

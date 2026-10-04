@@ -19,7 +19,9 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { workerSto
 const pane = process.env.HERDR_PANE_ID;
 // A PTY inherits the server environment, not the runner's TMPDIR. Keep child
 // dispatch environment files inside the same scratch capability boundary.
-const env = { ...process.env, ACCEPTANCE_ROOT: root, TMPDIR: root };
+const slotFile = path.join(root, 'test-slot-env.json');
+const slotEnv = fs.existsSync(slotFile) ? JSON.parse(fs.readFileSync(slotFile)) : {};
+const env = { ...process.env, ...slotEnv, ACCEPTANCE_ROOT: root, TMPDIR: root };
 async function command(binary, args, options = {}, timeout = 90_000) {
   if (workerStopping) throw new Error('scripted worker stopped; no further commands allowed');
   assertProducing(root);
@@ -41,19 +43,36 @@ async function command(binary, args, options = {}, timeout = 90_000) {
     });
   });
 }
-const call = (...args) => command(process.execPath, [path.join(root, 'herdr.mjs'), ...args], { env });
+const call = (...args) => command(process.execPath, [path.join(root, 'herdr.mjs'), ...args], { env: { ...env, ACCEPTANCE_CALLER: 'harness' } });
 let seq = 0;
-const state = (value) => call('pane', 'report-agent', pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', value, '--seq', String(++seq));
+function emptyComposer() {
+  // Actual PTY chrome, not an adapter read override: production's screen gate
+  // sees the same padded shaded Codex box as it does in a native session.
+  const shade = '\x1b[48;2;72;76;92m', reset = '\x1b[0m';
+  const width = Math.max(12, Math.min(process.stdout.columns ?? 60, 80) - 1);
+  const top = Math.max(1, (process.stdout.rows ?? 24) - 4);
+  // The production notice gate reads the last fourteen rendered rows.
+  process.stdout.write(`\x1b[2J\x1b[${top};1H` +
+    `${shade}${' '.repeat(width)}${reset}\n` +
+    `\x1b[1m${shade}›${reset}${shade}${' '.repeat(width - 1)}${reset}\n` +
+    `${shade}${' '.repeat(width)}${reset}\n` +
+    `scripted · ${root} · ${role}\n`);
+}
+const state = (value) => {
+  if (value === 'idle') emptyComposer();
+  return call('pane', 'report-agent', pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', value, '--seq', String(++seq));
+};
 await state('idle');
 fs.mkdirSync(path.join(root, 'script-panes'), { recursive: true });
 fs.writeFileSync(path.join(root, 'script-panes', pane), role);
-console.log(`Scripted ${role} ready (${name})`);
+// Readiness is published after the empty composer and idle receipt.
 // These are trusted scratch tasks, never model-written instructions or code.
 function defaultCycle() {
   const spec = JSON.parse(fs.readFileSync(path.join(root, 'default-supervisor-task.json')));
   const scoped = { ...env, HOME: spec.home, PATH: `${path.join(root, 'bin')}:${env.PATH}`, ORG_ACTOR: name,
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(scoped)) if (/^(ORG_|LANE_|MONITOR_|HERDR_)/.test(key)) delete scoped[key];
+  Object.assign(scoped, slotEnv);
   scoped.ORG_ACTOR = name;
   const node = (file, args, extra = {}) => command(process.execPath, [path.join(root, 'candidate', file), ...args], {
     cwd: spec.repo, env: { ...scoped, ...extra },

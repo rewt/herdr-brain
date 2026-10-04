@@ -1,0 +1,42 @@
+{
+  "baseline": "wHD:pR",
+  "currentBaseline": "wHD:pR",
+  "samples": 716,
+  "events": 0,
+  "startupEvents": [
+    {
+      "type": "subscription-startup",
+      "at": 1791083606753,
+      "event": {
+        "data": {
+          "pane_id": "wHD:pR",
+          "type": "pane_focused",
+          "workspace_id": "wHD"
+        },
+        "event": "pane_focused"
+      }
+    }
+  ],
+  "changes": [],
+  "externalChanges": [],
+  "errors": [],
+  "startedAt": 1791083606537,
+  "startupDrain": {
+    "reason": "quiet",
+    "maxReplayEvents": 512,
+    "server": {
+      "type": "pong",
+      "version": "0.8.2",
+      "protocol": 20,
+      "capabilities": {
+        "live_handoff": true,
+        "detached_server_daemon": true
+      }
+    },
+    "elapsedMs": 404
+  },
+  "monitoringStartedAt": 1791083607266,
+  "forbiddenAttempts": [],
+  "finishedAt": 1791083828514,
+  "elapsedMs": 221977
+}

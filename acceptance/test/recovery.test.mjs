@@ -140,7 +140,7 @@ test('a matching caller label with a foreign native path never grants recovery a
 test('cleanup stops and awaits a supervisor executing dispatch before reading ownership', async t => {
   const root = scratch(t), binary = path.join(root, 'fake-herdr.mjs');
   fs.copyFileSync(path.join(here, '../lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
-  for (const file of ['worker.mjs', 'herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
+  for (const file of ['worker.mjs', 'herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs', 'poll.mjs']) fs.copyFileSync(path.join(here, file), path.join(root, file));
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: [], panes: ['own:pane'], tabs: [] }));
   fs.writeFileSync(path.join(root, 'native.json'), '[]');
   fs.writeFileSync(binary, `#!${process.execPath}
@@ -173,10 +173,12 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
   fs.writeFileSync(path.join(candidate, 'dispatch/dispatch.mjs'), `
     import fs from 'node:fs';
     fs.writeFileSync(${JSON.stringify(path.join(root, 'dispatch-tmpdir'))}, process.env.TMPDIR ?? '');
+    fs.writeFileSync(${JSON.stringify(path.join(root, 'dispatch-slot'))}, JSON.stringify({ token: process.env.MONITOR_TEST_SLOT_TOKEN, path: process.env.MONITOR_TEST_SLOT_PATH }));
     import {execFileSync} from 'node:child_process';
     execFileSync(process.execPath,[${JSON.stringify(path.join(root, 'herdr.mjs'))},'workspace','create','--cwd',${JSON.stringify(root)}],{env:{...process.env,ACCEPTANCE_ROOT:${JSON.stringify(root)}},timeout:${loadTimeout(10000)}});
     console.log('{"run":"R-1"}');
   `);
+  fs.writeFileSync(path.join(root, 'test-slot-env.json'), JSON.stringify({ MONITOR_TEST_SLOT_TOKEN: 'gate-token', MONITOR_TEST_SLOT_PATH: path.join(root, 'gate-slot') }));
   fs.writeFileSync(path.join(root, 'default-supervisor-task.json'), JSON.stringify({ repo: root, home: root, binary: 'fake', ask: 'offline task' }));
   const child = spawnChild(t, process.execPath, [path.join(root, 'worker.mjs'), root, 'supervisor', 'offline-supervisor'], {
     cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, HERDR_PANE_ID: 'own:pane', ORG_ACTOR: 'eng107-r131-supervisor' },
@@ -185,6 +187,7 @@ test('cleanup stops and awaits a supervisor executing dispatch before reading ow
   child.stdin.write('acceptance-default-cycle\n');
   await until(() => fs.existsSync(path.join(root, 'active')));
   assert.equal(fs.readFileSync(path.join(root, 'dispatch-tmpdir'), 'utf8'), root, 'supervisor dispatch must keep temporary environment files in scratch');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'dispatch-slot'))), { token: 'gate-token', path: path.join(root, 'gate-slot') }, 'PTY default dispatch must inherit the gate slot despite environment scrubbing');
   const workerReceipt = fs.readdirSync(path.join(root, 'producers')).filter(file => file.endsWith('.json'))
     .map(file => JSON.parse(fs.readFileSync(path.join(root, 'producers', file))))
     .find(receipt => receipt.pid === child.pid);

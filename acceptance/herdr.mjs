@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { saveCreation, creationTargets, saveCreationIntent, recoverCreations } from './receipts.mjs';
 import { registerProducer, assertProducing } from './producers.mjs';
 import { isLaneEnvironmentCommand } from './environment.mjs';
+import { pollNative } from './poll.mjs';
 
 const root = fs.realpathSync(process.env.ACCEPTANCE_ROOT);
 const ledger = path.join(root, 'ownership.json');
@@ -60,7 +61,8 @@ for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
   // Let the close handler persist any creation reply already in the pipe.
   child?.kill(signal);
 });
-async function real(args) {
+async function real(args, { deadline } = {}) {
+  if (deadline !== undefined && Date.now() >= deadline) throw new ReceiptLimit('native poll deadline expired');
   assertProducing(root);
   if (interrupted) throw new ReceiptLimit('adapter interrupted; no further native commands allowed');
   const mutating = !['list', 'get', 'read', 'wait', 'process-info'].includes(args[1]);
@@ -70,7 +72,7 @@ async function real(args) {
   const targets = agentPane ? { panes: [agentPane], workspaces: [] } : undefined;
   const traceCall = (type, extra = {}) => {
     if (mutating && fs.existsSync(path.dirname(focusCalls))) fs.appendFileSync(focusCalls,
-      JSON.stringify({ type, id, at: Date.now(), args, requested: argv, ...(targets ? { targets } : {}), ...extra }) + '\n');
+      JSON.stringify({ type, id, at: Date.now(), args, requested: argv, origin: process.env.ACCEPTANCE_CALLER ?? 'product', actor: process.env.ORG_ACTOR, ...(targets ? { targets } : {}), ...extra }) + '\n');
   };
   traceCall('start');
   return await new Promise((resolve, reject) => {
@@ -83,8 +85,9 @@ async function real(args) {
     const active = child;
     let killTimer;
     const timer = setTimeout(() => {
-      active.kill('SIGTERM'); killTimer = setTimeout(() => active.kill('SIGKILL'), loadTimeout(1000));
-    }, loadTimeout(35_000));
+      if (deadline !== undefined) active.kill('SIGKILL'); // These polling calls are read-only.
+      else { active.kill('SIGTERM'); killTimer = setTimeout(() => active.kill('SIGKILL'), loadTimeout(1000)); }
+    }, Math.min(loadTimeout(35_000), deadline === undefined ? Infinity : Math.max(1, deadline - Date.now())));
     child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', (code) => {
       clearTimeout(timer); clearTimeout(killTimer); producer.child(active.pid, false);
@@ -101,7 +104,8 @@ async function real(args) {
       }
       traceCall('end', created ? { created } : {});
       fs.appendFileSync(path.join(root, 'herdr.jsonl'), JSON.stringify({ args, code, stdout, stderr }) + '\n');
-      resolve({ code, stdout, stderr });
+      if (deadline !== undefined && Date.now() >= deadline) reject(new ReceiptLimit('native poll deadline expired'));
+      else resolve({ code, stdout, stderr });
     });
   });
 }
@@ -173,11 +177,14 @@ try {
   if ((group === 'pane' && ['run', 'report-agent', 'release-agent'].includes(verb)) || (group === 'agent' && ['start', 'send-keys'].includes(verb))) {
     const id = group === 'pane' ? target : verb === 'start' ? option('--pane') : state.panes.includes(target) ? target : body(await real(['agent', 'get', target])).agent.pane_id;
     let pane;
-    const deadline = Date.now() + loadTimeout(5000);
-    for (;;) {
-      pane = body(await real(['pane', 'get', id])).pane;
-      if ((pane.foreground_cwd && inside(pane.foreground_cwd)) || Date.now() >= deadline) break;
-      await new Promise((r) => setTimeout(r, 100));
+    try {
+      await pollNative(async deadline => {
+        pane = body(await real(['pane', 'get', id], { deadline })).pane;
+        return pane.foreground_cwd && inside(pane.foreground_cwd);
+      }, 'pane cwd did not become ready', 5000);
+    } catch (error) {
+      if (pane?.foreground_cwd && !inside(pane.foreground_cwd)) throw new CapabilityRefusal('pane cwd left scratch');
+      throw new ReceiptLimit(error.message);
     }
     if (!pane.foreground_cwd) throw new ReceiptLimit('pane cwd receipt unavailable');
     if (!inside(pane.foreground_cwd)) throw new CapabilityRefusal('pane cwd left scratch');
@@ -186,13 +193,12 @@ try {
     const pane = option('--pane');
     const command = [process.execPath, path.join(root, 'worker.mjs'), root, 'worker', target].map(quote).join(' ');
     body(await real(['pane', 'run', pane, command]));
-    const deadline = Date.now() + loadTimeout(6000);
-    for (;;) {
-      const r = await real(['agent', 'get', pane]);
-      if (r.code === 0 && body(r).agent?.agent_status === 'idle') break;
-      if (Date.now() >= deadline) throw new Error('stand-in did not register');
-      await new Promise((r) => setTimeout(r, 100));
-    }
+    try {
+      await pollNative(async deadline => {
+        const r = await real(['agent', 'get', pane], { deadline });
+        return r.code === 0 && body(r).agent?.agent_status === 'idle';
+      }, 'stand-in did not register', 6000);
+    } catch (error) { throw new ReceiptLimit(`stand-in did not register: ${error.message}`); }
     const r = await real(['agent', 'rename', pane, target]);
     body(r); process.stdout.write(r.stdout); process.exit(0);
   }

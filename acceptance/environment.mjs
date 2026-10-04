@@ -34,3 +34,12 @@ export function isLaneEnvironmentCommand(command, root) {
     return proof === `${checks} && printf '\\n%s\\n' ${nonce}\n`;
   } catch { return false; }
 }
+
+// Only the slot protocol crosses environment scrubbing. A nested detached queue
+// must retain both host paths and the live holder token, just like the gate.
+export function testSlotEnvironment(env) {
+  const keys = ['MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'MONITOR_TEST_SLOT_TOKEN',
+    'MONITOR_TEST_SLOT_WAIT_SECONDS', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED',
+    'BCH_CLOAK_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_WAIT_SECONDS'];
+  return Object.fromEntries(keys.filter(key => env[key] !== undefined).map(key => [key, env[key]]));
+}

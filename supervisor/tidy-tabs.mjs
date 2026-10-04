@@ -87,6 +87,9 @@ export function planTidy(snapshot) {
     const skip = (why) => keep.push({ tab_id: tab.tab_id, label: tab.label, why });
     if (tab.tab_id === selfTab) { skip('this tab'); continue; }
     const tabPanes = panes.filter((p) => p.tab_id === tab.tab_id);
+    // Closing the UI's selected tab moves operator focus to a neighbour. Keep
+    // it even when its worker is finished; the next background tick can close it.
+    if (tab.focused || tabPanes.some((p) => p.focused)) { skip('operator is focused here'); continue; }
     const tabAgents = agents.filter((a) => a.tab_id === tab.tab_id || tabPanes.some((p) => p.pane_id === a.pane_id));
     if (!tabPanes.length) { skip('no panes observed'); continue; }
     if (tabAgents.some((a) => !a.name)) { skip('an unnamed agent (an operator chat) is here'); continue; }

@@ -42,7 +42,10 @@ export function assertFocus(summary, { evidence, error } = {}) {
     const calls = first.calls.length ? first.calls.map((call) =>
       `${call.args.join(' ')} (requested ${call.requested.join(' ')})`).join('; ')
       : `harness-owned destination (${first.workspaces?.join(', ') || first.panes.join(', ')})`;
-    throw new Error(`operator focus changed from ${first.from ?? summary.baseline} to ${first.panes.join(', ') || '(none)'} at ${first.at}; ${first.phase?.key ?? 'setup'}; ${calls}`);
+    const describe = call => call ? `${call.args.join(' ')} (requested ${call.requested.join(' ')}; ${Math.max(0, first.at - (call.completedAt ?? call.at))}ms ago; actor=${call.actor ?? 'unknown'})` : '(none recorded)';
+    const previous = `previous pane ${first.previousPane ?? first.from} (${first.previousOwnership ?? 'unknown'}-owned)`;
+    const nearest = `nearest harness: ${describe(first.nearestCalls?.harness)}; nearest product: ${describe(first.nearestCalls?.product)}`;
+    throw new Error(`operator focus changed from ${first.from ?? summary.baseline} to ${first.panes.join(', ') || '(none)'} at ${first.at}; ${first.phase?.key ?? 'setup'}; ${calls}; ${previous}; ${nearest}`);
   }
   if (error) throw error;
   if (!summary?.baseline || summary.samples < 2 || summary.errors.length) {
@@ -90,25 +93,33 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   const trace = path.join(evidence, 'focus-trace.jsonl');
   const summaryPath = path.join(evidence, 'focus-summary.json');
   const summary = { baseline: null, currentBaseline: null, samples: 0, events: 0, startupEvents: [], changes: [], externalChanges: [], errors: [], startedAt: Date.now() };
-  let stopping = false, monitoring = false, timer, inFlight, lastEventAt = 0, observations = Promise.resolve();
+  let stopping = false, monitoring = false, timer, inFlight, lastEventAt = 0, previousPane, observations = Promise.resolve();
   const ownedPanes = new Set(), ownedWorkspaces = new Set(), paneWorkspaces = new Map();
   const append = (row) => fs.appendFileSync(trace, JSON.stringify(row) + '\n');
   const context = (at) => {
     const phaseFile = path.join(evidence, 'focus-phase.json');
     const phase = fs.existsSync(phaseFile) ? JSON.parse(fs.readFileSync(phaseFile)) : { key: 'setup' };
     const rows = readCalls(evidence);
-    const active = new Map(), completed = [];
+    const active = new Map(), completed = [], history = new Map();
     for (const row of rows) {
-      if (row.type === 'start') active.set(row.id, row);
+      if (row.type === 'start') { active.set(row.id, row); history.set(row.id, row); }
       else if (row.type === 'end') {
         const call = active.get(row.id);
         active.delete(row.id);
-        if (call && at - row.at < 1000) completed.push({ ...call, created: row.created, completedAt: row.at });
+        if (call) {
+          const ended = { ...call, created: row.created, completedAt: row.at };
+          history.set(row.id, ended);
+          if (at - row.at < 1000) completed.push(ended);
+        }
       }
     }
     // Capture temporal overlap as diagnostics. Only a matching destination
     // establishes correlation, including one second after its call completes.
-    return { phase, nearbyCalls: [...active.values(), ...completed.sort((a, b) => b.completedAt - a.completedAt)] };
+    const nearestCalls = {};
+    for (const origin of ['harness', 'product']) nearestCalls[origin] = [...history.values()]
+      .filter(call => call.origin === origin && call.at <= at)
+      .sort((a, b) => (b.completedAt ?? b.at) - (a.completedAt ?? a.at))[0];
+    return { phase, nearestCalls, nearbyCalls: [...active.values(), ...completed.sort((a, b) => b.completedAt - a.completedAt)] };
   };
   const error = (value) => {
     summary.errors.push(value.message ?? String(value));
@@ -132,6 +143,10 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
       retainOwnership();
       row.calls = [];
       row.from = summary.currentBaseline;
+      row.previousPane = previousPane ?? summary.baseline;
+      const previousWorkspace = paneWorkspaces.get(row.previousPane);
+      row.previousOwnership = ownedPanes.has(row.previousPane) || ownedWorkspaces.has(previousWorkspace) ? 'harness' : 'operator';
+      previousPane = panes[0];
       if (panes.length !== 1) throw new Error(`expected one focused pane, received ${JSON.stringify(panes)}`);
       if (panes[0] !== summary.currentBaseline) {
         let workspace = paneWorkspaces.get(panes[0]);

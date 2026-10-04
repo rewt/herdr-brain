@@ -104,7 +104,11 @@ time. Candidate work waits for readiness, and events are never discarded after
 monitoring starts.
 `focus-trace.jsonl`, `focus-calls.jsonl` and `focus-summary.json` retain the initial
 and current baselines, case, timestamps, samples, events and actual/requested
-Herdr calls. A move into a harness-owned pane or workspace fails, including late
+Herdr calls. Failure details also name the previously observed pane, whether it
+belonged to the scratch receipts or the operator, and the nearest recorded
+harness and candidate product calls (with their age and actor), even when they
+are too old or unrelated to establish correlation. Calls from other clients are
+not visible through the scoped adapter. A move into a harness-owned pane or workspace fails, including late
 panes absent from the pane ledger. A change correlated with an active or recently
 completed harness/candidate call fails only when its destination is the specific
 pane or workspace that call targeted or created, and names that call. Mere time
@@ -119,6 +123,12 @@ Forbidden focus attempts also produce typed receipts and fail the case even if
 the caller suppresses the refusal and exits successfully. Late observations
 correlate against the most recent matching completion for one second after that
 call ends.
+
+The model-free stand-in renders a real shaded, padded empty Codex composer before
+reporting idle; reads still use the native PTY screen and the production composer
+check. Shared product tab cleanup preserves globally focused tabs, including at
+the final recheck. The previous unattributed focus change is not treated as proof
+of that cleanup cause.
 
 On Herdr 0.8.2, `--no-focus` covers workspace/worktree/tab creation, worktree open,
 pane split/move and plugin pane open; it is not an option for agent start, pane run
@@ -286,7 +296,9 @@ background lookup; the remaining ENG-64 switch canaries stay independently gated
 The promotion queue case uses a fresh project without lane/promotion configuration or
 a record, runs two default npm gates in FIFO order, keeps a dirty refused lane, and
 requires all three notices at the owned supervisor PTY. It retains queue and gate
-logs under the scratch evidence directory.
+logs under the scratch evidence directory. The gate's test-slot token and both
+slot paths survive scratch environment scrubbing, including the PTY supervisor's
+child dispatch, so nested validation runs inside the gate's existing host slot.
 
 
 Release mechanics build immutable copies with the candidate release script in a
@@ -436,3 +448,17 @@ Python backup. The retirement scanner itself has no
 backup/notify-file exemption. It conservatively retains asterisk-leading lines,
 including executable shell case arms, both for callers and backup references.
 These source and archive receipts stay in evidence.
+
+Scratch cleanup drains notice senders before stopping inbox owner workers. It
+uses only scratch-local owner receipts, verifies live argv, birth identity and
+process group, stops owned transport children first, and retains
+`inbox-cleanup.json`. Missing or ambiguous identities fail cleanup without
+signalling replacements. Workspace cleanup still runs if inbox teardown fails.
+The native validation adapter admits only the exact private `r-XXXXXX` temporary
+directory beneath its session root named by all three temporary environment
+variables; broader session writes, redirects and protected state remain denied.
+
+Failure-path teardown holds the scripted worker's working transition until the
+watcher logs the recorded abandonment. A PTY input receipt can precede notice
+confirmation; returning to idle after a 300ms pulse can make the subsequent
+native wait miss that transition and turn a successful notice into a timeout.

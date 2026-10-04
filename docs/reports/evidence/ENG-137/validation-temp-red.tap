@@ -1,0 +1,54 @@
+TAP version 13
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 1 - validation composition keeps product denials and refuses foreign writes and unsupported profiles # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.555083
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 2 - validation write exceptions reject redirected directories and protected Git or shared-state targets # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045541
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 3 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035916
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+ok 4 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03625
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+not ok 5 - native per-run validation temp is admitted only by its private identity and exact environment handoff
+  ---
+  duration_ms: 39.78575
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'acceptance_product_boundary: validation added external writes'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    validationTransport (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/.validation-before.mjs:74:14)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/acceptance/test/.validation-before.test.mjs:163:20
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-harness/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 4
+# todo 0
+# duration_ms 81.302959

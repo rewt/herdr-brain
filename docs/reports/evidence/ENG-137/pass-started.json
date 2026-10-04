@@ -1,0 +1,6 @@
+{
+  "at": "2026-10-04T03:13:26.474Z",
+  "current": null,
+  "pending": 0,
+  "command": "node acceptance/run.mjs --candidate lane-harness --skip-live --keep --npm-cache /Users/rewt/.npm"
+}

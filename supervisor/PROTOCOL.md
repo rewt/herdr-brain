@@ -27,13 +27,18 @@ Use dispatch/dispatch.mjs for a selected item, lane, named route and ask, with
 `--to YOUR-SUPERVISOR`. It records the run and arms watch before sending work.
 Skip work already running and honor record blockers and project authority.
 Unaligned work and exceeded advisory budgets remain visible and may proceed.
+When the next plan step depends on an item landing, add `--awaited` and optionally
+`--awaited-step 'PLAN STEP'` to dispatch, or set the item's `meta.notify=supervisor`
+and `meta.notify_step` through `record set`. Autopilot completes verified promotion
+and closes the item, then sends one short landing line so you can resume the plan.
 
 The inbox applies `notice-autopilot/v1` before automatic delivery. Under the
 project's auto tooling authority it handles recorded done reports, promotes
 independent PASS, leaves watched fixes in flight, retries the exact base-moved
 escalation once, and files one follow-up before accepting capped Moderate/Minor
 findings. A promoted queue notice closes its bound item. These routine notices
-do not reach chat. The action receipts retain commands and acknowledgements;
+do not reach chat unless the item is marked awaited. Notices bound to abandoned
+runs are journaled and dropped. The action receipts retain commands and acknowledgements;
 `supervisor.mjs status [--json]` reads lane stages and the last policy actions
 without model calls or writes. See [README.md](README.md) for the kill switch and
 receipt paths. STOP or paused housekeeping disables automatic actions.

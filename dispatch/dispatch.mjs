@@ -17,7 +17,7 @@ const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
-  serves: { type: 'string' },
+  serves: { type: 'string' }, awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },
   to: { type: 'string', default: 'supervisor-herdr' }, base: { type: 'string' }, extra: { type: 'string' },
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
@@ -113,11 +113,12 @@ function lockJob() {
 }
 async function main() {
   if (!positionals.length && !opt.retry && !opt.status) {
-    process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR] [--serves P-n]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nUse discovery/adapters/codex.mjs for project entry; workers report, watch validates and ingests, then lane check/promote fast-forward without push. Only the canonical supervisor starts housekeeping.\n`);
+    process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR] [--serves P-n] [--awaited [--awaited-step TEXT]]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nUse discovery/adapters/codex.mjs for project entry; workers report, watch validates and ingests, then lane check/promote fast-forward without push. Only the canonical supervisor starts housekeeping.\n`);
     return;
   }
   opt.org ??= findOrgDir({ cwd: opt.repo });
   if (!opt.org) throw new Error('--org DIR or ORG_DIR is required');
+  if (opt['awaited-step'] !== undefined && (!opt.awaited || !opt['awaited-step'].trim())) throw new Error('--awaited-step requires --awaited and nonempty text');
   if ((opt.adopt && opt.fresh) || (opt.resend && opt['accept-delivered'])) throw new Error('choose one launch recovery and one delivery recovery');
   if (opt.status) {
     journal = locate(opt.status);
@@ -125,7 +126,7 @@ async function main() {
     return;
   }
   if (opt.retry) {
-    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'serves'].some((key) => opt[key] !== undefined)) {
+    if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'serves', 'awaited', 'awaited-step'].some((key) => opt[key] !== undefined)) {
       throw new Error('--retry uses the saved request; do not supply new work flags');
     }
     journal = locate(opt.retry);
@@ -179,6 +180,7 @@ async function main() {
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
     atomic(job.routeConfig, config);
+    if (opt.awaited) record(['set', job.item, 'meta.notify=supervisor', ...(opt['awaited-step'] ? [`meta.notify_step=${opt['awaited-step']}`] : [])]);
     save();
     lockJob();
   }

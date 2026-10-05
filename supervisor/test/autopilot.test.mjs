@@ -2,6 +2,7 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fixture } from '../../settle/test/fixture.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { receiptDirectory } from '../context.mjs';
@@ -238,15 +239,114 @@ test(`a ${record} record prevents classification without changing a report notic
 });
 test('promoted queue notice handles its bound run and a closed item is a no-op', t => {
   const f = setup(t, [{ result: 'recorded_promotion' }]), project = f.entry.project;
+  const execute = (file, args, options) => { f.record(['close', f.item]); return f.execute(file, args, options); };
   fs.mkdirSync(path.join(project.identity, 'promote'), { recursive: true });
   fs.writeFileSync(path.join(project.identity, 'promote/queue.json'), JSON.stringify({ identity: project.identity, pending: [], current: null, results: [{ id: 'job', topic: 'topic', run: f.run, org: f.org, outcome: 'promoted' }] }));
   f.entry.message = '[promote-queue] id=job lane=topic outcome=promoted reason="landed"';
-  assert.equal(f.apply().disposition, 'handled'); assert.ok(f.calls[0].args.includes('--notice'));
+  assert.equal(autopilotNotice(f.entry, { execute }).disposition, 'handled'); assert.ok(f.calls[0].args.includes('--notice'));
   const saved = JSON.parse(fs.readFileSync(f.apply().receipt)); assert.equal(saved.actions.length, 1);
   f.record(['close', f.item]); f.entry.message = f.entry.message.replace('id=job', 'id=other');
   const q = JSON.parse(fs.readFileSync(path.join(project.identity, 'promote/queue.json'))); q.results[0].id = 'other';
   fs.writeFileSync(path.join(project.identity, 'promote/queue.json'), JSON.stringify(q));
   assert.equal(f.apply().disposition, 'handled'); assert.equal(f.calls.length, 1);
+});
+function promotionQueue(f, job) {
+  const directory = path.join(f.entry.project.identity, 'promote');
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, 'queue.json'), JSON.stringify({ identity: f.entry.project.identity, pending: [], current: null, results: [job] }));
+}
+for (const [id, topic] of [['7e203ad6-dca3-429b-9059-ac2c7f29e750', 'fleet-membership'], ['58c5c2da-a048-469f-bc44-8bbdce18a0a3', 'gate-profile']])
+test(`runless completion ${topic} retains an explicit binding diagnostic`, t => {
+  const f = setup(t);
+  promotionQueue(f, { id, topic, org: f.org, outcome: 'promoted', reason: 'green batch fast-forward' });
+  f.entry.id = `promote:${id}`;
+  f.entry.message = `[promote-queue] id=${id} lane=${topic} outcome=promoted reason="green batch fast-forward"`;
+  const result = f.apply(), saved = JSON.parse(fs.readFileSync(result.receipt));
+  assert.equal(result.disposition, 'wake'); assert.match(saved.reason, /promotion.*run binding/i);
+  assert.doesNotMatch(saved.reason, /reading 'closed'/); assert.equal(f.calls.length, 0);
+});
+test('completion after an interrupted promotion has its own receipt and closes once', t => {
+  const f = setup(t, [{ result: 'recorded_promotion' }]);
+  f.entry.id = 'promote:job'; f.entry.message = '[promote-queue] id=job lane=topic outcome=interrupted';
+  const interrupted = f.apply(); assert.equal(interrupted.disposition, 'wake');
+  promotionQueue(f, { id: 'job', topic: 'topic', run: f.run, org: f.org, outcome: 'promoted' });
+  f.entry.id = 'promote:job:complete'; f.entry.message = '[promote-queue] id=job lane=topic outcome=promoted';
+  const execute = (file, args, options) => { f.record(['close', f.item]); return f.execute(file, args, options); };
+  const completed = autopilotNotice(f.entry, { execute }); assert.equal(completed.disposition, 'handled');
+  assert.notEqual(completed.receipt, interrupted.receipt); assert.equal(f.calls.length, 1);
+  assert.equal(f.apply().disposition, 'handled'); assert.equal(f.calls.length, 1);
+  assert.match(JSON.parse(fs.readFileSync(interrupted.receipt)).reason, /interrupted/);
+});
+for (const kind of ['watch-no-report', 'watch-long-running', 'watch-invalid-report', 'org-report'])
+test(`abandoned ${kind} is journaled without waking or acting`, t => {
+  const f = setup(t, [], { ingest: false }); f.record(['abandon', f.run, '--note', 'Replaced']);
+  f.entry.id = `watch:${f.run}:${kind}`;
+  if (kind !== 'org-report') f.entry.message = `[${kind}] run=${f.run} item=${f.item} worker=old`;
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const result = f.apply(); assert.equal(result.disposition, 'handled');
+  assert.match(JSON.parse(fs.readFileSync(result.receipt)).reason, /abandoned/);
+  assert.equal(f.calls.length, 0); assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+});
+test('awaited promotion closes before waking with one short plan line and later notices stay silent', t => {
+  const f = setup(t);
+  f.record(['set', f.item, 'meta.notify=supervisor', 'meta.notify_step=Cut RC-11']);
+  promotionQueue(f, { id: 'job', topic: 'topic', run: f.run, org: f.org, outcome: 'promoted' });
+  f.entry.id = 'promote:job'; f.entry.message = '[promote-queue] id=job lane=topic outcome=promoted';
+  let calls = 0;
+  const execute = () => {
+    calls++; f.record(['close', f.item, '--if-current-run', f.run, '--note', 'Verified promotion']);
+    return JSON.stringify({ result: 'recorded_promotion', run: f.run, item: f.item });
+  };
+  const result = autopilotNotice(f.entry, { execute });
+  assert.equal(f.show(f.item).closed.as, 'done'); assert.equal(result.disposition, 'wake');
+  assert.equal(result.summary, `[autopilot] ${f.item} landed; unblocks: Cut RC-11`);
+  assert.equal(autopilotNotice(f.entry, { execute }).summary, result.summary); assert.equal(calls, 1);
+  f.entry.id = 'promote:job:late';
+  assert.equal(autopilotNotice(f.entry, { execute }).disposition, 'handled'); assert.equal(calls, 1);
+});
+test('awaited PASS queued for promotion stays silent until closure', t => {
+  const f = setup(t, [pass, { phase: 'acknowledged' }]);
+  f.record(['set', f.item, 'meta.notify=supervisor']);
+  assert.equal(f.apply().disposition, 'handled'); assert.equal(f.show(f.item).closed, null);
+});
+test('a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice', t => {
+  const f = setup(t); f.record(['set', f.item, 'meta.notify=supervisor']);
+  let calls = 0;
+  const execute = () => {
+    calls++; f.record(['close', f.item, '--if-current-run', f.run]);
+    return JSON.stringify({ result: 'recorded_promotion', run: f.run, item: f.item });
+  };
+  const result = autopilotNotice(f.entry, { execute });
+  assert.equal(result.disposition, 'wake'); assert.equal(result.summary, `[autopilot] ${f.item} landed`);
+  const saved = JSON.parse(fs.readFileSync(result.receipt)); delete saved.disposition;
+  fs.writeFileSync(result.receipt, JSON.stringify(saved));
+  assert.equal(autopilotNotice(f.entry, { execute }).summary, result.summary, 'interrupted notification keeps delivery text');
+  promotionQueue(f, { id: 'job', topic: 'topic', run: f.run, org: f.org, outcome: 'promoted' });
+  f.entry.id = 'promote:job'; f.entry.message = '[promote-queue] id=job lane=topic outcome=promoted';
+  assert.equal(autopilotNotice(f.entry, { execute }).disposition, 'handled'); assert.equal(calls, 1);
+});
+test('abandoned watcher inbox entry is handled without Herdr delivery', async t => {
+  const f = setup(t, [], { ingest: false }); f.record(['abandon', f.run]);
+  f.entry.message = `[watch-no-report] run=${f.run} item=${f.item} worker=old`;
+  const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id: `watch:${f.run}:no-report`, waitSeconds: 0 });
+  assert.equal(result.handled, true); assert.deepEqual(f.herdrCalls(), []);
+  const entry = readInbox(result.inbox)[0]; assert.equal(entry.state, 'handled');
+  assert.equal(entry.message, f.entry.message); assert.match(entry.autopilot.summary, /watch-no-report/);
+});
+test('legacy uncertain promotion receipts still forbid command replay after the key upgrade', t => {
+  const f = setup(t), key = 'promotion:job';
+  const directory = path.join(receiptDirectory(f.org, f.entry.project.identity), 'autopilot');
+  fs.mkdirSync(directory, { recursive: true });
+  const file = path.join(directory, `${createHash('sha256').update(key).digest('hex')}.json`);
+  const notice = '[promote-queue] id=job lane=topic outcome=promoted';
+  const bytes = JSON.stringify({ policy: 'notice-autopilot/v1', key, project: f.entry.project,
+    notice, notice_id: 'promote:job', actions: [{ phase: 'started' }] });
+  fs.writeFileSync(file, bytes);
+  promotionQueue(f, { id: 'job', topic: 'topic', run: f.run, org: f.org, outcome: 'promoted' });
+  f.entry.id = 'promote:job'; f.entry.message = notice;
+  const result = f.apply(); assert.equal(result.disposition, 'wake');
+  assert.match(JSON.parse(fs.readFileSync(result.receipt)).reason, /uncertain/);
+  assert.equal(f.calls.length, 0); assert.equal(fs.readFileSync(file, 'utf8'), bytes);
 });
 test('inbox consumes routine results before any Herdr delivery and retains original notice', async t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]);
@@ -327,8 +427,9 @@ for (const withFindings of [false, true]) test(`actual handle and promotion comm
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
   assert.deepEqual(f.herdrCalls(), calls);
 });
-test('automatic PASS reaches the real queue, lands and closes without waking the supervisor', { timeout: 30000 }, async t => {
+for (const awaited of [false, true]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}`, { timeout: 30000 }, async t => {
   const f = setup(t, [], { ingest: false }); f.commit('correct\n');
+  if (awaited) f.record(['set', f.item, 'meta.notify=supervisor', 'meta.notify_step=Cut RC-11']);
   assert.equal(f.show(f.run).report, null, 'first notice has no immutable report');
   const runner = path.join(f.root, 'first-notice.mjs');
   fs.writeFileSync(runner, `import {promptSupervisor} from ${JSON.stringify(path.join(f.source, 'supervisor/prompt-supervisor.mjs'))};\nconsole.log(JSON.stringify(await promptSupervisor(${JSON.stringify(f.entry.to)},${JSON.stringify(f.entry.message)},${JSON.stringify({ org: f.org, cwd: f.repo, id: 'automatic-cycle', waitSeconds: 0 })})));\n`);
@@ -348,8 +449,16 @@ test('automatic PASS reaches the real queue, lands and closes without waking the
   const queue = JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')));
   assert.equal(queue.results.length, 1); assert.equal(queue.results[0].outcome, 'promoted');
   const notices = readInbox(result.inbox); assert.equal(notices.length, 2);
-  assert.ok(notices.every(entry => entry.state === 'handled'));
-  assert.ok(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt').every(a => a[3].includes('Private record file:')));
+  assert.equal(notices[0].state, 'handled');
+  assert.equal(notices[1].state, awaited ? 'sent' : 'handled');
+  const wakes = f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt' && !a[3].includes('Private record file:'));
+  assert.equal(wakes.length, awaited ? 1 : 0);
+  if (awaited) {
+    assert.equal(wakes[0][3], `[autopilot] ${f.item} landed; unblocks: Cut RC-11 notice-id=${notices[1].id}`);
+    const again = await promptSupervisor(f.entry.to, notices[1].message, { org: f.org, cwd: f.repo, id: notices[1].id, herdr: path.join(f.root, 'bin/herdr'), waitSeconds: 0 });
+    assert.equal(again.delivered, true);
+    assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt' && a[3].startsWith('[autopilot]')).length, 1);
+  }
 });
 test('real CLIs retry an exit-one base-moved refusal with the saved request and land once', { timeout: 30000 }, async t => {
   const f = setup(t); f.commit('correct\n');

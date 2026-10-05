@@ -36,6 +36,15 @@ function execute(file, args, options) {
   return spawnSync(process.execPath, [file, ...args], { ...options, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
 }
 
+function runIdentity(project, run) {
+  try { return run.workspace && gitProject(run.workspace).identity; }
+  catch {
+    const settle = read(path.join(project.org, 'settle', `${run.id}.json`));
+    const dispatch = run.meta.dispatch_journal && read(run.meta.dispatch_journal);
+    return settle?.run === run.id ? settle.common : dispatch?.run === run.id && dispatch.workspace === run.workspace ? dispatch.common : null;
+  }
+}
+
 function authority(project, runId, { pendingReport = false } = {}) {
   const live = gitProject(project.repo);
   if (live.identity !== project.identity || live.canonical !== project.repo || fs.realpathSync(project.org) !== project.org) throw Error('autopilot project binding changed');
@@ -67,14 +76,7 @@ function authority(project, runId, { pendingReport = false } = {}) {
     if (!decision?.category || ['publish', 'priorities'].includes(decision.category) || approvalPolicy(config, decision.category) !== 'auto') throw Error('report decision needs operator judgment');
   }
   if (reportCategoryFlags(config, report).length) throw Error('report category evidence needs inspection');
-  let identity;
-  try { identity = run.workspace && gitProject(run.workspace).identity; }
-  catch {
-    const settle = read(path.join(project.org, 'settle', `${runId}.json`));
-    const dispatch = run.meta.dispatch_journal && read(run.meta.dispatch_journal);
-    identity = settle?.run === runId ? settle.common : dispatch?.run === runId && dispatch.workspace === run.workspace ? dispatch.common : null;
-  }
-  if (identity !== project.identity) throw Error('run has no verified project binding');
+  if (runIdentity(project, run) !== project.identity) throw Error('run has no verified project binding');
   return { state, run, item };
 }
 
@@ -91,7 +93,9 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
   const project = entry.project;
   const report = /^\[org-report\] run=(R-\d+) item=(\S+) outcome=(done|blocked|needs_human|failed) headline=/.exec(entry.message);
   const promotion = /^\[promote-queue\] id=([a-zA-Z0-9-]+) lane=(\S+) outcome=(\S+)(?: |$)/.exec(entry.message);
-  const key = report ? `report:${report[1]}` : promotion ? `promotion:${promotion[1]}` : `notice:${entry.id}`;
+  // Report intake/follow-ups remain unique per run. Promotion interruptions and
+  // completions are distinct producer notice IDs, despite sharing a job ID.
+  const key = report ? `report:${report[1]}` : `notice:${entry.id}`;
   const file = path.join(receiptDirectory(project.org, project.identity), 'autopilot', `${digest(key)}.json`);
   let receipt = { policy: POLICY, key, project, notice: entry.message, notice_id: entry.id, actions: [], started: new Date().toISOString() }, release;
   const save = () => writeFileAtomic(file, JSON.stringify(receipt, null, 2) + '\n', 0o600);
@@ -102,20 +106,69 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     : entry.message;
   const finish = (disposition, reason, unchanged = false) => {
     receipt.disposition = disposition; receipt.reason = line(reason); receipt.finished = new Date().toISOString(); save();
-    return { disposition, receipt: file, summary: unchanged ? entry.message : summary(reason) };
+    return { disposition, receipt: file, summary: receipt.delivery_summary ?? (unchanged ? entry.message : summary(reason)) };
   };
   // If the action receipt cannot safely be written, the inbox journals this
   // diagnostic with the policy result while delivery still uses only summary.
   const retained = reason => ({ disposition: 'wake', receipt: file, reason: line(reason), summary: entry.message });
-  let runId;
+  let runId, alreadyClosed;
+  const landingFile = () => path.join(path.dirname(file), 'landings', `${runId}.json`);
+  const landingReceipt = item => {
+    const saved = read(landingFile());
+    if (saved && (saved.run !== runId || saved.item !== item.id || JSON.stringify(saved.project) !== JSON.stringify(project))) throw Error('landing notification binding changed');
+    return saved;
+  };
+  const landed = result => {
+    if (result.result !== 'recorded_promotion') return finish('wake', result.result ?? 'unknown promotion result');
+    const { item } = authority(project, runId);
+    if (item.closed?.as !== 'done') throw Error('promotion returned without recorded item closure');
+    if (item.meta.notify !== 'supervisor') return finish('handled', 'promotion recorded');
+    if (result.run !== runId || result.item !== item.id) throw Error('landed result differs from bound run and item');
+    const marker = landingFile(), unlock = noticeLock(`${marker}.lock`);
+    try {
+      const prior = landingReceipt(item);
+      if (prior) {
+        return finish('handled', 'landing notification already journaled');
+      }
+      receipt.delivery_summary = `[autopilot] ${line(item.id)} landed${item.meta.notify_step ? `; unblocks: ${line(item.meta.notify_step)}` : ''}`;
+      // Save the delivery text before the dedup marker. If interrupted here,
+      // receipt recovery still wakes with this text; the inbox owns retries.
+      save();
+      writeFileAtomic(marker, JSON.stringify({ project, run: runId, item: item.id, notice_id: entry.id, receipt: file }) + '\n', 0o600);
+      return finish('wake', 'awaited item landed');
+    } finally { unlock(); }
+  };
   try {
     release = noticeLock(`${file}.lock`);
     let prior;
-    try { prior = read(file); }
+    try {
+      prior = read(file);
+      if (!prior && promotion) {
+        const legacy = path.join(path.dirname(file), `${digest(`promotion:${promotion[1]}`)}.json`);
+        const saved = read(legacy);
+        // Keep old evidence intact. A completed/uncertain command for this
+        // outcome must not become executable again when receipt keys change.
+        const outcome = saved && /^\[promote-queue\] id=\S+ lane=\S+ outcome=(\S+)/.exec(saved.notice)?.[1];
+        if (saved && (outcome === promotion[3] || (saved.actions?.length && !saved.disposition) || saved.actions?.some(a => a.phase !== 'acknowledged'))) {
+          if (saved.key !== `promotion:${promotion[1]}` || saved.policy !== POLICY || JSON.stringify(saved.project) !== JSON.stringify(project)) return retained('legacy autopilot receipt binding changed');
+          prior = { ...saved, key, legacy_receipt: legacy };
+        }
+      }
+    }
     catch (error) { return retained(`unreadable action receipt: ${error.message}`); }
     if (prior) {
       if (prior.key !== key || prior.policy !== POLICY || JSON.stringify(prior.project) !== JSON.stringify(project)) return retained('autopilot receipt binding changed');
       receipt = prior;
+    }
+    const watch = /^\[(?:watch-no-report|watch-long-running|watch-blocked|watch-invalid-report|watch-unavailable)\] run=(R-\d+) item=(\S+)(?: |$)/.exec(entry.message);
+    // Abandoned workers can still emit queued watcher/report notices. Suppress
+    // only fixed prefixes bound to a verified run in this project's record.
+    if (report || watch) {
+      try {
+        const { state } = authority(project), match = report ?? watch, run = state.runs.get(match[1]);
+        if (run?.abandoned && run.item === match[2] && runIdentity(project, run) === project.identity)
+          return finish('handled', `abandoned run ${run.id}; notice dropped`);
+      } catch { /* Damaged/unavailable evidence retains the usual delivery. */ }
     }
     // Intermediate and unknown notices need no record or status projection.
     // Policy diagnostics belong only in their receipt, never in the payload.
@@ -132,14 +185,16 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
       if (queue?.identity !== project.identity) throw Error('promotion queue binding missing or changed');
       const job = queueJobs(queue).find(j => j.id === promotion[1]);
       if (!job || job.outcome !== 'promoted' || job.topic !== promotion[2] || job.org !== project.org) throw Error('promotion notice differs from queue receipt');
+      if (!/^R-\d+$/.test(job.run ?? '')) throw Error('promotion receipt has no run binding; inspect queue evidence');
       runId = job.run;
       const { item } = authority(project, runId);
-      if (item.closed?.as === 'done') return finish('handled', 'promotion already closed');
+      alreadyClosed = item.closed?.as === 'done' && (item.meta.notify !== 'supervisor' || landingReceipt(item));
     }
     if (receipt.actions.some(a => a.phase !== 'acknowledged')) return finish('wake', 'uncertain autopilot command; inspect before recovery');
     if (receipt.actions.length && !receipt.disposition) return finish('wake', 'interrupted autopilot sequence; inspect acknowledged actions');
     if (receipt.disposition) return { disposition: receipt.disposition, receipt: file,
-      summary: receipt.error ? entry.message : summary(receipt.reason) };
+      summary: receipt.delivery_summary ?? (receipt.error ? entry.message : summary(receipt.reason)) };
+    if (alreadyClosed) return finish('handled', 'promotion already closed');
     const command = (name, file, args, { json = true, pendingReport = false } = {}) => {
       authority(project, runId, { pendingReport }); // Re-read STOP, pause, authority and record.
       const action = { name, file, args, phase: 'started', at: new Date().toISOString() };
@@ -171,7 +226,7 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     const supervisor = local('./supervisor.mjs');
     if (promotion) {
       const result = command('close promoted item', supervisor, ['handle', '--notice', entry.message, ...args]);
-      return finish(result.result === 'recorded_promotion' ? 'handled' : 'wake', result.result ?? 'unknown promotion result');
+      return landed(result);
     }
     const saved = read(path.join(project.org, 'settle', `${runId}.json`));
     if (saved && (saved.common !== project.identity || saved.run !== runId || (saved.stage !== 'complete' && !moved(saved.result)))) throw Error('uncertain or interrupted settlement; inspect retained receipt');
@@ -188,7 +243,7 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
     if (policy?.cap > 0 && policy.round >= policy.cap && /\[Major\]/.test(result.findings ?? reviewText)) return finish('wake', 'Major findings at review cap');
     if (result.result === 'fix_round' && policy?.cap > 0 && policy.round >= policy.cap && result.review?.verdict === 'NEEDS-WORK') return finish('wake', 'correction findings at review cap require judgment');
     if (result.result === 'fix_round') return finish('handled', 'watched fix already dispatched');
-    if (result.result === 'recorded_promotion') return finish('handled', 'promotion recorded');
+    if (result.result === 'recorded_promotion') return landed(result);
     const accepted = result.result === 'promotable_with_findings';
     if (result.result !== 'promotable' && !accepted) return finish('wake', `${result.result ?? 'unknown result'}: ${result.reason ?? 'inspect evidence'}`);
     if (!accepted && result.review?.verdict !== 'PASS') return finish('wake', 'promotable result lacks PASS');

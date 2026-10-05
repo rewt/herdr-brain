@@ -16,12 +16,13 @@ workers recover pending policy through the same durable action receipts.
 | `fix_round` | Leave the dispatched, watched correction in flight |
 | Exact settle "base branch moved" escalation | One `handle RUN --retry` using the saved request, without `--to`; a second escalation wakes |
 | Capped `promotable_with_findings`, parsed Moderate/Minor only | One engineer follow-up containing all findings, then `promote --accept-findings` with the follow-up and policy in its reason |
-| `[promote-queue]` promoted | `handle --notice TEXT` closes the bound item, or no action if already closed |
+| `[promote-queue]` promoted | `handle --notice TEXT` closes the bound item; an awaited item then wakes with one landing line |
+| Verified notice for an abandoned run | Journal and drop without waking or mutating the record |
 | Anything else | Wake with a bounded one-line reason and the action receipt path |
 
 FAIL, Major findings at the review cap, refusals, train failures, release gate
 notices, non-done/no-report workers, questions, uncertain or interrupted results,
-and unknown notices/results always wake. Settle retains responsibility for review
+and unknown notices/results wake unless bound to an abandoned run. Settle retains responsibility for review
 and correction dispatch: a FAIL or capped Major can already have dispatched a fix
 when its result arrives; autopilot wakes with that evidence and does not promote.
 Only fixed notice prefixes route actions. Headline and report narrative are never
@@ -44,9 +45,23 @@ and name that run, with the same outcome, question, blocker and category guards
 as an immutable report. Autopilot does not ingest it: `handle` performs conditional
 intake. Retry, follow-up and promotion require the immutable report afterward.
 
-Action receipts live under `ORG/supervisor/REPOSITORY_KEY/autopilot/`. Their key is
-the report run or promotion job, so different delivery IDs cannot create duplicate
-follow-ups. Each command's argv, intent and acknowledged result are retained.
+Mark an item the supervisor is waiting for with
+`record set ENG-185 meta.notify=supervisor 'meta.notify_step=Cut RC-11'`, or add
+`--awaited --awaited-step 'Cut RC-11'` to dispatch. The plan step is optional.
+After verified promotion and recorded closure, the autopilot delivers
+`[autopilot] ENG-185 landed; unblocks: Cut RC-11` through the normal input gate.
+Unmarked landings stay silent. Notification receipts in `autopilot/landings/`
+deduplicate by landed run across promotion and delayed report notices; the inbox
+retains delivery/retry ownership. Clear the request with `meta.notify=none`.
+The marker expresses supervisor intent and grants no promotion authority.
+
+Action receipts live under `ORG/supervisor/REPOSITORY_KEY/autopilot/`. Report keys
+remain per run so different delivery IDs cannot create duplicate follow-ups.
+Promotion receipts use the producer's notice ID: `promote:JOB` and
+`promote:JOB:complete` are separate receipts after an interruption. Legacy receipts
+remain intact and uncertain commands still require inspection. Each command's
+argv, intent and acknowledged result are retained. Runless promotion receipts
+wake with an explicit missing-binding diagnostic; no item is inferred from a lane name.
 Native command receipts also retain exit status, stderr and signal evidence.
 The exact structured base-movement refusal can be acknowledged despite exit one
 only when its run and journal match the retained project-bound settlement and

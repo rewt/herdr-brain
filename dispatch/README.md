@@ -23,6 +23,13 @@ freezes that request's route configuration for both `record start --route` and
 `lane dispatch --route`; retries keep it even if project config changes. Lifecycle
 configuration retains its original sources and path resolution.
 
+`--awaited` records `meta.notify=supervisor` on the item before starting work.
+Optionally add `--awaited-step 'Cut RC-11'` to record the plan step it unblocks.
+After verified promotion and record closure, autopilot sends the supervisor one
+short landing line. Routine unmarked landings stay silent. Retry keeps the record
+metadata and does not re-arm a notification cleared with `meta.notify=none`;
+these flags belong only to a new dispatch request.
+
 `--serves P-n` names the operator priority this dispatch serves. The record validates
 it, keeps it in run metadata and includes the outcome and current rank in the run
 brief. Retry preserves the saved selection. Without the flag, `record start`

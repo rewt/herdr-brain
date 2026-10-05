@@ -78,6 +78,18 @@ function rememberProcesses(root, org, realWatch, receipts) {
       '--org', org, '--to', job.to, '--cwd', job.repo, '--log', path.join(org, 'dispatch', `${job.run}.watch.log`)].join(' ') : fakeCommand);
   }
 }
+test('awaited dispatch records the notification and plan step before launching and preserves retry flags', t => {
+  const f = fixture(t); f.fail('dispatch');
+  assert.equal(f.start(['--awaited', '--awaited-step', 'Cut RC-11']).status, 1);
+  assert.equal(f.show(f.item).meta.notify, 'supervisor');
+  assert.equal(f.show(f.item).meta.notify_step, 'Cut RC-11');
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
+  assert.equal(f.dispatch(['--retry', job.run, '--awaited']).status, 1);
+  f.rec(['set', f.item, 'meta.notify=none']);
+  f.fail(''); const retry = f.dispatch(['--retry', job.run, '--fresh']);
+  assert.equal(retry.status, 0, retry.stderr);
+  assert.equal(f.show(f.item).meta.notify, 'none', 'retry must not re-arm an operator-cleared notification');
+});
 for (const source of ['fake watcher receipt', 'real watcher journal']) {
   test(`${source} refuses PID reuse before registration and retains ownership across retries`, t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-receipt-'));

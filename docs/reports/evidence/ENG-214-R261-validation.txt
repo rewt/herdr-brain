@@ -1,0 +1,37 @@
+Run: R-261
+Review corrected: docs/reviews/fleet-membership/ebbfa14-r1.md
+All product calls use scratch HERDR_MONITOR_FLEET in-process; tests are offline.
+
+Regression tests written before implementation:
+  node --test --test-name-pattern='excluding a joined external-record|explicit external ORG_DIR|a neighbor with its own record' test/fleet.test.mjs
+  Before: 0 passed, 5 failed, 30 omitted by selection; exit 1.
+  Failures reproduced discarded joined mappings, external-record settings loss
+  for moved and unmoved checkouts, and another project's parent layer leaking
+  into a neighbor with its own record.
+  After: 5 passed, 0 failed, 30 omitted by selection; exit 0.
+
+Final focused integration after strengthening layer-alias and entry coverage:
+  node --test test/fleet.test.mjs discovery/test/entry.test.mjs discovery/test/native-sandbox.test.mjs
+  62 tests: 61 passed, 0 failed, 1 optional native-boundary probe skipped.
+  Exit 0; duration 21.430 seconds.
+
+Coverage:
+  - Excluded joined projects retain external record writes/status, parent routes,
+    trusted profile arguments and custom mapped worktrees. Canonical exclusions
+    cover linked checkouts; a linked-only exclusion also retains its mapping.
+    Inclusion continues to read the same event log without creating a local .org.
+  - Explicit external ORG_DIR layouts retain identical routes and lane config
+    before and after fleet creation elsewhere, including a moved checkout.
+    Reads/entry are non-mutating; bare join requires explicit adoption, and the
+    printed shell-quoted adoption command preserves all discovered paths.
+  - Neighbors with distinct local records cannot inherit mapped parent settings,
+    including a parent .lane.json symlink to the mapped canonical layer.
+    Automatic entry joins independently; explicit --layer permits sharing.
+  - Both Codex and Claude, explicit and interactive automatic entry, pass non-Git,
+    unjoined excluded, joined excluded and linked excluded directories through
+    with one calm line, unchanged arguments/temp, exit propagation and no probes.
+
+git diff --check passed during self-review.
+The required final lane check runs after the checked report is committed:
+  node lanes/lane.mjs check --cmd 'node --test test/fleet.test.mjs discovery/test/entry.test.mjs discovery/test/native-sandbox.test.mjs'
+Its final committed-tree receipt is .lane/gate.json.

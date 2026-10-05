@@ -12,7 +12,7 @@ import { entryPolicy } from '../policy.mjs';
 import { assertSupervisorEntry } from '../../acceptance/entry.mjs';
 import { copyProduct } from '../../lib/product-files.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
-import { setFleetExcluded } from '../../lib/fleet.mjs';
+import { joinFleet, setFleetExcluded } from '../../lib/fleet.mjs';
 import { runPTY, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 const root = new URL('../../', import.meta.url).pathname;
 const fixture = (t) => {
@@ -146,15 +146,19 @@ test('machine installer retains native flags, reaches Claude too and restores on
   assert.throws(() => command(process.execPath, [installer, '--bin', bin, '--codex', fake], f.repo), /unmanaged/u);
 });
 
-for (const interactive of [false, true]) test(`${interactive ? 'interactive automatic' : 'explicit'} entry passes non-Git and excluded directories through with one calm line`, { skip: interactive && PTY_SKIP_REASON }, t => {
+for (const interactive of [false, true]) for (const joined of [false, true]) test(`${interactive ? 'interactive automatic' : 'explicit'} entry passes non-Git and excluded directories through with one calm line${joined ? ' after joining an external record' : ''}`, { skip: interactive && PTY_SKIP_REASON }, t => {
   const f = fixture(t), notGit = path.join(f.scratch, 'not-git'); fs.mkdirSync(notGit);
+  const record = path.join(f.scratch, 'external-record'); initOrg(record);
+  if (joined) joinFleet({ cwd: f.repo, record, worktrees: path.join(f.scratch, 'mapped-worktrees') });
+  const linked = path.join(f.scratch, 'linked'); command('git', ['worktree', 'add', '-qb', 'lane/passthrough', linked], f.repo);
+  const recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
   setFleetExcluded({ root: f.repo, excluded: true });
   const receipt = path.join(f.scratch, 'passthrough.jsonl'), binary = path.join(f.scratch, 'native');
   fs.writeFileSync(binary, `#!/usr/bin/env node\nrequire('fs').appendFileSync(process.env.TEST_RECEIPT, JSON.stringify({ args: process.argv.slice(2), cwd: process.cwd(), requests: process.env.MONITOR_REQUEST_DIR, temp: process.env.TMPDIR }) + '\\n');\nprocess.exit(7);\n`, { mode: 0o755 });
   const env = { ...process.env, TEST_RECEIPT: receipt, MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '', HERDR_INTEGRATION_ID: '',
     TMPDIR: f.scratch, ORG_DIR: '', HERDR_ORG_CONSOLE_CONFIG: path.join(f.scratch, 'absent-console.json') };
   const native = ['--model', 'literal-model', 'Literal task'];
-  for (const cwd of [notGit, f.repo]) for (const kind of ['codex', 'claude']) {
+  for (const cwd of [notGit, f.repo, linked]) for (const kind of ['codex', 'claude']) {
     const args = [path.join(root, `discovery/adapters/${kind}.mjs`), ...(interactive ? ['--auto-entry'] : []), '--repo', cwd, '--binary', binary, '--', ...native];
     const result = interactive ? runPTY(process.execPath, args, { cwd, env }) : spawnSync(process.execPath, args, { cwd, env, encoding: 'utf8' });
     const output = `${result.stdout}${result.stderr}`.replaceAll('\r', '').replace(/^\^D\u0008\u0008/u, '').trim();
@@ -165,5 +169,6 @@ for (const interactive of [false, true]) test(`${interactive ? 'interactive auto
     assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
     assert.equal(fs.existsSync(path.join(cwd, '.lane')), false);
   }
-  assert.equal(fs.readFileSync(receipt, 'utf8').trim().split('\n').length, 4, 'there are no sandbox probes or duplicate native launches');
+  assert.equal(fs.readFileSync(receipt, 'utf8').trim().split('\n').length, 6, 'there are no sandbox probes or duplicate native launches');
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
 });

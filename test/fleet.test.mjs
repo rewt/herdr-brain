@@ -9,6 +9,7 @@ import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
 import { ConfigError, EXAMPLE, loadModernConfig, loadConfig } from '../console/lib/config.mjs';
 import { catalog, createIdentityReader } from '../console/modern/model.mjs';
 import { createEntry } from '../discovery/runtime.mjs';
+import { nativeSessionContext } from '../discovery/native-sandbox.mjs';
 import { projectRows } from '../console/modern/project.mjs';
 import { createModernSession } from '../console/modern/session.mjs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -384,6 +385,96 @@ test('fleet exclusions persist before Git exists, cover descendants and aliases,
   const linked = path.join(f.scratch, 'excluded-linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/excluded', linked]);
   assert.equal(projectFleet(linked, f.env).excluded, cwd, 'canonical exclusion applies to linked checkouts');
   f.run(f.scratch, ['include', cwd]); assert.equal(projectFleet(linked, f.env).project.record, mapping.record);
+});
+
+test('excluding a joined external-record project preserves record writes, settings and worktrees in every checkout', t => {
+  const f = fixture(t), cwd = f.repo('joined/app'), record = path.join(f.scratch, 'external-record'); initOrg(record);
+  const layer = path.join(path.dirname(cwd), '.lane.json'), worktrees = path.join(f.scratch, 'mapped-worktrees');
+  fs.writeFileSync(layer, JSON.stringify({ always_args: { codex: ['-p', 'trusted-project'] }, routes: { engineer: { model: 'owned-route' } } }));
+  f.join(cwd, ['--record', record, '--worktrees', worktrees, '--layer', layer]);
+  const linked = path.join(f.scratch, 'linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/excluded-record', linked]);
+  const routes = loadDiscoveredRoutes({ cwd, env: f.env }), mapping = projectFleet(cwd, f.env).project;
+  const laneConfig = checkout => spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: checkout, env: f.env, encoding: 'utf8' });
+  const beforeConfig = laneConfig(cwd); assert.equal(beforeConfig.status, 0, beforeConfig.stderr);
+  for (const excluded of [cwd, linked]) {
+    const result = f.run(f.scratch, ['exclude', excluded]); assert.equal(result.status, 0, result.stderr);
+    for (const checkout of excluded === cwd ? [cwd, linked] : [linked]) {
+      const boundary = projectFleet(checkout, f.env);
+      assert.equal(boundary.excluded, excluded); assert.deepEqual(boundary.project, mapping);
+      assert.equal(findOrgDir({ cwd: checkout, env: f.env }), record);
+      assert.deepEqual(loadDiscoveredRoutes({ cwd: checkout, env: f.env }), routes);
+      const config = laneConfig(checkout); assert.equal(config.status, 0, config.stderr); assert.equal(config.stdout, beforeConfig.stdout);
+      assert.equal(createEntry({ cwd: checkout }), null); assert.equal(nativeSessionContext(checkout), null);
+      const add = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', 'Work while excluded'], { cwd: checkout, env: f.env, encoding: 'utf8' });
+      assert.equal(add.status, 0, add.stderr);
+      const status = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd: checkout, env: f.env, encoding: 'utf8' });
+      assert.equal(status.status, 0, status.stderr); assert.ok(JSON.parse(status.stdout).items.some(item => item.title === 'Work while excluded'));
+      assert.equal(fs.existsSync(path.join(checkout, '.org')), false, 'excluded reads and writes never initialize a second record');
+    }
+    const bytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+    const include = f.run(f.scratch, ['include', excluded]); assert.equal(include.status, 0, include.stderr);
+    assert.deepEqual(projectFleet(linked, f.env).project, mapping);
+    assert.equal(findOrgDir({ cwd: linked, env: f.env }), record);
+    assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), bytes);
+    assert.ok(nativeSessionContext(linked));
+  }
+});
+
+for (const moved of [false, true]) test(`explicit external ORG_DIR preserves the ${moved ? 'moved' : 'unmoved'} unjoined layout until adoption`, t => {
+  const f = fixture(t);
+  let cwd = f.repo('existing/app');
+  const record = path.join(f.scratch, 'records', 'external'), parent = path.dirname(cwd), layer = path.join(parent, '.lane.json'); initOrg(record);
+  fs.writeFileSync(layer, JSON.stringify({ worktree_root: 'existing-worktrees', always_args: { codex: ['-p', 'trusted-project'] }, routes: { engineer: { model: 'existing-route' } } }));
+  if (moved) { const destination = path.join(parent, "moved app's checkout"); fs.renameSync(cwd, destination); cwd = destination; }
+  f.env.ORG_DIR = record; process.env.ORG_DIR = record;
+  const routes = loadDiscoveredRoutes({ cwd, env: f.env });
+  const laneConfig = () => spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env: f.env, encoding: 'utf8' });
+  const beforeConfig = laneConfig(); assert.equal(beforeConfig.status, 0, beforeConfig.stderr);
+  const recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+  const other = f.repo('other'), joinedOther = f.join(other);
+  assert.equal(joinedOther.project.record, path.join(other, '.org'), 'entry must not adopt an inherited ORG_DIR');
+  const fleetFile = path.join(f.fleetHome, 'fleet.json'), fleetBytes = fs.readFileSync(fleetFile);
+  assert.equal(findOrgDir({ cwd, env: f.env }), record);
+  assert.deepEqual(loadDiscoveredRoutes({ cwd, env: f.env }), routes);
+  const afterConfig = laneConfig(); assert.equal(afterConfig.status, 0, afterConfig.stderr); assert.equal(afterConfig.stdout, beforeConfig.stdout);
+  assert.match(afterConfig.stderr, /monitor fleet join --record/u); assert.ok(afterConfig.stderr.includes(record)); assert.ok(afterConfig.stderr.includes(layer));
+  assert.equal(createEntry({ cwd, role: 'supervisor' }), null);
+  const bareJoin = f.run(cwd, ['join']); assert.notEqual(bareJoin.status, 0); assert.match(bareJoin.stderr, /explicit adoption/u);
+  assert.deepEqual(fs.readFileSync(fleetFile), fleetBytes); assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+  assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
+  const command = afterConfig.stderr.trim().split(' with ').at(-1);
+  const adopted = spawnSync('/bin/sh', ['-c', command.replace(/^monitor/, '"$FLEET_TEST_NODE" "$FLEET_TEST_CLIENT"')], {
+    cwd, env: { ...f.env, FLEET_TEST_NODE: process.execPath, FLEET_TEST_CLIENT: client }, encoding: 'utf8',
+  });
+  assert.equal(adopted.status, 0, adopted.stderr);
+  const mapping = JSON.parse(adopted.stdout).project;
+  assert.equal(mapping.record, record); assert.deepEqual(mapping.layers, [layer]); assert.equal(mapping.worktrees, path.join(parent, 'existing-worktrees', path.basename(cwd)));
+  assert.deepEqual(loadDiscoveredRoutes({ cwd, env: f.env }), routes);
+});
+
+for (const alias of [false, true]) test(`a neighbor with its own record cannot inherit another project's mapped parent layer${alias ? ' through an alias' : ''}`, t => {
+  const f = fixture(t), owner = f.repo('shared/owner'), neighbor = f.repo('shared/neighbor');
+  const layer = path.join(path.dirname(owner), '.lane.json'), record = path.join(neighbor, '.org'); initOrg(record);
+  const selectedLayer = alias ? path.join(f.scratch, 'owned-layer.json') : layer;
+  fs.writeFileSync(selectedLayer, JSON.stringify({ worktree_root: 'private-worktrees', validate: 'private-validator',
+    always_args: { codex: ['-p', 'private-memory'] }, routes: { engineer: { model: 'private-route' } } }));
+  if (alias) fs.symlinkSync(selectedLayer, layer);
+  f.join(owner, ['--layer', layer]);
+  const before = fs.readFileSync(path.join(record, 'events.jsonl'));
+  assert.equal(findOrgDir({ cwd: neighbor, env: f.env }), record);
+  assert.equal(projectFleet(neighbor, f.env).legacy, null);
+  const routes = loadDiscoveredRoutes({ cwd: neighbor, env: f.env }); assert.deepEqual(routes.files, []); assert.equal(routes.suggested, true);
+  const config = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: neighbor, env: f.env, encoding: 'utf8' });
+  assert.equal(config.status, 0, config.stderr); assert.doesNotMatch(config.stdout, /private-route|private-memory|private-validator|private-worktrees/u);
+  // Entry also joins independently, without adopting the parent's settings or worktrees.
+  const automatic = f.repo('shared/automatic'); initOrg(path.join(automatic, '.org'));
+  const entry = createEntry({ cwd: automatic, role: 'supervisor' }); assert.ok(entry); f.keep(entry);
+  assert.deepEqual(f.read().projects.automatic.layers, []); assert.notEqual(entry.context().worktrees, path.join(path.dirname(layer), 'private-worktrees', 'automatic'));
+  // Explicit --layer adoption is the way to share a mapped layer while keeping a distinct record.
+  f.join(neighbor, ['--record', record, '--layer', layer]);
+  assert.deepEqual(loadDiscoveredRoutes({ cwd: neighbor, env: f.env }).files, [selectedLayer]);
+  assert.equal(loadDiscoveredRoutes({ cwd: neighbor, env: f.env }).config.routes.engineer.model, 'private-route');
+  assert.equal(findOrgDir({ cwd: neighbor, env: f.env }), record); assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), before);
 });
 
 test('legacy record discovery keeps its symlink path and does not depend on valid parent settings', t => {

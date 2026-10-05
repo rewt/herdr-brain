@@ -11,8 +11,8 @@ import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
 
 export function nativeSessionContext(cwd) {
-  const { project, fleet } = projectFleet(cwd);
-  if (!project) return null;
+  const { project, fleet, excluded } = projectFleet(cwd);
+  if (excluded || !project) return null;
   const git = gitProject(cwd);
   return { workspace: git.checkout, canonical: project.checkout, org: project.record,
     tempRoot: project.temp, worktrees: project.worktrees, projects: Object.values(fleet.projects).filter(p => p.identity !== project.identity) };

@@ -100,7 +100,9 @@ the root does not exist yet or becomes a Git repository later. Excluded entry
 and native sessions retain their arguments, checkout and native permissions;
 Monitor does not join, create a record or generate a project sandbox. Explicit
 join also requires inclusion first. Excluding an already joined project keeps
-its mapping and record intact and applies to its linked worktrees. `include`
+its mapping and record intact and applies to its linked worktrees. Record and
+lane commands keep using its mapped record, settings layers and worktree root
+while excluded; work recorded then remains visible after inclusion. `include`
 removes the named root only; any remaining ancestor exclusion still applies.
 
 Each entry stores the canonical Git common directory (`identity`), canonical
@@ -128,8 +130,9 @@ monitor fleet join --record /project-record \
 Joined projects read only their own fleet mapping and checkout. Creating the
 fleet for another project does not disable an existing unjoined Git project's
 legacy record and settings discovery: when its previously discovered `.org`
-record is still unclaimed, record and lane commands preserve that record, the
-nearest parent settings layer, and the prior lane worktree location. A visible
+record (or existing external record selected by `ORG_DIR`) and nearest parent
+settings layer are still unclaimed, record and lane commands preserve the record,
+settings and prior lane worktree location. A visible
 message gives a shell-quoted `monitor fleet join --record ... --worktrees ...
 --layer ...` command naming the discovered layout. Entry stays native until that
 explicit adoption; reads and native entry never add the project to the fleet.
@@ -137,6 +140,11 @@ This compatibility option avoids guessing ownership of an ancestor record.
 A bare join refuses to replace an existing ancestor record or discard its parent
 settings; use the printed adoption command to keep those paths.
 A record already mapped to another project is never inherited by a neighbour.
+A neighbour with its own record also cannot inherit a parent settings layer
+already mapped to another project, including through a symlink. Sharing that
+layer requires explicit `monitor fleet join --record ... --layer ...` adoption.
+An inherited `ORG_DIR` never authorizes automatic record adoption; the printed
+command requires an explicit `--record` selection.
 An unjoined project can bootstrap its own local record through `record`, but only
 entry/join adds membership. `ORG_DIR`, `LANE_CONFIG` and lane worktree environment
 overrides remain explicit selections. Without a fleet file, legacy discovery and

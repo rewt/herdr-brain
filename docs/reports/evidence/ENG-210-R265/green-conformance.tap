@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: caller identity source failure remains an exit-75 refusal in direct check
+ok 1 - caller identity source failure remains an exit-75 refusal in direct check
+  ---
+  duration_ms: 1399.577917
+  ...
+# Subtest: caller identity source failure remains an exit-75 refusal in direct promote
+ok 2 - caller identity source failure remains an exit-75 refusal in direct promote
+  ---
+  duration_ms: 1671.340792
+  ...
+# Subtest: train refuses uncommitted repair and leaves main at the validated input base
+ok 3 - train refuses uncommitted repair and leaves main at the validated input base
+  ---
+  duration_ms: 3107.595917
+  ...
+# Subtest: train refuses committed gate change and leaves main at the validated input base
+ok 4 - train refuses committed gate change and leaves main at the validated input base
+  ---
+  duration_ms: 3479.345167
+  ...
+# Subtest: repeated red gates retain distinct immutable logs and hashes for the same committed tree
+ok 5 - repeated red gates retain distinct immutable logs and hashes for the same committed tree
+  ---
+  duration_ms: 3682.82
+  ...
+# Subtest: a completed gate refused at integration counts once; failed preparation counts no gate
+ok 6 - a completed gate refused at integration counts once; failed preparation counts no gate
+  ---
+  duration_ms: 2036.753625
+  ...
+# Subtest: resuming a prepared attempt retains both executed gates in receipts and metrics
+ok 7 - resuming a prepared attempt retains both executed gates in receipts and metrics
+  ---
+  duration_ms: 1869.170083
+  ...
+# Subtest: executed gates that dirty the worktree still retain real exit, log and timing evidence
+ok 8 - executed gates that dirty the worktree still retain real exit, log and timing evidence
+  ---
+  duration_ms: 1062.837792
+  ...
+# Subtest: interrupted execution time is included separately from completed gate time
+ok 9 - interrupted execution time is included separately from completed gate time
+  ---
+  duration_ms: 1120.290583
+  ...
+# Subtest: post-gate dirty scratch drift cannot reach main
+ok 10 - post-gate dirty scratch drift cannot reach main
+  ---
+  duration_ms: 2383.548042
+  ...
+# Subtest: post-gate committed scratch drift cannot reach main
+ok 11 - post-gate committed scratch drift cannot reach main
+  ---
+  duration_ms: 2180.2745
+  ...
+# Subtest: concurrent same-tree red checks retain distinct complete logs
+ok 12 - concurrent same-tree red checks retain distinct complete logs
+  ---
+  duration_ms: 929.516958
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 24969.165458

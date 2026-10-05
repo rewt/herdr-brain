@@ -1,0 +1,31 @@
+{
+  "phase": "before",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v20.19.4",
+  "workload": "16 sequential PBKDF2-SHA256 calls, 1000000 iterations each",
+  "rows": [
+    {
+      "wall_s": 2.172340917,
+      "source_spawns": 24
+    },
+    {
+      "wall_s": 2.100926084,
+      "source_spawns": 24
+    },
+    {
+      "wall_s": 2.308924333,
+      "source_spawns": 26
+    },
+    {
+      "wall_s": 2.643959667,
+      "source_spawns": 29
+    },
+    {
+      "wall_s": 2.236443917,
+      "source_spawns": 25
+    }
+  ],
+  "median_wall_s": 2.236443917,
+  "mean_wall_s": 2.2925189836
+}

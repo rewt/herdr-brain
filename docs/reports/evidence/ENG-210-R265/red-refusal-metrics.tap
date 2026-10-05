@@ -1,0 +1,162 @@
+TAP version 13
+# Subtest: caller identity source failure remains an exit-75 refusal in direct check
+not ok 1 - caller identity source failure remains an exit-75 refusal in direct check
+  ---
+  duration_ms: 251.221834
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    lane: process source unavailable: transient source failure
+    
+    
+    1 !== 75
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 75
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/promote/test/conformance.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: caller identity source failure remains an exit-75 refusal in direct promote
+not ok 2 - caller identity source failure remains an exit-75 refusal in direct promote
+  ---
+  duration_ms: 238.481042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    lane: process source unavailable: transient source failure
+    
+    
+    1 !== 75
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 75
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/promote/test/conformance.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: train refuses uncommitted repair and leaves main at the validated input base
+ok 3 - train refuses uncommitted repair and leaves main at the validated input base # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062583
+  ...
+# Subtest: train refuses committed gate change and leaves main at the validated input base
+ok 4 - train refuses committed gate change and leaves main at the validated input base # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.121208
+  ...
+# Subtest: repeated red gates retain distinct immutable logs and hashes for the same committed tree
+ok 5 - repeated red gates retain distinct immutable logs and hashes for the same committed tree # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044625
+  ...
+# Subtest: a completed gate refused at integration counts once; failed preparation counts no gate
+ok 6 - a completed gate refused at integration counts once; failed preparation counts no gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035958
+  ...
+# Subtest: resuming a prepared attempt retains both executed gates in receipts and metrics
+ok 7 - resuming a prepared attempt retains both executed gates in receipts and metrics # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0385
+  ...
+# Subtest: executed gates that dirty the worktree still retain real exit, log and timing evidence
+ok 8 - executed gates that dirty the worktree still retain real exit, log and timing evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.084875
+  ...
+# Subtest: interrupted execution time is included separately from completed gate time
+ok 9 - interrupted execution time is included separately from completed gate time # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.092083
+  ...
+# Subtest: post-gate dirty scratch drift cannot reach main
+ok 10 - post-gate dirty scratch drift cannot reach main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.084333
+  ...
+# Subtest: post-gate committed scratch drift cannot reach main
+ok 11 - post-gate committed scratch drift cannot reach main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034667
+  ...
+# Subtest: concurrent same-tree red checks retain distinct complete logs
+ok 12 - concurrent same-tree red checks retain distinct complete logs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075875
+  ...
+# Subtest: profile completed time excludes interruptions and exposes executed time separately
+not ok 13 - profile completed time excludes interruptions and exposes executed time separately
+  ---
+  duration_ms: 119.618375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      {
+        max: 20,
+    +   median: 10,
+    +   samples: 3,
+    +   total: 34
+    -   median: 15,
+    -   samples: 2,
+    -   total: 30
+      }
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    samples: 2
+    total: 30
+    median: 15
+    max: 20
+  actual:
+    samples: 3
+    total: 34
+    median: 10
+    max: 20
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/promote/test/metrics-profile.test.mjs:24:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 0
+# fail 3
+# cancelled 0
+# skipped 10
+# todo 0
+# duration_ms 529.811875

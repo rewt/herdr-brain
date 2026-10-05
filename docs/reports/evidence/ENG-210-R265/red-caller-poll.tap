@@ -1,0 +1,126 @@
+TAP version 13
+# Subtest: cancel signals compound gate descendants in a top-level slot
+ok 1 - cancel signals compound gate descendants in a top-level slot # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.582625
+  ...
+# Subtest: cancel signals compound gate descendants in a nested slot
+ok 2 - cancel signals compound gate descendants in a nested slot # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.335792
+  ...
+# Subtest: spawnSync timeout signals compound gate descendants in a top-level slot
+ok 3 - spawnSync timeout signals compound gate descendants in a top-level slot # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049459
+  ...
+# Subtest: spawnSync timeout signals compound gate descendants in a nested slot
+ok 4 - spawnSync timeout signals compound gate descendants in a nested slot # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034416
+  ...
+# Subtest: the live synchronous caller watch spawns and hashes nothing after gate startup
+not ok 5 - the live synchronous caller watch spawns and hashes nothing after gate startup
+  ---
+  duration_ms: 1102.139291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:74:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    polling does not execute a source or hash its bundled helper
+    + actual - expected
+    
+    + 'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n' +
+    +   'hash\n' +
+    +   'hash\n' +
+    +   'spawn\n'
+    - ''
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ''
+  actual: |-
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    hash
+    hash
+    spawn
+    
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:90:10)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: stopping the synchronous gate caller signals its top-level compound gate group
+ok 6 - stopping the synchronous gate caller signals its top-level compound gate group # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049791
+  ...
+# Subtest: stopping the synchronous gate caller signals its nested compound gate group
+ok 7 - stopping the synchronous gate caller signals its nested compound gate group # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.088917
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 6
+# todo 0
+# duration_ms 1133.818958

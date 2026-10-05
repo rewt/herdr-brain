@@ -39,8 +39,11 @@ receives worker entry just like a fresh interactive shell launch. A display-only
 managed-start receipt neither bypasses entry nor selects a supervisor role.
 Assigned Monitor launches retain their explicit bypass; receipts grant no worker
 or supervisor capability.
-Non-Git folders, empty repositories and a checkout on the wrong configured
-integration branch warn and continue with the native executable.
+Non-Git and fleet-excluded folders continue with the native executable and one
+calm line: `monitor: not a fleet project; starting native Claude without a project
+sandbox` (or Codex). No Git error or sandbox warning is printed for those folders.
+Empty repositories and a checkout on the wrong configured integration branch
+still explain the entry failure and continue with the native executable.
 
 Tools intentionally opting into entry use `monitor-codex -- exec ...` or
 `monitor-claude -- --print ...`. These explicit entry commands are also the
@@ -83,11 +86,22 @@ for tests. Reads never create or join anything. Agents that bypass entry run:
 monitor fleet join
 monitor fleet show
 monitor fleet join --session-limit 8
+monitor fleet exclude ~/development/improving
+monitor fleet include ~/development/improving
 ```
 
 Join is idempotent, including from linked worktrees. The session limit defaults
 to 6 and is advisory; entry, the console and `show` surface it without refusing
-sessions. Entry/join alone writes the file. Supervisors remain per project.
+sessions. Entry and fleet commands alone write the file. Supervisors remain per project.
+
+Exclusions persist as optional `excluded_roots` in version 1 of the fleet file.
+They apply to a root and every descendant, including through symlinks, even if
+the root does not exist yet or becomes a Git repository later. Excluded entry
+and native sessions retain their arguments, checkout and native permissions;
+Monitor does not join, create a record or generate a project sandbox. Explicit
+join also requires inclusion first. Excluding an already joined project keeps
+its mapping and record intact and applies to its linked worktrees. `include`
+removes the named root only; any remaining ancestor exclusion still applies.
 
 Each entry stores the canonical Git common directory (`identity`), canonical
 `checkout`, `record`, `worktrees`, `temp` and explicitly owned settings `layers`.
@@ -111,11 +125,22 @@ monitor fleet join --record /project-record \
   --worktrees /project-worktrees --temp /project-temp --layer /owned/.lane.json
 ```
 
-With a fleet present, automatic record and parent-settings discovery stops at
-the project edge and reads only that project's mapping and checkout. An unjoined
-project can bootstrap its own record through `record`, but only entry/join adds
-it to the fleet. `ORG_DIR` and `LANE_CONFIG` remain explicit selections. Without
-a fleet file, legacy discovery and console configuration work as before.
+Joined projects read only their own fleet mapping and checkout. Creating the
+fleet for another project does not disable an existing unjoined Git project's
+legacy record and settings discovery: when its previously discovered `.org`
+record is still unclaimed, record and lane commands preserve that record, the
+nearest parent settings layer, and the prior lane worktree location. A visible
+message gives a shell-quoted `monitor fleet join --record ... --worktrees ...
+--layer ...` command naming the discovered layout. Entry stays native until that
+explicit adoption; reads and native entry never add the project to the fleet.
+This compatibility option avoids guessing ownership of an ancestor record.
+A bare join refuses to replace an existing ancestor record or discard its parent
+settings; use the printed adoption command to keep those paths.
+A record already mapped to another project is never inherited by a neighbour.
+An unjoined project can bootstrap its own local record through `record`, but only
+entry/join adds membership. `ORG_DIR`, `LANE_CONFIG` and lane worktree environment
+overrides remain explicit selections. Without a fleet file, legacy discovery and
+console configuration work as before.
 The console merges joined projects with projects from its existing configuration
 that have not joined yet, retaining their explicitly configured records and
 presentation and transcript preferences. Reading the console never joins them;

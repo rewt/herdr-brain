@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { requestTimeout } from './deadlines.mjs';
 import { parseArgs } from 'node:util';
-import { joinFleet, fleetView } from '../lib/fleet.mjs';
+import { joinFleet, fleetView, setFleetExcluded } from '../lib/fleet.mjs';
 const [op, ...words] = process.argv.slice(2);
 try {
   if (op === 'fleet') {
@@ -15,12 +15,14 @@ try {
       console.log(JSON.stringify(joinFleet({ record: values.record, worktrees: values.worktrees, temp: values.temp, layers: values.layer,
         sessionLimit: values['session-limit'] === undefined ? undefined : Number(values['session-limit']), replace: values.replace }), null, 2));
     } else if (action === 'show' && !args.length) console.log(JSON.stringify(fleetView(), null, 2));
-    else throw new Error('usage: monitor fleet join [--replace NAME] [--record PATH] [--worktrees PATH] [--temp PATH] [--layer PATH] [--session-limit N] | monitor fleet show');
+    else if (['exclude', 'include'].includes(action) && args.length === 1)
+      console.log(JSON.stringify(setFleetExcluded({ root: args[0], excluded: action === 'exclude' }), null, 2));
+    else throw new Error('usage: monitor fleet join [--replace NAME] [--record PATH] [--worktrees PATH] [--temp PATH] [--layer PATH] [--session-limit N] | monitor fleet show | monitor fleet <exclude|include> PATH');
     process.exit(0);
   }
   if (!op || ['--help', '-h', 'help'].includes(op)) {
     console.log('monitor <context|start TASK|resume ITEM|commit SUBJECT|check|promote|rebase|continue|abort|apply-routes|finish>');
-    console.log('monitor fleet join [--replace NAME] [--session-limit N] | monitor fleet show (available without entry)');
+    console.log('monitor fleet join [--replace NAME] [--session-limit N] | monitor fleet show | monitor fleet <exclude|include> PATH (available without entry)');
     console.log('continue: stage the files you resolved through the bounded Git adapter and continue your paused rebase. No direct git add is required.');
     console.log('finish: ingest the exact run report; done requires successful promotion. A second different report is refused by record.');
     process.exit(0);

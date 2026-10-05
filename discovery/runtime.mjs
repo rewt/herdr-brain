@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
-import { joinFleet, readFleet } from '../lib/fleet.mjs';
+import { joinFleet, readFleet, projectFleet, excludedFleetRoot } from '../lib/fleet.mjs';
 import { openProjectControls } from '../herdr/project-entry.mjs';
 import { plainDirectory, readPlainFile, removePlainDirectory, writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { withLock } from '../lib/store.mjs';
@@ -28,10 +28,21 @@ export function command(binary, args, cwd, env = {}, timeout = DEFAULT_REQUEST_T
 }
 
 export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, worktreeRoot, sandboxBinary }) {
-  const project = gitProject(cwd);
+  const registry = readFleet();
+  if (excludedFleetRoot(cwd, registry)) return null;
+  let project;
+  try { project = gitProject(cwd); }
+  catch (error) {
+    if (/not a git repository/u.test(String(error.stderr))) return null;
+    throw error;
+  }
+  if (excludedFleetRoot(project.canonical, registry)) return null;
   const enteredPath = path.relative(project.checkout, fs.realpathSync(cwd)).split(path.sep).join('/') || '.';
   const settings = projectEntrySettings(project);
   if (!settings.enabled) return null;
+  // Reading an established layout cannot prove ownership of its parent record.
+  // Keep native entry and discovery until the printed explicit join is applied.
+  if (registry && projectFleet(cwd).legacy) return null;
   if (!['worker', 'supervisor'].includes(role)) throw new Error('role must be worker or supervisor');
   const mode = role === 'supervisor' ? 'main' : settings.mode;
   const workerLane = role === 'worker' && mode === 'worker';

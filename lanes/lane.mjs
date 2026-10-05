@@ -306,14 +306,14 @@ function nearestParentConfig(repository) {
 
 const EXPLICIT_CONFIG = process.env.LANE_CONFIG !== undefined;
 const REPOSITORY_CONFIG_FILE = join(REPO_ROOT, ".lane.json");
-const PARENT_CONFIG_FILE = EXPLICIT_CONFIG ? undefined : FLEET.fleet ? FLEET.project?.layers[0] : nearestParentConfig(REPO_ROOT);
+const PARENT_CONFIG_FILE = EXPLICIT_CONFIG ? undefined : FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers[0] : nearestParentConfig(REPO_ROOT);
 const CONFIG_LAYERS = (() => {
   if (EXPLICIT_CONFIG) {
     const file = resolve(CALLER_CWD, process.env.LANE_CONFIG);
     return [{ file, config: readConfig(file, { required: true }) }];
   }
   const layers = [];
-  for (const file of FLEET.fleet ? FLEET.project?.layers ?? [] : [PARENT_CONFIG_FILE].filter(Boolean))
+  for (const file of FLEET.fleet ? (FLEET.project ?? FLEET.legacy)?.layers ?? [] : [PARENT_CONFIG_FILE].filter(Boolean))
     layers.push({ file, config: readConfig(file, { required: true }) });
   const repository = readConfig(REPOSITORY_CONFIG_FILE);
   if (repository !== undefined) layers.push({ file: REPOSITORY_CONFIG_FILE, config: repository });

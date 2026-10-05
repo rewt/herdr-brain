@@ -331,7 +331,7 @@ export function loadDiscoveredRoutes({ cwd = process.cwd(), env = process.env, f
     if (!nearest) return { config: structuredClone(ROUTE_PRESET), files: [], suggested: true };
     return { config: readRoutesConfig(nearest), files: [nearest] };
   }
-  const parents = boundary.fleet ? boundary.project?.layers ?? [] : [nearestParentConfig(repository)];
+  const parents = boundary.fleet ? (boundary.project ?? boundary.legacy)?.layers ?? [] : [nearestParentConfig(repository)];
   const files = [...parents, join(repository, ".lane.json")].filter((candidate) => candidate && existsSync(candidate));
   if (files.length === 0) return { config: structuredClone(ROUTE_PRESET), files, suggested: true };
   const config = mergeRoutesConfig(files.map(readRoutesConfig));

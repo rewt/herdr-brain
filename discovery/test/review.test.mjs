@@ -166,7 +166,10 @@ test('interactive no-identity launches warn and preserve the native session', { 
   fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ main: 'integration' }));
   for (const cwd of [notGit, empty, f.repo]) for (const kind of ['codex', 'claude']) {
     const output = interactive(path.join(installed.bin, kind), [], cwd, installed.env);
-    assert.match(output, /continuing with native/u, `${kind} at ${cwd}`);
+    if (cwd === notGit) {
+      assert.match(output, /monitor: not a fleet project; starting native/u);
+      assert.doesNotMatch(output, /fatal:|Command failed|WARNING:/u);
+    } else assert.match(output, /continuing with native/u, `${kind} at ${cwd}`);
     assert.equal(JSON.parse(fs.readFileSync(installed.receipt)).cwd, cwd);
     assert.ok(!fs.existsSync(path.join(cwd, '.org')));
   }

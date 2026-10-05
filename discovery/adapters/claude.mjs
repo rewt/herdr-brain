@@ -27,7 +27,7 @@ function passthrough() {
     if (nativeSession('claude', native)) {
       const context = nativeSessionContext(values.repo);
       if (context) launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
-      else console.error('monitor sandbox: WARNING: project has no fleet mapping; native sandbox settings were not generated');
+      else console.error('monitor: not a fleet project; starting native Claude without a project sandbox');
     }
   } catch (error) { console.error(`monitor sandbox: ${error.message}`); process.exitCode = 1; return; }
   const child = spawn(launch.binary, launch.args, { stdio: 'inherit', env: launch.env });

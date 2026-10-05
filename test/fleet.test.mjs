@@ -14,6 +14,7 @@ import { createModernSession } from '../console/modern/session.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { recover } from '../herdr/entry-transaction.mjs';
 import { entryPolicy } from '../discovery/policy.mjs';
+import { projectFleet } from '../lib/fleet.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const client = path.join(root, 'discovery/client.mjs');
@@ -203,7 +204,8 @@ test('malformed fleet fails before entry or discovery touches any record', t => 
   const f = fixture(t), cwd = f.repo('app'), record = path.join(f.scratch, '.org'); initOrg(record);
   const before = fs.readFileSync(path.join(record, 'events.jsonl'));
   fs.mkdirSync(f.fleetHome);
-  for (const bad of ['{', JSON.stringify({ version: 1, session_limit: 0, projects: {} }), JSON.stringify({ version: 1, session_limit: 6, projects: { app: { checkout: cwd } } })]) {
+  for (const bad of ['{', JSON.stringify({ version: 1, session_limit: 0, projects: {} }), JSON.stringify({ version: 1, session_limit: 6, projects: { app: { checkout: cwd } } }),
+    ...[null, {}, ['relative/path']].map(excluded_roots => JSON.stringify({ version: 1, session_limit: 6, projects: {}, excluded_roots }))]) {
     fs.writeFileSync(path.join(f.fleetHome, 'fleet.json'), bad);
     assert.throws(() => findOrgDir({ cwd, env: f.env }), /fleet/i);
     assert.throws(() => loadDiscoveredRoutes({ cwd, env: f.env }), /fleet/i);
@@ -307,6 +309,92 @@ test('without a fleet file legacy ancestor discovery and console configuration a
   assert.deepEqual(loadDiscoveredRoutes({ cwd, env: f.env }).files, [layer]);
   assert.equal(loadConfig(f.consoleFile).projects[0].org, record);
   assert.equal(fs.existsSync(f.fleetHome), false);
+});
+
+for (const moved of [false, true]) test(`a ${moved ? 'moved' : 'unmoved'} existing project keeps its layout when another project creates the fleet`, t => {
+  const f = fixture(t);
+  let cwd = f.repo('existing/app');
+  const parent = path.dirname(cwd), record = path.join(parent, '.org'), layer = path.join(parent, '.lane.json');
+  initOrg(record);
+  fs.writeFileSync(layer, JSON.stringify({ worktree_root: moved ? 'worktrees' : undefined, always_args: { codex: ['-p', 'trusted-project'] }, routes: { engineer: { kind: 'codex', model: 'project-model' } } }));
+  fs.writeFileSync(path.join(cwd, '.lane.json'), JSON.stringify({ routes: { reviewer: { kind: 'claude', model: 'project-review' } } }));
+  if (moved) {
+    cwd = path.join(parent, "moved app's checkout");
+    fs.renameSync(path.join(parent, 'app'), cwd);
+  }
+  const expectedRecord = findOrgDir({ cwd, env: f.env });
+  const expectedRoutes = loadDiscoveredRoutes({ cwd, env: f.env });
+  const laneConfig = () => spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd, env: f.env, encoding: 'utf8' });
+  const beforeConfig = laneConfig(); assert.equal(beforeConfig.status, 0, beforeConfig.stderr);
+  const recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
+  f.join(f.repo('other'));
+  const fleetFile = path.join(f.fleetHome, 'fleet.json'), fleetBytes = fs.readFileSync(fleetFile);
+  assert.equal(findOrgDir({ cwd, env: f.env }), expectedRecord);
+  assert.deepEqual(loadDiscoveredRoutes({ cwd, env: f.env }), expectedRoutes);
+  const afterConfig = laneConfig(); assert.equal(afterConfig.status, 0, afterConfig.stderr);
+  assert.equal(afterConfig.stdout, beforeConfig.stdout);
+  assert.match(afterConfig.stderr, /monitor fleet join --record/u);
+  assert.ok(afterConfig.stderr.includes(record)); assert.ok(afterConfig.stderr.includes(layer));
+  assert.equal(createEntry({ cwd, role: 'supervisor' }), null, 'entry keeps native behavior until the explicit adoption');
+  const bareJoin = f.run(cwd, ['join']); assert.notEqual(bareJoin.status, 0); assert.match(bareJoin.stderr, /explicit adoption/u);
+  assert.deepEqual(fs.readFileSync(fleetFile), fleetBytes, 'reads and entry do not register the existing project');
+  assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
+  assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
+  const quoted = value => "'" + value.replaceAll("'", "'\\''") + "'";
+  const command = afterConfig.stderr.trim().split(' with ').at(-1);
+  const joined = spawnSync('/bin/sh', ['-c', command.replace(/^monitor/, '"$FLEET_TEST_NODE" "$FLEET_TEST_CLIENT"')], {
+    cwd, env: { ...f.env, FLEET_TEST_NODE: process.execPath, FLEET_TEST_CLIENT: client }, encoding: 'utf8',
+  });
+  assert.equal(joined.status, 0, joined.stderr);
+  const mapping = JSON.parse(joined.stdout).project;
+  assert.equal(mapping.record, record); assert.deepEqual(mapping.layers, [layer]);
+  assert.equal(mapping.worktrees, path.join(parent, moved ? 'worktrees' : '.worktrees', path.basename(cwd)));
+  assert.deepEqual(loadDiscoveredRoutes({ cwd, env: f.env }), expectedRoutes);
+  const linked = path.join(f.scratch, 'linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/existing', linked]);
+  assert.equal(findOrgDir({ cwd: linked, env: f.env }), record);
+  assert.deepEqual(loadDiscoveredRoutes({ cwd: linked, env: f.env }).files, expectedRoutes.files);
+  assert.ok(afterConfig.stderr.includes(quoted(mapping.worktrees)));
+});
+
+test('fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility', t => {
+  const f = fixture(t), directory = path.join(f.scratch, 'excluded'); fs.mkdirSync(directory);
+  const alias = path.join(f.scratch, 'alias'); fs.symlinkSync(directory, alias);
+  const missing = path.join(alias, 'future');
+  let result = f.run(f.scratch, ['exclude', missing]); assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(f.read().excluded_roots, [path.join(directory, 'future')]);
+  const cwd = f.repo('excluded/future/app');
+  assert.equal(projectFleet(cwd, f.env).excluded, path.join(directory, 'future'));
+  assert.equal(createEntry({ cwd }), null);
+  result = f.run(cwd, ['join']); assert.notEqual(result.status, 0); assert.match(result.stderr, /excluded/u);
+  assert.deepEqual(f.read().projects, {}); assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
+  const file = path.join(f.fleetHome, 'fleet.json'), bytes = fs.readFileSync(file), mtime = fs.statSync(file).mtimeMs;
+  result = f.run(f.scratch, ['exclude', missing]); assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(fs.readFileSync(file), bytes); assert.equal(fs.statSync(file).mtimeMs, mtime);
+  // Prefix siblings are eligible; inclusion removes only the named root.
+  const sibling = f.repo('excluded/future-sibling/app'); f.join(sibling);
+  f.run(f.scratch, ['exclude', directory]); f.run(f.scratch, ['include', missing]);
+  assert.equal(createEntry({ cwd }), null, 'an ancestor exclusion still applies');
+  result = f.run(f.scratch, ['include', alias]); assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(f.read().excluded_roots, []);
+  const entry = createEntry({ cwd, role: 'supervisor' }); f.keep(entry);
+  assert.ok(entry.context().fleet); assert.equal(Object.keys(f.read().projects).length, 2);
+  const mapping = projectFleet(cwd, f.env).project;
+  f.run(f.scratch, ['exclude', cwd]); assert.equal(createEntry({ cwd }), null);
+  assert.deepEqual({ ...f.read().projects[mapping.name], name: mapping.name }, mapping, 'exclusion preserves a joined mapping');
+  const linked = path.join(f.scratch, 'excluded-linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/excluded', linked]);
+  assert.equal(projectFleet(linked, f.env).excluded, cwd, 'canonical exclusion applies to linked checkouts');
+  f.run(f.scratch, ['include', cwd]); assert.equal(projectFleet(linked, f.env).project.record, mapping.record);
+});
+
+test('legacy record discovery keeps its symlink path and does not depend on valid parent settings', t => {
+  const f = fixture(t), cwd = f.repo('legacy/app'), record = path.join(f.scratch, 'external'); initOrg(record);
+  const alias = path.join(path.dirname(cwd), '.org'), layer = path.join(path.dirname(cwd), '.lane.json');
+  fs.symlinkSync(record, alias); fs.writeFileSync(layer, '{');
+  assert.equal(findOrgDir({ cwd, env: f.env }), alias);
+  assert.throws(() => loadDiscoveredRoutes({ cwd, env: f.env }), /route config/u);
+  f.join(f.repo('other'));
+  assert.equal(findOrgDir({ cwd, env: f.env }), alias);
+  assert.throws(() => loadDiscoveredRoutes({ cwd, env: f.env }), /route config/u);
 });
 
 test('fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records', t => {

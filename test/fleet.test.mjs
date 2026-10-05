@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { findOrgDir, initOrg } from '../lib/store.mjs';
-import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
+import { findOrgDir, initOrg, loadEvents } from '../lib/store.mjs';
+import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { ConfigError, EXAMPLE, loadModernConfig, loadConfig } from '../console/lib/config.mjs';
 import { catalog, createIdentityReader } from '../console/modern/model.mjs';
 import { createEntry } from '../discovery/runtime.mjs';
@@ -16,6 +16,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { recover } from '../herdr/entry-transaction.mjs';
 import { entryPolicy } from '../discovery/policy.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
+import { gitProject } from '../lib/project.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const client = path.join(root, 'discovery/client.mjs');
@@ -364,7 +365,7 @@ test('fleet exclusions persist before Git exists, cover descendants and aliases,
   let result = f.run(f.scratch, ['exclude', missing]); assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(f.read().excluded_roots, [path.join(directory, 'future')]);
   const cwd = f.repo('excluded/future/app');
-  assert.equal(projectFleet(cwd, f.env).excluded, path.join(directory, 'future'));
+  assert.equal(nativeSessionContext(cwd), null);
   assert.equal(createEntry({ cwd }), null);
   result = f.run(cwd, ['join']); assert.notEqual(result.status, 0); assert.match(result.stderr, /excluded/u);
   assert.deepEqual(f.read().projects, {}); assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
@@ -383,7 +384,8 @@ test('fleet exclusions persist before Git exists, cover descendants and aliases,
   f.run(f.scratch, ['exclude', cwd]); assert.equal(createEntry({ cwd }), null);
   assert.deepEqual({ ...f.read().projects[mapping.name], name: mapping.name }, mapping, 'exclusion preserves a joined mapping');
   const linked = path.join(f.scratch, 'excluded-linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/excluded', linked]);
-  assert.equal(projectFleet(linked, f.env).excluded, cwd, 'canonical exclusion applies to linked checkouts');
+  assert.equal(nativeSessionContext(linked), null, 'canonical exclusion applies to linked checkouts');
+  assert.equal(createEntry({ cwd: linked }), null);
   f.run(f.scratch, ['include', cwd]); assert.equal(projectFleet(linked, f.env).project.record, mapping.record);
 });
 
@@ -400,7 +402,7 @@ test('excluding a joined external-record project preserves record writes, settin
     const result = f.run(f.scratch, ['exclude', excluded]); assert.equal(result.status, 0, result.stderr);
     for (const checkout of excluded === cwd ? [cwd, linked] : [linked]) {
       const boundary = projectFleet(checkout, f.env);
-      assert.equal(boundary.excluded, excluded); assert.deepEqual(boundary.project, mapping);
+      assert.deepEqual(boundary.project, mapping);
       assert.equal(findOrgDir({ cwd: checkout, env: f.env }), record);
       assert.deepEqual(loadDiscoveredRoutes({ cwd: checkout, env: f.env }), routes);
       const config = laneConfig(checkout); assert.equal(config.status, 0, config.stderr); assert.equal(config.stdout, beforeConfig.stdout);
@@ -418,6 +420,95 @@ test('excluding a joined external-record project preserves record writes, settin
     assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), bytes);
     assert.ok(nativeSessionContext(linked));
   }
+});
+
+test('exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout', async t => {
+  const layouts = [
+    { name: 'joined checkout record', record: 'checkout', joined: true },
+    { name: 'joined external record', record: 'external', joined: true },
+    { name: 'unjoined checkout compatibility', record: 'checkout' },
+    { name: 'unjoined ancestor compatibility', record: 'ancestor' },
+    { name: 'unjoined external ORG_DIR', record: 'external', orgDir: true },
+    { name: 'stale mapping with the same Git identity', record: 'external', joined: true, stale: true },
+    { name: 'stale mapping with external ORG_DIR', record: 'external', joined: true, stale: true, orgDir: true },
+  ];
+  for (const layout of layouts) await t.test(layout.name, tc => {
+    const f = fixture(tc);
+    const cwd = f.repo('existing/app');
+    const parent = path.dirname(cwd), layer = path.join(parent, '.lane.json');
+    const record = layout.record === 'checkout' ? path.join(cwd, '.org')
+      : layout.record === 'ancestor' ? path.join(parent, '.org') : path.join(f.scratch, 'external-record');
+    initOrg(record);
+    fs.writeFileSync(layer, JSON.stringify({ worktree_root: 'existing-worktrees', validate: 'project-validator',
+      always_args: { codex: ['-p', 'trusted-project'] }, routes: { engineer: { kind: 'codex', model: 'project-model' } } }));
+    fs.writeFileSync(path.join(cwd, '.lane.json'), JSON.stringify({ routes: { reviewer: { kind: 'claude', model: 'project-review' } } }));
+    const worktrees = layout.joined ? path.join(f.scratch, 'mapped-worktrees') : path.join(parent, 'existing-worktrees', 'app');
+    const mapping = layout.joined ? f.join(cwd, ['--record', record, '--worktrees', worktrees, '--layer', layer]).project : null;
+    if (!layout.joined) f.join(f.repo('other'));
+    if (layout.stale) {
+      const fleet = f.read(); mapping.checkout = path.join(parent, 'previous-checkout');
+      fleet.projects.app.checkout = mapping.checkout;
+      fs.writeFileSync(path.join(f.fleetHome, 'fleet.json'), JSON.stringify(fleet));
+      assert.equal(gitProject(cwd).identity, mapping.identity);
+      assert.notEqual(gitProject(cwd).canonical, mapping.checkout);
+    }
+    if (layout.orgDir) { f.env.ORG_DIR = record; process.env.ORG_DIR = record; }
+    const linked = path.join(f.scratch, 'linked'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/invariant', linked]);
+    const capture = fn => {
+      try { return { value: fn() }; }
+      catch (error) { return { error: { name: error.name, message: error.message } }; }
+    };
+    const discover = checkout => {
+      const routes = capture(() => loadDiscoveredRoutes({ cwd: checkout, env: f.env }));
+      const config = spawnSync(process.execPath, [path.join(root, 'lanes/lane.mjs'), 'config'], { cwd: checkout, env: f.env, encoding: 'utf8' });
+      assert.ifError(config.error);
+      return {
+        record: capture(() => findOrgDir({ cwd: checkout, env: f.env })),
+        settings: routes,
+        route: capture(() => resolveLaunchRoute(loadDiscoveredRoutes({ cwd: checkout, env: f.env }).config, { route: 'engineer' })),
+        worktrees: config.status === 0 ? JSON.parse(config.stdout.split('\n').find(row => row.startsWith('worktree_root\t')).split('\t')[1]) : null,
+        laneConfig: { status: config.status, stdout: config.stdout, ...(config.status ? { error: config.stderr.trim() } : {}) },
+      };
+    };
+    const checkouts = [cwd, linked], before = checkouts.map(discover);
+    for (const values of before) {
+      if (layout.stale) {
+        if (layout.orgDir) assert.equal(values.record.value, record);
+        else assert.match(values.record.error.message, /stale fleet project/u);
+        for (const key of ['settings', 'route']) assert.match(values[key].error.message, /stale fleet project/u);
+        assert.notEqual(values.laneConfig.status, 0); assert.match(values.laneConfig.error, /stale fleet project/u);
+      } else {
+        assert.equal(values.record.value, record);
+        assert.deepEqual(values.settings.value.files, [layer, path.join(cwd, '.lane.json')]);
+        assert.equal(values.worktrees, worktrees); assert.equal(values.laneConfig.status, 0);
+        assert.equal(values.route.value.model, 'project-model'); assert.deepEqual(values.route.value.args, ['-p', 'trusted-project']);
+      }
+    }
+    const recorded = [];
+    const recordWork = (checkout, title) => {
+      const result = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'add', title], { cwd: checkout, env: f.env, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr); recorded.push(title);
+      assert.deepEqual(loadEvents(record).events.filter(e => e.type === 'item.added').map(e => e.title), recorded);
+      assert.equal(fs.existsSync(path.join(linked, '.org')), false, 'linked readers never create a second record');
+      assert.equal(fs.existsSync(path.join(cwd, '.org')), layout.record === 'checkout', 'external/ancestor records never get shadowed locally');
+    };
+    if (!layout.stale) recordWork(cwd, 'Before exclusion');
+    for (const excluded of checkouts) {
+      const result = f.run(f.scratch, ['exclude', excluded]); assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(checkouts.map(discover), before, `discovery while excluding ${excluded}`);
+      for (const checkout of excluded === cwd ? checkouts : [linked]) {
+        assert.equal(createEntry({ cwd: checkout }), null); assert.equal(nativeSessionContext(checkout), null);
+        if (!layout.stale) recordWork(checkout, `During exclusion ${excluded} from ${checkout}`);
+      }
+      const include = f.run(f.scratch, ['include', excluded]); assert.equal(include.status, 0, include.stderr);
+      assert.deepEqual(checkouts.map(discover), before, `discovery after including ${excluded}`);
+      if (!layout.stale) {
+        recordWork(linked, `After inclusion ${excluded}`);
+        const status = spawnSync(process.execPath, [path.join(root, 'bin/org.mjs'), 'status', '--json'], { cwd: linked, env: f.env, encoding: 'utf8' });
+        assert.equal(status.status, 0, status.stderr); assert.deepEqual(JSON.parse(status.stdout).items.map(item => item.title), recorded);
+      }
+    }
+  });
 });
 
 for (const moved of [false, true]) test(`explicit external ORG_DIR preserves the ${moved ? 'moved' : 'unmoved'} unjoined layout until adoption`, t => {

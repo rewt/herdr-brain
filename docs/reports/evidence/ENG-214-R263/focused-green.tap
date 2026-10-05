@@ -1,0 +1,393 @@
+TAP version 13
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 1 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 620.999417
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 2 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 538.330834
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 3 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1348.191458
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 4 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 973.601583
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 5 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 256.221667
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 6 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 530.977667
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 7 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 1873.9425
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 8 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 741.9515
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 9 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 830.4005
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 10 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 846.460667
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 11 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 773.797875
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 12 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1473.699584
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 13 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1415.688208
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 14 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1322.834375
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 15 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1357.860084
+  ...
+# Subtest: headless tasks and resumes get a sandbox even when prompt text names a utility
+ok 16 - headless tasks and resumes get a sandbox even when prompt text names a utility
+  ---
+  duration_ms: 0.93775
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 17 - each run gets short private fleet temp and all three temp variables
+  ---
+  duration_ms: 14.295709
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 18 - long and redirected temp roots refuse before creating a run
+  ---
+  duration_ms: 10.179417
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 19 - Codex uses native workspace roots, excludes system temp and retains hook transport
+  ---
+  duration_ms: 208.489542
+  ...
+# Subtest: legacy Codex uses writable roots with system temp excluded
+ok 20 - legacy Codex uses writable roots with system temp excluded
+  ---
+  duration_ms: 139.658708
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 21 - Claude gets per-session native write settings and keeps existing hooks
+  ---
+  duration_ms: 109.33625
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 22 - extra directories are supplied through native options in canonical project config
+  ---
+  duration_ms: 127.582
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 23 - unsupported harness runs with a visible warning and its own temp
+  ---
+  duration_ms: 132.73425
+  ...
+# Subtest: Codex respects inherited and CLI sandbox choices with one source-naming warning
+ok 24 - Codex respects inherited and CLI sandbox choices with one source-naming warning
+  ---
+  duration_ms: 153.724375
+  ...
+# Subtest: Claude preserves interpreter exclusions from loaded settings and names their source once
+ok 25 - Claude preserves interpreter exclusions from loaded settings and names their source once
+  ---
+  duration_ms: 117.174166
+  ...
+# Subtest: Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+ok 26 - Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+  ---
+  duration_ms: 108.518916
+  ...
+# Subtest: nested fleet roots refuse before launch in both Codex paths and Claude
+ok 27 - nested fleet roots refuse before launch in both Codex paths and Claude
+  ---
+  duration_ms: 39.103417
+  ...
+# Subtest: workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+ok 28 - workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+  ---
+  duration_ms: 144.28125
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 29 - assigned and headless adapters keep the checkout and run with native settings and temp
+  ---
+  duration_ms: 579.828375
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 30 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+  ---
+  duration_ms: 529.543084
+  ...
+# Subtest: real Codex native roots deny another project checkout, record and temp including symlinks
+ok 31 - real Codex native roots deny another project checkout, record and temp including symlinks # SKIP set MONITOR_TEST_SANDBOX for the offline native boundary probe
+  ---
+  duration_ms: 0.051167
+  ...
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 32 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 1029.918291
+  ...
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-KnqDkl/existing/app' with monitor fleet join --record '/private/tmp/ft-KnqDkl/existing/.org' --worktrees '/private/tmp/ft-KnqDkl/existing/.worktrees/app' --layer '/private/tmp/ft-KnqDkl/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-HEhc8X/existing/moved app'\\''s checkout' with monitor fleet join --record '/private/tmp/ft-HEhc8X/existing/.org' --worktrees '/private/tmp/ft-HEhc8X/existing/worktrees/moved app'\\''s checkout' --layer '/private/tmp/ft-HEhc8X/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-FYjob0/existing/app' with monitor fleet join --record '/private/tmp/ft-FYjob0/existing/app/.org' --worktrees '/private/tmp/ft-FYjob0/existing/existing-worktrees/app' --layer '/private/tmp/ft-FYjob0/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-2GBn0P/existing/app' with monitor fleet join --record '/private/tmp/ft-2GBn0P/existing/.org' --worktrees '/private/tmp/ft-2GBn0P/existing/existing-worktrees/app' --layer '/private/tmp/ft-2GBn0P/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-HX5mxu/existing/app' with monitor fleet join --record '/private/tmp/ft-HX5mxu/external-record' --worktrees '/private/tmp/ft-HX5mxu/existing/existing-worktrees/app' --layer '/private/tmp/ft-HX5mxu/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-5JmrRT/existing/app' with monitor fleet join --record '/private/tmp/ft-5JmrRT/records/external' --worktrees '/private/tmp/ft-5JmrRT/existing/existing-worktrees/app' --layer '/private/tmp/ft-5JmrRT/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-Qzw9bh/existing/moved app'\\''s checkout' with monitor fleet join --record '/private/tmp/ft-Qzw9bh/records/external' --worktrees '/private/tmp/ft-Qzw9bh/existing/existing-worktrees/moved app'\\''s checkout' --layer '/private/tmp/ft-Qzw9bh/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-eNlIlI/legacy/app' with monitor fleet join --record '/private/tmp/ft-eNlIlI/legacy/.org' --worktrees '/private/tmp/ft-eNlIlI/legacy/.worktrees/app' --layer '/private/tmp/ft-eNlIlI/legacy/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-kFbA8i/unjoined' with monitor fleet join --record '/private/tmp/ft-kFbA8i/unjoined/.org' --worktrees '/Users/rewt/.herdr/worktrees/unjoined'
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 33 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 671.861875
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 34 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 1292.000042
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 35 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 199.126
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 36 - a moved default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 755.40075
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 37 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 794.936917
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 38 - explicit replacement remaps the default checkout record by its relative path
+  ---
+  duration_ms: 343.757208
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 39 - a re-clone in place can explicitly replace a missing native record
+  ---
+  duration_ms: 474.764625
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 40 - an unedited example console configuration is rejected with a fleet present
+  ---
+  duration_ms: 161.191583
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 41 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 566.376125
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 42 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 158.3285
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 43 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 329.768458
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 44 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1466.593542
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 45 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 169.624583
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 46 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 618.942291
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 47 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 81.032334
+  ...
+# Subtest: a unmoved existing project keeps its layout when another project creates the fleet
+ok 48 - a unmoved existing project keeps its layout when another project creates the fleet
+  ---
+  duration_ms: 688.188
+  ...
+# Subtest: a moved existing project keeps its layout when another project creates the fleet
+ok 49 - a moved existing project keeps its layout when another project creates the fleet
+  ---
+  duration_ms: 700.868625
+  ...
+# Subtest: fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility
+ok 50 - fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility
+  ---
+  duration_ms: 896.801958
+  ...
+# Subtest: excluding a joined external-record project preserves record writes, settings and worktrees in every checkout
+ok 51 - excluding a joined external-record project preserves record writes, settings and worktrees in every checkout
+  ---
+  duration_ms: 1499.74625
+  ...
+# Subtest: exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+    # Subtest: joined checkout record
+    ok 1 - joined checkout record
+      ---
+      duration_ms: 2620.493458
+      ...
+    # Subtest: joined external record
+    ok 2 - joined external record
+      ---
+      duration_ms: 2551.082166
+      ...
+    # Subtest: unjoined checkout compatibility
+    ok 3 - unjoined checkout compatibility
+      ---
+      duration_ms: 2764.108834
+      ...
+    # Subtest: unjoined ancestor compatibility
+    ok 4 - unjoined ancestor compatibility
+      ---
+      duration_ms: 2730.696959
+      ...
+    # Subtest: unjoined external ORG_DIR
+    ok 5 - unjoined external ORG_DIR
+      ---
+      duration_ms: 2248.18425
+      ...
+    # Subtest: stale mapping with the same Git identity
+    ok 6 - stale mapping with the same Git identity
+      ---
+      duration_ms: 1692.461708
+      ...
+    # Subtest: stale mapping with external ORG_DIR
+    ok 7 - stale mapping with external ORG_DIR
+      ---
+      duration_ms: 1454.155958
+      ...
+    1..7
+ok 52 - exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+  ---
+  duration_ms: 16061.942959
+  ...
+# Subtest: explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+ok 53 - explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+  ---
+  duration_ms: 625.7505
+  ...
+# Subtest: explicit external ORG_DIR preserves the moved unjoined layout until adoption
+ok 54 - explicit external ORG_DIR preserves the moved unjoined layout until adoption
+  ---
+  duration_ms: 641.270375
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer
+ok 55 - a neighbor with its own record cannot inherit another project's mapped parent layer
+  ---
+  duration_ms: 997.848208
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+ok 56 - a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+  ---
+  duration_ms: 1002.752416
+  ...
+# Subtest: legacy record discovery keeps its symlink path and does not depend on valid parent settings
+ok 57 - legacy record discovery keeps its symlink path and does not depend on valid parent settings
+  ---
+  duration_ms: 316.732667
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 58 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 194.221458
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 59 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 1303.765833
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 60 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 480.442
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 61 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 164.892666
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 62 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 713.558083
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a moved checkout
+ok 63 - fleet repair: automatic entry suggests the stale external record for a moved checkout
+  ---
+  duration_ms: 286.657125
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a re-cloned checkout
+ok 64 - fleet repair: automatic entry suggests the stale external record for a re-cloned checkout
+  ---
+  duration_ms: 311.175208
+  ...
+# Subtest: fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+ok 65 - fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+  ---
+  duration_ms: 280.219917
+  ...
+# Subtest: fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+ok 66 - fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+  ---
+  duration_ms: 327.253708
+  ...
+# Subtest: fleet repair: unknown names, live records, and overlapping roots remain refused before writes
+ok 67 - fleet repair: unknown names, live records, and overlapping roots remain refused before writes
+  ---
+  duration_ms: 593.794291
+  ...
+1..67
+# tests 74
+# suites 0
+# pass 73
+# fail 0
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 37281.366875

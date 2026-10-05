@@ -1,0 +1,304 @@
+TAP version 13
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 1 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.54925
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 2 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044709
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 3 - unrelated project has one canonical record, a real pending question and two separate lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.333875
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 4 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.074541
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 5 - concurrent automatic record bootstrap never truncates events or duplicates records # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035209
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 6 - initialization preserves a populated record, and a supervisor has no worker Git capability # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02675
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 7 - machine installer retains native flags, reaches Claude too and restores only its own files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026625
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 8 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 766.731792
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 9 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 706.852083
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 10 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 716.031542
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 11 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 773.446125
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 12 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1404.111
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 13 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1310.758834
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 14 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1292.035459
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 15 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1361.307416
+  ...
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-rlKXnq/existing/app' with monitor fleet join --record '/private/tmp/ft-rlKXnq/existing/app/.org' --worktrees '/private/tmp/ft-rlKXnq/existing/existing-worktrees/app' --layer '/private/tmp/ft-rlKXnq/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-bYeogS/existing/app' with monitor fleet join --record '/private/tmp/ft-bYeogS/existing/.org' --worktrees '/private/tmp/ft-bYeogS/existing/existing-worktrees/app' --layer '/private/tmp/ft-bYeogS/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-RJcpAv/existing/app' with monitor fleet join --record '/private/tmp/ft-RJcpAv/external-record' --worktrees '/private/tmp/ft-RJcpAv/existing/existing-worktrees/app' --layer '/private/tmp/ft-RJcpAv/existing/.lane.json'
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 16 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.59525
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 17 - concurrent first entries publish one complete fleet with both projects # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.048083
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 18 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031209
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 19 - moved checkout remains stale in fleet and console instead of being guessed by name # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076583
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 20 - a moved default-record checkout joins automatically without claiming the stale same-name entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039875
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 21 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02775
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 22 - explicit replacement remaps the default checkout record by its relative path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 23 - a re-clone in place can explicitly replace a missing native record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0315
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 24 - an unedited example console configuration is rejected with a fleet present # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.119375
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 25 - malformed fleet fails before entry or discovery touches any record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076583
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 26 - fleet advisory and stale checkout are visible in the project view # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034959
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 27 - installed monitor command joins without a session and removal restores its bin # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066833
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 28 - stable machine installation carries monitor and recovery can restore its launcher # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029625
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 29 - an already-open console reads new joins and adjusted advisory limits on refresh # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.061333
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 30 - explicit adoption maps paths and settings; record ownership cannot be duplicated # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025792
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 31 - without a fleet file legacy ancestor discovery and console configuration are unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067708
+  ...
+# Subtest: a unmoved existing project keeps its layout when another project creates the fleet
+ok 32 - a unmoved existing project keeps its layout when another project creates the fleet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037459
+  ...
+# Subtest: a moved existing project keeps its layout when another project creates the fleet
+ok 33 - a moved existing project keeps its layout when another project creates the fleet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.111292
+  ...
+# Subtest: fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility
+ok 34 - fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.065458
+  ...
+# Subtest: excluding a joined external-record project preserves record writes, settings and worktrees in every checkout
+ok 35 - excluding a joined external-record project preserves record writes, settings and worktrees in every checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026917
+  ...
+# Subtest: exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+    # Subtest: joined checkout record
+    ok 1 - joined checkout record
+      ---
+      duration_ms: 2556.367917
+      ...
+    # Subtest: joined external record
+    ok 2 - joined external record
+      ---
+      duration_ms: 2687.687083
+      ...
+    # Subtest: unjoined checkout compatibility
+    ok 3 - unjoined checkout compatibility
+      ---
+      duration_ms: 2724.181958
+      ...
+    # Subtest: unjoined ancestor compatibility
+    ok 4 - unjoined ancestor compatibility
+      ---
+      duration_ms: 2727.910333
+      ...
+    # Subtest: unjoined external ORG_DIR
+    ok 5 - unjoined external ORG_DIR
+      ---
+      duration_ms: 2647.605584
+      ...
+    # Subtest: stale mapping with the same Git identity
+    ok 6 - stale mapping with the same Git identity
+      ---
+      duration_ms: 1859.698
+      ...
+    # Subtest: stale mapping with external ORG_DIR
+    ok 7 - stale mapping with external ORG_DIR
+      ---
+      duration_ms: 1660.850167
+      ...
+    1..7
+ok 36 - exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+  ---
+  duration_ms: 16865.114042
+  ...
+# Subtest: explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+ok 37 - explicit external ORG_DIR preserves the unmoved unjoined layout until adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.052459
+  ...
+# Subtest: explicit external ORG_DIR preserves the moved unjoined layout until adoption
+ok 38 - explicit external ORG_DIR preserves the moved unjoined layout until adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030542
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer
+ok 39 - a neighbor with its own record cannot inherit another project's mapped parent layer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0265
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+ok 40 - a neighbor with its own record cannot inherit another project's mapped parent layer through an alias # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.1145
+  ...
+# Subtest: legacy record discovery keeps its symlink path and does not depend on valid parent settings
+ok 41 - legacy record discovery keeps its symlink path and does not depend on valid parent settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029917
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 42 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0415
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 43 - entry worktree roots are session overrides and never freeze the fleet mapping # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023917
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 44 - console merges unjoined configured projects with fleet entries across refresh and adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039167
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 45 - explicit ORG_DIR validates the fleet without launching Git on record commands # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024292
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 46 - a moved checkout can explicitly replace its stale mapping while retaining its external record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02525
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a moved checkout
+ok 47 - fleet repair: automatic entry suggests the stale external record for a moved checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023292
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a re-cloned checkout
+ok 48 - fleet repair: automatic entry suggests the stale external record for a re-cloned checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022791
+  ...
+# Subtest: fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+ok 49 - fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022667
+  ...
+# Subtest: fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+ok 50 - fleet repair: live same-name external mappings join separately; multiple stale matches only suggest # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021958
+  ...
+# Subtest: fleet repair: unknown names, live records, and overlapping roots remain refused before writes
+ok 51 - fleet repair: unknown names, live records, and overlapping roots remain refused before writes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069708
+  ...
+1..51
+# tests 58
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 42
+# todo 0
+# duration_ms 16932.57725

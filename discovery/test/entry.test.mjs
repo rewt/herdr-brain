@@ -13,6 +13,7 @@ import { assertSupervisorEntry } from '../../acceptance/entry.mjs';
 import { copyProduct } from '../../lib/product-files.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { joinFleet, setFleetExcluded } from '../../lib/fleet.mjs';
+import { gitProject } from '../../lib/project.mjs';
 import { runPTY, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 const root = new URL('../../', import.meta.url).pathname;
 const fixture = (t) => {
@@ -146,10 +147,17 @@ test('machine installer retains native flags, reaches Claude too and restores on
   assert.throws(() => command(process.execPath, [installer, '--bin', bin, '--codex', fake], f.repo), /unmanaged/u);
 });
 
-for (const interactive of [false, true]) for (const joined of [false, true]) test(`${interactive ? 'interactive automatic' : 'explicit'} entry passes non-Git and excluded directories through with one calm line${joined ? ' after joining an external record' : ''}`, { skip: interactive && PTY_SKIP_REASON }, t => {
+for (const interactive of [false, true]) for (const layout of ['unjoined', 'joined', 'compatibility', 'stale']) test(`${interactive ? 'interactive automatic' : 'explicit'} entry passes non-Git and excluded directories through with one calm line (${layout})`, { skip: interactive && PTY_SKIP_REASON }, t => {
   const f = fixture(t), notGit = path.join(f.scratch, 'not-git'); fs.mkdirSync(notGit);
-  const record = path.join(f.scratch, 'external-record'); initOrg(record);
-  if (joined) joinFleet({ cwd: f.repo, record, worktrees: path.join(f.scratch, 'mapped-worktrees') });
+  const record = path.join(f.scratch, layout === 'compatibility' ? '.org' : 'external-record'); initOrg(record);
+  const mapping = ['joined', 'stale'].includes(layout) ? joinFleet({ cwd: f.repo, record, worktrees: path.join(f.scratch, 'mapped-worktrees') }).project : null;
+  if (layout === 'stale') {
+    const fleetFile = path.join(process.env.HERDR_MONITOR_FLEET, 'fleet.json'), fleet = JSON.parse(fs.readFileSync(fleetFile));
+    mapping.checkout = path.join(f.scratch, 'previous-checkout'); fleet.projects.unrelated.checkout = mapping.checkout;
+    fs.writeFileSync(fleetFile, JSON.stringify(fleet));
+    assert.equal(gitProject(f.repo).identity, mapping.identity); assert.notEqual(gitProject(f.repo).canonical, mapping.checkout);
+  }
+  if (layout === 'compatibility') fs.writeFileSync(path.join(f.scratch, '.lane.json'), JSON.stringify({ worktree_root: 'legacy-worktrees', routes: { engineer: { model: 'legacy-model' } } }));
   const linked = path.join(f.scratch, 'linked'); command('git', ['worktree', 'add', '-qb', 'lane/passthrough', linked], f.repo);
   const recordBytes = fs.readFileSync(path.join(record, 'events.jsonl'));
   setFleetExcluded({ root: f.repo, excluded: true });
@@ -158,17 +166,24 @@ for (const interactive of [false, true]) for (const joined of [false, true]) tes
   const env = { ...process.env, TEST_RECEIPT: receipt, MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '', HERDR_INTEGRATION_ID: '',
     TMPDIR: f.scratch, ORG_DIR: '', HERDR_ORG_CONSOLE_CONFIG: path.join(f.scratch, 'absent-console.json') };
   const native = ['--model', 'literal-model', 'Literal task'];
-  for (const cwd of [notGit, f.repo, linked]) for (const kind of ['codex', 'claude']) {
-    const args = [path.join(root, `discovery/adapters/${kind}.mjs`), ...(interactive ? ['--auto-entry'] : []), '--repo', cwd, '--binary', binary, '--', ...native];
-    const result = interactive ? runPTY(process.execPath, args, { cwd, env }) : spawnSync(process.execPath, args, { cwd, env, encoding: 'utf8' });
-    const output = `${result.stdout}${result.stderr}`.replaceAll('\r', '').replace(/^\^D\u0008\u0008/u, '').trim();
-    assert.equal(result.status, 7, output);
-    assert.equal(output, `monitor: not a fleet project; starting native ${kind === 'codex' ? 'Codex' : 'Claude'} without a project sandbox`);
-    const calls = fs.readFileSync(receipt, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-    assert.deepEqual(calls.at(-1), { args: native, cwd, requests: '', temp: f.scratch });
-    assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
-    assert.equal(fs.existsSync(path.join(cwd, '.lane')), false);
-  }
-  assert.equal(fs.readFileSync(receipt, 'utf8').trim().split('\n').length, 6, 'there are no sandbox probes or duplicate native launches');
+  const launch = cwd => {
+    for (const kind of ['codex', 'claude']) {
+      const args = [path.join(root, `discovery/adapters/${kind}.mjs`), ...(interactive ? ['--auto-entry'] : []), '--repo', cwd, '--binary', binary, '--', ...native];
+      const result = interactive ? runPTY(process.execPath, args, { cwd, env }) : spawnSync(process.execPath, args, { cwd, env, encoding: 'utf8' });
+      const output = `${result.stdout}${result.stderr}`.replaceAll('\r', '').replace(/^\^D\u0008\u0008/u, '').trim();
+      assert.equal(result.status, 7, output);
+      assert.equal(output, `monitor: not a fleet project; starting native ${kind === 'codex' ? 'Codex' : 'Claude'} without a project sandbox`);
+      const calls = fs.readFileSync(receipt, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+      assert.deepEqual(calls.at(-1), { args: native, cwd, requests: '', temp: f.scratch });
+      assert.equal(fs.existsSync(path.join(cwd, '.org')), false);
+      assert.equal(fs.existsSync(path.join(cwd, '.lane')), false);
+    }
+  };
+  for (const cwd of [notGit, f.repo, linked]) launch(cwd);
+  // Entered-path exclusions must also bypass a stale canonical mapping.
+  setFleetExcluded({ root: f.repo, excluded: false });
+  setFleetExcluded({ root: linked, excluded: true });
+  launch(linked);
+  assert.equal(fs.readFileSync(receipt, 'utf8').trim().split('\n').length, 8, 'there are no sandbox probes or duplicate native launches');
   assert.deepEqual(fs.readFileSync(path.join(record, 'events.jsonl')), recordBytes);
 });

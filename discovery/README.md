@@ -96,13 +96,18 @@ sessions. Entry and fleet commands alone write the file. Supervisors remain per 
 
 Exclusions persist as optional `excluded_roots` in version 1 of the fleet file.
 They apply to a root and every descendant, including through symlinks, even if
-the root does not exist yet or becomes a Git repository later. Excluded entry
+the root does not exist yet or becomes a Git repository later. A canonical
+checkout's exclusion also applies to its linked worktrees. Excluded entry
 and native sessions retain their arguments, checkout and native permissions;
 Monitor does not join, create a record or generate a project sandbox. Explicit
-join also requires inclusion first. Excluding an already joined project keeps
-its mapping and record intact and applies to its linked worktrees. Record and
-lane commands keep using its mapped record, settings layers and worktree root
-while excluded; work recorded then remains visible after inclusion. `include`
+join also requires inclusion first. Exclusion changes only whether Monitor
+entry and generated native sandboxes apply. Record discovery, settings layers,
+lane worktree roots and resolved routes stay identical before, during and after
+exclusion, for joined and unjoined projects, ancestor and external records, and
+linked worktrees. Readers retain ownership and stale-mapping checks even while
+excluded. Native launch checks the entered and canonical exclusions before
+resolving a mapping, so an excluded stale mapping still passes through quietly.
+Work recorded while excluded remains visible after inclusion. `include`
 removes the named root only; any remaining ancestor exclusion still applies.
 
 Each entry stores the canonical Git common directory (`identity`), canonical

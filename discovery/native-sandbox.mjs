@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { projectFleet } from '../lib/fleet.mjs';
+import { projectFleet, readFleet, excludedFleetRoot } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { removePlainDirectory, writeFileAtomic } from '../lib/files.mjs';
 import { checkedDirectory, within } from './paths.mjs';
@@ -11,9 +11,14 @@ import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
 
 export function nativeSessionContext(cwd) {
-  const { project, fleet, excluded } = projectFleet(cwd);
-  if (excluded || !project) return null;
-  const git = gitProject(cwd);
+  const registry = readFleet();
+  // Native passthrough must precede mapping validation and adoption notices.
+  if (!registry || excludedFleetRoot(cwd, registry)) return null;
+  let git;
+  try { git = gitProject(cwd); } catch { return null; }
+  if (excludedFleetRoot(git.canonical, registry)) return null;
+  const { project, fleet } = projectFleet(cwd);
+  if (!project) return null;
   return { workspace: git.checkout, canonical: project.checkout, org: project.record,
     tempRoot: project.temp, worktrees: project.worktrees, projects: Object.values(fleet.projects).filter(p => p.identity !== project.identity) };
 }

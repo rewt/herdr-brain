@@ -1,0 +1,1137 @@
+TAP version 13
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 1 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.651
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 2 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055709
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 3 - unrelated project has one canonical record, a real pending question and two separate lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.050042
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 4 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076916
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 5 - concurrent automatic record bootstrap never truncates events or duplicates records # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036084
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 6 - initialization preserves a populated record, and a supervisor has no worker Git capability # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.080084
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 7 - machine installer retains native flags, reaches Claude too and restores only its own files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 8 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 921.534958
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 9 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 937.886667
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 10 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 890.843167
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+not ok 11 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 449.781125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor sandbox: stale fleet project unrelated: /private/tmp/me-Siky2b/previous-checkout; inspect its mapping before joining
+    
+    1 !== 7
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 7
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    launch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/discovery/test/entry.test.mjs:173:12)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/discovery/test/entry.test.mjs:180:47
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 12 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1667.154334
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 13 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1528.968334
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 14 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1505.391292
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+not ok 15 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 728.286833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor sandbox: stale fleet project unrelated: /private/tmp/me-WhQzDh/previous-checkout; inspect its mapping before joining
+    
+    1 !== 7
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 7
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    launch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/discovery/test/entry.test.mjs:173:12)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/discovery/test/entry.test.mjs:180:47
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-XCluHG/existing/app' with monitor fleet join --record '/private/tmp/ft-XCluHG/existing/app/.org' --worktrees '/private/tmp/ft-XCluHG/existing/existing-worktrees/app' --layer '/private/tmp/ft-XCluHG/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-PWjTT1/existing/app' with monitor fleet join --record '/private/tmp/ft-PWjTT1/existing/.org' --worktrees '/private/tmp/ft-PWjTT1/existing/existing-worktrees/app' --layer '/private/tmp/ft-PWjTT1/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-W5TiaD/existing/app' with monitor fleet join --record '/private/tmp/ft-W5TiaD/external-record' --worktrees '/private/tmp/ft-W5TiaD/existing/existing-worktrees/app' --layer '/private/tmp/ft-W5TiaD/existing/.lane.json'
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 16 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.6245
+  ...
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 17 - concurrent first entries publish one complete fleet with both projects # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.052083
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 18 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033292
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 19 - moved checkout remains stale in fleet and console instead of being guessed by name # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.077458
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 20 - a moved default-record checkout joins automatically without claiming the stale same-name entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043625
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 21 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032584
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 22 - explicit replacement remaps the default checkout record by its relative path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029375
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 23 - a re-clone in place can explicitly replace a missing native record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034708
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 24 - an unedited example console configuration is rejected with a fleet present # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.124084
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 25 - malformed fleet fails before entry or discovery touches any record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.081541
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 26 - fleet advisory and stale checkout are visible in the project view # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037375
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 27 - installed monitor command joins without a session and removal restores its bin # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.075083
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 28 - stable machine installation carries monitor and recovery can restore its launcher # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030875
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 29 - an already-open console reads new joins and adjusted advisory limits on refresh # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066041
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 30 - explicit adoption maps paths and settings; record ownership cannot be duplicated # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030083
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 31 - without a fleet file legacy ancestor discovery and console configuration are unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078208
+  ...
+# Subtest: a unmoved existing project keeps its layout when another project creates the fleet
+ok 32 - a unmoved existing project keeps its layout when another project creates the fleet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042333
+  ...
+# Subtest: a moved existing project keeps its layout when another project creates the fleet
+ok 33 - a moved existing project keeps its layout when another project creates the fleet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.129042
+  ...
+# Subtest: fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility
+ok 34 - fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0745
+  ...
+# Subtest: excluding a joined external-record project preserves record writes, settings and worktrees in every checkout
+ok 35 - excluding a joined external-record project preserves record writes, settings and worktrees in every checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033916
+  ...
+# Subtest: exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+    # Subtest: joined checkout record
+    ok 1 - joined checkout record
+      ---
+      duration_ms: 3022.606833
+      ...
+    # Subtest: joined external record
+    ok 2 - joined external record
+      ---
+      duration_ms: 2995.976042
+      ...
+    # Subtest: unjoined checkout compatibility
+    not ok 3 - unjoined checkout compatibility
+      ---
+      duration_ms: 1159.458375
+      location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41'
+      failureType: 'testCodeFailure'
+      error: |-
+        discovery while excluding /private/tmp/ft-XCluHG/existing/app
+        + actual - expected ... Lines skipped
+        
+          [
+            {
+              laneConfig: {
+                status: 0,
+        +       stdout: 'always_args\t{}\tdefault\n' +
+        -       stdout: 'always_args\t{"codex":["-p","trusted-project"]}\t/private/tmp/ft-XCluHG/existing/.lane.json\n' +
+                  'authority\tnull\tdefault\n' +
+                  'dispatch\t{}\tdefault\n' +
+                  'main\t"main"\tdefault\n' +
+                  'prepare\t[]\tdefault\n' +
+                  'registry\t".lane/sessions.json"\tdefault\n' +
+        +         'routes.reviewer\t{"kind":"claude","model":"project-review"}\t/private/tmp/ft-XCluHG/existing/app/.lane.json\n' +
+        +         'schema\tnull\tdefault\n' +
+        +         'seams_doc\tnull\tdefault\n' +
+        +         'selection_policy\tnull\tdefault\n' +
+        +         'validate\t"npm test"\tdefault\n' +
+        +         'validation.environment\t""\tdefault\n' +
+        +         'validation.fast\t"npm test"\tdefault\n' +
+        +         'validation.promotion\t"npm test"\tdefault\n' +
+        +         'validation.release\t"npm test"\tdefault\n' +
+        +         'worktree_root\t"/Users/rewt/.herdr/worktrees/app"\tdefault\n'
+        +     },
+        +     record: {
+        +       value: '/private/tmp/ft-XCluHG/existing/app/.org'
+        +     },
+        +     route: {
+        +       error: {
+        +         message: 'unknown route: engineer (configured: reviewer)',
+        +         name: 'Error'
+        +       }
+        +     },
+        ...
+        -         'routes.engineer\t{"kind":"codex","model":"project-model"}\t/private/tmp/ft-XCluHG/existing/.lane.json\n' +
+        -         'routes.reviewer\t{"kind":"claude","model":"project-review"}\t/private/tmp/ft-XCluHG/existing/app/.lane.json\n' +
+        -         'schema\tnull\tdefault\n' +
+        -         'seams_doc\tnull\tdefault\n' +
+        -         'selection_policy\tnull\tdefault\n' +
+        -         'validate\t"project-validator"\t/private/tmp/ft-XCluHG/existing/.lane.json\n' +
+        -         'validation.environment\t""\tdefault\n' +
+        -         'validation.fast\t"project-validator"\t/private/tmp/ft-XCluHG/existing/.lane.json\n' +
+        -         'validation.promotion\t"project-validator"\t/private/tmp/ft-XCluHG/existing/.lane.json\n' +
+        -         'validation.release\t"project-validator"\t/private/tmp/ft-XCluHG/existing/.lane.json\n' +
+        -         'worktree_root\t"/private/tmp/ft-XCluHG/existing/existing-worktrees/app"\t/private/tmp/ft-XCluHG/existing/.lane.json\n'
+        -     },
+        -     record: {
+        -       value: '/private/tmp/ft-XCluHG/existing/app/.org'
+        -     },
+        -     route: {
+        -       value: {
+        -         args: [
+        -           '-p',
+        -           'trusted-project'
+        ...
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected:
+        0:
+          record:
+            value: '/private/tmp/ft-XCluHG/existing/app/.org'
+          settings:
+            value:
+              config:
+                always_args:
+                  codex:
+                    0: '-p'
+                    1: 'trusted-project'
+                routes:
+                  engineer:
+                    kind: 'codex'
+                    model: 'project-model'
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-XCluHG/existing/.lane.json'
+                1: '/private/tmp/ft-XCluHG/existing/app/.lane.json'
+          route:
+            value:
+              route: 'engineer'
+              kind: 'codex'
+              model: 'project-model'
+              effortConfigured: false
+              args:
+                0: '-p'
+                1: 'trusted-project'
+              env:
+          worktrees: '/private/tmp/ft-XCluHG/existing/existing-worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{"codex":["-p","trusted-project"]}	/private/tmp/ft-XCluHG/existing/.lane.json
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.engineer	{"kind":"codex","model":"project-model"}	/private/tmp/ft-XCluHG/existing/.lane.json
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-XCluHG/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              validation.environment	""	default
+              validation.fast	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              validation.promotion	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              validation.release	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              worktree_root	"/private/tmp/ft-XCluHG/existing/existing-worktrees/app"	/private/tmp/ft-XCluHG/existing/.lane.json
+              
+        1:
+          record:
+            value: '/private/tmp/ft-XCluHG/existing/app/.org'
+          settings:
+            value:
+              config:
+                always_args:
+                  codex:
+                    0: '-p'
+                    1: 'trusted-project'
+                routes:
+                  engineer:
+                    kind: 'codex'
+                    model: 'project-model'
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-XCluHG/existing/.lane.json'
+                1: '/private/tmp/ft-XCluHG/existing/app/.lane.json'
+          route:
+            value:
+              route: 'engineer'
+              kind: 'codex'
+              model: 'project-model'
+              effortConfigured: false
+              args:
+                0: '-p'
+                1: 'trusted-project'
+              env:
+          worktrees: '/private/tmp/ft-XCluHG/existing/existing-worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{"codex":["-p","trusted-project"]}	/private/tmp/ft-XCluHG/existing/.lane.json
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.engineer	{"kind":"codex","model":"project-model"}	/private/tmp/ft-XCluHG/existing/.lane.json
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-XCluHG/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              validation.environment	""	default
+              validation.fast	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              validation.promotion	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              validation.release	"project-validator"	/private/tmp/ft-XCluHG/existing/.lane.json
+              worktree_root	"/private/tmp/ft-XCluHG/existing/existing-worktrees/app"	/private/tmp/ft-XCluHG/existing/.lane.json
+              
+      actual:
+        0:
+          record:
+            value: '/private/tmp/ft-XCluHG/existing/app/.org'
+          settings:
+            value:
+              config:
+                routes:
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-XCluHG/existing/app/.lane.json'
+          route:
+            error:
+              name: 'Error'
+              message: 'unknown route: engineer (configured: reviewer)'
+          worktrees: '/Users/rewt/.herdr/worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{}	default
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-XCluHG/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"npm test"	default
+              validation.environment	""	default
+              validation.fast	"npm test"	default
+              validation.promotion	"npm test"	default
+              validation.release	"npm test"	default
+              worktree_root	"/Users/rewt/.herdr/worktrees/app"	default
+              
+        1:
+          record:
+            value: '/private/tmp/ft-XCluHG/existing/app/.org'
+          settings:
+            value:
+              config:
+                routes:
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-XCluHG/existing/app/.lane.json'
+          route:
+            error:
+              name: 'Error'
+              message: 'unknown route: engineer (configured: reviewer)'
+          worktrees: '/Users/rewt/.herdr/worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{}	default
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-XCluHG/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"npm test"	default
+              validation.environment	""	default
+              validation.fast	"npm test"	default
+              validation.promotion	"npm test"	default
+              validation.release	"npm test"	default
+              worktree_root	"/Users/rewt/.herdr/worktrees/app"	default
+              
+      operator: 'deepStrictEqual'
+      stack: |-
+        TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:498:14)
+        Test.runInAsyncScope (node:async_hooks:206:9)
+        Test.run (node:internal/test_runner/test:796:25)
+        Test.start (node:internal/test_runner/test:702:17)
+        TestContext.test (node:internal/test_runner/test:292:20)
+        file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41
+        async Test.run (node:internal/test_runner/test:797:9)
+        async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+      ...
+    # Subtest: unjoined ancestor compatibility
+    not ok 4 - unjoined ancestor compatibility
+      ---
+      duration_ms: 1231.937625
+      location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41'
+      failureType: 'testCodeFailure'
+      error: |-
+        discovery while excluding /private/tmp/ft-PWjTT1/existing/app
+        + actual - expected ... Lines skipped
+        
+          [
+            {
+              laneConfig: {
+                status: 0,
+        +       stdout: 'always_args\t{}\tdefault\n' +
+        -       stdout: 'always_args\t{"codex":["-p","trusted-project"]}\t/private/tmp/ft-PWjTT1/existing/.lane.json\n' +
+                  'authority\tnull\tdefault\n' +
+                  'dispatch\t{}\tdefault\n' +
+                  'main\t"main"\tdefault\n' +
+                  'prepare\t[]\tdefault\n' +
+                  'registry\t".lane/sessions.json"\tdefault\n' +
+        +         'routes.reviewer\t{"kind":"claude","model":"project-review"}\t/private/tmp/ft-PWjTT1/existing/app/.lane.json\n' +
+        +         'schema\tnull\tdefault\n' +
+        +         'seams_doc\tnull\tdefault\n' +
+        +         'selection_policy\tnull\tdefault\n' +
+        +         'validate\t"npm test"\tdefault\n' +
+        +         'validation.environment\t""\tdefault\n' +
+        +         'validation.fast\t"npm test"\tdefault\n' +
+        +         'validation.promotion\t"npm test"\tdefault\n' +
+        +         'validation.release\t"npm test"\tdefault\n' +
+        +         'worktree_root\t"/Users/rewt/.herdr/worktrees/app"\tdefault\n'
+        +     },
+        +     record: {
+        +       value: null
+        +     },
+        +     route: {
+        +       error: {
+        +         message: 'unknown route: engineer (configured: reviewer)',
+        +         name: 'Error'
+        +       }
+        +     },
+        ...
+        -         'routes.engineer\t{"kind":"codex","model":"project-model"}\t/private/tmp/ft-PWjTT1/existing/.lane.json\n' +
+        -         'routes.reviewer\t{"kind":"claude","model":"project-review"}\t/private/tmp/ft-PWjTT1/existing/app/.lane.json\n' +
+        -         'schema\tnull\tdefault\n' +
+        -         'seams_doc\tnull\tdefault\n' +
+        -         'selection_policy\tnull\tdefault\n' +
+        -         'validate\t"project-validator"\t/private/tmp/ft-PWjTT1/existing/.lane.json\n' +
+        -         'validation.environment\t""\tdefault\n' +
+        -         'validation.fast\t"project-validator"\t/private/tmp/ft-PWjTT1/existing/.lane.json\n' +
+        -         'validation.promotion\t"project-validator"\t/private/tmp/ft-PWjTT1/existing/.lane.json\n' +
+        -         'validation.release\t"project-validator"\t/private/tmp/ft-PWjTT1/existing/.lane.json\n' +
+        -         'worktree_root\t"/private/tmp/ft-PWjTT1/existing/existing-worktrees/app"\t/private/tmp/ft-PWjTT1/existing/.lane.json\n'
+        -     },
+        -     record: {
+        -       value: '/private/tmp/ft-PWjTT1/existing/.org'
+        -     },
+        -     route: {
+        -       value: {
+        -         args: [
+        -           '-p',
+        -           'trusted-project'
+        ...
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected:
+        0:
+          record:
+            value: '/private/tmp/ft-PWjTT1/existing/.org'
+          settings:
+            value:
+              config:
+                always_args:
+                  codex:
+                    0: '-p'
+                    1: 'trusted-project'
+                routes:
+                  engineer:
+                    kind: 'codex'
+                    model: 'project-model'
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-PWjTT1/existing/.lane.json'
+                1: '/private/tmp/ft-PWjTT1/existing/app/.lane.json'
+          route:
+            value:
+              route: 'engineer'
+              kind: 'codex'
+              model: 'project-model'
+              effortConfigured: false
+              args:
+                0: '-p'
+                1: 'trusted-project'
+              env:
+          worktrees: '/private/tmp/ft-PWjTT1/existing/existing-worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{"codex":["-p","trusted-project"]}	/private/tmp/ft-PWjTT1/existing/.lane.json
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.engineer	{"kind":"codex","model":"project-model"}	/private/tmp/ft-PWjTT1/existing/.lane.json
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-PWjTT1/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              validation.environment	""	default
+              validation.fast	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              validation.promotion	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              validation.release	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              worktree_root	"/private/tmp/ft-PWjTT1/existing/existing-worktrees/app"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              
+        1:
+          record:
+            value: '/private/tmp/ft-PWjTT1/existing/.org'
+          settings:
+            value:
+              config:
+                always_args:
+                  codex:
+                    0: '-p'
+                    1: 'trusted-project'
+                routes:
+                  engineer:
+                    kind: 'codex'
+                    model: 'project-model'
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-PWjTT1/existing/.lane.json'
+                1: '/private/tmp/ft-PWjTT1/existing/app/.lane.json'
+          route:
+            value:
+              route: 'engineer'
+              kind: 'codex'
+              model: 'project-model'
+              effortConfigured: false
+              args:
+                0: '-p'
+                1: 'trusted-project'
+              env:
+          worktrees: '/private/tmp/ft-PWjTT1/existing/existing-worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{"codex":["-p","trusted-project"]}	/private/tmp/ft-PWjTT1/existing/.lane.json
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.engineer	{"kind":"codex","model":"project-model"}	/private/tmp/ft-PWjTT1/existing/.lane.json
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-PWjTT1/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              validation.environment	""	default
+              validation.fast	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              validation.promotion	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              validation.release	"project-validator"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              worktree_root	"/private/tmp/ft-PWjTT1/existing/existing-worktrees/app"	/private/tmp/ft-PWjTT1/existing/.lane.json
+              
+      actual:
+        0:
+          record:
+            value: ~
+          settings:
+            value:
+              config:
+                routes:
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-PWjTT1/existing/app/.lane.json'
+          route:
+            error:
+              name: 'Error'
+              message: 'unknown route: engineer (configured: reviewer)'
+          worktrees: '/Users/rewt/.herdr/worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{}	default
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-PWjTT1/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"npm test"	default
+              validation.environment	""	default
+              validation.fast	"npm test"	default
+              validation.promotion	"npm test"	default
+              validation.release	"npm test"	default
+              worktree_root	"/Users/rewt/.herdr/worktrees/app"	default
+              
+        1:
+          record:
+            value: ~
+          settings:
+            value:
+              config:
+                routes:
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-PWjTT1/existing/app/.lane.json'
+          route:
+            error:
+              name: 'Error'
+              message: 'unknown route: engineer (configured: reviewer)'
+          worktrees: '/Users/rewt/.herdr/worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{}	default
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-PWjTT1/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"npm test"	default
+              validation.environment	""	default
+              validation.fast	"npm test"	default
+              validation.promotion	"npm test"	default
+              validation.release	"npm test"	default
+              worktree_root	"/Users/rewt/.herdr/worktrees/app"	default
+              
+      operator: 'deepStrictEqual'
+      stack: |-
+        TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:498:14)
+        Test.runInAsyncScope (node:async_hooks:206:9)
+        Test.run (node:internal/test_runner/test:796:25)
+        Test.start (node:internal/test_runner/test:702:17)
+        TestContext.test (node:internal/test_runner/test:292:20)
+        file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41
+        async Test.run (node:internal/test_runner/test:797:9)
+        async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+      ...
+    # Subtest: unjoined external ORG_DIR
+    not ok 5 - unjoined external ORG_DIR
+      ---
+      duration_ms: 1091.104
+      location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41'
+      failureType: 'testCodeFailure'
+      error: |-
+        discovery while excluding /private/tmp/ft-W5TiaD/existing/app
+        + actual - expected ... Lines skipped
+        
+          [
+            {
+              laneConfig: {
+                status: 0,
+        +       stdout: 'always_args\t{}\tdefault\n' +
+        -       stdout: 'always_args\t{"codex":["-p","trusted-project"]}\t/private/tmp/ft-W5TiaD/existing/.lane.json\n' +
+                  'authority\tnull\tdefault\n' +
+                  'dispatch\t{}\tdefault\n' +
+                  'main\t"main"\tdefault\n' +
+                  'prepare\t[]\tdefault\n' +
+                  'registry\t".lane/sessions.json"\tdefault\n' +
+        +         'routes.reviewer\t{"kind":"claude","model":"project-review"}\t/private/tmp/ft-W5TiaD/existing/app/.lane.json\n' +
+        +         'schema\tnull\tdefault\n' +
+        +         'seams_doc\tnull\tdefault\n' +
+        +         'selection_policy\tnull\tdefault\n' +
+        +         'validate\t"npm test"\tdefault\n' +
+        +         'validation.environment\t""\tdefault\n' +
+        +         'validation.fast\t"npm test"\tdefault\n' +
+        +         'validation.promotion\t"npm test"\tdefault\n' +
+        +         'validation.release\t"npm test"\tdefault\n' +
+        +         'worktree_root\t"/Users/rewt/.herdr/worktrees/app"\tdefault\n'
+        +     },
+        +     record: {
+        +       value: '/private/tmp/ft-W5TiaD/external-record'
+        +     },
+        +     route: {
+        +       error: {
+        +         message: 'unknown route: engineer (configured: reviewer)',
+        +         name: 'Error'
+        +       }
+        +     },
+        ...
+        -         'routes.engineer\t{"kind":"codex","model":"project-model"}\t/private/tmp/ft-W5TiaD/existing/.lane.json\n' +
+        -         'routes.reviewer\t{"kind":"claude","model":"project-review"}\t/private/tmp/ft-W5TiaD/existing/app/.lane.json\n' +
+        -         'schema\tnull\tdefault\n' +
+        -         'seams_doc\tnull\tdefault\n' +
+        -         'selection_policy\tnull\tdefault\n' +
+        -         'validate\t"project-validator"\t/private/tmp/ft-W5TiaD/existing/.lane.json\n' +
+        -         'validation.environment\t""\tdefault\n' +
+        -         'validation.fast\t"project-validator"\t/private/tmp/ft-W5TiaD/existing/.lane.json\n' +
+        -         'validation.promotion\t"project-validator"\t/private/tmp/ft-W5TiaD/existing/.lane.json\n' +
+        -         'validation.release\t"project-validator"\t/private/tmp/ft-W5TiaD/existing/.lane.json\n' +
+        -         'worktree_root\t"/private/tmp/ft-W5TiaD/existing/existing-worktrees/app"\t/private/tmp/ft-W5TiaD/existing/.lane.json\n'
+        -     },
+        -     record: {
+        -       value: '/private/tmp/ft-W5TiaD/external-record'
+        -     },
+        -     route: {
+        -       value: {
+        -         args: [
+        -           '-p',
+        -           'trusted-project'
+        ...
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected:
+        0:
+          record:
+            value: '/private/tmp/ft-W5TiaD/external-record'
+          settings:
+            value:
+              config:
+                always_args:
+                  codex:
+                    0: '-p'
+                    1: 'trusted-project'
+                routes:
+                  engineer:
+                    kind: 'codex'
+                    model: 'project-model'
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-W5TiaD/existing/.lane.json'
+                1: '/private/tmp/ft-W5TiaD/existing/app/.lane.json'
+          route:
+            value:
+              route: 'engineer'
+              kind: 'codex'
+              model: 'project-model'
+              effortConfigured: false
+              args:
+                0: '-p'
+                1: 'trusted-project'
+              env:
+          worktrees: '/private/tmp/ft-W5TiaD/existing/existing-worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{"codex":["-p","trusted-project"]}	/private/tmp/ft-W5TiaD/existing/.lane.json
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.engineer	{"kind":"codex","model":"project-model"}	/private/tmp/ft-W5TiaD/existing/.lane.json
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-W5TiaD/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              validation.environment	""	default
+              validation.fast	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              validation.promotion	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              validation.release	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              worktree_root	"/private/tmp/ft-W5TiaD/existing/existing-worktrees/app"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              
+        1:
+          record:
+            value: '/private/tmp/ft-W5TiaD/external-record'
+          settings:
+            value:
+              config:
+                always_args:
+                  codex:
+                    0: '-p'
+                    1: 'trusted-project'
+                routes:
+                  engineer:
+                    kind: 'codex'
+                    model: 'project-model'
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-W5TiaD/existing/.lane.json'
+                1: '/private/tmp/ft-W5TiaD/existing/app/.lane.json'
+          route:
+            value:
+              route: 'engineer'
+              kind: 'codex'
+              model: 'project-model'
+              effortConfigured: false
+              args:
+                0: '-p'
+                1: 'trusted-project'
+              env:
+          worktrees: '/private/tmp/ft-W5TiaD/existing/existing-worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{"codex":["-p","trusted-project"]}	/private/tmp/ft-W5TiaD/existing/.lane.json
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.engineer	{"kind":"codex","model":"project-model"}	/private/tmp/ft-W5TiaD/existing/.lane.json
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-W5TiaD/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              validation.environment	""	default
+              validation.fast	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              validation.promotion	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              validation.release	"project-validator"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              worktree_root	"/private/tmp/ft-W5TiaD/existing/existing-worktrees/app"	/private/tmp/ft-W5TiaD/existing/.lane.json
+              
+      actual:
+        0:
+          record:
+            value: '/private/tmp/ft-W5TiaD/external-record'
+          settings:
+            value:
+              config:
+                routes:
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-W5TiaD/existing/app/.lane.json'
+          route:
+            error:
+              name: 'Error'
+              message: 'unknown route: engineer (configured: reviewer)'
+          worktrees: '/Users/rewt/.herdr/worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{}	default
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-W5TiaD/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"npm test"	default
+              validation.environment	""	default
+              validation.fast	"npm test"	default
+              validation.promotion	"npm test"	default
+              validation.release	"npm test"	default
+              worktree_root	"/Users/rewt/.herdr/worktrees/app"	default
+              
+        1:
+          record:
+            value: '/private/tmp/ft-W5TiaD/external-record'
+          settings:
+            value:
+              config:
+                routes:
+                  reviewer:
+                    kind: 'claude'
+                    model: 'project-review'
+              files:
+                0: '/private/tmp/ft-W5TiaD/existing/app/.lane.json'
+          route:
+            error:
+              name: 'Error'
+              message: 'unknown route: engineer (configured: reviewer)'
+          worktrees: '/Users/rewt/.herdr/worktrees/app'
+          laneConfig:
+            status: 0
+            stdout: |-
+              always_args	{}	default
+              authority	null	default
+              dispatch	{}	default
+              main	"main"	default
+              prepare	[]	default
+              registry	".lane/sessions.json"	default
+              routes.reviewer	{"kind":"claude","model":"project-review"}	/private/tmp/ft-W5TiaD/existing/app/.lane.json
+              schema	null	default
+              seams_doc	null	default
+              selection_policy	null	default
+              validate	"npm test"	default
+              validation.environment	""	default
+              validation.fast	"npm test"	default
+              validation.promotion	"npm test"	default
+              validation.release	"npm test"	default
+              worktree_root	"/Users/rewt/.herdr/worktrees/app"	default
+              
+      operator: 'deepStrictEqual'
+      stack: |-
+        TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:498:14)
+        Test.runInAsyncScope (node:async_hooks:206:9)
+        Test.run (node:internal/test_runner/test:796:25)
+        Test.start (node:internal/test_runner/test:702:17)
+        TestContext.test (node:internal/test_runner/test:292:20)
+        file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41
+        async Test.run (node:internal/test_runner/test:797:9)
+        async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+      ...
+    # Subtest: stale mapping with the same Git identity
+    not ok 6 - stale mapping with the same Git identity
+      ---
+      duration_ms: 890.689125
+      location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41'
+      failureType: 'testCodeFailure'
+      error: 'stale fleet project app: /private/tmp/ft-MWyWGc/existing/previous-checkout; inspect its mapping before joining'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        projectFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/lib/fleet.mjs:150:45)
+        nativeSessionContext (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/discovery/native-sandbox.mjs:14:40)
+        TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:500:74)
+        Test.runInAsyncScope (node:async_hooks:206:9)
+        Test.run (node:internal/test_runner/test:796:25)
+        Test.start (node:internal/test_runner/test:702:17)
+        TestContext.test (node:internal/test_runner/test:292:20)
+        file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41
+        async Test.run (node:internal/test_runner/test:797:9)
+        async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+      ...
+    # Subtest: stale mapping with external ORG_DIR
+    not ok 7 - stale mapping with external ORG_DIR
+      ---
+      duration_ms: 794.174292
+      location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41'
+      failureType: 'testCodeFailure'
+      error: 'stale fleet project app: /private/tmp/ft-JCzFYn/existing/previous-checkout; inspect its mapping before joining'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        projectFleet (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/lib/fleet.mjs:150:45)
+        nativeSessionContext (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/discovery/native-sandbox.mjs:14:40)
+        TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:500:74)
+        Test.runInAsyncScope (node:async_hooks:206:9)
+        Test.run (node:internal/test_runner/test:796:25)
+        Test.start (node:internal/test_runner/test:702:17)
+        TestContext.test (node:internal/test_runner/test:292:20)
+        file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/fleet.test.mjs:435:41
+        async Test.run (node:internal/test_runner/test:797:9)
+        async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+      ...
+    1..7
+not ok 36 - exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+  ---
+  duration_ms: 11186.867167
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-fleet-membership/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'subtestsFailed'
+  error: '5 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+ok 37 - explicit external ORG_DIR preserves the unmoved unjoined layout until adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0535
+  ...
+# Subtest: explicit external ORG_DIR preserves the moved unjoined layout until adoption
+ok 38 - explicit external ORG_DIR preserves the moved unjoined layout until adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032625
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer
+ok 39 - a neighbor with its own record cannot inherit another project's mapped parent layer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.117709
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+ok 40 - a neighbor with its own record cannot inherit another project's mapped parent layer through an alias # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028917
+  ...
+# Subtest: legacy record discovery keeps its symlink path and does not depend on valid parent settings
+ok 41 - legacy record discovery keeps its symlink path and does not depend on valid parent settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026625
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 42 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025042
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 43 - entry worktree roots are session overrides and never freeze the fleet mapping # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023125
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 44 - console merges unjoined configured projects with fleet entries across refresh and adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024417
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 45 - explicit ORG_DIR validates the fleet without launching Git on record commands # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044084
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 46 - a moved checkout can explicitly replace its stale mapping while retaining its external record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039167
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a moved checkout
+ok 47 - fleet repair: automatic entry suggests the stale external record for a moved checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02325
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a re-cloned checkout
+ok 48 - fleet repair: automatic entry suggests the stale external record for a re-cloned checkout # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023292
+  ...
+# Subtest: fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+ok 49 - fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022792
+  ...
+# Subtest: fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+ok 50 - fleet repair: live same-name external mappings join separately; multiple stale matches only suggest # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024875
+  ...
+# Subtest: fleet repair: unknown names, live records, and overlapping roots remain refused before writes
+ok 51 - fleet repair: unknown names, live records, and overlapping roots remain refused before writes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068375
+  ...
+1..51
+# tests 58
+# suites 0
+# pass 8
+# fail 8
+# cancelled 0
+# skipped 42
+# todo 0
+# duration_ms 11264.036875

@@ -1,0 +1,105 @@
+TAP version 13
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 1 - codex install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.538416
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 2 - claude install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.3255
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 3 - codex and claude install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033875
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 4 - missing harness refuses before shell or harness configuration changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.07225
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 5 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+  ---
+  duration_ms: 1225.185709
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 6 - missing npm names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.061125
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 7 - missing git names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039833
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 8 - missing python3 names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.09
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 9 - missing herdr names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079458
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 10 - native hooks survive relocation, join an unconfigured project and open two panes once without focus # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.051375
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 11 - codex native startup honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032083
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 12 - codex native resume honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078417
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 13 - claude native startup honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031917
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 14 - claude native resume honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.076125
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 15 - uninstall preserves unrelated harness edits and refuses a changed managed hook # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0365
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 16 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0965
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 17 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034667
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 18 - native configuration writes roll back with the rest of an interrupted installation # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068875
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 19 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062625
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 18
+# todo 0
+# duration_ms 1262.173875

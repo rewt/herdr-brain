@@ -397,6 +397,11 @@ if (args[0] === "workspace" && args[1] === "list") {
   state.environmentReadyAt = Date.now() + Number(process.env.FAKE_HERDR_ENV_DELAY || 0);
   state.prepareCommand = args[3]; save();
 } else if (args[0] === "pane" && args[1] === "read") {
+  if (args[args.indexOf("--source") + 1] === "visible") {
+    if (process.env.FAKE_HERDR_SCREEN_FAIL === "1") process.exit(3);
+    process.stdout.write(process.env.FAKE_HERDR_SCREEN || "› Ready for a task");
+    process.exit(0);
+  }
   state.environmentReads = (state.environmentReads || 0) + 1; save();
   // Model terminal echo and a shell still finishing initialization. Neither
   // is proof the source command has executed.
@@ -2011,6 +2016,56 @@ test("dispatch refreshes Herdr workspaces before accepting newly visible metadat
   }
 });
 
+test("dispatch checks the captured Codex hooks screen before direct brief delivery and retains blocked workers", async () => {
+  const screen = readFileSync(new URL('../../dispatch/test/fixtures/codex-0.160.0-hooks-screen.txt', import.meta.url), 'utf8');
+  const scenarios = [
+    { kind: 'codex', blocked: true },
+    { kind: 'codex', profile: 'claude-mem-bastian', blocked: true },
+    { kind: 'codex', screen: 'Hooks need review\n1 hook is new or changed.', blocked: true },
+    { kind: 'codex', screen: screen.split('\n').map(line => `> ${line}`).join('\n'), blocked: false },
+    { kind: 'claude', blocked: false },
+    { kind: 'codex', screenFail: true, blocked: true },
+  ];
+  for (const scenario of scenarios) {
+    const fixture = makeFixture({ main: 'main', validate: 'true', routes: {
+      engineer: { kind: scenario.kind, args: scenario.profile ? ['-p', scenario.profile] : [] },
+    } });
+    try {
+      ignoreLaneState(fixture);
+      const path = openLane(fixture, 'hook-screen');
+      const fake = writeFakeHerdr(fixture, { lanePath: path, branch: 'lane/hook-screen', initiallyOpened: true });
+      fixture.env.FAKE_HERDR_SCREEN = scenario.screen ?? screen;
+      fixture.env.FAKE_HERDR_SCREEN_FAIL = scenario.screenFail ? '1' : '0';
+      const brief = join(fixture.root, 'brief.md');
+      writeFileSync(brief, 'Deliver this brief once');
+      const result = lane(fixture, ['dispatch', 'hook-screen', '--route', 'engineer', `@${brief}`]);
+      assert.equal(result.status, scenario.blocked ? 1 : 0, result.stderr);
+      const calls = fake.calls();
+      assert.equal(calls.filter(args => args[0] === 'agent' && args[1] === 'prompt').length, scenario.blocked ? 0 : 1);
+      const reads = calls.filter(args => args[0] === 'pane' && args[1] === 'read' && args.includes('visible'));
+      assert.equal(reads.length, scenario.kind === 'codex' ? 1 : 0);
+      if (reads.length) assert.deepEqual(reads[0], ['pane', 'read', fake.state().agentPane, '--source', 'visible', '--format', 'text']);
+      if (scenario.blocked) {
+        assert.match(result.stderr, /brief not sent/);
+        assert.ok(result.stderr.includes(fake.state().agent));
+        assert.ok(result.stderr.includes(fake.state().agentPane));
+        if (!scenario.screenFail) {
+          assert.match(result.stderr, /Open \/hooks/);
+          assert.ok(result.stderr.includes(scenario.profile ?? 'configured default profile'));
+          assert.match(result.stderr, /Hook trust is the operator's decision/);
+        }
+        assert.ok(!calls.some(args => args[1] === 'close' || args[1] === 'send-keys'));
+        const { loadRegistry } = await registryApi();
+        assert.equal(loadRegistry(fixture.repo).sessions.length, 0);
+      } else if (reads.length) {
+        assert.ok(calls.indexOf(reads[0]) < calls.findIndex(args => args[1] === 'prompt'));
+      }
+    } finally {
+      fixture.cleanup();
+    }
+  }
+});
+
 test("dispatch opens a single agent tab in the initial pane and keeps fix rounds background", async () => {
   const values = { NORMAL: "plain", QUOTED: "spaces ' \" $HOME $(exit 99) `exit 99`;\nsecond line", EMPTY: "" };
   const fixture = makeFixture({ main: "main", validate: "true", routes: {
@@ -2053,7 +2108,7 @@ test("dispatch opens a single agent tab in the initial pane and keeps fix rounds
       assert.ok(!paneRuns.some(args => args.some(arg => arg.includes(value))), 'env values must not be pane input');
     }
     assert.equal(fake.state().environmentReads, 3);
-    const readIndex = calls.findLastIndex(args => args[0] === 'pane' && args[1] === 'read');
+    const readIndex = calls.findLastIndex(args => args[0] === 'pane' && args[1] === 'read' && args.includes('recent-unwrapped'));
     assert.ok(readIndex > exportIndex && readIndex < startIndex);
     assert.equal(fake.state().initialLabel, 'agent:initial-pane');
     assert.equal(fake.state().renamedAfterStart, true);

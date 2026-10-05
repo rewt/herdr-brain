@@ -156,6 +156,23 @@ function fixture(t, { realWatch = false, preload } = {}) {
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
+// Verbatim supervisor capture from stalled pane w2SW:p1 on 2026-10-05.
+const hooksTableScreen = fs.readFileSync(new URL('./fixtures/codex-0.160.0-hooks-screen.txt', import.meta.url), 'utf8');
+test('captured Codex hooks event table detects the warning count while quoted task text stays safe', () => {
+  assert.equal(hookReviewDialog(hooksTableScreen), '1 hook needs review before it can run.');
+  assert.equal(hookReviewDialog(hooksTableScreen.replace('⚠ 1 hook needs review before it', '⚠️ 2 hooks need review before they')),
+    '2 hooks need review before they can run.');
+  assert.equal(hookReviewDialog(`\u001b[33m${hooksTableScreen}\u001b[0m`), '1 hook needs review before it can run.');
+  for (const screen of [
+    '⚠ 1 hook needs review before it can run.',
+    '› ⚠ 1 hook needs review before it can run.',
+    hooksTableScreen.replace('  Hooks\n', '› Hooks\n'),
+    hooksTableScreen.replace('  ⚠', '› ⚠'),
+    hooksTableScreen.replace('  t trust all', '› t trust all'),
+    hooksTableScreen.split('\n').map(line => `> ${line}`).join('\n'),
+    hooksTableScreen.split('\n').map(line => `› ${line}`).join('\n'),
+  ]) assert.equal(hookReviewDialog(screen), undefined, screen);
+});
 // Codex 0.160.0 startup_hooks_review labels, transcribed from the installed
 // binary. ANSI/box framing represents a visible pane; no live session is used.
 const startupHookReviewScreen = `╭──────────────────────────────────────────────────────────────────────╮
@@ -196,17 +213,20 @@ test('hook dialog detection handles ANSI, borders, plural counts and wrapping wi
   assert.equal(codexProfile(['-p', 'old', '--profile=new']), 'new');
   assert.equal(codexProfile([]), undefined);
 });
-for (const profile of [undefined, 'claude-mem-bastian']) test(`Codex hook review blocks the brief visibly in ${profile ?? 'the default profile'} and ordinary retry delivers once`, t => {
+for (const [screenName, screen, count] of [
+  ['startup dialog', startupHookReviewScreen, '1 hook is new or changed.'],
+  ['captured hooks event table', hooksTableScreen, '1 hook needs review before it can run.'],
+]) for (const profile of [undefined, 'claude-mem-bastian']) test(`Codex ${screenName} blocks the brief visibly in ${profile ?? 'the default profile'} and ordinary retry delivers once`, t => {
   const f = fixture(t);
   if (profile) fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({
     always_args: { codex: ['--profile', profile] }, routes: { engineer: { kind: 'codex', model: 'model-a', effort: 'high' } },
   }));
-  fs.writeFileSync(path.join(f.root, 'screen'), startupHookReviewScreen);
+  fs.writeFileSync(path.join(f.root, 'screen'), screen);
   const first = f.start(); assert.equal(first.status, 1, first.stderr);
   const blocked = JSON.parse(first.stdout), job = JSON.parse(fs.readFileSync(blocked.journal));
   assert.equal(blocked.result, 'blocked'); assert.equal(blocked.code, 'DISPATCH_HOOK_REVIEW');
   assert.equal(blocked.run, job.run); assert.equal(blocked.pane, job.worker.pane);
-  assert.match(first.stderr, /1 hook is new or changed\./); assert.match(first.stderr, /Open \/hooks/);
+  assert.ok(first.stderr.includes(count)); assert.match(first.stderr, /Open \/hooks/);
   assert.ok(first.stderr.includes(profile ?? 'configured default profile'));
   assert.equal(job.stage, 'prompt'); assert.equal(promptCalls(f).length, 0);
   assert.match(f.show(job.run).notes.at(-1).text, /hook-review dialog.*brief not sent/);

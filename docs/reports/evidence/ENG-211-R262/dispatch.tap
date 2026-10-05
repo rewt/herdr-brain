@@ -1,0 +1,190 @@
+TAP version 13
+# Subtest: fake watcher receipt refuses PID reuse before registration and retains ownership across retries
+ok 1 - fake watcher receipt refuses PID reuse before registration and retains ownership across retries
+  ---
+  duration_ms: 8.658875
+  ...
+# Subtest: real watcher journal refuses PID reuse before registration and retains ownership across retries
+ok 2 - real watcher journal refuses PID reuse before registration and retains ownership across retries
+  ---
+  duration_ms: 1.896958
+  ...
+# Subtest: captured Codex hooks event table detects the warning count while quoted task text stays safe
+ok 3 - captured Codex hooks event table detects the warning count while quoted task text stays safe
+  ---
+  duration_ms: 1.38
+  ...
+# Subtest: hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose
+ok 4 - hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose
+  ---
+  duration_ms: 0.685875
+  ...
+# Subtest: Codex startup dialog blocks the brief visibly in the default profile and ordinary retry delivers once
+ok 5 - Codex startup dialog blocks the brief visibly in the default profile and ordinary retry delivers once
+  ---
+  duration_ms: 2577.654042
+  ...
+# Subtest: Codex startup dialog blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+ok 6 - Codex startup dialog blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+  ---
+  duration_ms: 3030.276667
+  ...
+# Subtest: Codex captured hooks event table blocks the brief visibly in the default profile and ordinary retry delivers once
+ok 7 - Codex captured hooks event table blocks the brief visibly in the default profile and ordinary retry delivers once
+  ---
+  duration_ms: 2330.928708
+  ...
+# Subtest: Codex captured hooks event table blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+ok 8 - Codex captured hooks event table blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+  ---
+  duration_ms: 2933.237
+  ...
+# Subtest: screen read failure leaves delivery unsent and retryable
+ok 9 - screen read failure leaves delivery unsent and retryable
+  ---
+  duration_ms: 1879.284
+  ...
+# Subtest: an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery
+ok 10 - an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery
+  ---
+  duration_ms: 2254.06925
+  ...
+# Subtest: Linux dispatch watcher receipt and journal round-trip as strings through record set
+ok 11 - Linux dispatch watcher receipt and journal round-trip as strings through record set
+  ---
+  duration_ms: 1505.397541
+  ...
+# Subtest: dispatch waits under simulated swap pressure before opening a lane and resumes the same request
+ok 12 - dispatch waits under simulated swap pressure before opening a lane and resumes the same request
+  ---
+  duration_ms: 6522.517709
+  ...
+# Subtest: STOP during dispatch open memory wait retains the request without a worker launch
+ok 13 - STOP during dispatch open memory wait retains the request without a worker launch
+  ---
+  duration_ms: 6432.308333
+  ...
+# Subtest: STOP during dispatch worker memory wait retains the request without a worker launch
+ok 14 - STOP during dispatch worker memory wait retains the request without a worker launch
+  ---
+  duration_ms: 6541.040041
+  ...
+# Subtest: dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work
+ok 15 - dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work
+  ---
+  duration_ms: 3524.573666
+  ...
+# Subtest: one command records exact route/worker fields, arms watch before prompt, and preserves briefs
+ok 16 - one command records exact route/worker fields, arms watch before prompt, and preserves briefs
+  ---
+  duration_ms: 1592.614583
+  ...
+# Subtest: open/prepare failures keep a visible request, create no run, and retry cleanly
+ok 17 - open/prepare failures keep a visible request, create no run, and retry cleanly
+  ---
+  duration_ms: 2651.570334
+  ...
+# Subtest: watch failure records a worker but never sends work; retry reuses the same worker/run
+ok 18 - watch failure records a worker but never sends work; retry reuses the same worker/run
+  ---
+  duration_ms: 1655.257
+  ...
+# Subtest: uncertain launch refuses automatic replay and requires explicit adoption
+ok 19 - uncertain launch refuses automatic replay and requires explicit adoption
+  ---
+  duration_ms: 1720.908208
+  ...
+# Subtest: uncertain prompt refuses automatic resend; caller can authorize it after inspection
+ok 20 - uncertain prompt refuses automatic resend; caller can authorize it after inspection
+  ---
+  duration_ms: 1847.087167
+  ...
+# Subtest: a fix round can reuse a stopped worker or start fresh; changed route is refused
+ok 21 - a fix round can reuse a stopped worker or start fresh; changed route is refused
+  ---
+  duration_ms: 3130.249667
+  ...
+# Subtest: retry pins routes across config edits and detects a replaced occupant
+ok 22 - retry pins routes across config edits and detects a replaced occupant
+  ---
+  duration_ms: 1655.873583
+  ...
+# Subtest: base moves a clean reused lane only by fast-forward; dirty lane is preserved
+ok 23 - base moves a clean reused lane only by fast-forward; dirty lane is preserved
+  ---
+  duration_ms: 2063.144417
+  ...
+# Subtest: a real detached watcher acknowledges initialization and sheds supervisor pane identity
+ok 24 - a real detached watcher acknowledges initialization and sheds supervisor pane identity
+  ---
+  duration_ms: 1184.0835
+  ...
+# Subtest: lost record start result is visible and recovered without starting a second run
+ok 25 - lost record start result is visible and recovered without starting a second run
+  ---
+  duration_ms: 1476.046583
+  ...
+# Subtest: live request locks refuse retries without changing the journal
+ok 26 - live request locks refuse retries without changing the journal
+  ---
+  duration_ms: 1047.273208
+  ...
+# Subtest: explicit fresh launch and accepted delivery recover uncertain attempts
+ok 27 - explicit fresh launch and accepted delivery recover uncertain attempts
+  ---
+  duration_ms: 1598.152458
+  ...
+# Subtest: invalid route and empty brief mutate neither lane nor record
+ok 28 - invalid route and empty brief mutate neither lane nor record
+  ---
+  duration_ms: 331.708958
+  ...
+# Subtest: a refused record start with no matching run retries the saved request
+ok 29 - a refused record start with no matching run retries the saved request
+  ---
+  duration_ms: 1753.797
+  ...
+# Subtest: a run ID supplied as ITEM is refused before creating a lane or journal
+ok 30 - a run ID supplied as ITEM is refused before creating a lane or journal
+  ---
+  duration_ms: 254.892375
+  ...
+# Subtest: reuse refuses an idle worker whose previous run is still open
+ok 31 - reuse refuses an idle worker whose previous run is still open
+  ---
+  duration_ms: 1384.285375
+  ...
+# Subtest: reuse accepts an abandoned run with the same stopped occupant
+ok 32 - reuse accepts an abandoned run with the same stopped occupant
+  ---
+  duration_ms: 2104.312417
+  ...
+# Subtest: retry locks before reading its journal so another retry cannot replay stale progress
+ok 33 - retry locks before reading its journal so another retry cannot replay stale progress
+  ---
+  duration_ms: 1546.055
+  ...
+# Subtest: two retries cannot both take over a dead-owner lock
+ok 34 - two retries cannot both take over a dead-owner lock
+  ---
+  duration_ms: 1377.65775
+  ...
+# Subtest: an unknown start outcome with no match stays conservative; multiple matches require explicit recovery
+ok 35 - an unknown start outcome with no match stays conservative; multiple matches require explicit recovery
+  ---
+  duration_ms: 1809.472
+  ...
+# Subtest: dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24
+ok 36 - dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24
+  ---
+  duration_ms: 12146.116083
+  ...
+1..36
+# tests 36
+# suites 0
+# pass 36
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 83923.51125

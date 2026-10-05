@@ -14,6 +14,7 @@
 import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
+import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -1301,6 +1302,22 @@ function dispatch(topic, promptText, options = {}) {
     fail(`agent '${agentName}' is running in '${cwdCheck.cwd}', not the lane worktree ${path}; ${failedTab()}, brief NOT sent`);
   }
   if (promptText !== undefined && promptText.trim() !== "") {
+    if (resolved.kind === "codex") {
+      const screen = spawnSync("herdr", ["pane", "read", pane, "--source", "visible", "--format", "text"], {
+        encoding: "utf8",
+        ...(options.deadline === undefined ? {} : { timeout: Math.max(1, options.deadline - Date.now()) }),
+      });
+      if (screen.status !== 0) {
+        fail(`could not read visible screen for live agent '${agentName}' in pane ${pane}; agent retained, brief not sent; inspect the worker before delivering the brief`);
+      }
+      const dialog = hookReviewDialog(screen.stdout ?? "");
+      if (dialog) {
+        const profile = codexProfile(agentArgs);
+        const scope = profile ? `profile ${JSON.stringify(profile)} (-p ${JSON.stringify(profile)})`
+          : "the configured default profile (no -p/--profile in the launch arguments)";
+        fail(`Codex hook-review dialog "${dialog}" blocks worker ${agentName} in ${pane}, ${scope}; agent retained, brief not sent. Open /hooks in that worker session and review the hooks in that profile, then deliver the brief to that retained worker with herdr agent prompt. Hook trust is the operator's decision.`);
+      }
+    }
     try {
       execFileSync("herdr", ["agent", "prompt", agentName, promptText], {
         stdio: options.silent ? ["ignore", "ignore", "pipe"] : "inherit",

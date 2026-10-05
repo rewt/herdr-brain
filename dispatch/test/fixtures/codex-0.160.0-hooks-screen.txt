@@ -1,0 +1,18 @@
+  >_ OpenAI Codex (v0.160.0)
+     ~/.herdr/worktrees/herdr-brain/lane-gate-profile
+  Well, well, well. An idea approaches.
+  Tip: Use the desktop app. Run codex app to open it. It installs automatically if needed.
+  Hooks
+  Lifecycle hooks from config and enabled plugins.
+  ⚠ 1 hook needs review before it can run.
+  Event                 Installed   Active      Review      Description
+  PreToolUse            0           0           0           Before a tool executes
+  PermissionRequest     0           0           0           When permission is requested
+  PostToolUse           0           0           0           After a tool executes
+  PreCompact            0           0           0           Before context compaction
+  PostCompact           0           0           0           After context compaction
+› SessionStart          2           1           1           When a new session starts
+  SessionEnd            0           0           0           Right before a session ends
+  UserPromptSubmit      0           0           0           When the user submits a prompt
+↓
+  t trust all · enter review · esc close

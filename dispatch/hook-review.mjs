@@ -6,6 +6,14 @@ export function hookReviewDialog(screen) {
   // turn quoted task text into a dialog marker. Whitespace allows wrapped rows.
   const text = stripVTControlCharacters(screen).split(/\r?\n/u)
     .map(line => line.replace(/^[\t │┃║]+|[\t │┃║]+$/gu, '')).join('\n');
+  // The /hooks event table can be the startup screen too. Only accept its
+  // warning-prefixed count alongside the heading, table and review controls;
+  // a warning glyph in quoted composer prose is not a dialog by itself.
+  const table = /(?:^|\n)Hooks(?=\n|$)/u.test(text) &&
+    /(?:^|\n)Event\s+Installed\s+Active\s+Review\s+Description(?=\n|$)/u.test(text) &&
+    /(?:^|\n)t trust all · enter review · esc close(?=\n|$)/u.test(text);
+  const warning = text.match(/(?:^|\n)⚠\uFE0F?\s+(\d+\s+hooks?\s+needs?\s+review\s+before\s+(?:it|they)\s+can\s+run\.?)(?=\n|$)/iu)?.[1];
+  if (table && warning) return warning.replace(/\s+/gu, ' ');
   const count = text.match(/(?:^|\n)(\d+\s+hooks?\s+(?:is|are)\s+new\s+or\s+changed\.?)(?=\n|$)/iu)?.[1];
   const title = /(?:^|\n)Hooks\s+need\s+review(?=\n|$)/iu.test(text);
   const trustOption = /(?:^|\n)(?:[›>❯]\s*)?(?:\d+[.)]\s*)?Trust all and continue(?=\n|$)/iu.test(text);

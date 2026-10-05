@@ -126,6 +126,8 @@ Some failures cannot be safely retried by guessing:
   dialog, retaining the same run, worker and live watcher. A screen-read failure
   also leaves the brief unsent. An uncertain earlier delivery stays `prompting`
   and still needs its existing explicit recovery flag.
+  This includes the `Hooks` event table with its `⚠` review count and
+  `t trust all · enter review · esc close` footer, as captured from Codex 0.160.0.
 - A live watcher whose acknowledgement was lost still owns watch's run lock.
   Inspect the log and stop that watcher before re-arming; the module refuses to
   launch a duplicate. Do not remove a live lock.

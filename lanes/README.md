@@ -119,6 +119,13 @@ its reported cwd by real path, sends the brief, and only then records session
 metadata. A persistence failure after delivery is reported as partial success and
 never replays the prompt.
 
+Before delivering a Codex brief, direct dispatch reads the visible pane and
+blocks on a hook-review dialog, including the `Hooks` event table. It names the
+worker, pane and launch profile and retains the agent with the brief unsent.
+Open `/hooks` in that worker and review the hooks in that profile, then deliver
+the brief to the retained worker with `herdr agent prompt`. Hook trust remains
+the operator's decision. A failed screen read also leaves the brief unsent.
+
 Dispatch opens from the canonical project's workspace when one exists, or from
 its canonical checkout path when none is open. Both paths use `--no-focus` and
 verify the resulting repository identity.

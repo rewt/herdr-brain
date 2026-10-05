@@ -8,9 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
 import { queueFor, enqueue } from '../promote.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { copyProduct } from '../../lib/product-files.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
-function fixture(t, { red = false } = {}) {
+function fixture(t, { red = false, copied = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-train-'))), repo = path.join(root, 'repo');
   fs.mkdirSync(repo);
   const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', PROMOTE_WORKFLOW_ENGINE: '0',
@@ -35,10 +36,56 @@ function fixture(t, { red = false } = {}) {
   fs.writeFileSync(file, JSON.stringify({ schema: 'promotion-train/v1', id: 'example', identity,
     jobs: [{ id: 'first', topic: 'first', expectedHead: head }], phase: 'pending' }));
   t.after(async () => { await waitForInboxIdle(path.join(identity, 'supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
-  const run = (...flags) => exec(process.execPath, [path.join(source, 'lanes/lane.mjs'), 'promote-batch', file, ...flags]);
+  const product = copied ? path.join(root, 'product') : source;
+  if (copied) copyProduct(source, product);
+  const run = (...flags) => exec(process.execPath, [path.join(product, 'lanes/lane.mjs'), 'promote-batch', file, ...flags]);
   const plan = () => JSON.parse(fs.readFileSync(file));
-  return { root, repo, workspace, env, exec, git, identity, file, head, base, run, plan, counts };
+  return { root, repo, workspace, env, exec, git, identity, file, head, base, run, plan, counts, product };
 }
+
+test('copied default train promotes without the opt-in engine or workflow definitions', t => {
+  const f = fixture(t, { copied: true });
+  fs.rmSync(path.join(f.product, 'workflow'), { recursive: true, force: true });
+  fs.rmSync(path.join(f.product, '.herdr/workflows'), { recursive: true, force: true });
+  const result = f.run(); assert.equal(result.status, 0, result.stderr);
+  const plan = f.plan(); assert.equal(plan.results.first.outcome, 'promoted');
+  assert.equal(plan.workflow, undefined); assert.equal(plan.workflow_runs, undefined);
+  assert.equal(f.git(['rev-parse', 'main']), plan.attempts[0].tip);
+  assert.equal(fs.readFileSync(f.counts, 'utf8'), 'gate\n');
+  assert.equal(f.git(['status', '--porcelain']), '');
+  assert.equal(f.git(['rev-list', '--merges', 'main']), '');
+});
+
+test('copied opt-in train carries its engine and workflow definitions and promotes with receipts', t => {
+  const f = fixture(t, { copied: true });
+  assert.ok(!fs.existsSync(path.join(f.product, 'promote/test')), 'the train uses the distributed product');
+  const result = f.run('--workflow'); assert.equal(result.status, 0, result.stderr);
+  const plan = f.plan(), execution = JSON.parse(fs.readFileSync(plan.workflow_runs[0]));
+  assert.equal(plan.results.first.outcome, 'promoted');
+  assert.equal(plan.workflow.file, path.join(f.product, '.herdr/workflows/train.md'));
+  assert.equal(execution.status, 'succeeded');
+  assert.deepEqual(execution.steps.map(s => [s.id, s.status]), ['prepare', 'validate', 'integrate', 'close'].map(id => [id, 'succeeded']));
+  assert.equal(f.git(['rev-parse', 'main']), plan.attempts[0].tip);
+  assert.equal(fs.readFileSync(f.counts, 'utf8'), 'gate\n');
+  assert.equal(f.git(['status', '--porcelain']), '');
+  assert.equal(f.git(['rev-list', '--merges', 'main']), '');
+});
+
+test('promotion lock stays held while the opt-in engine loads and releases on a load failure', t => {
+  const f = fixture(t, { copied: true }), contenderFile = path.join(f.root, 'contender.json');
+  const engine = path.join(f.product, 'workflow/engine.mjs');
+  // Attempt a second batch from inside module initialization, across the new
+  // asynchronous import boundary. It must refuse before touching the plan.
+  fs.appendFileSync(engine, `\nconst contender = spawnSync(process.execPath, ${JSON.stringify([path.join(f.product, 'lanes/lane.mjs'), 'promote-batch', f.file])}, { cwd: ${JSON.stringify(f.repo)}, env: process.env, encoding: 'utf8' });\nfs.writeFileSync(${JSON.stringify(contenderFile)}, JSON.stringify({ status: contender.status, stderr: contender.stderr }));\nthrow new Error('scripted engine load failure');\n`);
+  const failed = f.run('--workflow'); assert.equal(failed.status, 1); assert.match(failed.stderr, /scripted engine load failure/);
+  const contender = JSON.parse(fs.readFileSync(contenderFile));
+  assert.equal(contender.status, 1); assert.match(contender.stderr, /locked: .*lane-promote.lock/);
+  assert.equal(f.git(['rev-parse', 'main']), f.base);
+  assert.equal(fs.existsSync(f.counts), false);
+  assert.equal(fs.existsSync(path.join(f.identity, 'lane-promote.lock')), false);
+  const retry = f.run(); assert.equal(retry.status, 0, retry.stderr);
+  assert.equal(f.plan().results.first.outcome, 'promoted');
+});
 
 test('explicit train workflow flag produces per-stage receipts and preserves the actual green gate proof', t => {
   const f = fixture(t), result = f.run('--workflow'); assert.equal(result.status, 0, result.stderr);

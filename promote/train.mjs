@@ -10,7 +10,6 @@ import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
-import { loadWorkflow, runWorkflow } from '../workflow/engine.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
@@ -42,7 +41,7 @@ export function verifyTrainResult(result, { project, saved }) {
       git(['rev-list', '--merges', `${onto}..${result.tip}`]) === '';
   } catch { return false; }
 }
-export function runTrain({ file, canonical, identity, main, prepare, validation, workflow = process.env.PROMOTE_WORKFLOW_ENGINE === '1' }) {
+export async function runTrain({ file, canonical, identity, main, prepare, validation, workflow = process.env.PROMOTE_WORKFLOW_ENGINE === '1' }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
@@ -100,6 +99,9 @@ export function runTrain({ file, canonical, identity, main, prepare, validation,
       plan.groups = []; save(); return false;
     }
   };
+  // Default trains and unrelated lane commands must not load the opt-in engine.
+  // A saved workflow still selects it on recovery, even without the flag.
+  const { loadWorkflow, runWorkflow } = (workflow || plan.workflow) ? await import('../workflow/engine.mjs') : {};
   const definition = (workflow || plan.workflow) ? loadWorkflow(fileURLToPath(new URL('../.herdr/workflows/train.md', import.meta.url))) : null;
   if (definition) {
     // v1 is a migration seam, not a way to remove/reorder lifecycle guards.

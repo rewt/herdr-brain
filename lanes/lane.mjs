@@ -2355,8 +2355,14 @@ function withPromotionLock(operation) {
   // fail() exits; the exit handler releases ordinary refusals too. Signals leave
   // the lock behind because a validation or lifecycle child may still be alive.
   process.once("exit", release);
-  try { return operation(); }
-  finally { process.off("exit", release); release(); }
+  // The opt-in train imports its engine asynchronously under this same lock.
+  const finish = () => { process.off("exit", release); release(); };
+  let pending = false;
+  try {
+    const result = operation();
+    if (result instanceof Promise) { pending = true; return result.finally(finish); }
+    return result;
+  } finally { if (!pending) finish(); }
 }
 
 function promote(topic, options = {}) {
@@ -2670,7 +2676,7 @@ switch (command) {
         if (error.code !== 'PROMOTION_STOPPED') throw error;
         // Let the train's existing guards persist each member's STOP refusal.
       }
-      withPromotionLock(() => runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
+      await withPromotionLock(() => runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
         main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings(),
         workflow: rest.includes('--workflow') || process.env.PROMOTE_WORKFLOW_ENGINE === '1' }));
     } catch (error) { fail(error.message); }

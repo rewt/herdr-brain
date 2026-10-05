@@ -1,0 +1,32 @@
+{
+  "harness": "codex",
+  "results": [
+    {
+      "name": "02 Record bootstrap and canonical discovery",
+      "status": "PASS"
+    },
+    {
+      "name": "03 Suggested routes without project configuration",
+      "status": "PASS"
+    },
+    {
+      "name": "04 Installed entry teaches dispatch, watch, worker and supervisor defaults",
+      "status": "PASS"
+    },
+    {
+      "name": "20 Real concurrent own-lane work and sandboxed fast-forward promotion",
+      "status": "PENDING",
+      "reason": "Live cases omitted by --skip-live."
+    },
+    {
+      "name": "21 Real routing question waits and actual operator answer applies",
+      "status": "PENDING",
+      "reason": "Live cases omitted by --skip-live."
+    }
+  ],
+  "usage": [],
+  "install": "/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/monitor-installed-KwAgqB",
+  "scratch": "/private/tmp/mp-FeovGX",
+  "interrupted": false,
+  "setupComplete": true
+}

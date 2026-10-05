@@ -1,0 +1,7 @@
+PASS    02 Record bootstrap and canonical discovery
+PASS    03 Suggested routes without project configuration
+PASS    04 Installed entry teaches dispatch, watch, worker and supervisor defaults
+PENDING 20 Real concurrent own-lane work and sandboxed fast-forward promotion: Live cases omitted by --skip-live.
+PENDING 21 Real routing question waits and actual operator answer applies: Live cases omitted by --skip-live.
+Evidence: /private/tmp/mp-FeovGX/evidence
+Installed snapshot: /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/monitor-installed-KwAgqB

@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: copied default train promotes without the opt-in engine or workflow definitions
+ok 1 - copied default train promotes without the opt-in engine or workflow definitions
+  ---
+  duration_ms: 717.83275
+  ...
+# Subtest: copied opt-in train carries its engine and workflow definitions and promotes with receipts
+ok 2 - copied opt-in train carries its engine and workflow definitions and promotes with receipts
+  ---
+  duration_ms: 757.880875
+  ...
+# Subtest: explicit train workflow flag produces per-stage receipts and preserves the actual green gate proof
+ok 3 - explicit train workflow flag produces per-stage receipts and preserves the actual green gate proof
+  ---
+  duration_ms: 619.385625
+  ...
+# Subtest: engine red receipts retain the real gate exit and cannot reach integration
+ok 4 - engine red receipts retain the real gate exit and cannot reach integration
+  ---
+  duration_ms: 517.578459
+  ...
+# Subtest: default train does not execute a workflow or create workflow receipts
+ok 5 - default train does not execute a workflow or create workflow receipts
+  ---
+  duration_ms: 628.911333
+  ...
+# Subtest: a pinned workflow hash refuses a changed definition even when resumed without the flag
+ok 6 - a pinned workflow hash refuses a changed definition even when resumed without the flag
+  ---
+  duration_ms: 178.958
+  ...
+# Subtest: the promotion queue persists and forwards the workflow choice independently of worker environment
+ok 7 - the promotion queue persists and forwards the workflow choice independently of worker environment
+  ---
+  duration_ms: 1245.093833
+  ...
+# Subtest: tier selection covers every current test once in promotion or release and excludes support modules
+ok 8 - tier selection covers every current test once in promotion or release and excludes support modules
+  ---
+  duration_ms: 3.081417
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4713.988041

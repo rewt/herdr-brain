@@ -1,0 +1,143 @@
+TAP version 13
+# Subtest: copied default train promotes without the opt-in engine or workflow definitions
+not ok 1 - copied default train promotes without the opt-in engine or workflow definitions
+  ---
+  duration_ms: 153.9485
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    node:internal/modules/esm/resolve:283
+        throw new ERR_MODULE_NOT_FOUND(
+              ^
+    
+    Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/workflow-train-BGViw6/product/workflow/engine.mjs' imported from /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/workflow-train-BGViw6/product/promote/train.mjs
+        at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+        at moduleResolve (node:internal/modules/esm/resolve:952:10)
+        at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+        at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+        at #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+        at ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+        at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+        at ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+      code: 'ERR_MODULE_NOT_FOUND',
+      url: 'file:///Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/workflow-train-BGViw6/product/workflow/engine.mjs'
+    }
+    
+    Node.js v20.19.4
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/promote/test/workflow-train.test.mjs:50:34
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: copied opt-in train carries its engine and workflow definitions and promotes with receipts
+not ok 2 - copied opt-in train carries its engine and workflow definitions and promotes with receipts
+  ---
+  duration_ms: 149.770417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    node:internal/modules/esm/resolve:283
+        throw new ERR_MODULE_NOT_FOUND(
+              ^
+    
+    Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/workflow-train-erI5Zl/product/workflow/engine.mjs' imported from /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/workflow-train-erI5Zl/product/promote/train.mjs
+        at finalizeResolution (node:internal/modules/esm/resolve:283:11)
+        at moduleResolve (node:internal/modules/esm/resolve:952:10)
+        at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+        at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+        at #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+        at ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+        at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+        at ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+      code: 'ERR_MODULE_NOT_FOUND',
+      url: 'file:///Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-tf5n96/workflow-train-erI5Zl/product/workflow/engine.mjs'
+    }
+    
+    Node.js v20.19.4
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    finalizeResolution (node:internal/modules/esm/resolve:283:11)
+    moduleResolve (node:internal/modules/esm/resolve:952:10)
+    defaultResolve (node:internal/modules/esm/resolve:1188:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:642:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:591:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:574:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:236:38)
+    ModuleJob._link (node:internal/modules/esm/module_job:130:49) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/promote/test/workflow-train.test.mjs:62:46
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-probe-workflows/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: explicit train workflow flag produces per-stage receipts and preserves the actual green gate proof
+ok 3 - explicit train workflow flag produces per-stage receipts and preserves the actual green gate proof # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067125
+  ...
+# Subtest: engine red receipts retain the real gate exit and cannot reach integration
+ok 4 - engine red receipts retain the real gate exit and cannot reach integration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049
+  ...
+# Subtest: default train does not execute a workflow or create workflow receipts
+ok 5 - default train does not execute a workflow or create workflow receipts # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037167
+  ...
+# Subtest: a pinned workflow hash refuses a changed definition even when resumed without the flag
+ok 6 - a pinned workflow hash refuses a changed definition even when resumed without the flag # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032416
+  ...
+# Subtest: the promotion queue persists and forwards the workflow choice independently of worker environment
+ok 7 - the promotion queue persists and forwards the workflow choice independently of worker environment # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078167
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 5
+# todo 0
+# duration_ms 347.301334

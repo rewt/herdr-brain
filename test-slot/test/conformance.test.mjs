@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadTimeout } from '../../lib/deadline.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
-for (const nested of [false, true]) for (const cause of ['cancel', 'timeout']) test(`${cause} signals compound gate descendants in a ${nested ? 'nested' : 'top-level'} slot`, { timeout: loadTimeout(10000) }, async t => {
+for (const nested of [false, true]) test(`cancel signals compound gate descendants in a ${nested ? 'nested' : 'top-level'} slot`, { timeout: loadTimeout(10000) }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-conformance-'));
   const ready = path.join(root, 'ready'), got = path.join(root, 'got'), wrapper = path.join(root, 'wrapper'), lock = path.join(root, 'lock');
   const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
@@ -35,12 +35,61 @@ for (const nested of [false, true]) for (const cause of ['cancel', 'timeout']) t
     const { lookupProcess } = await import('../../lib/processes.mjs');
     inner = lookupProcess(target).value.ppid;
   }
-  if (cause === 'timeout') await new Promise(r => setTimeout(() => { process.kill(inner, 'SIGTERM'); r(); }, 100));
-  else process.kill(inner, 'SIGTERM');
+  process.kill(inner, 'SIGTERM');
   // Bound the witness so a surviving descendant cannot hang the suite.
   const finished = await Promise.race([done, new Promise(r => setTimeout(() => r(null), 1500))]);
   assert.equal(fs.existsSync(got), true, 'the Node descendant receives the signal');
   assert.notEqual(finished, null, stderr); assert.notEqual(finished, 0);
+});
+
+for (const nested of [false, true]) test(`spawnSync timeout signals compound gate descendants in a ${nested ? 'nested' : 'top-level'} slot`, { timeout: loadTimeout(15000) }, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-timeout-'));
+  const ready = path.join(root, 'ready'), got = path.join(root, 'got'), result = path.join(root, 'result'), lock = path.join(root, 'lock');
+  const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
+  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+  const leaf = path.join(root, 'leaf.cjs'), adapter = path.join(root, 'adapter.mjs');
+  const timeout = loadTimeout(2000);
+  fs.writeFileSync(leaf, `const fs=require('fs');process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(got)},'SIGTERM');process.exit(0);});fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`);
+  fs.writeFileSync(adapter, `import fs from 'node:fs';import {runTestSlotSync} from ${JSON.stringify(new URL('../run.mjs', import.meta.url).href)};
+// Nested cancellation also signals this caller in the held command group.
+process.on('SIGTERM',()=>{});
+const r=runTestSlotSync('timed-gate',['/bin/sh','-c',${JSON.stringify(`${JSON.stringify(process.execPath)} ${JSON.stringify(leaf)}; :`)}],{retryTimeout:false,timeout:${timeout},killSignal:'SIGTERM',stdio:'inherit'});
+fs.writeFileSync(${JSON.stringify(result)},JSON.stringify({error:r.error?.code,signal:r.signal,status:r.status}));process.exit(0);`);
+  const child = spawn(process.execPath, nested ? [cli, 'run', 'outer', '--', process.execPath, adapter] : [adapter], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = ''; child.stderr.on('data', d => { stderr += d; }); child.stdout.resume();
+  const done = new Promise(resolve => child.once('close', code => resolve(code)));
+  t.after(() => {
+    for (const file of [ready, lock]) try { const data = fs.readFileSync(file, 'utf8'); const pid = file === lock ? JSON.parse(data).pgid : Number(data); if(pid)process.kill(file === lock ? -pid : pid,'SIGKILL'); } catch {}
+    try { child.kill('SIGKILL'); } catch {}
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const finished = await Promise.race([done, new Promise(r => setTimeout(() => r(null), timeout + loadTimeout(5000)))]);
+  assert.notEqual(finished, null, stderr);
+  assert.ok(fs.existsSync(ready), 'the compound gate started before the real timeout');
+  assert.equal(fs.readFileSync(got, 'utf8'), 'SIGTERM', 'the descendant receives the timeout signal');
+  const timed = JSON.parse(fs.readFileSync(result));
+  assert.equal(timed.error, 'ETIMEDOUT');
+  // A wrapper that forwards and handles SIGTERM exits with its portable 143.
+  assert.ok(timed.signal === 'SIGTERM' || timed.status === 143, JSON.stringify(timed));
+});
+
+test('the live synchronous caller watch spawns and hashes nothing after gate startup', { timeout: loadTimeout(10000) }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-poll-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const started = path.join(root, 'started'), calls = path.join(root, 'calls'), adapter = path.join(root, 'adapter.mjs'), preload = path.join(root, 'count.mjs'), lock = path.join(root, 'lock');
+  fs.writeFileSync(calls, '');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import crypto from 'node:crypto';import {syncBuiltinESMExports} from 'node:module';
+const execute=cp.spawnSync,hash=crypto.createHash;
+const count=kind=>{if(fs.existsSync(${JSON.stringify(started)}))fs.appendFileSync(${JSON.stringify(calls)},kind+'\\n');};
+cp.spawnSync=(...args)=>{count('spawn');return execute(...args);};crypto.createHash=(...args)=>{count('hash');return hash(...args);};syncBuiltinESMExports();`);
+  // Readiness follows the recorded group identity, even on a loaded host.
+  fs.writeFileSync(adapter, `import {runTestSlotSync} from ${JSON.stringify(new URL('../run.mjs', import.meta.url).href)};
+const r=runTestSlotSync('poll-proof',[process.execPath,'-e',${JSON.stringify(`const fs=require('fs');const timer=setInterval(()=>{if(JSON.parse(fs.readFileSync(${JSON.stringify(lock)},'utf8')).groupBirth){clearInterval(timer);fs.writeFileSync(${JSON.stringify(started)},'ready');setTimeout(()=>process.exit(0),1000);}},20);`)}],{retryTimeout:false,encoding:'utf8'});if(r.status!==0)throw Error(r.stderr);`);
+  const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, NODE_OPTIONS: `--import=${preload}` };
+  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+  const r = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
+  assert.equal(r.status, 0, r.stderr); assert.ok(fs.existsSync(started));
+  assert.equal(fs.readFileSync(calls, 'utf8'), '', 'polling does not execute a source or hash its bundled helper');
 });
 
 for (const nested of [false, true]) test(`stopping the synchronous gate caller signals its ${nested ? 'nested' : 'top-level'} compound gate group`, { timeout: loadTimeout(10000) }, async t => {

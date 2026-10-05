@@ -220,8 +220,12 @@ of the synchronous train caller. Metrics count those starts, including gates
 still running or interrupted, and retain completed gate time alongside
 `executed_gate_time_s`, which also includes timed interruptions. Preparation and
 slot refusals do not invent executions; reused proofs do not add executions.
+Each gate profile keeps completed durations in `time_s` and all measured
+execution durations in `executed_time_s`; `gates` counts executions.
 If the exact synchronous caller dies, its slot wrapper signals the command
-group. Nested cancellation signals the held command group once per signal,
+group. The direct child's caller watch checks its parent PID and signal-zero
+liveness without spawning a process or re-hashing identity helpers per poll.
+Nested cancellation signals the held command group once per signal,
 preserving the existing group-based orphan protection.
 
 Batch `phase` is display telemetry. The existing attempt `phase` remains the

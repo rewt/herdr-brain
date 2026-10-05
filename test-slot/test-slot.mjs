@@ -401,9 +401,13 @@ if (invokedDirectly()) {
       const caller = parsed.options.caller;
       // spawnSync blocks its caller's JS signal handlers. If that exact caller
       // dies (including a timeout), the async wrapper cancels the command group.
-      // Unknown liveness never authorizes a signal; the slot remains protective.
+      // This wrapper is the caller's direct spawnSync child. A parent cannot be
+      // replaced by a reused PID without first reparenting this child. The
+      // recorded start/birth is taken once by the adapter; polling needs only
+      // getppid and kill-zero, never a source lookup or bundled-helper hash.
+      // Unknown signal-probe errors alone do not authorize cancellation.
       const checkCaller = () => {
-        if (processState(caller.pid, caller.start, caller.birth).state === 'gone') {
+        if (process.ppid !== caller.pid || probe(caller.pid) === false) {
           clearInterval(callerWatch); process.kill(process.pid, 'SIGTERM');
         }
       };

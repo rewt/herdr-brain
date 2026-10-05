@@ -5,15 +5,33 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { REFUSED_EXIT } from './test-slot.mjs';
+import { REFUSED_EXIT, HOLDER_UNKNOWN_CODE } from './test-slot.mjs';
 import { processStartRecord } from './lock-support.mjs';
 const CLI = fileURLToPath(new URL('./test-slot.mjs', import.meta.url));
 export { REFUSED_EXIT };
+
+// Match a wrapper refusal, including stderr redirected into a validation log.
+// No execution receipt or attempts field: the command has not started.
+function callerRefusal(label, error, options) {
+  const message = `${HOLDER_UNKNOWN_CODE}: ${label} refused: cannot establish caller process source identity: ${error.message}\n`;
+  const output = [null, '', message].map((text, index) => {
+    if (index === 0) return null;
+    const target = Array.isArray(options.stdio) ? options.stdio[index] : options.stdio;
+    const fd = target === 'inherit' ? index : typeof target === 'number' ? target : target?.fd;
+    if (typeof fd === 'number') { if (text) fs.writeSync(fd, text); return null; }
+    if (target === 'ignore') return null;
+    return options.encoding && options.encoding !== 'buffer' ? text : Buffer.from(text);
+  });
+  return { pid: 0, output, stdout: output[1], stderr: output[2], status: REFUSED_EXIT, signal: null };
+}
+
 export function runTestSlotSync(label, argv, { retryTimeout = true, waitSeconds, waitReceipt, executionReceipt, ...options } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-test-slot-result-'));
   const receipt = executionReceipt ?? path.join(directory, 'result.json');
   try {
-    const caller = { pid: process.pid, ...processStartRecord(process.pid) };
+    let caller;
+    try { caller = { pid: process.pid, ...processStartRecord(process.pid) }; }
+    catch (error) { return callerRefusal(label, error, options); }
     const result = spawnSync(process.execPath, [CLI, 'run', label, '--result-path', receipt, '--caller', JSON.stringify(caller),
       ...(waitSeconds === undefined ? [] : ['--wait', String(waitSeconds)]),
       ...(waitReceipt === undefined ? [] : ['--wait-receipt-path', waitReceipt]),

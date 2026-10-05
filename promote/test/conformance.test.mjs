@@ -7,6 +7,26 @@ import { createHash } from 'node:crypto';
 
 import { fixture, cli } from './helpers/conformance.mjs';
 
+for (const operation of ['check', 'promote']) test(`caller identity source failure remains an exit-75 refusal in direct ${operation}`, t => {
+  const f = fixture(t), wt = f.lane('topic');
+  const preload = path.join(f.root, 'transient.mjs'), denied = path.join(f.root, 'denied');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+const execute=cp.spawnSync,read=fs.readFileSync;let failed=false;
+const deny=()=>{if(failed||!new Error().stack.includes('runTestSlotSync'))return false;failed=true;fs.writeFileSync(${JSON.stringify(denied)},'one transient source failure');return true;};
+cp.spawnSync=(file,...args)=>String(file).includes('process-source-')&&deny()?{error:Object.assign(Error('transient source failure'),{code:'ENOENT'})}:execute(file,...args);
+fs.readFileSync=(file,...args)=>String(file).startsWith('/proc/')&&deny()?(()=>{throw Object.assign(Error('transient source failure'),{code:'EACCES'});})():read(file,...args);syncBuiltinESMExports();`);
+  f.env.NODE_OPTIONS += ` --import=${preload}`;
+  const r = operation === 'check' ? f.exec(['check', '--tier', 'promotion'], wt) : f.exec(['promote', 'topic']);
+  assert.ok(fs.existsSync(denied), 'only the caller identity lookup is denied');
+  assert.equal(r.status, 75, r.stderr);
+  assert.match(r.stderr, /TEST_SLOT_HOLDER_UNKNOWN:.*cannot establish caller process source identity/);
+  assert.equal(fs.existsSync(f.counts), false, 'no gate command executes');
+  assert.equal(f.git(['rev-parse', 'main']), f.base);
+  assert.equal(fs.existsSync(path.join(wt, '.lane/gate.json')), false);
+  const receipts = fs.readdirSync(path.join(f.identity, 'lane-validation')).filter(name => name.endsWith('.json'));
+  assert.deepEqual(receipts, [], 'source refusal supplies no reusable evidence');
+});
+
 for (const mode of ['uncommitted repair', 'committed gate change']) test(`train refuses ${mode} and leaves main at the validated input base`, t => {
   const f = fixture(t); f.lane('topic'); const b = f.batch(['topic']);
   f.body(`fs.writeFileSync('work','validated repair');${mode.startsWith('committed') ? "require('child_process').execFileSync('git',['add','.']);require('child_process').execFileSync('git',['commit','-qm','post-gate']);" : ''}console.log('green after repair');`);
@@ -84,15 +104,27 @@ const r=cp.spawnSync(${JSON.stringify(realGit)},a,{stdio:'inherit'});process.exi
   assert.equal(f.git(['rev-parse', 'main']), f.base); assert.equal(b.read().attempts[0].gate.exit_code, 0);
 });
 
-test('concurrent gates allocate separate complete logs before either gate completes', async t => {
+test('concurrent same-tree red checks retain distinct complete logs', async t => {
   const f = fixture(t), one = f.lane('first'), two = f.lane('second');
-  f.body("setTimeout(()=>console.log('complete '+process.cwd()),200);");
+  f.git(['reset', '--hard', 'lane/first'], two);
+  f.body("console.log('complete '+process.cwd());process.exit(1);");
   const { spawnChild, waitForExit } = await import('../../test/helpers/child.mjs');
   const children = [one, two].map(cwd => spawnChild(t, process.execPath, [cli, 'check', '--tier', 'fast', '--cmd', `${process.execPath} ${f.checker}`], { cwd, env: f.env }));
-  for (const child of children) { const r = await waitForExit(child); assert.equal(r.status, 0, r.stderr); }
+  const results = await Promise.all(children.map(waitForExit));
+  for (const [i, result] of results.entries()) {
+    // The cache-key lock can refuse one concurrent caller. Retry only that
+    // refusal after both callers finish; two real red executions are required.
+    const r = /locked/.test(result.stderr)
+      ? f.exec(['check', '--tier', 'fast', '--cmd', `${process.execPath} ${f.checker}`], [one, two][i]) : result;
+    assert.equal(r.status, 1, r.stderr);
+    assert.match(r.stdout, /GATE .* exit=1/, r.stderr);
+  }
   const gates = [one, two].map(cwd => JSON.parse(fs.readFileSync(path.join(cwd, '.lane/gate.json'))));
+  assert.equal(gates[0].key, gates[1].key, 'both executions share the collision-prone cache key');
   assert.notEqual(gates[0].log, gates[1].log);
-  for (const [i, gate] of gates.entries()) assert.match(fs.readFileSync(gate.log, 'utf8'), new RegExp(`complete ${[one, two][i]}`));
-  assert.ok(Date.parse(gates[0].started_at) < Date.parse(gates[1].finished_at));
-  assert.ok(Date.parse(gates[1].started_at) < Date.parse(gates[0].finished_at));
+  for (const [i, gate] of gates.entries()) {
+    const output = fs.readFileSync(gate.log, 'utf8');
+    assert.ok(output.includes(`complete ${[one, two][i]}\n`));
+    assert.equal(createHash('sha256').update(JSON.stringify(output)).digest('hex'), gate.log_hash);
+  }
 });

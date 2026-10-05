@@ -1,0 +1,23 @@
+Run: R-258
+Implementation commit: d1a3931
+All tests are offline; fixtures set HERDR_MONITOR_FLEET in-process to scratch.
+
+Focused integration:
+  node --test test/fleet.test.mjs discovery/test/entry.test.mjs discovery/test/native-sandbox.test.mjs discovery/test/review.test.mjs discovery/test/settings.test.mjs
+  82 cases: 76 passed, 5 failed, 1 optional native-boundary probe skipped.
+  Each failure: sandbox-exec: sandbox_apply: Operation not permitted (outer sandbox).
+
+Exact native validation rerun outside the outer sandbox:
+  node --test --test-name-pattern='^(canonical preparation and validation remain authoritative|worker mode validates and promotes|main-mode done reports require|entry advertises tracked tiers|undeclared entry with package metadata)' discovery/test/review.test.mjs discovery/test/settings.test.mjs
+  5 passed, 0 failed; 23 cases omitted by the selection pattern.
+
+Focused core after passthrough and exclusion changes:
+  node --test test/fleet.test.mjs discovery/test/entry.test.mjs discovery/test/native-sandbox.test.mjs
+  53 passed, 0 failed, 1 optional native-boundary probe skipped.
+
+Final compatibility checks after record-alias handling and explicit-adoption guard:
+  node --test --test-name-pattern='^(a (moved|unmoved) existing project|fleet exclusions|legacy record discovery)' test/fleet.test.mjs
+  4 passed, 0 failed; 26 cases omitted by the selection pattern.
+
+git diff --check: passed before implementation commit.
+Final lane check runs after the report commit; its final-head receipt is .lane/gate.json.

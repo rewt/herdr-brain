@@ -169,7 +169,8 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   const inherited='- Validation is inherited from settle; the explicit zero-command review budget permits no independent execution.';
   const acknowledgment=fs.existsSync(path.join(root,'inherited-unverified'));
   const unverified=!budget?'- No unambiguous Review run budget; default zero-command limit.':fs.existsSync(path.join(root,'unverified'))?(acknowledgment?inherited+'\\n':'')+'- The acceptance evidence remains unresolved.':acknowledgment?inherited:'None';
-  const nonclaims=budget&&!acknowledgment?inherited:'None';
+  const gateAcknowledgment=prompt.split('\\n').find(line=>line.startsWith('- The supplied gate is inherited evidence;'));
+  const nonclaims=budget&&!acknowledgment?[gateAcknowledgment,inherited].filter(Boolean).join('\\n'):'None';
   const recordAction=path.join(root,'review-record-action.json');
   if(fs.existsSync(path.join(root,'review-stop'))) {fs.mkdirSync(path.join(repo,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(repo,'.lane/supervisor/STOP'),'Stop during review\\n');}
   if(fs.existsSync(recordAction)) execFileSync(process.execPath,[process.env.SETTLE_TEST_RECORD,...JSON.parse(fs.readFileSync(recordAction,'utf8'))],{cwd:repo,env:{...process.env,ORG_DIR:path.join(repo,'.org')}});

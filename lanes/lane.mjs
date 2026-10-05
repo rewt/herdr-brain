@@ -28,6 +28,7 @@ import { acquireLock } from "./promotion-lock.mjs";
 import { withPromotionGuard } from '../promote/guard.mjs';
 import { runTrain } from '../promote/train.mjs';
 import { ROUTE_PRESET } from './preset.mjs';
+import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
 
@@ -1744,15 +1745,17 @@ function validateReviewRecord(record, expected) {
   if (!Array.isArray(identifiers) || identifiers.some((value) => typeof value !== "string" || value === "")) {
     fail("Private identifiers must be an array of nonempty strings");
   }
-  const prose = [sections.get("Findings"), sections.get("Non-claims"), sections.get("Unverified")].join("\n");
-  for (const line of prose.split("\n")) {
-    for (const match of line.matchAll(/\btests? pass(?:ed|ing)?\b/giu)) {
-      const before = line.slice(0, match.index);
-      const after = line.slice(match.index + match[0].length);
-      const negated = /\b(?:no|not|never)\s*$/iu.test(before) ||
-        /^(?:(?![.;]).){0,80}\b(?:not|never)\s+(?:claimed|verified|supported)\b/iu.test(after) ||
-        /^(?:(?![.;]).){0,80}\b(?:claim|witness)\b(?:(?![.;]).){0,40}\b(?:absent|missing|unavailable)\b/iu.test(after);
-      if (!negated) fail("tests-pass claims are allowed only in witnessed Re-executed entries");
+  for (const name of ["Findings", "Non-claims", "Unverified"]) {
+    for (const line of sections.get(name).split("\n")) {
+      if (name === "Non-claims" && line === INHERITED_GATE_NON_CLAIM) continue;
+      for (const match of line.matchAll(/\btests? pass(?:ed|ing)?\b/giu)) {
+        const before = line.slice(0, match.index);
+        const after = line.slice(match.index + match[0].length);
+        const negated = /\b(?:no|not|never)\s*$/iu.test(before) ||
+          /^(?:(?![.;]).){0,80}\b(?:not|never)\s+(?:claimed|verified|supported)\b/iu.test(after) ||
+          /^(?:(?![.;]).){0,80}\b(?:claim|witness)\b(?:(?![.;]).){0,40}\b(?:absent|missing|unavailable)\b/iu.test(after);
+        if (!negated) fail("tests-pass claims are allowed only in witnessed Re-executed entries");
+      }
     }
   }
   return { verdict: verdictMatch[1], sections, executions, identifiers, record: normalized };
@@ -2227,6 +2230,7 @@ async function review(topic, args, memoryChecked = false) {
     ROUTE: options.route,
     TIMEOUT_SECONDS: String(options.timeout),
     GATE: gate.prompt,
+    INHERITED_GATE_NON_CLAIM,
     SOURCE_MATERIAL: sourceText,
     SUPPLEMENTAL_BRIEF: supplement.trimEnd(),
   });

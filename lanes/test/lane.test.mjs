@@ -24,6 +24,7 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
 import { nativeSandboxLaunch } from '../../discovery/native-sandbox.mjs';
+import { INHERITED_GATE_NON_CLAIM } from '../review-evidence.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
 const HERDR_CLIENT = resolve(HERE, "..", "board", "herdr-client.mjs");
@@ -4702,6 +4703,92 @@ test("review keeps uppercase brace tokens literal in briefs and tracked source f
     negativeControl("literal source brace tokens");
   } finally {
     for (const fixture of fixtures) fixture.cleanup();
+  }
+});
+
+test("review refuses reconstructed Claude inherited-gate test-pass prose", () => {
+  const topic = "review-claude-inherited-claim";
+  const review = makeReviewFixture(topic, { verdict: "PASS" });
+  review.fixture.env.FAKE_REVIEW_RECORD_PATH = join(HERE, "fixtures", "inherited-gate-claim-review.md");
+  try {
+    const head = git(review.path, ["rev-parse", "HEAD"]);
+    mkdirSync(join(review.path, ".lane"), { recursive: true });
+    writeFileSync(join(review.path, ".lane", "gate.json"), JSON.stringify({
+      head, branch: `lane/${topic}`, command: "node --test", exit_code: 0,
+      started_at: "2026-10-05T00:00:00.000Z", finished_at: "2026-10-05T00:00:01.000Z",
+    }));
+    const run = lane(review.fixture, ["review", topic, "--round", "1", "--brief", review.brief, "--route", "alternate"]);
+    assert.equal(run.status, 2, run.stderr);
+    assert.equal(run.stdout, "");
+    assert.match(run.stderr, /gate exit=0/);
+    assert.match(run.stderr, /tests-pass claims are allowed only in witnessed Re-executed entries/);
+    assert.match(readFileSync(privateReviewDelivery(review), "utf8"), /inherited lane gate shows tests passed/);
+    assert.ok(!existsSync(join(review.path, "docs", "reviews", topic, `${head.slice(0, 7)}-r1.md`)));
+  } finally {
+    review.fixture.cleanup();
+  }
+});
+
+test("review accepts only the exact inherited-gate acknowledgment under Non-claims on either route", () => {
+  assert.equal(INHERITED_GATE_NON_CLAIM,
+    "- The supplied gate is inherited evidence; this review does not claim tests passed.");
+  const cases = [
+    ["alternate", { nonclaims: INHERITED_GATE_NON_CLAIM }, 0],
+    ["review-codex", { nonclaims: INHERITED_GATE_NON_CLAIM }, 0],
+    ["alternate", { unverified: INHERITED_GATE_NON_CLAIM }, 2],
+    ["alternate", { findings: INHERITED_GATE_NON_CLAIM }, 2],
+    ["alternate", { nonclaims: `${INHERITED_GATE_NON_CLAIM} Tests passed.` }, 2],
+    ["alternate", { nonclaims: `${INHERITED_GATE_NON_CLAIM}\n- The inherited gate confirms tests passed.` }, 2],
+    ["alternate", { nonclaims: "- The supplied gate is inherited evidence; this reviewer does not claim tests passed." }, 2],
+  ];
+  for (const [index, [route, payload, status]] of cases.entries()) {
+    const topic = `review-inherited-ack-${index}`;
+    const review = makeReviewFixture(topic, { verdict: "PASS", payload });
+    try {
+      const run = lane(review.fixture, ["review", topic, "--round", "1", "--brief", review.brief, "--route", route]);
+      assert.equal(run.status, status, run.stderr);
+      assert.equal(run.stdout, status === 0 ? "PASS\n" : "");
+      const head = git(review.path, ["rev-parse", "HEAD"]);
+      const publicPath = join(review.path, "docs", "reviews", topic, `${head.slice(0, 7)}-r1.md`);
+      if (status === 0) {
+        const record = readFileSync(publicPath, "utf8");
+        assert.match(record, /## Re-executed\n```json\n\[\]/);
+        assert.ok(record.includes(`## Non-claims\n${INHERITED_GATE_NON_CLAIM}\n`));
+        const prompt = review.fake.calls().find(args => args[0] === "agent" && args[1] === "prompt")[3];
+        assert.ok(prompt.includes(INHERITED_GATE_NON_CLAIM));
+        assert.match(prompt, /accepted only under Non-claims/);
+      } else {
+        assert.match(run.stderr, /tests-pass claims are allowed only in witnessed Re-executed entries/);
+        assert.ok(!existsSync(publicPath));
+      }
+    } finally {
+      review.fixture.cleanup();
+    }
+  }
+});
+
+test("review inherited-gate acknowledgment cannot replace an execution witness", () => {
+  const witnessed = {
+    command: "node --test", cwd: "scratch", exit_code: 0, result: "Observed suite completion", tests_pass: true,
+    witness: { kind: "mutation", command: "node --test broken.test.mjs", cwd: "scratch", exit_code: 1,
+      result: "Observed mutation rejection", observed_failure: "The mutated expectation failed" },
+  };
+  const cases = [
+    [witnessed, 0],
+    [{ ...witnessed, witness: null }, 2],
+    [{ ...witnessed, exit_code: 1 }, 2],
+  ];
+  for (const [index, [execution, status]] of cases.entries()) {
+    const topic = `review-inherited-witness-${index}`;
+    const review = makeReviewFixture(topic, { verdict: "PASS",
+      payload: { nonclaims: INHERITED_GATE_NON_CLAIM, reexecuted: [execution] } });
+    try {
+      const run = lane(review.fixture, ["review", topic, "--round", "1", "--brief", review.brief]);
+      assert.equal(run.status, status, run.stderr);
+      if (status !== 0) assert.match(run.stderr, /tests_pass requires exit 0 and an observed witness/);
+    } finally {
+      review.fixture.cleanup();
+    }
   }
 });
 

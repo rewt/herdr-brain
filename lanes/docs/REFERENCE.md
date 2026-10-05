@@ -444,7 +444,10 @@ and `witness`. A witness is null or an object with exactly `kind`
 (`negative-control` or `mutation`), `command`, `cwd`, integer `exit_code`, nonempty
 `result`, and nonempty `observed_failure`. A tests-pass entry requires exit zero and
 an observed witness. Free prose cannot claim tests passed; inherited gates are not
-fresh Re-executed evidence. Re-executed command strings, including witness commands,
+fresh Re-executed evidence. To cite a supplied gate, copy the template's exact
+inherited-evidence acknowledgment under Non-claims. Only that whole bullet in that
+section is exempt from the prose claim check; appended or paraphrased claims remain
+subject to the check. Re-executed command strings, including witness commands,
 are machine syntax and are rendered verbatim inside the JSON fence after required path
 and alias sanitization. Prose may quote error messages, usage strings, and identifiers
 with Markdown or HTML punctuation; public rendering escapes that punctuation as

@@ -74,7 +74,17 @@ or a fundamental requirement fails. Use only [Major], [Moderate], and [Minor] fi
 
 Any `tests_pass: true` execution needs exit code zero and an actually observed
 negative-control or mutation witness. The witness command also consumes budget. Never
-claim tests passed in free prose.
+claim tests passed in free prose, including Findings, Non-claims, and Unverified.
+To cite a supplied gate, copy this exact whole bullet under Non-claims:
+
+{{INHERITED_GATE_NON_CLAIM}}
+
+This fixed acknowledgment is accepted only under Non-claims. Do not paraphrase it,
+append gate results to it, or restate inherited results as "tests pass" or "tests
+passed" elsewhere. A supplied gate may be green, failed, or stale; this acknowledgment
+asserts no result. Record any specific evidence gap under Unverified. Keep Re-executed
+as an empty JSON array when you executed no commands. A supplemental brief may also
+require a separate exact acknowledgment of deferred validation; copy that as supplied.
 
 ## Required output
 

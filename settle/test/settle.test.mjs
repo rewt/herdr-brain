@@ -6,6 +6,7 @@ import os from 'node:os';
 import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
 import { fixture } from './fixture.mjs';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
+import { INHERITED_GATE_NON_CLAIM } from '../../lanes/review-evidence.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 const result = (r) => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 const journal = (f, run) => JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${run}.json`), 'utf8'));
@@ -140,7 +141,7 @@ test('unconfigured project: report, independent claim finding, fresh fix run, re
   assert.match(prompt, /Claim: work.txt contains correct/); assert.match(prompt, /work.txt must contain correct/);
   assert.match(prompt, /## Review run budget\nBuild, test, prepare, install and check commands: maximum count 0/);
   const review = fs.readFileSync(second.review.path, 'utf8');
-  assert.match(review, /## Non-claims\n- Validation is inherited from settle/);
+  assert.match(review, /- Validation is inherited from settle/);
   assert.match(review, /## Re-executed\n```json\n\[\]/);
   assert.match(review, /## Unverified\nNone/);
   assert.ok(!fs.existsSync(path.join(f.repo, '.lane.json')));
@@ -168,6 +169,20 @@ test('non-done outcomes escalate with substance without launching a reviewer or 
     assert.equal(item.status, outcome === 'failed' ? 'ready' : outcome, 'derived blocked and needs-human views retain the item');
   }
 });
+test('settle generated review brief supplies the exact inherited-gate non-claim', (t) => {
+  const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  const settled = result(f.settle(run));
+  assert.equal(settled.result, 'promotable');
+  assert.equal(settled.validation.executed, false);
+  const prompt = fs.readFileSync(path.join(f.root, 'review-prompt'), 'utf8');
+  assert.ok(prompt.includes(`To cite the supplied lane gate, copy this exact whole entry under Non-claims:\n${INHERITED_GATE_NON_CLAIM}`));
+  assert.match(prompt, /maximum count 0 for each command/);
+  const review = fs.readFileSync(settled.review.path, 'utf8');
+  assert.ok(review.includes(`## Non-claims\n${INHERITED_GATE_NON_CLAIM}\n- Validation is inherited from settle`));
+  assert.match(review, /## Re-executed\n```json\n\[\]/);
+  assert.match(review, /## Unverified\nNone/);
+});
+
 test('inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence', (t) => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'inherited-unverified'), '');

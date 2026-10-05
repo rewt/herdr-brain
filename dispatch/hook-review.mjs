@@ -2,8 +2,16 @@ import { stripVTControlCharacters } from 'node:util';
 
 // Inspect the visible screen, not scrollback where a resolved dialog can remain.
 export function hookReviewDialog(screen) {
-  const text = stripVTControlCharacters(screen);
-  return text.match(/(?:^|\n)[^\p{L}\p{N}\n]*(\d+\s+hooks?\s+needs?\s+review)[^\p{L}\p{N}\n]*(?=\n|$)/iu)?.[1].replace(/\s+/gu, ' ');
+  // Remove dialog borders, but retain composer markers and prose so they cannot
+  // turn quoted task text into a dialog marker. Whitespace allows wrapped rows.
+  const text = stripVTControlCharacters(screen).split(/\r?\n/u)
+    .map(line => line.replace(/^[\t │┃║]+|[\t │┃║]+$/gu, '')).join('\n');
+  const count = text.match(/(?:^|\n)(\d+\s+hooks?\s+(?:is|are)\s+new\s+or\s+changed\.?)(?=\n|$)/iu)?.[1];
+  const title = /(?:^|\n)Hooks\s+need\s+review(?=\n|$)/iu.test(text);
+  const trustOption = /(?:^|\n)(?:[›>❯]\s*)?(?:\d+[.)]\s*)?Trust all and continue(?=\n|$)/iu.test(text);
+  if (title && (count || trustOption)) return count?.replace(/\s+/gu, ' ') ?? 'Hooks need review';
+  return text.match(/(?:^|\n)(\d+\s+hooks?\s+needs?\s+review(?:\s+before\s+(?:it|they)\s+can\s+run\.?)?)(?=\n|$)/iu)?.[1]
+    .replace(/\s+/gu, ' ');
 }
 
 export function codexProfile(args) {

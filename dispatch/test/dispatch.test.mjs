@@ -156,11 +156,42 @@ function fixture(t, { realWatch = false, preload } = {}) {
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
+// Codex 0.160.0 startup_hooks_review labels, transcribed from the installed
+// binary. ANSI/box framing represents a visible pane; no live session is used.
+const startupHookReviewScreen = `╭──────────────────────────────────────────────────────────────────────╮
+│ \u001b[1mHooks need review\u001b[0m                                                    │
+│                                                                      │
+│ 1 hook is new or changed.                                             │
+│ Hooks can run outside the sandbox after you trust them.               │
+│                                                                      │
+│ \u001b[36m› 1. Review hooks\u001b[0m                                                    │
+│   2. Trust all and continue                                           │
+│   3. Continue without trusting (hooks won't run)                       │
+╰──────────────────────────────────────────────────────────────────────╯`;
 test('hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose', () => {
-  for (const screen of ['1 hook needs review', '\u001b[1m│ 2 hooks need review │\u001b[0m', '╭──╮\n  1 hook needs\n  review\n╰──╯']) {
-    assert.match(hookReviewDialog(screen), /^\d+ hooks? needs? review$/);
+  for (const [screen, name] of [
+    [startupHookReviewScreen, '1 hook is new or changed.'],
+    [startupHookReviewScreen.replace('1 hook is', '3 hooks are'), '3 hooks are new or changed.'],
+    [startupHookReviewScreen.replace('1 hook is new or changed.', ''), 'Hooks need review'],
+    ['Hooks need review\n1 hook is new or changed.', '1 hook is new or changed.'],
+    ['│ Hooks need review │\n│ 2 hooks are new or │\n│ changed. │', '2 hooks are new or changed.'],
+    ['1 hook needs review before it can run.', '1 hook needs review before it can run.'],
+    ['│ 2 hooks need review before they can run. │', '2 hooks need review before they can run.'],
+    ['1 hook needs review', '1 hook needs review'],
+    ['\u001b[1m│ 2 hooks need review │\u001b[0m', '2 hooks need review'],
+    ['╭──╮\n  1 hook needs\n  review\n╰──╯', '1 hook needs review'],
+  ]) {
+    assert.equal(hookReviewDialog(screen), name);
   }
-  for (const screen of ['› Ready', '0 hooks pending', 'Explain why 1 hook needs review', '› Fix "1 hook needs review"']) assert.equal(hookReviewDialog(screen), undefined);
+  for (const screen of [
+    '› Ready', '0 hooks pending', 'Explain why 1 hook needs review', '› Fix "1 hook needs review"',
+    '› 1 hook needs review', '› 1 hook needs review before it can run.',
+    'Explain why Hooks need review\n1 hook is new or changed.',
+    '› Hooks need review\n1 hook is new or changed.',
+    'Hooks need review\n› 1 hook is new or changed.',
+    '› Trust all and continue', 'Hooks need review', '1 hook is new or changed.',
+    'Hooks need review\nExplain Trust all and continue',
+  ]) assert.equal(hookReviewDialog(screen), undefined, screen);
   for (const args of [['-p', 'worker'], ['--profile', 'worker'], ['--profile=worker'], ['-pworker']]) assert.equal(codexProfile(args), 'worker');
   assert.equal(codexProfile(['-p', 'old', '--profile=new']), 'new');
   assert.equal(codexProfile([]), undefined);
@@ -170,12 +201,12 @@ for (const profile of [undefined, 'claude-mem-bastian']) test(`Codex hook review
   if (profile) fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({
     always_args: { codex: ['--profile', profile] }, routes: { engineer: { kind: 'codex', model: 'model-a', effort: 'high' } },
   }));
-  fs.writeFileSync(path.join(f.root, 'screen'), '\u001b[1m│ 1 hook needs review │\u001b[0m\nReview hooks before continuing\n');
+  fs.writeFileSync(path.join(f.root, 'screen'), startupHookReviewScreen);
   const first = f.start(); assert.equal(first.status, 1, first.stderr);
   const blocked = JSON.parse(first.stdout), job = JSON.parse(fs.readFileSync(blocked.journal));
   assert.equal(blocked.result, 'blocked'); assert.equal(blocked.code, 'DISPATCH_HOOK_REVIEW');
   assert.equal(blocked.run, job.run); assert.equal(blocked.pane, job.worker.pane);
-  assert.match(first.stderr, /1 hook needs review/); assert.match(first.stderr, /Open \/hooks/);
+  assert.match(first.stderr, /1 hook is new or changed\./); assert.match(first.stderr, /Open \/hooks/);
   assert.ok(first.stderr.includes(profile ?? 'configured default profile'));
   assert.equal(job.stage, 'prompt'); assert.equal(promptCalls(f).length, 0);
   assert.match(f.show(job.run).notes.at(-1).text, /hook-review dialog.*brief not sent/);
@@ -206,7 +237,7 @@ test('screen read failure leaves delivery unsent and retryable', t => {
 test('an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery', t => {
   const f = fixture(t); f.fail('prompt'); assert.equal(f.start().status, 1);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0])); f.fail('');
-  fs.writeFileSync(path.join(f.root, 'screen'), '2 hooks need review');
+  fs.writeFileSync(path.join(f.root, 'screen'), startupHookReviewScreen.replace('1 hook is', '2 hooks are'));
   const stopped = f.dispatch(['--retry', job.run, '--resend']); assert.equal(stopped.status, 1);
   assert.equal(JSON.parse(stopped.stdout).result, 'blocked'); assert.equal(promptCalls(f).length, 1);
   assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).stage, 'prompting');

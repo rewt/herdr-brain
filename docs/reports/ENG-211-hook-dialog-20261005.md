@@ -25,7 +25,7 @@ learnings:
   - Release hook commands must retain the literal current/ path rather than resolving it to a release directory; migration from the old command needs one operator review per profile.
   - Visible-screen reads avoid matching a resolved hook dialog retained in terminal scrollback; an unsent blocked request can stay at dispatch's existing prompt stage.
 artifacts:
-  - "Implementation commit: 5b76eaf (fix(dispatch): block briefs at Codex hook review dialogs)"
+  - "Implementation commit: 499df79 (fix(dispatch): block briefs at Codex hook review dialogs)"
   - dispatch/dispatch.mjs
   - dispatch/hook-review.mjs
   - dispatch/test/dispatch.test.mjs

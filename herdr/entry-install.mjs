@@ -160,6 +160,6 @@ try {
     if (!values.check && (changes.length || runtime?.created)) transact(journal, bin, runtimeRoot, changes, runtime, owner);
     if (!values.check) cleanupNativeDirectories();
     console.log(`entry: ${values.check ? 'checked' : values.remove ? 'restored' : 'installed'} machine entry at ${bin}`);
-    if (!values.check && !values.remove && entry?.native) console.log('entry: required Codex setup: open /hooks and review the Monitor user SessionStart hook in every profile used for workers or native/desktop entry. Use codex -p PROFILE for a named profile; plain codex uses its configured default profile. Trust in one profile does not cover another. Dispatch blocks at "1 hook needs review" until you review in the affected worker/profile, then use dispatch --retry R-n. Hook trust stays under your control; installation never writes trust records.');
+    if (!values.check && !values.remove && entry?.native) console.log('entry: required Codex setup: open /hooks and review the Monitor user SessionStart hook in every profile used for workers or native/desktop entry. Use codex -p PROFILE for a named profile; plain codex uses its configured default profile. Trust in one profile does not cover another. Dispatch blocks at "Hooks need review" until you review in the affected worker/profile, then use dispatch --retry R-n. Hook trust stays under your control; installation never writes trust records.');
   });
 } catch (error) { console.error(`entry: ${error.message}`); process.exitCode = 1; }

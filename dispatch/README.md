@@ -113,8 +113,10 @@ Some failures cannot be safely retried by guessing:
   `--accept-delivered` if it landed, or `--resend` if it did not. Both require
   `--retry`; neither is automatic.
 - Before any Codex brief delivery, including an authorized resend, dispatch reads
-  the worker's visible pane screen. A `1 hook needs review` dialog (or plural
-  count) returns exit 1 with JSON `result: "blocked"`, code
+  the worker's visible pane screen. A `Hooks need review` dialog with a
+  count of new or changed hooks or trust option, or a counted
+  `1 hook needs review before it can run.` message, returns exit 1 with JSON
+  `result: "blocked"`, code
   `DISPATCH_HOOK_REVIEW`, the worker/pane, run, journal and a specific fix on
   stderr and in the record note. The diagnostic names the profile from the saved
   launch route, or says the configured default profile when none was explicit.

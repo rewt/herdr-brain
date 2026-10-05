@@ -22,7 +22,8 @@ Trust is per profile: reviewing `claude-mem-rewt` does not review
 `claude-mem-bastian` or the default profile. The operator chooses whether to
 trust the hook; installation and dispatch never write Codex trust records.
 
-If dispatch reports the `1 hook needs review` dialog, open `/hooks` in the
+If dispatch reports the `Hooks need review` dialog with its count of new or changed
+hooks, or `1 hook needs review before it can run.`, open `/hooks` in the
 named worker session and review in that profile, then run
 `node dispatch/dispatch.mjs --retry R-n` with the returned run ID. The pending
 brief, run and worker are retained for retry.

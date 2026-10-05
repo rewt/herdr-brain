@@ -1,0 +1,24 @@
+{
+  "gate": {
+    "node_version_file": ".nvmrc",
+    "env": {
+      "BCH_CLOAK_TEST_SLOT_WAIT_SECONDS": "7200",
+      "CARGO_NET_OFFLINE": "true",
+      "COREPACK_ENABLE_NETWORK": "0"
+    },
+    "wait_seconds": 7200,
+    "external_lock": "/private/tmp/eng208-bch-rehearsal-R255/.git/legacy-promote.flock",
+    "refuse_processes": [
+      "scripts/lane/lane\\.mjs [p]romote(?:\\s|$)"
+    ],
+    "prepare": [
+      {
+        "run": "pnpm install --offline --ignore-scripts --frozen-lockfile --store-dir /private/tmp/eng208-bch-rehearsal-R255/.pnpm-store --filter @bch-cloak/protocol-runtime... --filter @bch-cloak/reference-wallet... --filter @bch-cloak/chain-io... --filter @bch-cloak/wizardconnect-client... --filter @bch-cloak/reference-aggregator... --filter @bch-cloak/reference-cli...",
+        "unless": "node_modules"
+      },
+      {
+        "run": "pnpm --filter @bch-cloak/reference-wallet --filter @bch-cloak/wizardconnect-client build"
+      }
+    ]
+  }
+}

@@ -12,6 +12,7 @@ import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
+import { runProjectGateSync } from './gate-profile.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
@@ -156,12 +157,33 @@ function performBatch(batch, queue) {
     identity: queue.project.identity, jobs: batch.jobs, phase: 'pending' }, null, 2) + '\n');
   const output = fs.openSync(log, 'a');
   let r;
-  try { r = spawnSync(process.execPath, [first.laneCLI, 'promote-batch', receipt, ...(first.workflow ? ['--workflow'] : [])], { cwd, env, stdio: ['ignore', output, output] }); }
+  try { r = runProjectGateSync({ canonical: cwd, receipt,
+    argv: [first.laneCLI, 'promote-batch', receipt, ...(first.workflow ? ['--workflow'] : [])], cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
+  const hostFile = path.join(directory, 'host-gate.json');
+  if (r.status !== 0 && fs.existsSync(hostFile)) {
+    const host = JSON.parse(fs.readFileSync(hostFile, 'utf8'));
+    if (!host.command_started && host.phase === 'refused') {
+      // A capped transition/slot wait is a visible pre-execution refusal,
+      // never red test evidence or an interrupted Git integration.
+      const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+      if (!train.attempts?.length) {
+        train.results ??= {};
+        for (const job of batch.jobs) train.results[job.id] ??= { outcome: 'refused', reason: host.reason, batch: batch.id, host_receipt: hostFile };
+        train.phase = 'complete'; train.groups = [];
+        writeFileAtomic(receipt, JSON.stringify(train, null, 2) + '\n');
+        return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt } }));
+      }
+      // An earlier attempt may already have fast-forwarded (including a lost
+      // response). Retain its checkpoints and let the next drain reconcile it;
+      // a new guard wait cannot turn an integrated commit into a refusal.
+    }
+  }
   if (r.error || r.status !== 0) throw new Error(`batch interrupted or refused; main only moves for a green batch; inspect ${receipt} and ${log}, then resume --drain`);
   const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   if (train.phase !== 'complete') throw new Error(`incomplete batch receipt: ${receipt}`);
-  return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt } }));
+  return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt,
+    ...(train.host_receipt ? { host_receipt: train.host_receipt } : {}) } }));
 }
 
 function finishBatchJob(job, result, queue) {
@@ -188,7 +210,7 @@ function finishBatchJob(job, result, queue) {
 }
 
 export function notice(job, result) {
-  return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}${result.receipt ? ` receipt=${result.receipt}` : ''}`;
+  return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}${result.receipt ? ` receipt=${result.receipt}` : ''}${result.host_receipt ? ` host-receipt=${result.host_receipt}` : ''}`;
 }
 async function deliver(job, result, queue) {
   const message = notice(job, result);

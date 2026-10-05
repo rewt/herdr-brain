@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 
 import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
 import { lookupProcess } from "../lib/processes.mjs";
+import { writeFileAtomic } from "../lib/files.mjs";
 
 export const TEST_SLOT_PATH = process.platform === "darwin" ? "/private/tmp/bch-cloak-test-slot.lock" : "/tmp/bch-cloak-test-slot.lock";
 export const COMPAT_PATH_ENV = "MONITOR_TEST_SLOT_COMPAT_PATH";
@@ -114,13 +115,15 @@ export function waitSecondsOf(env = process.env) {
  * a live holder; refuses with TEST_SLOT_HELD when it still holds, or TEST_SLOT_HOLDER_UNKNOWN when liveness cannot be
  * established. Resolves to { nested, token, holder, release(), setGroup(pgid, groupStart) }.
  */
-export async function acquireTestSlot(label, { env = process.env, lockPath = slotPathOf(env), waitSeconds = waitSecondsOf(env), pollMs = 2_000, token = randomBytes(16).toString("hex") } = {}) {
+export async function acquireTestSlot(label, { env = process.env, lockPath = slotPathOf(env), waitSeconds = waitSecondsOf(env), pollMs = 2_000,
+  token = randomBytes(16).toString("hex"), onWait = () => {}, deadline = Date.now() + waitSeconds * 1000 } = {}) {
   if (!Number.isSafeInteger(waitSeconds) || waitSeconds < 0 || !Number.isSafeInteger(pollMs) || pollMs < 1) throw new Error("invalid test slot wait/poll allowance");
   let ownStart;
   try { ownStart = processStartRecord(process.pid); }
   catch (error) { throw slotError(HOLDER_UNKNOWN_CODE, `${label} refused: cannot establish own process source identity: ${reasonOf(error)}`); }
   const started = Date.now();
   let takeovers = 0;
+  let reported;
   for (;;) {
     const mine = { pid: process.pid, processStart: ownStart.start, processBirth: ownStart.birth, pgid: null, groupStart: null, groupBirth: null, token, label, cwd: process.cwd(), host: os.hostname(), acquiredAt: new Date().toISOString() };
     try {
@@ -154,25 +157,30 @@ export async function acquireTestSlot(label, { env = process.env, lockPath = slo
     }
     if (inside) return nested(holder);
     const waited = Date.now() - started;
-    if (waited >= waitSeconds * 1_000) {
+    if (Date.now() >= deadline) {
       throw slotError(HELD_CODE, `${label} refused: ${describeHolder(holder)} has held the test slot ${lockPath} since ${String(holder.acquiredAt)}${waitSeconds > 0 ? ` (waited ${String(Math.round(waited / 1_000))} s)` : ""}. Heavy validation commands share one host slot; wait for it to finish, or set ${WAIT_ENV} to queue.`);
     }
-    await sleep(Math.min(pollMs, waitSeconds * 1_000 - waited));
+    if (reported !== holder.token) {
+      reported = holder.token;
+      onWait({ lock_path: lockPath, label, holder: describeHolder(holder), acquired_at: holder.acquiredAt, wait_seconds: waitSeconds });
+    }
+    await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())));
   }
 }
 
 /** Workspace slot plus the legacy bridge, acquired in a fixed order. Taking
  * both locks closes the race with bch-cloak while workspace paths migrate. */
 export async function acquireHostTestSlot(label, { env = process.env, lockPath = slotPathOf(env), compatPath = env[COMPAT_PATH_ENV] ?? TEST_SLOT_PATH,
-  waitSeconds = waitSecondsOf(env), pollMs = 100 } = {}) {
+  waitSeconds = waitSecondsOf(env), pollMs = 100, onWait = () => {} } = {}) {
   const started = Date.now();
+  const deadline = started + waitSeconds * 1000;
   const slots = [];
   const paths = [...new Set([compatPath, lockPath])];
   for (const file of paths) slotPathOf({ [PATH_ENV]: file });
   try {
     for (const file of paths) {
       const remaining = Math.max(0, waitSeconds - Math.floor((Date.now() - started) / 1000));
-      slots.push(await acquireTestSlot(label, { env, lockPath: file, waitSeconds: remaining, pollMs,
+      slots.push(await acquireTestSlot(label, { env, lockPath: file, waitSeconds: remaining, pollMs, deadline, onWait,
         ...(slots.length ? { token: slots[0].token } : {}) }));
     }
     return { nested: slots[0].nested, token: slots[0].token, holder: slots[0].holder,
@@ -229,6 +237,7 @@ function parse(argv) {
     const value = () => { const v = rest[++i]; if (v === undefined) throw new Error(`${arg} needs a value`); return v; };
     if (arg === "--wait") options.waitSeconds = waitSecondsOf({ [WAIT_ENV]: value() });
     else if (arg === "--result-path") options.resultPath = value();
+    else if (arg === "--wait-receipt-path") options.waitReceipt = value();
     else if (arg === "--lock-path") options.compatPath = options.lockPath = value();
     else if (arg === "--poll-ms") options.pollMs = Number(value());
     else if (arg === "--retry-timeout-under-load") options.retryTimeout = true;
@@ -243,9 +252,22 @@ async function run({ positional, options, child }) {
   const [label] = positional;
   if (label === undefined || child.length === 0) throw new Error("usage: test-slot.mjs run <label> [--wait <seconds>] -- <command> [args...]");
   let slot;
+  const wait = { schema: 'test-slot-wait/v1', state: 'waiting', started_at: new Date().toISOString(),
+    wait_seconds: options.waitSeconds ?? waitSecondsOf(), waits: [] };
+  const saveWait = changes => {
+    Object.assign(wait, changes);
+    if (options.waitReceipt) writeFileAtomic(options.waitReceipt, JSON.stringify(wait, null, 2) + '\n', 0o600);
+  };
+  saveWait({});
   try {
-    slot = await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) });
+    slot = await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs,
+      onWait: entry => {
+        saveWait({ waits: [...wait.waits, { ...entry, at: new Date().toISOString() }] });
+        if (options.waitReceipt) process.stderr.write(`TEST_SLOT_WAIT: ${entry.holder}; ${entry.lock_path}; capped at ${wait.wait_seconds}s\n`);
+      }, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) });
+    saveWait({ state: 'acquired', finished_at: new Date().toISOString(), nested: slot.nested });
   } catch (error) {
+    saveWait({ state: 'refused', finished_at: new Date().toISOString(), reason: error.message });
     if (error?.code === HELD_CODE || error?.code === HOLDER_UNKNOWN_CODE) {
       process.stderr.write(`${error.message}\n`);
       return REFUSED_EXIT;

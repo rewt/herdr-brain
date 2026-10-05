@@ -1,0 +1,20 @@
+{
+  "schema": "promotion-host-gate/v1",
+  "profile_fingerprint": "b8c0f943eef0880c58e33173674b823470693cac6fdb7e2966d2f04aa0abc5ff",
+  "started_at": "2026-10-05T14:34:26.524Z",
+  "phase": "refused",
+  "slot_receipt": "/private/tmp/eng208-bch-rehearsal-R255/.git/promote/batches/eng208-proof/test-slot-wait.json",
+  "node": {
+    "pin": "22.22.3",
+    "executable": "/Users/rewt/.nvm/versions/node/v22.22.3/bin/node"
+  },
+  "external_lock": {
+    "path": "/private/tmp/eng208-bch-rehearsal-R255/.git/legacy-promote.flock",
+    "state": "acquired",
+    "started_at": "2026-10-05T14:34:26.527Z",
+    "wait_seconds": 7200,
+    "finished_at": "2026-10-05T14:34:26.564Z"
+  },
+  "reason": "PROMOTE_PROCESS_RUNNING: pid 16362: node scripts/lane/lane.mjs promote pool-wallet-design",
+  "finished_at": "2026-10-05T14:34:26.603Z"
+}

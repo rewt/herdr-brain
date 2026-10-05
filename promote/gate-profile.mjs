@@ -1,0 +1,83 @@
+// Canonical project declarations, independent of session/run metadata.
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { validationEnvironment } from '../lanes/validation.mjs';
+import { lookupProcess } from '../lib/processes.mjs';
+import { writeFileAtomic } from '../lib/files.mjs';
+
+export const HOST_ENV = 'MONITOR_PROMOTION_HOST_PROFILE';
+const HOST = fileURLToPath(new URL('./host-gate.mjs', import.meta.url));
+const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const object = value => value && typeof value === 'object' && !Array.isArray(value);
+
+export function resolveGateProfile(canonical, environment = process.env) {
+  const file = path.join(canonical, '.promote.json');
+  const gate = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).gate : undefined;
+  if (gate === undefined) return null;
+  if (!object(gate)) throw new Error('promote gate must be an object');
+  const fields = ['node_version_file', 'env', 'prepare', 'external_lock', 'refuse_processes', 'wait_seconds'];
+  for (const key of Object.keys(gate)) if (!fields.includes(key)) throw new Error(`unknown promote gate field: ${key}`);
+  const waitSeconds = gate.wait_seconds ?? 7200;
+  if (!Number.isSafeInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 9999999) throw new Error('gate.wait_seconds must be a bounded whole number of seconds');
+  if (gate.env !== undefined && (!object(gate.env) || Object.entries(gate.env).some(([key, value]) =>
+    !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== 'string' || value.includes('\0') ||
+    /^(?:MONITOR_PROMOTION_|MONITOR_TEST_SLOT_(?:PATH|COMPAT_PATH|TOKEN)|BCH_CLOAK_TEST_SLOT_TOKEN|HERDR_(?:PANE|TAB|WORKSPACE)_ID)/.test(key)))) {
+    throw new Error('gate.env must map environment names to strings; slot paths/tokens and session transport are host-owned');
+  }
+  const prepare = gate.prepare ?? [];
+  if (!Array.isArray(prepare) || prepare.some(step => !object(step) || typeof step.run !== 'string' || !step.run.trim() ||
+    Object.keys(step).some(key => !['run', 'unless'].includes(key)) || (step.unless !== undefined && (typeof step.unless !== 'string' ||
+    path.isAbsolute(step.unless) || step.unless.split(/[\\/]/).includes('..'))))) throw new Error('gate.prepare must contain run and optional relative unless');
+  if (gate.external_lock !== undefined && (typeof gate.external_lock !== 'string' || !path.isAbsolute(gate.external_lock) || gate.external_lock.includes('\0'))) throw new Error('gate.external_lock must be an absolute kernel lock file');
+  const processes = gate.refuse_processes ?? [];
+  if (!Array.isArray(processes) || processes.some(pattern => typeof pattern !== 'string' || !pattern.trim())) throw new Error('gate.refuse_processes must be an array of regular expressions');
+  for (const pattern of processes) new RegExp(pattern);
+  const env = validationEnvironment({ ...environment, ...gate.env });
+  delete env[HOST_ENV];
+  // The train's bound governs its slot as well as the transition lock. The
+  // project's legacy variable still reaches its own nested slot wrapper.
+  env.MONITOR_TEST_SLOT_WAIT_SECONDS = String(waitSeconds);
+  let node = null;
+  if (gate.node_version_file !== undefined) {
+    const relative = gate.node_version_file;
+    if (typeof relative !== 'string' || !relative || path.isAbsolute(relative) || relative.split(/[\\/]/).includes('..')) throw new Error('gate.node_version_file must be a project-relative file');
+    const pin = fs.readFileSync(path.join(canonical, relative), 'utf8').trim().replace(/^v/, '');
+    if (!/^\d+\.\d+\.\d+$/.test(pin)) throw new Error('gate Node pin must be an exact version');
+    if (!env.HOME || !path.isAbsolute(env.HOME)) throw new Error('gate Node pin needs an absolute HOME');
+    const bin = path.join(env.HOME, '.nvm/versions/node', `v${pin}`, 'bin');
+    const executable = path.join(bin, 'node');
+    fs.accessSync(executable, fs.constants.X_OK);
+    const result = spawnSync(executable, ['--version'], { encoding: 'utf8', env });
+    if (result.error || result.status !== 0 || result.stdout.trim() !== `v${pin}`) throw new Error(`pinned Node v${pin} is unavailable at ${executable}`);
+    env.PATH = [bin, ...(env.PATH ?? '').split(path.delimiter).filter(entry => entry !== bin)].join(path.delimiter);
+    node = { pin, executable };
+  }
+  return { env, node, prepare, externalLock: gate.external_lock, processes, waitSeconds,
+    // Hash declarations and effective runtime without persisting environment
+    // values. Preparation and this salt participate in tree-keyed evidence.
+    fingerprint: hash({ gate, node }), file };
+}
+
+export function checkCompetingProcesses(profile) {
+  if (!profile.processes.length) return;
+  const table = lookupProcess();
+  if (!table.ok) throw new Error(`PROMOTE_PROCESS_UNKNOWN: ${table.error}`);
+  const ancestors = new Set();
+  for (let pid = process.pid; pid && !ancestors.has(pid); pid = table.value.get(pid)?.ppid) ancestors.add(pid);
+  for (const row of table.value.values()) {
+    if (ancestors.has(row.pid) || /^Z/.test(row.state)) continue;
+    if (profile.processes.some(pattern => new RegExp(pattern).test(row.command))) throw new Error(`PROMOTE_PROCESS_RUNNING: pid ${row.pid}: ${row.command}`);
+  }
+}
+
+export function runProjectGateSync({ canonical, receipt, argv, ...options }) {
+  const profile = resolveGateProfile(canonical, options.env);
+  if (!profile) return spawnSync(process.execPath, argv, options);
+  const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  plan.host_receipt = path.join(path.dirname(receipt), 'host-gate.json');
+  writeFileAtomic(receipt, JSON.stringify(plan, null, 2) + '\n', 0o600);
+  return spawnSync(process.execPath, [HOST, canonical, receipt, ...argv], { ...options, env: profile.env });
+}

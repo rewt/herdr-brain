@@ -1,0 +1,13 @@
+{
+  "source": "f359730b832ab2d5d563f8b9af0b39e0972f7009",
+  "clone": "/private/tmp/eng208-bch-rehearsal-R255",
+  "gate_exit": 0,
+  "gate_duration_s": 1576.841076792,
+  "node_pin": "22.22.3",
+  "validated_head": "9b35efa5a118dfb6831512aa670ec5d4d7868a63",
+  "validated_tree": "c99f415f734130bf9522d8203e1bc97bfcaa2748",
+  "main": "1246b250602334c0f6b2e0a5cc62c649c10ca0a2",
+  "checkpoint": "validated",
+  "integration": "blocked by live declared process; green checkpoint retained",
+  "refusal": "lane: PROMOTE_PROCESS_RUNNING: pid 11684: node scripts/lane/lane.mjs promote pool-wallet-host"
+}

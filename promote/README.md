@@ -119,13 +119,82 @@ node promote/promote.mjs --repo /project --status
 ```
 
 Tracked `/project/.promote.json` may contain `to`, `delivery_attempts`,
-`retry_seconds` and `validate`. Command flags `--to`, `--delivery-attempts`,
+`retry_seconds`, `validate` and the `gate` profile below. Command flags `--to`, `--delivery-attempts`,
 `--retry-seconds`, `--validate` override them. `LANE_VALIDATE` takes precedence over
 the promotion config's validation override. `LANE_CONFIG` retains the lane CLI's
 explicit config selection. Request overrides are saved per entry, so a subsequent
 enqueuer does not inherit the first enqueuer's gate or supervisor. With no gate
 override, lane configuration's promotion tier is resolved when promotion runs. `--herdr` and
 `--lane-cli` are CLI adapter hooks for isolated tests.
+
+### Existing project gate profile
+
+Declare the gate command in `.lane.validation.json`, for example
+`{"promotion":"pnpm validate:all-safe"}`. A canonical `.promote.json` can also
+declare a `gate` profile. This example matches bch-cloak's existing gate; the
+train has no project names or package filters built into it:
+
+```json
+{
+  "gate": {
+    "node_version_file": ".nvmrc",
+    "env": { "BCH_CLOAK_TEST_SLOT_WAIT_SECONDS": "7200" },
+    "prepare": [
+      {
+        "run": "pnpm install --offline --ignore-scripts --frozen-lockfile",
+        "unless": "node_modules"
+      },
+      {
+        "run": "pnpm --filter @bch-cloak/reference-wallet --filter @bch-cloak/wizardconnect-client build"
+      }
+    ],
+    "external_lock": "/private/tmp/bch-cloak-promote.flock",
+    "refuse_processes": ["scripts/lane/lane\\.mjs [p]romote(?:\\s|$)"],
+    "wait_seconds": 7200
+  }
+}
+```
+
+The Node file must contain an exact installed version. The adapter prefixes
+`$HOME/.nvm/versions/node/v<VERSION>/bin` to PATH for preparation and the gate,
+and verifies that executable's version. Missing pins refuse before building.
+`env` supplies literal strings; it cannot redirect host slot paths or supply
+slot tokens. Profile preparation follows existing lane preparation in each
+scratch candidate, under the slot. Both preparations and the effective profile
+fingerprint salt green evidence; environment values are not written to receipts.
+
+Start promotion from the supervisor's host shell. Detached children inherit
+their caller's sandbox; detaching does not grant host permissions. A declared
+profile probes local socket listening and `/dev/ptmx` before building, and
+refuses with `PROMOTE_HOST_REQUIRED` and a host launch instruction if either is
+unavailable. It never invokes a model or asks a worker to run the gate. Direct
+`lane promote` keeps its existing behavior; a profiled batch uses the queue's
+host adapter.
+
+The adapter first takes the optional external kernel record lock for the train
+invocation, including preparation, all bisection gates, integration and scratch
+cleanup. It then takes the host test slot for that entire invocation. This order
+matches legacy promotion's lock-then-slot order. The external lock uses
+`/bin/zsh`'s `zsystem flock` (`fcntl`, not the incompatible `flock(2)` API), keeps
+its descriptor through exec, and never deletes the lock file. Projects using
+this bridge need `/bin/zsh` with `zsh/system`. `refuse_processes` contains regular
+expressions checked against live process commands before waiting for the slot,
+again after that wait, and under the Git lock before integration. Unreadable
+process evidence refuses. Matching processes are reported and left running.
+
+The wait cap defaults to 7200 seconds and applies separately to the external
+lock and host slot. Unknown holders still refuse immediately. The host receipt
+`promote/batches/ID/host-gate.json` shows the current phase, Node pin, profile
+fingerprint, lock wait and refusal reason; `test-slot-wait.json` shows the slot
+holder, cap and waiting/acquired/refused state. Logs include both receipt paths
+and wait reasons. A capped pre-execution wait produces a per-lane refusal,
+preserves main and the lanes, and creates no red gate evidence or bisection.
+Explicitly enqueue again after the holder clears. Resuming an interrupted
+execution reacquires the guards before using the existing train checkpoints;
+a capped wait on a resume retains those checkpoints and stays interrupted,
+since the earlier attempt may already have integrated.
+Unconfigured trains also wait for the host slot with a 7200-second default;
+explicit Monitor or legacy slot wait settings retain precedence.
 
 ## Evidence and recovery
 

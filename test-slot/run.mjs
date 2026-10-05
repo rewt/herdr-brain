@@ -8,11 +8,14 @@ import { fileURLToPath } from 'node:url';
 import { REFUSED_EXIT } from './test-slot.mjs';
 const CLI = fileURLToPath(new URL('./test-slot.mjs', import.meta.url));
 export { REFUSED_EXIT };
-export function runTestSlotSync(label, argv, { retryTimeout = true, ...options } = {}) {
+export function runTestSlotSync(label, argv, { retryTimeout = true, waitSeconds, waitReceipt, ...options } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-test-slot-result-'));
   const receipt = path.join(directory, 'result.json');
   try {
-    const result = spawnSync(process.execPath, [CLI, 'run', label, '--result-path', receipt, ...(retryTimeout ? ['--retry-timeout-under-load'] : []), '--', ...argv], options);
+    const result = spawnSync(process.execPath, [CLI, 'run', label, '--result-path', receipt,
+      ...(waitSeconds === undefined ? [] : ['--wait', String(waitSeconds)]),
+      ...(waitReceipt === undefined ? [] : ['--wait-receipt-path', waitReceipt]),
+      ...(retryTimeout ? ['--retry-timeout-under-load'] : []), '--', ...argv], options);
     // Preserve actual command signals across the wrapper's portable 128+signal
     // exit convention. Never guess a signal from a deliberate numeric exit.
     if (!result.error && fs.existsSync(receipt)) {

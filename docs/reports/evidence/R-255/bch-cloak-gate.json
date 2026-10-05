@@ -1,0 +1,18 @@
+{
+  "schema": "lane-validation/v1",
+  "key": "bceea6ba6c943024f15fc11693dfaec3524d56c85fe46896b1f79a0e5417c6f5",
+  "head": "9b35efa5a118dfb6831512aa670ec5d4d7868a63",
+  "tree": "c99f415f734130bf9522d8203e1bc97bfcaa2748",
+  "branch": "promote-train/4269a76c-8d34-4c28-ae97-39e37b6d5113",
+  "tier": "promotion",
+  "command": "pnpm validate:all-safe",
+  "environment_fingerprint": "da44648c3f233e4f445876139e5559b5e51ce397edb11ee824e43d7ccec83a2d",
+  "exit_code": 0,
+  "signal": null,
+  "started_at": "2026-10-05T14:36:57.122Z",
+  "finished_at": "2026-10-05T15:03:13.997Z",
+  "duration_s": 1576.841076792,
+  "log": "/private/tmp/eng208-bch-rehearsal-R255/.git/lane-validation/bceea6ba6c943024f15fc11693dfaec3524d56c85fe46896b1f79a0e5417c6f5.log",
+  "log_hash": "4ff38404fa6116f0a35d9d14c269c115970ebb8379675ed29b64e2b842838eaf",
+  "reused": false
+}

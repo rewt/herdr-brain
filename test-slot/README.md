@@ -33,6 +33,15 @@ of whole seconds; the default is immediate refusal. The legacy
 `BCH_CLOAK_TEST_SLOT_WAIT_SECONDS` is accepted when the Monitor variable is unset.
 Waiters poll for release; this is mutual exclusion, not a FIFO queue.
 
+`run ... --wait-receipt-path PATH -- COMMAND` atomically records the bounded
+wait in a `test-slot-wait/v1` receipt, including waiting/acquired/refused state,
+the holder description and the reason for refusal. It also logs each new live
+holder with `TEST_SLOT_WAIT`. Without this option the existing coded CLI output
+stays unchanged. The promotion gate profile uses this receipt while holding the
+slot across its pre-gate build and entire train invocation. The legacy bridge
+and configured workspace slot share one deadline, so acquiring the bridge does
+not grant a fresh wait allowance for the second lock.
+
 A refusal exits **75**, with one coded line: `TEST_SLOT_HELD` for a live holder,
 or `TEST_SLOT_HOLDER_UNKNOWN` when liveness cannot be established. Neither is a
 test failure. Lane checks preserve exit 75 and write no failed gate receipt;

@@ -11,6 +11,7 @@ import { fold } from '../lib/state.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { loadWorkflow, runWorkflow } from '../workflow/engine.mjs';
+import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
@@ -45,7 +46,17 @@ export function runTrain({ file, canonical, identity, main, prepare, validation,
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
   const save = () => writeFileAtomic(file, JSON.stringify(plan, null, 2) + '\n', 0o600);
-  const env = validationEnvironment();
+  const profile = resolveGateProfile(canonical);
+  if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
+  const env = profile?.env ?? validationEnvironment();
+  // Unconfigured trains also queue for the slot with a cap. Explicit host
+  // settings, including immediate refusal, retain their existing precedence.
+  env.MONITOR_TEST_SLOT_WAIT_SECONDS ??= env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS ?? '7200';
+  if (profile) {
+    prepare = [...prepare, ...profile.prepare];
+    validation = { ...validation, environment: `${validation.environment}\nprofile:${profile.fingerprint}` };
+    checkCompetingProcesses(profile);
+  }
   const run = (args, cwd = canonical, extra = {}) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env, maxBuffer: 32 * 1024 * 1024, ...extra });
   const git = (args, cwd, extra) => {
     const r = run(args, cwd, extra);
@@ -265,6 +276,7 @@ export function runTrain({ file, canonical, identity, main, prepare, validation,
   const integrateAttempt = attempt => {
     if (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) throw new Error('train integration requires exact-commit green evidence');
     if (!canonicalReady()) return false;
+    if (profile) checkCompetingProcesses(profile);
     if (git(['rev-parse', main]) !== attempt.base) {
       attempt.phase = 'stale'; attempt.error = 'main moved during validation; replan'; save(); return false;
     }

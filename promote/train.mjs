@@ -247,11 +247,16 @@ export function runTrain({ file, canonical, identity, main, prepare, validation,
       // A resumed validated attempt must also return to prepared before its
       // old proof is replaced; validated always means a completed green gate.
       attempt.phase = 'prepared';
+      if (attempt.gate) (attempt.gate_history ??= []).push(attempt.gate);
       attempt.gate = { command: validation.tiers.promotion.command, started_at: new Date().toISOString() };
       phase('validating');
       attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command: validation.tiers.promotion.command,
-        prepare, environment: validation.environment, env, label: 'train scratch' });
+        prepare, environment: validation.environment, env, label: 'train scratch',
+        onStart: gate => { attempt.gate = gate; save(); } });
     } catch (error) {
+      // A dirty execution is measurable, but never a completed green proof.
+      if (error.gate) attempt.gate = { ...attempt.gate, finished_at: error.gate.finished_at,
+        duration_s: error.gate.duration_s, execution: error.gate, error: error.message };
       if (attempt.gate && !attempt.gate.finished_at) {
         attempt.gate.finished_at = new Date().toISOString();
         attempt.gate.duration_s = Math.max(0, (Date.parse(attempt.gate.finished_at) - Date.parse(attempt.gate.started_at)) / 1000);

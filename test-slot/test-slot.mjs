@@ -237,6 +237,11 @@ function parse(argv) {
     const value = () => { const v = rest[++i]; if (v === undefined) throw new Error(`${arg} needs a value`); return v; };
     if (arg === "--wait") options.waitSeconds = waitSecondsOf({ [WAIT_ENV]: value() });
     else if (arg === "--result-path") options.resultPath = value();
+    else if (arg === '--caller') {
+      options.caller = JSON.parse(value());
+      if (!options.caller || !Number.isSafeInteger(options.caller.pid) || options.caller.pid < 1 ||
+          typeof options.caller.start !== 'string' || typeof options.caller.birth !== 'string') throw Error('invalid test-slot caller identity');
+    }
     else if (arg === "--wait-receipt-path") options.waitReceipt = value();
     else if (arg === "--lock-path") options.compatPath = options.lockPath = value();
     else if (arg === "--poll-ms") options.pollMs = Number(value());
@@ -275,10 +280,16 @@ async function run({ positional, options, child }) {
     throw error;
   }
   let received = null;
+  let execution = {};
+  const started = proc => {
+    execution = { command_started: true, command_pid: proc.pid, started_at: new Date().toISOString() };
+    if (options.resultPath) writeFileAtomic(options.resultPath, JSON.stringify(execution) + '\n', 0o600);
+  };
   const retryTimeout = options.retryTimeout && process.env[RETRIED_ENV] !== "1";
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, retryTimeout, options.lockPath, options.compatPath, attempt > 0);
-    if (options.resultPath) fs.writeFileSync(options.resultPath, JSON.stringify({ signal: received ?? result.signal, attempts: attempt + 1 }) + "\n", { mode: 0o600 });
+    const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, retryTimeout, options.lockPath, options.compatPath, attempt > 0, started);
+    if (options.resultPath) writeFileAtomic(options.resultPath, JSON.stringify({ ...execution, signal: received ?? result.signal,
+      exit_code: result.status, attempts: attempt + 1, finished_at: new Date().toISOString() }) + '\n', 0o600);
     if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
     if (!result.groupGone) return result.status || 1;
     if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
@@ -295,7 +306,7 @@ export function shouldRetryTimeout({ status, timeout, load, childRetried = false
   return status !== 0 && status !== REFUSED_EXIT && timeout && load > 1 && !childRetried;
 }
 
-async function executeCommand(argv, slot, received, captureTimeout, lockPath, compatPath, retried) {
+async function executeCommand(argv, slot, received, captureTimeout, lockPath, compatPath, retried, started) {
   const capacity = Math.max(1, Math.min(4, os.availableParallelism()));
   let load = os.loadavg()[0] / capacity;
   let timeout = false;
@@ -317,13 +328,20 @@ async function executeCommand(argv, slot, received, captureTimeout, lockPath, co
     proc.once("error", (error) => { process.stderr.write(`test-slot: ${error.message}\n`); resolve({ status: 127, signal: null }); });
     proc.once("close", (code, signal) => resolve({ status: exitOf(code, signal), signal }));
   });
+  if (proc.pid !== undefined) started(proc);
   if (captureTimeout) {
     proc.stdout.on("data", data => { observe(data); process.stdout.write(data); });
     proc.stderr.on("data", data => { observe(data); process.stderr.write(data); });
   }
+  const forwarded = new Set();
   const forward = (signal) => {
     received(signal);
-    try { process.kill(slot.nested ? proc.pid : -proc.pid, signal); } catch { /* already gone */ }
+    // A nested command remains in the holder's group so orphan liveness still
+    // protects the slot. Forward once: this group includes this wrapper too.
+    if (forwarded.has(signal)) return;
+    forwarded.add(signal);
+    const target = slot.nested ? (slot.holder.pgid ? -slot.holder.pgid : proc.pid) : -proc.pid;
+    try { process.kill(target, signal); } catch { /* already gone */ }
   };
   for (const signal of SIGNALS) process.on(signal, forward);
   try {
@@ -371,6 +389,7 @@ function status({ options }) {
 
 const invokedDirectly = () => { try { return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); } catch { return false; } };
 if (invokedDirectly()) {
+  let callerWatch;
   try {
     const parsed = parse(process.argv.slice(2));
     const main = parsed.command === "run" ? run : parsed.command === "status" ? status : null;
@@ -378,6 +397,21 @@ if (invokedDirectly()) {
       process.stderr.write("usage: test-slot.mjs run <label> [--wait <seconds>] -- <command> [args...] | status\n");
       process.exit(2);
     }
+    if (parsed.command === 'run' && parsed.options.caller) {
+      const caller = parsed.options.caller;
+      // spawnSync blocks its caller's JS signal handlers. If that exact caller
+      // dies (including a timeout), the async wrapper cancels the command group.
+      // Unknown liveness never authorizes a signal; the slot remains protective.
+      const checkCaller = () => {
+        if (processState(caller.pid, caller.start, caller.birth).state === 'gone') {
+          clearInterval(callerWatch); process.kill(process.pid, 'SIGTERM');
+        }
+      };
+      checkCaller();
+      callerWatch = setInterval(checkCaller, 100);
+      callerWatch.unref();
+    }
     process.exitCode = await main(parsed);
   } catch (error) { process.stderr.write(`test-slot: ${error.message}\n`); process.exitCode = 2; }
+  finally { clearInterval(callerWatch); }
 }

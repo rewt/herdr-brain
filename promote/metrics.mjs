@@ -23,6 +23,17 @@ export function stats(values) {
 const rate = (green, completed, unknown = 0) => ({ green, completed, unknown, rate: completed ? green / completed : null });
 const status = gate => !gate.finished_at ? 'unfinished' : gate.signal ? 'interrupted' :
   gate.exit_code === 0 ? 'green' : Number.isInteger(gate.exit_code) && gate.exit_code > 0 ? 'red' : 'unknown';
+const gateObservations = attempt => [...(attempt.gate_history ?? []), ...(attempt.gate ? [attempt.gate] : [])];
+function executionEvidence(observation) {
+  const gate = observation.execution ?? observation;
+  if (!gate.execution_receipt || gate.finished_at && gate.exit_code !== undefined) return gate;
+  try {
+    const started = JSON.parse(fs.readFileSync(gate.execution_receipt, 'utf8'));
+    if (started.command_started === true) return { ...gate, executed: true, ...started,
+      duration_s: started.finished_at ? Math.max(0, (Date.parse(started.finished_at) - Date.parse(started.started_at)) / 1000) : gate.duration_s };
+  } catch { /* Old clocks without execution evidence remain unknown. */ }
+  return gate;
+}
 const testPath = /(?:[^\s'"():]+\/)*[^\s'"():]+\.(?:test|spec)\.[cm]?[jt]sx?/g;
 function normalizeFile(file, roots) {
   for (const root of roots.filter(Boolean)) {
@@ -116,14 +127,15 @@ export function collectMetrics({ project = process.cwd(), since, until, now = ne
       plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
       if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs) || !Array.isArray(plan.attempts ?? [])) throw Error('unsupported or foreign receipt');
       if (!plan.jobs.every(j => j && typeof j.id === 'string' && typeof j.topic === 'string') ||
-          !(plan.attempts ?? []).every(a => a && Array.isArray(a.jobs ?? []) && (a.jobs ?? []).every(j => j && typeof j.topic === 'string') && (!a.gate || typeof a.gate === 'object')) ||
+          !(plan.attempts ?? []).every(a => a && Array.isArray(a.jobs ?? []) && (a.jobs ?? []).every(j => j && typeof j.topic === 'string') && (!a.gate || typeof a.gate === 'object') &&
+            Array.isArray(a.gate_history ?? []) && (a.gate_history ?? []).every(g => g && typeof g === 'object')) ||
           !Object.values(plan.results ?? {}).every(r => r && typeof r === 'object')) throw Error('malformed train receipt');
     } catch (error) { warnings.push(`${receipt}: ${error.message}`); continue; }
     const started = Date.parse(plan.started_at);
     if ((lower !== null || upper !== null) && !Number.isFinite(started)) { warnings.push(`${receipt}: no batch start; excluded from window`); continue; }
     if (lower !== null && started < lower || upper !== null && started >= upper) continue;
-    const attempts = plan.attempts ?? [], gated = attempts.filter(a => a.gate);
-    const first = gated[0] ? status(gated[0].gate) : 'no-gate';
+    const attempts = plan.attempts ?? [], observations = attempts.flatMap(gateObservations);
+    const first = observations[0] ? status(executionEvidence(observations[0])) : 'no-gate';
     const results = Object.values(plan.results ?? {});
     batches.push({ id: plan.id, receipt, started_at: plan.started_at ?? null, phase: plan.phase,
       lanes: plan.jobs.map(j => j.topic), first_gate: first,
@@ -131,38 +143,39 @@ export function collectMetrics({ project = process.cwd(), since, until, now = ne
       promoted: results.filter(r => r.outcome === 'promoted').length,
       refused: results.filter(r => r.outcome === 'refused').length });
     for (const [index, attempt] of attempts.entries()) {
-      if (!attempt.gate) continue;
-      const g = attempt.gate, outcome = status(g), jobs = attempt.jobs ?? [];
-      const fingerprint = JSON.stringify([g.log, g.started_at, g.finished_at, g.command]);
-      const duplicate = !g.reused && seen.has(fingerprint);
-      if (!g.reused) seen.add(fingerprint);
-      const row = { batch: plan.id, attempt: index, command: g.command, status: outcome,
-        lanes: jobs.map(j => j.topic), lane_count: jobs.length, reused: g.reused === true, duplicate,
-        started_at: g.started_at, finished_at: g.finished_at ?? null,
-        duration_s: g.finished_at && finite(g.duration_s) ? g.duration_s : null,
-        elapsed_s: !g.finished_at && Number.isFinite(Date.parse(g.started_at)) ? Math.max(0, (Date.parse(now) - Date.parse(g.started_at)) / 1000) : null,
-        integrated: ['integrated', 'complete'].includes(attempt.phase) && outcome === 'green' };
-      gates.push(row);
-      let log = { failing_files: [], failing_steps: [] };
-      // Prefer the exact gate log; train.log may mix several bisection attempts.
-      if (g.log) {
-        try {
-          const contents = fs.readFileSync(g.log, 'utf8');
-          if (g.log_hash && createHash('sha256').update(JSON.stringify(contents)).digest('hex') !== g.log_hash) throw Error('gate log hash mismatch');
-          log = parseLog(contents, [attempt.scratch, project]);
-          if (!row.reused && !duplicate && !parsed.has(fingerprint)) {
-            stepRows.push(...sumSteps(log.steps)); fileRows.push(...log.files); groupRows.push(...log.groups); parsed.add(fingerprint);
-          }
-        } catch (error) { warnings.push(`${plan.id} attempt ${index}: ${error.message}`); }
-      } else if (outcome === 'red') warnings.push(`${plan.id} attempt ${index}: no exact gate log; combined train.log cannot identify an attempt's failures`);
-      if (outcome === 'red') red.push({ ...row, failing_steps: log.failing_steps,
-        attribution: attribution(project, { ...attempt, jobs }, log.failing_files),
-        isolated_lane: jobs.length === 1 ? jobs[0].topic : null,
-        reason: attempt.error ?? null });
+      for (const [executionIndex, observation] of gateObservations(attempt).entries()) {
+        const g = executionEvidence(observation), outcome = status(g), jobs = attempt.jobs ?? [];
+        const fingerprint = JSON.stringify([g.log, g.started_at, g.finished_at, g.command]);
+        const duplicate = !g.reused && seen.has(fingerprint);
+        if (!g.reused) seen.add(fingerprint);
+        const row = { batch: plan.id, attempt: index, execution: executionIndex, command: g.command, status: outcome, executed: g.executed === true,
+          lanes: jobs.map(j => j.topic), lane_count: jobs.length, reused: g.reused === true, duplicate,
+          started_at: g.started_at, finished_at: g.finished_at ?? null,
+          duration_s: g.finished_at && finite(g.duration_s) ? g.duration_s : null,
+          elapsed_s: !g.finished_at && Number.isFinite(Date.parse(g.started_at)) ? Math.max(0, (Date.parse(now) - Date.parse(g.started_at)) / 1000) : null,
+          integrated: observation === attempt.gate && !observation.execution && ['integrated', 'complete'].includes(attempt.phase) && outcome === 'green' };
+        gates.push(row);
+        let log = { failing_files: [], failing_steps: [] };
+        // Prefer the exact gate log; train.log may mix several bisection attempts.
+        if (g.log) {
+          try {
+            const contents = fs.readFileSync(g.log, 'utf8');
+            if (g.log_hash && createHash('sha256').update(JSON.stringify(contents)).digest('hex') !== g.log_hash) throw Error('gate log hash mismatch');
+            log = parseLog(contents, [attempt.scratch, project]);
+            if (!row.reused && !duplicate && !parsed.has(fingerprint)) {
+              stepRows.push(...sumSteps(log.steps)); fileRows.push(...log.files); groupRows.push(...log.groups); parsed.add(fingerprint);
+            }
+          } catch (error) { warnings.push(`${plan.id} attempt ${index}: ${error.message}`); }
+        } else if (outcome === 'red') warnings.push(`${plan.id} attempt ${index}: no exact gate log; combined train.log cannot identify an attempt's failures`);
+        if (outcome === 'red') red.push({ ...row, failing_steps: log.failing_steps,
+          attribution: attribution(project, { ...attempt, jobs }, log.failing_files),
+          isolated_lane: jobs.length === 1 ? jobs[0].topic : null,
+          reason: attempt.error ?? null });
+      }
     }
   }
   const observed = gates.filter(g => !g.reused && !g.duplicate);
-  const executed = observed.filter(g => ['green', 'red', 'interrupted'].includes(g.status));
+  const executed = observed.filter(g => g.executed || ['green', 'red', 'interrupted'].includes(g.status));
   const completed = executed.filter(g => ['green', 'red'].includes(g.status));
   const firstCompleted = batches.filter(b => ['green', 'red'].includes(b.first_gate));
   const landed = executed.filter(g => g.integrated);
@@ -179,15 +192,16 @@ export function collectMetrics({ project = process.cwd(), since, until, now = ne
         batches.filter(b => !['green', 'red', 'no-gate'].includes(b.first_gate)).length),
       batches_without_gate: batches.filter(b => b.first_gate === 'no-gate').length,
       gate_time_s: stats(completed.map(g => g.duration_s)),
+      executed_gate_time_s: stats(executed.map(g => g.duration_s)),
       gate_profiles: [...new Set(executed.map(g => g.command))].map(command => ({ command,
-        time_s: stats(completed.filter(g => g.command === command).map(g => g.duration_s)),
+        time_s: stats(executed.filter(g => g.command === command).map(g => g.duration_s)),
         gates: executed.filter(g => g.command === command).length })) },
     slowest_steps: ranked(stepRows), slowest_test_files: ranked(fileRows), slowest_test_groups: ranked(groupRows),
     red_attribution: red, batches, gates, warnings,
     limitations: [
-      'Executed gates require an exit or signal; unfinished clocks and validation exceptions are observations with execution unknown.',
+      'Executed gates require an exit, signal or durable command-start receipt; old unfinished clocks remain observations with execution unknown.',
       'First-pass rate is the first retained gate per batch, including cached evidence; unfinished/unknown and batches without a gate are excluded.',
-      'Receipts overwrite an interrupted gate when its attempt resumes; overwritten executions cannot be reconstructed or counted.',
+      'Resumed attempts retain gate history; executions overwritten by older versions cannot be reconstructed or counted.',
       'Step durations sum test-stream totals per gate, not wall time: builds, slot waits and unmarked work are excluded.',
       'Multi-file TAP streams without file labels cannot supply individual file durations; these are shown as groups when the command names files.',
       'Only exact gate logs are attributed; combined train.log is not assigned to bisection attempts.',
@@ -231,6 +245,7 @@ export function renderMetrics(data) {
     `Batches: ${s.batches}; complete ${s.complete_batches}; bisected ${s.bisected_batches}; without gate ${s.batches_without_gate}`,
     `Gates executed: ${s.gates_executed}; green ${s.green}; red ${s.red}; interrupted ${s.interrupted}; observations ${s.gates_observed}; unfinished ${s.unfinished}; unknown ${s.unknown}; reused ${s.reused}; duplicate evidence ${s.duplicate_evidence}`,
     `Gate wall time: median ${seconds(s.gate_time_s.median)}; total ${seconds(s.gate_time_s.total)}; ${s.gate_time_s.samples} timed completed gates`,
+    `All executed gate wall time: median ${seconds(s.executed_gate_time_s.median)}; total ${seconds(s.executed_gate_time_s.total)}; ${s.executed_gate_time_s.samples} timed gates including interruptions`,
     `Lanes per executed gate: mean ${s.lanes_per_gate.samples ? (s.lanes_per_gate.total / s.lanes_per_gate.samples).toFixed(2) : 'unavailable'}; median ${s.lanes_per_gate.median ?? 'unavailable'}; max ${s.lanes_per_gate.max ?? 'unavailable'}; landed per green executed gate ${s.lanes_landed_per_green_executed_gate ?? 'unavailable'}`,
     `First-pass green (first retained gate per batch): ${s.first_pass.green}/${s.first_pass.completed} = ${s.first_pass.rate === null ? 'unavailable' : (100 * s.first_pass.rate).toFixed(1) + '%'}; ${s.first_pass.unknown} unknown`,
     'Gate profiles:'];

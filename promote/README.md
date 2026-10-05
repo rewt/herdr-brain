@@ -209,6 +209,20 @@ gate returns, its full validation receipt supplies those fields, including a
 red exit. Reused green evidence retains its original clock and `reused: true`.
 If validation throws instead of returning evidence, the unfinished clock is
 closed with `finished_at`, `duration_s` and `error`, without inventing an exit.
+If a command actually ran before making the worktree dirty, its measured receipt
+is retained under `gate.execution`; it cannot authorize integration. Each
+execution has a unique, exclusively created log. The tree-keyed cache receipt
+points to that log, so later red runs cannot overwrite earlier gate output.
+
+Before revalidation, the previous observation moves into `attempt.gate_history`.
+The slot's `execution_receipt` records command start and completion independently
+of the synchronous train caller. Metrics count those starts, including gates
+still running or interrupted, and retain completed gate time alongside
+`executed_gate_time_s`, which also includes timed interruptions. Preparation and
+slot refusals do not invent executions; reused proofs do not add executions.
+If the exact synchronous caller dies, its slot wrapper signals the command
+group. Nested cancellation signals the held command group once per signal,
+preserving the existing group-based orphan protection.
 
 Batch `phase` is display telemetry. The existing attempt `phase` remains the
 recovery checkpoint (`prepared` during a running check, `validated` during the

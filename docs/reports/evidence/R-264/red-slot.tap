@@ -1,0 +1,62 @@
+TAP version 13
+# Subtest: cancel signals compound gate descendants in a top-level slot
+ok 1 - cancel signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 77.686459
+  ...
+# Subtest: timeout signals compound gate descendants in a top-level slot
+ok 2 - timeout signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 175.115083
+  ...
+# Subtest: cancel signals compound gate descendants in a nested slot
+not ok 3 - cancel signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 1592.339041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:11:80'
+  failureType: 'testCodeFailure'
+  error: |-
+    the Node descendant receives the signal
+    
+    false !== true
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:42:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: timeout signals compound gate descendants in a nested slot
+not ok 4 - timeout signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 1697.90825
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:11:80'
+  failureType: 'testCodeFailure'
+  error: |-
+    the Node descendant receives the signal
+    
+    false !== true
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:42:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 2
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3569.755041

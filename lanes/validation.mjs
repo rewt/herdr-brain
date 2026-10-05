@@ -77,7 +77,7 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
-export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label }) {
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart }) {
   env = validationEnvironment(env);
   const before = captured(cwd, label);
   const fingerprint = environmentFingerprint({ env, prepare, environment });
@@ -85,7 +85,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
   // who runs a check; they do not force a second execution of identical inputs.
   const key = digest({ schema: 'lane-validation/v1', tree: before.tree, command, fingerprint });
   const directory = plainDirectory(path.join(common, 'lane-validation'));
-  const receipt = path.join(directory, `${key}.json`), log = path.join(directory, `${key}.log`);
+  const receipt = path.join(directory, `${key}.json`);
   const release = acquireLock(path.join(directory, `${key}.lock`));
   process.once('exit', release);
   try {
@@ -97,28 +97,33 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
         VALIDATION_TIERS.includes(previous.tier) && previous.reused === false &&
         Number.isFinite(Date.parse(previous.started_at)) && Number.isFinite(Date.parse(previous.finished_at)) &&
         Date.parse(previous.finished_at) >= Date.parse(previous.started_at) &&
-        Number.isFinite(previous.duration_s) && previous.duration_s >= 0 && previous.log === log) {
+        Number.isFinite(previous.duration_s) && previous.duration_s >= 0 &&
+        typeof previous.log === 'string' && path.dirname(previous.log) === directory &&
+        (path.basename(previous.log) === `${key}.log` ||
+          new RegExp(`^${key}\\.[0-9a-f-]{36}\\.log$`).test(path.basename(previous.log)))) {
       let usable = false;
-      try { usable = digest(readPlainFile(log)) === previous.log_hash; } catch {}
+      try { usable = digest(readPlainFile(previous.log)) === previous.log_hash; } catch {}
       if (usable) {
         unchanged(cwd, before, label);
-        process.stdout.write(`REUSE tree=${before.tree} tier=${tier} command=${JSON.stringify(command)} log=${log}\n`);
+        process.stdout.write(`REUSE tree=${before.tree} tier=${tier} command=${JSON.stringify(command)} log=${previous.log}\n`);
         return { ...previous, ...before, tier, reused: true, validated_head: previous.head };
       }
     }
-    const temporary = path.join(directory, `.${key}.${randomUUID()}.log`);
-    const fd = fs.openSync(temporary, 'wx', 0o600);
+    // The cache receipt can advance; every execution's log remains immutable.
+    const log = path.join(directory, `${key}.${randomUUID()}.log`);
+    const executionReceipt = `${log}.execution.json`;
+    const fd = fs.openSync(log, 'wx', 0o600);
     const startedAt = new Date(), started = process.hrtime.bigint();
     let run;
     try {
+      onStart?.({ command, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
       run = tier === 'promotion'
-        ? runTestSlotSync(`promotion ${cwd}`, ['/bin/sh', '-c', command], { cwd, env, retryTimeout: false, stdio: ['inherit', fd, fd] })
+        ? runTestSlotSync(`promotion ${cwd}`, ['/bin/sh', '-c', command], { cwd, env, executionReceipt, retryTimeout: false, stdio: ['inherit', fd, fd] })
         : spawnSync(command, { cwd, env, shell: '/bin/sh', stdio: ['inherit', fd, fd] });
     }
     finally { fs.closeSync(fd); }
-    const output = readPlainFile(temporary);
-    fs.renameSync(temporary, log);
+    const output = readPlainFile(log);
     if (run.error) process.stderr.write(`${run.error.message}\n`);
     const signal = run.signal ?? null;
     const exitCode = run.status ?? (signal && os.constants.signals[signal] ? 128 + os.constants.signals[signal] : 1);
@@ -130,9 +135,11 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     process.stdout.write(output);
     const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, environment_fingerprint: fingerprint,
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
-      duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false };
+      duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
+      ...(tier === 'promotion' ? { execution_receipt: executionReceipt, executed: run.attempts !== undefined } : {}) };
     // Failed, dirty or moving executions never become reusable green evidence.
-    unchanged(cwd, before, label);
+    try { unchanged(cwd, before, label); }
+    catch (error) { throw Object.assign(error, { gate }); }
     writeFileAtomic(receipt, JSON.stringify(gate, null, 2) + '\n', 0o600);
     return gate;
   } finally { process.off('exit', release); release(); }

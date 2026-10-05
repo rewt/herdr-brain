@@ -1,0 +1,461 @@
+TAP version 13
+# Subtest: cancel signals compound gate descendants in a top-level slot
+ok 1 - cancel signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 104.278417
+  ...
+# Subtest: timeout signals compound gate descendants in a top-level slot
+ok 2 - timeout signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 199.462917
+  ...
+# Subtest: cancel signals compound gate descendants in a nested slot
+ok 3 - cancel signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 101.143875
+  ...
+# Subtest: timeout signals compound gate descendants in a nested slot
+ok 4 - timeout signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 202.87075
+  ...
+# Subtest: stopping the synchronous gate caller signals its top-level compound gate group
+ok 5 - stopping the synchronous gate caller signals its top-level compound gate group
+  ---
+  duration_ms: 193.816584
+  ...
+# Subtest: stopping the synchronous gate caller signals its nested compound gate group
+ok 6 - stopping the synchronous gate caller signals its nested compound gate group
+  ---
+  duration_ms: 212.749459
+  ...
+# Subtest: project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+ok 7 - project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+  ---
+  duration_ms: 903.610167
+  ...
+# Subtest: busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+ok 8 - busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+  ---
+  duration_ms: 1830.312291
+  ...
+# Subtest: a released legacy lock admits the waiting train and stays held for the complete batch
+ok 9 - a released legacy lock admits the waiting train and stays held for the complete batch
+  ---
+  duration_ms: 941.420166
+  ...
+# Subtest: a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+ok 10 - a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+  ---
+  duration_ms: 1728.372625
+  ...
+# Subtest: a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+ok 11 - a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+  ---
+  duration_ms: 3066.183584
+  ...
+# Subtest: busy host slot has a live bounded receipt and the train inherits it after release
+ok 12 - busy host slot has a live bounded receipt and the train inherits it after release
+  ---
+  duration_ms: 1103.417
+  ...
+# Subtest: busy host slot caps without a red gate receipt or integration
+ok 13 - busy host slot caps without a red gate receipt or integration
+  ---
+  duration_ms: 1410.126875
+  ...
+# Subtest: a declared competing process refuses before taking the slot or building
+ok 14 - a declared competing process refuses before taking the slot or building
+  ---
+  duration_ms: 251.392625
+  ...
+# Subtest: a competing process started during a slot wait refuses before preparation
+ok 15 - a competing process started during a slot wait refuses before preparation
+  ---
+  duration_ms: 596.773917
+  ...
+# Subtest: unavailable host capabilities refuse with a host launch instruction before builds
+ok 16 - unavailable host capabilities refuse with a host launch instruction before builds
+  ---
+  duration_ms: 263.060291
+  ...
+# Subtest: malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence
+ok 17 - malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence
+  ---
+  duration_ms: 156.603208
+  ...
+# Subtest: slot ownership records exact kernel births and refuses same-second PID reuse
+ok 18 - slot ownership records exact kernel births and refuses same-second PID reuse
+  ---
+  duration_ms: 24.771
+  ...
+# Subtest: slot accepts the existing UTC/C holder schema and preserves live ambiguous legacy records
+ok 19 - slot accepts the existing UTC/C holder schema and preserves live ambiguous legacy records
+  ---
+  duration_ms: 5.841125
+  ...
+# Subtest: Linux legacy timestamps use kernel boot seconds and validated clock ticks
+ok 20 - Linux legacy timestamps use kernel boot seconds and validated clock ticks
+  ---
+  duration_ms: 0.682334
+  ...
+# Subtest: Linux slot births distinguish identical start ticks across reboots
+ok 21 - Linux slot births distinguish identical start ticks across reboots
+  ---
+  duration_ms: 0.176917
+  ...
+# Subtest: a missing source refuses a fresh slot before creating a lock or starting its command
+ok 22 - a missing source refuses a fresh slot before creating a lock or starting its command
+  ---
+  duration_ms: 31.829875
+  ...
+# Subtest: slot exclusion and token-free nesting work inside seatbelt without setuid ps
+ok 23 - slot exclusion and token-free nesting work inside seatbelt without setuid ps
+  ---
+  duration_ms: 155.8225
+  ...
+# Subtest: environment-independent holder identity (REV-378 I1)
+    # Subtest: refuses same environment control with a live runner
+    ok 1 - refuses same environment control with a live runner
+      ---
+      duration_ms: 157.143
+      ...
+    # {"environment":"same environment control","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses same environment control with a live orphaned command group
+    ok 2 - refuses same environment control with a live orphaned command group
+      ---
+      duration_ms: 147.6565
+      ...
+    # {"environment":"same environment control","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=UTC with a live runner
+    ok 3 - refuses TZ=UTC with a live runner
+      ---
+      duration_ms: 148.626
+      ...
+    # {"environment":"TZ=UTC","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=UTC with a live orphaned command group
+    ok 4 - refuses TZ=UTC with a live orphaned command group
+      ---
+      duration_ms: 152.79875
+      ...
+    # {"environment":"TZ=UTC","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=Asia/Tokyo with a live runner
+    ok 5 - refuses TZ=Asia/Tokyo with a live runner
+      ---
+      duration_ms: 155.169
+      ...
+    # {"environment":"TZ=Asia/Tokyo","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses TZ=Asia/Tokyo with a live orphaned command group
+    ok 6 - refuses TZ=Asia/Tokyo with a live orphaned command group
+      ---
+      duration_ms: 150.40075
+      ...
+    # {"environment":"TZ=Asia/Tokyo","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_ALL=fr_FR.UTF-8 with a live runner
+    ok 7 - refuses LC_ALL=fr_FR.UTF-8 with a live runner
+      ---
+      duration_ms: 144.123125
+      ...
+    # {"environment":"LC_ALL=fr_FR.UTF-8","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_ALL=fr_FR.UTF-8 with a live orphaned command group
+    ok 8 - refuses LC_ALL=fr_FR.UTF-8 with a live orphaned command group
+      ---
+      duration_ms: 145.348333
+      ...
+    # {"environment":"LC_ALL=fr_FR.UTF-8","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_TIME=de_DE.UTF-8 with a live runner
+    ok 9 - refuses LC_TIME=de_DE.UTF-8 with a live runner
+      ---
+      duration_ms: 139.834625
+      ...
+    # {"environment":"LC_TIME=de_DE.UTF-8","orphan":false,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses LC_TIME=de_DE.UTF-8 with a live orphaned command group
+    ok 10 - refuses LC_TIME=de_DE.UTF-8 with a live orphaned command group
+      ---
+      duration_ms: 146.789834
+      ...
+    # {"environment":"LC_TIME=de_DE.UTF-8","orphan":true,"holder_live":true,"status_raw_exit":1,"taker_raw_exit":75,"command_started":false,"record_unchanged":true}
+    # Subtest: refuses a live holder's legacy environment-dependent start identity
+    ok 11 - refuses a live holder's legacy environment-dependent start identity
+      ---
+      duration_ms: 84.691833
+      ...
+    1..11
+ok 24 - environment-independent holder identity (REV-378 I1)
+  ---
+  duration_ms: 1573.628584
+  type: 'suite'
+  ...
+# Subtest: serialized stale takeover (REV-378 I2)
+    # Subtest: never admits two takers when one is paused between comparing and deleting the stale record
+    ok 1 - never admits two takers when one is paused between comparing and deleting the stale record
+      ---
+      duration_ms: 165.425958
+      ...
+    # {"paused_taker_admitted":true,"competing_taker_admitted":false,"competing_taker_raw_exit":75}
+    # Subtest: leaves a dead holder and an abandoned takeover guard in place, then recovers after operator cleanup
+    ok 2 - leaves a dead holder and an abandoned takeover guard in place, then recovers after operator cleanup
+      ---
+      duration_ms: 12.767291
+      ...
+    1..2
+ok 25 - serialized stale takeover (REV-378 I2)
+  ---
+  duration_ms: 178.306167
+  type: 'suite'
+  ...
+# Subtest: two concurrent holders are refused
+    # Subtest: refuses a second run by name, runs none of its command, and admits it once the first releases
+    ok 1 - refuses a second run by name, runs none of its command, and admits it once the first releases
+      ---
+      duration_ms: 194.662291
+      ...
+    # Subtest: uses the existing bch-cloak host path by default
+    ok 2 - uses the existing bch-cloak host path by default
+      ---
+      duration_ms: 0.283375
+      ...
+    1..2
+ok 26 - two concurrent holders are refused
+  ---
+  duration_ms: 195.008959
+  type: 'suite'
+  ...
+# Subtest: a dead holder is recovered
+    # Subtest: keeps the slot while a SIGKILLed runner's command still runs, and recovers it once that group is gone
+    ok 1 - keeps the slot while a SIGKILLed runner's command still runs, and recovers it once that group is gone
+      ---
+      duration_ms: 145.813084
+      ...
+    # Subtest: takes over a record whose process and group are gone, or whose pid now belongs to another process
+    ok 2 - takes over a record whose process and group are gone, or whose pid now belongs to another process
+      ---
+      duration_ms: 36.291083
+      ...
+    1..2
+ok 27 - a dead holder is recovered
+  ---
+  duration_ms: 182.185625
+  type: 'suite'
+  ...
+# Subtest: a waiter does not deadlock on itself
+    # Subtest: runs a waiting run started inside the holder's own command at once, with the holder's token
+    ok 1 - runs a waiting run started inside the holder's own command at once, with the holder's token
+      ---
+      duration_ms: 86.368792
+      ...
+    # Subtest: runs a waiting run started inside the holder's own command at once, with the token scrubbed from its environment
+    ok 2 - runs a waiting run started inside the holder's own command at once, with the token scrubbed from its environment
+      ---
+      duration_ms: 90.224583
+      ...
+    # Subtest: runs a process that carries the holder's token inside the slot, even outside the holder's process tree
+    ok 3 - runs a process that carries the holder's token inside the slot, even outside the holder's process tree
+      ---
+      duration_ms: 162.427042
+      ...
+    # Subtest: never matches a waiter by its command line: a free slot is taken at once, a held one is refused by the holder's pid
+    ok 4 - never matches a waiter by its command line: a free slot is taken at once, a held one is refused by the holder's pid
+      ---
+      duration_ms: 157.088333
+      ...
+    # Subtest: takes the slot again in the process that holds it without waiting or replacing it
+    ok 5 - takes the slot again in the process that holds it without waiting or replacing it
+      ---
+      duration_ms: 32.476041
+      ...
+    1..5
+ok 28 - a waiter does not deadlock on itself
+  ---
+  duration_ms: 528.776541
+  type: 'suite'
+  ...
+# Subtest: waiting
+    # Subtest: queues behind a live holder and takes the slot when it is released
+    ok 1 - queues behind a live holder and takes the slot when it is released
+      ---
+      duration_ms: 628.23425
+      ...
+    # Subtest: refuses once its wait runs out
+    ok 2 - refuses once its wait runs out
+      ---
+      duration_ms: 1111.485417
+      ...
+    # Subtest: reads its wait from the environment, and refuses a malformed one
+    ok 3 - reads its wait from the environment, and refuses a malformed one
+      ---
+      duration_ms: 81.203958
+      ...
+    1..3
+ok 29 - waiting
+  ---
+  duration_ms: 1821.07125
+  type: 'suite'
+  ...
+# Subtest: liveness it cannot establish is refused by name
+    # Subtest: refuses, without waiting, and leaves a live holder's lock in place when the source is denied (EPERM)
+    ok 1 - refuses, without waiting, and leaves a live holder's lock in place when the source is denied (EPERM)
+      ---
+      duration_ms: 89.111167
+      ...
+    # Subtest: refuses, without waiting, and leaves a live holder's lock in place when the source is missing (ENOENT)
+    ok 2 - refuses, without waiting, and leaves a live holder's lock in place when the source is missing (ENOENT)
+      ---
+      duration_ms: 87.510291
+      ...
+    # Subtest: refuses, without waiting, and leaves a live holder's lock in place when the source is answering that the live holder does not exist
+    ok 3 - refuses, without waiting, and leaves a live holder's lock in place when the source is answering that the live holder does not exist
+      ---
+      duration_ms: 87.283208
+      ...
+    # Subtest: retains a stale record for root-owned PID 1 when its identity read is denied
+    ok 4 - retains a stale record for root-owned PID 1 when its identity read is denied
+      ---
+      duration_ms: 28.535333
+      ...
+    # Subtest: refuses when the source cannot list the ancestry it needs to tell a nested waiter from another run
+    ok 5 - refuses when the source cannot list the ancestry it needs to tell a nested waiter from another run
+      ---
+      duration_ms: 87.863583
+      ...
+    # Subtest: refuses, and leaves the file in place, for a record that names no holder, or a live one it cannot date
+    ok 6 - refuses, and leaves the file in place, for a record that names no holder, or a live one it cannot date
+      ---
+      duration_ms: 85.091417
+      ...
+    1..6
+ok 30 - liveness it cannot establish is refused by name
+  ---
+  duration_ms: 465.594833
+  type: 'suite'
+  ...
+# Subtest: signals and release
+    # Subtest: forwards SIGINT to the command's group, then releases
+    ok 1 - forwards SIGINT to the command's group, then releases
+      ---
+      duration_ms: 64.504292
+      ...
+    # Subtest: forwards SIGTERM to the command's group, then releases
+    ok 2 - forwards SIGTERM to the command's group, then releases
+      ---
+      duration_ms: 60.991417
+      ...
+    # Subtest: forwards SIGHUP to the command's group, then releases
+    ok 3 - forwards SIGHUP to the command's group, then releases
+      ---
+      duration_ms: 64.852166
+      ...
+    # Subtest: status reports free (0), held (1) and unknown (2) without touching the lock
+    ok 4 - status reports free (0), held (1) and unknown (2) without touching the lock
+      ---
+      duration_ms: 134.710167
+      ...
+    # Subtest: never reports success for an interrupted run, even when its command exits 0 on the signal
+    ok 5 - never reports success for an interrupted run, even when its command exits 0 on the signal
+      ---
+      duration_ms: 64.895125
+      ...
+    # Subtest: release removes only its own lock
+    ok 6 - release removes only its own lock
+      ---
+      duration_ms: 6.595333
+      ...
+    1..6
+ok 31 - signals and release
+  ---
+  duration_ms: 396.741042
+  type: 'suite'
+  ...
+# Subtest: workspace configuration and timeout retry
+    # Subtest: uses the workspace path and passes it to nested commands
+    ok 1 - uses the workspace path and passes it to nested commands
+      ---
+      duration_ms: 99.908333
+      ...
+    # Subtest: retries only once for timeout under load
+    ok 2 - retries only once for timeout under load
+      ---
+      duration_ms: 76.571625
+      ...
+    # Subtest: retries only once for reported Node timeout under load
+    ok 3 - retries only once for reported Node timeout under load
+      ---
+      duration_ms: 74.540792
+      ...
+    # Subtest: retries only once for timeout without load
+    ok 4 - retries only once for timeout without load
+      ---
+      duration_ms: 49.042959
+      ...
+    # Subtest: retries only once for ordinary failure under load
+    ok 5 - retries only once for ordinary failure under load
+      ---
+      duration_ms: 46.873625
+      ...
+    # Subtest: retries only once for slot refusal under load
+    ok 6 - retries only once for slot refusal under load
+      ---
+      duration_ms: 48.229333
+      ...
+    # Subtest: does not retry a second timeout or a signaled timeout
+    ok 7 - does not retry a second timeout or a signaled timeout
+      ---
+      duration_ms: 127.37625
+      ...
+    # Subtest: limits nested retrying holders to two attempts when the child initiates the retry
+    ok 8 - limits nested retrying holders to two attempts when the child initiates the retry
+      ---
+      duration_ms: 137.131959
+      ...
+    # Subtest: limits nested retrying holders to two attempts when the ancestor initiates the retry
+    ok 9 - limits nested retrying holders to two attempts when the ancestor initiates the retry
+      ---
+      duration_ms: 173.741667
+      ...
+    # Subtest: promotion retries only the timed-out heavy step and continues the remaining steps once
+    ok 10 - promotion retries only the timed-out heavy step and continues the remaining steps once
+      ---
+      duration_ms: 386.109958
+      ...
+    # Subtest: release retries only the timed-out heavy step and continues the remaining steps once
+    ok 11 - release retries only the timed-out heavy step and continues the remaining steps once
+      ---
+      duration_ms: 519.488208
+      ...
+    # Subtest: does not inherit a stale token into a dead holder record
+    ok 12 - does not inherit a stale token into a dead holder record
+      ---
+      duration_ms: 5.740417
+      ...
+    1..12
+ok 32 - workspace configuration and timeout retry
+  ---
+  duration_ms: 1745.078875
+  type: 'suite'
+  ...
+# Subtest: legacy bridge during workspace migration
+    # Subtest: a configured workspace path waits for the legacy slot and holds both for its entire command
+    ok 1 - a configured workspace path waits for the legacy slot and holds both for its entire command
+      ---
+      duration_ms: 549.231084
+      ...
+    1..1
+ok 33 - legacy bridge during workspace migration
+  ---
+  duration_ms: 549.342458
+  type: 'suite'
+  ...
+# Subtest: hard interruption preserves a started gate and counts it after resuming the prepared attempt
+ok 34 - hard interruption preserves a started gate and counts it after resuming the prepared attempt
+  ---
+  duration_ms: 1010.165
+  ...
+1..34
+# tests 74
+# suites 10
+# pass 74
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12297.425833

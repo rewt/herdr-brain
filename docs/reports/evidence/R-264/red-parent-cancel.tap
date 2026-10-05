@@ -1,0 +1,64 @@
+TAP version 13
+# Subtest: cancel signals compound gate descendants in a top-level slot
+ok 1 - cancel signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 77.966
+  ...
+# Subtest: timeout signals compound gate descendants in a top-level slot
+ok 2 - timeout signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 197.6825
+  ...
+# Subtest: cancel signals compound gate descendants in a nested slot
+ok 3 - cancel signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 99.920542
+  ...
+# Subtest: timeout signals compound gate descendants in a nested slot
+ok 4 - timeout signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 198.431584
+  ...
+# Subtest: stopping the synchronous gate caller signals its top-level compound gate group
+not ok 5 - stopping the synchronous gate caller signals its top-level compound gate group
+  ---
+  duration_ms: 1588.072583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:46:37'
+  failureType: 'testCodeFailure'
+  error: 'orphaned gate descendant receives cancellation'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:67:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: stopping the synchronous gate caller signals its nested compound gate group
+not ok 6 - stopping the synchronous gate caller signals its nested compound gate group
+  ---
+  duration_ms: 1615.44975
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:46:37'
+  failureType: 'testCodeFailure'
+  error: 'orphaned gate descendant receives cancellation'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test-slot/test/conformance.test.mjs:67:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 4
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3805.872166

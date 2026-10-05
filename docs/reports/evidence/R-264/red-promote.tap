@@ -1,0 +1,121 @@
+TAP version 13
+# Subtest: train refuses uncommitted repair and leaves main at the validated input base
+ok 1 - train refuses uncommitted repair and leaves main at the validated input base
+  ---
+  duration_ms: 375.864416
+  ...
+# Subtest: train refuses committed gate change and leaves main at the validated input base
+ok 2 - train refuses committed gate change and leaves main at the validated input base
+  ---
+  duration_ms: 409.447208
+  ...
+# Subtest: repeated red gates retain distinct immutable logs and hashes for the same committed tree
+not ok 3 - repeated red gates retain distinct immutable logs and hashes for the same committed tree
+  ---
+  duration_ms: 686.595916
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected "actual" to be strictly unequal to:
+    
+    '/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-9sQAhZ/rev465-mVozbu/repo/.git/lane-validation/18f2af522a72179247103d84d198e4f38fc9b72f1f825db87e470abd781f03c4.log'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-9sQAhZ/rev465-mVozbu/repo/.git/lane-validation/18f2af522a72179247103d84d198e4f38fc9b72f1f825db87e470abd781f03c4.log'
+  actual: '/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-9sQAhZ/rev465-mVozbu/repo/.git/lane-validation/18f2af522a72179247103d84d198e4f38fc9b72f1f825db87e470abd781f03c4.log'
+  operator: 'notStrictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/promote/test/conformance.test.mjs:55:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a completed gate refused at integration counts once; failed preparation counts no gate
+ok 4 - a completed gate refused at integration counts once; failed preparation counts no gate
+  ---
+  duration_ms: 598.759792
+  ...
+# Subtest: resuming a validated attempt retains both executed gates in receipts and metrics
+not ok 5 - resuming a validated attempt retains both executed gates in receipts and metrics
+  ---
+  duration_ms: 504.006334
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: "Cannot read properties of undefined (reading 'length')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/promote/test/conformance.test.mjs:79:49
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: executed gates that dirty the worktree still retain real exit, log and timing evidence
+not ok 6 - executed gates that dirty the worktree still retain real exit, log and timing evidence
+  ---
+  duration_ms: 370.839792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    undefined !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/promote/test/conformance.test.mjs:89:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: interrupted execution time is included separately from completed gate time
+not ok 7 - interrupted execution time is included separately from completed gate time
+  ---
+  duration_ms: 474.092
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: "Cannot read properties of undefined (reading 'samples')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/promote/test/conformance.test.mjs:97:47
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-rev465/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 3
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3463.765958

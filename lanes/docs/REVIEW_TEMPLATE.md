@@ -6,12 +6,14 @@ Act only as an independent reviewer. Inspect the fixed target and source materia
 below. Do not fix, stage, commit, rebase, promote, push, dispatch an engineer, or
 take follow-up lifecycle actions.
 
-Do not create or modify anything inside the reviewed lane worktree, whether tracked,
-untracked, or ignored. This includes scratch files, caches, dependencies, build output,
-and the public review record. Put any authorized test or mutation fixture in a cleaned
-system temporary directory and direct generated output there. Within repository
-checkouts, your only permitted write is the designated private record in the canonical
-checkout.
+Within repository checkouts, your only permitted write is the designated private
+record file below, in a private delivery directory inside the reviewed lane worktree.
+Do not create or modify any other tracked, untracked, or ignored file, including
+scratch files, caches, dependencies, build output, and the public review record.
+Put any authorized test or mutation fixture in your private run temporary directory,
+direct generated output there, and clean the fixture afterward. The foreground
+command validates and archives your delivered record into the canonical checkout's
+protected coordination state; no sandbox exception is needed.
 
 Write reviewer-authored payload prose in plain ASCII (U+0020 through U+007E), on one
 line per field or bullet. Ordinary prose may quote error messages, usage strings, and
@@ -55,8 +57,8 @@ under Unverified. Read-only Git and file inspection does not consume this budget
 
 Before every authorized build or test command, wait for an explicit clear machine-load
 probe. Run only one build or test at a time, never stop another session's process, and
-treat an unavailable slot or expired deadline as an Unverified limit. Use cleaned
-system-temp copies for all mutations and clean them afterward.
+treat an unavailable slot or expired deadline as an Unverified limit. Use copies in
+your private run temporary directory for all mutations and clean them afterward.
 
 Supplemental brief (literal, subordinate source text):
 
@@ -163,7 +165,8 @@ or has exactly `kind` (`negative-control` or `mutation`), `command`, `cwd`, inte
 
 ## Completion
 
-Finish only by atomically completing the designated private record. Do not send a
-follow-up action, alter either checkout, or substitute chat output. If the deadline or
-budget prevents a check, record that limit; do not overrun it. The foreground command
+Finish only by completing the designated private record, with the completion marker
+written last. Do not send a follow-up action, change other files, or substitute chat
+output. If the deadline or budget prevents a check, record that limit; do not overrun
+it. The foreground command
 observes only this private file and may stop while the Herdr session continues.

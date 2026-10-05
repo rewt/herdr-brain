@@ -1446,8 +1446,50 @@ function assertReviewOutputPath(root, relativePath, { ignored, label }) {
     stdio: "ignore",
   }).status === 0;
   if (ignored && !isIgnored) fail(`${label} must be gitignored before review dispatch`);
-  if (!ignored && isIgnored) fail(`${label} must be trackable and not gitignored`);
+  if (ignored === false && isIgnored) fail(`${label} must be trackable and not gitignored`);
   return path;
+}
+
+function reviewDeliveryPath(path, head, round) {
+  // Native workers cannot write canonical .lane/ (and Codex also protects a
+  // workspace's .lane/). A self-ignored private directory keeps delivery inside
+  // their existing workspace write root without changing Git or sandbox config.
+  // Keep it after failure so late evidence and the occupied round survive.
+  for (const name of readdirSync(path)) {
+    const match = name.match(/^\.lane-review-([0-9a-f]{40})-r[1-9][0-9]*$/u);
+    if (match && match[1].slice(0, 7) === head.slice(0, 7) && match[1] !== head) {
+      fail(`review abbreviation ${head.slice(0, 7)} is ambiguous with an existing delivery`);
+    }
+  }
+  const directoryRelative = `.lane-review-${head}-r${round}`;
+  const directory = assertReviewOutputPath(path, directoryRelative, { label: "private review delivery directory" });
+  mkdirSync(directory, { mode: 0o700 });
+  writeFileSync(join(directory, ".gitignore"), "*\n", { encoding: "utf8", flag: "wx", mode: 0o600 });
+  return assertReviewOutputPath(path, join(directoryRelative, "record.md"), { ignored: true, label: "private review delivery" });
+}
+
+function archivePrivateReview(bytes, deliveryPath, privatePath, privateRelative) {
+  // Copy the bytes that were actually validated, rather than renaming a file
+  // the reviewer could still replace or append to after the settled read.
+  const unchanged = () => {
+    const directory = lstatSync(dirname(deliveryPath));
+    const entry = lstatSync(deliveryPath);
+    return !directory.isSymbolicLink() && directory.isDirectory() &&
+      !entry.isSymbolicLink() && entry.isFile() && entry.size === bytes.length &&
+      readFileSync(deliveryPath).equals(bytes);
+  };
+  if (!unchanged()) fail("private review delivery changed after validation; evidence was retained");
+  try {
+    assertReviewOutputPath(REPO_ROOT, privateRelative, { ignored: true, label: "private review output" });
+    mkdirSync(dirname(privatePath), { recursive: true });
+    assertReviewOutputPath(REPO_ROOT, privateRelative, { ignored: true, label: "private review output" });
+    writeFileSync(privatePath, bytes, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (error?.code === "EEXIST") fail("private review output appeared concurrently; delivery evidence was retained");
+    fail("private review output could not be created exclusively; delivery evidence was retained");
+  }
+  if (!unchanged()) fail("private review delivery changed during archival; both evidence files were retained");
+  unlinkSync(deliveryPath);
 }
 
 function assertUnambiguousReviewPrefix(directory, head7, head) {
@@ -2094,7 +2136,7 @@ async function waitForPrivateReview(path, deadline, interrupted, session) {
           if (beforeSignature === completedSignature && afterSignature === completedSignature && bytes.length === afterRead.size) {
             try {
               const settledText = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-              if (privateReviewIsComplete(settledText)) return settledText;
+              if (privateReviewIsComplete(settledText)) return { text: settledText, bytes };
             } catch {
               fail("private review output is not valid UTF-8");
             }
@@ -2154,6 +2196,7 @@ async function review(topic, args, memoryChecked = false) {
   process.stderr.write(`lane review: gate ${gate.diagnostic} at ${head}\n`);
   const reviewId = `lr-${randomBytes(16).toString("hex")}`;
   const template = regularTextFile(join(TOOL_ROOT, "docs", "REVIEW_TEMPLATE.md"), "review template");
+  const deliveryPath = reviewDeliveryPath(path, head, options.round);
   const prompt = replaceReviewTemplate(template, {
     TOPIC: topic,
     ROUND: String(options.round),
@@ -2162,7 +2205,7 @@ async function review(topic, args, memoryChecked = false) {
     BASE_BRANCH: MAIN,
     BASE_HEAD: baseHead,
     BASE_COMMIT: baseCommit,
-    PRIVATE_RECORD_FILE: privatePath,
+    PRIVATE_RECORD_FILE: deliveryPath,
     PUBLIC_RECORD_FILE: publicPath,
     ROUTE: options.route,
     TIMEOUT_SECONDS: String(options.timeout),
@@ -2182,7 +2225,7 @@ async function review(topic, args, memoryChecked = false) {
     } catch (error) {
       fail(`review dispatch failed: ${error.code === "ETIMEDOUT" ? "timeout" : "Herdr command error"}`);
     }
-    const record = await waitForPrivateReview(privatePath, deadline, interrupted, session);
+    const { text: record, bytes } = await waitForPrivateReview(deliveryPath, deadline, interrupted, session);
     const parsed = validateReviewRecord(record, {
       head, topic, round: options.round, reviewId, baseBranch: MAIN, baseCommit,
     });
@@ -2196,6 +2239,7 @@ async function review(topic, args, memoryChecked = false) {
     const publicRecord = sanitizeReviewProjection(parsed, {
       head, topic, round: options.round, reviewId, baseBranch: MAIN, baseCommit, path,
     });
+    archivePrivateReview(bytes, deliveryPath, privatePath, privateRelative);
     if (Date.now() > deadline) fail("review timed out before public review creation; private evidence was retained");
     try {
       mkdirSync(dirname(publicPath), { recursive: true });

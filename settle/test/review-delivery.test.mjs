@@ -1,0 +1,32 @@
+import test from '../../test/helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fixture } from './fixture.mjs';
+
+test('settle accepts and commits a review delivered through the lane worktree', t => {
+  const f = fixture(t), run = f.start();
+  f.commit('correct\n'); f.report(run);
+  const head = f.git(['rev-parse', 'HEAD'], f.workspace);
+  const handled = f.settle(run);
+  assert.equal(handled.status, 0, handled.stderr);
+  const result = JSON.parse(handled.stdout);
+  assert.equal(result.result, 'promotable');
+  assert.equal(result.review.verdict, 'PASS');
+  const prompt = fs.readFileSync(path.join(f.root, 'review-prompt'), 'utf8');
+  const delivery = prompt.match(/^Private record file: (.+)$/mu)[1];
+  assert.equal(delivery, path.join(f.workspace, `.lane-review-${head}-r1`, 'record.md'));
+  assert.equal(fs.existsSync(delivery), false);
+  const archive = path.join(f.repo, '.lane', 'reviews', 'topic', `${head.slice(0, 7)}-r1.md`);
+  assert.match(fs.readFileSync(archive, 'utf8'), /## Analysis\nScripted independent claim check/);
+  assert.equal(result.review.path, path.join(f.workspace, 'docs', 'reviews', 'topic', `${head.slice(0, 7)}-r1.md`));
+  assert.doesNotMatch(fs.readFileSync(result.review.path, 'utf8'), /## Analysis|Scripted independent claim check/);
+  assert.equal(f.git(['status', '--porcelain'], f.workspace), '');
+  assert.equal(f.git(['diff', '--name-only', head, 'HEAD'], f.workspace), path.relative(f.workspace, result.review.path));
+  const prompts = () => f.calls().filter(args => args[1] === 'prompt' && args[3]?.includes('Private record file: '));
+  assert.equal(prompts().length, 1);
+  const repeated = f.settle(run);
+  assert.equal(repeated.status, 0, repeated.stderr);
+  assert.deepEqual(JSON.parse(repeated.stdout), result);
+  assert.equal(prompts().length, 1);
+});

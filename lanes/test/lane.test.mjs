@@ -23,6 +23,7 @@ import { waitForFile } from '../../test/helpers/file-wait.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { SCRIPT, PTY_SKIP_REASON } from '../../test/helpers/pty.mjs';
+import { nativeSandboxLaunch } from '../../discovery/native-sandbox.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LANE = resolve(process.env.LANE_TEST_CLI ?? join(HERE, "..", "lane.mjs"));
 const HERDR_CLIENT = resolve(HERE, "..", "board", "herdr-client.mjs");
@@ -536,8 +537,22 @@ if (args[0] === "workspace" && args[1] === "list") {
     if (process.env.FAKE_REVIEW_MODE === "trailing-space-line") record += " \\n";
     if (process.env.FAKE_REVIEW_MODE === "trailing-tab-line") record += "\\t\\n";
     if (process.env.FAKE_REVIEW_MODE === "crlf-record") record = record.replace(/\\n/gu, "\\r\\n");
+    if (process.env.FAKE_REVIEW_MODE === "utf8-bom") record = "\uFEFF" + record;
     mkdirSync(dirname(privatePath), { recursive: true });
-    writeFileSync(privatePath, process.env.FAKE_REVIEW_MODE === "oversized" ? "x".repeat(1024 * 1024 + 1) : record);
+    if (process.env.FAKE_REVIEW_MODE === "late-complete") {
+      spawn(process.execPath, [
+        "--input-type=module", "--eval",
+        "import { writeFileSync } from 'node:fs'; setTimeout(() => writeFileSync(process.argv[1], process.argv[2]), 3500);",
+        privatePath, record,
+      ], { stdio: "ignore" }).unref();
+    } else {
+      writeFileSync(privatePath, process.env.FAKE_REVIEW_MODE === "oversized" ? "x".repeat(1024 * 1024 + 1) : record);
+    }
+    if (process.env.FAKE_REVIEW_MODE === "archive-collision") {
+      const archive = process.env.FAKE_HERDR_REPO_ROOT + "/.lane/reviews/" + field("Topic") + "/" + reviewed.slice(0, 7) + "-r" + field("Round") + ".md";
+      mkdirSync(dirname(archive), { recursive: true });
+      writeFileSync(archive, "concurrent archive sentinel\\n");
+    }
     if (process.env.FAKE_REVIEW_MODE === "rewrite-complete") {
       const rewritten = record
         .replace(/^\\*\\*PASS\\*\\*$/mu, "**NEEDS-WORK**")
@@ -566,7 +581,7 @@ if (args[0] === "workspace" && args[1] === "list") {
       execFileSync("git", ["-C", process.env.FAKE_HERDR_LANE_PATH, "add", "moved.txt"]);
       execFileSync("git", ["-C", process.env.FAKE_HERDR_LANE_PATH, "commit", "-m", "move review head"]);
     } else if (process.env.FAKE_REVIEW_MODE === "remove-worktree") {
-      rmSync(process.env.FAKE_HERDR_LANE_PATH, { recursive: true, force: true });
+      rmSync(process.env.FAKE_HERDR_LANE_PATH + "/.git");
     }
   }
   if (process.env.FAKE_HERDR_BREAK_REGISTRY) {
@@ -3102,6 +3117,177 @@ function reviewPayloadFixture(path) {
   };
 }
 
+function privateReviewDelivery(review) {
+  const prompt = review.fake.calls().find(args => args[0] === 'agent' && args[1] === 'prompt')?.[3];
+  assert.ok(prompt, 'review prompt was delivered');
+  return prompt.match(/^Private record file: (.+)$/mu)[1];
+}
+
+test("review delivery is writable under native worker settings while canonical reviews remain denied", () => {
+  const topic = "review-native-delivery";
+  const review = makeReviewFixture(topic, { verdict: "PASS" });
+  const nativeRoot = realpathSync(mkdtempSync(join(realpathSync('/tmp'), 'lr-')));
+  try {
+    const native = join(nativeRoot, 'native');
+    writeFileSync(native, '#!/bin/sh\nif [ "$1" = --help ] || [ "$2" = --help ]; then echo "--sandbox --add-dir --settings --permission-profile"; else echo "2.1.284"; fi\n', { mode: 0o755 });
+    const org = join(nativeRoot, 'org'), temp = join(nativeRoot, 'temp');
+    const codexHome = join(nativeRoot, 'codex'), claudeHome = join(nativeRoot, 'claude');
+    for (const directory of [org, temp, codexHome, claudeHome]) mkdirSync(directory);
+    const run = lane(review.fixture, ["review", topic, "--round", "1", "--brief", review.brief]);
+    assert.equal(run.status, 0, run.stderr);
+    const prompt = review.fake.calls().find(args => args[0] === 'agent' && args[1] === 'prompt')[3];
+    const delivery = prompt.match(/^Private record file: (.+)$/mu)[1];
+    const head = git(review.path, ['rev-parse', 'HEAD']);
+    const archive = join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`);
+    const context = { workspace: review.path, canonical: review.fixture.repo, org, tempRoot: temp,
+      worktrees: review.fixture.worktrees, role: 'worker', projects: [] };
+    const env = { ...review.fixture.env, CODEX_HOME: codexHome, CLAUDE_CONFIG_DIR: claudeHome };
+    const inside = (root, file) => file === root || file.startsWith(root + '/');
+    for (const kind of ['codex', 'claude']) {
+      const launch = nativeSandboxLaunch({ kind, binary: native, args: [], context, env,
+        warn: message => assert.fail(message) });
+      try {
+        let canWrite;
+        if (kind === 'codex') {
+          const settings = launch.args.find(arg => arg.startsWith('permissions.monitor-worker.filesystem='));
+          // Resolve the generator's literal inline TOML path rules, including
+          // the workspace-relative rules, by their most specific path.
+          const rules = [...settings.matchAll(/("(?:[^"\\]|\\.)*")="(read|write)"/gu)].map(match => {
+            const key = JSON.parse(match[1]);
+            return [key === ':root' ? '/' : key.startsWith('/') ? key : resolve(review.path, key), match[2]];
+          });
+          canWrite = file => rules.filter(([root]) => root === '/' || inside(root, file))
+            .sort(([a], [b]) => b.length - a.length)[0]?.[1] === 'write';
+        } else {
+          const settings = JSON.parse(readFileSync(launch.args[launch.args.indexOf('--settings') + 1], 'utf8'));
+          canWrite = file => [review.path, ...settings.sandbox.filesystem.allowWrite].some(root => inside(root, file)) &&
+            !settings.sandbox.filesystem.denyWrite.some(root => inside(root, file));
+          assert.ok(settings.permissions.deny.includes(`Edit(/${join(review.fixture.repo, '.lane')}/**)`));
+        }
+        assert.equal(canWrite(archive), false, `${kind}: canonical review writes must stay denied`);
+        assert.equal(canWrite(delivery), true, `${kind}: native settings deny the brief's private record path ${delivery}`);
+        if (kind === 'codex' && process.env.MONITOR_TEST_SANDBOX) {
+          const script = `const fs=require('fs'),assert=require('assert');
+assert.throws(()=>fs.writeFileSync(${JSON.stringify(archive)},'tampered'),e=>['EPERM','EACCES'].includes(e.code));
+fs.writeFileSync(${JSON.stringify(delivery)},'late native delivery');`;
+          const probe = spawnSync(process.env.MONITOR_TEST_SANDBOX, [
+            'sandbox', '--permission-profile', 'monitor-worker', '-C', review.path, ...launch.args,
+            '--', process.execPath, '-e', script,
+          ], { cwd: review.path, env: launch.env, encoding: 'utf8', timeout: loadTimeout(10000) });
+          assert.equal(probe.status, 0, probe.stdout + probe.stderr);
+          assert.equal(readFileSync(delivery, 'utf8'), 'late native delivery');
+          rmSync(delivery);
+        }
+      } finally { launch.close(); }
+    }
+    assert.equal(existsSync(delivery), false, 'validated delivery moved into the canonical archive');
+    assert.match(readFileSync(archive, 'utf8'), /## Analysis\nFixture review evidence/);
+    negativeControl('native review delivery boundary');
+  } finally {
+    review.fixture.cleanup();
+    rmSync(nativeRoot, { recursive: true, force: true });
+  }
+});
+
+test("review archival refuses an occupied destination and retains delivered evidence", () => {
+  const topic = 'review-archive-collision';
+  const review = makeReviewFixture(topic, { verdict: 'PASS', mode: 'archive-collision' });
+  try {
+    const head = git(review.path, ['rev-parse', 'HEAD']);
+    const run = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
+    assert.equal(run.status, 2, run.stderr);
+    assert.equal(run.stdout, '');
+    assert.match(run.stderr, /private review output already exists/);
+    const archive = join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`);
+    assert.equal(readFileSync(archive, 'utf8'), 'concurrent archive sentinel\n');
+    assert.match(readFileSync(privateReviewDelivery(review), 'utf8'), /^\*\*PASS\*\*/u);
+    assert.ok(!existsSync(join(review.path, 'docs', 'reviews', topic, `${head.slice(0, 7)}-r1.md`)));
+  } finally { review.fixture.cleanup(); }
+});
+
+test("review archival preserves accepted raw UTF-8 bytes", () => {
+  const topic = 'review-raw-utf8';
+  const review = makeReviewFixture(topic, { verdict: 'PASS', mode: 'utf8-bom' });
+  try {
+    const head = git(review.path, ['rev-parse', 'HEAD']);
+    const run = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, 'PASS\n');
+    const archived = readFileSync(join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`));
+    assert.deepEqual([...archived.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+    assert.match(archived.toString('utf8'), /## Analysis\nFixture review evidence/);
+    assert.equal(existsSync(privateReviewDelivery(review)), false);
+  } finally { review.fixture.cleanup(); }
+});
+
+test("review timeout retains late delivery and reserves the round before the file arrives", async () => {
+  const topic = 'review-late-delivery';
+  const review = makeReviewFixture(topic, { verdict: 'PASS', mode: 'late-complete' });
+  try {
+    const head = git(review.path, ['rev-parse', 'HEAD']);
+    const first = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief, '--timeout', '3']);
+    assert.equal(first.status, 2, first.stderr);
+    assert.equal(first.stdout, '');
+    assert.match(first.stderr, /may still write late evidence/);
+    const delivery = privateReviewDelivery(review);
+    assert.ok(first.stderr.includes(delivery));
+    const prompts = () => review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt');
+    const repeat = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
+    assert.equal(repeat.status, 2, repeat.stderr);
+    assert.match(repeat.stderr, /private review delivery directory already exists/);
+    assert.equal(prompts().length, 1);
+    await waitForCondition(() => existsSync(delivery) && readFileSync(delivery, 'utf8').includes('<!-- lane-review-complete -->'),
+      'late review delivery', 8000);
+    const late = readFileSync(delivery, 'utf8');
+    assert.equal(git(review.path, ['status', '--porcelain']), '', 'late delivery stays private and ignored');
+    assert.ok(!existsSync(join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r1.md`)));
+    delete review.fixture.env.FAKE_REVIEW_MODE;
+    const second = lane(review.fixture, ['review', topic, '--round', '2', '--brief', review.brief]);
+    assert.equal(second.status, 0, second.stderr);
+    assert.equal(second.stdout, 'PASS\n');
+    assert.equal(readFileSync(delivery, 'utf8'), late, 'later round leaves late evidence intact');
+    assert.match(readFileSync(join(review.fixture.repo, '.lane', 'reviews', topic, `${head.slice(0, 7)}-r2.md`), 'utf8'), /^Round: 2$/mu);
+    assert.equal(prompts().length, 2);
+  } finally { review.fixture.cleanup(); }
+});
+
+test("review preflight refuses a redirected delivery directory before dispatch", () => {
+  const topic = 'review-delivery-symlink';
+  const review = makeReviewFixture(topic, { verdict: 'PASS' });
+  try {
+    const outside = join(review.fixture.root, 'outside-delivery');
+    mkdirSync(outside);
+    // Ignore this fixture's symlink to reach the delivery preflight rather than
+    // the ordinary clean-tree check. This is not a product ignore mutation.
+    writeFileSync(join(review.path, '.gitignore'), '.lane/\n.ready.marker\n.lane-review-*\n');
+    git(review.path, ['add', '.gitignore']); git(review.path, ['commit', '-qm', 'Ignore delivery fixture']);
+    const currentHead = git(review.path, ['rev-parse', 'HEAD']);
+    symlinkSync(outside, join(review.path, `.lane-review-${currentHead}-r1`));
+    const run = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
+    assert.equal(run.status, 2, run.stderr);
+    assert.match(run.stderr, /private review delivery directory already exists/);
+    assert.equal(review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 0);
+    assert.ok(!existsSync(join(outside, 'record.md')));
+  } finally { review.fixture.cleanup(); }
+});
+
+test("review preflight preserves abbreviation collision safety for pending delivery", () => {
+  const topic = 'review-delivery-prefix';
+  const review = makeReviewFixture(topic, { verdict: 'PASS' });
+  try {
+    const head = git(review.path, ['rev-parse', 'HEAD']);
+    const other = head.slice(0, 7) + (head.endsWith('0'.repeat(33)) ? '1' : '0').repeat(33);
+    const pending = join(review.path, `.lane-review-${other}-r4`);
+    mkdirSync(pending);
+    writeFileSync(join(pending, '.gitignore'), '*\n');
+    const run = lane(review.fixture, ['review', topic, '--round', '1', '--brief', review.brief]);
+    assert.equal(run.status, 2, run.stderr);
+    assert.match(run.stderr, /review abbreviation .* is ambiguous with an existing delivery/);
+    assert.equal(review.fake.calls().filter(args => args[0] === 'agent' && args[1] === 'prompt').length, 0);
+    assert.equal(readFileSync(join(pending, '.gitignore'), 'utf8'), '*\n');
+  } finally { review.fixture.cleanup(); }
+});
+
 test("review requires explicit source, round, route, and bounded unique flags with exit 2", () => {
   const { fixture, brief } = makeReviewFixture("review-flags");
   try {
@@ -3201,6 +3387,12 @@ test("review settles a completed private record before validating its final byte
     ), "utf8");
     assert.equal(parseVerdict(publicRecord), "NEEDS-WORK");
     assert.match(publicRecord, /Rewritten reviewer behavior was not exercised/);
+    const archived = readFileSync(join(
+      review.fixture.repo, '.lane', 'reviews', 'review-settle', `${head.slice(0, 7)}-r1.md`,
+    ), 'utf8');
+    assert.equal(parseVerdict(archived), 'NEEDS-WORK');
+    assert.match(archived, /Rewritten reviewer behavior was not exercised/);
+    assert.equal(existsSync(privateReviewDelivery(review)), false);
     assert.ok(Date.now() - started >= 2_300, "review returned before the rewritten record settled");
     negativeControl("completed private record settle window");
   } finally {
@@ -4515,8 +4707,9 @@ test("review refuses malformed private evidence, incomplete output, timeout, and
       ]);
       assert.equal(run.status, exit, `${mode}\n${run.stderr}`);
       assert.equal(run.stdout, "");
-      const privatePath = join(review.fixture.repo, ".lane", "reviews", topic, `${capturedHead.slice(0, 7)}-r1.md`);
-      if (verdict !== undefined) assert.ok(existsSync(privatePath));
+      const privatePath = privateReviewDelivery(review);
+      if (verdict !== undefined) assert.ok(existsSync(privatePath), `${mode}: private delivery evidence retained`);
+      assert.ok(!existsSync(join(review.fixture.repo, ".lane", "reviews", topic, `${capturedHead.slice(0, 7)}-r1.md`)));
       if (mode === "missing") {
         assert.match(run.stderr, /review timed out; reviewer agent '[a-z0-9_-]+' in tab w-lane:t2/);
       }
@@ -4567,12 +4760,11 @@ test("review sends malformed completed endings to schema validation without wait
   }
 });
 
-test("review contains unexpected errors when the target disappears after dispatch", () => {
+test("review contains unexpected errors when target Git metadata disappears after dispatch", () => {
   const review = makeReviewFixture("review-removed-worktree", {
     verdict: "PASS", mode: "remove-worktree",
   });
   try {
-    const capturedHead = git(review.path, ["rev-parse", "HEAD"]);
     const run = lane(review.fixture, [
       "review", "review-removed-worktree", "--round", "1", "--brief", review.brief,
     ]);
@@ -4581,9 +4773,7 @@ test("review contains unexpected errors when the target disappears after dispatc
     assert.match(run.stderr, /lane review: unexpected failure; private evidence may have been retained/);
     assert.doesNotMatch(run.stderr, /(?:Error:|\n\s+at )/);
     assert.doesNotMatch(run.stderr, new RegExp(review.fixture.root.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")));
-    assert.ok(existsSync(join(
-      review.fixture.repo, ".lane", "reviews", "review-removed-worktree", `${capturedHead.slice(0, 7)}-r1.md`,
-    )));
+    assert.ok(existsSync(privateReviewDelivery(review)));
     negativeControl("unexpected review error boundary");
   } finally {
     review.fixture.cleanup();

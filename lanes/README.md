@@ -161,8 +161,12 @@ lane review api-change --round 1 --brief /absolute/path/to/review-questions.md
 ```
 
 The review command uses [the packaged protocol](docs/REVIEW_TEMPLATE.md), validates
-the reviewer's private record, verifies that the lane did not move, and publishes a
-sanitized review under `docs/reviews/<topic>/`. After publication succeeds it
+the reviewer's private record delivered inside its lane worktree, verifies that the
+lane did not move, archives the validated bytes under canonical `.lane/reviews/<topic>/`,
+and publishes a sanitized review under `docs/reviews/<topic>/`. Native worker
+permissions continue to protect canonical `.lane/`; the CLI owns archival. Partial
+or late delivery evidence is retained and the occupied round cannot be dispatched
+again. After publication succeeds it
 prints `PASS` (exit 0), `NEEDS-WORK`, or `FAIL` (exit 1). A STOP before launch
 prints the stopped JSON receipt (exit 3); other failures exit 2 without a verdict.
 Malformed finding lines are preserved as sanitized literal prose marked

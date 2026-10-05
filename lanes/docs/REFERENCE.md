@@ -386,24 +386,34 @@ check, validation, or a framework executable and never turns a gate into a verdi
 
 The installed [review template](REVIEW_TEMPLATE.md) overrides generic engineering
 instructions with a review-only role. The reviewer may write exactly the designated
-canonical-checkout private file:
+private delivery file inside its lane worktree:
+
+```text
+.lane-review-<full-head>-r<N>/record.md
+```
+
+The CLI creates that private directory with a self-ignoring `.gitignore`, without
+changing project ignores or native permissions. Canonical `.lane/` remains protected
+from worker writes. After validation and sanitization, the CLI exclusively saves the
+validated bytes in the canonical checkout and removes the delivered file:
 
 ```text
 .lane/reviews/<topic>/<head7>-r<N>.md
 ```
 
-That path must be gitignored, untracked, absent, and free of symlink escapes. The
+The archive path must be gitignored, untracked, absent, and free of symlink escapes. The
 corresponding `docs/reviews/<topic>/<head7>-r<N>.md` path must be absent, untracked,
 trackable, and not ignored; the same command creates the public record after the
 unchanged-lane check. Matching abbreviations tied to another full SHA refuse as
 ambiguous. The CLI never overwrites, stages, commits, resets, cleans, fixes, retries,
 or selects another round.
 
-The reviewer cannot write anywhere in the lane worktree, including ignored scratch,
-cache, dependency, or build paths. Test and mutation copies belong in cleaned system
-temporary directories. The only repository write it may make is the required private
-record. Without an unambiguous supplemental `Review run budget`, the budget is zero
-build/test/prepare/install/check commands. An authorized budget names exact commands
+The reviewer cannot write other files in the lane worktree, including ignored scratch,
+cache, dependency, or build paths. Test and mutation copies belong in its private run
+temporary directory and must be cleaned afterward. The only repository write it may
+make is the required private delivery record. Without an unambiguous supplemental
+`Review run budget`, the budget is zero build/test/prepare/install/check commands.
+An authorized budget names exact commands
 and a finite count for each command and witness. Every authorized build or test waits
 for a clear machine-load probe and runs alone; the CLI passes the budget but executes
 none of it.
@@ -449,6 +459,11 @@ rechecks the exact HEAD, branch, and a completely clean lane before accepting th
 verdict. It polls only the selected private path with foreground timers. It does not
 infer completion from chat or an agent footer, send follow-up actions, kill the
 reviewer, delete partial/late evidence, or leave a watcher behind.
+Failure retains the delivery directory and any private evidence there. The timeout
+or interruption message names that path for inspection, and the occupied directory
+blocks another dispatch at the same HEAD and round, even before a late file arrives.
+Recovery uses an explicitly selected later round. A concurrently occupied archive
+is never overwritten, and the delivered evidence remains available on refusal.
 
 Only after that unchanged-lane check, the CLI constructs a public envelope from the
 validated metadata, Findings, Re-executed, Non-claims, and Unverified sections. It

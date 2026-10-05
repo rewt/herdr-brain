@@ -12,7 +12,7 @@ import { snapshot } from './entry-runtime.mjs';
 import { withInstallationLock } from './entry-lock.mjs';
 import { planNativeHooks } from './native-hooks.mjs';
 
-const { values } = parseArgs({ options: { product: { type: 'string' }, remove: { type: 'boolean' }, check: { type: 'boolean' }, snapshot: { type: 'boolean' }, recover: { type: 'boolean' } } });
+const { values } = parseArgs({ options: { product: { type: 'string' }, 'hook-runtime': { type: 'string' }, remove: { type: 'boolean' }, check: { type: 'boolean' }, snapshot: { type: 'boolean' }, recover: { type: 'boolean' } } });
 const product = path.resolve(values.product ?? fileURLToPath(new URL('../', import.meta.url)));
 const monitorHome = process.env.HERDR_MONITOR_HOME ?? path.join(process.env.HOME, '.local/share/herdr-monitor');
 const bin = path.resolve(process.env.HERDR_MONITOR_ENTRY_BIN ?? path.join(monitorHome, 'entry/bin'));
@@ -140,7 +140,7 @@ try {
       if (values.snapshot) runtime = snapshot(product, runtimeRoot, owner.token);
       entry = stageInstaller(runtime?.directory ?? product, args);
     }
-    const cleanupNativeDirectories = planNativeHooks({ bin, runtime: runtime?.directory ?? product,
+    const cleanupNativeDirectories = planNativeHooks({ bin, runtime: values['hook-runtime'] ? path.resolve(values['hook-runtime']) : runtime?.directory ?? product,
       kinds: entry && exists(path.join(product, 'herdr/native-entry.mjs')) ? [entry.native && 'codex', entry.claudeNative && 'claude'].filter(Boolean) : [], inspect, change });
     for (const name of names) change(path.join(bin, name), entry?.files[name] === undefined ? null : { content: Buffer.from(entry.files[name]), mode: 0o755 });
     change(entryFile, entry ? { content: Buffer.from(JSON.stringify(entry, null, 2) + '\n'), mode: 0o600 } : null);
@@ -160,6 +160,6 @@ try {
     if (!values.check && (changes.length || runtime?.created)) transact(journal, bin, runtimeRoot, changes, runtime, owner);
     if (!values.check) cleanupNativeDirectories();
     console.log(`entry: ${values.check ? 'checked' : values.remove ? 'restored' : 'installed'} machine entry at ${bin}`);
-    if (!values.check && !values.remove && entry?.native) console.log('entry: review the Monitor user SessionStart hook in Codex /hooks before native-path or desktop entry; hook trust stays under your control');
+    if (!values.check && !values.remove && entry?.native) console.log('entry: required Codex setup: open /hooks and review the Monitor user SessionStart hook in every profile used for workers or native/desktop entry. Use codex -p PROFILE for a named profile; plain codex uses its configured default profile. Trust in one profile does not cover another. Dispatch blocks at "1 hook needs review" until you review in the affected worker/profile, then use dispatch --retry R-n. Hook trust stays under your control; installation never writes trust records.');
   });
 } catch (error) { console.error(`entry: ${error.message}`); process.exitCode = 1; }

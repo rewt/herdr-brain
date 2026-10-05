@@ -14,6 +14,19 @@ bash herdr/release.sh rollback
 bash herdr/release.sh restore
 ```
 
+After activation, complete the printed **required Codex setup** before dispatching:
+open Codex with each profile used for workers or native/desktop sessions, open
+`/hooks`, and review the Monitor user SessionStart hook. For a named profile,
+launch `codex -p PROFILE`; plain `codex` uses its configured default profile.
+Trust is per profile: reviewing `claude-mem-rewt` does not review
+`claude-mem-bastian` or the default profile. The operator chooses whether to
+trust the hook; installation and dispatch never write Codex trust records.
+
+If dispatch reports the `1 hook needs review` dialog, open `/hooks` in the
+named worker session and review in that profile, then run
+`node dispatch/dispatch.mjs --retry R-n` with the returned run ID. The pending
+brief, run and worker are retained for retry.
+
 Only the operator/supervisor performs machine installation. Lane tests set their
 own refusal/fake Herdr CLI before any lane or entry operation. The bounded test
 runner also clears inherited Herdr IDs and pins an absent scratch socket; neither
@@ -76,6 +89,12 @@ and rollback. Originally missing config directories are removed only when empty.
 Codex users review new/changed hooks through `/hooks`, as required by
 [native hook trust](https://learn.chatgpt.com/docs/hooks); installation never writes
 trust records. No project hook or project setup file is installed.
+Release activation points the hook command at
+`$HERDR_MONITOR_HOME/current/herdr/native-entry.mjs`. Its command stays the same
+across upgrades and rollback, so changing the release directory alone does not
+request a new review. Switching an older release-specific command to this stable
+path is itself a hook change and requires operator review once in each profile.
+Other hook-command changes still require Codex's own review.
 Hooks join the fleet and provide adapter guidance for native-path/desktop sessions;
 the bounded worker parent still comes from `monitor-codex` or `monitor-claude`.
 Scripts must be installed on the host running the session.

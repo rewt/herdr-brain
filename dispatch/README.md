@@ -112,6 +112,18 @@ Some failures cannot be safely retried by guessing:
 - Failed/lost prompt delivery leaves `prompting`. Inspect the worker, then use
   `--accept-delivered` if it landed, or `--resend` if it did not. Both require
   `--retry`; neither is automatic.
+- Before any Codex brief delivery, including an authorized resend, dispatch reads
+  the worker's visible pane screen. A `1 hook needs review` dialog (or plural
+  count) returns exit 1 with JSON `result: "blocked"`, code
+  `DISPATCH_HOOK_REVIEW`, the worker/pane, run, journal and a specific fix on
+  stderr and in the record note. The diagnostic names the profile from the saved
+  launch route, or says the configured default profile when none was explicit.
+  Open `/hooks` in that worker session and review the hooks in that profile.
+  Dispatch never sends keys or trusts hooks. An unsent request stays at `prompt`;
+  ordinary `--retry R-n` sends the saved brief after the operator clears the
+  dialog, retaining the same run, worker and live watcher. A screen-read failure
+  also leaves the brief unsent. An uncertain earlier delivery stays `prompting`
+  and still needs its existing explicit recovery flag.
 - A live watcher whose acknowledgement was lost still owns watch's run lock.
   Inspect the log and stop that watcher before re-arming; the module refuses to
   launch a duplicate. Do not remove a live lock.

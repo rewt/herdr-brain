@@ -188,7 +188,7 @@ entry() {
   local tree=$1; shift
   local bin=${HERDR_MONITOR_ENTRY_BIN:-$HOME_DIR/entry/bin}
   if [ -f "$tree/discovery/install.mjs" ]; then
-    HERDR_MONITOR_HOME="$HOME_DIR" node "$ENTRY_DRIVER" --product "$tree" "$@"
+    HERDR_MONITOR_HOME="$HOME_DIR" node "$ENTRY_DRIVER" --product "$tree" --hook-runtime "$HOME_DIR/current" "$@"
   elif [ -e "$bin/.monitor-entry.json" ] || [ -e "$bin/.monitor-shell.json" ]; then
     HERDR_MONITOR_HOME="$HOME_DIR" node "$ENTRY_DRIVER" --remove "$@"
   fi

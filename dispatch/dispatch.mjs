@@ -11,6 +11,7 @@ import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes
 import { findOrgDir } from '../lib/store.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -315,6 +316,19 @@ async function main() {
     if (job.stage === 'prompting' && !opt.resend) throw new Error('prompt delivery outcome is unknown; inspect worker, then --accept-delivered or --resend only if delivery did not land');
     if (job.stage === 'prompt' || (job.stage === 'prompting' && opt.resend)) {
       liveWorker(job.worker);
+      if (job.declared.harness === 'codex') {
+        const screen = command(['herdr'], ['pane', 'read', job.worker.pane, '--source', 'visible', '--format', 'text']);
+        const dialog = hookReviewDialog(screen);
+        if (dialog) {
+          const launch = resolveLaunchRoute(JSON.parse(fs.readFileSync(job.routeConfig, 'utf8')), { route: job.route });
+          const profile = codexProfile(launch.args);
+          const scope = profile ? `profile ${JSON.stringify(profile)} (-p ${JSON.stringify(profile)})`
+            : 'the configured default profile (no -p/--profile in the saved route)';
+          const error = new Error(`Codex hook-review dialog "${dialog}" blocks worker ${job.worker.agentName} in ${job.worker.pane}, ${scope}; brief not sent. Open /hooks in that worker session and review the hooks in that profile, then retry with --retry ${job.run}. Hook trust is the operator's decision.`);
+          error.code = 'DISPATCH_HOOK_REVIEW';
+          throw error;
+        }
+      }
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.${job.extra ? `\n\n${job.extra}` : ''}`;
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
@@ -336,6 +350,10 @@ catch (error) {
   if (error.code === 'DISPATCH_STOPPED') {
     process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
       reason: error.message, stage: job.stage, journal })}\n`);
+  } else if (error.code === 'DISPATCH_HOOK_REVIEW') {
+    process.stdout.write(`${JSON.stringify({ result: 'blocked', code: error.code, run: job.run, item: job.item,
+      agent: job.worker.agentName, pane: job.worker.pane, reason: error.message, stage: job.stage, journal })}\n`);
+    process.exitCode = 1;
   } else {
     // Coordinators inherit stderr for live waits; retain failure evidence on
     // their captured stdout as well, including failures before a journal exists.

@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ownerAlive } from '../../lib/process-owner.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
+import { hookReviewDialog, codexProfile } from '../hook-review.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -48,6 +49,10 @@ if(type==='lane') {
  const { ownerIdentity } = await import(${JSON.stringify(new URL('../../lib/process-owner.mjs', import.meta.url).href)});
  result({run:a[0],pid:child.pid,identity:ownerIdentity(child.pid),log:path.join(root,a[0]+'.log')});
 } else {
+ if(a[0]==='pane' && a[1]==='read') {
+  if(fail==='screen') {console.error('injected screen read failure');process.exit(1);}
+  process.stdout.write(fs.existsSync(path.join(root,'screen'))?fs.readFileSync(path.join(root,'screen'),'utf8'):'› Ready for a task');
+ }
  if(a[0]==='agent' && a[1]==='get') {
   const agent=a[2]==='supervisor-herdr'?{name:a[2]}:workers[a[2]];
   if(!agent) {console.error(JSON.stringify({error:{code:'agent_not_found'}}));process.exit(1);}
@@ -151,6 +156,64 @@ function fixture(t, { realWatch = false, preload } = {}) {
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
+test('hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose', () => {
+  for (const screen of ['1 hook needs review', '\u001b[1m│ 2 hooks need review │\u001b[0m', '╭──╮\n  1 hook needs\n  review\n╰──╯']) {
+    assert.match(hookReviewDialog(screen), /^\d+ hooks? needs? review$/);
+  }
+  for (const screen of ['› Ready', '0 hooks pending', 'Explain why 1 hook needs review', '› Fix "1 hook needs review"']) assert.equal(hookReviewDialog(screen), undefined);
+  for (const args of [['-p', 'worker'], ['--profile', 'worker'], ['--profile=worker'], ['-pworker']]) assert.equal(codexProfile(args), 'worker');
+  assert.equal(codexProfile(['-p', 'old', '--profile=new']), 'new');
+  assert.equal(codexProfile([]), undefined);
+});
+for (const profile of [undefined, 'claude-mem-bastian']) test(`Codex hook review blocks the brief visibly in ${profile ?? 'the default profile'} and ordinary retry delivers once`, t => {
+  const f = fixture(t);
+  if (profile) fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({
+    always_args: { codex: ['--profile', profile] }, routes: { engineer: { kind: 'codex', model: 'model-a', effort: 'high' } },
+  }));
+  fs.writeFileSync(path.join(f.root, 'screen'), '\u001b[1m│ 1 hook needs review │\u001b[0m\nReview hooks before continuing\n');
+  const first = f.start(); assert.equal(first.status, 1, first.stderr);
+  const blocked = JSON.parse(first.stdout), job = JSON.parse(fs.readFileSync(blocked.journal));
+  assert.equal(blocked.result, 'blocked'); assert.equal(blocked.code, 'DISPATCH_HOOK_REVIEW');
+  assert.equal(blocked.run, job.run); assert.equal(blocked.pane, job.worker.pane);
+  assert.match(first.stderr, /1 hook needs review/); assert.match(first.stderr, /Open \/hooks/);
+  assert.ok(first.stderr.includes(profile ?? 'configured default profile'));
+  assert.equal(job.stage, 'prompt'); assert.equal(promptCalls(f).length, 0);
+  assert.match(f.show(job.run).notes.at(-1).text, /hook-review dialog.*brief not sent/);
+  const watcher = job.watcher;
+  assert.equal(f.dispatch(['--retry', job.run]).status, 1); assert.equal(promptCalls(f).length, 0);
+  // A changed live config must not misidentify the profile of the saved worker.
+  if (profile) {
+    fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({routes:{engineer:{kind:'codex',args:['-p','other']}}}));
+    assert.ok(f.dispatch(['--retry', job.run]).stderr.includes(profile));
+  }
+  fs.writeFileSync(path.join(f.root, 'screen'), '› Ready for a task');
+  const retry = f.dispatch(['--retry', job.run]); assert.equal(retry.status, 0, retry.stderr);
+  const resumed = JSON.parse(retry.stdout); assert.equal(resumed.run, job.run); assert.equal(resumed.agent, job.worker.agentName);
+  assert.deepEqual(resumed.watcher, watcher); assert.equal(promptCalls(f).length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'watch').length, 1);
+  assert.equal(f.calls().some(c => c.a.includes('send-keys')), false, 'dispatch never accepts hook trust');
+  const reads = f.calls().filter(c => c.a[0] === 'pane' && c.a[1] === 'read');
+  for (const read of reads) assert.deepEqual(read.a, ['pane','read',job.worker.pane,'--source','visible','--format','text']);
+  assert.equal(f.dispatch(['--retry', job.run]).status, 0); assert.equal(promptCalls(f).length, 1);
+});
+test('screen read failure leaves delivery unsent and retryable', t => {
+  const f = fixture(t); f.fail('screen'); const first = f.start();
+  assert.equal(first.status, 1); assert.match(first.stderr, /screen read failure/);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0])); assert.equal(job.stage, 'prompt'); assert.equal(promptCalls(f).length, 0);
+  f.fail(''); const retry = f.dispatch(['--retry', job.run]); assert.equal(retry.status, 0, retry.stderr); assert.equal(promptCalls(f).length, 1);
+});
+test('an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery', t => {
+  const f = fixture(t); f.fail('prompt'); assert.equal(f.start().status, 1);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0])); f.fail('');
+  fs.writeFileSync(path.join(f.root, 'screen'), '2 hooks need review');
+  const stopped = f.dispatch(['--retry', job.run, '--resend']); assert.equal(stopped.status, 1);
+  assert.equal(JSON.parse(stopped.stdout).result, 'blocked'); assert.equal(promptCalls(f).length, 1);
+  assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).stage, 'prompting');
+  fs.writeFileSync(path.join(f.root, 'screen'), '› Ready');
+  assert.equal(f.dispatch(['--retry', job.run]).status, 1, 'uncertain earlier delivery still needs explicit recovery');
+  const retry = f.dispatch(['--retry', job.run, '--resend']); assert.equal(retry.status, 0, retry.stderr); assert.equal(promptCalls(f).length, 2);
+});
 test('Linux dispatch watcher receipt and journal round-trip as strings through record set', t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-linux-identity-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));

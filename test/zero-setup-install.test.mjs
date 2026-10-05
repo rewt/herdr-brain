@@ -71,6 +71,44 @@ test('missing harness refuses before shell or harness configuration changes', t 
   for (const name of ['.zshenv', '.bashrc', '.codex/hooks.json', '.claude/settings.json']) assert.equal(fs.existsSync(path.join(f.home, name)), false);
 });
 
+test('release activation keeps native hook commands stable through upgrade and rollback without writing profile trust', t => {
+  const f = fixture(t, ['codex', 'claude']);
+  fs.symlinkSync(process.execPath, path.join(f.tools, 'node'));
+  const releaseHome = f.env.HERDR_MONITOR_HOME;
+  const first = path.join(releaseHome, 'releases', 'first'), second = path.join(releaseHome, 'releases', 'second');
+  copyProduct(f.product, first); copyProduct(f.product, second);
+  fs.appendFileSync(path.join(second, 'herdr/native-entry.mjs'), '\n// New release runtime.\n');
+  const trust = new Map();
+  for (const name of ['config.toml', 'claude-mem-rewt.config.toml', 'claude-mem-bastian.config.toml']) {
+    const file = path.join(f.env.CODEX_HOME, name), content = Buffer.from(`# Operator-owned ${name}\n`);
+    f.write(file, content); trust.set(file, content);
+  }
+  const extra = { HERDR_MONITOR_REPO: f.product, HERDR_MONITOR_BIN: path.join(f.root, 'launchers'), RELEASE_NO_LAUNCHD: '1' };
+  // Seed the release-specific command written by the previous installer.
+  f.ok(f.run(process.execPath, [path.join(f.product, 'herdr/entry-install.mjs'), '--product', first]));
+  assert.ok(fs.readFileSync(path.join(f.env.CODEX_HOME, 'hooks.json'), 'utf8').includes(first));
+  const release = args => f.ok(f.run('/bin/bash', [path.join(f.product, 'herdr/release.sh'), ...args], extra));
+  const activated = release(['activate', 'first']);
+  assert.match(activated.stdout, /required Codex setup.*\/hooks.*every profile/);
+  assert.match(activated.stdout, /Trust in one profile does not cover another/);
+  const files = [path.join(f.env.CODEX_HOME, 'hooks.json'), path.join(f.env.CLAUDE_CONFIG_DIR, 'settings.json')];
+  const before = files.map(file => fs.readFileSync(file));
+  for (const file of files) {
+    const command = JSON.parse(fs.readFileSync(file)).hooks.SessionStart[0].hooks[0].command;
+    assert.ok(command.includes(path.join(releaseHome, 'current/herdr/native-entry.mjs')));
+    assert.ok(!command.includes('/releases/'));
+  }
+  release(['activate', 'second']);
+  assert.equal(fs.realpathSync(path.join(releaseHome, 'current')), second);
+  for (let i = 0; i < files.length; i++) assert.deepEqual(fs.readFileSync(files[i]), before[i]);
+  // The stable command executes the active runtime, even on initial activation.
+  const command = JSON.parse(before[0]).hooks.SessionStart[0].hooks[0].command;
+  f.ok(f.run('/bin/sh', ['-c', command], {}, JSON.stringify({hook_event_name:'SessionStart',source:'startup',cwd:f.home})));
+  release(['rollback']); assert.equal(fs.realpathSync(path.join(releaseHome, 'current')), first);
+  for (let i = 0; i < files.length; i++) assert.deepEqual(fs.readFileSync(files[i]), before[i]);
+  for (const [file, content] of trust) assert.deepEqual(fs.readFileSync(file), content);
+});
+
 for (const missing of ['npm', 'git', 'python3', 'herdr']) test(`missing ${missing} names the prerequisite and changes no machine files`, t => {
   const f = fixture(t, ['claude']);
   for (const [name, version] of Object.entries({npm:'10.0.0',git:'git version 2.50.0',python3:'Python 3.12.0',herdr:'herdr 0.8.2'})) {

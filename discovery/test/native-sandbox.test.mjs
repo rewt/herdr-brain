@@ -403,7 +403,8 @@ test('Codex respects inherited and CLI sandbox choices with one source-naming wa
     const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: choice.args, context: f.context, warn: s => warnings.push(s) });
     t.after(launch.close);
     assert.deepEqual(launch.args.slice(0, choice.args.length), choice.args, 'the operator sandbox choice remains untouched');
-    assert.deepEqual(launch.args.slice(choice.args.length), ['-c', projectTrust([f.own.checkout])]);
+    assert.deepEqual(launch.args.slice(-2), ['-c', projectTrust([f.own.checkout])]);
+    assert.ok(launch.args.slice(choice.args.length).some(arg => arg.startsWith('hooks.PermissionRequest=')), 'per-launch denial hook accompanies native sandbox choice');
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /WARNING.*sandbox_mode.*danger-full-access/u);
     assert.ok(warnings[0].includes(choice.source), warnings[0]);
@@ -563,6 +564,8 @@ test('native Codex config reader accepts dotted and quoted launch trust without 
   for (const directory of [f.own.checkout, workspace]) assert.equal(loaded.projects[directory].trust_level, 'trusted');
   assert.equal(loaded.projects[f.other.checkout].trust_level, 'untrusted');
   assert.equal(loaded.developer_instructions, 'offline project trust marker', 'native loader enables the trusted worktree project layer');
+  assert.match(loaded.hooks.PermissionRequest[0].hooks[0].command, /supervisor\/permission-hook\.mjs/,
+    'native config reader accepts the per-launch permission hook');
   assert.equal(fs.readFileSync(configFile, 'utf8'), config);
 });
 

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import test from '../../test/helpers/bounded-test.mjs';
-import { stewardTick, readStewardJournal, operatorAlert } from '../lib/steward.mjs';
+import { stewardTick, readStewardJournal, operatorAlert, routingProject } from '../lib/steward.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { rememberSupervisor } from '../../supervisor/session-binding.mjs';
 import { drainInbox, readInbox, enqueueSupervisor } from '../../supervisor/prompt-supervisor.mjs';
@@ -30,7 +30,7 @@ function fixture(t) {
   const fleet = { version: 1, session_limit: 6, projects: { alpha, beta } };
   fs.writeFileSync(path.join(fleetHome, 'fleet.json'), JSON.stringify(fleet));
   const env = { ...process.env, HERDR_MONITOR_FLEET: fleetHome };
-  const config = value => fs.writeFileSync(path.join(home, 'steward.json'), JSON.stringify(value));
+  const config = value => fs.writeFileSync(path.join(home, 'steward.json'), JSON.stringify({ key_fallback: false, ...value }));
   config({ projects: { alpha: { supervisor: 'alpha-supervisor' }, beta: { supervisor: 'beta-supervisor' } }, debounce_seconds: 60, stalled_seconds: 300, alert_cap: 3 });
   const agent = (name, p = alpha, status = 'blocked') => ({ name, pane_id: `${name}:p1`, terminal_id: `${name}:terminal`, agent_session: `${name}:native`, cwd: p.checkout, agent_status: status, agent: 'claude' });
   const worker = agent('worker'), supervisor = agent('alpha-supervisor', alpha, 'idle');
@@ -212,7 +212,8 @@ test('corrupt configuration, fleet and journals refuse effects', async t => {
   fs.rmSync(path.join(f.home, 'steward/journal.json'));
   fs.writeFileSync(path.join(f.env.HERDR_MONITOR_FLEET, 'fleet.json'), '{');
   await assert.rejects(f.tick(), /invalid fleet/);
-  assert.deepEqual(f.alerts, []);
+  assert.equal(f.alerts.length, 1);
+  assert.equal(f.alerts[0].kind, 'journal-refused');
 });
 
 test('bounded journal compaction preserves active alert caps while evicting old session history', async t => {
@@ -240,9 +241,9 @@ test('offline inbox observation continues escalating with the same cap when Herd
 test('the local alert command receives a single literal JSON argument without shell interpretation', async t => {
   const f = fixture(t), output = path.join(f.root, 'alert.json'), script = path.join(f.root, 'alert.mjs');
   fs.writeFileSync(script, `import fs from 'node:fs'; fs.writeFileSync(process.argv[2], process.argv[3]);`);
-  const payload = { message: '$(touch NO) `touch NO` " quoted\nnew line' };
+  const payload = { project: 'alpha', session: 'worker', kind: 'blocked', message: '$(touch NO) `touch NO` " quoted\nnew line' };
   await operatorAlert(payload, { alert_command: [process.execPath, script, output] });
-  assert.deepEqual(JSON.parse(fs.readFileSync(output)), payload);
+  assert.deepEqual(JSON.parse(fs.readFileSync(output)), { project: 'alpha', session: 'worker', kind: 'blocked' });
   assert.equal(fs.existsSync(path.join(f.root, 'NO')), false);
 });
 
@@ -273,15 +274,16 @@ test('retired session cap receipts survive unrelated journal compaction and late
   assert.deepEqual((await f.tick({ ...opts, now: NOW + 300000 })).actions, []);
 });
 
-test('journal saturation refuses an effect before the command and preserves the existing cap receipts', async t => {
+test('many retired alert receipts compact without silencing new sessions', async t => {
   const f = fixture(t);
   const file = path.join(f.home, 'steward/journal.json');
   fs.mkdirSync(path.dirname(file));
   fs.writeFileSync(file, JSON.stringify({ version: 1, events: Array.from({ length: 2048 }, (_, i) => ({ key: `old-${i}`, type: 'alert-intent', at: NOW })) }));
-  const before = fs.readFileSync(file);
-  await assert.rejects(f.tick({ rows: [f.row(f.supervisor)], agents: [{ ...f.supervisor, agent_status: 'blocked' }] }), /journal full/);
-  assert.deepEqual(fs.readFileSync(file), before);
-  assert.deepEqual(f.alerts, []);
+  const result = await f.tick({ rows: [f.row(f.supervisor)], agents: [{ ...f.supervisor, agent_status: 'blocked' }] });
+  assert.equal(result.actions[0].kind, 'blocked-supervisor');
+  assert.ok(f.journal().length < 400);
+  const routed = await f.tick({ now: NOW + 60000 });
+  assert.equal(routed.actions[0].type, 'route');
 });
 
 test('the watcher captures first-seen and replacement-session blocks without a digest model', async t => {
@@ -311,4 +313,81 @@ test('the watcher captures first-seen and replacement-session blocks without a d
   assert.equal(events[0].agent_session, f.worker.agent_session);
   assert.equal(events.filter(e => e.type === 'result')[1].terminal_id, 'replacement-terminal');
   assert.notEqual(events.filter(e => e.type === 'result')[0].id, events.filter(e => e.type === 'result')[1].id);
+});
+
+
+test('exhausted stalled episode cap cannot silence a later supervisor block, while debounce is shared', async t => {
+  const f = fixture(t);
+  await f.tick();
+  for (const seconds of [300,360,420]) await f.tick({now:NOW+seconds*1000,rows:[]});
+  assert.equal(f.alerts.length,3);
+  const supervisor = {...f.supervisor,agent_status:'blocked'}, row = f.row(supervisor,{id:'later-block',at:new Date(NOW+421000).toISOString()});
+  assert.equal((await f.tick({now:NOW+421000,agents:[supervisor],rows:[row]})).actions.length,0);
+  assert.equal((await f.tick({now:NOW+480000,agents:[supervisor],rows:[row]})).actions[0].kind,'blocked-supervisor');
+  assert.equal(f.alerts.length,4);
+  const newRow = {...row,id:'another-block',at:new Date(NOW+600000).toISOString()};
+  assert.equal((await f.tick({now:NOW+600000,agents:[supervisor],rows:[newRow]})).actions[0].kind,'blocked-supervisor');
+});
+
+test('non-fleet sessions wait for the stalled threshold before unresolved-route alerts', async t => {
+  const f = fixture(t), agent = {...f.worker,cwd:f.root};
+  const row = f.row(agent);
+  assert.deepEqual((await f.tick({agents:[agent],rows:[row]})).actions,[]);
+  assert.equal((await f.tick({now:NOW+300000,agents:[agent],rows:[row]})).actions[0].kind,'unresolved-route');
+});
+
+test('routing identity cache has a short TTL and never supplies permission authority', t => {
+  const f = fixture(t), first = routingProject(f.alpha.checkout,NOW);
+  assert.equal(routingProject(f.alpha.checkout,NOW+1000),first);
+  assert.notEqual(routingProject(f.alpha.checkout,NOW+30000),first);
+});
+
+test('unrecoverable journal refusal sends one bounded failure alert and refuses routing effects', async t => {
+  const f = fixture(t), file = path.join(f.home,'steward/journal.json');
+  fs.mkdirSync(path.dirname(file)); fs.writeFileSync(file,'{');
+  for (let i=0;i<2;i++) await assert.rejects(f.tick({now:NOW+i*1000}));
+  assert.equal(f.alerts.length,1); assert.equal(f.alerts[0].kind,'journal-refused');
+  assert.equal(fs.existsSync(path.join(f.alpha.record,'supervisor/inbox.log')),false);
+  assert.equal(fs.readFileSync(file,'utf8'),'{');
+});
+
+test('iMessage runs beside the local channel with only project/session/kind and literal recipient argv', async t => {
+  const f = fixture(t), script=path.join(f.root,'alert.mjs'), output=path.join(f.root,'alerts.jsonl');
+  fs.writeFileSync(script,`import fs from 'node:fs'; fs.appendFileSync(process.argv[2],JSON.stringify(process.argv.slice(3))+'\\n');`);
+  const config = {alert_command:[process.execPath,script,output,'local'],imessage_command:[process.execPath,script,output],imessage_recipient:'operator$(touch NO)'};
+  await operatorAlert({project:'alpha',session:'sup',kind:'blocked',message:'PRIVATE SCREEN',screen_excerpt:'SECRET',journal:'/private/path'},config);
+  const rows=fs.readFileSync(output,'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows.length,2);
+  assert.deepEqual(rows.map(r=>r[0]).sort(),['local',config.imessage_recipient].sort());
+  for(const r of rows) assert.deepEqual(JSON.parse(r[1]),{project:'alpha',session:'sup',kind:'blocked'});
+  assert.equal(fs.existsSync(path.join(f.root,'NO')),false);
+});
+
+test('terminal denial receipts consume uncertain effects once and queue a durable record-ask nudge', async t => {
+  const f=fixture(t); f.config({projects:{alpha:{supervisor:f.supervisor.name}},key_fallback:true});
+  let calls=0;
+  const decline=async(row,agent,{beforeKey})=>{calls++; assert.ok(f.journal().some(e=>e.type==='permission-intent')); await beforeKey(); return {ok:true,behavior:'deny'};};
+  await f.tick({decline}); await f.tick({decline,now:NOW+1000});
+  assert.equal(calls,1);
+  const inbox=readInbox(path.join(f.alpha.record,'supervisor/inbox.log'));
+  assert.equal(inbox[0].to,f.worker.name); assert.match(inbox[0].message,/record ask/); assert.match(inbox[0].message,/Do not work around/);
+  assert.equal(fs.readFileSync(path.join(f.alpha.record,'events.jsonl'),'utf8'),'');
+});
+
+test('one failed alert channel cannot suppress the independently configured iMessage channel', async t => {
+  const f=fixture(t),script=path.join(f.root,'imessage.mjs'),output=path.join(f.root,'imessage.json');
+  fs.writeFileSync(script,`import fs from 'node:fs'; fs.writeFileSync(process.argv[2],process.argv[4]);`);
+  await assert.rejects(operatorAlert({project:'alpha',session:'sup',kind:'blocked'},{alert_command:[process.execPath,'-e','process.exit(1)'],imessage_command:[process.execPath,script,output],imessage_recipient:'operator@example.test'}));
+  assert.deepEqual(JSON.parse(fs.readFileSync(output)),{project:'alpha',session:'sup',kind:'blocked'});
+});
+
+test('operator setup CLI exercises fake channels only, without querying or mutating a session', t => {
+  const f=fixture(t), script=path.join(f.root,'setup-alert.mjs'),output=path.join(f.root,'setup.jsonl');
+  fs.writeFileSync(script,`import fs from 'node:fs'; fs.appendFileSync(process.argv[2],process.argv.at(-1)+'\\n');`);
+  f.config({alert_command:[process.execPath,script,output],imessage_command:[process.execPath,script,output],imessage_recipient:'operator@example.test'});
+  const stdout=execFileSync(process.execPath,[new URL('../bin/brain.mjs',import.meta.url).pathname,'steward','--test-alert'],{env:{...f.env,BRAIN_STATE:f.home,HERDR_BIN:'/must-not-call-herdr'},encoding:'utf8'});
+  assert.match(stdout,/setup alert sent/);
+  const rows=fs.readFileSync(output,'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows.length,2);
+  assert.ok(rows.every(row=>row.kind==='test-alert'));
 });

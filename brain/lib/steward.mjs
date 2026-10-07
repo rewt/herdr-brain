@@ -1,16 +1,20 @@
-// Deterministic fleet routing. Only transport receipts live here; record status
-// stays derived by the record. No model, approval keys, or worker prompts.
+// Deterministic routing and denial-only fallback. Only action receipts live
+// here; record status stays derived by the record. No model or approval keys.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { readFleet } from '../../lib/fleet.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { supervisorBinding } from '../../supervisor/session-binding.mjs';
 import { enqueueSupervisor, readInbox, resumeInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { noticeLock } from '../../supervisor/notice-lock.mjs';
 import { HOME } from './queue.mjs';
+import { writeFileAtomic } from '../../lib/files.mjs';
+import { permissionDecision } from './permission-policy.mjs';
+import { fallbackRequest, declineObserved } from './permission-fallback.mjs';
 
 const run = promisify(execFile);
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -25,7 +29,7 @@ export function stewardConfig(home = HOME) {
   try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (!object(raw)) throw Error('steward config must be an object');
-  for (const key of Object.keys(raw)) if (!['enabled', 'projects', 'alert_command', 'stalled_seconds', 'debounce_seconds', 'alert_cap'].includes(key)) throw Error(`unknown steward setting: ${key}`);
+  for (const key of Object.keys(raw)) if (!['enabled', 'projects', 'alert_command', 'stalled_seconds', 'debounce_seconds', 'alert_cap', 'imessage_command', 'imessage_recipient', 'key_fallback'].includes(key)) throw Error(`unknown steward setting: ${key}`);
   if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean') throw Error('steward enabled must be boolean');
   const number = (key, fallback, min, max) => {
     const value = raw[key] ?? fallback;
@@ -35,7 +39,8 @@ export function stewardConfig(home = HOME) {
   const config = { enabled: raw.enabled ?? true, projects: raw.projects ?? {},
     stalled_seconds: number('stalled_seconds', 300, 1, 86400),
     debounce_seconds: number('debounce_seconds', 300, 1, 86400),
-    alert_cap: number('alert_cap', 3, 1, 10), alert_command: raw.alert_command ?? null };
+    alert_cap: number('alert_cap', 3, 1, 10), alert_command: raw.alert_command ?? null, imessage_command: raw.imessage_command ?? null, imessage_recipient: raw.imessage_recipient ?? null, key_fallback: raw.key_fallback ?? true };
+  if (typeof config.key_fallback !== 'boolean') throw Error('steward key_fallback must be boolean');
   if (!Number.isInteger(config.alert_cap)) throw Error('steward alert_cap must be an integer');
   if (!object(config.projects)) throw Error('steward projects must be an object');
   for (const [name, project] of Object.entries(config.projects)) {
@@ -43,25 +48,34 @@ export function stewardConfig(home = HOME) {
     for (const key of Object.keys(project)) if (!['supervisor', 'inbox'].includes(key)) throw Error(`unknown steward project setting: ${key}`);
     if (project.inbox !== undefined && (typeof project.inbox !== 'string' || !path.isAbsolute(project.inbox))) throw Error('steward inbox must be absolute');
   }
-  if (config.alert_command !== null && (!Array.isArray(config.alert_command) || !config.alert_command.length || config.alert_command.some(v => typeof v !== 'string' || !v || v.includes('\0')))) throw Error('steward alert_command must be a nonempty argv array');
+  for (const key of ['alert_command', 'imessage_command']) if (config[key] !== null && (!Array.isArray(config[key]) || !config[key].length || config[key].some(v => typeof v !== 'string' || !v || v.includes('\0')))) throw Error(`steward ${key} must be a nonempty argv array`);
+  if (config.imessage_recipient !== null && (typeof config.imessage_recipient !== 'string' || !config.imessage_recipient.trim() || /[\x00-\x1f]/.test(config.imessage_recipient))) throw Error('steward imessage_recipient must be a nonempty address');
+  if (config.imessage_command && !config.imessage_recipient) throw Error('imessage_command requires an operator-local imessage_recipient');
   return config;
 }
 
 // Payload is one argument, never interpolated into a shell or AppleScript.
 export async function operatorAlert(payload, config) {
+  const publicPayload = { project: String(payload.project ?? 'unresolved'), session: String(payload.session ?? 'unresolved'), kind: String(payload.kind ?? 'steward') };
+  const channels = [];
   if (config.alert_command) {
     const [bin, ...args] = config.alert_command;
-    await run(bin, [...args, JSON.stringify(payload)], { timeout: 10000, maxBuffer: 65536 });
-    return;
+    channels.push(run(bin, [...args, JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
+  } else if (process.platform === 'darwin') {
+    channels.push(run('/usr/bin/osascript', ['-e', 'on run argv\ndisplay notification (item 1 of argv) with title "Herdr steward"\nend run', JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
+  } else channels.push(Promise.reject(Error('configure alert_command on this platform')));
+  if (config.imessage_recipient) {
+    const [bin, ...args] = config.imessage_command ?? [process.execPath, fileURLToPath(new URL('../bin/steward-imessage.mjs', import.meta.url))];
+    channels.push(run(bin, [...args, config.imessage_recipient, JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
   }
-  if (process.platform !== 'darwin') throw Error('configure alert_command on this platform');
-  const message = `${payload.project} / ${payload.session ?? 'unresolved supervisor'}: ${payload.message}`;
-  await run('/usr/bin/osascript', ['-e', 'on run argv\ndisplay notification (item 1 of argv) with title "Herdr steward"\nend run', cut(message)], { timeout: 10000, maxBuffer: 65536 });
+  const results = await Promise.allSettled(channels);
+  const errors = results.filter(r => r.status === 'rejected');
+  if (errors.length) throw Error(errors.map(r => r.reason.message).join('; '));
 }
 
 // Bounded event journal, atomically replaced and fsynced before effects. Keep
-// all alert intents across compaction; refuse new effects at the ceiling.
-// Retired sessions keep small cap receipts so a restore cannot reset a cap.
+// current alert receipts across compaction, with bounded retired retention.
+// Recent restores retain caps; older retired episodes expire after seven days.
 const MAX_EVENTS = 2048, MAX_BYTES = 4 * 1024 * 1024;
 export function readStewardJournal(file) {
   if (!fs.existsSync(file)) return [];
@@ -70,18 +84,20 @@ export function readStewardJournal(file) {
   if (data.version !== 1 || !Array.isArray(data.events) || data.events.length > MAX_EVENTS || data.events.some(e => !object(e) || typeof e.key !== 'string' || typeof e.type !== 'string' || !Number.isFinite(e.at))) throw Error('invalid steward journal');
   return data.events;
 }
-function journal(file, active, now) {
+export function stewardJournal(file, active, now) {
   let events = readStewardJournal(file);
   const compact = () => {
     // Route attempts use stable IDs; the last intent/result suffices. Alerts
     // retain every intent (counting failures and lost acknowledgements).
     const latest = new Map();
-    for (const event of events) if (event.type.startsWith('route-') || event.type === 'evidence') latest.set(`${event.key}:${event.type}`, event);
-    const keep = events.filter(e => active.has(e.key) && (!e.type.startsWith('route-') && e.type !== 'evidence' || latest.get(`${e.key}:${e.type}`) === e));
+    for (const event of events) if (event.type.startsWith('route-') || event.type === 'permission-result' || event.type === 'evidence') latest.set(`${event.key}:${event.type}`, event);
+    const recent = new Set(events.filter(e => active.has(e.key) && e.type === 'alert-intent').slice(-256));
+    const history = new Set(events.filter(e => active.has(e.key) && ['alert-result', 'permission-intent', 'permission-result'].includes(e.type)).slice(-128));
+    const keep = events.filter(e => active.has(e.key) && (!['alert-result', 'permission-intent', 'permission-result'].includes(e.type) || history.has(e)) && (e.type !== 'alert-intent' || recent.has(e)) && (!e.type.startsWith('route-') && e.type !== 'permission-result' && e.type !== 'evidence' || latest.get(`${e.key}:${e.type}`) === e));
     const retired = events.filter(e => !active.has(e.key));
     const archived = retired.filter(e => e.type !== 'alert-intent').slice(-128);
-    const caps = retired.filter(e => e.type === 'alert-intent').map(e => ({
-      type: e.type, key: e.key, id: e.id, at: e.at, project: e.project, session: e.session,
+    const caps = retired.filter(e => e.type === 'alert-intent' && now - e.at <= 7 * 86400000).slice(-256).map(e => ({
+      type: e.type, key: e.key, id: e.id, at: e.at, project: e.project, session: e.session, episode: e.episode,
     }));
     events = [...archived, ...caps, ...keep].sort((a, b) => a.at - b.at);
   };
@@ -99,9 +115,19 @@ function journal(file, active, now) {
   return { get events() { return events; }, add(event) { events.push({ ...event, at: now }); compact(); save(); } };
 }
 
-export async function stewardTick({ rows = [], agents = [], home = HOME, env = process.env,
+const gitCache = new Map();
+export function routingProject(cwd, now = Date.now()) {
+  const old = gitCache.get(cwd);
+  if (old && now >= old.at && now - old.at < 30000) return old.value;
+  const value = gitProject(cwd);
+  if (gitCache.size >= 512) gitCache.delete(gitCache.keys().next().value);
+  gitCache.set(cwd, { at: now, value });
+  return value;
+}
+
+async function routingTick({ rows = [], agents = [], home = HOME, env = process.env,
   now = Date.now(), dryRun = false, alert = operatorAlert,
-  enqueue = enqueueSupervisor, resume = resumeInbox } = {}) {
+  enqueue = enqueueSupervisor, resume = resumeInbox, decline = declineObserved } = {}) {
   const config = stewardConfig(home);
   if (!config.enabled) return { disabled: true, actions: [] };
   const fleet = readFleet(env);
@@ -114,7 +140,7 @@ export async function stewardTick({ rows = [], agents = [], home = HOME, env = p
     if (!agent.name || !agent.pane_id) continue;
     const key = sessionKey(agent);
     try {
-      const git = gitProject(agent.cwd);
+      const git = routingProject(agent.cwd, now);
       const match = Object.entries(fleet.projects).find(([, p]) => p.identity === git.identity && p.checkout === git.canonical);
       if (match) {
         const [name, p] = match;
@@ -170,16 +196,19 @@ export async function stewardTick({ rows = [], agents = [], home = HOME, env = p
   if (!dryRun) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     release = noticeLock(`${file}.lock`);
-    receipts = journal(file, active, now);
+    try { receipts = stewardJournal(file, active, now); }
+    catch (error) { release(); throw error; }
   } else receipts = { events: [...previous], add(event) { this.events.push({ ...event, at: now }); } };
   const escalate = async (key, payload) => {
-    const attempts = receipts.events.filter(e => e.key === key && e.type === 'alert-intent');
-    if (attempts.length >= config.alert_cap || attempts.length && now - attempts.at(-1).at < config.debounce_seconds * 1000) return;
+    const episode = hash(JSON.stringify([payload.kind, payload.source, payload.id, payload.at]));
+    const all = receipts.events.filter(e => e.key === key && e.type === 'alert-intent');
+    const attempts = all.filter(e => e.episode === episode);
+    if (attempts.length >= config.alert_cap || all.length && now - all.at(-1).at < config.debounce_seconds * 1000) return;
     const action = { type: 'alert', ...payload, journal: file };
     actions.push(action);
-    if (dryRun) { receipts.add({ ...payload, type: 'alert-intent', key }); return; }
-    const id = `${key}:${attempts.length + 1}`;
-    receipts.add({ ...payload, type: 'alert-intent', key, id });
+    if (dryRun) { receipts.add({ ...payload, type: 'alert-intent', key, episode }); return; }
+    const id = `${key}:${episode}:${attempts.length + 1}`;
+    receipts.add({ ...payload, type: 'alert-intent', key, id, episode });
     try { await alert(action, config); receipts.add({ type: 'alert-result', key, id, ok: true }); }
     catch (error) { receipts.add({ type: 'alert-result', key, id, ok: false, error: cut(error.message) }); }
   };
@@ -195,13 +224,37 @@ export async function stewardTick({ rows = [], agents = [], home = HOME, env = p
       const { agent, key } = current, p = projects.get(name);
       // A captured project column is presentation, not routing evidence.
       let capturedIdentity;
-      try { capturedIdentity = gitProject(row.where).identity; } catch {}
+      try { capturedIdentity = routingProject(row.where, now).identity; } catch {}
       if (p && capturedIdentity !== p.identity) continue;
       const payload = { project: p?.name ?? 'unresolved', session: name, pane: agent.pane_id,
         source: row.id, kind: 'blocked', message: cut(row.dialog?.question ?? row.unsent ?? row.headline ?? 'Session blocked'),
         screen_excerpt: cut(row.screen?.slice(-1600), 1600),
         options: row.dialog?.options?.slice(0, 10).map(o => ({ key: cut(o.key, 40), label: cut(o.label, 200) })) ?? [] };
       const to = p && targetFor(p);
+      const fallback = config.key_fallback && p && fallbackRequest(row);
+      const fallbackId = `permission:${hash(`${key}:${row.id}:${row.screen}`)}`;
+      if (fallback && receipts.events.some(e => e.id === fallbackId && e.type === 'permission-result' && e.ok)) continue;
+      const recentEffects = receipts.events.filter(e => e.key === key && e.type === 'permission-intent' && now - e.at < 300000);
+      if (fallback && recentEffects.length < 3 && !receipts.events.some(e => e.id === fallbackId && e.type === 'permission-intent')) {
+        actions.push({ type: 'permission', project: p.name, session: name, behavior: 'deny', source: row.id });
+        if (!dryRun) {
+          receipts.add({ type: 'permission-intent', key, id: fallbackId, source: row.id, behavior: 'deny' });
+          try {
+            const result = await decline(row, agent, { herdr: env.HERDR_BIN ?? 'herdr', beforeKey: () => {
+              const nudgeId = `steward:nudge:${fallbackId}`;
+              const message = `[steward-denied] ${fallback.message}`;
+              return enqueue(name, message, { id: nudgeId, cwd: p.checkout, org: p.record, inbox: config.projects[p.name]?.inbox, herdr: env.HERDR_BIN ?? 'herdr' });
+            } });
+            receipts.add({ type: 'permission-result', key, id: fallbackId, ...result });
+            if (result.ok) {
+              const decision = permissionDecision({ hook_event_name: 'PermissionRequest', tool_name: 'Read', tool_input: { file_path: row.screen.match(/^\s*Read\(([^\n]+)\)\s*$/m)?.[1] }, cwd: agent.cwd }, { kind: 'claude', project: { ...p, workspace: agent.cwd } });
+              if (decision.alert) await escalate(key, { ...payload, kind: decision.reason });
+              continue;
+            }
+          } catch (error) { receipts.add({ type: 'permission-result', key, id: fallbackId, ok: false, error: cut(error.message) }); }
+        }
+      }
+      if (!p && (!Number.isFinite(Date.parse(row.at)) || now - Date.parse(row.at) < config.stalled_seconds * 1000)) continue;
       if (!p || bindings.has(name) || to === name || !to || live.has(to) && projects.get(to)?.identity !== p.identity) {
         await escalate(key, { ...payload, kind: bindings.has(name) || to === name ? 'blocked-supervisor' : 'unresolved-route' });
         continue;
@@ -231,7 +284,7 @@ export async function stewardTick({ rows = [], agents = [], home = HOME, env = p
       if (!dryRun && fs.existsSync(inbox) && !resumed.has(inbox)) {
         resumed.add(inbox);
         try {
-          const git = gitProject(p.checkout);
+          const git = routingProject(p.checkout, now);
           if (git.identity !== p.identity || git.canonical !== p.checkout) throw Error('stale fleet checkout; delivery owner not resumed');
           await resume(inbox);
         } catch (error) { actions.push({ type: 'delivery-error', inbox, error: cut(error.message) }); }
@@ -244,4 +297,32 @@ export async function stewardTick({ rows = [], agents = [], home = HOME, env = p
     }
     return { actions, journal: file };
   } finally { release?.(); }
+}
+
+// A damaged/full routing journal cannot silence the failure that stopped it.
+// The separate, bounded receipt consumes the alert attempt before its effect.
+export async function stewardTick(options = {}) {
+  try { return await routingTick(options); }
+  catch (error) {
+    const home = options.home ?? HOME, now = options.now ?? Date.now();
+    const journalFile = path.join(home, 'steward/journal.json');
+    let journalFailure = /steward journal/.test(error.message);
+    if (!journalFailure) try { readStewardJournal(journalFile); } catch { journalFailure = true; }
+    if (journalFailure && !options.dryRun) {
+      const file = path.join(home, 'steward/journal-failure.json');
+      let release;
+      try {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        release = noticeLock(`${file}.lock`);
+        const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+        if (!previous || now - previous.at >= 86400000) {
+          writeFileAtomic(file, JSON.stringify({ at: now }) + '\n', 0o600);
+          const fd = fs.openSync(file, 'r'); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+          await (options.alert ?? operatorAlert)({ project: 'steward', session: 'watcher', kind: 'journal-refused' }, stewardConfig(home));
+        }
+      } catch (failure) { process.stderr.write(`Steward journal failure alert refused: ${failure.message}\n`); }
+      finally { release?.(); }
+    }
+    throw error;
+  }
 }

@@ -26,7 +26,7 @@ import * as service from '../lib/service.mjs';
 import { loadProjects, withProject } from '../lib/projects.mjs';
 import { parseArgs, cliHelp } from '../../lib/cli-help.mjs';
 import { recordDigest, renderDigest } from '../lib/signals.mjs';
-import { stewardTick } from '../lib/steward.mjs';
+import { stewardTick, stewardConfig, operatorAlert } from '../lib/steward.mjs';
 cliHelp(import.meta.url, "Usage: brain watch|steward|queue|show|send|key|later|never|answer|digest|explain|status|service|start [OPTIONS]");
 
 const argv = process.argv.slice(2);
@@ -214,6 +214,14 @@ async function main() {
   switch (cmd) {
     case 'watch': return watch();
     case 'steward': {
+      if (has('--test-alert')) {
+        if (has('--dry-run')) throw Error('--test-alert cannot be combined with --dry-run');
+        const config = stewardConfig();
+        if (!config.imessage_recipient) throw Error('set imessage_recipient in the operator-local steward.json first');
+        await operatorAlert({ project: 'steward', session: 'operator-setup', kind: 'test-alert' }, config);
+        console.log('Steward setup alert sent through the configured local and iMessage channels.');
+        break;
+      }
       const result = await stewardTick({ rows: fold(), agents: await agents().catch(() => null), dryRun: has('--dry-run') });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
@@ -347,7 +355,7 @@ async function main() {
       process.stderr.write([
         'usage:',
         '  brain watch [--digest] [--catch-up]   keep the queue current',
-        '  brain steward [--dry-run]            route blocked sessions and alert stalled notices without a model',
+        '  brain steward [--dry-run|--test-alert]  inspect routing or send the operator setup alert',
         '  brain queue [--all] [--json]          what is waiting',
         '  brain show <id>                       one result in full',
         '  brain send <id> ["text"]              send a reply to that session',

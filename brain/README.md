@@ -10,7 +10,9 @@ reads what it said, and puts it in a queue you can look at.
 The model-free steward consumes blocked entries each watch tick: worker blocks
 become project supervisor notices, while supervisor blocks and stalled notices
 escalate to the operator and its own bounded journal. Automatic notice delivery
-uses the supervisor's existing empty-composer gate. It never answers a dialog.
+uses the supervisor's existing empty-composer gate. Per-launch permission hooks
+approve proven project file reads and decline everything else. A narrowly bound
+terminal fallback can decline the captured Claude outside-read dialog.
 It sends operator replies (`send`, `key`) or opens a session
 (`start`) only when you ask, and it never closes one.
 
@@ -91,7 +93,7 @@ The unsent-text case is not hypothetical. On the first run against a live
 machine it found five sessions stuck at the same first-run dialog, four of them
 holding answers that had been typed and never delivered.
 
-## Model-free steward routing
+## Model-free steward policy and routing
 
 Monitor's [unattended question guard](../supervisor/README.md) prevents a newly
 launched ops session from opening its own blocking question; operator chats use
@@ -140,8 +142,8 @@ an optional absolute `inbox` in a project entry selects a custom Monitor JSONL
 journal. Enqueue never waits for a composer. The acknowledged transport owner
 applies notice policy and delivers through the existing idle/done, two-read
 composer gate. A worker notice with a lost enqueue reply retries the same ID.
-Dead delivery owners are resumed each tick. The steward never keys a permission
-dialog, focuses a pane, invokes a supervisor cycle mutation or writes record events.
+Dead delivery owners are resumed each tick. The steward never focuses a pane,
+invokes a supervisor cycle mutation or writes record events.
 
 A blocked supervisor cannot consume its own notice, so it gets a steward journal
 entry and a local operator alert. Missing, ambiguous, stale or foreign recipient
@@ -150,27 +152,105 @@ bindings also escalate. Native pending/uncertain notices and legacy regular
 alert channel. Legacy outboxes are read-only: no replay, deletion or `RETRY` file.
 Unparseable inboxes escalate with their diagnostic instead of being treated as empty.
 
-The default alert is a macOS notification via a fixed `osascript` program. Select
-another local channel with `"alert_command": ["/absolute/path/to/command", "arg"]`.
-It receives one additional literal JSON argument containing project, session,
-kind, message, evidence source and steward journal path. Arguments never go
-through a shell. Non-macOS hosts require this setting. Commands have a ten-second
-deadline. No model determines the message or channel.
+The default alert is a macOS notification via a fixed `osascript` program.
+`"alert_command": ["/absolute/path/to/command", "arg"]` selects a local channel.
+Add `"imessage_recipient": "operator address"` in the operator's local
+`$BRAIN_STATE/steward.json` to send iMessage beside that channel. The bundled
+`brain/bin/steward-imessage.mjs` passes the recipient and JSON to a fixed
+Messages AppleScript using argv. An optional `imessage_command` argv array
+selects another transport; it receives the recipient and then the literal JSON.
+Every channel receives **project, session and kind only**, never screen text,
+question text, filesystem paths or the journal location. No shell interprets
+alert arguments. Each channel has a ten-second deadline; one failed channel
+cannot suppress the other. No model determines a message or channel.
 
-Alerts share one debounce and cap per session occupant, across blocked and stalled
-causes. Defaults: five minutes between attempts and three attempts total; local
-command failure or an interrupted acknowledgement consumes an attempt as well.
-Changing a question or restarting the watcher does not reset that cap. Successful
-delivery or a resumed session ends the corresponding alert condition.
+The operator runs exactly one setup test and grants Messages Automation:
+
+```sh
+node brain/bin/brain.mjs steward --test-alert
+```
+
+Development/tests never send that live setup alert. Configuration is local to
+the operator and never becomes project configuration or a committed address.
+
+Routing alerts share a per-occupant debounce (five minutes by default), with
+three attempts **per episode**: a captured block or a particular undelivered
+notice. Failed commands and interrupted acknowledgements consume attempts.
+An exhausted stall episode cannot silence a later supervisor block. A new
+capture/notice gets its own cap while retaining the occupant's debounce.
+Successful delivery or a resumed session ends the corresponding condition.
+Non-fleet sessions must wait `stalled_seconds` before unresolved-route alerts.
+Routing Git lookups are cached for 30 seconds, with at most 512 entries;
+permission approvals always resolve fresh Git and filesystem identity.
 
 `$BRAIN_STATE/steward/journal.json` contains fsynced action intents and results,
-bounded to 2,048 events and 4 MiB. Compaction retains the latest routing receipts,
-all alert-cap receipts (small receipts for retired sessions), and 128 retired
-history events. Saturation or corruption refuses new steward effects for inspection;
-it never silently resets a cap. `enabled: false` disables routing, owner recovery
-and alerts. Unknown configuration fields and fleet project names fail closed.
-Existing Brain capture history and supervisor transport journals keep their
-existing retention policies; this pass bounds its own journal and debounce.
+bounded to 2,048 events and 4 MiB. Compaction retains recent active alert intents,
+latest routing receipts, 128 history events and up to 256 retired alert intents
+no older than seven days. Old retired receipts expire so unrelated occupants
+cannot permanently fill the journal. A corrupt/full journal refuses effects and
+attempts one operator `journal-refused` alert per day through a separate small
+fsynced receipt. Neither corruption nor failure silently resets active receipts.
+`enabled: false` disables routing, owner recovery and alerts. Unknown fields and
+fleet project names fail closed.
+
+### Permission decisions
+
+Monitor's joined-project native launches register their permission handler in
+its own [module](../supervisor/permission-hooks.mjs); `session-hooks.mjs` only
+exports its registration. Existing question and lifecycle hooks remain separate.
+Claude uses an authenticated loopback **PermissionRequest HTTP hook**, owned by
+the launcher and closed with the native child. If loopback is unavailable, the
+same structured protocol runs as a command hook. The launcher awaits readiness
+before spawning. Codex uses a **PermissionRequest command hook** subject to
+native operator hook trust. Its command is stable across launches; the parent
+supplies project/run-temp binding through `MONITOR_PERMISSION_BINDING`. Neither
+adapter writes persistent settings or hook trust, nor bypasses a trust review.
+Unsupported old harnesses keep their existing visible warning and native flow.
+
+The table is deterministic and defaults to denial:
+
+| Request | Decision |
+| --- | --- |
+| Claude built-in `Read`, regular file resolving inside its freshly verified checkout, project lane root, record or this launch's private temp | Allow this request only |
+| Credentials, funds/chain, publishing or permission expansion | Deny, nudge the session to `record ask`, alert the operator |
+| Shell commands, Codex Bash/apply_patch/MCP requests, unknown tools, foreign paths, unresolved inputs or symlink escapes | Deny and nudge the session to `record ask` |
+
+A command is never proven read-only. No shell allow-prefix/execpolicy amendment,
+`updatedPermissions`, saved permission rule or broad folder grant is emitted.
+Existing native execpolicy continues to reject forbidden commands; a request
+that reaches the hook is declined. Codex currently exposes no native file-read
+approval class, so it has no automatic approvals. Credential-looking resolved
+targets are denied even through an ordinary-looking symlink. Search/glob tools
+are also denied: recursive traversal is not proof of resolved containment.
+
+The denied session receives: do not work around the denial, record the question
+under its work item with `record ask` and the action category, continue other
+work, and wait for operator authorization before any later retry. **The session
+owns recording the question via the CLI.** Brain never appends `events.jsonl`.
+Local action audit is in `$BRAIN_STATE/steward/permissions.json`: fsynced before
+responding, at most 512 decision receipts and 128 launch circuit counters. It
+stores request fingerprints and policy reasons, without copying raw requests.
+Approvals stop after three identical requests or 32 approvals per launch.
+Denied requests still clear the dialog when the circuit is open. Never-list
+alerts consume durable per-request caps and per-launch debounce receipts before
+effects; channel failure cannot become an approval. Invalid audit/config/binding
+always returns a structured denial. Already-installed hooks deny if disabled;
+restart native sessions after changing launch policy.
+
+Terminal fallback (`key_fallback`, default true) is **denial only** and supports
+the captured four-option Claude outside-working-directories read request. It
+requires native session and terminal IDs, the same live blocked occupant/pane,
+exact fresh screen/dialog comparisons, and repeated occupant checks. It picks
+only `No, and ask again next time` (key 3), never the persistent allow/block
+choices. It records an intent before keys, never retries a lost acknowledgement,
+and limits attempts to three per occupant in five minutes. A durable inbox nudge is enqueued before keys
+to ask the denied session to record its question. Changed/unknown dialogs,
+missing IDs and hook-trust/folder-trust setup stay on the existing route/alert
+path; it never guesses a key. New permission hooks take effect on new launches,
+not retroactively inside sessions already running.
+
+The native protocol shapes follow [Claude's hook reference](https://code.claude.com/docs/en/hooks#permissionrequest-decision-control)
+and [official Codex hook documentation](https://learn.chatgpt.com/docs/hooks#permissionrequest).
 
 ## Where things live
 

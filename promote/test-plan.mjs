@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 export const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
-export function promotionTestPlan({ cwd, planner, changed, baseCommand = '', env = process.env }) {
+export function promotionTestPlan({ cwd, plannerRoot = cwd, planner, changed, baseCommand = '', env = process.env }) {
   if (!planner) return null;
   if (typeof planner !== 'string' || !planner || path.isAbsolute(planner) || planner.split(/[\\/]/).includes('..')) throw Error('promotion_tests must be a project-relative planner');
-  const file = path.join(cwd, planner);
+  const file = path.join(plannerRoot, planner);
   if (!fs.statSync(file).isFile()) throw Error('promotion test planner must be a regular file');
   const r = spawnSync(process.execPath, [file, '--plan', JSON.stringify(changed), JSON.stringify(baseCommand)], { cwd, env, encoding: 'utf8', timeout: 20000, maxBuffer: 1024 * 1024 });
   if (r.error || r.status !== 0) throw Error(r.stderr || r.error?.message || 'promotion test planning failed');

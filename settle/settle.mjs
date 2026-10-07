@@ -16,7 +16,8 @@ import { loadDiscoveredRoutes, mergeRoutesConfig, readRoutesConfig, resolveLaunc
 import { INHERITED_GATE_NON_CLAIM } from '../lanes/review-evidence.mjs';
 import { validateDeskSettings } from './config.mjs';
 import { acquire } from './lock.mjs';
-import { promotionTestPlan, changedPaths } from '../promote/test-plan.mjs';
+import { changedPaths } from '../promote/test-plan.mjs';
+import { canonicalTestPlan } from './test-plan.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
 import { deferredTests, recordedTestEvidence, TEST_ESCALATION } from './test-evidence.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
@@ -757,13 +758,17 @@ function main() {
         if (!files || job.review.verdict !== 'PASS' || findings?.severities?.length) return escalate('The reviewer has unverified claims; the supervisor must resolve the remaining evidence');
         const declaration = resolveValidation({ root: job.repo });
         const changed = changedPaths(workspace, git(['merge-base', job.mainHead, job.finalHead], workspace), job.finalHead);
-        const plan = promotionTestPlan({ cwd: workspace, planner: declaration.promotion_tests, changed, baseCommand: declaration.tiers.promotion.command });
+        let plan = null, plannerError;
+        try {
+          plan = canonicalTestPlan({ repo: job.repo, base: job.mainHead, cwd: workspace,
+            planner: declaration.promotion_tests, changed, baseCommand: declaration.tiers.promotion.command });
+        } catch (error) { plannerError = error.message; }
         const covered = [...(plan?.files ?? [])];
         // Whole-file promotion inventory is supplied by the planner separately.
         covered.push(...(plan?.covered ?? []));
         const reexecuted = recordedTestEvidence({ notes: show(id).notes, common: job.common, head: job.finalHead,
           tree: git(['rev-parse', 'HEAD^{tree}'], workspace), files });
-        job.testEvidence = { files, plan, ...(reexecuted ? { reexecuted } : {}) }; save();
+        job.testEvidence = { files, plan, ...(plannerError ? { planner_error: plannerError } : {}), ...(reexecuted ? { reexecuted } : {}) }; save();
         if (!files.every(file => covered.includes(file)) && !reexecuted) return escalate(TEST_ESCALATION);
       }
       job.stage = 'rebase'; save();

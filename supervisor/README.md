@@ -481,9 +481,16 @@ landing path. Reviewers still execute no commands and must report missing code,
 incomplete acceptance and other uncertainty separately.
 
 If the plan cannot cover those files, the supervisor may execute them in full
-and record the evidence before `promote RUN --why REASON`. Run a clean lane check
-with a direct `node --test FILE...` or `node test/helpers/run.mjs FILE...` command,
-then add a decision note to that run with the exact text
+and record the evidence before `promote RUN --why REASON`. After the review record
+is committed, run this from the clean lane workspace (substitute the named files):
+
+```sh
+LANE_VALIDATE='node --test FILE...' node lanes/lane.mjs check --tier fast
+```
+
+`LANE_VALIDATE='node test/helpers/run.mjs FILE...'` is also accepted. The receipt's
+head and tree must match the current lane HEAD after the review commit; a check
+from before that commit is stale. Then add a decision note to that run with the exact text
 `Test re-execution evidence: /absolute/GIT_COMMON_DIR/lane-validation/KEY.json`.
 Promotion resolves only the saved test-only PASS escalation, verifies the green
 receipt's exact lane head/tree, full-file command and immutable log hash, and

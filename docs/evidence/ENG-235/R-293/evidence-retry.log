@@ -1,0 +1,150 @@
+TAP version 13
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.765875
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 34.859583
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.543167
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 34.483292
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.496084
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 31.384791
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.475416
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.437667
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.485084
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.81725
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.4745
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 38.364166
+# Subtest: only scoped test deferrals become promotable through the planned gate
+ok 1 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 16502.543708
+  ...
+# Subtest: lane-modified planner and imports cannot shrink canonical coverage
+ok 2 - lane-modified planner and imports cannot shrink canonical coverage
+  ---
+  duration_ms: 9004.738667
+  ...
+# Subtest: lane-modified planner and imports cannot invent canonical coverage
+ok 3 - lane-modified planner and imports cannot invent canonical coverage
+  ---
+  duration_ms: 6540.307458
+  ...
+# Subtest: missing planner covers nothing, retains its error and allows recorded re-execution
+ok 4 - missing planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6036.643292
+  ...
+# Subtest: failed planner covers nothing, retains its error and allows recorded re-execution
+ok 5 - failed planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 5958.854209
+  ...
+# Subtest: invalid JSON covers nothing, retains its error and allows recorded re-execution
+ok 6 - invalid JSON covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 5125.532583
+  ...
+# Subtest: invalid coverage covers nothing, retains its error and allows recorded re-execution
+ok 7 - invalid coverage covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4933.078459
+  ...
+# Subtest: oversized output covers nothing, retains its error and allows recorded re-execution
+ok 8 - oversized output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 5024.61775
+  ...
+# Subtest: hand-written receipt with matching filename and log hash must also match its derived key
+ok 9 - hand-written receipt with matching filename and log hash must also match its derived key
+  ---
+  duration_ms: 1.484916
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 10 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 7043.029708
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 66235.994916

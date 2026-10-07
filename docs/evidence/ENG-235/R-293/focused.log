@@ -1,0 +1,926 @@
+TAP version 13
+# Subtest: affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+ok 1 - affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+  ---
+  duration_ms: 6.044458
+  ...
+# Subtest: real import closure selects the previously missed release files and records bounded coverage
+ok 2 - real import closure selects the previously missed release files and records bounded coverage
+  ---
+  duration_ms: 447.4085
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 3 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 198.306208
+  ...
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 4 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 4103.140667
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 5 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 4303.052208
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 6 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1409.669958
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 7 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 7115.255583
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 8 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 2285.296292
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 9 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 3249.936667
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 10 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 5380.383959
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 11 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 2553.599458
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 12 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 7753.169125
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 13 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 7082.705917
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 14 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 2676.346375
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 15 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 5223.323042
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 16 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 9912.917083
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 17 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 2199.849625
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 18 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2505.776583
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 19 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2400.782
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 20 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4825.09
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 21 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 5170.668375
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 22 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 6879.393416
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 23 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 6692.083875
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 24 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 4969.75725
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 25 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 6967.285375
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 26 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 1955.730125
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 27 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 5712.387959
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 28 - a paused check exposes its clock atomically while validation is still running
+  ---
+  duration_ms: 1519.933209
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 29 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+  ---
+  duration_ms: 4724.069
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 30 - red validation finishes the published clock and retains its real exit
+  ---
+  duration_ms: 1187.70375
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 31 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+  ---
+  duration_ms: 5801.968792
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 32 - validation that throws closes its telemetry clock without inventing green evidence
+  ---
+  duration_ms: 1149.811417
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 33 - affected test supplements run once in the batch gate, are recorded and block a red landing
+  ---
+  duration_ms: 3265.799583
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 34 - a changed gate cannot omit a bound deferred test file
+  ---
+  duration_ms: 985.49775
+  ...
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.57025
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 35.290709
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.657292
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 38.786708
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.658083
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 45.481125
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.695167
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 46.69575
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.659333
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 45.226083
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.530208
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 37.933458
+# Subtest: only scoped test deferrals become promotable through the planned gate
+not ok 35 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 4783.831292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: canonical checkout is dirty; promotion requires clean worktrees
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:11:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:28:33
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+  ...
+# Subtest: lane-modified planner and imports cannot shrink canonical coverage
+not ok 36 - lane-modified planner and imports cannot shrink canonical coverage
+  ---
+  duration_ms: 4391.6725
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: canonical checkout is dirty; promotion requires clean worktrees
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:11:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:43:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: lane-modified planner and imports cannot invent canonical coverage
+ok 37 - lane-modified planner and imports cannot invent canonical coverage
+  ---
+  duration_ms: 4402.967583
+  ...
+# Subtest: missing planner covers nothing, retains its error and allows recorded re-execution
+not ok 38 - missing planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4818.378667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: canonical checkout is dirty; promotion requires clean worktrees
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:11:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:62:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: failed planner covers nothing, retains its error and allows recorded re-execution
+not ok 39 - failed planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 5137.711
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: canonical checkout is dirty; promotion requires clean worktrees
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:11:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:62:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: invalid JSON covers nothing, retains its error and allows recorded re-execution
+not ok 40 - invalid JSON covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6293.582334
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: canonical checkout is dirty; promotion requires clean worktrees
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:11:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:62:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: invalid coverage covers nothing, retains its error and allows recorded re-execution
+not ok 41 - invalid coverage covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6232.925458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: canonical checkout is dirty; promotion requires clean worktrees
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:11:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:62:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: oversized output covers nothing, retains its error and allows recorded re-execution
+not ok 42 - oversized output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6075.658
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: canonical checkout is dirty; promotion requires clean worktrees
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:11:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/settle/test/test-evidence.test.mjs:62:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-bound-escalations/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: hand-written receipt with matching filename and log hash must also match its derived key
+ok 43 - hand-written receipt with matching filename and log hash must also match its derived key
+  ---
+  duration_ms: 1.782875
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 44 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 7436.773708
+  ...
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 45 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 735.597167
+  ...
+# Subtest: fix_round is left in flight
+ok 46 - fix_round is left in flight
+  ---
+  duration_ms: 550.630625
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 47 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 634.649875
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 48 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 644.051
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 49 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 534.701958
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 50 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 542.858875
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 51 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 518.17475
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 52 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 484.961875
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 53 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 445.959167
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 54 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 497.460958
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 55 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 681.829083
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 56 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 454.995333
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 57 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 457.009083
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 58 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 465.580125
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 59 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 458.610667
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 60 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 459.086292
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 61 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 485.724875
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 62 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 524.031917
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 63 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 533.427834
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 64 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 471.764709
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 65 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 395.816375
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 66 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 386.861709
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 67 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 494.599833
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 68 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 392.628
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 69 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 406.096833
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 70 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 440.675084
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 71 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 532.440792
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 72 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 508.251917
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 73 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 627.466667
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 74 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 378.318417
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 75 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 383.955333
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 76 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 394.635084
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 77 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 428.938375
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 78 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 429.066208
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 79 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 535.251958
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 80 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 618.187416
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 81 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 481.948
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 82 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 513.250583
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 83 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 347.422375
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 84 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 387.938583
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 85 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 377.147667
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 86 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 352.860875
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 87 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 347.643833
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 88 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 356.931625
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 89 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 378.08875
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 90 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 427.09025
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 91 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 351.450875
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 92 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 371.407958
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 93 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 356.568708
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 94 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 408.975
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 95 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 447.255584
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 96 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 608.7775
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 97 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 348.606625
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 98 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 434.57025
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 99 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 451.684333
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 100 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 461.558792
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 101 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 430.820125
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 102 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 442.490875
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 103 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 423.003041
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 104 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 434.417667
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 105 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 645.463916
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 106 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 307.891542
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 107 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 316.716584
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 108 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 581.788416
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 109 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 340.01925
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 110 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 295.578
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 111 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 294.388542
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 112 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 300.47775
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 113 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 660.877916
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 114 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 538.856416
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 115 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 718.736041
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 116 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 420.727959
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 117 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 370.079667
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 118 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 542.405333
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 119 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 887.708708
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 120 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 840.037916
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 121 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 841.768833
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 122 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 775.98925
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 123 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 549.041208
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 124 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 5155.62575
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 125 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 5812.4905
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 126 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 6652.373834
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+ok 127 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 6984.525958
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+ok 128 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 7095.957666
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 129 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 8235.252541
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing:
+ok 130 - stderr-only failed action preserves refusal instead of JSON parsing:
+  ---
+  duration_ms: 427.893042
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 131 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 440.251875
+  ...
+1..131
+# tests 131
+# suites 0
+# pass 124
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 132025.397709

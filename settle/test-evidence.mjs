@@ -16,7 +16,10 @@ export function recordedTestEvidence({ notes, common, head, tree, files }) {
     try {
       if (path.dirname(file) !== path.join(common, 'lane-validation')) continue;
       const gate = JSON.parse(readPlainFile(file));
+      const key = createHash('sha256').update(JSON.stringify({ schema: gate.schema, tree: gate.tree,
+        command: gate.command, fingerprint: gate.environment_fingerprint })).digest('hex');
       if (!/^[0-9a-f]{64}$/.test(gate.key ?? '') || path.basename(file) !== `${gate.key}.json` ||
+          gate.key !== key || !/^[0-9a-f]{64}$/.test(gate.environment_fingerprint ?? '') ||
           !Number.isFinite(Date.parse(gate.started_at)) || !Number.isFinite(Date.parse(gate.finished_at)) ||
           Date.parse(gate.finished_at) < Date.parse(gate.started_at) || !Number.isFinite(gate.duration_s) || gate.duration_s < 0 ||
           gate.schema !== 'lane-validation/v1' || gate.head !== head || gate.tree !== tree || gate.exit_code !== 0 || gate.signal !== null || path.dirname(gate.log) !== path.dirname(file)) continue;

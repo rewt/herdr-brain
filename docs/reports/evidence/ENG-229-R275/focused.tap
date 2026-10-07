@@ -1,0 +1,250 @@
+TAP version 13
+# Subtest: bin/org.mjs --help exits successfully before operational work
+ok 1 - bin/org.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.118959
+  ...
+# Subtest: brain/bin/brain.mjs --help exits successfully before operational work
+ok 2 - brain/bin/brain.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.677
+  ...
+# Subtest: console/app.mjs --help exits successfully before operational work
+ok 3 - console/app.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 47.272125
+  ...
+# Subtest: console/dev.mjs --help exits successfully before operational work
+ok 4 - console/dev.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.507875
+  ...
+# Subtest: console/proto/main.mjs --help exits successfully before operational work
+ok 5 - console/proto/main.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.354417
+  ...
+# Subtest: contrib/settle-watch.mjs --help exits successfully before operational work
+ok 6 - contrib/settle-watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.84375
+  ...
+# Subtest: discovery/acceptance.mjs --help exits successfully before operational work
+ok 7 - discovery/acceptance.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.029584
+  ...
+# Subtest: discovery/adapters/codex.mjs --help exits successfully before operational work
+ok 8 - discovery/adapters/codex.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 39.001917
+  ...
+# Subtest: discovery/adapters/claude.mjs --help exits successfully before operational work
+ok 9 - discovery/adapters/claude.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 42.90725
+  ...
+# Subtest: discovery/install.mjs --help exits successfully before operational work
+ok 10 - discovery/install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.236
+  ...
+# Subtest: discovery/native/build.mjs --help exits successfully before operational work
+ok 11 - discovery/native/build.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.523709
+  ...
+# Subtest: discovery/validate.mjs --help exits successfully before operational work
+ok 12 - discovery/validate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.029334
+  ...
+# Subtest: discovery/git-driver.mjs --help exits successfully before operational work
+ok 13 - discovery/git-driver.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.102583
+  ...
+# Subtest: discovery/bounded.mjs --help exits successfully before operational work
+ok 14 - discovery/bounded.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.97225
+  ...
+# Subtest: discovery/bubblewrap.mjs --help exits successfully before operational work
+ok 15 - discovery/bubblewrap.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 21.997
+  ...
+# Subtest: discovery/client.mjs --help exits successfully before operational work
+ok 16 - discovery/client.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.53
+  ...
+# Subtest: dispatch/dispatch.mjs --help exits successfully before operational work
+ok 17 - dispatch/dispatch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.180708
+  ...
+# Subtest: docs/adoption/rehearse.mjs --help exits successfully before operational work
+ok 18 - docs/adoption/rehearse.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.273875
+  ...
+# Subtest: herdr/dependencies.mjs --help exits successfully before operational work
+ok 19 - herdr/dependencies.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.791333
+  ...
+# Subtest: herdr/entry-install.mjs --help exits successfully before operational work
+ok 20 - herdr/entry-install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.208917
+  ...
+# Subtest: herdr/native-entry.mjs --help exits successfully before operational work
+ok 21 - herdr/native-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.856541
+  ...
+# Subtest: herdr/prerequisites.mjs --help exits successfully before operational work
+ok 22 - herdr/prerequisites.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.776791
+  ...
+# Subtest: herdr/release-candidate.mjs --help exits successfully before operational work
+ok 23 - herdr/release-candidate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.012417
+  ...
+# Subtest: housekeeping/housekeeping.mjs --help exits successfully before operational work
+ok 24 - housekeeping/housekeeping.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.090209
+  ...
+# Subtest: lanes/lane.mjs --help exits successfully before operational work
+ok 25 - lanes/lane.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.98325
+  ...
+# Subtest: promote/host-gate.mjs --help exits successfully before operational work
+ok 26 - promote/host-gate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.702459
+  ...
+# Subtest: promote/promote.mjs --help exits successfully before operational work
+ok 27 - promote/promote.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.276791
+  ...
+# Subtest: promote/metrics.mjs --help exits successfully before operational work
+ok 28 - promote/metrics.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.715834
+  ...
+# Subtest: release/release.mjs --help exits successfully before operational work
+ok 29 - release/release.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.204625
+  ...
+# Subtest: settle/settle.mjs --help exits successfully before operational work
+ok 30 - settle/settle.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.011334
+  ...
+# Subtest: supervisor/open-session.mjs --help exits successfully before operational work
+ok 31 - supervisor/open-session.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.818875
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+ok 32 - supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.668291
+  ...
+# Subtest: supervisor/session-start.mjs --help exits successfully before operational work
+ok 33 - supervisor/session-start.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.563708
+  ...
+# Subtest: supervisor/supervisor.mjs --help exits successfully before operational work
+ok 34 - supervisor/supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.61675
+  ...
+# Subtest: supervisor/tidy-tabs.mjs --help exits successfully before operational work
+ok 35 - supervisor/tidy-tabs.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.066084
+  ...
+# Subtest: test-slot/test-slot.mjs --help exits successfully before operational work
+ok 36 - test-slot/test-slot.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.174833
+  ...
+# Subtest: watch/watch.mjs --help exits successfully before operational work
+ok 37 - watch/watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 40.018875
+  ...
+# Subtest: acceptance/run.mjs --help exits successfully before operational work
+ok 38 - acceptance/run.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 39.987041
+  ...
+# Subtest: acceptance/plugin-entry.mjs --help exits successfully before operational work
+ok 39 - acceptance/plugin-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.851167
+  ...
+# Subtest: lanes/lane.mjs via release symlinks --help exits successfully before operational work
+ok 40 - lanes/lane.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 32.437208
+  ...
+# Subtest: brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+ok 41 - brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 32.471292
+  ...
+# Subtest: installed entry survives removal of an old versioned executable target without reinstall
+ok 42 - installed entry survives removal of an old versioned executable target without reinstall
+  ---
+  duration_ms: 3410.4375
+  ...
+# Subtest: installed entry survives removal of an old stable symlink target without reinstall
+ok 43 - installed entry survives removal of an old stable symlink target without reinstall
+  ---
+  duration_ms: 2783.721708
+  ...
+# Subtest: installed entry survives removal of an old discovered versioned executable target without reinstall
+ok 44 - installed entry survives removal of an old discovered versioned executable target without reinstall
+  ---
+  duration_ms: 2887.899167
+  ...
+# Subtest: native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+ok 45 - native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+  ---
+  duration_ms: 35.345542
+  ...
+# Subtest: explicit native selections beat competing PATH tools (machine environment)
+ok 46 - explicit native selections beat competing PATH tools (machine environment)
+  ---
+  duration_ms: 1727.395792
+  ...
+# Subtest: explicit native selections beat competing PATH tools (direct arguments)
+ok 47 - explicit native selections beat competing PATH tools (direct arguments)
+  ---
+  duration_ms: 1200.716459
+  ...
+# Subtest: discovered native follows PATH while its original receipt remains executable
+ok 48 - discovered native follows PATH while its original receipt remains executable
+  ---
+  duration_ms: 925.468333
+  ...
+1..48
+# tests 48
+# suites 0
+# pass 48
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 13005.291916

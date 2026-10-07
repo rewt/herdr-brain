@@ -1,0 +1,744 @@
+TAP version 13
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 1 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1418.591958
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 2 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1427.112916
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 3 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1499.538791
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 4 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 69.567833
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 5 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+  ---
+  duration_ms: 1259.059458
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 6 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 59.366584
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 7 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 295.009875
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 8 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 429.280083
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 9 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 435.90875
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 10 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 1836.667416
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 11 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1147.339542
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 12 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1333.854958
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 13 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 2140.616041
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 14 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1615.8975
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 15 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 2302.025083
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 16 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 3409.625208
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 17 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.307084
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 18 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 1429.188958
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 19 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 2960.879084
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 20 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 703.272542
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 21 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 785.324708
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 22 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1343.277959
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 23 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 1026.497875
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 24 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 375.717166
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 25 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 610.502125
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 26 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 2688.328958
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 27 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 947.485833
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 28 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 816.029875
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 29 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1054.509875
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 30 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1163.725292
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 31 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 2025.005292
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 32 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1651.03275
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 33 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1623.323459
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 34 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1711.193666
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry: keeping lane/entry-1376800deb82 at /private/tmp/mr-Bh8fHK/lanes/lane-entry-1376800deb82: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-1376800deb82 at /private/tmp/mr-Bh8fHK/lanes/lane-entry-1376800deb82: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-db3af47de07a at /private/tmp/mr-Bh8fHK/lanes/lane-entry-db3af47de07a: commits beyond its creation base
+# monitor entry: keeping lane/entry-1376800deb82 at /private/tmp/mr-Bh8fHK/lanes/lane-entry-1376800deb82: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-db3af47de07a at /private/tmp/mr-Bh8fHK/lanes/lane-entry-db3af47de07a: commits beyond its creation base
+# monitor entry: keeping lane/entry-0380579b5916 at /private/tmp/mr-Bh8fHK/lanes/lane-entry-0380579b5916: a run was started in this lane
+# Subtest: route adoption leaves planted predictable and destination symlinks untouched
+ok 35 - route adoption leaves planted predictable and destination symlinks untouched
+  ---
+  duration_ms: 941.106417
+  ...
+# Subtest: plain CLI finds nested records and keeps automatic runtime files out of git status
+ok 36 - plain CLI finds nested records and keeps automatic runtime files out of git status
+  ---
+  duration_ms: 567.995083
+  ...
+# Subtest: atomic writer pins its directory when an attacker replaces the directory path
+ok 37 - atomic writer pins its directory when an attacker replaces the directory path
+  ---
+  duration_ms: 131.526209
+  ...
+# Subtest: supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+ok 38 - supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1678.983375
+  ...
+# Subtest: contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+ok 39 - contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1339.939125
+  ...
+# Subtest: global-only Git identity and unused globally installed LFS survive broker commits
+ok 40 - global-only Git identity and unused globally installed LFS survive broker commits
+  ---
+  duration_ms: 928.684333
+  ...
+# Subtest: only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+ok 41 - only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+  ---
+  duration_ms: 3336.127333
+  ...
+# Subtest: interactive no-identity launches warn and preserve the native session
+ok 42 - interactive no-identity launches warn and preserve the native session
+  ---
+  duration_ms: 1970.078834
+  ...
+# Subtest: fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+ok 43 - fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+  ---
+  duration_ms: 4228.548375
+  ...
+# Subtest: canonical preparation and validation remain authoritative in both check and promote
+ok 44 - canonical preparation and validation remain authoritative in both check and promote
+  ---
+  duration_ms: 3748.647958
+  ...
+# Subtest: operator-selected record ancestors, record files and report links keep working
+ok 45 - operator-selected record ancestors, record files and report links keep working
+  ---
+  duration_ms: 1191.720875
+  ...
+# Subtest: symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+ok 46 - symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+  ---
+  duration_ms: 693.387
+  ...
+# Subtest: findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+ok 47 - findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+  ---
+  duration_ms: 243.818292
+  ...
+# Subtest: macOS /tmp remains a valid operator record path
+ok 48 - macOS /tmp remains a valid operator record path
+  ---
+  duration_ms: 104.807125
+  ...
+# Subtest: close removes only untouched entry lanes, including failed setup
+ok 49 - close removes only untouched entry lanes, including failed setup
+  ---
+  duration_ms: 3220.289208
+  ...
+# monitor entry: keeping lane/entry-d105821bc998 at /private/tmp/mr2-X5SORF/lanes/lane-entry-d105821bc998: a run was started in this lane
+# monitor entry: keeping lane/entry-ada2430cd6ff at /private/tmp/mr2-rbOuFa/lanes/lane-entry-ada2430cd6ff: a run was started in this lane
+# monitor entry: keeping lane/entry-cfeb3f5251fe at /private/tmp/mr2-uVBP0c/lanes/lane-entry-cfeb3f5251fe: a run was started in this lane
+# monitor entry: keeping lane/entry-c9d89524dfad at /private/tmp/mr2-j5bqXC/lanes/lane-entry-c9d89524dfad: a run was started in this lane
+# monitor entry: keeping lane/entry-eda169fc4c0a at /private/tmp/mr2-tcoAdK/lanes/lane-entry-eda169fc4c0a: a run was started in this lane
+# monitor entry: keeping lane/entry-b0ee0553453c at /private/tmp/mr2-rz6Xhk/lanes/lane-entry-b0ee0553453c: a run was started in this lane
+# monitor entry: keeping lane/entry-af95c7177033 at /private/tmp/mr2-Xg4jFN/lanes/lane-entry-af95c7177033: a run was started in this lane
+# monitor entry: keeping lane/entry-fb722fe2c3e7 at /private/tmp/mr2-4xIMM9/lanes/lane-entry-fb722fe2c3e7: a run was started in this lane
+# monitor entry: keeping lane/entry-d347f729d108 at /private/tmp/mr2-eE5eK3/lanes/lane-entry-d347f729d108: a run was started in this lane
+# monitor entry: keeping lane/entry-6b2880b3a6c0 at /private/tmp/mr2-U56OXu/lanes/lane-entry-6b2880b3a6c0: external Git driver configuration differs between lane and canonical checkout
+# Subtest: all providers reject temporary writable symlink components
+ok 50 - all providers reject temporary writable symlink components
+  ---
+  duration_ms: 282.775
+  ...
+# Subtest: all providers reject ancestor writable symlink components
+ok 51 - all providers reject ancestor writable symlink components
+  ---
+  duration_ms: 142.890458
+  ...
+# Subtest: all providers reject dangling writable symlink components
+ok 52 - all providers reject dangling writable symlink components
+  ---
+  duration_ms: 59.630833
+  ...
+# Subtest: sandbox grants reject redirected workspaces, queues and external runtime paths
+ok 53 - sandbox grants reject redirected workspaces, queues and external runtime paths
+  ---
+  duration_ms: 55.515583
+  ...
+# Subtest: sandbox exceptions cannot override a protected record, Git tree or nested record target
+ok 54 - sandbox exceptions cannot override a protected record, Git tree or nested record target
+  ---
+  duration_ms: 53.68575
+  ...
+# Subtest: Git filter refuses a temporary symlink to record before execution
+ok 55 - Git filter refuses a temporary symlink to record before execution
+  ---
+  duration_ms: 75.596125
+  ...
+# Subtest: Git filter refuses a temporary symlink to git before execution
+ok 56 - Git filter refuses a temporary symlink to git before execution
+  ---
+  duration_ms: 66.072708
+  ...
+# Subtest: disabled clean filters preserve binary bytes across integration
+ok 57 - disabled clean filters preserve binary bytes across integration
+  ---
+  duration_ms: 2652.922042
+  ...
+# Subtest: disabled smudge filters preserve binary bytes across integration
+ok 58 - disabled smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 2514.118833
+  ...
+# Subtest: disabled process filters preserve binary bytes across integration
+ok 59 - disabled process filters preserve binary bytes across integration
+  ---
+  duration_ms: 2688.2715
+  ...
+# Subtest: disabled clean/smudge/process filters preserve binary bytes across integration
+ok 60 - disabled clean/smudge/process filters preserve binary bytes across integration
+  ---
+  duration_ms: 2175.414542
+  ...
+# Subtest: disabled process/clean/smudge filters preserve binary bytes across integration
+ok 61 - disabled process/clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 2352.155833
+  ...
+# Subtest: disabled clean/smudge filters preserve binary bytes across integration
+ok 62 - disabled clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 3258.92625
+  ...
+# Subtest: disabled clean/smudge filters preserve binary bytes across integration
+ok 63 - disabled clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 3575.68175
+  ...
+# Subtest: clean-only required filters preserve the missing direction as identity
+ok 64 - clean-only required filters preserve the missing direction as identity
+  ---
+  duration_ms: 2983.787375
+  ...
+# Subtest: smudge-only required filters preserve the missing direction as identity
+ok 65 - smudge-only required filters preserve the missing direction as identity
+  ---
+  duration_ms: 3319.2755
+  ...
+# Subtest: required configured filters cannot fall back to identity after a command failure
+ok 66 - required configured filters cannot fall back to identity after a command failure
+  ---
+  duration_ms: 1808.388875
+  ...
+# Subtest: Claude live cases stay pending without authorized authentication and never launch the native binary
+ok 67 - Claude live cases stay pending without authorized authentication and never launch the native binary
+  ---
+  duration_ms: 1023.180583
+  ...
+# Subtest: retained Claude discovery evidence marks unauthenticated cases pending on HUM-19
+ok 68 - retained Claude discovery evidence marks unauthenticated cases pending on HUM-19
+  ---
+  duration_ms: 0.190667
+  ...
+# Subtest: Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+ok 69 - Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+  ---
+  duration_ms: 14.084875
+  ...
+# Subtest: bare bubblewrap and renamed symlink aliases require experimental selection
+ok 70 - bare bubblewrap and renamed symlink aliases require experimental selection
+  ---
+  duration_ms: 23.587666
+  ...
+# Subtest: explicit experimental selection survives repeated selection and builds the gated provider command
+ok 71 - explicit experimental selection survives repeated selection and builds the gated provider command
+  ---
+  duration_ms: 36.146542
+  ...
+# Subtest: direct bubblewrap launcher requires opt-in before launching a provider
+ok 72 - direct bubblewrap launcher requires opt-in before launching a provider
+  ---
+  duration_ms: 253.9605
+  ...
+# Subtest: Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+ok 73 - Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+  ---
+  duration_ms: 137.156
+  ...
+# Subtest: installation requires and preserves experimental selection while Codex installs keep their native default
+ok 74 - installation requires and preserves experimental selection while Codex installs keep their native default
+  ---
+  duration_ms: 113.217208
+  ...
+# Subtest: macOS copies nonempty files and refuses a redirected temporary root after profile construction
+ok 75 - macOS copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.057208
+  ...
+# Subtest: Codex copies nonempty files and refuses a redirected temporary root after profile construction
+ok 76 - Codex copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.098417
+  ...
+# monitor entry: keeping lane/entry-2a181b0838bd at /private/tmp/ms-zyXfdT/lanes/lane-entry-2a181b0838bd: a run was started in this lane
+# monitor entry: keeping lane/entry-00b710f68035 at /private/tmp/ms-X9tSZi/lanes/lane-entry-00b710f68035: a run was started in this lane
+# monitor entry: keeping lane/entry-f330ea7ca377 at /private/tmp/ms-qLqZJb/lanes/lane-entry-f330ea7ca377: a run was started in this lane
+# monitor entry: keeping lane/entry-c1093c7ec788 at /private/tmp/ms-qWFbd8/lanes/lane-entry-c1093c7ec788: modified, untracked or ignored files
+# Subtest: explicit installed adapters leave opted-out projects and native arguments untouched
+ok 77 - explicit installed adapters leave opted-out projects and native arguments untouched
+  ---
+  duration_ms: 872.391166
+  ...
+# Subtest: automatic interactive adapters pass opted-out sessions straight through
+ok 78 - automatic interactive adapters pass opted-out sessions straight through
+  ---
+  duration_ms: 1239.350333
+  ...
+# Subtest: both transports deliver project settings, integration branch and instruction precedence
+ok 79 - both transports deliver project settings, integration branch and instruction precedence
+  ---
+  duration_ms: 2572.825083
+  ...
+# Subtest: main-checkout mode reaches both native harnesses without becoming a supervisor
+ok 80 - main-checkout mode reaches both native harnesses without becoming a supervisor
+  ---
+  duration_ms: 2516.351917
+  ...
+# Subtest: automatic interactive entry honors the project main-checkout mode
+ok 81 - automatic interactive entry honors the project main-checkout mode
+  ---
+  duration_ms: 2469.8565
+  ...
+# Subtest: worker mode validates and promotes to the declared integration branch
+ok 82 - worker mode validates and promotes to the declared integration branch
+  ---
+  duration_ms: 2182.978042
+  ...
+# Subtest: main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+ok 83 - main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+  ---
+  duration_ms: 869.15975
+  ...
+# Subtest: main-mode done reports require clean committed work and successful sandboxed validation
+ok 84 - main-mode done reports require clean committed work and successful sandboxed validation
+  ---
+  duration_ms: 3414.492917
+  ...
+# Subtest: entry-only configuration preserves the portable route suggestion and pending operator question
+ok 85 - entry-only configuration preserves the portable route suggestion and pending operator question
+  ---
+  duration_ms: 585.623583
+  ...
+# Subtest: entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+ok 86 - entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+  ---
+  duration_ms: 2857.818083
+  ...
+# Subtest: undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+ok 87 - undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+  ---
+  duration_ms: 2248.580125
+  ...
+# Subtest: entry settings use canonical Git identity and do not inherit parent or worker config
+ok 88 - entry settings use canonical Git identity and do not inherit parent or worker config
+  ---
+  duration_ms: 856.211125
+  ...
+# Subtest: invalid enabled settings and mismatched integration branches fail before runtime creation
+ok 89 - invalid enabled settings and mismatched integration branches fail before runtime creation
+  ---
+  duration_ms: 246.392875
+  ...
+# Subtest: entry lessons are active, area-matched, deterministic, bounded and read-only
+ok 90 - entry lessons are active, area-matched, deterministic, bounded and read-only
+  ---
+  duration_ms: 1718.813083
+  ...
+# Subtest: both installed adapters deliver shared lessons for nested entry to native arguments offline
+ok 91 - both installed adapters deliver shared lessons for nested entry to native arguments offline
+  ---
+  duration_ms: 3553.743583
+  ...
+# Subtest: installed adapters launch from literal bracket directories with an empty lesson record
+ok 92 - installed adapters launch from literal bracket directories with an empty lesson record
+  ---
+  duration_ms: 3517.357542
+  ...
+# Subtest: installed adapters launch from literal bracket directories with matching lessons
+ok 93 - installed adapters launch from literal bracket directories with matching lessons
+  ---
+  duration_ms: 3481.971875
+  ...
+# Subtest: native receipts require actual lesson prompt arguments for each transport
+ok 94 - native receipts require actual lesson prompt arguments for each transport
+  ---
+  duration_ms: 2.460541
+  ...
+# Subtest: skipped fresh lessons sessions keep the release gate pending without launching anything
+ok 95 - skipped fresh lessons sessions keep the release gate pending without launching anything
+  ---
+  duration_ms: 0.707375
+  ...
+# Subtest: native interactive readiness requires more than a retained banner
+ok 96 - native interactive readiness requires more than a retained banner
+  ---
+  duration_ms: 0.3325
+  ...
+# Subtest: release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+ok 97 - release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+  ---
+  duration_ms: 2714.58375
+  ...
+# Subtest: uncredentialed Claude banner then exit 0 passes only delivery and start
+ok 98 - uncredentialed Claude banner then exit 0 passes only delivery and start
+  ---
+  duration_ms: 2940.757125
+  ...
+# Subtest: uncredentialed Claude prompt then exit 0 passes only delivery and start
+ok 99 - uncredentialed Claude prompt then exit 0 passes only delivery and start
+  ---
+  duration_ms: 2739.658708
+  ...
+# Subtest: uncredentialed Claude banner then exit 1 passes only delivery and start
+ok 100 - uncredentialed Claude banner then exit 1 passes only delivery and start
+  ---
+  duration_ms: 2463.152208
+  ...
+# Subtest: uncredentialed Claude prompt then exit 1 passes only delivery and start
+ok 101 - uncredentialed Claude prompt then exit 1 passes only delivery and start
+  ---
+  duration_ms: 2298.4055
+  ...
+# Subtest: uncredentialed Claude still stops a running native child after delivery proof
+ok 102 - uncredentialed Claude still stops a running native child after delivery proof
+  ---
+  duration_ms: 2387.625125
+  ...
+# Subtest: uncredentialed Claude cannot pass without a native spawn receipt
+ok 103 - uncredentialed Claude cannot pass without a native spawn receipt
+  ---
+  duration_ms: 2047.830125
+  ...
+# Subtest: Codex banner then exit still fails without a Claude profile
+ok 104 - Codex banner then exit still fails without a Claude profile
+  ---
+  duration_ms: 1152.542458
+  ...
+# Subtest: Codex prompt then exit still fails without a Claude profile
+ok 105 - Codex prompt then exit still fails without a Claude profile
+  ---
+  duration_ms: 1205.583834
+  ...
+# Subtest: a proposed canary cannot pass entry delivery and its fresh session still stops
+ok 106 - a proposed canary cannot pass entry delivery and its fresh session still stops
+  ---
+  duration_ms: 1154.624917
+  ...
+# Subtest: codex banner then exit 0 fails the gate and closes its owned session
+ok 107 - codex banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 1150.045084
+  ...
+# Subtest: codex banner then exit 1 fails the gate and closes its owned session
+ok 108 - codex banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 1512.6655
+  ...
+# Subtest: claude banner then exit 0 fails the gate and closes its owned session
+ok 109 - claude banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 2269.192166
+  ...
+# Subtest: claude banner then exit 1 fails the gate and closes its owned session
+ok 110 - claude banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 2343.713208
+  ...
+# Subtest: codex prompt then exit 0 fails while adapter cleanup is blocked
+ok 111 - codex prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 1320.420875
+  ...
+# Subtest: codex prompt then exit 1 fails while adapter cleanup is blocked
+ok 112 - codex prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 1266.515959
+  ...
+# Subtest: claude prompt then exit 0 fails while adapter cleanup is blocked
+ok 113 - claude prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 2328.848625
+  ...
+# Subtest: claude prompt then exit 1 fails while adapter cleanup is blocked
+ok 114 - claude prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 2330.168667
+  ...
+# Subtest: inserting a case anywhere leaves every production dependency and outcome unchanged
+ok 115 - inserting a case anywhere leaves every production dependency and outcome unchanged
+  ---
+  duration_ms: 17.723292
+  ...
+# Subtest: optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+ok 116 - optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+  ---
+  duration_ms: 0.420875
+  ...
+# Subtest: a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+ok 117 - a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+  ---
+  duration_ms: 0.170459
+  ...
+# Subtest: independent product and explicit safety failures retain precedence over genuine canary limits
+ok 118 - independent product and explicit safety failures retain precedence over genuine canary limits
+  ---
+  duration_ms: 0.123458
+  ...
+# Subtest: case keys are required and unique even when display names differ
+ok 119 - case keys are required and unique even when display names differ
+  ---
+  duration_ms: 0.450459
+  ...
+# Subtest: no configured existing project skips all five compatibility bodies visibly and permits a green gate
+ok 120 - no configured existing project skips all five compatibility bodies visibly and permits a green gate
+  ---
+  duration_ms: 0.2595
+  ...
+# Subtest: optional compatibility never hides other failures or pending live cases
+ok 121 - optional compatibility never hides other failures or pending live cases
+  ---
+  duration_ms: 0.389375
+  ...
+# Subtest: configured compatibility retains strict failures and prerequisites
+ok 122 - configured compatibility retains strict failures and prerequisites
+  ---
+  duration_ms: 0.433083
+  ...
+# Subtest: acceptance admits the exact private lane environment handoff including literal shell metacharacters
+ok 123 - acceptance admits the exact private lane environment handoff including literal shell metacharacters
+  ---
+  duration_ms: 3.290375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: outside
+ok 124 - acceptance refuses altered lane environment handoff: outside
+  ---
+  duration_ms: 0.906167
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: suffix
+ok 125 - acceptance refuses altered lane environment handoff: suffix
+  ---
+  duration_ms: 1.020291
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: cleanup
+ok 126 - acceptance refuses altered lane environment handoff: cleanup
+  ---
+  duration_ms: 2.35225
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: mode
+ok 127 - acceptance refuses altered lane environment handoff: mode
+  ---
+  duration_ms: 1.428958
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: symlink
+ok 128 - acceptance refuses altered lane environment handoff: symlink
+  ---
+  duration_ms: 1.238667
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: script
+ok 129 - acceptance refuses altered lane environment handoff: script
+  ---
+  duration_ms: 0.946042
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: verifier
+ok 130 - acceptance refuses altered lane environment handoff: verifier
+  ---
+  duration_ms: 1.479042
+  ...
+# Subtest: native creation envelopes retain their result once and exclude failed creates and reads
+ok 131 - native creation envelopes retain their result once and exclude failed creates and reads
+  ---
+  duration_ms: 1.479917
+  ...
+# Subtest: a leaking refusal fails even when the separate configured workspace is unchanged
+ok 132 - a leaking refusal fails even when the separate configured workspace is unchanged
+  ---
+  duration_ms: 1.810458
+  ...
+# Subtest: an exit-zero no-op retry fails the production busy-retry check
+ok 133 - an exit-zero no-op retry fails the production busy-retry check
+  ---
+  duration_ms: 0.287084
+  ...
+# Subtest: a refusal with no effects and one registered, prompted retry session qualify
+ok 134 - a refusal with no effects and one registered, prompted retry session qualify
+  ---
+  duration_ms: 0.278375
+  ...
+# Subtest: retry requires destination, native creation, live topology, registration and exact prompt attribution
+ok 135 - retry requires destination, native creation, live topology, registration and exact prompt attribution
+  ---
+  duration_ms: 1.056125
+  ...
+# Subtest: refusal also rejects topology or prompt changes without a creation receipt
+ok 136 - refusal also rejects topology or prompt changes without a creation receipt
+  ---
+  duration_ms: 0.438916
+  ...
+# Subtest: fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+ok 137 - fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+  ---
+  duration_ms: 59.278
+  ...
+# Subtest: candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+ok 138 - candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+  ---
+  duration_ms: 0.4665
+  ...
+# Subtest: cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+ok 139 - cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+  ---
+  duration_ms: 1.198709
+  ...
+# Subtest: ordinary product entry and source-attribution gaps fail without a safety or harness marker
+ok 140 - ordinary product entry and source-attribution gaps fail without a safety or harness marker
+  ---
+  duration_ms: 0.280208
+  ...
+# Subtest: dependent cutover/default-cycle cases preserve prerequisite causes and origins
+ok 141 - dependent cutover/default-cycle cases preserve prerequisite causes and origins
+  ---
+  duration_ms: 0.336917
+  ...
+1..141
+# tests 141
+# suites 0
+# pass 139
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 73090.877375

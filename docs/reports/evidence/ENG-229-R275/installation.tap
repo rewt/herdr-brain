@@ -1,0 +1,210 @@
+TAP version 13
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 1 - offline fleet fixtures keep default run temp within the Unix socket budget # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.881625
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 2 - planning rejects bytes edits to shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.052333
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 3 - planning rejects mode edits to shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030917
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 4 - planning rejects bytes edits to adapter without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031167
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 5 - planning rejects mode edits to adapter without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036375
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 6 - planning rejects bytes edits to receipt without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028875
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 7 - planning rejects mode edits to receipt without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031708
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 8 - planning rejects bytes edits to absent adapter without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028375
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 9 - planning rejects bytes edits to unchanged shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.205
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 10 - planning rejects mode edits to unchanged shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.137834
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 11 - release tests preserve a separate installation inherited through the parent environment # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039083
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 12 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 3407.461583
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 13 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 3319.028125
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 14 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 2314.101792
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 15 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.046125
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 16 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 3061.22
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 17 - non-UTF-8 shell bytes survive failed-write rollback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044833
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 18 - non-UTF-8 shell bytes survive terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024834
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 19 - mode-only reinstallation at staged survives failed-write rollback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069833
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 20 - mode-only reinstallation at applied survives failed-write rollback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025167
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 21 - mode-only reinstallation at operator chmod survives failed-write rollback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019584
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 22 - mode-only reinstallation at staged survives terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018667
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 23 - mode-only reinstallation at applied survives terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015833
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 24 - mode-only reinstallation at operator chmod survives terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020125
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 25 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015667
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 26 - relocated installed runtime executes lane review through its bundled template dependency # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015125
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 27 - release carries entry, pins final versions, rolls back and restores exact shell state # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018542
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 28 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015083
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 29 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.015333
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 30 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 2719.048334
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 31 - Herdr build checkout can move or disappear while installed entry and restore still work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056125
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 32 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.121167
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 33 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 4173.918667
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 34 - non-writable shell files refuse installation without adapters or partial snippets # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.04125
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 35 - recovery receipt precedes shell writes and rolls back a failure after the first snippet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024667
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 36 - recovery receipt precedes shell writes and recovers a terminated install # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021042
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 37 - rollback preserves a namespaced tag with a same-basename distractor # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01825
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 38 - terminated install recovers a staged shell replacement as well as the first installed snippet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018042
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 39 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1544.134292
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 40 - rolling back to a release without discovery removes entry and can roll forward again # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035333
+  ...
+1..40
+# tests 40
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 33
+# todo 0
+# duration_ms 20589.305792

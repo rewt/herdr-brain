@@ -1,0 +1,23 @@
+product/docs	acceptance/README.md
+product/docs	acceptance/lessons.mjs
+product/docs	acceptance/live.mjs
+product/docs	acceptance/run.mjs
+release	acceptance/test/live-session.test.mjs
+product/docs	discovery/README.md
+product/docs	discovery/acceptance.mjs
+product/docs	discovery/adapters/claude.mjs
+product/docs	discovery/adapters/codex.mjs
+product/docs	discovery/install.mjs
+release	discovery/test/alternatives.test.mjs
+promotion	discovery/test/entry.test.mjs
+release	discovery/test/lessons.test.mjs
+promotion	discovery/test/review-r4.test.mjs
+release	discovery/test/review.test.mjs
+release	discovery/test/settings.test.mjs
+release	lanes/test/lane.test.mjs
+release	test/cli-help.test.mjs
+release	test/entry-upgrade.test.mjs
+release	test/fleet.test.mjs
+release	test/plugin-install.test.mjs
+
+Additional indirect installer coverage: discovery/test/acceptance.test.mjs (discovery/acceptance.mjs), acceptance/test/lessons.test.mjs (acceptance/lessons.mjs), test/zero-setup-install.test.mjs (herdr/entry-install.mjs).

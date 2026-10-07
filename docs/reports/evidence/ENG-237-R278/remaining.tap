@@ -1,0 +1,290 @@
+Release tier: 4 files; 3 bounded suites
+Release suite test:1: 2 files
+TAP version 13
+# Subtest: installed entry survives removal of an old versioned executable target without reinstall
+ok 1 - installed entry survives removal of an old versioned executable target without reinstall
+  ---
+  duration_ms: 3551.351083
+  ...
+# Subtest: installed entry survives removal of an old stable symlink target without reinstall
+ok 2 - installed entry survives removal of an old stable symlink target without reinstall
+  ---
+  duration_ms: 3535.60925
+  ...
+# Subtest: installed entry survives removal of an old discovered versioned executable target without reinstall
+ok 3 - installed entry survives removal of an old discovered versioned executable target without reinstall
+  ---
+  duration_ms: 2725.4445
+  ...
+# Subtest: native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+ok 4 - native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+  ---
+  duration_ms: 46.705542
+  ...
+# Subtest: explicit native selections beat competing PATH tools (machine environment)
+ok 5 - explicit native selections beat competing PATH tools (machine environment)
+  ---
+  duration_ms: 1630.117625
+  ...
+# Subtest: explicit native selections beat competing PATH tools (direct arguments)
+ok 6 - explicit native selections beat competing PATH tools (direct arguments)
+  ---
+  duration_ms: 1287.325458
+  ...
+# Subtest: discovered native follows PATH while its original receipt remains executable
+ok 7 - discovered native follows PATH while its original receipt remains executable
+  ---
+  duration_ms: 1047.852875
+  ...
+# Subtest: installed wrappers launch explicit natives without dirname on PATH
+ok 8 - installed wrappers launch explicit natives without dirname on PATH
+  ---
+  duration_ms: 1272.414625
+  ...
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 9 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 2184.438541
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 10 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1297.8665
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 11 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 2292.422542
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 12 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 76.7045
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 13 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+  ---
+  duration_ms: 1274.487209
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 14 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 52.539833
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 15 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 450.567917
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 16 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 499.216625
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 17 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 638.864375
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 18 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 1787.9965
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 19 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1142.954583
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 20 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1169.521792
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 21 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1398.613958
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 22 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1170.045958
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 23 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 1510.911083
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 24 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 2308.09725
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 25 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.295583
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 26 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 949.835417
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 27 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 1913.246
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 22154.466375
+Release suite acceptance/test/live-session.test.mjs:1: 1 files
+TAP version 13
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+ok 1 - real live discovery setup confines a short fleet temp with no project configuration
+  ---
+  duration_ms: 781.751333
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 2 - real live-worker arguments reach the installed adapter with its supported private temp grant
+  ---
+  duration_ms: 1135.48925
+  ...
+# Subtest: installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+ok 3 - installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+  ---
+  duration_ms: 8540.62625
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10495.574792
+Release suite acceptance/test/lessons.test.mjs:1: 1 files
+TAP version 13
+# Subtest: native receipts require actual lesson prompt arguments for each transport
+ok 1 - native receipts require actual lesson prompt arguments for each transport
+  ---
+  duration_ms: 1.721541
+  ...
+# Subtest: skipped fresh lessons sessions keep the release gate pending without launching anything
+ok 2 - skipped fresh lessons sessions keep the release gate pending without launching anything
+  ---
+  duration_ms: 0.618208
+  ...
+# Subtest: native interactive readiness requires more than a retained banner
+ok 3 - native interactive readiness requires more than a retained banner
+  ---
+  duration_ms: 0.309
+  ...
+# Subtest: release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+ok 4 - release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+  ---
+  duration_ms: 2268.520125
+  ...
+# Subtest: uncredentialed Claude banner then exit 0 passes only delivery and start
+ok 5 - uncredentialed Claude banner then exit 0 passes only delivery and start
+  ---
+  duration_ms: 2124.826792
+  ...
+# Subtest: uncredentialed Claude prompt then exit 0 passes only delivery and start
+ok 6 - uncredentialed Claude prompt then exit 0 passes only delivery and start
+  ---
+  duration_ms: 2170.192
+  ...
+# Subtest: uncredentialed Claude banner then exit 1 passes only delivery and start
+ok 7 - uncredentialed Claude banner then exit 1 passes only delivery and start
+  ---
+  duration_ms: 2120.718708
+  ...
+# Subtest: uncredentialed Claude prompt then exit 1 passes only delivery and start
+ok 8 - uncredentialed Claude prompt then exit 1 passes only delivery and start
+  ---
+  duration_ms: 2163.911875
+  ...
+# Subtest: uncredentialed Claude still stops a running native child after delivery proof
+ok 9 - uncredentialed Claude still stops a running native child after delivery proof
+  ---
+  duration_ms: 2225.418666
+  ...
+# Subtest: uncredentialed Claude cannot pass without a native spawn receipt
+ok 10 - uncredentialed Claude cannot pass without a native spawn receipt
+  ---
+  duration_ms: 1973.596958
+  ...
+# Subtest: Codex banner then exit still fails without a Claude profile
+ok 11 - Codex banner then exit still fails without a Claude profile
+  ---
+  duration_ms: 1172.303334
+  ...
+# Subtest: Codex prompt then exit still fails without a Claude profile
+ok 12 - Codex prompt then exit still fails without a Claude profile
+  ---
+  duration_ms: 1173.790709
+  ...
+# Subtest: a proposed canary cannot pass entry delivery and its fresh session still stops
+ok 13 - a proposed canary cannot pass entry delivery and its fresh session still stops
+  ---
+  duration_ms: 1168.579875
+  ...
+# Subtest: codex banner then exit 0 fails the gate and closes its owned session
+ok 14 - codex banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 1187.703917
+  ...
+# Subtest: codex banner then exit 1 fails the gate and closes its owned session
+ok 15 - codex banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 1136.906834
+  ...
+# Subtest: claude banner then exit 0 fails the gate and closes its owned session
+ok 16 - claude banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 2136.431417
+  ...
+# Subtest: claude banner then exit 1 fails the gate and closes its owned session
+ok 17 - claude banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 2120.781625
+  ...
+# Subtest: codex prompt then exit 0 fails while adapter cleanup is blocked
+ok 18 - codex prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 1211.579125
+  ...
+# Subtest: codex prompt then exit 1 fails while adapter cleanup is blocked
+ok 19 - codex prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 1175.247792
+  ...
+# Subtest: claude prompt then exit 0 fails while adapter cleanup is blocked
+ok 20 - claude prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 2189.410084
+  ...
+# Subtest: claude prompt then exit 1 fails while adapter cleanup is blocked
+ok 21 - claude prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 2207.998209
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 31967.026542
+All release-tier suites passed.

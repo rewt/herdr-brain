@@ -1,0 +1,3 @@
+installer: 0
+{"kind":"codex","status":1,"stdout":"","stderr":"/private/tmp/entry-hang-probe-YXT1U1/entry-bin/codex: line 2: dirname: command not found\n/private/tmp/entry-hang-probe-YXT1U1/entry-bin/codex: line 2: cd: : No such file or directory\n"}
+{"kind":"claude","status":1,"stdout":"","stderr":"/private/tmp/entry-hang-probe-YXT1U1/entry-bin/claude: line 2: dirname: command not found\n/private/tmp/entry-hang-probe-YXT1U1/entry-bin/claude: line 2: cd: : No such file or directory\n"}

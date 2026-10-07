@@ -1,0 +1,310 @@
+TAP version 13
+# Subtest: lane keep reason identifies no-run without authorizing closure
+ok 1 - lane keep reason identifies no-run without authorizing closure
+  ---
+  duration_ms: 1.498709
+  ...
+# Subtest: lane keep reason identifies no-report without authorizing closure
+ok 2 - lane keep reason identifies no-report without authorizing closure
+  ---
+  duration_ms: 0.606167
+  ...
+# Subtest: lane keep reason identifies newer-open-run without authorizing closure
+ok 3 - lane keep reason identifies newer-open-run without authorizing closure
+  ---
+  duration_ms: 0.141958
+  ...
+# Subtest: lane keep reason identifies identity without authorizing closure
+ok 4 - lane keep reason identifies identity without authorizing closure
+  ---
+  duration_ms: 0.121375
+  ...
+# Subtest: lane keep reason identifies tied-newest without authorizing closure
+ok 5 - lane keep reason identifies tied-newest without authorizing closure
+  ---
+  duration_ms: 0.064209
+  ...
+# Subtest: lane keep reason identifies blocked without authorizing closure
+ok 6 - lane keep reason identifies blocked without authorizing closure
+  ---
+  duration_ms: 0.224708
+  ...
+# Subtest: lane keep reason identifies needs_human without authorizing closure
+ok 7 - lane keep reason identifies needs_human without authorizing closure
+  ---
+  duration_ms: 0.270875
+  ...
+# Subtest: lane keep reason identifies item without authorizing closure
+ok 8 - lane keep reason identifies item without authorizing closure
+  ---
+  duration_ms: 0.338708
+  ...
+# Subtest: lane keep reason identifies blocker without authorizing closure
+ok 9 - lane keep reason identifies blocker without authorizing closure
+  ---
+  duration_ms: 0.340292
+  ...
+# Subtest: lane keep reason identifies duplicate-name without authorizing closure
+ok 10 - lane keep reason identifies duplicate-name without authorizing closure
+  ---
+  duration_ms: 0.246417
+  ...
+# Subtest: a shared tab lists the distinct reasons for each ineligible worker
+ok 11 - a shared tab lists the distinct reasons for each ineligible worker
+  ---
+  duration_ms: 0.108916
+  ...
+# Subtest: closes exited watchers and old finished sessions, keeps the newest session
+ok 12 - closes exited watchers and old finished sessions, keeps the newest session
+  ---
+  duration_ms: 0.950458
+  ...
+# Subtest: never closes active, unnamed or still-running tabs, or its own tab
+ok 13 - never closes active, unnamed or still-running tabs, or its own tab
+  ---
+  duration_ms: 0.096167
+  ...
+# Subtest: an operator chat (unnamed agent) is kept even in a session or lane tab
+ok 14 - an operator chat (unnamed agent) is kept even in a session or lane tab
+  ---
+  duration_ms: 0.150375
+  ...
+# Subtest: closes lane worker tabs only when every worker there has a recorded report
+ok 15 - closes lane worker tabs only when every worker there has a recorded report
+  ---
+  duration_ms: 0.0855
+  ...
+# Subtest: a newer lane review verdict finishes its idle review tab, but an older verdict does not
+ok 16 - a newer lane review verdict finishes its idle review tab, but an older verdict does not
+  ---
+  duration_ms: 0.218416
+  ...
+# Subtest: a FAIL review record on its first nonempty line finishes an older review session
+ok 17 - a FAIL review record on its first nonempty line finishes an older review session
+  ---
+  duration_ms: 0.090208
+  ...
+# Subtest: a watcher label in a lane workspace or with an agent inside is left alone
+ok 18 - a watcher label in a lane workspace or with an agent inside is left alone
+  ---
+  duration_ms: 0.134625
+  ...
+# Subtest: shell-only detection
+ok 19 - shell-only detection
+  ---
+  duration_ms: 0.103625
+  ...
+# Subtest: finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+ok 20 - finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+  ---
+  duration_ms: 1869.317042
+  ...
+# Subtest: dry-run previews finished tabs and never closes, including through housekeeping --once
+ok 21 - dry-run previews finished tabs and never closes, including through housekeeping --once
+  ---
+  duration_ms: 1184.186125
+  ...
+# Subtest: a working or blocked change at the final recheck preserves the finished tab
+ok 22 - a working or blocked change at the final recheck preserves the finished tab
+  ---
+  duration_ms: 1173.406584
+  ...
+# Subtest: new occupants revealed after the final pane list preserve their tab
+ok 23 - new occupants revealed after the final pane list preserve their tab
+  ---
+  duration_ms: 2074.565375
+  ...
+# Subtest: conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+ok 24 - conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+  ---
+  duration_ms: 0.340709
+  ...
+# Subtest: housekeeping --once preserves waiting reports, blocking items and missing item evidence
+ok 25 - housekeeping --once preserves waiting reports, blocking items and missing item evidence
+  ---
+  duration_ms: 5904.005875
+  ...
+# Subtest: automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+ok 26 - automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+  ---
+  duration_ms: 3370.896417
+  ...
+# Subtest: replacement identity and a waiting report at the final observation prevent closing
+ok 27 - replacement identity and a waiting report at the final observation prevent closing
+  ---
+  duration_ms: 2096.467042
+  ...
+# Subtest: a reused worker name with a newer open run and an extra unnamed occupant never close
+ok 28 - a reused worker name with a newer open run and an extra unnamed occupant never close
+  ---
+  duration_ms: 745.180167
+  ...
+# Subtest: a matching worker cannot authorize another occupant reusing its name
+ok 29 - a matching worker cannot authorize another occupant reusing its name
+  ---
+  duration_ms: 1124.557209
+  ...
+# Subtest: only this Git project is tidied and the caller tab is preserved
+ok 30 - only this Git project is tidied and the caller tab is preserved
+  ---
+  duration_ms: 623.744084
+  ...
+# Subtest: finished reviews and old settle sessions use the existing tidy policy
+ok 31 - finished reviews and old settle sessions use the existing tidy policy
+  ---
+  duration_ms: 1509.420875
+  ...
+# Subtest: three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+ok 32 - three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+  ---
+  duration_ms: 3034.465042
+  ...
+# Subtest: supported review routes need a matching topic verdict newer than their session
+ok 33 - supported review routes need a matching topic verdict newer than their session
+  ---
+  duration_ms: 0.228167
+  ...
+# Subtest: automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+ok 34 - automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+  ---
+  duration_ms: 14118.112583
+  ...
+# Subtest: replacement reviewers at the final observation keep their tabs without worker runs
+ok 35 - replacement reviewers at the final observation keep their tabs without worker runs
+  ---
+  duration_ms: 7144.41175
+  ...
+# Subtest: review evidence cannot override a recorded worker waiting on a blocker
+ok 36 - review evidence cannot override a recorded worker waiting on a blocker
+  ---
+  duration_ms: 641.609833
+  ...
+# Subtest: failed and incomplete reads close nothing and are logged without stopping housekeeping
+ok 37 - failed and incomplete reads close nothing and are logged without stopping housekeeping
+  ---
+  duration_ms: 2368.123792
+  ...
+# Subtest: every tick tidies despite the ten-minute cleanup interval and a tidy failure
+ok 38 - every tick tidies despite the ten-minute cleanup interval and a tidy failure
+  ---
+  duration_ms: 5554.903708
+  ...
+# Subtest: auto-tidy preserves a focused finished worker at initial and final observation
+ok 39 - auto-tidy preserves a focused finished worker at initial and final observation
+  ---
+  duration_ms: 1089.555167
+  ...
+# Subtest: switched external dispatch records launches and housekeeping previews only settled merged tabs
+ok 40 - switched external dispatch records launches and housekeeping previews only settled merged tabs
+  ---
+  duration_ms: 5986.699708
+  ...
+# {"at":"2026-10-07T16:26:11.595Z","action":"tidy-tabs","output":"[dry-run] keep blocked \\"worker\\": waiting on recorded blocked outcome for lane-worker-blocked\\n[dry-run] keep needs_human \\"worker\\": waiting on recorded needs_human outcome for lane-worker-needs_human\\n[dry-run] keep open \\"worker\\": no recorded report for lane-worker-open\\n[dry-run] keep working \\"worker\\": an agent here is still active\\n[dry-run] keep legacy \\"worker\\": recorded launch identity does not match lane-worker-legacy\\n[dry-run] would close done \\"worker\\": worker finished and its result is recorded (lane-worker-done)\\n[dry-run] would close unmerged \\"worker\\": worker finished and its result is recorded (lane-worker-unmerged)","dryRun":true}\\n{"at":"2026-10-07T16:26:12.390Z","action":"scan","close":1,"keep":6,"cleanup":true,"resume":true,"dryRun":true}\\n{"at":"2026-10-07T16:26:12.390Z","action":"keep","tab_id":"blocked","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T16:26:12.391Z","action":"keep","tab_id":"needs_human","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T16:26:12.391Z","action":"keep","tab_id":"open","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T16:26:12.391Z","action":"keep","tab_id":"working","label":"worker","why":"an agent here is still active","dryRun":true}\\n{"at":"2026-10-07T16:26:12.391Z","action":"keep","tab_id":"legacy","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T16:26:12.391Z","action":"keep","tab_id":"unmerged","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T16:26:12.391Z","action":"would-close","tab_id":"done","label":"worker","why":"R-1 recorded report; lane promoted or archived"}
+# Subtest: rollback restores every file byte and executable mode
+ok 41 - rollback restores every file byte and executable mode
+  ---
+  duration_ms: 9.75975
+  ...
+# Subtest: contrib cannot retire with an extra executable caller, and scans refuse symlinks
+ok 42 - contrib cannot retire with an extra executable caller, and scans refuse symlinks
+  ---
+  duration_ms: 5.914541
+  ...
+# Subtest: all current edits apply to relocated inventory scripts and refuse premise drift
+ok 43 - all current edits apply to relocated inventory scripts and refuse premise drift
+  ---
+  duration_ms: 19.096708
+  ...
+# Subtest: current snapshot covers every switch and active caller and relocates all fixed temp paths
+not ok 44 - current snapshot covers every switch and active caller and relocates all fixed temp paths
+  ---
+  duration_ms: 12.4245
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'unrelocated live path in /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-Lcodub/cutover-boundary-E8SLEd/existing/bch-cloak/.claude/skills/lane/SKILL.md: /Users/rewt'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:70:13)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:66:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/test/cutover.test.mjs:59:3
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+ok 45 - mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+  ---
+  duration_ms: 20.120458
+  ...
+# Subtest: current legacy notify queues its report in scratch and needs an event-service delivery consumer
+ok 46 - current legacy notify queues its report in scratch and needs an event-service delivery consumer
+  ---
+  duration_ms: 382.052458
+  ...
+# Subtest: relocated dispatch keeps the lock and session cap in baseline and switched copies
+not ok 47 - relocated dispatch keeps the lock and session cap in baseline and switched copies
+  ---
+  duration_ms: 163.751167
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'unrelocated live path in /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-Lcodub/cutover-boundary-vjCkat/existing/bch-cloak/.claude/skills/lane/SKILL.md: /Users/rewt'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:70:13)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/security.mjs:66:32)
+    invoke (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/test/cutover.test.mjs:157:5)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-keep-reasons/acceptance/test/cutover.test.mjs:172:20
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+ok 48 - cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+  ---
+  duration_ms: 14.94725
+  ...
+# Subtest: production notice contract accepts rewritten current documents and rejects missing obligations
+ok 49 - production notice contract accepts rewritten current documents and rejects missing obligations
+  ---
+  duration_ms: 18.42425
+  ...
+# Subtest: retirement scans nested Python, executable extensionless and notify entry callers
+ok 50 - retirement scans nested Python, executable extensionless and notify entry callers
+  ---
+  duration_ms: 6.070917
+  ...
+# Subtest: installed tidy recovers a bounded tail from each log including a late older run
+ok 51 - installed tidy recovers a bounded tail from each log including a late older run
+  ---
+  duration_ms: 228.964167
+  ...
+# Subtest: only unreferenced timestamped script backups qualify as historical material
+ok 52 - only unreferenced timestamped script backups qualify as historical material
+  ---
+  duration_ms: 5.300667
+  ...
+# Subtest: executable shell case arms cannot hide contrib callers or references to historical backups
+ok 53 - executable shell case arms cannot hide contrib callers or references to historical backups
+  ---
+  duration_ms: 4.610708
+  ...
+# Subtest: referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+ok 54 - referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+  ---
+  duration_ms: 8.002708
+  ...
+1..54
+# tests 54
+# suites 0
+# pass 52
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 62683.316083
+Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent

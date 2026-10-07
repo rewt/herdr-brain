@@ -473,3 +473,20 @@ project's canonical Git common directory, including when read from a lane.
 Measurements deduplicate hardlinks, exclude symlink targets, and stop at 100,000
 entries or one second per area; incomplete measurements are labeled as lower
 bounds. Storage size never refuses work or changes record status.
+
+A PASS review containing only scoped `Test evidence not re-executed` entries can
+use the normal bound promotion path when the promotion test plan covers every
+named file. Autopilot then queues and closes it through the existing verified
+landing path. Reviewers still execute no commands and must report missing code,
+incomplete acceptance and other uncertainty separately.
+
+If the plan cannot cover those files, the supervisor may execute them in full
+and record the evidence before `promote RUN --why REASON`. Run a clean lane check
+with a direct `node --test FILE...` or `node test/helpers/run.mjs FILE...` command,
+then add a decision note to that run with the exact text
+`Test re-execution evidence: /absolute/GIT_COMMON_DIR/lane-validation/KEY.json`.
+Promotion resolves only the saved test-only PASS escalation, verifies the green
+receipt's exact lane head/tree, full-file command and immutable log hash, and
+rechecks all normal record, clean-tree, STOP and replay guards. Missing, stale,
+filtered, red or unrecorded evidence cannot discharge it. The resulting request
+retains the run binding and closes through the usual autopilot landing path.

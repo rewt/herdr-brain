@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+ok 1 - affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+  ---
+  duration_ms: 3.637792
+  ...
+# Subtest: real import closure selects the previously missed release files and records bounded coverage
+ok 2 - real import closure selects the previously missed release files and records bounded coverage
+  ---
+  duration_ms: 284.281375
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 3 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 152.879625
+  ...
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.465583
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.1095
+# Subtest: only scoped test deferrals become promotable through the planned gate
+ok 4 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 8148.698292
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 5 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 6199.985875
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 14386.440666

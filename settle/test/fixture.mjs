@@ -168,7 +168,7 @@ else if(args[0]==='agent'&&args[1]==='prompt') {
   const budget=prompt.includes('## Review run budget')&&prompt.includes('Build, test, prepare, install and check commands: maximum count 0 for each command.');
   const inherited='- Validation is inherited from settle; the explicit zero-command review budget permits no independent execution.';
   const acknowledgment=fs.existsSync(path.join(root,'inherited-unverified'));
-  const unverified=!budget?'- No unambiguous Review run budget; default zero-command limit.':fs.existsSync(path.join(root,'unverified'))?(acknowledgment?inherited+'\\n':'')+'- The acceptance evidence remains unresolved.':acknowledgment?inherited:'None';
+  const unverified=review.unverified??(!budget?'- No unambiguous Review run budget; default zero-command limit.':fs.existsSync(path.join(root,'unverified'))?(acknowledgment?inherited+'\\n':'')+'- The acceptance evidence remains unresolved.':acknowledgment?inherited:'None');
   const gateAcknowledgment=prompt.split('\\n').find(line=>line.startsWith('- The supplied gate is inherited evidence;'));
   const nonclaims=budget&&!acknowledgment?[gateAcknowledgment,inherited].filter(Boolean).join('\\n'):'None';
   const recordAction=path.join(root,'review-record-action.json');

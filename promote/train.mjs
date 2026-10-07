@@ -12,6 +12,8 @@ import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
+import { promotionTestPlan, changedPaths, plannedCommand } from './test-plan.mjs';
+
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
 export function verifyTrainResult(result, { project, saved }) {
@@ -24,6 +26,7 @@ export function verifyTrainResult(result, { project, saved }) {
         job?.expectedHead !== saved.head || job.run !== saved.run || job.org !== saved.org || job.topic !== saved.lane) return false;
     const attempt = plan.attempts.find(a => ['integrated', 'complete'].includes(a.phase) && a.tips[result.id] === result.tip);
     const captured = attempt?.jobs.find(j => j.id === result.id);
+    if (saved.test_evidence && !saved.test_evidence.reexecuted && JSON.stringify(job.requiredTests) !== JSON.stringify(saved.test_evidence.files)) return false;
     if (captured?.sourceHead !== saved.head || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) return false;
     const git = args => {
       const r = spawnSync('git', ['-C', project.canonical, ...args], { encoding: 'utf8' });
@@ -243,6 +246,11 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         if (r.error || r.status !== 0) throw new Error(`train preparation failed: ${step.run}`);
       }
       if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch tip or branch changed during preparation');
+      const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))];
+      attempt.test_plan = promotionTestPlan({ cwd: attempt.scratch, planner: validation.promotion_tests, changed, baseCommand: validation.tiers.promotion.command, env });
+      const covered = [...(attempt.test_plan?.files ?? []), ...(attempt.test_plan?.covered ?? [])];
+      if (attempt.jobs.some(job => (job.requiredTests ?? []).some(file => !covered.includes(file)))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
+      const command = plannedCommand(validation.tiers.promotion.command, attempt.test_plan);
       process.stdout.write(`validating in ${attempt.scratch}: ${validation.tiers.promotion.command}\n`);
       // Publish the clock before the synchronous gate blocks. No exit code is
       // present until validation returns, so this can never prove a green gate.
@@ -250,9 +258,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       // old proof is replaced; validated always means a completed green gate.
       attempt.phase = 'prepared';
       if (attempt.gate) (attempt.gate_history ??= []).push(attempt.gate);
-      attempt.gate = { command: validation.tiers.promotion.command, started_at: new Date().toISOString() };
+      attempt.gate = { command, started_at: new Date().toISOString() };
       phase('validating');
-      attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command: validation.tiers.promotion.command,
+      attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command,
         prepare, environment: validation.environment, env, label: 'train scratch',
         onStart: gate => { attempt.gate = gate; save(); } });
     } catch (error) {

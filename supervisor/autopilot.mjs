@@ -208,7 +208,11 @@ export function autopilotNotice(entry, { execute: call = execute } = {}) {
       const stdout = r.stdout ?? '';
       let result;
       try { result = json ? JSON.parse(stdout) : stdout.trim(); }
-      catch (error) { action.output = stdout; save(); throw error; }
+      catch (error) {
+        action.output = stdout; save();
+        if (r.error || r.signal || r.status !== 0) throw Error(`${path.basename(file)}: ${r.stderr || r.error?.message || r.signal || `exit ${r.status}`}`);
+        throw error;
+      }
       action.result = result;
       if (r.error || r.signal || r.status !== 0) {
         action.output = stdout; save();

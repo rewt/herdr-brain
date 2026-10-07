@@ -427,8 +427,18 @@ for (const withFindings of [false, true]) test(`actual handle and promotion comm
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
   assert.deepEqual(f.herdrCalls(), calls);
 });
-for (const awaited of [false, true]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}`, { timeout: 30000 }, async t => {
+for (const [awaited, scopedTests] of [[false, false], [true, false], [false, true]]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}${scopedTests ? ' with deferred test evidence' : ''}`, { timeout: 30000 }, async t => {
   const f = setup(t, [], { ingest: false }); f.commit('correct\n');
+  if (scopedTests) {
+    const marker = path.join(f.root, 'extra-test-runs');
+    fs.writeFileSync(path.join(f.repo, 'planner.mjs'), `import {spawnSync} from 'node:child_process'; if(process.argv[2]==='--plan') console.log(JSON.stringify({files:['checks.test.mjs']})); else process.exitCode=spawnSync(process.execPath,['--test',...JSON.parse(process.argv[3])],{stdio:'inherit'}).status??1;`);
+    fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion_tests: 'planner.mjs' }));
+    f.git(['add', 'planner.mjs', '.lane.validation.json']); f.git(['commit', '-qm', 'Declare promotion test plan']);
+    f.git(['rebase', 'main'], f.workspace);
+    fs.writeFileSync(path.join(f.workspace, 'checks.test.mjs'), `import test from 'node:test'; import fs from 'node:fs'; test('additional evidence',()=>fs.appendFileSync(${JSON.stringify(marker)},'run\\n'));`);
+    f.git(['add', 'checks.test.mjs'], f.workspace); f.git(['commit', '-qm', 'Add scoped release test'], f.workspace);
+    fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ unverified: '- Test evidence not re-executed: checks.test.mjs' }));
+  }
   if (awaited) f.record(['set', f.item, 'meta.notify=supervisor', 'meta.notify_step=Cut RC-11']);
   assert.equal(f.show(f.run).report, null, 'first notice has no immutable report');
   const runner = path.join(f.root, 'first-notice.mjs');
@@ -448,6 +458,12 @@ for (const awaited of [false, true]) test(`automatic PASS reaches the real queue
   assert.ok(!fs.existsSync(f.workspace)); assert.equal(fs.readFileSync(path.join(f.repo, 'work.txt'), 'utf8'), 'correct\n');
   const queue = JSON.parse(fs.readFileSync(path.join(directory, 'queue.json')));
   assert.equal(queue.results.length, 1); assert.equal(queue.results[0].outcome, 'promoted');
+  if (scopedTests) {
+    assert.deepEqual(queue.results[0].requiredTests, ['checks.test.mjs']);
+    const plan = JSON.parse(fs.readFileSync(queue.results[0].receipt));
+    assert.deepEqual(plan.attempts[0].test_plan.files, ['checks.test.mjs']);
+    assert.equal(fs.readFileSync(path.join(f.root, 'extra-test-runs'), 'utf8'), 'run\n');
+  }
   const notices = readInbox(result.inbox); assert.equal(notices.length, 2);
   assert.equal(notices[0].state, 'handled');
   assert.equal(notices[1].state, awaited ? 'sent' : 'handled');
@@ -504,4 +520,15 @@ process.exit(r.status??1);`, { mode: 0o755 });
   const events = fs.readFileSync(path.join(f.org, 'events.jsonl'));
   assert.equal(JSON.parse(f.exec(process.execPath, [runner]).stdout).disposition, 'handled');
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+});
+
+for (const stdout of ['', '{broken']) test(`stderr-only failed action preserves refusal instead of JSON parsing: ${stdout}`, t => {
+  const f = setup(t);
+  const result = autopilotNotice(f.entry, { execute: () => ({ status: 1, stdout, stderr: 'promotion requires saved readiness', signal: null }) });
+  assert.equal(result.disposition, 'wake');
+  const saved = JSON.parse(fs.readFileSync(result.receipt));
+  assert.match(saved.error, /promotion requires saved readiness/);
+  assert.equal(saved.actions[0].output, stdout);
+  assert.equal(saved.actions[0].phase, 'started');
+  assert.equal(saved.actions[0].exit_code, 1);
 });

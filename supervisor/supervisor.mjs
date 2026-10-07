@@ -11,6 +11,7 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart, briefSize, receiptDirectory } from './context.mjs';
 import { queueJobs } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
+import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -176,20 +177,24 @@ export function main(argv = process.argv.slice(2)) {
     // Settle rechecks report hash, record, exact heads, clean trees and readiness.
     const settledFile = path.join(project.org, 'settle', `${id}.json`);
     const settled = fs.existsSync(settledFile) ? JSON.parse(fs.readFileSync(settledFile, 'utf8')) : null;
-    if (settled?.common !== project.identity || settled.stage !== 'complete' || !['promotable', 'promotable_with_findings'].includes(settled.result?.result)) throw new Error('handle the final report first; promotion requires saved promotable settlement evidence');
+    const testEscalation = settled?.result?.result === 'escalate' && settled.result.reason === TEST_ESCALATION && settled.review?.verdict === 'PASS';
+    if (settled?.common !== project.identity || settled.stage !== 'complete' || (!testEscalation && !['promotable', 'promotable_with_findings'].includes(settled.result?.result))) throw new Error('handle the final report first; promotion requires saved promotable settlement evidence');
     if (settled.result.result === 'promotable_with_findings' && !opt['accept-findings']) throw new Error('capped findings require --accept-findings and --why before promotion');
+    if (testEscalation) settleArgs.push('--retry', '--resolve-tests');
     const result = JSON.parse(call(settle, settleArgs));
     if (!['promotable', 'promotable_with_findings'].includes(result.result) || result.run !== id) { print({ ...result, next: 'judge compact handoff; nothing queued' }); return; }
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor/STOP'))) throw new Error('STOP appeared during readiness checks; nothing queued');
     const saved = { identity: project.identity, org: project.org, run: id, lane: result.lane,
-      reviewed_commit: result.reviewed_commit, head: result.head, why: opt.why.trim(), phase: 'enqueuing',
+      reviewed_commit: result.reviewed_commit, head: result.head,
+      ...(result.test_evidence ? { test_evidence: result.test_evidence } : {}), why: opt.why.trim(), phase: 'enqueuing',
       ...(result.result === 'promotable_with_findings' ? { accepted_findings: result.findings, review_policy: result.review_policy } : {}),
       ...(prior ? { prior_attempts: prior } : {}) };
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n');
     call(local('../bin/org.mjs'), ['note', id, `Queue promotion of ${result.lane} at ${result.head}: ${saved.why}. Reviewed ${result.reviewed_commit}; evidence ${result.journal}${saved.accepted_findings !== undefined ? `. Accepted capped findings (policy ${JSON.stringify(saved.review_policy)}): ${saved.accepted_findings}` : ''}`, '--decision', '--summary', `Promotion authorized: ${saved.why}`]);
     const promote = opt['promote-cli'] ? path.resolve(opt['promote-cli']) : local('../promote/promote.mjs');
     saved.queue = JSON.parse(call(promote, [result.lane, '--repo', project.canonical, '--org', project.org,
-      '--expected-head', result.head, '--if-current-run', id, ...(opt.to ? ['--to', opt.to] : [])]));
+      '--expected-head', result.head, '--if-current-run', id,
+      ...(result.test_evidence && !result.test_evidence.reexecuted ? ['--required-tests', JSON.stringify(result.test_evidence.files)] : []), ...(opt.to ? ['--to', opt.to] : [])]));
     saved.phase = 'acknowledged';
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'); print(saved);
   } finally { release(); }

@@ -16,7 +16,7 @@ const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding:
 export function validateValidation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
   for (const [key, command] of Object.entries(value)) {
-    if (![...VALIDATION_TIERS, 'environment'].includes(key)) throw new Error(`unknown validation field: ${key}`);
+    if (![...VALIDATION_TIERS, 'environment', 'promotion_tests'].includes(key)) throw new Error(`unknown validation field: ${key}`);
     if (typeof command !== 'string' || !command.trim()) throw new Error(`validation.${key} must be a nonempty string`);
   }
   return value;
@@ -46,7 +46,7 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
     if (typeof command !== 'string' || !command.trim()) throw new Error(`validation.${tier} must be a nonempty string`);
     tiers[tier] = { command, source: env.LANE_VALIDATE !== undefined ? 'env' : declarationSources[tier] ?? (config.validate !== undefined ? sources.validate ?? source : 'default') };
   }
-  return { tiers, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
+  return { tiers, promotion_tests: declared.promotion_tests, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
 }
 
 // Do not persist environment values (which may contain credentials). Hash all

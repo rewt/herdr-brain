@@ -77,19 +77,21 @@ function settings(project, opt) {
   if (run !== undefined && !org) throw new Error('--if-current-run requires a record');
   return { to, attempts, retry, herdr: opt.herdr ?? 'herdr', laneCLI,
     org, expectedHead, run,
+    requiredTests: opt['required-tests'] === undefined ? [] : JSON.parse(opt['required-tests']),
     workflow: opt.workflow ?? process.env.PROMOTE_WORKFLOW_ENGINE === '1',
     validate,
     laneConfig: process.env.LANE_CONFIG ? path.resolve(process.env.LANE_CONFIG) : null };
 }
 
 export function enqueue(queue, topics, options) {
+  if (options.requiredTests !== undefined && (!Array.isArray(options.requiredTests) || options.requiredTests.length > 512 || options.requiredTests.some(f => typeof f !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(f) || f.split('/').includes('..') || path.isAbsolute(f)))) throw Error('invalid required test files');
   if (options.expectedHead !== undefined && (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.expectedHead) || topics.length !== 1)) throw new Error('expected head requires one lane and a full commit hash');
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
   return queue.transaction((data) => topics.map((topic) => {
     const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && job.result?.outcome === 'refused'));
     if (existing) {
-      if (existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
+      if (JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
       return { id: existing.id, topic, duplicate: true };
     }
     const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options };
@@ -369,7 +371,7 @@ async function main() {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, to: { type: 'string' },
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },
-    'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
+    'required-tests': { type: 'string' }, 'expected-head': { type: 'string' }, 'if-current-run': { type: 'string' },
     drain: { type: 'boolean' }, status: { type: 'boolean' }, workflow: { type: 'boolean' },
   } });
   const queue = queueFor(opt.repo);

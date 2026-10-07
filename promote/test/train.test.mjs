@@ -545,3 +545,41 @@ test('validation that throws closes its telemetry clock without inventing green 
   assert.ok(attempt.gate.duration_s >= 0); assert.equal(attempt.gate.exit_code, undefined);
   assert.equal(f.git(['rev-parse', 'main']), before); assert.ok(fs.existsSync(workspace));
 });
+
+test('affected test supplements run once in the batch gate, are recorded and block a red landing', t => {
+  const f = fixture(t);
+  const planner = `import fs from 'node:fs';
+if(process.argv[2]==='--plan') console.log(JSON.stringify({files:['extra.test.mjs'],graph:{max_suite_files:4}}));
+else { fs.appendFileSync(${JSON.stringify(path.join(f.root, 'extra-runs'))},'run\\n'); if(fs.existsSync('red-extra')) process.exitCode=1; }
+`;
+  fs.writeFileSync(path.join(f.repo, 'planner.mjs'), planner);
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion: `${process.execPath} ${f.checker}`, promotion_tests: 'planner.mjs' }));
+  f.git(['add', '.']); f.git(['commit', '-qm', 'Declare affected test planner']);
+  f.lane('first'); f.lane('second'); f.add('first'); f.add('second');
+  assert.equal(f.drain().status, 0);
+  assert.equal(f.runs(), 1);
+  assert.equal(fs.readFileSync(path.join(f.root, 'extra-runs'), 'utf8').trim().split('\n').length, 1);
+  const landed = f.queue.load().results[0];
+  const plan = JSON.parse(fs.readFileSync(landed.receipt));
+  assert.deepEqual(plan.attempts[0].test_plan.files, ['extra.test.mjs']);
+  assert.ok(plan.attempts[0].test_plan.changed.includes('first'));
+  assert.ok(plan.attempts[0].test_plan.changed.includes('second'));
+  assert.match(plan.attempts[0].gate.command, /--run/);
+  const bad = f.lane('extra-red');
+  fs.writeFileSync(path.join(bad, 'red-extra'), 'red'); f.git(['add', '.'], bad); f.git(['commit', '-qm', 'Red supplemental test'], bad);
+  f.add('extra-red'); assert.equal(f.drain().status, 0);
+  assert.equal(f.queue.load().results.at(-1).outcome, 'refused');
+  assert.equal(fs.existsSync(path.join(f.repo, 'red-extra')), false);
+});
+
+test('a changed gate cannot omit a bound deferred test file', t => {
+  const f = fixture(t), base = f.git(['rev-parse', 'main']);
+  f.lane('deferred'); f.add('deferred', { requiredTests: ['required.test.mjs'] });
+  assert.throws(() => f.add('deferred', { requiredTests: [] }), /different head or run binding/);
+  assert.equal(f.drain().status, 0);
+  const saved = f.queue.load();
+  assert.equal(saved.results[0].outcome, 'refused');
+  assert.match(saved.results[0].reason, /no longer covers/);
+  assert.equal(f.git(['rev-parse', 'main']), base);
+  assert.equal(f.runs(), 0);
+});

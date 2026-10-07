@@ -1,0 +1,95 @@
+TAP version 13
+# Subtest: defaults, legacy commands, partial tracked overrides and invalid declarations
+ok 1 - defaults, legacy commands, partial tracked overrides and invalid declarations # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.558542
+  ...
+# Subtest: a worker check, promotion check and promotion reuse their exact commands; release never runs
+ok 2 - a worker check, promotion check and promotion reuse their exact commands; release never runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040708
+  ...
+# Subtest: pane identities are absent from preparation, validation and fingerprints
+ok 3 - pane identities are absent from preparation, validation and fingerprints # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032292
+  ...
+# Subtest: same tree after empty commits and a clean rebase reuses validation across tiers
+ok 4 - same tree after empty commits and a clean rebase reuses validation across tiers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.26775
+  ...
+# Subtest: tree, command, environment, preparation and declared environment changes invalidate reuse
+ok 5 - tree, command, environment, preparation and declared environment changes invalidate reuse # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0345
+  ...
+# Subtest: red, signal, dirty and moved-head executions never supply reusable green evidence
+ok 6 - red, signal, dirty and moved-head executions never supply reusable green evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026
+  ...
+# Subtest: commands that start and exit 75 record failed receipts in both validation tiers
+ok 7 - commands that start and exit 75 record failed receipts in both validation tiers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.070709
+  ...
+# Subtest: worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+ok 8 - worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027625
+  ...
+# Subtest: a started command exiting 75 is a failure in check and promote, never a slot refusal
+ok 9 - a started command exiting 75 is a failure in check and promote, never a slot refusal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.112083
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retries
+ok 10 - promotion holds the slot without replaying the chain when leaf retries # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.087417
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retry exhausted
+ok 11 - promotion holds the slot without replaying the chain when leaf retry exhausted # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036209
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf declines
+ok 12 - promotion holds the slot without replaying the chain when leaf declines # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027042
+  ...
+# Subtest: promotion holds the slot without replaying the chain when earlier timeout text
+ok 13 - promotion holds the slot without replaying the chain when earlier timeout text # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055541
+  ...
+# Subtest: a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+ok 14 - a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031375
+  ...
+# Subtest: overlapping checks serialize evidence without running the same command twice
+ok 15 - overlapping checks serialize evidence without running the same command twice
+  ---
+  duration_ms: 562.977042
+  ...
+# Subtest: promotion checks in different projects serialize and a nested command uses the held slot
+ok 16 - promotion checks in different projects serialize and a nested command uses the held slot
+  ---
+  duration_ms: 881.862833
+  ...
+# Subtest: bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+ok 17 - bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.091875
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 15
+# todo 0
+# duration_ms 1483.736625

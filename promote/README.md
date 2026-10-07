@@ -303,3 +303,36 @@ Direct and queued promotions [wait for memory pressure to clear](../docs/referen
 once before acquiring the promotion lock and starting validation, then finish
 the fast-forward without another memory wait. Queued waits are visible in the
 job log; they do not produce a refused result.
+
+### Affected test files
+
+A canonical `.lane.validation.json` may declare `promotion_tests`, a relative
+path to a dependency-free Node planner. The train calls it with `--plan` and a
+JSON array containing the union of paths changed by the captured lanes, including
+both sides of renames and deletions, plus a JSON string naming the effective
+promotion command. It returns JSON `files` (additional full
+files), optional `covered` (files already run in full by the promotion command)
+and optional `graph` bounds. Selection is capped at 512 files and planning at
+20 seconds; invalid or oversized plans refuse integration. The planner receives
+`--run` and the selected JSON array after the declared promotion command, inside
+the same slot, log and green gate. The command includes the selection, so cached
+evidence cannot authorize a different plan. `attempt.test_plan` retains changed
+paths, selected files, coverage, command and graph bounds even for a red gate.
+
+This repository's `test/helpers/affected-tests.mjs` selects every changed existing
+`.test.mjs` file outside whole-file promotion coverage and release files reached
+by reverse dependency closure. It recognizes static imports, re-exports, literal
+dynamic imports, `new URL` references and literal launched-script paths, including
+conservative basename matches for joined paths. Cycles terminate. The graph is
+bounded to 10,000 paths and 32 MiB of source; execution uses the release runner's
+at-most-four-file suites and existing per-file/suite deadlines. Selected mixed
+tier files are omitted from patterned promotion steps and run once in full.
+Computed runtime references need a literal path/import to enter this static graph;
+the full release gate remains the release candidate's final validation.
+
+Settle can defer only entries of the exact form
+`- Test evidence not re-executed: path/to/file.test.mjs` under Unverified, with
+independent PASS and no other unresolved claims. Full-file coverage must be in
+the plan or in recorded re-execution evidence. Deferred files travel as
+`--required-tests` on the bound queue request; a later plan that omits them refuses
+before gating or integration. Other Unverified entries retain their escalation.

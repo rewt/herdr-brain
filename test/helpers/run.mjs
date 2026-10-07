@@ -15,7 +15,8 @@ const policy = fileURLToPath(new URL('./fixture-policy.mjs', import.meta.url));
 const argv = process.argv.slice(2);
 const worker = argv[0] === '--worker';
 if (worker) argv.shift();
-const files = argv.filter(arg => !arg.startsWith('--'));
+const selected = new Set(JSON.parse(process.env.MONITOR_PROMOTION_TEST_FILES ?? '[]'));
+const files = argv.filter(arg => !arg.startsWith('--')).filter(file => !argv.some(arg => arg.startsWith('--test-name-pattern=')) || !selected.has(file));
 const nameOption = argv.find(arg => arg.startsWith('--test-name-pattern='));
 const testNamePatterns = nameOption ? [new RegExp(nameOption.slice('--test-name-pattern='.length))] : undefined;
 // Fixed mode is reserved for intentional cancellation regressions. Ordinary
@@ -32,6 +33,7 @@ function bound(name, fallback, maximum = fallback) {
 }
 const fileTimeout = bound('file-timeout', 300_000, 480_000);
 const suiteTimeout = bound('suite-timeout', 360_000, 540_000);
+if (!files.length && selected.size) { cleanupHerdr(); process.exit(0); }
 if (!files.length) throw Error('usage: node test/helpers/run.mjs [--file-timeout=MS] [--suite-timeout=MS] [--fixed-deadlines] [--test-name-pattern=REGEX] TEST_FILES...');
 
 if (worker) {

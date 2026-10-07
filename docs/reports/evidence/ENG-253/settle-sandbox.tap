@@ -1,0 +1,208 @@
+TAP version 13
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold before reviewing
+ok 1 - legacy outcome-owner refusal rechecks the repaired fold before reviewing
+  ---
+  duration_ms: 5536.988333
+  ...
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+not ok 2 - legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+  ---
+  duration_ms: 1465.039041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    settle: R-2 is superseded by R-3; settle only acts on the requested run
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    result (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-recovery.test.mjs:7:30)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-recovery.test.mjs:46:21
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: recovery: older overlapping run clears a new refusal
+ok 3 - recovery: older overlapping run clears a new refusal
+  ---
+  duration_ms: 5722.411958
+  ...
+# Subtest: recovery: older overlapping run clears a legacy refusal after main moves
+ok 4 - recovery: older overlapping run clears a legacy refusal after main moves
+  ---
+  duration_ms: 6352.617542
+  ...
+# Subtest: a fresh handle also rechecks an existing completed overlapping-run refusal
+ok 5 - a fresh handle also rechecks an existing completed overlapping-run refusal
+  ---
+  duration_ms: 4562.313208
+  ...
+# Subtest: record readiness recovery retains the completed review
+ok 6 - record readiness recovery retains the completed review
+  ---
+  duration_ms: 6241.97125
+  ...
+# Subtest: record readiness recovery retains the completed review from a legacy receipt
+ok 7 - record readiness recovery retains the completed review from a legacy receipt
+  ---
+  duration_ms: 6494.162667
+  ...
+# Subtest: a legacy correction refusal resumes the fix stage after blockers clear and main moves
+not ok 8 - a legacy correction refusal resumes the fix stage after blockers clear and main moves
+  ---
+  duration_ms: 6723.049125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm watcher shutdown'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    TestContext.cleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:72:30)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a legacy dispatching refusal adopts only its existing correction after blockers clear
+not ok 9 - a legacy dispatching refusal adopts only its existing correction after blockers clear
+  ---
+  duration_ms: 6776.9245
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:91:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:93:59)
+    Object.record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:118:28)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-recovery.test.mjs:129:5
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: legacy refusal recovery rechecks identity before reviewing
+ok 10 - legacy refusal recovery rechecks identity before reviewing
+  ---
+  duration_ms: 1178.097875
+  ...
+# Subtest: legacy refusal recovery rechecks head before reviewing
+ok 11 - legacy refusal recovery rechecks head before reviewing
+  ---
+  duration_ms: 1175.716541
+  ...
+# Subtest: legacy refusal recovery rechecks dirty before reviewing
+ok 12 - legacy refusal recovery rechecks dirty before reviewing
+  ---
+  duration_ms: 1138.002375
+  ...
+# Subtest: legacy refusal recovery rechecks report before reviewing
+ok 13 - legacy refusal recovery rechecks report before reviewing
+  ---
+  duration_ms: 1369.583333
+  ...
+# Subtest: legacy refusal recovery rechecks superseded before reviewing
+ok 14 - legacy refusal recovery rechecks superseded before reviewing
+  ---
+  duration_ms: 1523.635583
+  ...
+# Subtest: legacy refusal recovery rechecks blocked before reviewing
+ok 15 - legacy refusal recovery rechecks blocked before reviewing
+  ---
+  duration_ms: 1494.255792
+  ...
+# Subtest: unverified acceptance remains a terminal escalation on retry
+ok 16 - unverified acceptance remains a terminal escalation on retry
+  ---
+  duration_ms: 4435.838083
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: settling an ingested older report preserves every newer reported outcome without review or correction
+ok 17 - settling an ingested older report preserves every newer reported outcome without review or correction
+  ---
+  duration_ms: 7075.467208
+  ...
+# Subtest: an unrecorded stale report cannot overwrite a newer outcome through ingestion
+ok 18 - an unrecorded stale report cannot overwrite a newer outcome through ingestion
+  ---
+  duration_ms: 880.451083
+  ...
+# Subtest: cached readiness and uncertain review retries hand off superseded runs
+ok 19 - cached readiness and uncertain review retries hand off superseded runs
+  ---
+  duration_ms: 6594.392417
+  ...
+# Subtest: conditional ingest and reopen protect a newer report arriving immediately before the record write
+ok 20 - conditional ingest and reopen protect a newer report arriving immediately before the record write
+  ---
+  duration_ms: 2523.266416
+  ...
+# Subtest: a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+ok 21 - a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+  ---
+  duration_ms: 8435.145416
+  ...
+# Subtest: conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+ok 22 - conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+  ---
+  duration_ms: 4964.584708
+  ...
+# Subtest: incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+ok 23 - incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+  ---
+  duration_ms: 12578.030542
+  ...
+# Subtest: resolved blocker links allow recovery of only the recorded correction run
+not ok 24 - resolved blocker links allow recovery of only the recorded correction run
+  ---
+  duration_ms: 7092.670125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:91:15)
+    Object.retry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:128:36)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-safety.test.mjs:148:28
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+ok 25 - correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+  ---
+  duration_ms: 4885.168834
+  ...
+# Subtest: legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+ok 26 - legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+  ---
+  duration_ms: 5668.880042
+  ...
+1..26
+# tests 26
+# suites 0
+# pass 22
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 62236.741208

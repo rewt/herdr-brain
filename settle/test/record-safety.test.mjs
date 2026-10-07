@@ -98,19 +98,20 @@ test('a newer report arriving during PASS or NEEDS-WORK review retains its outco
     assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the reviewer started');
   }
 });
-test('conditional reopen preserves another run outcome and accepts an already-open no-op retry', (t) => {
+test('conditional reopen accepts no-op retries and a late older report cannot block settling the correction', (t) => {
   const f = fixture(t), earlier = f.start(); f.report(earlier, 'needs_human');
-  const latest = f.start(); f.report(latest); ingest(f, latest);
+  const latest = f.start(); f.commit('correct\n'); f.report(latest); ingest(f, latest);
   f.record(['reopen', f.show(latest).item, '--if-current-run', latest]);
   const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
   f.record(['reopen', f.show(latest).item, '--if-current-run', latest]);
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
   ingest(f, earlier); const before = f.show(f.show(latest).item);
-  const refused = f.exec(process.execPath, [path.join(f.source, 'bin/org.mjs'), 'reopen', before.id, '--if-current-run', latest], f.repo, { ORG_DIR: f.org });
-  assert.equal(refused.status, 1); assert.match(refused.stderr, /outcome does not belong/);
-  assert.deepEqual(f.show(before.id).outcome, before.outcome);
-  assert.equal(result(f.settle(latest)).result, 'escalate'); assert.equal(f.calls().length, 0);
-  assert.deepEqual(f.show(before.id).outcome, before.outcome);
+  assert.equal(before.outcome.run, latest);
+  assert.equal(f.show(earlier).report.late, true);
+  f.record(['reopen', before.id, '--if-current-run', latest]);
+  assert.equal(f.show(before.id).outcome, null);
+  assert.equal(result(f.settle(latest)).result, 'promotable');
+  assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the independent reviewer starts');
 });
 test('incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt', (t) => {
   for (const kind of ['open', 'declined']) {

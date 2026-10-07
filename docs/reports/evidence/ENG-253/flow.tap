@@ -1,0 +1,97 @@
+TAP version 13
+# (node:4930) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: in-order reports keep the newest reported outcome while an unreported run stays active
+ok 1 - in-order reports keep the newest reported outcome while an unreported run stays active
+  ---
+  duration_ms: 1.35075
+  ...
+# Subtest: all report ingestion orders select the newest started reported run and retain older late reports
+ok 2 - all report ingestion orders select the newest started reported run and retain older late reports
+  ---
+  duration_ms: 1.064791
+  ...
+# Subtest: abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+ok 3 - abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+  ---
+  duration_ms: 0.269625
+  ...
+# Subtest: reopening still clears completion and unknown events are ignored by current and older folds
+ok 4 - reopening still clears completion and unknown events are ignored by current and older folds
+  ---
+  duration_ms: 0.263125
+  ...
+# Subtest: ingesting an older report after a correction records it as late without displacing the correction
+ok 5 - ingesting an older report after a correction records it as late without displacing the correction
+  ---
+  duration_ms: 317.696458
+  ...
+# Subtest: a blocked worker decomposes its own blocker and fresh runs pick up the thread
+ok 6 - a blocked worker decomposes its own blocker and fresh runs pick up the thread
+  ---
+  duration_ms: 525.01975
+  ...
+# Subtest: record start resolves a named route without copied harness metadata
+ok 7 - record start resolves a named route without copied harness metadata
+  ---
+  duration_ms: 201.921542
+  ...
+# Subtest: record start discovers canonical parent and repository routes from a linked worktree
+ok 8 - record start discovers canonical parent and repository routes from a linked worktree
+  ---
+  duration_ms: 260.909166
+  ...
+# Subtest: record start discovers the nearest route config from a non-Git record root
+ok 9 - record start discovers the nearest route config from a non-Git record root
+  ---
+  duration_ms: 170.172041
+  ...
+# Subtest: budgets are advisory: exceeding them is surfaced, never refused
+ok 10 - budgets are advisory: exceeding them is surfaced, never refused
+  ---
+  duration_ms: 232.428416
+  ...
+# Subtest: only record consistency is refused
+ok 11 - only record consistency is refused
+  ---
+  duration_ms: 453.5155
+  ...
+# Subtest: dropping a blocker unblocks the work it was blocking
+ok 12 - dropping a blocker unblocks the work it was blocking
+  ---
+  duration_ms: 281.936667
+  ...
+# Subtest: a brief shows sibling work and points at full reports
+ok 13 - a brief shows sibling work and points at full reports
+  ---
+  duration_ms: 206.247959
+  ...
+# Subtest: an abandoned run frees its item and a late report is not ingested
+ok 14 - an abandoned run frees its item and a late report is not ingested
+  ---
+  duration_ms: 361.090875
+  ...
+# Subtest: an interrupted write is ignored on read and repaired on the next write
+ok 15 - an interrupted write is ignored on read and repaired on the next write
+  ---
+  duration_ms: 140.215458
+  ...
+# Subtest: concurrent writers never collide
+ok 16 - concurrent writers never collide
+  ---
+  duration_ms: 208.474416
+  ...
+# Subtest: log filters by time and starting closed work reopens it
+ok 17 - log filters by time and starting closed work reopens it
+  ---
+  duration_ms: 260.608917
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3660.940042

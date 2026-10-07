@@ -740,7 +740,8 @@ function ingestFile(ctx, file, runHint, currentRun) {
     const stored = path.join('reports', `${runId}.md`);
     writeFileAtomic(path.join(ctx.dir, stored), text, 0o444);
     const report = { ...parsed.report, run: runId };
-    const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late: Boolean(run.abandoned), report }];
+    const late = laterRuns(s, runId).some((r) => r.report);
+    const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late, report }];
     const categoryFlags = reportCategoryFlags(ctx.config, report);
     for (const flag of categoryFlags) events.push({ type: 'category.flagged', id: run.item, run: runId, ...flag });
     const taken = new Set();
@@ -759,7 +760,7 @@ function ingestFile(ctx, file, runHint, currentRun) {
     return {
       add: events,
       actor: `run:${runId}`,
-      result: { runId, item: run.item, created, categoryFlags, late: Boolean(run.abandoned), outcome: report.outcome, summary: report.summary },
+      result: { runId, item: run.item, created, categoryFlags, late, outcome: report.outcome, summary: report.summary },
     };
   });
   return { ok: true, file: abs, warnings: parsed.warnings, ...result };
@@ -784,7 +785,7 @@ function printIngest(res) {
     safeOut(`${res.runId}: report already recorded\n`);
     return true;
   }
-  safeOut(`${res.runId} → ${res.outcome} on ${res.item}${res.late ? ' (late: the run had been abandoned)' : ''}: ${truncate(res.summary, 100)}\n`);
+  safeOut(`${res.runId} → ${res.outcome} on ${res.item}${res.late ? ' (late: a newer run already has a report)' : ''}: ${truncate(res.summary, 100)}\n`);
   for (const c of res.created) {
     safeOut(`  + ${c.id} "${truncate(c.title, 60)}"${c.role ? ` (${c.role})` : ''}${c.blocking ? ` blocks ${res.item}` : ''}\n`);
   }

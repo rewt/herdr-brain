@@ -52,7 +52,11 @@ to the supervisor with their substance and recorded outcomes intact, without
 guessing a scope decision. Settle acts only on the requested run. A later run or
 an outcome belonging to another reported run receives a supervisor handoff,
 including on retries and saved readiness. Stale, unrecorded reports are retained
-as evidence without ingestion, since ingestion would replace the current outcome.
+as evidence without ingestion. Direct record ingestion retains older reports and
+marks them late when a newer started run already has a report; the newest reported
+run owns the outcome. Saved outcome-owner refusals from older folds are rechecked
+on the next invocation or retry, with the same report, identity, tree and actual
+run supersession checks before review resumes.
 Only that run's own done outcome is reopened while review is pending.
 Ingest and reopen use the record CLI's optional `--if-current-run R-n` guard,
 checked inside the event-log transaction, so a newer report arriving between the

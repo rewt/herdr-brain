@@ -1,0 +1,56 @@
+{
+  "record": "/Users/rewt/development/rewt/.org",
+  "baseline": "f84602d4",
+  "events": 3681,
+  "last_seq": 3681,
+  "snapshot_sha256": "28455d04b43c06030ab34590d7f90ffacfada88c496f7d56a8b2351c9c933537",
+  "items": 318,
+  "runs": 291,
+  "outcome_changes": [
+    {
+      "item": "ENG-242",
+      "before": {
+        "value": "done",
+        "run": "R-281",
+        "at": "2026-10-07T14:30:29.722Z",
+        "seq": 3661
+      },
+      "after": {
+        "value": "done",
+        "run": "R-284",
+        "at": "2026-10-07T14:30:18.715Z",
+        "seq": 3658
+      },
+      "status_before": "done",
+      "status_after": "done"
+    }
+  ],
+  "late_changes": [
+    {
+      "item": "ARCH-17",
+      "run": "R-151",
+      "newer_reported_runs": [
+        "R-162",
+        "R-167",
+        "R-174",
+        "R-178",
+        "R-183"
+      ]
+    },
+    {
+      "item": "ENG-136",
+      "run": "R-182",
+      "newer_reported_runs": [
+        "R-189"
+      ]
+    },
+    {
+      "item": "ENG-242",
+      "run": "R-281",
+      "newer_reported_runs": [
+        "R-284"
+      ]
+    }
+  ],
+  "other_fold_fields_unchanged": true
+}

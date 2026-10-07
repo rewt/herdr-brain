@@ -193,9 +193,12 @@ function finish(result, reason, extra = {}) {
 }
 function print() { process.stdout.write(`${JSON.stringify(job.result)}\n`); }
 function transientRecordRefusal(reason) {
-  // Match only record readiness refusals emitted here. Supersession, changed
-  // reports, review uncertainty and replay conflicts must remain terminal.
+  // Match only record readiness refusals emitted here. An old fold could let a
+  // late report steal outcome ownership; recheck those saved refusals too.
+  // Actual run supersession, changed reports, review uncertainty and replay
+  // conflicts remain terminal.
   return /^Another run is open: R-\d+(?:, R-\d+)*$/.test(reason) ||
+    /^The current outcome belongs to R-\d+, not R-\d+; the supervisor must settle that run$/.test(reason) ||
     /^Correction needs supervisor judgment: the item is [a-z_]+; resolve its closure or blockers(?: \([^)]+\))?(?:; reported outcome (?:needs_human|blocked))?$/.test(reason) ||
     /^The record still has concurrent work or says [a-z_]+; resolve its blockers or concurrent work$/.test(reason);
 }

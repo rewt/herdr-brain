@@ -1,0 +1,227 @@
+TAP version 13
+# (node:76525) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: in-order reports keep the newest reported outcome while an unreported run stays active
+ok 1 - in-order reports keep the newest reported outcome while an unreported run stays active
+  ---
+  duration_ms: 1.878291
+  ...
+# Subtest: all report ingestion orders select the newest started reported run and retain older late reports
+ok 2 - all report ingestion orders select the newest started reported run and retain older late reports
+  ---
+  duration_ms: 1.154875
+  ...
+# Subtest: abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+ok 3 - abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+  ---
+  duration_ms: 0.6815
+  ...
+# Subtest: reopening still clears completion and unknown events are ignored by current and older folds
+ok 4 - reopening still clears completion and unknown events are ignored by current and older folds
+  ---
+  duration_ms: 0.342125
+  ...
+# Subtest: ingesting an older report after a correction records it as late without displacing the correction
+ok 5 - ingesting an older report after a correction records it as late without displacing the correction
+  ---
+  duration_ms: 377.255625
+  ...
+# Subtest: a blocked worker decomposes its own blocker and fresh runs pick up the thread
+ok 6 - a blocked worker decomposes its own blocker and fresh runs pick up the thread
+  ---
+  duration_ms: 643.48725
+  ...
+# Subtest: record start resolves a named route without copied harness metadata
+ok 7 - record start resolves a named route without copied harness metadata
+  ---
+  duration_ms: 250.996125
+  ...
+# Subtest: record start discovers canonical parent and repository routes from a linked worktree
+ok 8 - record start discovers canonical parent and repository routes from a linked worktree
+  ---
+  duration_ms: 316.917959
+  ...
+# Subtest: record start discovers the nearest route config from a non-Git record root
+ok 9 - record start discovers the nearest route config from a non-Git record root
+  ---
+  duration_ms: 190.308792
+  ...
+# Subtest: budgets are advisory: exceeding them is surfaced, never refused
+ok 10 - budgets are advisory: exceeding them is surfaced, never refused
+  ---
+  duration_ms: 271.380042
+  ...
+# Subtest: only record consistency is refused
+ok 11 - only record consistency is refused
+  ---
+  duration_ms: 521.827833
+  ...
+# Subtest: dropping a blocker unblocks the work it was blocking
+ok 12 - dropping a blocker unblocks the work it was blocking
+  ---
+  duration_ms: 304.191
+  ...
+# Subtest: a brief shows sibling work and points at full reports
+ok 13 - a brief shows sibling work and points at full reports
+  ---
+  duration_ms: 224.827334
+  ...
+# Subtest: an abandoned run frees its item and a late report is not ingested
+ok 14 - an abandoned run frees its item and a late report is not ingested
+  ---
+  duration_ms: 376.912375
+  ...
+# Subtest: an interrupted write is ignored on read and repaired on the next write
+ok 15 - an interrupted write is ignored on read and repaired on the next write
+  ---
+  duration_ms: 154.872375
+  ...
+# Subtest: concurrent writers never collide
+ok 16 - concurrent writers never collide
+  ---
+  duration_ms: 189.486875
+  ...
+# Subtest: log filters by time and starting closed work reopens it
+ok 17 - log filters by time and starting closed work reopens it
+  ---
+  duration_ms: 290.531584
+  ...
+# Subtest: settling an ingested older report preserves every newer reported outcome without review or correction
+ok 18 - settling an ingested older report preserves every newer reported outcome without review or correction
+  ---
+  duration_ms: 8706.329959
+  ...
+# Subtest: an unrecorded stale report cannot overwrite a newer outcome through ingestion
+ok 19 - an unrecorded stale report cannot overwrite a newer outcome through ingestion
+  ---
+  duration_ms: 1062.245167
+  ...
+# Subtest: cached readiness and uncertain review retries hand off superseded runs
+ok 20 - cached readiness and uncertain review retries hand off superseded runs
+  ---
+  duration_ms: 7431.333458
+  ...
+# Subtest: conditional ingest and reopen protect a newer report arriving immediately before the record write
+ok 21 - conditional ingest and reopen protect a newer report arriving immediately before the record write
+  ---
+  duration_ms: 3160.0465
+  ...
+# Subtest: a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+ok 22 - a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+  ---
+  duration_ms: 9089.475959
+  ...
+# Subtest: conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+ok 23 - conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+  ---
+  duration_ms: 4858.218
+  ...
+# Subtest: incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+ok 24 - incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+  ---
+  duration_ms: 13123.998708
+  ...
+# Subtest: resolved blocker links allow recovery of only the recorded correction run
+ok 25 - resolved blocker links allow recovery of only the recorded correction run
+  ---
+  duration_ms: 7075.150875
+  ...
+# Subtest: correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+ok 26 - correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+  ---
+  duration_ms: 5028.058625
+  ...
+# Subtest: legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+ok 27 - legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+  ---
+  duration_ms: 6013.43275
+  ...
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold before reviewing
+ok 28 - legacy outcome-owner refusal rechecks the repaired fold before reviewing
+  ---
+  duration_ms: 6297.302042
+  ...
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+ok 29 - legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+  ---
+  duration_ms: 1779.23475
+  ...
+# Subtest: recovery: older overlapping run clears a new refusal
+ok 30 - recovery: older overlapping run clears a new refusal
+  ---
+  duration_ms: 6541.88525
+  ...
+# Subtest: recovery: older overlapping run clears a legacy refusal after main moves
+ok 31 - recovery: older overlapping run clears a legacy refusal after main moves
+  ---
+  duration_ms: 7225.146375
+  ...
+# Subtest: a fresh handle also rechecks an existing completed overlapping-run refusal
+ok 32 - a fresh handle also rechecks an existing completed overlapping-run refusal
+  ---
+  duration_ms: 5026.761209
+  ...
+# Subtest: record readiness recovery retains the completed review
+ok 33 - record readiness recovery retains the completed review
+  ---
+  duration_ms: 6562.682792
+  ...
+# Subtest: record readiness recovery retains the completed review from a legacy receipt
+ok 34 - record readiness recovery retains the completed review from a legacy receipt
+  ---
+  duration_ms: 6614.07525
+  ...
+# Subtest: a legacy correction refusal resumes the fix stage after blockers clear and main moves
+ok 35 - a legacy correction refusal resumes the fix stage after blockers clear and main moves
+  ---
+  duration_ms: 7608.234667
+  ...
+# Subtest: a legacy dispatching refusal adopts only its existing correction after blockers clear
+ok 36 - a legacy dispatching refusal adopts only its existing correction after blockers clear
+  ---
+  duration_ms: 8190.723875
+  ...
+# Subtest: legacy refusal recovery rechecks identity before reviewing
+ok 37 - legacy refusal recovery rechecks identity before reviewing
+  ---
+  duration_ms: 1224.620542
+  ...
+# Subtest: legacy refusal recovery rechecks head before reviewing
+ok 38 - legacy refusal recovery rechecks head before reviewing
+  ---
+  duration_ms: 1309.117292
+  ...
+# Subtest: legacy refusal recovery rechecks dirty before reviewing
+ok 39 - legacy refusal recovery rechecks dirty before reviewing
+  ---
+  duration_ms: 1345.190417
+  ...
+# Subtest: legacy refusal recovery rechecks report before reviewing
+ok 40 - legacy refusal recovery rechecks report before reviewing
+  ---
+  duration_ms: 1413.796583
+  ...
+# Subtest: legacy refusal recovery rechecks superseded before reviewing
+ok 41 - legacy refusal recovery rechecks superseded before reviewing
+  ---
+  duration_ms: 1595.235834
+  ...
+# Subtest: legacy refusal recovery rechecks blocked before reviewing
+ok 42 - legacy refusal recovery rechecks blocked before reviewing
+  ---
+  duration_ms: 1628.797583
+  ...
+# Subtest: unverified acceptance remains a terminal escalation on retry
+ok 43 - unverified acceptance remains a terminal escalation on retry
+  ---
+  duration_ms: 4560.921542
+  ...
+1..43
+# tests 43
+# suites 0
+# pass 43
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 73124.930167

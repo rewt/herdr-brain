@@ -1,0 +1,59 @@
+{
+  "id": "ENG-242",
+  "kind": "work",
+  "title": "Steward slice 1, prevent: Monitor-launched sessions can read and are trusted for their own project's worktree root in the default fleet layout (~/.herdr-monitor/p/<hash>/worktrees), so a supervisor reading its lanes' reports never meets Claude's 'read outside the working directories' prompt and Codex workers never meet 'Folder access' for Monitor worktrees; per-launch native settings only, never the operator's persistent trust records",
+  "role": "engineer",
+  "capability": "tooling",
+  "parent": "ENG-241",
+  "priority": 1,
+  "accept": [],
+  "budget": {},
+  "meta": {},
+  "created": {
+    "seq": 3556,
+    "at": "2026-10-07T14:01:39.888Z",
+    "by": "supervisor-herdr",
+    "run": null,
+    "why": null
+  },
+  "closed": null,
+  "outcome": {
+    "value": "done",
+    "run": "R-284",
+    "at": "2026-10-07T14:30:18.715Z",
+    "seq": 3658
+  },
+  "runs": [
+    "R-281",
+    "R-284"
+  ],
+  "notes": [
+    {
+      "text": "Supervisor judgment on R-281's security decisions: (1) scope to the selected project and run temp, never persist trust: accepted. (2) Codex per-launch inline projects trust: accepted (trust grants no write). Claude: rejected as built. --add-dir of context.worktrees makes every sibling lane a working directory, which Claude's file tools may edit; Monitor's deny rules cover peer projects only, so a worker could edit other lanes without a prompt (breaks lane isolation). Correction: workers keep their own lane as the working directory; the supervisor and any reader get read-only access to the project's worktree root (native Read permission rules plus sandbox allowRead), with no edit or write grants outside their own lane.",
+      "decision": true,
+      "at": "2026-10-07T14:14:01.335Z",
+      "by": "supervisor-herdr",
+      "seq": 3584,
+      "summary": "Accept the Codex trust part; send the Claude worktree-root add-dir back as read-only access."
+    },
+    {
+      "text": "Supervisor judgment on R-284's security decisions: accepted. Working directories are cwd + run temp only; the project's worktree root is read-only via scoped Read rules and sandbox allowRead; sibling lanes get Edit/shell-write denies and a per-launch PreToolUse write guard; the supervisor reads all lanes and edits none. This is the read-only correction requested on R-281.",
+      "decision": true,
+      "at": "2026-10-07T14:30:16.312Z",
+      "by": "supervisor-herdr",
+      "seq": 3657,
+      "summary": "Accepted R-284's read-only lane access as the requested correction."
+    },
+    {
+      "text": "R-284 accepted on judgment but not settled yet: my late ingest of R-281 (after R-284) made R-281 the item's outcome, so settle refuses R-284. ENG-253 fixes outcome ordering; settle R-284 after it lands. Lesson: ingest an escalated original before its correction reports.",
+      "decision": false,
+      "at": "2026-10-07T14:31:42.319Z",
+      "by": "supervisor-herdr",
+      "seq": 3675
+    }
+  ],
+  "status": "done",
+  "blocked_by": [],
+  "blocks": [],
+  "children": []
+}

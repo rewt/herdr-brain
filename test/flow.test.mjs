@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fold, itemStatus, openRuns } from '../lib/state.mjs';
+import { fold as olderFold } from './fixtures/state-v0.mjs';
 
 const BIN = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const T0 = '2026-09-15T09:00:00Z';
@@ -33,6 +35,128 @@ function setup() {
 function report(fields) {
   return `---\n${fields}\n---\nDetails.\n`;
 }
+
+function outcomeEvents(entries) {
+  return [{ type: 'item.added', id: 'ENG-1', title: 'Outcome ordering' }, ...entries]
+    .map((entry, index) => ({ seq: index + 1, at: T0, by: 'test', ...entry }));
+}
+const startRun = (id) => ({ type: 'run.started', id, item: 'ENG-1' });
+const ingestReport = (run, outcome) => ({ type: 'report.ingested', run, report: { outcome }, sha256: run, file: `${run}.md` });
+
+test('in-order reports keep the newest reported outcome while an unreported run stays active', () => {
+  const events = outcomeEvents([
+    startRun('R-9'), ingestReport('R-9', 'failed'),
+    startRun('R-2'), ingestReport('R-2', 'done'), startRun('R-1'),
+  ]);
+  const state = fold(events);
+  assert.deepEqual(state.items.get('ENG-1').outcome, olderFold(events).items.get('ENG-1').outcome);
+  assert.equal(state.items.get('ENG-1').outcome.run, 'R-2');
+  assert.equal(state.runs.get('R-9').report.late, false);
+  assert.equal(state.runs.get('R-2').report.late, false);
+  assert.equal(itemStatus(state, 'ENG-1'), 'active');
+  assert.deepEqual(openRuns(state, 'ENG-1').map((run) => run.id), ['R-1']);
+});
+
+test('all report ingestion orders select the newest started reported run and retain older late reports', () => {
+  for (const order of [
+    ['R-9', 'R-2', 'R-1'], ['R-9', 'R-1', 'R-2'],
+    ['R-2', 'R-9', 'R-1'], ['R-2', 'R-1', 'R-9'],
+    ['R-1', 'R-9', 'R-2'], ['R-1', 'R-2', 'R-9'],
+  ]) {
+    const starts = ['R-9', 'R-2', 'R-1'];
+    const outcomes = { 'R-9': 'needs_human', 'R-2': 'blocked', 'R-1': 'done' };
+    const events = outcomeEvents([
+      ...starts.map((id, index) => ({ ...startRun(id), at: `2026-09-15T09:00:0${2 - index}Z` })),
+      ...order.map((id) => ingestReport(id, outcomes[id])),
+    ]);
+    for (let count = 1; count <= order.length; count++) {
+      const state = fold(events.slice(0, starts.length + 1 + count));
+      const seen = order.slice(0, count);
+      const winner = starts.findLast((id) => seen.includes(id));
+      const winnerEvent = events.find((event) => event.run === winner);
+      assert.deepEqual(state.items.get('ENG-1').outcome,
+        { value: outcomes[winner], run: winner, at: winnerEvent.at, seq: winnerEvent.seq }, order.join(', '));
+      for (const id of seen) {
+        const record = state.runs.get(id).report;
+        const previous = order.slice(0, order.indexOf(id));
+        assert.equal(record.late, previous.some((other) => starts.indexOf(other) > starts.indexOf(id)));
+        assert.equal(record.outcome, outcomes[id]);
+        assert.equal(record.sha256, id);
+        assert.equal(record.file, `${id}.md`);
+      }
+    }
+    assert.equal(itemStatus(fold(events), 'ENG-1'), 'done');
+  }
+});
+
+test('abandonment leaves the last reported outcome intact and historical abandoned reports still fold', () => {
+  const events = outcomeEvents([
+    startRun('R-1'), ingestReport('R-1', 'done'), startRun('R-2'),
+    { type: 'run.abandoned', id: 'R-2', note: 'session stopped' },
+  ]);
+  const state = fold(events);
+  assert.deepEqual(state.items.get('ENG-1').outcome, olderFold(events).items.get('ENG-1').outcome);
+  assert.equal(state.runs.get('R-2').report, null);
+  assert.equal(itemStatus(state, 'ENG-1'), 'done');
+  assert.deepEqual(openRuns(state, 'ENG-1'), []);
+  // Historical logs may contain accepted late reports from abandoned runs.
+  const historical = [...events, { ...ingestReport('R-2', 'blocked'), seq: 6, at: T0, late: true }];
+  assert.deepEqual(fold(historical).items.get('ENG-1').outcome, olderFold(historical).items.get('ENG-1').outcome);
+  assert.equal(fold(historical).runs.get('R-2').report.late, true);
+  const corrected = [...historical, { ...startRun('R-3'), seq: 7, at: T0 },
+    { ...ingestReport('R-3', 'done'), seq: 8, at: T0 }];
+  assert.equal(fold(corrected).items.get('ENG-1').outcome.run, 'R-3');
+  const lateAbandoned = outcomeEvents([
+    startRun('R-1'), { type: 'run.abandoned', id: 'R-1' },
+    startRun('R-2'), ingestReport('R-2', 'done'), { ...ingestReport('R-1', 'blocked'), late: true },
+  ]);
+  assert.equal(fold(lateAbandoned).items.get('ENG-1').outcome.run, 'R-2');
+  assert.ok(fold(lateAbandoned).runs.get('R-1').abandoned);
+  assert.equal(fold(lateAbandoned).runs.get('R-1').report.late, true);
+});
+
+test('reopening still clears completion and unknown events are ignored by current and older folds', () => {
+  const events = outcomeEvents([startRun('R-1'), ingestReport('R-1', 'done'), { type: 'item.reopened', id: 'ENG-1' }]);
+  const unknown = { type: 'future.unknown', seq: 5, at: T0, item: 'ENG-1', outcome: 'failed' };
+  for (const readFold of [fold, olderFold]) {
+    const state = readFold([...events, unknown]);
+    assert.equal(state.items.get('ENG-1').outcome, null);
+    assert.deepEqual(state.items, readFold(events).items);
+    assert.deepEqual(state.runs, readFold(events).runs);
+  }
+  const next = outcomeEvents([...events.slice(1), startRun('R-2'), ingestReport('R-2', 'blocked')]);
+  assert.equal(fold(next).items.get('ENG-1').outcome.run, 'R-2');
+  const staleAfterReopen = outcomeEvents([
+    startRun('R-1'), startRun('R-2'), ingestReport('R-2', 'done'),
+    { type: 'item.reopened', id: 'ENG-1' }, ingestReport('R-1', 'failed'),
+  ]);
+  assert.deepEqual(fold(staleAfterReopen).items.get('ENG-1').outcome,
+    { value: 'done', run: 'R-2', at: T0, seq: 4 });
+  assert.equal(fold(staleAfterReopen).runs.get('R-1').report.late, true);
+});
+
+test('ingesting an older report after a correction records it as late without displacing the correction', () => {
+  const { dir, ok } = setup();
+  ok(['add', 'Correct the implementation', '--role', 'engineer']);
+  ok(['start', 'ENG-1']);
+  ok(['start', 'ENG-1']);
+  const oldFile = path.join(dir, 'runs/R-1/report.md');
+  const newFile = path.join(dir, 'runs/R-2/report.md');
+  fs.writeFileSync(oldFile, report('run: R-1\noutcome: needs_human\nsummary: Original implementation needs judgment.'));
+  fs.writeFileSync(newFile, report('run: R-2\noutcome: done\nsummary: Correction completed.'));
+  ok(['ingest', newFile]);
+  assert.match(ok(['ingest', oldFile]), /late: a newer run already has a report/);
+  const item = JSON.parse(ok(['show', 'ENG-1', '--json']));
+  assert.equal(item.outcome.run, 'R-2');
+  assert.equal(item.status, 'done');
+  assert.equal(JSON.parse(ok(['show', 'R-1', '--json'])).report.late, true);
+  const event = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+    .findLast((event) => event.type === 'report.ingested');
+  assert.equal(event.run, 'R-1');
+  assert.equal(event.late, true);
+  assert.equal(fs.readFileSync(path.join(dir, 'reports/R-1.md'), 'utf8'), fs.readFileSync(oldFile, 'utf8'));
+  assert.match(ok(['ingest', oldFile]), /report already recorded/);
+});
 
 test('a blocked worker decomposes its own blocker and fresh runs pick up the thread', () => {
   const { dir, ok } = setup();

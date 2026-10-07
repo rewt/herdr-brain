@@ -27,6 +27,36 @@ function overlap(f) {
   return { older, run, refused };
 }
 
+for (const superseding of [false, true]) test(`legacy outcome-owner refusal rechecks the repaired fold${superseding ? ' and refuses a truly superseding run' : ' before reviewing'}`, t => {
+  const f = fixture(t), { older, run } = overlap(f);
+  f.report(older, 'needs_human');
+  f.record(['ingest', f.show(older).report_path]);
+  assert.equal(f.show(f.show(run).item).outcome.run, run);
+  // Before the ordering fix this late ingest displaced the correction, and a
+  // retry saved this terminal refusal. Preserve its receipt shape for recovery.
+  const saved = receipt(f, run);
+  saved.result.reason = `The current outcome belongs to ${older}, not ${run}; the supervisor must settle that run`;
+  delete saved.result.resume_stage;
+  fs.writeFileSync(receiptPath(f, run), JSON.stringify(saved));
+  advance(f);
+  if (superseding) {
+    const latest = f.start(); f.report(latest, 'needs_human');
+    f.record(['ingest', f.show(latest).report_path]);
+    const before = f.show(f.show(run).item);
+    const refused = f.retry(run);
+    assert.match(refused.status === 0 ? JSON.parse(refused.stdout).reason : refused.stderr, /superseded/);
+    assert.deepEqual(f.show(before.id).outcome, before.outcome);
+    assert.equal(reviews(f).length, 0);
+  } else {
+    const ready = result(f.retry(run));
+    assert.equal(ready.result, 'promotable'); assert.equal(reviews(f).length, 1);
+    assert.equal(receipt(f, run).mainHead, f.git(['rev-parse', 'main']));
+    assert.deepEqual(result(f.retry(run)), ready);
+    assert.equal(reviews(f).length, 1);
+  }
+  assert.equal(workers(f).length, 0);
+});
+
 for (const oldReceipt of [false, true]) test(`recovery: older overlapping run clears ${oldReceipt ? 'a legacy refusal after main moves' : 'a new refusal'}`, t => {
   const f = fixture(t), { older, run, refused } = overlap(f);
   if (oldReceipt) legacy(f, run);

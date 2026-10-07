@@ -81,6 +81,33 @@ and waits for two empty-composer reads while the supervisor is idle. Dispatch's
 work prompt still targets its own worker; it does not type notices into the
 supervisor directly.
 
+## External dispatchers
+
+Immediately after starting a worker, before arming watch, an external launcher
+records its launch through this foreground command:
+
+```sh
+node /path/to/herdr-monitor/dispatch/record-worker.mjs "$RUN" \
+  --org /path/to/.org --agent "$AGENT" --pane "$PANE" --cwd "$WORKTREE"
+```
+
+Supply the name, pane and checkout from that launch, not a session registry.
+When the launch reply supplies them, also pass `--worker-workspace ID`,
+`--terminal-id ID` and `--agent-session-id ID`; each must match the live occupant.
+The command reads that named Herdr worker directly, verifies its name, pane and
+cwd, and requires workspace plus at least one terminal/session identity. It calls
+`record worker` with argument arrays to save the same fields as Monitor dispatch:
+`agent`, `pane`, `worker_workspace`, `terminal_id`, `agent_session_id`, with cwd
+checked against the run's recorded `workspace`. No session registry is read.
+
+The record transaction refuses conflicting existing fields, a settled run
+lacking launch evidence, and a worker name assigned to a newer
+run. An exact retry writes no event; it cannot add another occupant identity to
+an already complete receipt. A failed step leaves the worker and run intact;
+inspect them before continuing, and do not arm watch after a recording failure.
+This is a launch step, never a migration/backfill tool for old workers. Historical
+tabs without recorded launch evidence stay protected by housekeeping.
+
 ## Recovery
 
 Requests and errors live in `.org/dispatch/<request>.json`, separate from the

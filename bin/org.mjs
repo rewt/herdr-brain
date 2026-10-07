@@ -77,6 +77,9 @@ Lessons (durable knowledge, separate from work items)
 Runs and reports
   record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [--workspace DIR]
           [--report PATH] [--escalation] [--meta key=value]... [--if-current-run R-n]
+  record worker <R-n> --agent NAME --pane ID --worker-workspace ID --cwd DIR
+          [--terminal-id ID] [--agent-session-id ID]
+                                          launcher receipt; use dispatch/record-worker.mjs at launch
   record check <report.md>                validate a report without recording anything
   record ingest <report.md> [--run R-n] [--if-current-run R-n]
                                           record a report; optional guard checked under the log lock
@@ -703,6 +706,38 @@ function start(argv) {
   return 0;
 }
 
+function worker(argv) {
+  const { values: v, positionals: [id] } = args(argv, Object.fromEntries(
+    ['agent', 'pane', 'worker-workspace', 'cwd', 'terminal-id', 'agent-session-id'].map(k => [k, { type: 'string' }])),
+  { min: 1, max: 1, usage: 'record worker R-n --agent NAME --pane ID --worker-workspace ID --cwd DIR [--terminal-id ID] [--agent-session-id ID]' });
+  for (const key of ['agent', 'pane', 'worker-workspace', 'cwd']) {
+    if (!v[key]?.trim()) throw new UserError(`--${key} is required`);
+  }
+  if (!v['terminal-id']?.trim() && !v['agent-session-id']?.trim()) throw new UserError('worker needs at least one occupant identity');
+  const meta = { agent: v.agent, pane: v.pane, worker_workspace: v['worker-workspace'],
+    ...(v['terminal-id'] ? { terminal_id: v['terminal-id'] } : {}),
+    ...(v['agent-session-id'] ? { agent_session_id: v['agent-session-id'] } : {}) };
+  mutate(openOrg(), s => {
+    const run = s.runs.get(id);
+    if (!run) throw new UserError(`unknown run ${id}`);
+    if (!run.workspace || fs.realpathSync(run.workspace) !== fs.realpathSync(v.cwd)) throw new UserError('worker cwd does not match run workspace');
+    const keys = ['agent', 'pane', 'worker_workspace', 'terminal_id', 'agent_session_id'];
+    for (const key of keys) {
+      if (run.meta[key] != null && run.meta[key] !== meta[key]) throw new UserError(`worker launch ${key} mismatch`);
+    }
+    const complete = run.meta.agent && run.meta.pane && run.meta.worker_workspace && (run.meta.terminal_id || run.meta.agent_session_id);
+    if (complete) {
+      if (keys.some(key => (run.meta[key] ?? null) !== (meta[key] ?? null))) throw new UserError('worker launch identity differs from recorded receipt');
+      return { add: [] };
+    } // Lost reply: exact identity only, never enrich a receipt later.
+    if (run.report || run.abandoned) throw new UserError('cannot backfill a settled worker launch');
+    if ([...s.runs.values()].some(other => other.started.seq > run.started.seq && other.meta.agent === meta.agent)) throw new UserError('worker name belongs to a newer run');
+    return { add: [{ type: 'run.updated', id, meta }] };
+  });
+  safeOut(`${id} worker launch recorded\n`);
+  return 0;
+}
+
 function ingestFile(ctx, file, runHint, currentRun) {
   const abs = path.resolve(file);
   let text;
@@ -1040,7 +1075,7 @@ const COMMANDS = {
   release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
   releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
+  start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
 };
 
 function main(argv) {

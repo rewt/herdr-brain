@@ -1,0 +1,75 @@
+TAP version 13
+# monitor entry: keeping lane/entry-69ecb4de48b1 at /private/tmp/as-xfHnKp/lanes/lane-entry-69ecb4de48b1: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 1 - validation composition keeps product denials and refuses foreign writes and unsupported profiles # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.621708
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 2 - validation write exceptions reject redirected directories and protected Git or shared-state targets # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058709
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 3 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042375
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+not ok 4 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 1741.354333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/as-xfHnKp/lanes/lane-entry-69ecb4de48b1/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/av-Uom9gX/project/.lane.json)): node --test
+    TAP version 13
+    # Subtest: gate and product boundaries
+    ok 1 - gate and product boundaries
+      ---
+      duration_ms: 4.093334
+      ...
+    # Subtest: green
+    ok 2 - green
+      ---
+      duration_ms: 0.480791
+      ...
+    1..2
+    # tests 2
+    # suites 0
+    # pass 2
+    # fail 0
+    # cancelled 0
+    # skipped 0
+    # todo 0
+    # duration_ms 38.790416
+    monitor validation: sandboxed validation exited 125
+    GATE 67edaee60c38a9bf3172504c8abaed69e1997f64 exit=1 (0.660s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/discovery/runtime.mjs:26:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/discovery/runtime.mjs:225:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/discovery/runtime.mjs:305:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/acceptance/test/validation.test.mjs:145:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+ok 5 - native per-run validation temp is admitted only by its private identity and exact environment handoff # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.064584
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 4
+# todo 0
+# duration_ms 1799.466333

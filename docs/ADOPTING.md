@@ -330,6 +330,48 @@ ORG_ACTOR=housekeeping-preview node /path/to/release/housekeeping/housekeeping.m
   --once --dry-run --state-dir "$PWD/.lane/housekeeping-preview"
 ```
 
+## Switch an existing project and clean up its backlog
+
+At the release-gated quiet switch, update an external dispatcher to call
+[`dispatch/record-worker.mjs`](../dispatch/README.md#external-dispatchers)
+immediately after launching each worker, before arming watch. Supply that launch's
+agent name, pane and checkout. The cutover rehearsal's switched `dispatch.sh`
+does this and refuses to continue if recording fails. Launch identity comes from
+the launched occupant; session registry entries cannot authorize cleanup.
+The switched one-shot cleanup also uses Monitor's shared identity checks.
+
+After switching, make housekeeping startup part of the canonical supervisor's
+routine, including after a supervisor restart:
+
+```sh
+cd /path/to/canonical/project
+node /path/to/release/housekeeping/housekeeping.mjs --start
+```
+
+Repeated starts reuse the schedule. Installation and worker lanes never start
+it. Preview from a lane with `--once --dry-run` and an isolated `--state-dir`;
+do not run a live loop there. The ENG-64 scratch switch documents startup but
+starts no loop during its rehearsal.
+
+Already-merged legacy lanes need a one-time supervised cleanup. Housekeeping
+preserves their tabs because their launcher did not record occupant identities;
+do not backfill them from current Herdr or session registry data. The canonical
+supervisor should inspect each candidate's recorded report/abandonment and
+waiting work, confirm no open run or live worker still needs the checkout, then
+check its clean attached branch is contained in the integration branch:
+
+```sh
+git -C /path/to/lane status --porcelain
+git -C /path/to/canonical/project merge-base --is-ancestor lane/TOPIC main
+```
+
+Use the project's integration branch in place of `main`. Inspect each associated
+tab and every occupant with Herdr; explicitly close only the tabs the supervisor
+has verified as finished. Then use the project's guarded `lane close TOPIC`
+command to remove the merged lane. Keep blocked, needs-human, unsettled, dirty
+or unmerged work for judgment; lane closure retains the CLI's archive recovery
+and lifecycle checks. This is an inspection procedure, not an automated sweep.
+
 ## Observe and steer with the console
 
 ```sh

@@ -50,6 +50,14 @@ no supervisor context is consumed after that.
 
 ## Evidence before action
 
+External dispatchers use the supported
+[`dispatch/record-worker.mjs` launch step](../dispatch/README.md#external-dispatchers)
+immediately after starting each worker, before arming watch. It records the same
+identity as Monitor dispatch through the record CLI and refuses mismatches.
+It is never used to reconstruct missing launch evidence for legacy tabs.
+See [existing-project adoption](../docs/ADOPTING.md#switch-an-existing-project-and-clean-up-its-backlog)
+for canonical-supervisor startup and the manual one-time backlog procedure.
+
 - A live worker must match the newest run for its name, recorded pane, workspace and cwd,
   and at least one recorded occupant identity (`terminal_id` or `agent_session_id`).
   Both identities are checked when recorded. Legacy runs missing pane, workspace,

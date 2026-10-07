@@ -286,9 +286,10 @@ async function main() {
   if (job.stage === 'record-worker') {
     liveWorker(job.worker);
     const worker = job.worker;
-    record(['set', job.run, `agent=${worker.agentName}`, `pane=${worker.pane}`, `worker_workspace=${worker.workspaceId}`,
-      ...(worker.agentSessionId ? [`agent_session_id=${worker.agentSessionId}`] : []),
-      ...(worker.terminalId ? [`terminal_id=${worker.terminalId}`] : [])]);
+    record(['worker', job.run, '--agent', worker.agentName, '--pane', worker.pane,
+      '--worker-workspace', worker.workspaceId, '--cwd', job.workspace,
+      ...(worker.agentSessionId ? ['--agent-session-id', worker.agentSessionId] : []),
+      ...(worker.terminalId ? ['--terminal-id', worker.terminalId] : [])]);
     note(`worker ${worker.agentName} in ${worker.pane} recorded; prompt not sent`);
     job.stage = 'watch'; save();
   }

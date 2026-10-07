@@ -198,7 +198,7 @@ test('cutover rewrites queued-notification cleanup ownership and refuses changed
   const original = fs.readFileSync(file, 'utf8');
   assert.match(original, /When its watcher has queued the notification/);
   assert.match(edits.notices, /One-shot cleanup closes finished workers/);
-  assert.match(edits.notices, /recorded done or abandoned worker tabs/);
+  assert.match(edits.notices, /identity-verified reported worker tabs/);
   assert.match(edits.notices, /blocked or needs-human worker keeps its tab/);
   assert.match(original, /Reports go to the agent named exactly/);
   assert.match(edits.notices, /stable supervisor agent name established by session-start.sh/);
@@ -228,7 +228,7 @@ test('production notice contract accepts rewritten current documents and rejects
     'stop com.rewt.bch-cloak.supervisor-events before arming',
     'never reuse the legacy inbox', 'No separate notice daemon',
     'One-shot cleanup owns finished-tab closure through close-finished-agents.sh',
-    'requires a recorded done or abandoned latest run',
+    'requires a matching recorded launch identity and latest report',
     'preserves blocked/needs_human, open, unknown and unrecorded workers',
     '900',
     '[watch-blocked]', '[watch-no-report]', '[watch-invalid-report]', '[watch-long-running]', '[watch-unavailable]',
@@ -256,34 +256,6 @@ test('retirement scans nested Python, executable extensionless and notify entry 
   retireContrib(root,compat); assert.equal(fs.existsSync(compat),false);
 });
 
-test('installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility', (t) => {
-  const {root,copy,spec,edits}=inventory(t), bin=path.join(root,'bin'); fs.mkdirSync(bin);
-  const reportFile=path.join(root,'unrecorded-report.md'); fs.writeFileSync(reportFile,'outcome: done');
-  const names=['done','blocked','needs_human','open','unrecorded','unknown','abandoned','fixed','regressed','shared-done','shared-blocked','supervisor','foreign'];
-  const runs=[];
-  for (const name of names) {
-    if(name==='unrecorded')continue;
-    const outcome=['blocked','needs_human','shared-blocked'].includes(name)?(name==='needs_human'?name:'blocked'):'done';
-    runs.push({meta:{agent:name},started:{seq:runs.length+1},report:['open','abandoned'].includes(name)?null:{outcome},abandoned:name==='abandoned'?{}:null,report_path:reportFile});
-  }
-  runs.push({meta:{agent:'fixed'},started:{seq:0},report:{outcome:'blocked'}});
-  runs.push({meta:{agent:'regressed'},started:{seq:999},report:{outcome:'needs_human'}});
-  const agents=names.map(name=>({name,agent_status:name==='unknown'?'unknown':'idle',tab_id:name.startsWith('shared-')?'shared':name,workspace_id:name==='supervisor'?spec.workspace:'owned-worker',cwd:name==='foreign'?root:path.join(spec.home,'.herdr/worktrees/bch-cloak/lane-'+name)}));
-  fs.writeFileSync(path.join(root,'record.json'),JSON.stringify({runs}));
-  fs.writeFileSync(path.join(root,'agents.json'),JSON.stringify({result:{agents}}));
-  const shim = (name,code)=>{const file=path.join(bin,name);fs.writeFileSync(file,`#!${process.execPath}\n${code}`,{mode:0o755});};
-  shim('org',`import fs from 'node:fs';console.log(fs.readFileSync(${JSON.stringify(path.join(root,'record.json'))},'utf8'));`);
-  shim('herdr',`import fs from 'node:fs';if(process.argv[2]==='agent')console.log(fs.readFileSync(${JSON.stringify(path.join(root,'agents.json'))},'utf8'));else if(process.argv[2]==='tab'&&process.argv[3]==='close')fs.appendFileSync(${JSON.stringify(path.join(root,'closed'))},process.argv[4]+'\\n');else process.exit(90);`);
-  const script=path.join(copy,'.lane/supervisor/close-finished-agents.sh');fs.writeFileSync(script,edits.cleanup);
-  const invoke=(args=[])=>spawnSync('/bin/zsh',['-f',script,...args],{env:{...process.env,PATH:bin+':'+process.env.PATH},encoding:'utf8'});
-  const dry=invoke(['--dry-run']);assert.equal(dry.status,0,dry.stderr);assert.ok(!fs.existsSync(path.join(root,'closed')));
-  const result=invoke();assert.equal(result.status,0,result.stderr);
-  assert.deepEqual(fs.readFileSync(path.join(root,'closed'),'utf8').trim().split('\n').sort(),['abandoned','done','fixed']);
-  // A failed record read must never degrade into "no protected agents".
-  fs.writeFileSync(path.join(root,'closed'),''); shim('org','process.exit(1);');
-  assert.notEqual(invoke().status,0);assert.equal(fs.readFileSync(path.join(root,'closed'),'utf8'),'');
-});
-
 test('installed tidy recovers a bounded tail from each log including a late older run', (t) => {
   const {root,copy,edits}=inventory(t),bin=path.join(root,'bin');fs.mkdirSync(bin);
   for(const name of ['org','herdr'])fs.writeFileSync(path.join(bin,name),`#!/bin/sh\necho '{"runs": [], "result": {"tabs": [], "workspaces": [], "agents": []}}'\n`,{mode:0o755});
@@ -293,6 +265,8 @@ test('installed tidy recovers a bounded tail from each log including a late olde
   fs.mkdirSync(path.join(root,'existing/.org'),{recursive:true});fs.writeFileSync(path.join(root,'existing/.org/events.jsonl'),'');
   fs.writeFileSync(path.join(copy,'.lane/supervisor/tidy-tabs.sh'),edits.tidy);
   fs.writeFileSync(path.join(copy,'.lane/supervisor/close-finished-agents.sh'),edits.cleanup);fs.chmodSync(path.join(copy,'.lane/supervisor/close-finished-agents.sh'),0o755);
+  fs.mkdirSync(path.join(root, 'candidate/supervisor'), {recursive:true});
+  fs.writeFileSync(path.join(root, 'candidate/supervisor/tidy-tabs.mjs'), 'console.log("no finished tabs");\n');
   const result=spawnSync('/bin/zsh',['-f',path.join(copy,'.lane/supervisor/tidy-tabs.sh'),'--dry-run','--log-lines','2'],{env:{...process.env,PATH:bin+':'+process.env.PATH},encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/late-from-old-run/);
   assert.equal(result.stdout.split('old-newer-log').length-1,2);

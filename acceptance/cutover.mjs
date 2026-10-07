@@ -34,6 +34,8 @@ export function switchedFiles({ copy, candidate, workspace, target, legacyTarget
   contents.dispatch = replace(contents.dispatch,
     `sed -n 's/.*notify-watch\\.sh \\(R-[0-9]*\\) --to ${legacyTarget}.*/\\1/p'`,
     `sed -n 's/.*watch\\/watch\\.mjs \\(R-[0-9]*\\) .*--to ${target} .*/\\1/p'`);
+  contents.dispatch = replace(contents.dispatch, 'org set $RUN agent=$AG pane=$PANE >/dev/null',
+    `node ${q(path.join(candidate, 'dispatch/record-worker.mjs'))} "$RUN" --org ${q(path.join(path.dirname(copy), '.org'))} --agent "$AG" --pane "$PANE" --cwd "$WT" >/dev/null`);
   contents.dispatch = contents.dispatch.replaceAll(legacyTarget, target);
   contents.name = replace(contents.name, `${workspace}:*`, `${workspace}:*`);
   contents.name = replace(contents.name, `${legacyTarget} >/dev/null 2>&1 || true`, `${target} >/dev/null || { echo 'supervisor naming failed' >&2; exit 1; }`);
@@ -51,41 +53,10 @@ export function switchedFiles({ copy, candidate, workspace, target, legacyTarget
   // Cleanup is now an eleventh required edit. A file on disk is not a
   // recorded outcome, and an unknown/agentless pane is not proof of completion.
   assert.ok((/open=\$\((org|node [^\n]+) status --json/.test(contents.cleanup)) && contents.cleanup.includes('# tabs with no live agent'), 'cleanup premise drift');
-  const cleanupScope = contents.cleanup.match(/    if .*cwd or a.get\("workspace_id"\)==.*: continue/)?.[0];
-  assert.ok(cleanupScope, 'cleanup workspace premise drift');
-  contents.cleanup = `#!/bin/zsh
-# Cutover cleanup: only a recorded done/abandoned latest run may close an idle
-# worker. Preserve blocked, needs_human, open, unknown and unrecorded workers.
-set -euo pipefail
-DRY=\${1:-}
-export ORG_DIR=\${ORG_DIR:-${path.join(path.dirname(copy), '.org')}}
-eligible=$(org status --json | python3 -c '
-import sys,json
-latest={}
-for r in json.load(sys.stdin)["runs"]:
-    name=(r.get("meta") or {}).get("agent")
-    if name and (name not in latest or r["started"]["seq"] > latest[name]["started"]["seq"]): latest[name]=r
-for name,r in latest.items():
-    report=r.get("report") or {}
-    if report.get("outcome") == "done" or (not report and r.get("abandoned") is not None): print(name)')
-herdr agent list | python3 -c '
-import sys,json
-eligible=set(sys.argv[1].split())
-agents=json.load(sys.stdin)["result"]["agents"]
-protected={a.get("tab_id") for a in agents if a.get("name") not in eligible or a.get("agent_status") not in ("done","idle")}
-seen=set()
-for a in agents:
-    cwd=a.get("cwd","")
-${cleanupScope}
-    if a.get("agent_status") not in ("done","idle") or a.get("name") not in eligible: continue
-    tab=a.get("tab_id")
-    if tab and tab not in seen and tab not in protected:
-        seen.add(tab); print(tab, a["name"], cwd.rsplit("/",1)[-1])
-' "$eligible" | while read -r tab name lane; do
-  if [ "$DRY" = --dry-run ]; then echo "would close $tab ($name, $lane)"; else
-    herdr tab close "$tab" && echo "closed $tab ($name, $lane)"; fi
-done
-# No agentless sweep: unknown panes carry no authoritative completion evidence.
+  contents.cleanup = `#!/bin/sh
+# Shared cleanup rechecks launch identity, record, Git and every tab occupant.
+set -eu
+exec node ${q(path.join(candidate, 'supervisor/tidy-tabs.mjs'))} --cwd ${q(copy)} --org ${q(path.join(path.dirname(copy), '.org'))} "$@"
 `;
   contents.protocol = contents.protocol.replace('a watcher that will open the next session', 'a watcher that delivers to the supervisor; fresh session launch is separate');
   contents.notices = replace(contents.notices, `**A finished worker closes itself.** When its watcher has queued the notification for an \`outcome: done\` report, it closes the
@@ -94,7 +65,7 @@ done
   A blocked or needs-human worker keeps its tab so the pane can be read.
 - **No janitor (retired 2026-10-03).** Its 60-second tick polled herdr. Finished workers' tabs close when their report notification is queued
   (above). Run \`close-finished-agents.sh\` and \`tidy-tabs.sh\` by hand at each settle or shift end; they are one-shot.`,
-  `**One-shot cleanup closes finished workers.** The watcher only delivers; close-finished-agents.sh closes recorded done or abandoned worker tabs.
+  `**One-shot cleanup closes finished workers.** The watcher only delivers; close-finished-agents.sh closes identity-verified reported worker tabs.
   A blocked or needs-human worker keeps its tab so the pane can be read.
 - **No janitor loop.** Run \`close-finished-agents.sh\` and \`tidy-tabs.sh\` by hand at each settle or shift end; they are one-shot.`);
   contents.notices = contents.notices.replace('starts each notify watcher', 'starts each standalone watcher');
@@ -105,9 +76,12 @@ done
   contents.protocol += '\n## Scratch cutover protocol\narm-watch delivers only; launch-supervisor invokes open-session separately. Retain the original [org-report] notice on busy refusal, wait for the named session with herdr agent wait NAME --until idle --until done --until blocked, and retry the same settle.sh R-n or continue.sh request. An already recorded report ends the retry.\n';
   const org = path.join(path.dirname(copy), '.org');
   const noticeMigration = `\n## Record inbox and autopilot\nNotices are journaled at ${path.join(org, 'supervisor/inbox.log')} with the canonical project identity and recipient ${target}. The notice-autopilot/v1 policy handles routine done reports before input delivery; exceptions reach that named supervisor through the input gate. Automatic actions require tooling=auto in this record's approvals and respect STOP, pause and .supervisor.json. Do not manually settle a handled notice again.\nAt the release-gated quiet switch, account for every pending legacy outbox message, retain the old plain-text inbox and outbox as evidence, and stop com.rewt.bch-cloak.supervisor-events before arming the new watcher. The new JSONL journal must never reuse the legacy inbox. No separate notice daemon is started. On rollback, drain the new journal and stop its owned senders before restoring and re-arming the legacy consumer; never run both delivery paths together.\n`;
+  const housekeepingRoutine = `\n## Switched supervisor routine\nAfter the quiet switch, the project supervisor starts housekeeping from the canonical checkout:\n\ncd ${q(copy)}\nnode ${q(path.join(candidate, 'housekeeping/housekeeping.mjs'))} --start\n\nRepeated starts reuse the schedule. Workers never start it. dispatch.sh records launch identity immediately after launch, before arming watch. Missing legacy identities are preserved; never backfill them from the session registry. Manually inspect already-merged lanes once as described in Monitor docs/ADOPTING.md.\n`;
+  contents.protocol += housekeepingRoutine;
+  contents.notices += housekeepingRoutine;
   contents.protocol += noticeMigration;
   contents.notices += noticeMigration;
-  contents.notices += '\n## Standalone notices\n[watch-blocked] [watch-no-report] [watch-invalid-report] [watch-long-running] [watch-unavailable] preserve the worker. [org-report] requires run, outcome, headline, check and report; verdict is no longer read. Idle grace is 900 seconds after observed working. session-start establishes the stable supervisor name; missing targets refuse dispatch before record start. One-shot cleanup owns finished-tab closure through close-finished-agents.sh, which requires a recorded done or abandoned latest run and preserves blocked/needs_human, open, unknown and unrecorded workers.\n';
+  contents.notices += '\n## Standalone notices\n[watch-blocked] [watch-no-report] [watch-invalid-report] [watch-long-running] [watch-unavailable] preserve the worker. [org-report] requires run, outcome, headline, check and report; verdict is no longer read. Idle grace is 900 seconds after observed working. session-start establishes the stable supervisor name; missing targets refuse dispatch before record start. One-shot cleanup owns finished-tab closure through close-finished-agents.sh, which requires a matching recorded launch identity and latest report and preserves blocked/needs_human, open, unknown and unrecorded workers.\n';
   contents.routes = replace(contents.routes, 'for (const script of [continueScript, watchScript])', 'for (const script of [continueScript])');
   contents.routes += `\ntest('cutover entries select split release modules',()=>{const i=buildSupervisorInvocation(REPO,['--route','executive','--','--open']);assert.equal(i.args[0],${JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs'))});assert.ok(readFileSync(resolve(REPO,'.lane/supervisor/arm-watch.sh'),'utf8').includes(${JSON.stringify(path.join(candidate, 'supervisor/arm-watch.sh'))}));assert.doesNotMatch(readFileSync(resolve(REPO,'scripts/lane/launch-supervisor.mjs'),'utf8'),/contrib\\/settle-watch/);});\n`;
   // Retain the original outside the caller tree until canary and rollback pass.
@@ -145,7 +119,7 @@ export function assertNoticeContract(protocol, grammar) {
   for (const prefix of ['watch-blocked', 'watch-no-report', 'watch-invalid-report', 'watch-long-running', 'watch-unavailable']) assert.ok(grammar.includes(`[${prefix}]`));
   assert.match(grammar, /900/);
   assert.match(grammar, /One-shot cleanup owns finished-tab closure through close-finished-agents\.sh/);
-  assert.match(grammar, /requires a recorded done or abandoned latest run/);
+  assert.match(grammar, /requires a matching recorded launch identity and latest report/);
   assert.match(grammar, /preserves blocked\/needs_human, open, unknown and unrecorded workers/);
 }
 export function restore(copy, originals) {

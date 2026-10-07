@@ -964,10 +964,11 @@ try {
         const item = rec(['add', `Cleanup ${outcome} fixture`, '--role', 'engineer']).match(/^(\S+)/)[1];
         const report = path.join(root, `cleanup-${outcome}.md`);
         const runId = rec(['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', wt, '--report', report]).match(/^(R-\d+)/)[1];
-        rec(['set', runId, `agent=${agent}`, `pane=${ws.root_pane.pane_id}`]);
+        h('agent', 'start', agent, '--kind', 'codex', '--pane', ws.root_pane.pane_id);
+        runCopy(process.execPath, [path.join(candidate, 'dispatch/record-worker.mjs'), runId,
+          '--org', org, '--agent', agent, '--pane', ws.root_pane.pane_id, '--cwd', wt], { cwd: copy, extra: { ORG_DIR: org } });
         write(report, `---\nrun: ${runId}\noutcome: ${outcome}\nsummary: Trusted cleanup fixture.\nheadline: The worker needs a decision\nblockers: ["Acceptance decision fixture"]\nproposals: []\nlearnings: []\nartifacts: []\n---\n`);
         rec(['check', report]); rec(['ingest', report, '--run', runId]);
-        h('agent', 'start', agent, '--kind', 'codex', '--pane', ws.root_pane.pane_id);
         jobs.push({ run: runId, info: json(rec(['show', runId, '--json'])) });
       }
       const before = jobs.map((job) => ({ run: job.run, outcome: json(rec(['show', job.run, '--json'])).report.outcome,

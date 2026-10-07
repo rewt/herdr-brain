@@ -217,7 +217,7 @@ enables its sandbox, refuses unavailable containment and unsandboxed command
 retries, and grants the same write paths. Other fleet projects' checkout, record,
 worktrees and temp have native write denies and matching file-edit deny rules.
 Existing CLI settings and hooks are merged into the session file; Herdr's socket
-environment and native socket settings are preserved. Claude's native OS sandbox
+environment is preserved. Claude's native OS sandbox
 covers shell commands; its file tools and hooks retain Claude's native permission
 behavior. No live model is needed to test the launch settings.
 
@@ -235,12 +235,52 @@ supervisor workflow, unless the project opts out.
 
 Each launch and validation step creates `<fleet-project-temp>/r-XXXXXX` with mode
 0700 and exports `TMPDIR`, `TMP` and `TEMP`. Claude also receives
-`CLAUDE_CODE_TMPDIR`; its native internal `claude-<uid>` subdirectory stays under
-that run temp. The resolved run path may use at most 60 bytes, leaving room for
+`CLAUDE_CODE_TMPDIR` for internal files. Claude Code 2.1.292 appends
+`claude-<uid>` and exports that directory as sandboxed shell `TMPDIR` only when
+the resulting path uses at most **44 bytes**. Longer paths fall back to
+`/tmp/claude-<uid>` (on macOS, `/private/tmp/claude-<uid>`); `settings.env.TMPDIR`
+cannot override the export in Claude's shell command. The resolved run path may use at most 60 bytes, leaving room for
 Unix socket names on macOS. Longer roots fail with the path and reason before a
 harness launches. Select a short temp root when joining the fleet; no symlink or
 system-temp fallback is used. Normal exit removes the run temp. Crash leftovers
 remain under the project's mapped temp for later lane cleanup (ENG-127).
+
+Claude receives `sandbox.network.allowUnixSockets` for the run temp and, when
+the 44-byte limit requires it, the canonical per-user fallback. On macOS the
+native runtime uses directory subpath rules for both bind and connect. Sibling
+run paths, other fleet projects and Herdr's control socket get no generated
+socket grant, including through symlinks. The fallback is shared by Claude
+sessions of the same user; sockets placed there have no per-run separation.
+A fleet temp root short enough to keep `<run-temp>/claude-<uid>` within 44 bytes
+avoids that shared allowance. Monitor does not grant all of `/tmp` or the fleet
+temp parent. On Linux native `allowUnixSockets` is ignored because seccomp cannot
+filter socket paths; Monitor does not enable `allowAllUnixSockets` to work around
+that limitation.
+
+Supplied CLI socket arrays are merged and deduplicated in the generated file.
+Inherited user, project, local and managed arrays stay in their original scopes
+for Claude's native merger and policy locks; repository grants are never copied
+into the trusted CLI tier. A warning identifies configured socket grants beyond
+the generated paths, `allowAllUnixSockets: true`, or `allowLocalBinding: true`.
+Explicit native settings keep their existing behavior. Neither broad switch is
+enabled by Monitor; `allowLocalBinding` remains off by default.
+
+The native 2.1.292 runtime has only an unscoped `allowPty` boolean, allowing
+`pseudo-tty`, `/dev/ptmx` and every `/dev/ttys*`. There is no per-run PTY setting
+in the inspected runtime or Claude settings schema. Monitor leaves PTY support
+disabled; the model-free probe observes `os.openpty()` returning EPERM.
+The [recorded native probe](docs/claude-sockets-2.1.292.md) includes the temp and
+socket results. Re-run it outside a nested sandbox, without authentication or a
+model call:
+
+```sh
+node discovery/claude-socket-probe.mjs /absolute/native/claude
+```
+
+This opt-in probe requires macOS, Claude Code 2.1.292 and an existing Herdr
+control socket. It uses the binary's preload facility to invoke its bundled
+temp selector and sandbox wrapper, then exits before the CLI starts a session.
+It creates sockets only in scratch/temp paths and sends no Herdr request.
 
 Extra directories use native options in canonical `.lane.json`: Codex's
 `sandbox_workspace_write.writable_roots`, or `always_args.codex` / `always_args.claude`

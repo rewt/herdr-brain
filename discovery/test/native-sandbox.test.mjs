@@ -97,7 +97,75 @@ test('Claude gets per-session native write settings and keeps existing hooks', t
   for (const directory of Object.values(f.other)) assert.ok(settings.sandbox.filesystem.denyWrite.includes(directory));
   assert.equal(launch.env.CLAUDE_CODE_TMPDIR, launch.env.TMPDIR);
   assert.equal(launch.env.HERDR_SOCKET_PATH, '/operator/herdr.sock');
-  assert.equal(settings.sandbox.network, undefined);
+  const fallback = path.join(fs.realpathSync('/tmp'), `claude-${process.getuid?.() ?? 0}`);
+  const shellTemp = path.join(launch.env.TMPDIR, `claude-${process.getuid?.() ?? 0}`);
+  assert.deepEqual(settings.sandbox.network, { allowUnixSockets: Buffer.byteLength(shellTemp) <= 44 ? [launch.env.TMPDIR] : [launch.env.TMPDIR, fallback] });
+  assert.equal(settings.sandbox.allowPty, undefined);
+  assert.equal(settings.env.TMPDIR, launch.env.TMPDIR);
+  assert.equal(settings.env.CLAUDE_CODE_TMPDIR, launch.env.TMPDIR);
+});
+
+test('Claude socket grants stay within each run and its measured shell fallback', t => {
+  const f = fixture(t), launches = [];
+  for (let i = 0; i < 2; i++) {
+    const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: f.context });
+    t.after(launch.close); launches.push(launch);
+  }
+  const grants = launches.map(launch => JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1])).sandbox.network.allowUnixSockets);
+  for (const [i, allowed] of grants.entries()) {
+    assert.ok(allowed.includes(launches[i].env.TMPDIR));
+    for (const denied of [f.own.temp, launches[1 - i].env.TMPDIR, ...Object.values(f.other), '/Users/operator/.config/herdr/herdr.sock', '/tmp', fs.realpathSync('/tmp')]) assert.ok(!allowed.includes(denied), denied);
+  }
+});
+
+test('a short Claude run temp needs no shared shell fallback grant', t => {
+  const f = fixture(t), short = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'c-'));
+  t.after(() => fs.rmSync(short, { recursive: true, force: true }));
+  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...f.context, tempRoot: short } });
+  t.after(launch.close);
+  assert.ok(Buffer.byteLength(path.join(launch.env.TMPDIR, `claude-${process.getuid?.() ?? 0}`)) <= 44);
+  const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+  assert.deepEqual(settings.sandbox.network.allowUnixSockets, [launch.env.TMPDIR]);
+});
+
+test('a long Claude run temp grants only the canonical per-user fallback in addition', t => {
+  const f = fixture(t), tempRoot = path.join(f.root, 'socket-temp-long'); fs.mkdirSync(tempRoot);
+  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...f.context, tempRoot } }); t.after(launch.close);
+  assert.ok(Buffer.byteLength(path.join(launch.env.TMPDIR, `claude-${process.getuid?.() ?? 0}`)) > 44);
+  const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+  assert.deepEqual(settings.sandbox.network.allowUnixSockets, [launch.env.TMPDIR, path.join(fs.realpathSync('/tmp'), `claude-${process.getuid?.() ?? 0}`)]);
+});
+
+test('Claude merges supplied Unix sockets and leaves inherited grants in native scopes', t => {
+  const f = fixture(t), user = path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json');
+  const project = path.join(f.own.checkout, '.claude/settings.json'); fs.mkdirSync(path.dirname(project));
+  fs.writeFileSync(user, JSON.stringify({ sandbox: { network: { allowUnixSockets: ['/configured/user.sock'] } } }));
+  fs.writeFileSync(project, JSON.stringify({ sandbox: { network: { allowUnixSockets: ['/configured/project.sock'] } } }));
+  const supplied = { sandbox: { network: { allowUnixSockets: ['/configured/cli.sock', '/configured/user.sock'], allowedDomains: ['example.test'], allowLocalBinding: false, allowAllUnixSockets: false } } };
+  const warnings = [];
+  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: ['--settings', JSON.stringify(supplied)], context: f.context, warn: text => warnings.push(text) }); t.after(launch.close);
+  const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+  assert.deepEqual(settings.sandbox.network.allowUnixSockets.slice(0, 2), ['/configured/cli.sock', '/configured/user.sock']);
+  assert.ok(!settings.sandbox.network.allowUnixSockets.includes('/configured/project.sock'), 'repository grants must not be lifted into the trusted CLI tier');
+  assert.deepEqual(settings.sandbox.network.allowedDomains, ['example.test']);
+  assert.equal(settings.sandbox.network.allowLocalBinding, false);
+  assert.equal(settings.sandbox.network.allowAllUnixSockets, false);
+  assert.equal(warnings.length, 1);
+  for (const source of [user, project, 'CLI --settings JSON']) assert.ok(warnings[0].includes(`sandbox.network.allowUnixSockets from ${source}`));
+  assert.deepEqual(JSON.parse(fs.readFileSync(user)).sandbox.network.allowUnixSockets, ['/configured/user.sock']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(project)).sandbox.network.allowUnixSockets, ['/configured/project.sock']);
+  const filtered = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: ['--setting-sources', ''], context: f.context }); t.after(filtered.close);
+  const filteredSettings = JSON.parse(fs.readFileSync(filtered.args[filtered.args.indexOf('--settings') + 1]));
+  assert.ok(!filteredSettings.sandbox.network.allowUnixSockets.some(p => p.startsWith('/configured/')));
+});
+
+test('Claude warns when native socket or TCP overrides widen generated confinement', t => {
+  const f = fixture(t), warnings = [];
+  const network = { allowAllUnixSockets: true, allowLocalBinding: true };
+  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: ['--settings', JSON.stringify({ sandbox: { network } })], context: f.context, warn: text => warnings.push(text) }); t.after(launch.close);
+  const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+  for (const key of Object.keys(network)) { assert.equal(settings.sandbox.network[key], true); assert.ok(warnings[0].includes(`sandbox.network.${key} from CLI --settings JSON`)); }
+  assert.equal(warnings.length, 1);
 });
 
 test('extra directories are supplied through native options in canonical project config', t => {

@@ -1,4 +1,4 @@
-// Native settings only: no outer sandbox, socket policy or grant protocol.
+// Native settings only: no outer sandbox or grant protocol.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -73,6 +73,17 @@ function merge(a, b) {
 function resolvedPath(pathname) {
   try { return fs.realpathSync(pathname); }
   catch (error) { if (error.code !== 'ENOENT') throw error; return path.join(resolvedPath(path.dirname(pathname)), path.basename(pathname)); }
+}
+
+// Claude Code 2.1.292's rTe() uses <CLAUDE_CODE_TMPDIR>/claude-<uid>
+// up to 44 bytes, then /tmp/claude-<uid>. TMPDIR in settings cannot override
+// the export in its sandboxed shell command. Keep macOS's /tmp alias canonical.
+function claudeSocketDirectories(temporary) {
+  const suffix = `claude-${process.getuid?.() ?? 0}`;
+  if (Buffer.byteLength(path.join(temporary, suffix)) <= 44) return [temporary];
+  const fallback = path.join(checkedDirectory('/tmp'), suffix);
+  if (fs.existsSync(fallback)) checkedDirectory(fallback);
+  return [temporary, fallback];
 }
 
 export function nativeSandboxLaunch({ kind, binary, args, context, env = process.env, warn = console.error }) {
@@ -152,6 +163,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       sources.push({ source: inline ? 'CLI --settings JSON' : path.resolve(context.workspace, value), settings: supplied });
       settings = merge(settings, supplied);
     }
+    const socketDirectories = claudeSocketDirectories(temporary);
     const warnings = [];
     const approved = [checkedDirectory(context.workspace), ...writable];
     for (const { source, settings: loaded } of sources) {
@@ -160,6 +172,10 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
         if (grants?.some(directory => !approved.some(root => within(root, resolvedPath(path.resolve(context.workspace, directory.replace(/^~(?=\/)/u, environment.HOME || process.env.HOME))))))) warnings.push(`${key} from ${source}`);
       }
       if (loaded.sandbox?.filesystem?.disabled === true) warnings.push(`sandbox.filesystem.disabled from ${source}`);
+      const network = loaded.sandbox?.network;
+      if (network?.allowAllUnixSockets === true) warnings.push(`sandbox.network.allowAllUnixSockets from ${source}`);
+      if (network?.allowLocalBinding === true) warnings.push(`sandbox.network.allowLocalBinding from ${source}`);
+      if (network?.allowUnixSockets?.some(directory => !socketDirectories.some(root => within(root, resolvedPath(path.resolve(context.workspace, directory.replace(/^~(?=\/)/u, environment.HOME || process.env.HOME))))))) warnings.push(`sandbox.network.allowUnixSockets from ${source}`);
       for (const [key, value, weaker] of [['enabled', loaded.sandbox?.enabled, false], ['allowUnsandboxedCommands', loaded.sandbox?.allowUnsandboxedCommands, true], ['failIfUnavailable', loaded.sandbox?.failIfUnavailable, false]]) {
         if (value === weaker) warnings.push(`sandbox.${key} from ${source}`);
       }
@@ -170,10 +186,14 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       return selected?.settings.sandbox[key];
     };
     // Native defaults already restrict writes to cwd and temp. Explicit peer
-    // denies also contain inherited user write paths without touching sockets.
+    // denies also contain inherited user write paths. Socket paths use native
+    // subpath rules for both bind and connect, independently of TCP binding.
     const denied = (context.projects ?? []).flatMap(p => [p.checkout, p.record, p.worktrees, p.temp])
       .concat(protectedPaths);
     settings.sandbox = { ...settings.sandbox, enabled: configured('enabled') ?? true, failIfUnavailable: configured('failIfUnavailable') ?? true, allowUnsandboxedCommands: configured('allowUnsandboxedCommands') ?? false,
+      // Leave inherited arrays in their native scopes: Claude merges them and
+      // can exclude repository grants when the sandbox is admin-required.
+      network: { ...settings.sandbox?.network, allowUnixSockets: [...new Set([...(settings.sandbox?.network?.allowUnixSockets ?? []), ...socketDirectories])] },
       filesystem: { ...settings.sandbox?.filesystem, allowWrite: [...new Set([...(settings.sandbox?.filesystem?.allowWrite ?? []), ...writable])], denyWrite: [...new Set([...(settings.sandbox?.filesystem?.denyWrite ?? []), ...denied])] } };
     settings.env = { ...settings.env, ...temporaryEnvironment(temporary), CLAUDE_CODE_TMPDIR: temporary };
     settings.permissions = { ...settings.permissions, deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.map(directory => `Edit(/${directory}/**)`)])] };

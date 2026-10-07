@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { quote } from '../discovery/runtime.mjs';
 import { rememberSupervisor } from './session-binding.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
+import { unattendedHookArguments } from './unattended.mjs';
 // A native utility/headless invocation can inherit a supervisor's shell and
 // pane. Suppress entry for that child without revoking the interactive receipt.
 export function passthroughEnvironment(env = process.env, { interactiveResume = false } = {}) {
@@ -24,19 +25,20 @@ export function sessionEnvironment(context, root, env = process.env) {
   catch (e) { process.stderr.write(sanitizeTerminal(`Supervisor entry binding: ${e.message}; session may continue.\n`)); }
   return result;
 }
-export function sessionHookArguments(kind, context, root) {
-  if (context.role !== 'supervisor') return [];
+export function sessionHookArguments(kind, context, root, env = process.env) {
+  const unattended = unattendedHookArguments(kind, context, root, env);
+  if (context.role !== 'supervisor') return unattended;
   const settings = path.join(context.canonical, kind === 'claude' ? '.claude/settings.json' : '.codex/hooks.json');
   try {
     const groups = JSON.parse(fs.readFileSync(settings, 'utf8')).hooks?.SessionStart ?? [];
     if (['startup', 'resume', 'clear', 'compact'].every(source => groups.some(group =>
       (!group.matcher || new RegExp(group.matcher).test(source)) && group.hooks?.some(hook =>
-        hook.type === 'command' && hook.command?.includes('supervisor/session-start.mjs'))))) return [];
+        hook.type === 'command' && hook.command?.includes('supervisor/session-start.mjs'))))) return unattended;
   } catch (e) {
     if (e.code !== 'ENOENT') process.stderr.write(sanitizeTerminal(`Supervisor entry project hooks: ${e.message}; using adapter hook.\n`));
   }
   const command = `${quote(process.execPath)} ${quote(path.join(root, 'supervisor/session-start.mjs'))}`;
   const matcher = '^(startup|resume|clear|compact)$';
-  if (kind === 'claude') return ['--settings', JSON.stringify({ hooks: { SessionStart: [{ matcher, hooks: [{ type: 'command', command, timeout: 30 }] }] } })];
-  return ['-c', `hooks.SessionStart=[{matcher=${JSON.stringify(matcher)},hooks=[{type="command",command=${JSON.stringify(command)},timeout=30}]}]`];
+  if (kind === 'claude') return ['--settings', JSON.stringify({ hooks: { SessionStart: [{ matcher, hooks: [{ type: 'command', command, timeout: 30 }] }] } }), ...unattended];
+  return ['-c', `hooks.SessionStart=[{matcher=${JSON.stringify(matcher)},hooks=[{type="command",command=${JSON.stringify(command)},timeout=30}]}]`, ...unattended];
 }

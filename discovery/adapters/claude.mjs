@@ -36,7 +36,9 @@ function passthrough() {
       const context = nativeSessionContext(values.repo);
       if (context) {
         context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
-        launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
+        launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary,
+          args: [...native, ...sessionHookArguments('claude', context, root, launch.env)], context,
+          env: { ...launch.env, ORG_DIR: context.org } });
       }
       else console.error('monitor: not a fleet project; starting native Claude without a project sandbox');
     }
@@ -63,9 +65,10 @@ try {
   const context = entry.context(), policy = entryPolicy(context, root);
   if (values['policy-only']) { console.log(policy); entry.close(); }
   else {
+    const environment = { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests };
     const launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary,
-      args: [...native, ...sessionHookArguments('claude', context, root), '--append-system-prompt', policy], context,
-      env: { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests } });
+      args: [...native, ...sessionHookArguments('claude', context, root, environment), '--append-system-prompt', policy], context,
+      env: environment });
     let child;
     try { child = spawnNative(entry, launch.binary, launch.args, { cwd: context.workspace, env: launch.env }); }
     catch (error) { launch.close(); throw error; }

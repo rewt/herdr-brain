@@ -312,6 +312,16 @@ policy. No persistent Codex trust record or Claude settings file is rewritten.
 Unknown/unsupported builds retain the existing visible warning. Version evidence
 and proof limits are in [worktree access](docs/worktree-access.md).
 
+The same per-launch path installs the supervisor's [unattended question guard](../supervisor/README.md).
+Ops and bypassed worker launches deny Claude `AskUserQuestion` and Codex
+`request_user_input`, directing the session to record a question, choose a safe
+default and continue. Project chats carry `MONITOR_SESSION_KIND=chat`; combined
+chat/ops supervisors can select `combined` in their launch environment. Those
+conversations ask normally until macOS idle reaches fifteen minutes, the screen
+locks or presence is unknown. A worker cannot inherit conversation policy from
+its parent's chat environment. No operator settings or native hook trust records
+are changed; enabled/trusted native hooks are still required.
+
 Workers and reviewers respect inherited or CLI Codex permission selectors,
 including `sandbox_mode`, configuration profiles and `--yolo`; one warning names
 the setting and its file or CLI source. Coordinating roles require the generated
@@ -321,6 +331,7 @@ permission selectors and any inherited `sandbox_mode` refuse the launch with
 the setting and source to remove. Codex's legacy selectors take precedence over
 permission profiles, so a per-launch profile cannot override them. No native
 configuration file is rewritten. Claude keeps user, project,
+
 local and supplied settings, including command exclusions, additional directories
 and filesystem write grants; one warning names settings and sources that weaken
 the generated policy. Native settings and hooks keep their harness behavior.

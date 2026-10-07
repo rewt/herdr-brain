@@ -27,7 +27,8 @@ export function rememberSupervisor(context, env) {
   // Explicitly repurposing the pane as a worker revokes its old supervisor role.
   if (context.role !== 'supervisor') { fs.rmSync(file, { force: true }); return; }
   const saved = { role: 'supervisor', pane, canonical: project.canonical, identity: project.identity,
-    org: fs.realpathSync(context.org), to: env.MONITOR_SUPERVISOR_AGENT || null };
+    org: fs.realpathSync(context.org), to: env.MONITOR_SUPERVISOR_AGENT || null,
+    session_kind: ['chat', 'combined'].includes(env.MONITOR_SESSION_KIND) ? env.MONITOR_SESSION_KIND : 'ops' };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
   try { fs.writeFileSync(temporary, JSON.stringify(saved) + '\n', { mode: 0o600 }); fs.renameSync(temporary, file); }

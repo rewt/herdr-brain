@@ -93,6 +93,13 @@ holding answers that had been typed and never delivered.
 
 ## Model-free steward routing
 
+Monitor's [unattended question guard](../supervisor/README.md) prevents a newly
+launched ops session from opening its own blocking question; operator chats use
+the same guard when macOS is idle for fifteen minutes, locked or unreadable.
+It asks the session to record the question with a safe default and continue.
+This is separate from the steward's detection and routing below. Existing
+dialogs and native permission/trust prompts still need their respective handling.
+
 `watch` runs the steward after captures and also checks stalled delivery when
 Herdr is unavailable. A foreground pass is available for inspection:
 

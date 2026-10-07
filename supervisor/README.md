@@ -1,5 +1,46 @@
 # Supervisor
 
+Monitor launches register [unattended.mjs](unattended.mjs) as a native
+`PreToolUse` command hook. Operations supervisors and dispatched/headless workers
+always deny blocking questions. Claude matches `AskUserQuestion`; Codex matches
+the local function tool `request_user_input`. The denial tells the session to
+`record ask` with an action category, a safe recommendation and a reason, without
+`--wait`, take the safe default and continue independent work. Funds/chain,
+publishing, credentials and permission expansion always default to **no**.
+Recommendations grant no operator authority and do not answer pending questions.
+If no safe default is proven, defer that action and continue other work. If the
+record is unavailable, retain the question in the report. The hook itself never
+writes the record or supplies an invented user answer.
+
+ENG-248 project chats use the explicit launch kind `MONITOR_SESSION_KIND=chat`,
+separate from their supervisor workflow role and ops notice recipient. A
+supervisor that still combines the operator conversation with operations selects
+`MONITOR_SESSION_KIND=combined` in its launch environment. These conversations
+ask normally while the operator is present. At each question, read-only native
+macOS `ioreg` queries check HID idle time and the logged-in console user's screen
+lock. Fifteen minutes of idle time, a locked screen, an unreadable/ambiguous
+console session or a non-macOS host switches to record-and-default behaviour.
+There is no away/back command or cached presence; the next question can ask
+normally again when presence returns. The existing canonical pane launch receipt
+retains this kind for restore without environment variables. Worker/bypass guards
+override inherited chat kinds; missing/old receipts default to operations.
+Display session names and metadata never select the policy.
+
+Hooks are generated per launch through [session-hooks.mjs](session-hooks.mjs),
+including native bypass/resume launches, and merge with Claude's other CLI hooks
+and lane guards. Persistent settings and trust records are not edited. Existing
+native sessions need a launch with the updated adapter; this does not retrofit
+or dismiss an already-open dialog. bch-cloak's legacy launcher stays unchanged;
+its combined conversation needs the explicit combined launch kind when it adopts
+this release. Native hook disabling, managed restrictions and Codex hook trust
+review retain their native behaviour. Offline tests prove generated launch
+settings and command-hook denial, not a live harness/model interaction. Codex's
+async question tool remains nonblocking and is not denied by this matcher.
+See [Claude question-tool decision control](https://code.claude.com/docs/en/hooks#pretooluse-decision-control)
+and [Codex local function tool hooks](https://learn.chatgpt.com/docs/hooks#tool-coverage);
+the Codex registration follows the documented local-function contract, which
+also notes that specialized tool paths may opt out.
+
 The [Brain steward](../brain/README.md#model-free-steward-routing) routes fleet-wide
 blocked worker captures through this same inbox and input gate. A blocked
 supervisor escalates to the steward journal and a local operator alert, because

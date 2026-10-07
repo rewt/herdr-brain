@@ -16,6 +16,7 @@ import { configureCliFixture } from '../../housekeeping/test/helpers/cli-fixture
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
 import { sessionEnvironment, sessionHookArguments } from '../session-hooks.mjs';
+import { questionMode } from '../unattended.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const linuxBoot = '12345678-1234-4234-8234-123456789abc';
 const linuxOwner = birth => pid => pid === deadPid ? { ok: true, value: null } : lookupProcess(pid, { platform: 'linux', identityOnly: true, readFile: file => {
@@ -54,7 +55,7 @@ function fixture(t) {
 const load = () => import('../entry.mjs');
 function codexLaunchHook(context) {
   const args = sessionHookArguments('codex', context, root);
-  assert.equal(args.length, 2);
+  assert.equal(args.length, 4);
   assert.equal(args[0], '-c');
   assert.match(args[1], /^hooks\.SessionStart=/);
   const command = args[1].match(/command=("(?:[^"\\]|\\.)*")/);
@@ -105,7 +106,9 @@ test('claude adapter reuses the project SessionStart entry exactly once', t => {
   const project = JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json')));
   fs.writeFileSync(path.join(directory, 'settings.json'), JSON.stringify(project));
   const context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
-  assert.deepEqual(sessionHookArguments('claude', context, root), [], 'project hook must not gain a second adapter hook');
+  const launch = sessionHookArguments('claude', context, root);
+  assert.equal(JSON.parse(launch[1]).hooks.SessionStart, undefined, 'project hook must not gain a second adapter hook');
+  assert.match(JSON.stringify(JSON.parse(launch[1]).hooks.PreToolUse), /AskUserQuestion/);
   for (const source of ['startup', 'resume', 'clear', 'compact']) {
     const hooks = project.hooks.SessionStart.filter(g => !g.matcher || new RegExp(g.matcher).test(source))
       .flatMap(g => g.hooks).filter(h => h.command.includes('session-start.mjs'));
@@ -124,7 +127,9 @@ test('codex supervisor adapter injects SessionStart without a project hook', t =
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
   const context = { role: 'supervisor', canonical: root };
   const hook = codexLaunchHook(context);
-  assert.deepEqual(sessionHookArguments('codex', { ...context, role: 'worker' }, root), []);
+  const worker = sessionHookArguments('codex', { ...context, role: 'worker' }, root);
+  assert.match(worker[1], /^hooks\.PreToolUse=/);
+  assert.doesNotMatch(worker.join(' '), /SessionStart/);
   const matcher = JSON.parse(hook.config.match(/matcher=("(?:[^"\\]|\\.)*")/)[1]);
   for (const source of ['startup', 'resume', 'clear', 'compact']) {
     assert.ok(new RegExp(matcher).test(source));
@@ -161,14 +166,40 @@ test('adapter exports its known supervisor agent identity', t => {
 
 test('project chat adapter and durable restore retain ops separately from the chat name', t => {
   const f = fixture(t), context = {role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org};
-  const env = sessionEnvironment(context, root, {HERDR_PANE_ID: 'control:pChat', HERDR_AGENT_NAME: 'chat-project', MONITOR_SUPERVISOR_AGENT: 'ops-project'});
+  const env = sessionEnvironment(context, root, {HERDR_PANE_ID: 'control:pChat', HERDR_AGENT_NAME: 'chat-project', MONITOR_SUPERVISOR_AGENT: 'ops-project', MONITOR_SESSION_KIND: 'chat'});
   assert.equal(env.HERDR_AGENT_NAME, 'chat-project'); assert.equal(env.MONITOR_SUPERVISOR_AGENT, 'ops-project');
   const receipt = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane/supervisor/panes', `${createHash('sha256').update('control:pChat').digest('hex')}.json`)));
   assert.equal(receipt.to, 'ops-project');
+  assert.equal(receipt.session_kind, 'chat');
+  assert.equal(questionMode({ canonical: f.repo }, { HERDR_PANE_ID: 'control:pChat' }), 'conversation');
+  assert.equal(questionMode({ canonical: f.repo, role: 'worker' }, { HERDR_PANE_ID: 'control:pChat' }), 'ops');
+  assert.equal(questionMode({ canonical: f.repo }, { HERDR_PANE_ID: 'another:pane' }), 'ops');
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
   const restored = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo,
     {HERDR_PANE_ID: 'control:pChat'}, JSON.stringify({cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume'}));
   good(restored); assert.match(restored.stdout, /Supervisor cold start/); assert.doesNotMatch(restored.stdout, /session may continue/);
+});
+
+for (const kind of ['claude', 'codex']) test(`${kind} bypassed worker gets the question guard without inheriting chat kind or supervisor entry`, t => {
+  const f = fixture(t), binary = path.join(f.root, 'native.cjs'), receipt = path.join(f.root, 'question-launch.json');
+  const temporary = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'uq-'));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  joinFleet({ cwd: f.repo, temp: temporary });
+  fs.writeFileSync(binary, `#!${process.execPath}\nconst fs=require('node:fs'),args=process.argv.slice(2);
+if(args.includes('--help'))console.log('--sandbox --add-dir --settings --permission-profile');
+else if(args.includes('--version'))console.log('2.1.284');
+else fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexOf('--settings')+1])):null}));\n`, { mode: 0o755 });
+  const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--auto-entry', '--repo', f.repo, '--binary', binary,
+    '--', ...(kind === 'claude' ? ['--print', 'task'] : ['exec', 'task'])], f.repo,
+    { MONITOR_SESSION_KIND: 'chat', MONITOR_SESSION_ROLE: 'supervisor', MONITOR_ENTRY_BYPASS: '1' });
+  good(r);
+  const captured = JSON.parse(fs.readFileSync(receipt));
+  const guard = kind === 'claude' ? captured.settings.hooks.PreToolUse.find(g => g.matcher.includes('AskUserQuestion')).hooks[0].command
+    : captured.args.find(a => a.startsWith('hooks.PreToolUse='));
+  assert.match(guard, /unattended.mjs/); assert.match(guard, /'ops'/);
+  assert.doesNotMatch(captured.args.join(' '), /session-start.mjs/);
+  assert.ok(!fs.existsSync(path.join(f.repo, '.claude/settings.json')));
+  assert.ok(!fs.existsSync(path.join(f.repo, '.codex/hooks.json')));
 });
 function fakeCommands(f) {
   const calls = [];
@@ -308,11 +339,13 @@ test('adapters use short fleet temp and bind worker, supervisor and chat roles w
     fs.writeFileSync(fake, `#!${process.execPath}\nif(process.argv.includes('--help')){console.log('--sandbox --add-dir --settings --permission-profile');process.exit(0)}\nif(process.argv.includes('--version')){console.log('2.1.284');process.exit(0)}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify({args:process.argv.slice(2),temp:process.env.TMPDIR,role:process.env.MONITOR_SESSION_ROLE,bypass:process.env.MONITOR_ENTRY_BYPASS,repo:process.env.MONITOR_SUPERVISOR_REPO,identity:process.env.MONITOR_SUPERVISOR_IDENTITY,org:process.env.MONITOR_SUPERVISOR_ORG,entry:process.env.MONITOR_SUPERVISOR_ENTRY,settings:process.argv.includes('--settings')?JSON.parse(require('fs').readFileSync(process.argv[process.argv.indexOf('--settings')+1])):null}));\n`, { mode: 0o755 });
     const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--role', role,
       '--binary', fake, '--validator', fake, '--runtime-dir', path.join(f.root, 'runtime'), '--worktree-root', path.join(f.root, 'worktrees'), '--', '--model', 'opaque-model'], f.repo,
-      { ...f.binding, HERDR_PANE_ID: 'wTest:pSupervisor', HERDR_SOCKET_PATH: socket, CODEX_HOME: config, CLAUDE_CONFIG_DIR: config });
+      { ...f.binding, MONITOR_SESSION_ROLE: 'worker', MONITOR_ENTRY_BYPASS: '1', MONITOR_SESSION_KIND: 'chat', HERDR_PANE_ID: 'wTest:pSupervisor', HERDR_SOCKET_PATH: socket, CODEX_HOME: config, CLAUDE_CONFIG_DIR: config });
+
     good(r); const native = JSON.parse(fs.readFileSync(receipt)); assert.equal(native.role, role); assert.ok(native.args.includes('opaque-model'));
     assert.equal(path.dirname(native.temp), temporary);
     assert.ok(Buffer.byteLength(native.temp) <= 60);
     assert.equal(native.bypass, role === 'supervisor' ? '0' : '1');
+    assert.match(native.args.join(' '), new RegExp(role === 'supervisor' ? "'conversation'" : "'ops'"));
     if (role === 'supervisor') {
       assert.equal(native.repo, f.repo); assert.equal(native.identity, f.project.identity); assert.equal(native.org, path.join(f.repo, '.org'));
       assert.equal(native.entry, path.join(root, 'supervisor/session-start.mjs'));
@@ -324,6 +357,8 @@ test('adapters use short fleet temp and bind worker, supervisor and chat roles w
     } else {
       assert.equal(native.repo, ''); assert.equal(native.identity, ''); assert.equal(native.entry, '');
       assert.ok(!native.args.some(a => a.includes('hooks.SessionStart='))); if (kind === 'claude') assert.equal(native.settings.hooks?.SessionStart, undefined);
+      assert.match(native.args.join(' '), /unattended.mjs/);
+
     }
   }
 });

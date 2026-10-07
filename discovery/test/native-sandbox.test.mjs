@@ -11,6 +11,8 @@ import { runTemporary, temporaryEnvironment } from '../temporary.mjs';
 import { nativeSandboxLaunch, nativeSession } from '../native-sandbox.mjs';
 import { toml } from '../confinement.mjs';
 import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
+import { unattendedHookArguments } from '../../supervisor/unattended.mjs';
+import { fileURLToPath } from 'node:url';
 
 const projectTrust = directories => `projects=${toml(Object.fromEntries([...new Set(directories)].map(directory => [directory, { trust_level: 'trusted' }])))}`;
 
@@ -60,6 +62,31 @@ function fixture(t, fallbackState = 'owned') {
   });
   return { root, own, other, context, binary, socket, fallback, fallbackInspections: () => fallbackInspections };
 }
+
+test('native question guard merges with supplied Claude hooks and lane guards and keeps Codex settings per launch', t => {
+  const f = fixture(t), root = fileURLToPath(new URL('../../', import.meta.url));
+  const settings = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'existing-command' }] }],
+    SessionStart: [{ hooks: [{ type: 'command', command: 'existing-start' }] }] } };
+  const file = path.join(f.root, 'operator-settings.json'); fs.writeFileSync(file, JSON.stringify(settings));
+  for (const kind of ['claude', 'codex']) {
+    const guard = unattendedHookArguments(kind, { ...f.context, role: 'supervisor' }, root, { MONITOR_SESSION_KIND: 'chat' });
+    const launch = nativeSandboxLaunch({ kind, binary: f.binary, args: [...(kind === 'claude' ? ['--settings', file] : []), ...guard], context: f.context });
+    t.after(launch.close);
+    if (kind === 'claude') {
+      const merged = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+      assert.deepEqual(merged.hooks.PreToolUse[0], settings.hooks.PreToolUse[0]);
+      assert.deepEqual(merged.hooks.SessionStart, settings.hooks.SessionStart);
+      assert.equal(merged.hooks.PreToolUse.filter(g => g.matcher.includes('AskUserQuestion')).length, 1);
+      assert.ok(merged.hooks.PreToolUse.some(g => g.matcher.includes('NotebookEdit')));
+      assert.match(merged.hooks.PreToolUse[1].hooks[0].command, /'conversation'/);
+    } else {
+      assert.ok(launch.args.includes(guard[1]));
+      assert.match(guard[1], /request_user_input/);
+    }
+  }
+  assert.deepEqual(JSON.parse(fs.readFileSync(file)), settings);
+  for (const directory of ['.claude', '.codex']) assert.ok(!fs.existsSync(path.join(f.own.checkout, directory)), 'no persistent settings created');
+});
 
 test('headless tasks and resumes get a sandbox even when prompt text names a utility', () => {
   for (const args of [['exec', 'help'], ['--model', 'literal', 'exec', 'debug'], ['resume', 'session']]) assert.equal(nativeSession('codex', args), true);

@@ -45,7 +45,9 @@ function passthrough() {
       const context = nativeSessionContext(cwd);
       if (context) {
         context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
-        launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
+        launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary,
+          args: [...native, ...sessionHookArguments('codex', context, root, launch.env)], context,
+          env: { ...launch.env, ORG_DIR: context.org } });
       }
       else console.error('monitor: not a fleet project; starting native Codex without a project sandbox');
     }
@@ -70,9 +72,10 @@ try {
     // Keep native model, effort and approval arguments; generate the sandbox.
     // -C belongs to entry because changing checkout changes the capability.
     if (native.some((arg) => arg.startsWith('-C') || ['--cd', '--worktree'].includes(arg) || arg.startsWith('--cd='))) throw new Error('select project with adapter --repo; native checkout overrides are not allowed');
-    const nativeArgs = ['--no-daemon', ...native, ...sessionHookArguments('codex', context, root), '-C', context.workspace, '-c', `developer_instructions=${JSON.stringify(policy)}`];
+    const environment = { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests };
+    const nativeArgs = ['--no-daemon', ...native, ...sessionHookArguments('codex', context, root, environment), '-C', context.workspace, '-c', `developer_instructions=${JSON.stringify(policy)}`];
     const launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary, args: nativeArgs, context,
-      env: { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests } });
+      env: environment });
     let child;
     try { child = spawnNative(entry, launch.binary, launch.args, { cwd: context.workspace, env: launch.env }); }
     catch (error) { launch.close(); throw error; }

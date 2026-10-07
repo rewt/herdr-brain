@@ -1,0 +1,65 @@
+TAP version 13
+# Subtest: release suites cover tierFiles(release) exactly once and isolate heavy files
+ok 1 - release suites cover tierFiles(release) exactly once and isolate heavy files
+  ---
+  duration_ms: 1.963
+  ...
+# Subtest: growing directories add bounded suites without losing or repeating files
+ok 2 - growing directories add bounded suites without losing or repeating files
+  ---
+  duration_ms: 0.805375
+  ...
+# Subtest: release scripts hold the slot without retrying the entire release inventory
+ok 3 - release scripts hold the slot without retrying the entire release inventory
+  ---
+  duration_ms: 0.505917
+  ...
+# Subtest: a suite deadline under load retries only that suite and continues once
+ok 4 - a suite deadline under load retries only that suite and continues once
+  ---
+  duration_ms: 2135.795292
+  ...
+# Subtest: a repeated suite deadline stops without replaying completed or later suites
+ok 5 - a repeated suite deadline stops without replaying completed or later suites
+  ---
+  duration_ms: 3368.787542
+  ...
+# Subtest: an ordinary failure under load stops without retrying or starting later suites
+ok 6 - an ordinary failure under load stops without retrying or starting later suites
+  ---
+  duration_ms: 471.025166
+  ...
+# Subtest: npm phases preserve every file once and isolate copied-entry probes
+ok 7 - npm phases preserve every file once and isolate copied-entry probes
+  ---
+  duration_ms: 1.009333
+  ...
+# Subtest: the phased command propagates a failing suite and never starts its later phase
+ok 8 - the phased command propagates a failing suite and never starts its later phase
+  ---
+  duration_ms: 175.58375
+  ...
+# Subtest: the phased command forwards suite watchdog overrides to its bounded runner
+ok 9 - the phased command forwards suite watchdog overrides to its bounded runner
+  ---
+  duration_ms: 1057.007083
+  ...
+# Subtest: bounded runner selects merge checks and forwards the selection to its worker
+ok 10 - bounded runner selects merge checks and forwards the selection to its worker
+  ---
+  duration_ms: 303.868625
+  ...
+# Subtest: release keeps the complete offline suite and promotion covers the fast tier
+ok 11 - release keeps the complete offline suite and promotion covers the fast tier
+  ---
+  duration_ms: 2.405542
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6017.174166

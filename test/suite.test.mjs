@@ -59,7 +59,7 @@ test('release keeps the complete offline suite and promotion covers the fast tie
   assert.match(scripts['test:release:steps'], /npm test.*npm run test:lanes.*npm run test:acceptance/);
   for (const step of ['slot', 'core', 'cycle']) assert.ok(scripts.test.includes(`test:${step}`));
   assert.match(scripts['test:release:steps'], /npm run test:release:only/);
-  assert.match(scripts['test:release:only'], /test\/helpers\/tier\.mjs release/);
+  assert.match(scripts['test:release:only'], /test\/helpers\/release-suites\.mjs/);
   assert.match(scripts['test:promotion:core'], /test\/helpers\/tier\.mjs promotion/);
   for (const tier of ['fast', 'core', 'cycle', 'lanes', 'acceptance']) assert.ok(scripts[`test:${tier}`].includes(`test/helpers/tier.mjs ${tier}`));
   const root = fileURLToPath(new URL('../', import.meta.url));

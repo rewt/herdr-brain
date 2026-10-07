@@ -1,0 +1,1155 @@
+TAP version 13
+# Subtest: review brief carries a matching ingest validation receipt (new intake)
+ok 1 - review brief carries a matching ingest validation receipt (new intake)
+  ---
+  duration_ms: 4604.905292
+  ...
+# Subtest: review brief carries a matching ingest validation receipt (previous intake)
+ok 2 - review brief carries a matching ingest validation receipt (previous intake)
+  ---
+  duration_ms: 4608.059417
+  ...
+# Subtest: matching intake discharges only report validity: - Report record-check validation not independently executed.
+ok 3 - matching intake discharges only report validity: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 4921.418333
+  ...
+# Subtest: matching intake discharges only report validity: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 4 - matching intake discharges only report validity: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 4842.141209
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: report
+ok 5 - ingest proof refuses mismatched or absent evidence: report
+  ---
+  duration_ms: 4640.626166
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: ingested_report
+ok 6 - ingest proof refuses mismatched or absent evidence: ingested_report
+  ---
+  duration_ms: 4763.470625
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: reportText
+ok 7 - ingest proof refuses mismatched or absent evidence: reportText
+  ---
+  duration_ms: 4423.728708
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: reportHash
+ok 8 - ingest proof refuses mismatched or absent evidence: reportHash
+  ---
+  duration_ms: 4554.608833
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: run
+ok 9 - ingest proof refuses mismatched or absent evidence: run
+  ---
+  duration_ms: 4730.453584
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: abandoned
+ok 10 - ingest proof refuses mismatched or absent evidence: abandoned
+  ---
+  duration_ms: 5303.456458
+  ...
+# Subtest: ingest proof refuses mismatched or absent evidence: missing
+ok 11 - ingest proof refuses mismatched or absent evidence: missing
+  ---
+  duration_ms: 5325.824667
+  ...
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.809125
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 37.409
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.664083
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 39.632042
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.765791
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 42.45875
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.732666
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 43.767333
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.675291
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 41.020917
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.88375
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 40.042083
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.532042
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 39.157709
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.647916
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 42.998958
+# Subtest: only scoped test deferrals become promotable through the planned gate
+ok 12 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 9134.952542
+  ...
+# Subtest: test deferrals plus matching record-check proof use the bound path: - Report record-check validation not independently executed.
+ok 13 - test deferrals plus matching record-check proof use the bound path: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 13486.817375
+  ...
+# Subtest: test deferrals plus matching record-check proof use the bound path: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 14 - test deferrals plus matching record-check proof use the bound path: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 13655.128625
+  ...
+# Subtest: lane-modified planner and imports cannot shrink canonical coverage
+ok 15 - lane-modified planner and imports cannot shrink canonical coverage
+  ---
+  duration_ms: 4897.864209
+  ...
+# Subtest: lane-modified planner and imports cannot invent canonical coverage
+ok 16 - lane-modified planner and imports cannot invent canonical coverage
+  ---
+  duration_ms: 5091.300625
+  ...
+# Subtest: missing planner covers nothing, retains its error and allows recorded re-execution
+ok 17 - missing planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6639.961042
+  ...
+# Subtest: failed planner covers nothing, retains its error and allows recorded re-execution
+ok 18 - failed planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6592.745334
+  ...
+# Subtest: empty output covers nothing, retains its error and allows recorded re-execution
+ok 19 - empty output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6427.488667
+  ...
+# Subtest: whitespace output covers nothing, retains its error and allows recorded re-execution
+ok 20 - whitespace output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6304.918375
+  ...
+# Subtest: invalid JSON covers nothing, retains its error and allows recorded re-execution
+ok 21 - invalid JSON covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6107.969542
+  ...
+# Subtest: invalid coverage covers nothing, retains its error and allows recorded re-execution
+ok 22 - invalid coverage covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 6164.077792
+  ...
+# Subtest: oversized output covers nothing, retains its error and allows recorded re-execution
+ok 23 - oversized output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 5911.236791
+  ...
+# Subtest: hand-written receipt with matching filename and log hash must also match its derived key
+ok 24 - hand-written receipt with matching filename and log hash must also match its derived key
+  ---
+  duration_ms: 1.269167
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 25 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 8127.956208
+  ...
+# Subtest: settle retains the review stage under simulated memory pressure and launches once after it clears
+ok 26 - settle retains the review stage under simulated memory pressure and launches once after it clears
+  ---
+  duration_ms: 10432.147917
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: STOP arriving during correction dispatch memory wait returns a resumable stopped handoff
+not ok 27 - STOP arriving during correction dispatch memory wait returns a resumable stopped handoff
+  ---
+  duration_ms: 18807.245208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm fixture inbox children: /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-oTvShq/settle-test-YiUMks/project/.org/supervisor/inbox.log'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    stopFixtureInbox (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/inbox.mjs:43:30)
+    TestContext.cleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:80:11)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: PID 29682 lookup failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: fixture teardown waits for a concurrent child to finish writing before removing its directory
+not ok 28 - fixture teardown waits for a concurrent child to finish writing before removing its directory
+  ---
+  duration_ms: 372.089959
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable
+not ok 29 - unconfigured project: report, independent claim finding, fresh fix run, report, settle, promotable
+  ---
+  duration_ms: 6840.559958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    Object.settle (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:127:37)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/settle.test.mjs:125:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: already ingested reports use immutable bytes and never create duplicate proposals
+ok 30 - already ingested reports use immutable bytes and never create duplicate proposals
+  ---
+  duration_ms: 5012.733917
+  ...
+# Subtest: non-done outcomes escalate with substance without launching a reviewer or correction
+ok 31 - non-done outcomes escalate with substance without launching a reviewer or correction
+  ---
+  duration_ms: 3801.342417
+  ...
+# Subtest: settle generated review brief supplies the exact inherited-gate non-claim
+ok 32 - settle generated review brief supplies the exact inherited-gate non-claim
+  ---
+  duration_ms: 4958.344584
+  ...
+# Subtest: inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence
+ok 33 - inherited validation acknowledgments are scoped non-claims, never unresolved acceptance evidence
+  ---
+  duration_ms: 9853.078667
+  ...
+# Subtest: discovered project settings override parent settle values and inherit a non-main integration branch
+not ok 34 - discovered project settings override parent settle values and inherit a non-main integration branch
+  ---
+  duration_ms: 7080.370834
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:93:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:118:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:123:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/settle.test.mjs:213:58
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: explicit configuration selects one layer and command flags override settle settings
+ok 35 - explicit configuration selects one layer and command flags override settle settings
+  ---
+  duration_ms: 1146.97025
+  ...
+# Subtest: an item dropped or blocked during NEEDS-WORK review cannot launch a correction
+ok 36 - an item dropped or blocked during NEEDS-WORK review cannot launch a correction
+  ---
+  duration_ms: 10005.09125
+  ...
+# Subtest: initial and cached readiness both require a clean canonical checkout
+ok 37 - initial and cached readiness both require a clean canonical checkout
+  ---
+  duration_ms: 9209.204792
+  ...
+# Subtest: dirty lanes and foreign Git identities cannot be reviewed or dispatched
+ok 38 - dirty lanes and foreign Git identities cannot be reviewed or dispatched
+  ---
+  duration_ms: 5004.545292
+  ...
+# Subtest: malformed reviews never silently retry models; inspected uncertain launches can start a new round
+ok 39 - malformed reviews never silently retry models; inspected uncertain launches can start a new round
+  ---
+  duration_ms: 9028.558958
+  ...
+# Subtest: uncertain fix delivery recovers the dispatch journal and never starts a second correction
+not ok 40 - uncertain fix delivery recovers the dispatch journal and never starts a second correction
+  ---
+  duration_ms: 6353.0035
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    Object.retry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:128:36)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/settle.test.mjs:295:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: suite execution is deferred until promotion even with an independent PASS
+ok 41 - suite execution is deferred until promotion even with an independent PASS
+  ---
+  duration_ms: 4674.701959
+  ...
+# Subtest: PASS with unverified claims and moved heads do not return promotable
+ok 42 - PASS with unverified claims and moved heads do not return promotable
+  ---
+  duration_ms: 8751.8625
+  ...
+# Subtest: same-lane contenders cannot run two independent reviews
+ok 43 - same-lane contenders cannot run two independent reviews
+  ---
+  duration_ms: 4671.044959
+  ...
+# Subtest: other-item lane work and dropped items require judgment; a saved PASS rechecks the record
+ok 44 - other-item lane work and dropped items require judgment; a saved PASS rechecks the record
+  ---
+  duration_ms: 7405.278041
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: settling an ingested older report preserves every newer reported outcome without review or correction
+ok 45 - settling an ingested older report preserves every newer reported outcome without review or correction
+  ---
+  duration_ms: 11845.732292
+  ...
+# Subtest: an unrecorded stale report cannot overwrite a newer outcome through ingestion
+ok 46 - an unrecorded stale report cannot overwrite a newer outcome through ingestion
+  ---
+  duration_ms: 1386.817375
+  ...
+# Subtest: cached readiness and uncertain review retries hand off superseded runs
+ok 47 - cached readiness and uncertain review retries hand off superseded runs
+  ---
+  duration_ms: 8816.800167
+  ...
+# Subtest: conditional ingest and reopen protect a newer report arriving immediately before the record write
+ok 48 - conditional ingest and reopen protect a newer report arriving immediately before the record write
+  ---
+  duration_ms: 3494.306542
+  ...
+# Subtest: a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+ok 49 - a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+  ---
+  duration_ms: 9570.129208
+  ...
+# Subtest: conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+ok 50 - conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+  ---
+  duration_ms: 5154.551083
+  ...
+# Subtest: incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+not ok 51 - incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+  ---
+  duration_ms: 12391.277583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:93:59)
+    Object.record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:118:28)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/record-safety.test.mjs:128:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: resolved blocker links allow recovery of only the recorded correction run
+ok 52 - resolved blocker links allow recovery of only the recorded correction run
+  ---
+  duration_ms: 6970.293625
+  ...
+# Subtest: correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+not ok 53 - correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+  ---
+  duration_ms: 4948.492209
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:93:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:118:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:123:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/record-safety.test.mjs:167:102
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+ok 54 - legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+  ---
+  duration_ms: 5787.731958
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold before reviewing
+ok 55 - legacy outcome-owner refusal rechecks the repaired fold before reviewing
+  ---
+  duration_ms: 6278.536333
+  ...
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+ok 56 - legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+  ---
+  duration_ms: 1787.118958
+  ...
+# Subtest: recovery: older overlapping run clears a new refusal
+ok 57 - recovery: older overlapping run clears a new refusal
+  ---
+  duration_ms: 6053.482166
+  ...
+# Subtest: recovery: older overlapping run clears a legacy refusal after main moves
+ok 58 - recovery: older overlapping run clears a legacy refusal after main moves
+  ---
+  duration_ms: 6667.490667
+  ...
+# Subtest: a fresh handle also rechecks an existing completed overlapping-run refusal
+ok 59 - a fresh handle also rechecks an existing completed overlapping-run refusal
+  ---
+  duration_ms: 4801.486333
+  ...
+# Subtest: record readiness recovery retains the completed review
+ok 60 - record readiness recovery retains the completed review
+  ---
+  duration_ms: 6696.073292
+  ...
+# Subtest: record readiness recovery retains the completed review from a legacy receipt
+ok 61 - record readiness recovery retains the completed review from a legacy receipt
+  ---
+  duration_ms: 6374.502083
+  ...
+# Subtest: a legacy correction refusal resumes the fix stage after blockers clear and main moves
+not ok 62 - a legacy correction refusal resumes the fix stage after blockers clear and main moves
+  ---
+  duration_ms: 6930.812875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm watcher shutdown'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    TestContext.cleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:72:30)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a legacy dispatching refusal adopts only its existing correction after blockers clear
+not ok 63 - a legacy dispatching refusal adopts only its existing correction after blockers clear
+  ---
+  duration_ms: 5690.504209
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:93:59)
+    Object.record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:118:28)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/record-recovery.test.mjs:127:21
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: legacy refusal recovery rechecks identity before reviewing
+ok 64 - legacy refusal recovery rechecks identity before reviewing
+  ---
+  duration_ms: 1269.049
+  ...
+# Subtest: legacy refusal recovery rechecks head before reviewing
+ok 65 - legacy refusal recovery rechecks head before reviewing
+  ---
+  duration_ms: 1494.403375
+  ...
+# Subtest: legacy refusal recovery rechecks dirty before reviewing
+ok 66 - legacy refusal recovery rechecks dirty before reviewing
+  ---
+  duration_ms: 1334.294291
+  ...
+# Subtest: legacy refusal recovery rechecks report before reviewing
+ok 67 - legacy refusal recovery rechecks report before reviewing
+  ---
+  duration_ms: 1669.819583
+  ...
+# Subtest: legacy refusal recovery rechecks superseded before reviewing
+ok 68 - legacy refusal recovery rechecks superseded before reviewing
+  ---
+  duration_ms: 1821.575709
+  ...
+# Subtest: legacy refusal recovery rechecks blocked before reviewing
+ok 69 - legacy refusal recovery rechecks blocked before reviewing
+  ---
+  duration_ms: 1699.033084
+  ...
+# Subtest: unverified acceptance remains a terminal escalation on retry
+ok 70 - unverified acceptance remains a terminal escalation on retry
+  ---
+  duration_ms: 4217.4445
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: project cap counts completed reviews across fix runs and records the no-dispatch decision
+not ok 71 - project cap counts completed reviews across fix runs and records the no-dispatch decision
+  ---
+  duration_ms: 5710.976042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/round-cap.test.mjs:20:1'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    Object.settle (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:127:37)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/round-cap.test.mjs:22:43)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: a recorded item cap overrides the project and flag overrides persist on the item
+ok 72 - a recorded item cap overrides the project and flag overrides persist on the item
+  ---
+  duration_ms: 11244.366416
+  ...
+# Subtest: explicit correction after capped findings remains resumable under STOP
+ok 73 - explicit correction after capped findings remains resumable under STOP
+  ---
+  duration_ms: 6810.412375
+  ...
+# Subtest: zero item cap disables the project cap; worker starts without reviews do not consume rounds
+not ok 74 - zero item cap disables the project cap; worker starts without reviews do not consume rounds
+  ---
+  duration_ms: 5984.020333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/round-cap.test.mjs:70:1'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm watcher shutdown'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    TestContext.cleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:72:30)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cap reached still dispatches for Major or FAIL
+not ok 75 - cap reached still dispatches for Major or FAIL
+  ---
+  duration_ms: 5942.498791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/round-cap.test.mjs:78:1'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:91:15)
+    Object.settle (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/fixture.mjs:127:37)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/settle/test/round-cap.test.mjs:83:24)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cap cannot waive unverified claims or unparsed finding severity
+ok 76 - cap cannot waive unverified claims or unparsed finding severity
+  ---
+  duration_ms: 8954.819625
+  ...
+# Subtest: uncertain reviewer retries retain the cap snapshot and do not consume another completed round
+ok 77 - uncertain reviewer retries retain the cap snapshot and do not consume another completed round
+  ---
+  duration_ms: 6485.512792
+  ...
+# Subtest: cached capped findings and explicit correction recheck head and current run
+ok 78 - cached capped findings and explicit correction recheck head and current run
+  ---
+  duration_ms: 9026.217375
+  ...
+# Subtest: malformed cap config or flags are refused before review and dispatch
+ok 79 - malformed cap config or flags are refused before review and dispatch
+  ---
+  duration_ms: 1901.865833
+  ...
+# Subtest: capped decisions recover missing or lost record responses without repeating review or writing duplicate notes
+ok 80 - capped decisions recover missing or lost record responses without repeating review or writing duplicate notes
+  ---
+  duration_ms: 10801.462708
+  ...
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 81 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 581.918625
+  ...
+# Subtest: fix_round is left in flight
+ok 82 - fix_round is left in flight
+  ---
+  duration_ms: 407.716875
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 83 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 517.897041
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 84 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 574.63325
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 85 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 469.174083
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 86 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 421.319584
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 87 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 445.369833
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 88 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 440.68175
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 89 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 418.983083
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 90 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 421.504166
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 91 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 577.608583
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 92 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 428.538541
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 93 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 414.020583
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 94 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 414.872292
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 95 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 420.168666
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 96 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 432.208333
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 97 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 430.870917
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 98 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 417.278084
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 99 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 431.650542
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 100 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 428.284584
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 101 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 346.591916
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 102 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 345.503625
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 103 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 326.437041
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 104 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 343.603792
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 105 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 345.024458
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 106 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 327.208958
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 107 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 445.907208
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 108 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 437.175667
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 109 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 641.261833
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 110 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 342.798958
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 111 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 338.807625
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 112 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 358.703458
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 113 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 402.387125
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 114 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 401.29475
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 115 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 505.573292
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 116 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 575.283833
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 117 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 466.000125
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 118 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 509.385834
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 119 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 355.553458
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 120 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 388.356959
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 121 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 359.350125
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 122 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 346.579375
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 123 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 348.020834
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 124 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 379.196875
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 125 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 370.354708
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 126 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 374.958875
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 127 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 377.005583
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 128 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 358.240792
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 129 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 371.894875
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 130 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 410.250042
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 131 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 457.426333
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 132 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 684.105916
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 133 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 385.060625
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 134 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 452.008333
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 135 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 463.215208
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 136 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 492.159042
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 137 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 491.498291
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 138 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 497.874875
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 139 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 495.02425
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 140 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 474.731708
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 141 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 679.452417
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 142 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 318.640792
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 143 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 312.811917
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 144 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 588.2685
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 145 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 308.292375
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 146 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 323.500125
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 147 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 344.049166
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 148 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 355.265959
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 149 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 838.457334
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 150 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 621.8635
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 151 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 794.391667
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 152 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 485.575916
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 153 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 380.022792
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 154 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 651.343791
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 155 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1073.136166
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 156 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 974.928584
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 157 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 871.864458
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 158 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 813.515125
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 159 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 549.084833
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 160 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 5210.380875
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 161 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 6154.060791
+  ...
+# Subtest: real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+ok 162 - real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+  ---
+  duration_ms: 4676.367583
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 163 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 7421.570916
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+ok 164 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 8195.323667
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+ok 165 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 8011.022375
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+ok 166 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 7227.787416
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 167 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 7151.913084
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 168 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 8314.393667
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing:
+ok 169 - stderr-only failed action preserves refusal instead of JSON parsing:
+  ---
+  duration_ms: 455.786875
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 170 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 487.815791
+  ...
+1..170
+# tests 170
+# suites 0
+# pass 158
+# fail 12
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 334342.8075
+Surviving fixture: PID 82405, command /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-ingest-evidence/supervisor/prompt-supervisor.mjs --inbox /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-oTvShq/settle-test-j9NjpZ/project/.org/supervisor/inbox.log --owner-worker --settings {}. Files: settle/test/report-evidence.test.mjs, settle/test/test-evidence.test.mjs, settle/test/settle.test.mjs, settle/test/record-safety.test.mjs, settle/test/record-recovery.test.mjs, settle/test/round-cap.test.mjs, supervisor/test/autopilot.test.mjs

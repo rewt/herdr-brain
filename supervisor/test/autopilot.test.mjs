@@ -10,6 +10,7 @@ import { autopilotNotice } from '../autopilot.mjs';
 import { promptSupervisor, readInbox } from '../prompt-supervisor.mjs';
 import { noticeLock } from '../notice-lock.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM } from '../../settle/report-evidence.mjs';
 
 function setup(t, results = [], { ingest = true } = {}) {
   const f = fixture(t), run = f.start();
@@ -427,7 +428,23 @@ for (const withFindings of [false, true]) test(`actual handle and promotion comm
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
   assert.deepEqual(f.herdrCalls(), calls);
 });
-for (const [awaited, scopedTests] of [[false, false], [true, false], [false, true]]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}${scopedTests ? ' with deferred test evidence' : ''}`, { timeout: 30000 }, async t => {
+test('real handle still wakes for a non-test claim alongside ingest proof and deferred tests', t => {
+  const f = setup(t, [], { ingest: false }); f.commit('correct\n');
+  fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({
+    unverified: `- Test evidence not re-executed: checks.test.mjs\n${RECORD_CHECK_CLAIM}\n- Deployment evidence remains unresolved.` }));
+  const calls = [];
+  const handled = autopilotNotice(f.entry, { execute: (file, args) => {
+    calls.push(args);
+    const r = f.exec(process.execPath, [file, ...args]); assert.equal(r.status, 0, r.stderr); return r.stdout;
+  } });
+  assert.equal(handled.disposition, 'wake'); assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'handle');
+  const receipt = JSON.parse(fs.readFileSync(handled.receipt));
+  assert.equal(receipt.actions[0].result.result, 'escalate');
+  assert.match(receipt.actions[0].result.reason, /unverified claims/);
+  assert.equal(f.show(f.item).closed, null);
+});
+for (const [awaited, scopedTests, recordClaim] of [[false, false], [true, false], [false, true], [false, true, RECORD_CHECK_CLAIM], [false, true, LEGACY_RECORD_CHECK_CLAIM]]) test(`automatic PASS reaches the real queue, lands and closes ${awaited ? 'with one awaited wake' : 'without waking the supervisor'}${scopedTests ? ' with deferred test evidence' : ''}${recordClaim ? ` and ingest proof: ${recordClaim}` : ''}`, { timeout: 30000 }, async t => {
   const f = setup(t, [], { ingest: false }); f.commit('correct\n');
   if (scopedTests) {
     const marker = path.join(f.root, 'extra-test-runs');
@@ -437,7 +454,7 @@ for (const [awaited, scopedTests] of [[false, false], [true, false], [false, tru
     f.git(['rebase', 'main'], f.workspace);
     fs.writeFileSync(path.join(f.workspace, 'checks.test.mjs'), `import test from 'node:test'; import fs from 'node:fs'; test('additional evidence',()=>fs.appendFileSync(${JSON.stringify(marker)},'run\\n'));`);
     f.git(['add', 'checks.test.mjs'], f.workspace); f.git(['commit', '-qm', 'Add scoped release test'], f.workspace);
-    fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ unverified: '- Test evidence not re-executed: checks.test.mjs' }));
+    fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ unverified: '- Test evidence not re-executed: checks.test.mjs' + (recordClaim ? `\n${recordClaim}` : '') }));
   }
   if (awaited) f.record(['set', f.item, 'meta.notify=supervisor', 'meta.notify_step=Cut RC-11']);
   assert.equal(f.show(f.run).report, null, 'first notice has no immutable report');
@@ -463,6 +480,12 @@ for (const [awaited, scopedTests] of [[false, false], [true, false], [false, tru
     const plan = JSON.parse(fs.readFileSync(queue.results[0].receipt));
     assert.deepEqual(plan.attempts[0].test_plan.files, ['checks.test.mjs']);
     assert.equal(fs.readFileSync(path.join(f.root, 'extra-test-runs'), 'utf8'), 'run\n');
+    if (recordClaim) {
+      const settled = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${f.run}.json`)));
+      assert.equal(settled.result.report_ingest.sha256, f.show(f.run).report.sha256);
+      assert.ok(settled.review.text.includes(recordClaim.replaceAll('`', '\\`')));
+      assert.equal(settled.review.verdict, 'PASS');
+    }
   }
   const notices = readInbox(result.inbox); assert.equal(notices.length, 2);
   assert.equal(notices[0].state, 'handled');

@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { validateTree } from '../../lanes/validation.mjs';
 import { fixture } from './fixture.mjs';
 import { deferredTests, recordedTestEvidence, TEST_ESCALATION } from '../test-evidence.mjs';
+import { RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM } from '../report-evidence.mjs';
 const scoped = '- Test evidence not re-executed: checks.test.mjs';
 const result = r => { assert.equal(r.status, 0, r.stderr); return JSON.parse(r.stdout); };
 function setup(t, { planner = true, plannerSource = "import { files } from './coverage.mjs'; console.log(JSON.stringify({files}));\n", missingPlanner = false, unverified = scoped } = {}) {
@@ -31,6 +32,17 @@ test('only scoped test deferrals become promotable through the planned gate', t 
   const g = setup(t, { unverified: scoped + '\n- Acceptance evidence remains unresolved.' });
   assert.match(result(g.settle(g.run)).reason, /unverified claims/);
   assert.equal(deferredTests('- Test evidence not re-executed: ../checks.test.mjs', ''), null);
+});
+for (const claim of [RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM]) test(`test deferrals plus matching record-check proof use the bound path: ${claim}`, t => {
+  const f = setup(t, { unverified: `${scoped}\n${claim}` }), settled = result(f.settle(f.run));
+  assert.equal(settled.result, 'promotable'); assert.deepEqual(settled.test_evidence.files, ['checks.test.mjs']);
+  assert.equal(settled.report_ingest.sha256, f.show(f.run).report.sha256);
+  assert.ok(fs.readFileSync(settled.review.path, 'utf8').includes(claim.replaceAll('`', '\\`')));
+  const g = setup(t, { unverified: `${scoped}\n${claim}\n- The report claims a deployment without a receipt.` });
+  const refused = result(g.settle(g.run));
+  assert.equal(refused.result, 'escalate'); assert.match(refused.reason, /unverified claims/);
+  const uncovered = setup(t, { planner: false, unverified: `${scoped}\n${claim}` });
+  assert.equal(result(uncovered.settle(uncovered.run)).reason, TEST_ESCALATION);
 });
 for (const claimsCoverage of [false, true]) test(`lane-modified planner and imports cannot ${claimsCoverage ? 'invent' : 'shrink'} canonical coverage`, t => {
   const f = setup(t, claimsCoverage ? { plannerSource: "import { files } from './coverage.mjs'; console.log(JSON.stringify({files:[],covered:[]}));\n" } : {});

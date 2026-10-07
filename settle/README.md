@@ -46,6 +46,11 @@ report hash matches the captured report. A successful CLI exit alone is not a
 receipt: abandoned intake can skip the report with exit zero. Missing or different
 receipts receive a handoff before reopening, review or correction.
 Resuming a pending settlement and returning saved readiness repeat this check.
+Review briefs include the captured report path, immutable ingested path, SHA-256
+and passed ingest validation result. Ingest uses the same report validation as
+`record check`. Settle rechecks the supplied and ingested bytes against that hash
+before review and before deciding readiness. This verifies report validity;
+historical command execution and commit timing remain independent claims.
 Report-provided commands are
 never executed. Blocked, failed and needs-human reports are recorded and handed
 to the supervisor with their substance and recorded outcomes intact, without
@@ -71,7 +76,16 @@ test execution. Deferred promotion CI is a non-claim. If an acceptance requireme
 lacks code or report evidence, the reviewer names it under Unverified for a
 supervisor handoff. The brief supplies one exact inherited-validation
 acknowledgment that can also appear alone under Unverified; that scoped non-claim
-does not prevent readiness. Any additional Unverified entry does.
+does not prevent readiness. A whole `- Report record-check validation not independently executed.`
+entry is also discharged by a matching ingest receipt. The legacy whole entry
+about the report's `record check` lacking an in-repository receipt is recognized
+exactly as defined in [report-evidence.mjs](report-evidence.mjs) and receives the
+same treatment for its validation uncertainty. Added claims and
+other non-test entries still require a handoff. Scoped `- Test evidence not re-executed: path/to/file.test.mjs`
+entries in a PASS review with no findings follow the bound promotion path when
+the promotion test plan or recorded full-file re-execution covers every file.
+The independent review remains unchanged in the public record; the settlement
+receipt carries `report_ingest` separately from deferred test evidence.
 
 Settle commits only the validated public review record, after checking the exact
 reviewed HEAD and only that dirty path. `promotable` requires PASS, no remaining

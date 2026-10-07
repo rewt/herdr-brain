@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const MODULES = ['console', 'mcp'];
@@ -92,9 +92,15 @@ export function candidateCommand(stage, candidate, { env = process.env, skipLive
 }
 
 export function main(argv = process.argv.slice(2)) {
+  // Build-only candidates copy this driver and install.sh without lib/.
+  // Keep help local so those partial distributions remain self-contained.
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
-    candidate: { type: 'string' }, 'skip-live': { type: 'boolean' },
+    candidate: { type: 'string' }, 'skip-live': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
   } });
+  if (values.help) {
+    console.log('Usage: node herdr/release-candidate.mjs preflight|prepare|gate --candidate DIR [--skip-live (gate only)]\n\nOptions:\n  --candidate DIR\n  --skip-live (gate only)\n  -h, --help');
+    return;
+  }
   const stage = positionals[0];
   if (positionals.length !== 1 || !values.candidate || !['preflight', 'prepare', 'gate'].includes(stage) || stage !== 'gate' && values['skip-live']) throw new Error('usage: release-candidate.mjs preflight|prepare|gate --candidate DIR [--skip-live (gate only)]');
   const candidate = path.resolve(values.candidate);

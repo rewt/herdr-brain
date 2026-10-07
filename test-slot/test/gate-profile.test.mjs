@@ -13,10 +13,11 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const host = path.join(source, 'promote/host-gate.mjs');
 const slotCLI = path.join(source, 'test-slot/test-slot.mjs');
+const kernelLockOptions = { skip: !fs.existsSync('/bin/zsh') && 'external kernel-lock tests require /bin/zsh' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(fn) { for (let i = 0; i < 400; i++) { if (fn()) return; await pause(25); } assert.fail('fixture did not become ready'); }
 
-function fixture(t, changes = {}) {
+function fixture(t, { externalLock = false, ...changes } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-profile-'))), repo = path.join(root, 'repo');
   fixtureFleet(t, root);
   fs.mkdirSync(repo);
@@ -35,7 +36,8 @@ function fixture(t, changes = {}) {
   fs.writeFileSync(path.join(repo, 'prep.cjs'), `const fs=require('fs'),assert=require('assert/strict');assert(process.env.BCH_CLOAK_TEST_SLOT_TOKEN);assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token,process.env.BCH_CLOAK_TEST_SLOT_TOKEN);const lock=JSON.parse(fs.readFileSync('.promote.json')).gate.external_lock;if(lock){const r=require('child_process').spawnSync('/bin/zsh',['-f','-c','zmodload zsh/system; zsystem flock -t 0 -f fd "$1"','probe',lock]);assert.notEqual(r.status,0,'legacy kernel lock stays held during preparation');}fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/prepared','prepared');`);
   fs.writeFileSync(path.join(repo, 'gate.cjs'), `const fs=require('fs'),assert=require('assert/strict'),net=require('net');assert.equal(fs.readFileSync('dist/prepared','utf8'),'prepared');assert.equal(process.env.PROFILE_VALUE,'declared');assert.equal(process.env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS,'7200');assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token,process.env.BCH_CLOAK_TEST_SLOT_TOKEN);const fd=fs.openSync('/dev/ptmx','r+');fs.closeSync(fd);const s=net.createServer();s.listen(0,'127.0.0.1',()=>s.close(()=>fs.appendFileSync(process.env.PROFILE_EVIDENCE,JSON.stringify({node:process.execPath,version:process.version,token:process.env.BCH_CLOAK_TEST_SLOT_TOKEN})+'\\n')));`);
   const gate = { node_version_file: '.nvmrc', env: { PROFILE_VALUE: 'declared', BCH_CLOAK_TEST_SLOT_WAIT_SECONDS: '7200' },
-    prepare: [{ run: 'node prep.cjs' }], external_lock: path.join(root, 'promote.flock'), wait_seconds: 1, ...changes };
+    prepare: [{ run: 'node prep.cjs' }], wait_seconds: 1,
+    ...(externalLock ? { external_lock: path.join(root, 'promote.flock') } : {}), ...changes };
   const declare = () => { fs.writeFileSync(path.join(repo, '.promote.json'), JSON.stringify({ gate })); git(['add', '.']); git(['commit', '-qm', 'Profile']); };
   fs.writeFileSync(path.join(repo, '.lane.validation.json'), JSON.stringify({ promotion: 'node gate.cjs' })); declare();
   const lane = path.join(root, 'lane'); git(['worktree', 'add', '-qb', 'lane/profile', lane]);
@@ -62,7 +64,8 @@ async function holdSlot(t, f) {
 }
 
 test('project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration', t => {
-  const f = fixture(t); f.env.PROFILE_VALUE = 'caller';
+  const f = fixture(t, { prepare: [{ run: 'exit 9', unless: '.nvmrc' }, { run: 'node prep.cjs' }] });
+  f.env.PROFILE_VALUE = 'caller';
   const result = f.run(); assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(f.git(['rev-parse', 'main']), f.head);
   const evidence = JSON.parse(fs.readFileSync(f.env.PROFILE_EVIDENCE, 'utf8'));
@@ -70,13 +73,13 @@ test('project profile runs the pinned Node, real host sockets/PTY, preparation a
   const train = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(train.host_receipt, path.join(f.directory, 'host-gate.json'));
   assert.equal(train.results.job.outcome, 'promoted'); assert.equal(train.attempts[0].gate.exit_code, 0);
-  assert.equal(f.saved().external_lock.state, 'acquired'); assert.equal(f.slotSaved().state, 'acquired');
+  assert.equal(f.saved().external_lock, undefined); assert.equal(f.slotSaved().state, 'acquired');
   assert.equal(fs.existsSync(f.slot), false);
   assert.equal(fs.readFileSync(path.join(f.directory, 'host-gate.json'), 'utf8').includes('declared'), false, 'environment values stay out of receipts');
 });
 
-test('busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file', async t => {
-  const f = fixture(t), ready = path.join(f.root, 'ready');
+test('busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file', kernelLockOptions, async t => {
+  const f = fixture(t, { externalLock: true }), ready = path.join(f.root, 'ready');
   fs.writeFileSync(f.gate.external_lock, 'keep');
   const owner = spawnChild(t, '/bin/zsh', ['-f', '-c', 'zmodload zsh/system; zsystem flock -t 0 -f fd "$1" || exit 1; print ready > "$2"; read answer', 'holder', f.gate.external_lock, ready], { env: f.env, stdio: ['pipe', 'pipe', 'pipe'] });
   const done = waitForExit(owner);
@@ -91,8 +94,8 @@ test('busy legacy fcntl lock waits visibly, caps, preserves main, and releases w
   const resumed = f.run(); assert.equal(resumed.status, 0, resumed.stderr);
 });
 
-test('a released legacy lock admits the waiting train and stays held for the complete batch', async t => {
-  const f = fixture(t, { wait_seconds: 3 }), ready = path.join(f.root, 'ready');
+test('a released legacy lock admits the waiting train and stays held for the complete batch', kernelLockOptions, async t => {
+  const f = fixture(t, { externalLock: true, wait_seconds: 3 }), ready = path.join(f.root, 'ready');
   fs.writeFileSync(f.gate.external_lock, '');
   const owner = spawnChild(t, '/bin/zsh', ['-f', '-c', 'zmodload zsh/system; zsystem flock -t 0 -f fd "$1" || exit 1; print ready > "$2"; read answer', 'holder', f.gate.external_lock, ready], { env: f.env, stdio: ['pipe', 'pipe', 'pipe'] });
   await until(() => fs.existsSync(ready));
@@ -134,7 +137,13 @@ test('a capped resume preserves a lost fast-forward checkpoint and reconciles it
   const drain = () => spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   const slot = await holdSlot(t, f), capped = drain();
   await slot.release(); assert.equal(capped.status, 0, capped.stderr);
-  assert.equal(queue.load().results.at(-1).outcome, 'interrupted'); assert.equal(queue.load().interrupted.length, 1);
+  const cappedResult = queue.load().results.at(-1), hostReceipt = path.join(f.directory, 'host-gate.json');
+  assert.equal(cappedResult.outcome, 'interrupted'); assert.equal(queue.load().interrupted.length, 1);
+  assert.equal(cappedResult.host_receipt, hostReceipt);
+  assert.equal(queue.load().interrupted[0].results[0].result.host_receipt, hostReceipt);
+  assert.equal(JSON.parse(fs.readFileSync(hostReceipt)).phase, 'refused');
+  const notices = fs.readFileSync(path.join(f.repo, '.git/supervisor/inbox.log'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.ok(notices.some(entry => entry.message?.includes(`host-receipt=${hostReceipt}`)), 'interrupted notice links host refusal evidence');
   assert.equal(JSON.parse(fs.readFileSync(f.receipt)).attempts[0].phase, 'validated'); assert.equal(f.git(['rev-parse', 'main']), f.head);
   const resumed = drain(); assert.equal(resumed.status, 0, resumed.stderr);
   assert.equal(queue.load().results.at(-1).outcome, 'promoted', fs.readFileSync(path.join(f.directory, 'train.log'), 'utf8'));

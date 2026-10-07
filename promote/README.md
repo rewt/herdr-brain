@@ -141,8 +141,7 @@ train has no project names or package filters built into it:
     "env": { "BCH_CLOAK_TEST_SLOT_WAIT_SECONDS": "7200" },
     "prepare": [
       {
-        "run": "pnpm install --offline --ignore-scripts --frozen-lockfile",
-        "unless": "node_modules"
+        "run": "pnpm install --prefer-offline --ignore-scripts --frozen-lockfile"
       },
       {
         "run": "pnpm --filter @bch-cloak/reference-wallet --filter @bch-cloak/wizardconnect-client build"
@@ -162,6 +161,14 @@ and verifies that executable's version. Missing pins refuse before building.
 slot tokens. Profile preparation follows existing lane preparation in each
 scratch candidate, under the slot. Both preparations and the effective profile
 fingerprint salt green evidence; environment values are not written to receipts.
+
+Run dependency installs unconditionally for each scratch candidate. An existing
+`node_modules` directory can be stale after a rebase adds packages or changes the
+lockfile; an up-to-date install is a fast no-op. `--prefer-offline` reuses cached
+packages while allowing missing metadata or tarballs to be fetched, whereas
+`--offline` fails when the store lacks them. The optional relative `unless` path
+remains supported for preparation whose output stays valid whenever that path
+exists; do not use it to guard dependency installs.
 
 Start promotion from the supervisor's host shell. Detached children inherit
 their caller's sandbox; detaching does not grant host permissions. A declared

@@ -292,8 +292,10 @@ export async function drain(queue) {
           } catch (error) {
             const directory = path.join(queue.directory, 'batches', batch.id);
             const receipt = path.join(directory, 'train.json'), log = path.join(directory, 'train.log');
+            const hostReceipt = path.join(directory, 'host-gate.json');
             const results = batch.jobs.map(member => ({ job: member, result: {
               outcome: 'interrupted', reason: 'batch interrupted; inspect the receipt and log, then resume --drain', receipt, log, batch: batch.id,
+              ...(fs.existsSync(hostReceipt) ? { host_receipt: hostReceipt } : {}),
             } }));
             batch = { ...batch, phase: 'batch-delivering', error: error.message, results, deliveredCount: 0 };
           }

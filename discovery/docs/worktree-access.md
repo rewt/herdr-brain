@@ -1,5 +1,10 @@
 # Native worktree access evidence
 
+Historical ENG-242 evidence, inspected 2026-10-07.
+ENG-259 supersedes the supervisor lane-write restrictions below: supervisor and
+chat launches now receive their own worktree root as a write root. Worker and
+reviewer restrictions remain. See [current launch permissions](../README.md).
+
 ENG-242, inspected 2026-10-07. Installed native versions: Codex CLI **0.160.0**
 and Claude Code **2.1.292**. The installed PATH wrappers select these executables;
 no machine installation or activation was changed for this work.

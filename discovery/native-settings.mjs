@@ -33,7 +33,7 @@ function selectors(text, section = '') {
   return selected;
 }
 
-export function codexPermissionChoice(context, args, env) {
+export function codexPermissionChoice(context, args, env, { cliOnly = false } = {}) {
   const home = env.CODEX_HOME || process.env.CODEX_HOME || path.join(env.HOME || os.homedir(), '.codex');
   const files = ['/etc/codex/config.toml', path.join(home, 'config.toml')];
   const base = read(files[1]);
@@ -56,7 +56,7 @@ export function codexPermissionChoice(context, args, env) {
     const settings = { ...selectors(text), ...(file === files[1] && profile ? selectors(text, `profiles.${profile}`) : {}) };
     for (const key of ['sandbox_mode', 'default_permissions']) if (settings[key] !== undefined) values[key] = { setting: key, value: settings[key], source: file };
   }
-  let flag;
+  let flag, cliChoice;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     let config;
@@ -66,7 +66,7 @@ export function codexPermissionChoice(context, args, env) {
     // Codex also accepts bare CLI string values when TOML parsing fails.
     const bare = config?.match(/^\s*(sandbox_mode|default_permissions)\s*=\s*([\w:-]+)\s*$/u);
     if (config) for (const [setting, value] of Object.entries(bare ? { [bare[1]]: bare[2] } : selectors(config))) {
-      if (setting !== 'profile') values[setting] = { setting, value, source: `CLI ${arg}` };
+      if (setting !== 'profile') values[setting] = cliChoice = { setting, value, source: `CLI ${arg}` };
     }
     if (['-s', '--sandbox'].includes(arg)) flag = { setting: 'sandbox_mode', value: args[++i], source: `CLI ${arg}` };
     else if (arg.startsWith('--sandbox=')) flag = { setting: 'sandbox_mode', value: arg.slice(10), source: `CLI ${arg}` };
@@ -74,7 +74,7 @@ export function codexPermissionChoice(context, args, env) {
     else if (['--yolo', '--dangerously-bypass-approvals-and-sandbox'].includes(arg)) return { setting: 'sandbox_mode', value: 'danger-full-access', source: `CLI ${arg}` };
     else if (arg === '--full-auto') flag = { setting: 'sandbox_mode', value: 'workspace-write', source: 'CLI --full-auto' };
   }
-  return flag ?? values.sandbox_mode ?? values.default_permissions;
+  return cliOnly ? (flag ?? cliChoice) : (flag ?? values.sandbox_mode ?? values.default_permissions);
 }
 
 export function claudeSettingsSources(context, args, env) {

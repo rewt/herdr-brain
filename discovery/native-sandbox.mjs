@@ -10,6 +10,7 @@ import { checkedDirectory, within } from './paths.mjs';
 import { runTemporary, temporaryEnvironment } from './temporary.mjs';
 import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
+import { coordinatingRole, herdrControlSocket, socketProbeArguments } from './control-socket.mjs';
 
 export function nativeSessionContext(cwd) {
   const registry = readFleet();
@@ -20,7 +21,7 @@ export function nativeSessionContext(cwd) {
   if (excludedFleetRoot(git.canonical, registry)) return null;
   const { project, fleet } = projectFleet(cwd);
   if (!project) return null;
-  return { workspace: git.checkout, canonical: project.checkout, org: project.record,
+  return { workspace: git.checkout, canonical: project.checkout, identity: project.identity, org: project.record,
     tempRoot: project.temp, worktrees: project.worktrees, projects: Object.values(fleet.projects).filter(p => p.identity !== project.identity) };
 }
 
@@ -119,6 +120,9 @@ function claudeSocketDirectories(temporary, warn) {
 }
 
 export function nativeSandboxLaunch({ kind, binary, args, context, env = process.env, warn = console.error }) {
+  const coordinating = coordinatingRole(context.role);
+  if (coordinating && checkedDirectory(context.workspace) !== checkedDirectory(context.canonical))
+    throw new Error('coordinating launches require the canonical checkout');
   // A raw directory flag would bypass canonical project selection. Native
   // operator config remains the place to extend the session's write roots.
   const extra = directories(context, kind);
@@ -130,10 +134,15 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     if (roots.some(root => within(root, peerRoot) || within(peerRoot, root))) throw new Error(`overlapping fleet project paths: ${directory}; use separate checkout, record, worktrees and temp areas`);
   }
   const coordination = path.join(checkedDirectory(context.canonical), '.lane');
-  const protectedPaths = context.role === 'supervisor' ? [] : [...new Set([coordination, path.join(coordination, 'discovery')].flatMap(directory => [directory, resolvedPath(directory)]))];
+  const protectedPaths = coordinating ? [] : [...new Set([coordination, path.join(coordination, 'discovery')].flatMap(directory => [directory, resolvedPath(directory)]))];
   if (context.requests && protectedPaths.some(root => within(root, resolvedPath(context.requests)))) throw new Error('request queue must be outside canonical coordination state');
   if (extra.some(directory => protectedPaths.some(root => within(root, directory)))) throw new Error('extra directories cannot grant worker writes inside canonical coordination state');
   const choice = kind === 'codex' ? codexPermissionChoice(context, args, env) : null;
+  const explicitChoice = kind === 'codex' && coordinating ? codexPermissionChoice(context, args, env, { cliOnly: true }) : null;
+  const conflict = explicitChoice ?? (choice?.setting === 'sandbox_mode' ? choice : null);
+  if (coordinating && conflict)
+    throw new Error(`coordinating ${kind} launch requires the generated permission profile; remove ${conflict.setting}=${JSON.stringify(conflict.value)} from ${conflict.source} (legacy sandbox selectors take precedence over native permission profiles)`);
+  const controlSocket = coordinating ? herdrControlSocket(env) : null;
   const requestedArgs = args;
   const selectedArgs = [];
   const checkExtra = directory => {
@@ -151,6 +160,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
   const close = () => removePlainDirectory(temporary);
   try {
     const environment = { ...env, ...temporaryEnvironment(temporary, env) };
+    if (controlSocket) environment.HERDR_SOCKET_PATH = controlSocket;
     const help = spawnSync(binary, ['--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
     const version = kind === 'claude' ? spawnSync(binary, ['--version'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 }) : null;
     const claudeVersion = version?.stdout?.match(/\b(\d+)\.(\d+)\.(\d+)\b/u)?.slice(1).map(Number);
@@ -159,10 +169,11 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     const claudeSupported = claudeVersion && (claudeVersion[0] > 2 || (claudeVersion[0] === 2 && (claudeVersion[1] > 1 || (claudeVersion[1] === 1 && claudeVersion[2] >= 284))));
     const supported = help.status === 0 && (kind === 'codex' ? /--sandbox\b/u.test(help.stdout) && /--add-dir\b/u.test(help.stdout) : /--settings\b/u.test(help.stdout) && version.status === 0 && claudeSupported);
     if (!supported) {
+      if (coordinating) throw new Error(`${kind} has no supported native sandbox options for a coordinating launch`);
       warn(`monitor sandbox: WARNING: ${kind} has no supported native sandbox options; session is unconfined`);
       return { binary, args, env: environment, close };
     }
-    const writable = [...new Set([context.org, context.requests, temporary, ...extra].filter(Boolean).map(checkedDirectory))];
+    const writable = [...new Set([context.org, context.requests, temporary, ...(coordinating ? [context.worktrees] : []), ...extra].filter(Boolean).map(checkedDirectory))];
     if (kind === 'codex') {
       if (args.some(arg => ['--remote', '--worktree'].includes(arg) || /^(--remote=|--worktree=)/u.test(arg))) throw new Error('native sandbox launch cannot use a remote server or different worktree');
       // Folder trust is independent of the tool sandbox. Linked worktrees use
@@ -175,18 +186,34 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
         [...new Set([context.canonical, context.workspace].map(checkedDirectory))]
           .map(directory => [directory, { trust_level: 'trusted' }])))}`];
       args = [...args, ...trustArgs];
-      if (choice) {
+      if (choice && !coordinating) {
         warn(`monitor sandbox: WARNING: ${choice.setting}=${JSON.stringify(choice.value)} from ${choice.source} selects the operator's native policy instead of generated project confinement`);
         return { binary, args: [...requestedArgs, ...trustArgs], env: environment, close };
       }
       const provider = spawnSync(binary, ['sandbox', '--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
       if (provider.status === 0 && /--permission-profile\b/u.test(provider.stdout)) {
-        const filesystem = { ':root': 'read', ':workspace_roots': { '.': 'write', '.git': 'read', ...(context.role === 'supervisor' ? {} : { '.lane': 'read' }), '.codex': 'read', '.claude': 'read' },
+        if (choice) warn(`monitor sandbox: WARNING: coordinating role uses its generated permission profile instead of ${choice.setting}=${JSON.stringify(choice.value)} from ${choice.source}`);
+        // Native configuration layers merge tables. A fresh name prevents a
+        // persistent profile's roots, inheritance or sockets widening this one.
+        const profile = coordinating ? `monitor-coordinator-${path.basename(temporary)}` : 'monitor-worker';
+        const filesystem = { ':root': 'read', ':workspace_roots': { '.': 'write', '.git': 'read', ...(coordinating ? {} : { '.lane': 'read' }), '.codex': 'read', '.claude': 'read' },
           ...Object.fromEntries(writable.map(directory => [directory, 'write'])), ...Object.fromEntries(protectedPaths.map(directory => [directory, 'read'])) };
-        return { binary, args: [...args, '-c', 'default_permissions="monitor-worker"',
-          '-c', `permissions.monitor-worker.filesystem=${toml(filesystem)}`,
-          '-c', 'permissions.monitor-worker.network.enabled=true'], env: environment, close };
+        const permissions = ['-c', `default_permissions=${JSON.stringify(profile)}`,
+          ...(coordinating ? ['-c', `permissions.${profile}=${toml({ filesystem,
+            network: { enabled: true, unix_sockets: { [controlSocket]: 'allow' } } })}`,
+          '-c', 'features.network_proxy=true'] : ['-c', `permissions.${profile}.filesystem=${toml(filesystem)}`,
+          '-c', `permissions.${profile}.network.enabled=false`])];
+        if (controlSocket) {
+          const probe = spawnSync(binary, ['sandbox', '--permission-profile', profile,
+            ...(/--include-managed-config\b/u.test(provider.stdout) ? ['--include-managed-config'] : []),
+            '-C', context.workspace, ...permissions, '--', process.execPath, ...socketProbeArguments(controlSocket)],
+          { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 10000 });
+          if (probe.error || probe.status !== 0)
+            throw new Error(`Codex native permission profile cannot reach Herdr control socket ${controlSocket}: ${(probe.stderr || probe.error?.message || `probe exited ${probe.status}`).trim()}`);
+        }
+        return { binary, args: [...args, ...permissions], env: environment, close };
       }
+      if (coordinating) throw new Error('coordinating Codex launches require native permission-profile support for scoped Unix sockets');
       if (protectedPaths.some(directory => within(context.workspace, directory) && fs.existsSync(directory))) throw new Error('this Codex build cannot protect canonical coordination receipts in a main-mode worker; use native permission-profile support');
       return { binary, args: [...args, '-c', 'sandbox_mode="workspace-write"',
         '-c', `sandbox_workspace_write.writable_roots=${JSON.stringify(writable)}`,
@@ -205,18 +232,20 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       sources.push({ source: inline ? 'CLI --settings JSON' : path.resolve(context.workspace, value), settings: supplied });
       settings = merge(settings, supplied);
     }
-    const socketDirectories = claudeSocketDirectories(temporary, warn);
+    const socketDirectories = [...claudeSocketDirectories(temporary, warn), ...(controlSocket ? [controlSocket] : [])];
     // --add-dir grants file edits as well as reads. Keep working directories
     // to cwd and private run temp; scoped Read rules prevent the outside-read
     // prompt without turning the shared lane root into an edit capability.
     const workingDirectories = [temporary];
     const readable = [...new Set([context.worktrees, ...writable].filter(Boolean).map(checkedDirectory))];
-    const otherLanes = [...new Set(otherLanePaths(context))];
+    const otherLanes = coordinating ? [] : [...new Set(otherLanePaths(context))];
     if (writable.some(directory => otherLanes.some(root => within(root, directory) || within(directory, root))))
       throw new Error('extra directories cannot grant writes to sibling lanes or the shared worktree root');
     const warnings = [];
     const approved = [checkedDirectory(context.workspace), ...writable];
     for (const { source, settings: loaded } of sources) {
+      if (source === path.join(context.canonical, '.claude/settings.local.json') && loaded.sandbox?.network?.allowUnixSockets?.length)
+        warn(`monitor sandbox: WARNING: bridge socket grant in ${source}; coordinating roles now receive a per-launch grant; remove the bridge with grant-herdr-socket.mjs --remove`);
       if (loaded.sandbox?.excludedCommands?.length) warnings.push(`sandbox.excludedCommands from ${source}`);
       for (const [key, grants] of [['permissions.additionalDirectories', loaded.permissions?.additionalDirectories], ['sandbox.filesystem.allowWrite', loaded.sandbox?.filesystem?.allowWrite]]) {
         if (grants?.some(directory => !approved.some(root => within(root, resolvedPath(path.resolve(context.workspace, directory.replace(/^~(?=\/)/u, environment.HOME || process.env.HOME))))))) warnings.push(`${key} from ${source}`);
@@ -262,7 +291,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     settings.permissions = { ...settings.permissions,
       allow: [...new Set([...(settings.permissions?.allow ?? []), ...readable.map(directory => `Read(/${directory}/**)`), ...writable.map(directory => `Edit(/${directory}/**)`)])],
       deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.map(directory => `Edit(/${directory}/**)`)])] };
-    if (context.worktrees) {
+    if (context.worktrees && !coordinating) {
       const quote = value => `'${value.replace(/'/gu, `'"'"'`)}'`;
       const command = [process.execPath, fileURLToPath(new URL('./lane-file-access.mjs', import.meta.url)),
         checkedDirectory(context.workspace), checkedDirectory(context.worktrees)].map(quote).join(' ');

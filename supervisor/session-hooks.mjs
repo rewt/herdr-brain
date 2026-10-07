@@ -18,7 +18,7 @@ export function sessionEnvironment(context, root, env = process.env) {
     MONITOR_SUPERVISOR_REPO: context.role === 'supervisor' ? context.canonical : '',
     MONITOR_SUPERVISOR_IDENTITY: context.role === 'supervisor' ? context.identity : '',
     MONITOR_SUPERVISOR_ORG: context.role === 'supervisor' ? context.org : '',
-    MONITOR_SUPERVISOR_AGENT: context.role === 'supervisor' ? (context.agent || env.MONITOR_SUPERVISOR_AGENT || env.HERDR_AGENT_NAME || '') : '',
+    MONITOR_SUPERVISOR_AGENT: context.role === 'supervisor' ? (context.agent || env.MONITOR_SUPERVISOR_AGENT || env.HERDR_AGENT_NAME || '') : context.role === 'chat' ? (env.MONITOR_SUPERVISOR_AGENT || '') : '',
     MONITOR_SUPERVISOR_ENTRY: context.role === 'supervisor' ? path.join(root, 'supervisor/session-start.mjs') : '' };
   try { rememberSupervisor(context, result); }
   catch (e) { process.stderr.write(sanitizeTerminal(`Supervisor entry binding: ${e.message}; session may continue.\n`)); }

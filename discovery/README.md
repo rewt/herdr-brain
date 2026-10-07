@@ -119,7 +119,7 @@ Harness and recipient options apply to new chats; reopening retains the existing
 session and its recipient. Close its tab before selecting a different launch.
 
 Chats start the installed `monitor-codex` or `monitor-claude` with
-`--role supervisor --repo PROJECT` in the project's canonical checkout, and
+`--role chat --repo PROJECT` in the project's canonical checkout, and
 register a distinct `chat-` agent name derived from its Git common directory.
 Harness selection follows the plugin supervisor default; `--kind` or a project
 `--route NAME` overrides it. Project routing layers supply launch arguments and
@@ -284,10 +284,11 @@ supervisor can read a lane report under the default
 outside-working-directories dialog. Only the private run temp is added with
 `--add-dir`; the checkout remains the primary working directory. Record, request
 and explicitly configured writes use scoped Edit rules and sandbox write roots.
-The supervisor receives native Edit and shell-write denies for the shared lane
-root. A worker receives matching denies for sibling entries discovered at launch,
+Supervisor and chat roles receive scoped Edit and shell-write grants for their
+own project's worktree root, so they can create and dispatch lanes. They also
+retain writes to canonical `.lane` coordination state. A worker or reviewer receives matching denies for sibling entries discovered at launch,
 including resolved paths and siblings in nested worktree layouts. A generated
-native PreToolUse hook also rejects cross-lane Edit/Write/NotebookEdit targets
+native PreToolUse hook for workers and reviewers also rejects cross-lane Edit/Write/NotebookEdit targets
 resolved at tool time, covering lanes created after launch and symlink aliases.
 It leaves reads and ordinary edit approvals to native policy. Configured write
 roots overlapping sibling entries are refused. Existing peer and worker
@@ -305,17 +306,26 @@ policy. No persistent Codex trust record or Claude settings file is rewritten.
 Unknown/unsupported builds retain the existing visible warning. Version evidence
 and proof limits are in [worktree access](docs/worktree-access.md).
 
-An inherited or CLI Codex permission selector is respected, including
-`sandbox_mode`, configuration profiles and `--yolo`. One visible warning names
-the selected setting and its file or CLI source. Claude keeps user, project,
+Workers and reviewers respect inherited or CLI Codex permission selectors,
+including `sandbox_mode`, configuration profiles and `--yolo`; one warning names
+the setting and its file or CLI source. Coordinating roles require the generated
+`monitor-coordinator-r-XXXXXX` permission profile. An inherited `default_permissions`
+selection is replaced for this launch with a source-naming warning; explicit CLI
+permission selectors and any inherited `sandbox_mode` refuse the launch with
+the setting and source to remove. Codex's legacy selectors take precedence over
+permission profiles, so a per-launch profile cannot override them. No native
+configuration file is rewritten. Claude keeps user, project,
 local and supplied settings, including command exclusions, additional directories
 and filesystem write grants; one warning names settings and sources that weaken
 the generated policy. Native settings and hooks keep their harness behavior.
 These explicit native choices can weaken confinement. Overlapping fleet areas
 are refused before either harness launches, including peers nested beneath a
 checkout, record, worktree area or temp root.
-An explicit `--role supervisor` always uses the canonical checkout and its existing
-supervisor workflow, unless the project opts out.
+Explicit `--role supervisor` and `--role chat` use the canonical checkout, unless
+the project opts out. Chats carry `MONITOR_SESSION_ROLE=chat` and keep their ops
+notice recipient, without supervisor entry hooks or housekeeping. An interactive
+resume preserves the existing session role; headless and utility children do
+not gain coordinating permissions from their parent session.
 
 Each launch and validation step creates `<fleet-project-temp>/r-XXXXXX` with mode
 0700 and exports `TMPDIR`, `TMP` and `TEMP`. Both harnesses also export
@@ -345,14 +355,40 @@ inspected, belongs to the current user and is not writable by group or others.
 A missing, unreadable, redirected or unsafe fallback produces one warning and
 launch continues with only the run-temp grant. On macOS the
 native runtime uses directory subpath rules for both bind and connect. Sibling
-run paths, other fleet projects and Herdr's control socket get no generated
-socket grant, including through symlinks. The fallback is shared by Claude
+run paths and other fleet projects get no generated socket grant, including
+through symlinks. Workers and reviewers also get no generated Herdr grant. The fallback is shared by Claude
 sessions of the same user; sockets placed there have no per-run separation.
 A fleet temp root short enough to keep `<run-temp>/claude-<uid>` within 44 bytes
 avoids that shared allowance. Monitor does not grant all of `/tmp` or the fleet
 temp parent. On Linux native `allowUnixSockets` is ignored because seccomp cannot
 filter socket paths; Monitor does not enable `allowAllUnixSockets` to work around
 that limitation.
+
+Supervisor and chat launches resolve `HERDR_SOCKET_PATH`, falling back to
+`~/.config/herdr/herdr.sock`, to its real path. The endpoint must be a Unix
+socket owned by the current user; neither an endpoint named `herdr-client.sock`
+nor an alias to it is accepted. A bounded connect probe sends no Herdr request
+and refuses a missing, unsafe or unreachable control socket with its path and
+reason before handing over to the harness. Claude adds only that resolved
+endpoint to the per-launch `sandbox.network.allowUnixSockets` array.
+Codex adds it to `permissions.<coordinator-profile>.network.unix_sockets` with
+`allow` and enables Codex's built-in `features.network_proxy` for enforcement;
+this is native harness configuration, with no Monitor broker or service. It
+also verifies the connection inside the generated native permission profile,
+including managed requirements when supported. Codex's generated worker and
+review profiles keep direct network access off, because enabling it without
+native network enforcement permits arbitrary Unix sockets. Explicit worker
+policy selection remains the operator's choice (ENG-230).
+The [native permission contract](https://learn.chatgpt.com/docs/permissions)
+explains the rule map, enforcement feature and legacy-selector precedence.
+On Linux, path-scoped Claude Unix socket rules remain unsupported as described
+above; a generated path does not prove OS enforcement there.
+
+A socket grant found in the canonical `.claude/settings.local.json` produces a
+warning naming that exact file and `grant-herdr-socket.mjs --remove`. The
+operator's temporary bridge is redundant for newly launched coordinating
+sessions; existing chats and adopted prototypes need to be restarted to receive
+the new role and per-launch permissions. Monitor never edits the local file.
 
 Supplied CLI socket arrays are merged and deduplicated in the generated file.
 Inherited user, project, local and managed arrays stay in their original scopes

@@ -164,7 +164,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     fs.accessSync(adapter, fs.constants.X_OK);
     for (const [key, value] of Object.entries({ ORG_DIR: project.record, ORG_ACTOR: chat, HERDR_AGENT_NAME: chat,
       HERDR_MONITOR_FLEET: home, MONITOR_SUPERVISOR_AGENT: ops, MONITOR_SESSION_KIND: 'chat',
-      MONITOR_SESSION_ROLE: 'supervisor', MONITOR_ENTRY_BYPASS: '0', MONITOR_REQUEST_DIR: '', MONITOR_RUNTIME_DIR: '',
+      MONITOR_SESSION_ROLE: 'chat', MONITOR_ENTRY_BYPASS: '1', MONITOR_REQUEST_DIR: '', MONITOR_RUNTIME_DIR: '',
       MONITOR_WORKTREE_ROOT: '', LANE_CONFIG: '', HERDR_PLUGIN_CONTEXT_JSON: '', HERDR_PLUGIN_ROOT: '' })) pairs.set(key, value);
     const environment = [...pairs].flatMap(([key, value]) => ['--env', `${key}=${value}`]);
     let created;
@@ -188,7 +188,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     const clean = ['MONITOR_REQUEST_DIR', 'MONITOR_RUNTIME_DIR', 'MONITOR_WORKTREE_ROOT', 'LANE_CONFIG', 'HERDR_PLUGIN_CONTEXT_JSON', 'HERDR_PLUGIN_ROOT'];
     const started = `chat-started-${randomBytes(24).toString('hex')}`;
     const command = ['/usr/bin/env', ...clean.flatMap(key => ['-u', key]),
-      adapter, '--repo', project.checkout, '--role', 'supervisor', '--', ...native].map(quote).join(' ');
+      adapter, '--repo', project.checkout, '--role', 'chat', '--', ...native].map(quote).join(' ');
     herdr(['pane', 'run', receipt.pane, ['/bin/sh', '-c', `${markerCommand(started)}; exec ${command}`].map(quote).join(' ')]);
     const detectionDeadline = now() + startupMs;
     let detected, verified = false;

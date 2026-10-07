@@ -4,13 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import net from 'node:net';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { joinFleet } from '../../lib/fleet.mjs';
 import { command } from '../runtime.mjs';
 import { runTemporary, temporaryEnvironment } from '../temporary.mjs';
 import { nativeSandboxLaunch, nativeSession } from '../native-sandbox.mjs';
 import { toml } from '../confinement.mjs';
+import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
 
 const projectTrust = directories => `projects=${toml(Object.fromEntries([...new Set(directories)].map(directory => [directory, { trust_level: 'trusted' }])))}`;
 
@@ -22,6 +22,10 @@ function fixture(t, fallbackState = 'owned') {
   for (const directory of [...Object.values(own), ...Object.values(other)]) fs.mkdirSync(directory);
   const context = { workspace: own.checkout, canonical: own.checkout, org: own.record, tempRoot: own.temp, worktrees: own.worktrees, projects: [other] };
   const binary = path.join(root, 'native');
+  const socket = fakeControlSocket(t, root);
+  const beforeSocket = process.env.HERDR_SOCKET_PATH;
+  process.env.HERDR_SOCKET_PATH = socket;
+  t.after(() => { if (beforeSocket === undefined) delete process.env.HERDR_SOCKET_PATH; else process.env.HERDR_SOCKET_PATH = beforeSocket; });
   fs.writeFileSync(binary, '#!/bin/sh\nif [ "$1" = --help ] || [ "$2" = --help ]; then echo "--sandbox --add-dir --settings --permission-profile"; elif [ "$1" = --version ]; then echo "2.1.284"; fi\n', { mode: 0o755 });
   const codexHome = path.join(root, 'codex'); fs.mkdirSync(codexHome);
   const claudeHome = path.join(root, 'claude'); fs.mkdirSync(claudeHome);
@@ -54,7 +58,7 @@ function fixture(t, fallbackState = 'owned') {
     if (fallbackState === 'denied') throw Object.assign(new Error(`EPERM: operation not permitted, open '${fallback}'`), { code: 'EPERM' });
     return open.call(this, standIn, ...args);
   });
-  return { root, own, other, context, binary, fallback, fallbackInspections: () => fallbackInspections };
+  return { root, own, other, context, binary, socket, fallback, fallbackInspections: () => fallbackInspections };
 }
 
 test('headless tasks and resumes get a sandbox even when prompt text names a utility', () => {
@@ -355,11 +359,11 @@ test('Codex respects inherited and CLI sandbox choices with one source-naming wa
   assert.deepEqual(launch.args.slice(0, args.length), args); assert.equal(warnings.length, 1); assert.ok(warnings[0].includes(profile));
 });
 
-test('both roles receive read-only lane access and launch-only trust for fleet worktrees', t => {
+test('roles receive scoped lane access and launch-only trust for fleet worktrees', t => {
   const f = fixture(t), workspace = path.join(f.own.worktrees, 'lane-worker'); fs.mkdirSync(workspace);
   const codexFile = path.join(process.env.CODEX_HOME, 'config.toml');
   const claudeFile = path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json');
-  const codexSettings = `sandbox_mode="workspace-write"\n[projects.${JSON.stringify(f.own.checkout)}]\ntrust_level="untrusted"\n`;
+  const codexSettings = `default_permissions=":workspace"\n[projects.${JSON.stringify(f.own.checkout)}]\ntrust_level="untrusted"\n`;
   const claudeSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true }, sandbox: { filesystem: { denyRead: [f.root] } } });
   fs.writeFileSync(codexFile, codexSettings); fs.writeFileSync(claudeFile, claudeSettings);
   for (const role of ['worker', 'supervisor']) for (const kind of ['claude', 'codex']) {
@@ -373,9 +377,9 @@ test('both roles receive read-only lane access and launch-only trust for fleet w
       const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
       assert.deepEqual(settings.sandbox.filesystem.allowRead, expected);
       assert.ok(settings.permissions.allow.includes(`Read(/${f.own.worktrees}/**)`));
-      assert.ok(!settings.permissions.allow.includes(`Edit(/${f.own.worktrees}/**)`));
+      assert.equal(settings.permissions.allow.includes(`Edit(/${f.own.worktrees}/**)`), role === 'supervisor');
       assert.equal(settings.permissions.blockReadsOutsideWorkingDirectories, undefined, 'no global read-block override');
-      assert.ok(!settings.sandbox.filesystem.allowWrite.includes(f.own.worktrees), 'no explicit worktree-root write grant');
+      assert.equal(settings.sandbox.filesystem.allowWrite.includes(f.own.worktrees), role === 'supervisor');
       for (const directory of Object.values(f.other)) {
         assert.ok(!directories.includes(directory));
         assert.ok(settings.sandbox.filesystem.denyWrite.includes(directory));
@@ -383,7 +387,7 @@ test('both roles receive read-only lane access and launch-only trust for fleet w
     } else {
       const trust = launch.args.filter(arg => arg.startsWith('projects='));
       assert.deepEqual(trust, [projectTrust([f.own.checkout, context.workspace])]);
-      assert.ok(!launch.args.some(arg => arg.startsWith('permissions.')), 'the inherited sandbox selector stays in control');
+      assert.equal(launch.args.some(arg => arg.startsWith('permissions.')), role === 'supervisor', 'coordinators get a generated profile, workers retain the inherited selector');
     }
     assert.equal(fs.readFileSync(codexFile, 'utf8'), codexSettings);
     assert.equal(fs.readFileSync(claudeFile, 'utf8'), claudeSettings);
@@ -397,15 +401,16 @@ test('Claude denies sibling lanes and rejects configured lane write grants', t =
   const siblings = [path.join(f.own.worktrees, 'lane-sibling'), path.join(parent, 'sibling')];
   fs.mkdirSync(workspace, { recursive:true });
   for (const directory of siblings) fs.mkdirSync(directory);
-  for (const role of ['worker','supervisor']) {
-    const launch = nativeSandboxLaunch({kind:'claude',binary:f.binary,args:[],context:{...f.context,role,workspace:role==='worker'?workspace:f.own.checkout}});
+  for (const role of ['worker','review','supervisor','chat']) {
+    const launch = nativeSandboxLaunch({kind:'claude',binary:f.binary,args:[],context:{...f.context,role,workspace:['worker','review'].includes(role)?workspace:f.own.checkout}});
     t.after(launch.close);
     const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1]));
-    const denied = role==='worker'?siblings:[f.own.worktrees];
+    const denied = ['worker','review'].includes(role)?siblings:[];
     for (const directory of denied) {
       assert.ok(settings.sandbox.filesystem.denyWrite.includes(directory));
       assert.ok(settings.permissions.deny.includes(`Edit(/${directory}/**)`));
     }
+    assert.equal(settings.sandbox.filesystem.allowWrite.includes(f.own.worktrees), ['supervisor','chat'].includes(role));
     assert.ok(!settings.sandbox.filesystem.denyWrite.includes(workspace));
     assert.deepEqual(launch.args.filter((_,i)=>launch.args[i-1]==='--add-dir'), [launch.env.TMPDIR]);
   }
@@ -419,7 +424,7 @@ test('Claude native file hook denies late siblings and aliases without approving
   const f = fixture(t), workspace = path.join(f.own.worktrees, "own 'lane"), existing = path.join(f.own.worktrees, 'sibling');
   fs.mkdirSync(workspace); fs.mkdirSync(existing);
   const hooks = {PreToolUse:[{matcher:'Bash',hooks:[{type:'command',command:'existing-hook'}]}]};
-  for (const role of ['worker','supervisor']) {
+  for (const role of ['worker']) {
     const cwd = role==='worker'?workspace:f.own.checkout;
     const launch = nativeSandboxLaunch({kind:'claude',binary:f.binary,args:['--settings',JSON.stringify({hooks})],context:{...f.context,role,workspace:cwd}});
     t.after(launch.close);
@@ -504,7 +509,7 @@ test('native Codex config reader accepts dotted and quoted launch trust without 
   assert.equal(fs.readFileSync(configFile, 'utf8'), config);
 });
 
-test('Claude 2.1.292 native permissions prevent the supervisor read prompt and deny sibling file writes', {
+test('Claude 2.1.292 native permissions prevent read prompts and confine sibling file writes by role', {
   skip: !process.env.MONITOR_TEST_CLAUDE_READ && 'set MONITOR_TEST_CLAUDE_READ for the offline native permission check',
 }, t => {
   const f = fixture(t), binary = process.env.MONITOR_TEST_CLAUDE_READ;
@@ -552,7 +557,7 @@ try {
       const denied = edit({name,getPath:i=>i.file_path}, {file_path:file}, {
         ...permissions, mode, alwaysAllowRules:{cliArg:[...permissions.alwaysAllowRules.cliArg, 'Edit', 'Edit(/' + input.worktrees + '/**)']},
       });
-      assert.equal(denied.behavior, 'deny', name + ':' + mode + ':' + file);
+      assert.equal(denied.behavior, input.role === 'supervisor' ? 'allow' : 'deny', name + ':' + mode + ':' + file);
       assert.equal(denied.decisionReason.type, 'rule');
     }
   }
@@ -564,7 +569,7 @@ try {
   // Explicit user read blocks/denies retain native precedence.
   assert.equal(read(tool, args, {...permissions,blockReadsOutsideWorkingDirectories:true}).behavior, 'deny');
   assert.equal(read(tool, args, {...permissions,alwaysDenyRules:{cliArg:[...input.settings.permissions.deny,'Read(/'+input.worktrees+'/**)']}}).behavior, 'deny');
-  console.log('native read prompt and sibling Edit/Write/NotebookEdit denial passed');
+  console.log('native read prompt and role-specific Edit/Write/NotebookEdit boundaries passed');
   process.exit(0);
 } catch (error) { console.error(error); process.exit(1); }
 `);
@@ -581,7 +586,7 @@ try {
     const result = spawnSync(binary, ['--version'], {cwd:context.workspace,
       env:{...launch.env,HOME:f.root,MONITOR_READ_PROBE:input,BUN_OPTIONS:`--preload ${preload}`}, encoding:'utf8',timeout:10000});
     assert.equal(result.status, 0, result.stdout+result.stderr);
-    assert.match(result.stdout, /native read prompt and sibling Edit\/Write\/NotebookEdit denial passed/u);
+    assert.match(result.stdout, /native read prompt and role-specific Edit\/Write\/NotebookEdit boundaries passed/u);
   }
 });
 
@@ -786,36 +791,24 @@ fs.writeFileSync(${JSON.stringify(observations)},JSON.stringify({temp:env.TMPDIR
   for (const directory of Object.values(f.other)) assert.ok(!filesystem.includes(directory));
 });
 
-test('real Codex native roots deny another project checkout, record and temp including symlinks', {
+test('real Codex native roots deny peer writes and worker control-socket access including symlinks', {
   skip: !process.env.MONITOR_TEST_SANDBOX && 'set MONITOR_TEST_SANDBOX for the offline native boundary probe',
-}, async t => {
+}, t => {
   const f = fixture(t), binary = process.env.MONITOR_TEST_SANDBOX;
   const launch = nativeSandboxLaunch({ kind: 'codex', binary, args: [], context: f.context }); t.after(launch.close);
   const targets = [f.other.checkout, f.other.record, f.other.temp];
-  const socket = path.join(f.root, 'herdr.sock');
-  let notice;
-  const notified = new Promise(resolve => { notice = resolve; });
-  const server = net.createServer(client => { client.on('error', () => {}); client.once('data', data => { notice(data.toString()); client.end(); }); });
-  await new Promise(resolve => server.listen(socket, resolve));
-  t.after(() => new Promise(resolve => server.close(resolve)));
   fs.symlinkSync(f.other.checkout, path.join(f.own.checkout, 'escape'));
-  const hookFile = process.env.MONITOR_TEST_HERDR_HOOK;
-  const hookProbe = hookFile ? `const r=require('child_process').spawnSync('/bin/sh',[${JSON.stringify(hookFile)},'session'],{input:JSON.stringify({hook_event_name:'SessionStart',session_id:'fixture-session'}),env:{...process.env,HERDR_ENV:'1',HERDR_PANE_ID:'fixture-pane',HERDR_SOCKET_PATH:${JSON.stringify(socket)}},encoding:'utf8'});assert.equal(r.status,0,r.stderr);`
-    : `const hook=require('net').connect(${JSON.stringify(socket)});hook.on('error',e=>{throw e});hook.on('connect',()=>hook.end('agent-status: working',()=>hook.destroy()));`;
+  const socketAlias = path.join(f.own.checkout, 'herdr-alias'); fs.symlinkSync(f.socket, socketAlias);
   const script = `const fs=require('fs'),assert=require('assert');
 for(const p of ${JSON.stringify([...targets.map(p => path.join(p, 'bad')), path.join(f.own.checkout, 'escape/bad'), path.join(f.root, 'system-temp')])})assert.throws(()=>fs.writeFileSync(p,'bad'),e=>['EPERM','EACCES'].includes(e.code),p);
 for(const p of ${JSON.stringify([f.own.checkout, f.own.record, launch.env.TMPDIR])})fs.writeFileSync(p+'/ok','ok');
-${hookProbe}`;
+(async()=>{for(const socket of ${JSON.stringify([f.socket, socketAlias])}) {
+  const code=await new Promise(resolve=>{const c=require('net').connect(socket);c.once('error',e=>resolve(e.code));c.once('connect',()=>{c.destroy();resolve('ALLOWED')});});
+  assert.ok(['EPERM','EACCES'].includes(code),socket+': '+code);
+}})().catch(e=>{console.error(e);process.exitCode=1});`;
   const settings = launch.args.filter((_, i) => launch.args[i - 1] === '-c');
   const result = spawnSync(binary, ['sandbox', '--permission-profile', 'monitor-worker', '-C', f.own.checkout, ...settings.flatMap(s => ['-c', s]), '--', process.execPath, '-e', script], {
     cwd: f.own.checkout, env: launch.env, encoding: 'utf8', timeout: 10000,
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  const sent = await notified;
-  if (hookFile) {
-    const request = JSON.parse(sent);
-    assert.equal(request.method, 'pane.report_agent_session');
-    assert.equal(request.params.pane_id, 'fixture-pane');
-    assert.equal(request.params.agent_session_id, 'fixture-session');
-  } else assert.equal(sent, 'agent-status: working');
 });

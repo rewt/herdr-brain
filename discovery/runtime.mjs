@@ -43,9 +43,9 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   // Reading an established layout cannot prove ownership of its parent record.
   // Keep native entry and discovery until the printed explicit join is applied.
   if (registry && projectFleet(cwd).legacy) return null;
-  if (!['worker', 'supervisor'].includes(role)) throw new Error('role must be worker or supervisor');
-  const mode = role === 'supervisor' ? 'main' : settings.mode;
-  const workerLane = role === 'worker' && mode === 'worker';
+  if (!['worker', 'review', 'supervisor', 'chat'].includes(role)) throw new Error('role must be worker, review, supervisor or chat');
+  const mode = ['supervisor', 'chat'].includes(role) ? 'main' : settings.mode;
+  const workerLane = ['worker', 'review'].includes(role) && mode === 'worker';
   if (mode === 'main' && project.checkout !== project.canonical) throw new Error(`${role} entry in main requires the canonical checkout`);
   const id = randomUUID().replaceAll('-', '');
   const topic = `entry-${id.slice(0, 12)}`;
@@ -65,7 +65,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
   command('git', ['-C', project.canonical, 'rev-parse', '--verify', 'HEAD']);
   // Never inherit a different project's record into an unrelated session.
   const fleet = joinFleet({ cwd });
-  if (role === 'worker') openProjectControls({ project });
+  if (['worker', 'review'].includes(role)) openProjectControls({ project });
   let org = fleet.project.record;
   const recordAlias = org;
   env.ORG_DIR = org; gitEnv.ORG_DIR = org;
@@ -248,7 +248,7 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     if (!['context', 'start', 'resume', 'commit', 'rebase', 'continue', 'abort', 'check', 'promote', 'apply-routes', 'finish'].includes(op)) throw new Error('unknown operation');
     verify(op);
     if (op === 'context') return context();
-    if (role !== 'worker') throw new Error('supervisor uses the record/dispatch/watch CLIs; worker Git capabilities are unavailable');
+    if (!['worker', 'review'].includes(role)) throw new Error('supervisor uses the record/dispatch/watch CLIs; worker Git capabilities are unavailable');
     if (!workerLane && ['rebase', 'continue', 'abort', 'promote'].includes(op)) throw new Error('main checkout entry has no lane to rebase or promote; commit, check and finish here');
     if (op === 'start' || op === 'resume') {
       if (!text?.trim()) throw new Error('start requires the actual task');

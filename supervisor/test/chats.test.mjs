@@ -109,8 +109,9 @@ test('one quiet chat per canonical fleet identity shares a control workspace, re
   assert.equal(f.state().focus, 'operator-work');
   assert.match(first.name, /^chat-[a-f0-9]{24}$/); assert.equal(first.to, 'ops-0');
   const launch = f.state().launches[0];
-  assert.deepEqual(launch.args, ['--repo', f.projects[0].checkout, '--role', 'supervisor', '--', '-p', 'profile-0']);
+  assert.deepEqual(launch.args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--', '-p', 'profile-0']);
   assert.equal(launch.env.ORG_DIR, f.projects[0].record); assert.equal(launch.env.ORG_ACTOR, first.name);
+  assert.equal(f.state().env[first.pane].MONITOR_SESSION_ROLE, 'chat'); assert.equal(f.state().env[first.pane].MONITOR_ENTRY_BYPASS, '1');
   assert.equal(launch.env.MONITOR_SUPERVISOR_AGENT, 'ops-0'); assert.equal(launch.env.MONITOR_SESSION_KIND, 'chat');
   assert.equal(launch.env.MONITOR_REQUEST_DIR, undefined); assert.equal(launch.env.LANE_CONFIG, undefined);
   f.change(s => {s.tabs[0].label = 'Operator renamed this';});
@@ -131,7 +132,7 @@ test('operator CLI works without entry, selects an existing control workspace, a
   assert.equal(r.status, 0, r.stderr);
   const receipt = JSON.parse(r.stdout); assert.equal(receipt.workspace, 'chosen'); assert.equal(receipt.to, 'ops-explicit');
   const launch = f.state().launches[0]; assert.equal(launch.kind, 'claude');
-  assert.deepEqual(launch.args, ['--repo', f.projects[0].checkout, '--role', 'supervisor', '--', '--plugin-dir', "/space and quotes/it's-plugin", '--model', 'model-chat', '--effort', 'high']);
+  assert.deepEqual(launch.args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--', '--plugin-dir', "/space and quotes/it's-plugin", '--model', 'model-chat', '--effort', 'high']);
   assert.equal(launch.env.MONITOR_SUPERVISOR_AGENT, 'ops-explicit'); assert.equal(f.state().focus, 'operator-work');
   assert.equal(f.state().calls.some(a => a[0] === 'workspace' && a[1] === 'create'), false);
   assert.throws(() => f.open(f.projects[1], {workspace: 'other'}), /already use control workspace/);

@@ -13,7 +13,7 @@ import { nativeSandboxLaunch, nativeSessionContext, nativeSession } from '../nat
 import { TemporaryError } from '../temporary.mjs';
 import { resolveNative } from '../native-binary.mjs';
 const separator = process.argv.indexOf('--');
-const { values } = parseArgs({ usage: "Usage: monitor-claude [--repo PROJECT] [--role worker|supervisor] [OPTIONS] [-- NATIVE_ARGS...]", args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
+const { values } = parseArgs({ usage: "Usage: monitor-claude [--repo PROJECT] [--role worker|review|supervisor|chat] [OPTIONS] [-- NATIVE_ARGS...]", args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
   binary: { type: 'string' }, 'native-fallback': { type: 'string' }, 'native-explicit': { type: 'boolean' }, validator: { type: 'string' },
   'entry-bin': { type: 'string' }, 'codex-fallback': { type: 'string' }, 'codex-explicit': { type: 'boolean' },
@@ -29,12 +29,15 @@ const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
 function passthrough() {
-  let launch = { binary: values.binary, args: native, env: passthroughEnvironment(process.env,
-    { interactiveResume: interactiveResume({ kind: 'claude', args: native }) }) };
+  const resume = interactiveResume({ kind: 'claude', args: native });
+  let launch = { binary: values.binary, args: native, env: passthroughEnvironment(process.env, { interactiveResume: resume }) };
   try {
     if (nativeSession('claude', native)) {
       const context = nativeSessionContext(values.repo);
-      if (context) launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
+      if (context) {
+        context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
+        launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
+      }
       else console.error('monitor: not a fleet project; starting native Claude without a project sandbox');
     }
   } catch (error) { console.error(`monitor sandbox: ${error.message}`); process.exitCode = 1; return; }

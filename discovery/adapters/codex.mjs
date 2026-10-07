@@ -18,7 +18,7 @@ import { resolveNative } from '../native-binary.mjs';
 const separator = process.argv.indexOf('--');
 const adapterArgs = process.argv.slice(2, separator < 0 ? undefined : separator);
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);
-const { values } = parseArgs({ usage: "Usage: monitor-codex [--repo PROJECT] [--role worker|supervisor] [OPTIONS] [-- NATIVE_ARGS...]", args: adapterArgs, options: {
+const { values } = parseArgs({ usage: "Usage: monitor-codex [--repo PROJECT] [--role worker|review|supervisor|chat] [OPTIONS] [-- NATIVE_ARGS...]", args: adapterArgs, options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
   binary: { type: 'string' }, 'native-fallback': { type: 'string' }, 'native-explicit': { type: 'boolean' }, 'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' },
   validator: { type: 'string' }, 'entry-bin': { type: 'string' },
@@ -32,8 +32,8 @@ values.binary ??= 'codex';
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
 function passthrough() {
-  let launch = { binary: values.binary, args: native, env: passthroughEnvironment(process.env,
-    { interactiveResume: interactiveResume({ kind: 'codex', args: native }) }) };
+  const resume = interactiveResume({ kind: 'codex', args: native });
+  let launch = { binary: values.binary, args: native, env: passthroughEnvironment(process.env, { interactiveResume: resume }) };
   try {
     if (nativeSession('codex', native)) {
       let cwd = values.repo;
@@ -43,7 +43,10 @@ function passthrough() {
         else if (native[i].startsWith('-C')) cwd = native[i].slice(2);
       }
       const context = nativeSessionContext(cwd);
-      if (context) launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
+      if (context) {
+        context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
+        launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary, args: native, context, env: { ...launch.env, ORG_DIR: context.org } });
+      }
       else console.error('monitor: not a fleet project; starting native Codex without a project sandbox');
     }
   } catch (error) { console.error(`monitor sandbox: ${error.message}`); process.exitCode = 1; return; }

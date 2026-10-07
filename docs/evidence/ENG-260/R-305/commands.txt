@@ -51,6 +51,17 @@ guard-development.tap:
 
 No npm test, test:promotion, test:lanes, full release tier, live acceptance
 harness, housekeeping loop, model invocation, promotion, merge or push.
-Final required lane check runs fast after the checked report commit.
+Final lane check after the report commit uses only the light focused command:
+  node lanes/lane.mjs check --cmd 'node test/helpers/run.mjs test/main-module.test.mjs release/test/candidate.test.mjs'
+The supervisor's proving-window instruction supersedes the configured aggregate
+fast command. No additional heavy suite starts after that instruction.
 
 Committed TAP evidence has trailing whitespace normalized; results are unchanged.
+
+The queued native-comparison wrapper exited 75 after waiting 3600 seconds,
+before the supervisor's cancellation could find a remaining process.
+host-checks.log records the refusal; the comparison driver never started, so
+there is no outcomes.json or native main/head TAP. The supervisor instructed:
+  host checks deferred: bch-cloak proving window
+Both two-case main/head comparisons remain deferred; no slot holder was
+interrupted, no lock was broken, and no queued host-check remains.

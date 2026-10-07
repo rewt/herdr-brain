@@ -111,6 +111,13 @@ if (opt.print) {
     process.stderr.write('record console: --print expects COLSxROWS, e.g. 140x40\n');
     process.exit(1);
   }
+  // A standalone chat request can be refused before preparing a snapshot.
+  // In particular, the minimal profile must not load optional Ink/React just
+  // to say that this read-only command cannot open a chat.
+  if (opt.keys === 'C') {
+    process.stdout.write('--print does not open project chats\n');
+    process.exit(0);
+  }
   // A snapshot is read-only: it must never move the operator's Herdr focus,
   // record a task or start an agent, whatever --keys confirms.
   const deps = opt.modern ? { herdrGo: async () => ({ ok: false, error: '--print does not open Herdr terminals' }),

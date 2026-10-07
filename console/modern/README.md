@@ -125,6 +125,8 @@ and React load dynamically only when the minimal profile prepares its renderer;
 other `--print` profiles and their tests do not need them. Install optional UI
 dependencies with `npm --prefix console ci`. Tests requiring Ink visibly skip
 when the packages are absent; run them in an installed checkout to validate views.
+The standalone `--print --keys C` command refuses the chat request before
+preparing any profile's renderer, so it also works without those packages.
 The dependency-free `session-input.mjs` parser handles Esc, Meta, CSI and SS3
 before any bytes reach a session. Bare or repeated Esc and partial CSI/SS3
 return without forwarding the chunk; complete Alt+arrow sequences retain their

@@ -33,6 +33,7 @@ import { fleetPath } from '../lib/fleet.mjs';
 import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 import { startLegacyConsumer } from './legacy-consumer.mjs';
+import { copyExistingProject } from './existing-project.mjs';
 
 export function harnessEnvironment(input, root) {
   const env = { ...input };
@@ -643,33 +644,14 @@ try {
   // gate. Every file comes from a fresh read-only copy, never the inventory kit.
   live = opt['bch-cloak'] ? path.resolve(opt['bch-cloak']) : undefined;
   copy = path.join(root, 'existing/bch-cloak');
-  const tracked = ['.claude/skills/lane/SKILL.md', 'scripts/lane/launch-supervisor.mjs', 'scripts/lane/routing.mjs', 'scripts/lane/routing.json', 'scripts/lane/routing.test.mjs', 'scripts/lane/lane.mjs',
-    ...['continue.sh', 'arm-watch.sh', 'dispatch.sh', 'notify-watch.sh', 'SETTLE.md', 'WORK-PATTERN.md', 'session-start.sh', 'tidy-tabs.sh', 'apply-settle.sh', 'close-finished-agents.sh'].map((v) => `.lane/supervisor/${v}`)];
   const backup = path.join(root, 'backup');
-  const inventory = [];
   await test(cases.copy, () => {
     requirePrerequisite(results, cases.fixture.key);
-    for (const rel of tracked) {
-      const src = path.join(live, rel); const st = fs.lstatSync(src); assert.ok(st.isFile(), 'copy regular script files only');
-      const bytes = fs.readFileSync(src);
-      const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-      inventory.push({ file: rel, sha256, mode: st.mode & 0o777 });
-      write(path.join(copy, rel), bytes); fs.chmodSync(path.join(copy, rel), st.mode & 0o777);
-      write(path.join(backup, rel), bytes); fs.chmodSync(path.join(backup, rel), st.mode & 0o777);
-    }
-    write(path.join(evidence, 'live-copy-manifest.json'), JSON.stringify(inventory, null, 2));
-    // Read other scripts only into scratch, then scan the copy for omitted calls.
-    const sourceInventory = callerInventory(live);
-    write(path.join(evidence, 'historical-callers.json'), JSON.stringify(sourceInventory.historical.map((file) => ({
-      file: path.relative(live, file), sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
-      mode: fs.statSync(file).mode & 0o777, reason: 'timestamped script backup; no active source reference',
-    })), null, 2));
-    for (const src of sourceInventory.historical) write(path.join(backup, 'historical-callers', path.relative(live, src)), fs.readFileSync(src));
-    for (const src of sourceInventory.active) {
-      const rel = path.relative(live, src); if (tracked.includes(rel)) continue;
-      write(path.join(copy, rel), fs.readFileSync(src));
-      fs.chmodSync(path.join(copy, rel), fs.statSync(src).mode & 0o777);
-    }
+    const inventory = copyExistingProject({ live, copy, backup });
+    for (const rel of [...switches.map(([, file]) => file), '.lane/supervisor/apply-settle.sh'])
+      assert.ok(inventory.files.some(file => file.file === rel), `required cutover file missing: ${rel}`);
+    write(path.join(evidence, 'live-copy-manifest.json'), JSON.stringify(inventory.files, null, 2));
+    write(path.join(evidence, 'historical-callers.json'), JSON.stringify(inventory.historical, null, 2));
     const scan = run('rg', ['-n', 'org |herdr-monitor|herdr-brain|lane.mjs|notify-watch|settle-watch', copy], { ok: false });
     write(path.join(evidence, 'existing-call-inventory.txt'), scan.stdout);
     // Only path constants are relocated; route table and command arguments stay intact.
@@ -1042,9 +1024,10 @@ try {
       const legacy = await legacyCanary('legacy');
       return `${legacy.run}: restored dispatch -> notify-watch outbox -> scratch-owned supervisor-events -> real PTY receipt, exactly once; consumer stopped with lifecycle and delivery receipts`;
     });
-    write(path.join(evidence, 'cutover-switches.json'), JSON.stringify({ files: switches, checks, rollback: originals.map(({ key, file, mode }) => ({ key, file, mode, exact: true })) }, null, 2));
+    const sessionCap = { exercised: false, reason: 'Host process listing can be denied by the sandbox; dispatch cap coverage uses deterministic offline ps fixtures only.' };
+    write(path.join(evidence, 'cutover-switches.json'), JSON.stringify({ files: switches, checks, sessionCap, rollback: originals.map(({ key, file, mode }) => ({ key, file, mode, exact: true })) }, null, 2));
     for (const [key, rel] of switches) write(path.join(copy, rel), base[key]);
-    return `${switches.length} switches applied, executed and restored; detailed receipts in cutover-switches.json`;
+    return `${switches.length} switches applied, executed and restored; detailed receipts in cutover-switches.json; process-based session cap not exercised (offline fixture coverage only)`;
   };
   const retirementCase = () => {
     assert.ok(cutover, 'passed switch case has no fixture receipt');

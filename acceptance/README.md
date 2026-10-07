@@ -474,9 +474,24 @@ daemon. `watch/test/existing-project.test.mjs` separately proves journal and
 autopilot binding plus named exception delivery with real Git/record state and
 scripted offline settle/Herdr transport.
 
+The existing-project copier recursively discovers untracked supervisor scripts
+and support documents/configuration (including nested files and newly required
+documents such as `no-poll-waiting.md`). Every copied file has a raw byte/mode
+backup and a SHA-256 manifest entry. Logs, outbox/inbox, queues, locks, process
+receipts, caches and current handoff snapshots stay out of the rehearsal. Source
+and support symlinks are refused. The copy still undergoes path relocation and
+the transitive audit before execution.
+
+The rehearsal does **not** exercise dispatch's process-based in-flight cap:
+host `ps` can be denied by the sandbox, and a successful dispatch does not prove
+that count was observed. This limitation appears in the switch case result and
+`cutover-switches.json`. The sandbox grants stay unchanged; the offline dispatch
+test proves cap matching and refusal for legacy and switched watcher argv with
+deterministic `ps` output, separately from the real kernel-lock checks.
+
 The copier archives timestamped script backups outside the executable caller tree
 only after proving they have no reference from any active source, including
-transitive references through other backups. Recognized timestamped sh/mjs/py
+transitive references through other backups. Recognized timestamped shell/JS/Python
 backups are enumerated regardless of executable mode: an interpreter can invoke
 a readable mode-0644 backup. Referenced backups remain in the copied caller tree
 with their original mode; only proven unreferenced ones qualify as historical.

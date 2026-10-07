@@ -657,7 +657,6 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (s.compose) return composeKey(input, k);
     if (s.rename) return renameKey(input, k);
     if (s.act) return actKey(input, k);
-    if (input === 'C' && !k.ctrl && !k.meta) return activate('project-chat');
     if (s.view === 'need' && !k.ctrl && !k.meta) {
       const n = currentNeed(), choices = needChoices(n), actions = needActions(n, { canOpen: true });
       const byKey = [...choices, ...actions].find(c => c.key === input);
@@ -675,6 +674,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       else if (!k.ctrl && !k.meta && !k.tab && !k.upArrow && !k.downArrow) s.text += input.replace(/[\x00-\x1f\x7f]/g, '');
       changed(); return false;
     }
+    if (input === 'C' && !k.ctrl && !k.meta) return activate('project-chat');
     if (input === 'q') return true;
     if (k.tab) { moveRegion(s, k.shift ? -1 : 1); changed(); return false; }
     if (k.return) return activate(s.focus);

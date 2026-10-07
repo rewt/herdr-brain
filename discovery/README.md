@@ -104,12 +104,17 @@ monitor chat bch-cloak-aggregator --no-focus
 ```
 
 The console's **C** key opens or focuses its selected project's chat. The first
-command reuses a uniquely named **Herdr Brain** workspace or creates it in the
+command reuses a uniquely named **chats** workspace or creates it in the
 background. `--workspace ID` selects an existing control workspace on first use;
 `HERDR_MONITOR_CONTROL_WORKSPACE` supplies the same override. All subsequent
 projects use that single workspace. Reopening focuses the recorded tab, even
 after the operator renames its label. `--no-focus` creates or reuses it without
 moving focus. Refresh and project selection never open chats.
+The existing `chat-herdr-brain` prototype is adopted when its pane is in that
+workspace and its agent and pane are in the canonical checkout. Adoption records
+the binding and preserves its conversation, personal Claude configuration and
+entry bypass. Other fleet projects get tabs in the same workspace. Renaming the
+prototype's tab label does not affect reopening.
 Harness and recipient options apply to new chats; reopening retains the existing
 session and its recipient. Close its tab before selecting a different launch.
 
@@ -134,6 +139,13 @@ a tab. Startup failures retain the tab for inspection, and reopening never
 launches again into an uncertain pane. If its agent exited, reopening focuses
 the retained tab and reports `available: false`; close that tab in Herdr before
 requesting a fresh chat. Moved panes and conflicting occupants require inspection.
+An unnamed agent after a failed rename or late detection is renamed on reopen
+only when it matches the receipt's pane, workspace, harness and checkout.
+New tabs wait for a stable shell prompt and prove execution with a harmless
+marker before launching. Shell initialization questions, including oh-my-zsh's
+update prompt, receive no input. The started command must also emit its marker
+and produce the expected agent. Unrecognized prompt styles time out with the tab
+retained for inspection.
 No chat is launched during `console --print`, even with `--keys C`.
 
 Exclusions persist as optional `excluded_roots` in version 1 of the fleet file.

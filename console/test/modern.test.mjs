@@ -53,6 +53,19 @@ test('project chat failures are visible and read-only dependencies can refuse C'
   finally {session.stop();}
 });
 
+test('capital C in the folder path stays in text entry without opening a chat', async () => {
+  const chats = [];
+  const {session} = fixture({herdrProjectChat: async p => {chats.push(p); return {ok: true};}});
+  try {
+    await session.refresh(); await session.activate('folder');
+    session.ui.text = '/projects/';
+    await session.key('C'); await session.key('ode');
+    assert.equal(session.ui.text, '/projects/Code');
+    assert.deepEqual(chats, []);
+    assert.equal(session.ui.view, 'folder');
+  } finally {session.stop();}
+});
+
 test('completed work category flags stay visible on overview and Needs you and open the source item', async () => {
   const flag = { id: 'ENG-2', kind: 'category', text: 'Category review: tooling is auto but R-2 decisions[0] mentions keys; check operator authority' };
   let items;

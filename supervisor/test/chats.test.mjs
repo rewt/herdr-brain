@@ -37,11 +37,23 @@ else if (a[0] === 'tab' && a[1] === 'rename') { state.tabs.find(t => t.tab_id ==
 else if (a[0] === 'tab' && a[1] === 'focus') { state.focus = a[2]; result({}); }
 else if (a[0] === 'pane' && a[1] === 'get') result({pane: state.panes.find(p => p.pane_id === a[2])});
 else if (a[0] === 'pane' && a[1] === 'process-info') result({process_info: {shell_pid: 12, foreground_processes: [{pid: state.busy ? 13 : 12, name: 'zsh'}]}});
+else if (a[0] === 'pane' && a[1] === 'read') {
+  let screen = state.screen || 'checkout % ';
+  if (state.updateReads > 0) { state.updateReads--; screen = 'Would you like to update? [Y/n]'; }
+  if (state.updatePrompt) screen = 'Would you like to update? [Y/n]';
+  save(); console.log(screen);
+}
 else if (a[0] === 'pane' && a[1] === 'run') {
+  if (state.updatePrompt || state.updateReads > 0) fail('input swallowed by update prompt');
   const pane = state.panes.find(p => p.pane_id === a[2]); save();
+  if (state.dropInput) { state.screen = a[3] + '\\ncheckout % '; result({}); process.exit(0); }
   const run = spawnSync('/bin/sh', ['-c', a[3]], {cwd: pane.foreground_cwd, env: {...process.env, ...state.env[a[2]]}, encoding: 'utf8'});
   if (run.status !== 0) fail(run.stderr);
-  state.launches.push(JSON.parse(run.stdout));
+  state.screen = (state.screen || '') + '\\n' + run.stdout + '\\ncheckout % ';
+  if (a[3].startsWith('printf ')) { result({}); process.exit(0); }
+  const lines = run.stdout.trim().split('\\n');
+  state.launches.push(JSON.parse(lines.at(-1)));
+  if (state.dropStartMarker) state.screen = a[3] + '\\ncheckout % ';
   if (!state.noDetect) state.agents.push({pane_id: a[2], agent: state.detectKind || state.launches.at(-1).kind, name: null,
     cwd: state.wrongCwd || pane.foreground_cwd, agent_status: 'blocked'});
   result({});
@@ -80,7 +92,7 @@ function fixture(t) {
   const state = () => JSON.parse(fs.readFileSync(stateFile));
   const change = fn => { const s = state(); fn(s); fs.writeFileSync(stateFile, JSON.stringify(s)); };
   let time = 0;
-  const open = (p = projects[0], extra = {}) => openProjectChat({ project: p.name, identity: p.identity, env, startupMs: 10, now: () => time, sleep: ms => {time += ms;}, ...extra });
+  const open = (p = projects[0], extra = {}) => openProjectChat({ project: p.name, identity: p.identity, env, startupMs: 1000, now: () => time, sleep: ms => {time += ms;}, ...extra });
   const snapshot = dir => {
     const files = [];
     const visit = prefix => { for (const entry of fs.readdirSync(path.join(dir, prefix), {withFileTypes: true})) {
@@ -127,7 +139,7 @@ test('operator CLI works without entry, selects an existing control workspace, a
 
 test('failed or uncertain startup retains one tab and never launches again on reopen', t => {
   const f = fixture(t); f.change(s => {s.noDetect = true;});
-  assert.throws(() => f.open(), /startup not detected; retained tab/);
+  assert.throws(() => f.open(), /startup not detected.*retained tab/);
   const receipt = f.open(); assert.equal(receipt.reused, true); assert.equal(receipt.available, false);
   assert.equal(f.state().tabs.length, 1); assert.equal(f.state().launches.length, 1);
   assert.equal(f.state().focus, receipt.tab);
@@ -138,6 +150,101 @@ test('shell readiness fails before sending input and retains a recoverable tab',
   assert.throws(() => f.open(), /shell not ready/);
   assert.equal(f.state().launches.length, 0); assert.equal(f.state().focus, 'operator-work');
   assert.equal(f.open().reused, true); assert.equal(f.state().tabs.length, 1);
+});
+
+test('a failed rename is recovered only in the receipt pane with the same harness and checkout', t => {
+  const f = fixture(t); f.change(s => {s.fail = 'agent rename';});
+  assert.throws(() => f.open(), /injected failure/);
+  assert.equal(f.state().agents[0].name, null);
+  f.change(s => {delete s.fail; s.agents[0].agent = 'claude';});
+  assert.throws(() => f.open(), /another occupant/);
+  f.change(s => {s.agents[0].agent = 'codex';});
+  const receipt = f.open(undefined, {focus: false});
+  assert.equal(receipt.reused, true); assert.equal(receipt.available, true);
+  assert.equal(f.state().agents[0].name, receipt.name);
+  assert.equal(f.state().tabs.length, 1); assert.equal(f.state().launches.length, 1);
+  assert.equal(f.state().focus, 'operator-work');
+});
+
+test('late detection after timeout recovers the unnamed chat without replaying launch', t => {
+  const f = fixture(t); f.change(s => {s.noDetect = true;});
+  assert.throws(() => f.open(), /startup not detected/);
+  const stored = JSON.parse(fs.readFileSync(path.join(f.env.HERDR_MONITOR_FLEET, 'chats.json'))).projects[f.projects[0].identity];
+  f.change(s => {s.agents.push({pane_id: stored.pane, agent: stored.kind, cwd: stored.checkout, name: null});});
+  assert.equal(f.open().available, true);
+  assert.equal(f.state().agents[0].name, stored.name);
+  assert.equal(f.state().launches.length, 1);
+});
+
+test('an oh-my-zsh builtin update question never receives shell input', t => {
+  const f = fixture(t); f.change(s => {s.updatePrompt = true;});
+  assert.throws(() => f.open(), /shell not ready/);
+  assert.equal(f.state().calls.some(a => a[0] === 'pane' && a[1] === 'run'), false);
+  assert.equal(f.state().launches.length, 0);
+});
+
+test('startup waits through an update question before proving prompt and command execution', t => {
+  const f = fixture(t); f.change(s => {s.updateReads = 3;});
+  const receipt = f.open(undefined, {focus: false});
+  assert.equal(receipt.available, true);
+  const calls = f.state().calls;
+  const firstInput = calls.findIndex(a => a[0] === 'pane' && a[1] === 'run');
+  assert.equal(calls.slice(0, firstInput).filter(a => a[0] === 'pane' && a[1] === 'read').length, 5);
+  assert.equal(f.state().launches.length, 1); assert.equal(f.state().focus, 'operator-work');
+});
+
+test('echoed probe input is not execution proof and cannot launch an agent', t => {
+  const f = fixture(t); f.change(s => {s.dropInput = true;});
+  assert.throws(() => f.open(), /shell not ready/);
+  assert.equal(f.state().launches.length, 0);
+  assert.equal(f.state().calls.filter(a => a[0] === 'pane' && a[1] === 'run').length, 1);
+});
+
+test('agent detection alone cannot accept an unverified launch command', t => {
+  const f = fixture(t); f.change(s => {s.dropStartMarker = true;});
+  assert.throws(() => f.open(), /command unverified/);
+  assert.equal(f.state().agents[0].name, null);
+  assert.equal(f.state().focus, 'operator-work');
+  assert.equal(f.state().launches.length, 1);
+});
+
+function prototype(f) {
+  const p = f.projects[0];
+  f.change(s => {
+    s.spaces.push({workspace_id: 'w2XS', label: 'chats'});
+    s.tabs.push({tab_id: 'w2XS:prototype', workspace_id: 'w2XS', label: p.name});
+    s.panes.push({pane_id: 'w2XS:chat', tab_id: 'w2XS:prototype', workspace_id: 'w2XS', foreground_cwd: p.checkout});
+    s.agents.push({pane_id: 'w2XS:chat', name: `chat-${p.name}`, agent: 'claude', cwd: p.checkout});
+    s.env['w2XS:chat'] = {CLAUDE_CONFIG_DIR: '/personal/config', MONITOR_ENTRY_BYPASS: '1'};
+  });
+}
+
+test('the named prototype in chats is adopted unchanged and other projects join that workspace', t => {
+  const f = fixture(t); prototype(f);
+  // Adoption must not need the default adapter or relaunch using its account.
+  fs.rmSync(path.join(f.env.HERDR_MONITOR_ENTRY_BIN, 'monitor-codex'));
+  const receipt = f.open();
+  assert.equal(receipt.reused, true); assert.equal(receipt.kind, 'claude');
+  assert.equal(receipt.workspace, 'w2XS'); assert.equal(receipt.pane, 'w2XS:chat');
+  assert.equal(receipt.name, `chat-${f.projects[0].name}`);
+  assert.equal(f.state().focus, 'w2XS:prototype');
+  assert.deepEqual(f.state().env[receipt.pane], {CLAUDE_CONFIG_DIR: '/personal/config', MONITOR_ENTRY_BYPASS: '1'});
+  assert.equal(f.state().calls.some(a => ['create', 'run', 'rename'].includes(a[1])), false);
+  f.change(s => {s.tabs[0].label = 'My ongoing conversation';});
+  assert.equal(f.open().tab, receipt.tab);
+  const second = f.open(f.projects[1], {kind: 'claude', focus: false});
+  assert.equal(second.workspace, 'w2XS'); assert.equal(f.state().spaces.length, 1);
+  assert.equal(f.state().tabs.length, 2); assert.equal(f.state().launches.length, 1);
+  assert.equal(f.state().focus, receipt.tab);
+});
+
+test('prototype adoption refuses a foreign checkout or a pane outside the chats workspace', t => {
+  const f = fixture(t); prototype(f);
+  f.change(s => {s.agents[0].cwd = f.projects[1].checkout;});
+  assert.throws(() => f.open(), /prototype chat binding differs/);
+  f.change(s => {s.agents[0].cwd = f.projects[0].checkout; s.panes[0].workspace_id = 'elsewhere';});
+  assert.throws(() => f.open(), /outside the control workspace/);
+  assert.equal(f.state().launches.length, 0); assert.equal(f.state().focus, 'operator-work');
 });
 
 test('unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation', t => {
@@ -182,7 +289,7 @@ test('an existing named control workspace is reused and ambient recipients never
   const f = fixture(t), p = f.projects[0];
   const layer = JSON.parse(fs.readFileSync(p.layers[0])); delete layer.dispatch;
   fs.writeFileSync(p.layers[0], JSON.stringify(layer));
-  f.change(s => {s.spaces.push({workspace_id: 'brain', label: 'Herdr Brain'});});
+  f.change(s => {s.spaces.push({workspace_id: 'brain', label: 'chats'});});
   const receipt = f.open(undefined, {focus: false}); assert.equal(receipt.workspace, 'brain'); assert.equal(receipt.to, 'supervisor-herdr');
   assert.equal(f.state().launches[0].env.MONITOR_SUPERVISOR_AGENT, 'supervisor-herdr');
   assert.equal(f.state().spaces.length, 1); assert.equal(f.state().focus, 'operator-work');

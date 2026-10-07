@@ -1,0 +1,285 @@
+TAP version 13
+# Subtest: headless tasks and resumes get a sandbox even when prompt text names a utility
+ok 1 - headless tasks and resumes get a sandbox even when prompt text names a utility # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.560459
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 2 - each run gets short private fleet temp and all three temp variables # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0475
+  ...
+# Subtest: codex preserves the operator's Python bytecode environment
+ok 3 - codex preserves the operator's Python bytecode environment # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033959
+  ...
+# Subtest: claude preserves the operator's Python bytecode environment
+ok 4 - claude preserves the operator's Python bytecode environment # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0715
+  ...
+# Subtest: Claude respects Python bytecode values in user settings
+ok 5 - Claude respects Python bytecode values in user settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036417
+  ...
+# Subtest: Claude respects Python bytecode values in project settings
+ok 6 - Claude respects Python bytecode values in project settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03325
+  ...
+# Subtest: Claude respects Python bytecode values in local settings
+ok 7 - Claude respects Python bytecode values in local settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028042
+  ...
+# Subtest: Claude respects Python bytecode values in cli-json settings
+ok 8 - Claude respects Python bytecode values in cli-json settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030791
+  ...
+# Subtest: Claude respects Python bytecode values in cli-file settings
+ok 9 - Claude respects Python bytecode values in cli-file settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.11525
+  ...
+# Subtest: Claude respects Python bytecode values in managed settings
+ok 10 - Claude respects Python bytecode values in managed settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.086917
+  ...
+# Subtest: Claude respects Python bytecode values in managed-fragment settings
+ok 11 - Claude respects Python bytecode values in managed-fragment settings # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037875
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 12 - long and redirected temp roots refuse before creating a run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.067083
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 13 - Codex uses native workspace roots, excludes system temp and retains hook transport # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030291
+  ...
+# Subtest: legacy Codex uses writable roots with system temp excluded
+ok 14 - legacy Codex uses writable roots with system temp excluded # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.509042
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 15 - Claude gets per-session native write settings and keeps existing hooks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.047167
+  ...
+# Subtest: Claude socket grants stay within each run and its measured shell fallback
+ok 16 - Claude socket grants stay within each run and its measured shell fallback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078834
+  ...
+# Subtest: a short Claude run temp needs no shared shell fallback grant
+ok 17 - a short Claude run temp needs no shared shell fallback grant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032959
+  ...
+# Subtest: a long Claude run temp keeps the safely owned canonical per-user fallback grant
+ok 18 - a long Claude run temp keeps the safely owned canonical per-user fallback grant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.118875
+  ...
+# Subtest: Claude launches without the missing shared fallback grant and warns once
+ok 19 - Claude launches without the missing shared fallback grant and warns once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.073542
+  ...
+# Subtest: Claude launches without the denied shared fallback grant and warns once
+ok 20 - Claude launches without the denied shared fallback grant and warns once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030042
+  ...
+# Subtest: Claude launches without the foreign shared fallback grant and warns once
+ok 21 - Claude launches without the foreign shared fallback grant and warns once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.054625
+  ...
+# Subtest: Claude launches without the writable shared fallback grant and warns once
+ok 22 - Claude launches without the writable shared fallback grant and warns once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02275
+  ...
+# Subtest: Claude launches without the symlink shared fallback grant and warns once
+ok 23 - Claude launches without the symlink shared fallback grant and warns once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020417
+  ...
+# Subtest: Claude merges supplied Unix sockets and leaves inherited grants in native scopes
+ok 24 - Claude merges supplied Unix sockets and leaves inherited grants in native scopes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019291
+  ...
+# Subtest: Claude warns when native socket or TCP overrides widen generated confinement
+ok 25 - Claude warns when native socket or TCP overrides widen generated confinement # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018417
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 26 - extra directories are supplied through native options in canonical project config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018416
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 27 - unsupported harness runs with a visible warning and its own temp # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018416
+  ...
+# Subtest: Codex respects inherited and CLI sandbox choices with one source-naming warning
+ok 28 - Codex respects inherited and CLI sandbox choices with one source-naming warning # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017167
+  ...
+# Subtest: roles receive scoped lane access and launch-only trust for fleet worktrees
+ok 29 - roles receive scoped lane access and launch-only trust for fleet worktrees # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018458
+  ...
+# Subtest: Claude denies sibling lanes and rejects configured lane write grants
+ok 30 - Claude denies sibling lanes and rejects configured lane write grants # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018166
+  ...
+# Subtest: Claude native file hook denies late siblings and aliases without approving ordinary edits
+ok 31 - Claude native file hook denies late siblings and aliases without approving ordinary edits # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018167
+  ...
+# Subtest: Codex generated and legacy sandbox branches both receive exact project trust
+ok 32 - Codex generated and legacy sandbox branches both receive exact project trust # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0565
+  ...
+# Subtest: native Codex config reader accepts dotted and quoted launch trust without persisting it
+ok 33 - native Codex config reader accepts dotted and quoted launch trust without persisting it # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.063458
+  ...
+# Subtest: Claude 2.1.292 native permissions prevent read prompts and confine sibling file writes by role
+ok 34 - Claude 2.1.292 native permissions prevent read prompts and confine sibling file writes by role # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022208
+  ...
+# Subtest: Claude preserves interpreter exclusions from loaded settings and names their source once
+ok 35 - Claude preserves interpreter exclusions from loaded settings and names their source once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02275
+  ...
+# Subtest: Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+ok 36 - Claude preserves undeclared directories and sibling temp grants with one source-naming warning # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019583
+  ...
+# Subtest: nested fleet roots refuse before launch in both Codex paths and Claude
+ok 37 - nested fleet roots refuse before launch in both Codex paths and Claude # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020875
+  ...
+# Subtest: workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+ok 38 - workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+  ---
+  duration_ms: 267.684834
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 39 - assigned and headless adapters keep the checkout and run with native settings and temp # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056083
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (default)
+ok 40 - codex adapter Python import keeps bytecode out of the worktree (default) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.03075
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (prefix)
+ok 41 - codex adapter Python import keeps bytecode out of the worktree (prefix) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025708
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (disabled)
+ok 42 - codex adapter Python import keeps bytecode out of the worktree (disabled) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.041708
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-prefix)
+ok 43 - codex adapter Python import keeps bytecode out of the worktree (empty-prefix) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036042
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-disabled)
+ok 44 - codex adapter Python import keeps bytecode out of the worktree (empty-disabled) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.118125
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-both)
+ok 45 - codex adapter Python import keeps bytecode out of the worktree (empty-both) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030875
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (default)
+ok 46 - claude adapter Python import keeps bytecode out of the worktree (default) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030542
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (prefix)
+ok 47 - claude adapter Python import keeps bytecode out of the worktree (prefix) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028375
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (disabled)
+ok 48 - claude adapter Python import keeps bytecode out of the worktree (disabled) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.121709
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-prefix)
+ok 49 - claude adapter Python import keeps bytecode out of the worktree (empty-prefix) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030459
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-disabled)
+ok 50 - claude adapter Python import keeps bytecode out of the worktree (empty-disabled) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-both)
+ok 51 - claude adapter Python import keeps bytecode out of the worktree (empty-both) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022375
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (settings-prefix)
+ok 52 - claude adapter Python import keeps bytecode out of the worktree (settings-prefix) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02675
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (settings-disabled)
+ok 53 - claude adapter Python import keeps bytecode out of the worktree (settings-disabled) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062042
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 54 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037584
+  ...
+# Subtest: real Codex native roots deny peer writes and worker control-socket access including symlinks
+ok 55 - real Codex native roots deny peer writes and worker control-socket access including symlinks
+  ---
+  duration_ms: 91.755583
+  ...
+1..55
+# tests 55
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 53
+# todo 0
+# duration_ms 403.1795

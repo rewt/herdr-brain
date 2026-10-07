@@ -1,0 +1,55 @@
+TAP version 13
+# Subtest: control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+ok 1 - control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+  ---
+  duration_ms: 101.979875
+  ...
+# Subtest: claude grants only coordinating roles the resolved control socket and lane root
+ok 2 - claude grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 225.324292
+  ...
+# Subtest: codex grants only coordinating roles the resolved control socket and lane root
+ok 3 - codex grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 206.14825
+  ...
+# Subtest: coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+ok 4 - coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+  ---
+  duration_ms: 177.333375
+  ...
+# Subtest: the local bridge warning names the removable file without rewriting it
+ok 5 - the local bridge warning names the removable file without rewriting it
+  ---
+  duration_ms: 149.881334
+  ...
+# Subtest: a coordinating Codex launch fails before handover when its native profile cannot connect
+ok 6 - a coordinating Codex launch fails before handover when its native profile cannot connect
+  ---
+  duration_ms: 135.044541
+  ...
+# Subtest: chat session bindings carry their role and omit supervisor lifecycle hooks
+ok 7 - chat session bindings carry their role and omit supervisor lifecycle hooks
+  ---
+  duration_ms: 17.558459
+  ...
+# Subtest: claude native sandbox connects to the fake control socket only for supervisor and chat
+ok 8 - claude native sandbox connects to the fake control socket only for supervisor and chat
+  ---
+  duration_ms: 4282.08025
+  ...
+# Subtest: codex native sandbox connects to the fake control socket only for supervisor and chat
+ok 9 - codex native sandbox connects to the fake control socket only for supervisor and chat
+  ---
+  duration_ms: 365.395041
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5710.482542

@@ -22,6 +22,6 @@ export function runTemporary(root) {
 export function temporaryEnvironment(temporary, env = process.env) {
   const python = Object.fromEntries(['PYTHONPYCACHEPREFIX', 'PYTHONDONTWRITEBYTECODE']
     .filter(key => env[key] !== undefined).map(key => [key, env[key]]));
-  if (!Object.keys(python).length) python.PYTHONPYCACHEPREFIX = path.join(temporary, 'pycache');
+  if (!Object.values(python).some(value => value !== '')) python.PYTHONPYCACHEPREFIX = path.join(temporary, 'pycache');
   return { TMPDIR: temporary, TMP: temporary, TEMP: temporary, ...python };
 }

@@ -237,9 +237,14 @@ Each launch and validation step creates `<fleet-project-temp>/r-XXXXXX` with mod
 0700 and exports `TMPDIR`, `TMP` and `TEMP`. Both harnesses also export
 `PYTHONPYCACHEPREFIX=<run-temp>/pycache`, keeping Python import bytecode out of
 the worktree. An inherited `PYTHONPYCACHEPREFIX` or `PYTHONDONTWRITEBYTECODE`
-is preserved instead (including an explicitly empty value); no default cache
-prefix is added in that case. Claude's generated `settings.env` carries the
-same values for its shell commands. Claude also receives
+with a nonempty value is preserved instead; no default cache prefix is added
+in that case. Empty values do not suppress the default, since Python treats
+them as unset. Inherited values pass through, except that an empty cache prefix
+is replaced by the default when neither variable is nonempty. Claude also
+respects nonempty Python values in its native settings sources and CLI
+`--settings`, keeping them in their native scopes without adding a default.
+Otherwise its generated `settings.env` carries the launch values for shell
+commands. Claude also receives
 `CLAUDE_CODE_TMPDIR` for internal files. Claude Code 2.1.292 appends
 `claude-<uid>` and exports that directory as sandboxed shell `TMPDIR` only when
 the resulting path uses at most **44 bytes**. Longer paths fall back to

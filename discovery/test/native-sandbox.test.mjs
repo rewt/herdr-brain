@@ -74,15 +74,71 @@ for (const kind of ['codex', 'claude']) test(`${kind} preserves the operator's P
     {}, { PYTHONPYCACHEPREFIX: '/operator/cache' }, { PYTHONDONTWRITEBYTECODE: '1' },
     { PYTHONPYCACHEPREFIX: '/operator/cache', PYTHONDONTWRITEBYTECODE: '1' },
     { PYTHONPYCACHEPREFIX: '' }, { PYTHONDONTWRITEBYTECODE: '' },
+    { PYTHONPYCACHEPREFIX: '', PYTHONDONTWRITEBYTECODE: '' },
+    { PYTHONPYCACHEPREFIX: '/operator/cache', PYTHONDONTWRITEBYTECODE: '' },
+    { PYTHONPYCACHEPREFIX: '', PYTHONDONTWRITEBYTECODE: '1' },
   ]) {
     const launch = nativeSandboxLaunch({ kind, binary: f.binary, args: [], context: f.context, env: python });
     t.after(launch.close);
-    const expected = Object.keys(python).length ? python : { PYTHONPYCACHEPREFIX: path.join(launch.env.TMPDIR, 'pycache') };
+    const expected = Object.values(python).some(value => value !== '') ? python
+      : { ...python, PYTHONPYCACHEPREFIX: path.join(launch.env.TMPDIR, 'pycache') };
     const environments = [launch.env];
     if (kind === 'claude') environments.push(JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1])).env);
     for (const env of environments) for (const key of ['PYTHONPYCACHEPREFIX', 'PYTHONDONTWRITEBYTECODE']) assert.equal(env[key], expected[key]);
   }
 });
+
+for (const source of ['user', 'project', 'local', 'cli-json', 'cli-file', 'managed', 'managed-fragment']) {
+  test(`Claude respects Python bytecode values in ${source} settings`, t => {
+    const f = fixture(t);
+    const managed = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode' : '/etc/claude-code';
+    const files = {
+      user: path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json'),
+      project: path.join(f.own.checkout, '.claude/settings.json'),
+      local: path.join(f.own.checkout, '.claude/settings.local.json'),
+      'cli-file': path.join(f.root, 'operator-settings.json'),
+      managed: path.join(managed, 'managed-settings.json'),
+      'managed-fragment': path.join(managed, 'managed-settings.d/python.json'),
+    };
+    let supplied;
+    if (source.startsWith('managed')) {
+      const read = fs.readFileSync, readdir = fs.readdirSync;
+      t.mock.method(fs, 'readFileSync', function (file, ...args) {
+        return file === files[source] ? JSON.stringify(supplied) : read.call(this, file, ...args);
+      });
+      t.mock.method(fs, 'readdirSync', function (directory, ...args) {
+        return directory === path.join(managed, 'managed-settings.d')
+          ? (source === 'managed-fragment' ? ['python.json'] : []) : readdir.call(this, directory, ...args);
+      });
+    } else if (files[source]) fs.mkdirSync(path.dirname(files[source]), { recursive: true });
+    for (const python of [
+      { PYTHONPYCACHEPREFIX: '/operator/settings-cache' }, { PYTHONDONTWRITEBYTECODE: '1' },
+      { PYTHONPYCACHEPREFIX: '/operator/settings-cache', PYTHONDONTWRITEBYTECODE: '1' },
+      { PYTHONPYCACHEPREFIX: '' }, { PYTHONDONTWRITEBYTECODE: '' },
+      { PYTHONPYCACHEPREFIX: '', PYTHONDONTWRITEBYTECODE: '' },
+    ]) for (const inherited of [{}, { PYTHONPYCACHEPREFIX: '', PYTHONDONTWRITEBYTECODE: '' }]) {
+      supplied = { env: { ...python, OPERATOR_SETTING: 'kept' } };
+      if (files[source] && !source.startsWith('managed')) fs.writeFileSync(files[source], JSON.stringify(supplied));
+      const args = source === 'cli-json' ? ['--settings', JSON.stringify(supplied)]
+        : source === 'cli-file' ? [`--settings=${files[source]}`] : [];
+      const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args, context: f.context, env: inherited });
+      t.after(launch.close);
+      const generated = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+      if (Object.values(python).some(value => value !== '')) {
+        for (const key of ['PYTHONPYCACHEPREFIX', 'PYTHONDONTWRITEBYTECODE']) {
+          assert.equal(launch.env[key], inherited[key], 'settings choice suppresses the launch default');
+          assert.equal(generated.env[key], source.startsWith('cli-') ? python[key] : undefined,
+            'operator values retain their native settings scope');
+        }
+      } else {
+        assert.equal(launch.env.PYTHONPYCACHEPREFIX, path.join(launch.env.TMPDIR, 'pycache'));
+        assert.equal(generated.env.PYTHONPYCACHEPREFIX, launch.env.PYTHONPYCACHEPREFIX);
+      }
+      if (source.startsWith('cli-')) assert.equal(generated.env.OPERATOR_SETTING, 'kept');
+      else if (!source.startsWith('managed')) assert.deepEqual(JSON.parse(fs.readFileSync(files[source])), supplied);
+    }
+  });
+}
 
 test('long and redirected temp roots refuse before creating a run', t => {
   const f = fixture(t), long = path.join(f.root, 'x'.repeat(61));
@@ -399,11 +455,14 @@ fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,cwd:process.cwd
   }
 });
 
-for (const kind of ['codex', 'claude']) for (const mode of ['default', 'prefix', 'disabled']) {
+for (const kind of ['codex', 'claude']) for (const mode of ['default', 'prefix', 'disabled', 'empty-prefix', 'empty-disabled', 'empty-both',
+  ...(kind === 'claude' ? ['settings-prefix', 'settings-disabled'] : [])]) {
   test(`${kind} adapter Python import keeps bytecode out of the worktree (${mode})`, t => {
     const python = spawnSync('python3', ['--version'], { encoding: 'utf8', timeout: 5000 });
-    if (python.error?.code === 'ENOENT') { t.skip('python3 is unavailable; Python import probe skipped'); return; }
-    assert.equal(python.status, 0, python.error?.message ?? python.stderr);
+    if (python.error || python.status !== 0) {
+      t.skip(`python3 is unavailable or non-functional (${python.error?.message ?? `exit ${python.status}`}): Python import probe skipped`);
+      return;
+    }
     const f = fixture(t); fixtureFleet(t, f.root);
     command('git', ['init', '-qb', 'main'], f.own.checkout);
     command('git', ['config', 'user.name', 'Python cache test'], f.own.checkout);
@@ -429,19 +488,25 @@ fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({temp:env.TMPDIR,pyth
     const env = { ...process.env, MONITOR_ENTRY_BYPASS: '1', PYTHONPYCACHEPREFIX: undefined, PYTHONDONTWRITEBYTECODE: undefined };
     if (mode === 'prefix') env.PYTHONPYCACHEPREFIX = operatorCache;
     if (mode === 'disabled') env.PYTHONDONTWRITEBYTECODE = '1';
+    if (mode === 'empty-prefix' || mode === 'empty-both') env.PYTHONPYCACHEPREFIX = '';
+    if (mode === 'empty-disabled' || mode === 'empty-both') env.PYTHONDONTWRITEBYTECODE = '';
     const args = kind === 'codex' ? ['exec', 'Task'] : ['--print', 'Task'];
+    if (mode.startsWith('settings-')) args.push('--settings', JSON.stringify({ env: mode === 'settings-prefix'
+      ? { PYTHONPYCACHEPREFIX: operatorCache } : { PYTHONDONTWRITEBYTECODE: '1' } }));
     const result = spawnSync(process.execPath, [new URL(`../adapters/${kind}.mjs`, import.meta.url).pathname,
       '--auto-entry', '--repo', f.own.checkout, '--binary', f.binary, '--', ...args], {
       cwd: f.own.checkout, env, encoding: 'utf8', timeout: 20000,
     });
     assert.equal(result.status, 0, result.error?.message ?? result.stdout + result.stderr);
-    const got = JSON.parse(fs.readFileSync(receipt)), prefix = mode === 'prefix' ? operatorCache : path.join(got.temp, 'pycache');
+    const disabled = mode === 'disabled' || mode === 'settings-disabled';
+    const operatorPrefix = mode === 'prefix' || mode === 'settings-prefix';
+    const got = JSON.parse(fs.readFileSync(receipt)), prefix = operatorPrefix ? operatorCache : path.join(got.temp, 'pycache');
     assert.equal(got.python.value, 246);
-    assert.equal(got.python.disabled, mode === 'disabled');
-    assert.equal(got.python.prefix, mode === 'disabled' ? null : prefix);
-    assert.equal(got.python.exists, mode !== 'disabled', 'the import writes bytecode unless disabled');
-    if (mode !== 'disabled') assert.ok(got.python.cached.startsWith(prefix + path.sep), got.python.cached);
-    if (mode === 'prefix') assert.ok(fs.existsSync(got.python.cached), 'operator cache survives run cleanup');
+    assert.equal(got.python.disabled, disabled);
+    assert.equal(got.python.prefix, disabled ? null : prefix);
+    assert.equal(got.python.exists, !disabled, 'the import writes bytecode unless disabled');
+    if (!disabled) assert.ok(got.python.cached.startsWith(prefix + path.sep), got.python.cached);
+    if (operatorPrefix) assert.ok(fs.existsSync(got.python.cached), 'operator cache survives run cleanup');
     assert.ok(!fs.existsSync(path.join(f.own.checkout, '__pycache__')));
     assert.equal(command('git', ['status', '--porcelain'], f.own.checkout), '', 'import leaves the worktree clean');
     assert.ok(!fs.existsSync(got.temp), 'run cleanup removes its bytecode cache');

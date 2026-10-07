@@ -247,7 +247,9 @@ export async function drainInbox(file, options = {}) {
   } finally { release(); }
 }
 
-export async function promptSupervisor(to, message, options = {}) {
+// Durable enqueue only; fleet routing must not wait behind a busy composer.
+// resumeInbox owns policy and delivery through the existing input gate.
+export function enqueueSupervisor(to, message, options = {}) {
   const file = path.resolve(options.inbox ?? inboxPath(options));
   const id = options.id ?? randomUUID();
   if (typeof id !== 'string' || !id || /\s|[\x00-\x1f\x7f]/.test(id)) throw new Error('notice id must be nonempty without whitespace or control characters');
@@ -267,6 +269,12 @@ export async function promptSupervisor(to, message, options = {}) {
     append({ type: 'notice', id, to, message, project: noticeProject(file, options), owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });
   });
+  return { id, inbox: file };
+}
+
+export async function promptSupervisor(to, message, options = {}) {
+  const { id, inbox: file } = enqueueSupervisor(to, message, options);
+  const retrySeconds = seconds(options.retrySeconds, 10, 'retry seconds');
   // Acknowledged ownership precedes input. The worker survives this caller,
   // including a crash between the prompt side effect and its acknowledgement.
   // Routine policy never waits behind older exception delivery or busy input.

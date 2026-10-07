@@ -1,5 +1,5 @@
 // The loop as an always-on service: a macOS LaunchAgent that runs
-// `brain watch --digest`, restarts it if it dies, and starts it at login.
+// `brain watch`, restarts it if it dies, and starts it at login. No model calls.
 // The console shows its health from the watcher's heartbeat and starts or
 // stops it through these functions.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -28,7 +28,7 @@ function searchPath() {
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function plist() {
-  const args = [process.execPath, BRAIN, 'watch', '--digest'];
+  const args = [process.execPath, BRAIN, 'watch'];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">

@@ -1,5 +1,11 @@
 # Supervisor
 
+The [Brain steward](../brain/README.md#model-free-steward-routing) routes fleet-wide
+blocked worker captures through this same inbox and input gate. A blocked
+supervisor escalates to the steward journal and a local operator alert, because
+it cannot consume its own inbox. Aged pending notices and legacy parked outboxes
+use the same alert channel. This observer starts no project schedule or model.
+
 All automatic supervisor notices use `prompt-supervisor.mjs`, including watch's
 intermediate/final notices, promotion outcomes, and settle/dispatch's correction
 watchers. Before delivery, [autopilot.mjs](autopilot.mjs) applies the model-free

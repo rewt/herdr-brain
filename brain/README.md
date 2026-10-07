@@ -7,7 +7,11 @@ written to. What it has no place for is **what came out of a session** once it
 stops. `brain` watches Herdr, notices a session going `done` or `blocked`,
 reads what it said, and puts it in a queue you can look at.
 
-Watching and reading need nothing from you. It sends into a session (`send`, `key`) or opens one
+The model-free steward consumes blocked entries each watch tick: worker blocks
+become project supervisor notices, while supervisor blocks and stalled notices
+escalate to the operator and its own bounded journal. Automatic notice delivery
+uses the supervisor's existing empty-composer gate. It never answers a dialog.
+It sends operator replies (`send`, `key`) or opens a session
 (`start`) only when you ask, and it never closes one.
 
 ## Run it
@@ -27,7 +31,10 @@ node bin/brain.mjs watch --catch-up --digest
 ```
 
 - `--catch-up` takes whatever is already stopped on the first tick. Without it,
-  only transitions count, so a restart is quiet.
+  done sessions need a transition; newly seen blocked sessions are always
+  captured so the steward can route them. A replacement terminal/native session
+  is captured even if it starts blocked in the same pane. Persisted observations
+  avoid recapture of the same occupant.
 - `--digest` turns on the reading pass for results the parser cannot resolve
   on its own. One ephemeral headless session (`claude -p`, Sonnet 5), no pane,
   no tools, one small call.
@@ -43,6 +50,10 @@ node bin/brain.mjs watch --catch-up --digest
   collapsed the choice into "send your answer" and lost it. Sonnet 5 kept both
   routes and their consequences.
 - `--every N` seconds (default 5), `--model`, `--include-unnamed`.
+
+The installed service runs `watch` without `--digest`. Updating the source does
+not replace an already loaded LaunchAgent: activate the new installation with
+`brain service start` when ready. No service is started by development or tests.
 
 Then, from anywhere:
 
@@ -79,6 +90,80 @@ raw screen so nothing is lost when a guess is wrong.
 The unsent-text case is not hypothetical. On the first run against a live
 machine it found five sessions stuck at the same first-run dialog, four of them
 holding answers that had been typed and never delivered.
+
+## Model-free steward routing
+
+`watch` runs the steward after captures and also checks stalled delivery when
+Herdr is unavailable. A foreground pass is available for inspection:
+
+```sh
+node brain/bin/brain.mjs steward --dry-run  # JSON plan; no journal, owner or alert writes
+node brain/bin/brain.mjs steward           # one routing pass
+```
+
+Projects come from the fleet (`$HERDR_MONITOR_FLEET/fleet.json`, default
+`~/.herdr-monitor/fleet.json`) and fresh canonical Git common-directory identity.
+Queue project labels, repository basenames and workspace labels do not route.
+A linked worktree therefore routes to the same project's record. Only the latest
+queue observation of a currently blocked session in the same pane/occupant is
+eligible; answered/dismissed/acted/never entries stay resolved. New captures retain
+native session and terminal IDs. Older captures lack those IDs and can only be
+matched by their live pane and repository; their raw screens remain evidence.
+
+A native supervisor's explicit launch binding can supply its recipient. Legacy
+supervisors need an explicit name in `$BRAIN_STATE/steward.json` (default Brain
+state below). Example, using the project's exact fleet names:
+
+```json
+{
+  "enabled": true,
+  "projects": {
+    "bch-cloak": { "supervisor": "supervisor-opus" },
+    "bch-cloak-aggregator": { "supervisor": "aggregator-gm" },
+    "herdr-brain": { "supervisor": "supervisor-herdr" }
+  },
+  "stalled_seconds": 300,
+  "debounce_seconds": 300,
+  "alert_cap": 3
+}
+```
+
+Worker blocks are enqueued with stable IDs at `RECORD/supervisor/inbox.log`;
+an optional absolute `inbox` in a project entry selects a custom Monitor JSONL
+journal. Enqueue never waits for a composer. The acknowledged transport owner
+applies notice policy and delivers through the existing idle/done, two-read
+composer gate. A worker notice with a lost enqueue reply retries the same ID.
+Dead delivery owners are resumed each tick. The steward never keys a permission
+dialog, focuses a pane, invokes a supervisor cycle mutation or writes record events.
+
+A blocked supervisor cannot consume its own notice, so it gets a steward journal
+entry and a local operator alert. Missing, ambiguous, stale or foreign recipient
+bindings also escalate. Native pending/uncertain notices and legacy regular
+`.lane/supervisor/outbox/*.msg` files older than `stalled_seconds` use that same
+alert channel. Legacy outboxes are read-only: no replay, deletion or `RETRY` file.
+Unparseable inboxes escalate with their diagnostic instead of being treated as empty.
+
+The default alert is a macOS notification via a fixed `osascript` program. Select
+another local channel with `"alert_command": ["/absolute/path/to/command", "arg"]`.
+It receives one additional literal JSON argument containing project, session,
+kind, message, evidence source and steward journal path. Arguments never go
+through a shell. Non-macOS hosts require this setting. Commands have a ten-second
+deadline. No model determines the message or channel.
+
+Alerts share one debounce and cap per session occupant, across blocked and stalled
+causes. Defaults: five minutes between attempts and three attempts total; local
+command failure or an interrupted acknowledgement consumes an attempt as well.
+Changing a question or restarting the watcher does not reset that cap. Successful
+delivery or a resumed session ends the corresponding alert condition.
+
+`$BRAIN_STATE/steward/journal.json` contains fsynced action intents and results,
+bounded to 2,048 events and 4 MiB. Compaction retains the latest routing receipts,
+all alert-cap receipts (small receipts for retired sessions), and 128 retired
+history events. Saturation or corruption refuses new steward effects for inspection;
+it never silently resets a cap. `enabled: false` disables routing, owner recovery
+and alerts. Unknown configuration fields and fleet project names fail closed.
+Existing Brain capture history and supervisor transport journals keep their
+existing retention policies; this pass bounds its own journal and debounce.
 
 ## Where things live
 

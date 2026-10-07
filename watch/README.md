@@ -93,7 +93,10 @@ canonical checkout; it is removed last, after bch-cloak's release-gated switch. 
 supervisor may explicitly open one with `supervisor/settle.sh`; that launcher
 does not observe worker lifecycle. Brain `watch` remains separate: it captures
 all stopped session screens into the operator queue rather than delivering a
-recorded run to a supervisor.
+recorded run to a supervisor. Brain's model-free steward now consumes blocked
+captures using fleet identity, routes workers through the supervisor inbox, and
+escalates blocked supervisors or aged deliveries to a configurable local operator
+alert. See [Brain routing and bounds](../brain/README.md#model-free-steward-routing).
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.

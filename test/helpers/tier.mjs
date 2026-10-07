@@ -20,6 +20,7 @@ const promotion = [
   'acceptance/test/snapshot.test.mjs',
   'brain/test/capture.test.mjs',
   'brain/test/projects.test.mjs',
+  'brain/test/steward.test.mjs',
   'console/proto/autonomy.test.mjs',
   'console/proto/prototype.test.mjs',
   'console/proto/workflows.test.mjs',

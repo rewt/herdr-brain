@@ -14,6 +14,7 @@
 // said, and puts it in a queue. It never closes a session. It sends into one
 // (send, key) or starts one (start) only when the operator asks.
 import process from 'node:process';
+import { randomUUID } from 'node:crypto';
 import { agents, read, tabLabels, sendKeys, prompt, HerdrDown } from '../lib/herdr.mjs';
 import { parseScreen, headline } from '../lib/capture.mjs';
 import { append, bucketOf, fold, open as openRows, get, handleOf, loadSeen, saveSeen, LOG } from '../lib/queue.mjs';
@@ -25,7 +26,8 @@ import * as service from '../lib/service.mjs';
 import { loadProjects, withProject } from '../lib/projects.mjs';
 import { parseArgs, cliHelp } from '../../lib/cli-help.mjs';
 import { recordDigest, renderDigest } from '../lib/signals.mjs';
-cliHelp(import.meta.url, "Usage: brain watch|queue|show|send|key|later|never|answer|digest|explain|status|service|start [OPTIONS]");
+import { stewardTick } from '../lib/steward.mjs';
+cliHelp(import.meta.url, "Usage: brain watch|steward|queue|show|send|key|later|never|answer|digest|explain|status|service|start [OPTIONS]");
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';
@@ -48,7 +50,7 @@ const cut = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : (s ?? '')
 async function capture(agent, labels) {
   const text = await read(agent.name, 250);
   const parsed = parseScreen(text ?? '', { agent: agent.agent });
-  const id = `${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 13)}-${agent.name}`;
+  const id = `${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 13)}-${agent.name}-${randomUUID().slice(0, 8)}`;
   const entry = {
     type: 'result',
     id,
@@ -59,6 +61,8 @@ async function capture(agent, labels) {
     workspace: agent.workspace_id ?? null,
     tab: agent.tab_id ?? null,
     pane: agent.pane_id ?? null,
+    terminal_id: agent.terminal_id ?? null,
+    agent_session: agent.agent_session ?? null,
     tab_label: labels.get(agent.tab_id) ?? null,
     title: agent.terminal_title_stripped ?? null,
     ...parsed,
@@ -81,6 +85,7 @@ async function watch() {
   let catchUp = has('--catch-up');
   const model = val('--model', 'claude-sonnet-5');
   const seen = loadSeen();
+  seen.occupants ??= {};
   let down = false;
 
   const line = (s) => process.stdout.write(`${new Date().toTimeString().slice(0, 8)}  ${s}\n`);
@@ -93,6 +98,10 @@ async function watch() {
       if (down) { line('herdr is back'); down = false; }
     } catch (err) {
       if (!down) { line(`herdr unavailable: ${err.message}`); down = true; }
+      try {
+        const routed = await stewardTick({ agents: null });
+        for (const action of routed.actions) line(`STEWARD ${action.type} ${cut(action.session ?? action.inbox, 60)}`);
+      } catch (error) { line(`steward failed: ${cut(error.message, 160)}`); }
       await sleep(every);
       continue;
     }
@@ -104,13 +113,16 @@ async function watch() {
       live.add(name);
       const was = seen.states[name];
       const now = a.agent_status;
+      const occupant = JSON.stringify([a.pane_id, a.terminal_id, a.agent_session]);
+      const replaced = seen.occupants[name] !== occupant;
+      seen.occupants[name] = occupant;
       seen.states[name] = now;
-      // The transition is the event: entering done or blocked from anything
-      // else. A first sighting is not a transition, so a restart is quiet —
-      // unless --catch-up, which takes whatever is already stopped right now.
+      // Capture transitions, plus first-seen blocks for steward routing.
+      // Done sessions need --catch-up on first sighting. Persisted observations
+      // keep a restart from duplicating an unchanged capture.
       const first = was === undefined;
       if (!CAPTURE.has(now)) continue;
-      if (first ? !catchUp : was === now) continue;
+      if (first ? !catchUp && now !== 'blocked' : was === now && !(now === 'blocked' && replaced)) continue;
       const labels = tabLabels();
       const entry = await capture({ ...a, name }, labels);
       line(`${now.toUpperCase()}  ${name}  ${cut(entry.headline, 72)}`);
@@ -126,10 +138,16 @@ async function watch() {
       }
     }
     catchUp = false;   // only the first tick
-    for (const name of Object.keys(seen.states)) if (!live.has(name)) delete seen.states[name];
+    for (const name of Object.keys(seen.states)) if (!live.has(name)) {
+      delete seen.states[name]; delete seen.occupants[name];
+    }
     // The heartbeat the console reads to say whether the loop is alive.
     Object.assign(seen, { tick: new Date().toISOString(), pid: process.pid, every: every / 1000, digest: wantDigest });
     saveSeen(seen);
+    try {
+      const routed = await stewardTick({ rows: fold(), agents: list });
+      for (const action of routed.actions) line(`STEWARD ${action.type} ${cut(action.session ?? action.to ?? action.inbox, 60)}`);
+    } catch (error) { line(`steward failed: ${cut(error.message, 160)}`); }
     await sleep(every);
   }
 }
@@ -195,6 +213,11 @@ function show(id) {
 async function main() {
   switch (cmd) {
     case 'watch': return watch();
+    case 'steward': {
+      const result = await stewardTick({ rows: fold(), agents: await agents().catch(() => null), dryRun: has('--dry-run') });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
     case 'queue': case 'ls': return queue();
     case 'show': return show(argv[1]);
     case 'answer': {
@@ -324,6 +347,7 @@ async function main() {
       process.stderr.write([
         'usage:',
         '  brain watch [--digest] [--catch-up]   keep the queue current',
+        '  brain steward [--dry-run]            route blocked sessions and alert stalled notices without a model',
         '  brain queue [--all] [--json]          what is waiting',
         '  brain show <id>                       one result in full',
         '  brain send <id> ["text"]              send a reply to that session',

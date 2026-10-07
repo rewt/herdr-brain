@@ -29,8 +29,9 @@ import {
 const SELF = fileURLToPath(import.meta.url);
 const LOCAL_ORG = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 
-const { values: opt, positionals } = parseArgs({ usage: "Usage: node watch/watch.mjs R-n --org DIR [OPTIONS]",
+const { values: opt, positionals, tokens } = parseArgs({ usage: "Usage: node watch/watch.mjs R-n --org DIR [OPTIONS]",
   allowPositionals: true,
+  tokens: true,
   options: {
     org: { type: 'string' },
     to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr' },
@@ -257,9 +258,32 @@ function spawnWatcher() {
 
 function watcherArgs(mode) {
   // Freeze discovery and the named recipient before crossing a process or pane
-  // boundary, where cwd and adapter environment can differ.
-  return process.argv.slice(2).filter(arg => arg !== mode)
-    .concat('--org', opt.org, '--cwd', opt.cwd, '--to', opt.to);
+  // boundary, where cwd and adapter environment can differ. Replace supplied
+  // values in place so command receipts retain their order; add only omissions.
+  const original = process.argv.slice(2);
+  const frozen = new Set(['org', 'cwd', 'to']);
+  const argv = [];
+  const appendMissing = () => {
+    for (const name of frozen) argv.push(`--${name}`, opt[name]);
+    frozen.clear();
+  };
+  for (const token of tokens) {
+    if (token.kind === 'option') {
+      if (`--${token.name}` === mode) continue;
+      if (['org', 'cwd', 'to'].includes(token.name)) {
+        if (frozen.delete(token.name)) argv.push(`--${token.name}`, opt[token.name]);
+        continue;
+      }
+      argv.push(original[token.index]);
+      if (token.value !== undefined && !token.inlineValue) argv.push(token.value);
+    } else {
+      // Added options must precede a caller's positional-only boundary.
+      if (token.kind === 'option-terminator') appendMissing();
+      argv.push(original[token.index]);
+    }
+  }
+  appendMissing();
+  return argv;
 }
 
 // The parent returns only after the child has acquired the run lock and read

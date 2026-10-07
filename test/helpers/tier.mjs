@@ -62,6 +62,7 @@ const promotion = [
   'supervisor/test/autopilot.test.mjs',
   'test/approvals.test.mjs',
   'test/discernment.test.mjs',
+  'test/digest.test.mjs',
   'test/file-wait.test.mjs',
   'test/flow.test.mjs',
   'test/focus.test.mjs',

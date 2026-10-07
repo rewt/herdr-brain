@@ -6,6 +6,32 @@ supervisor escalates to the steward journal and a local operator alert, because
 it cannot consume its own inbox. Aged pending notices and legacy parked outboxes
 use the same alert channel. This observer starts no project schedule or model.
 
+Project chats pull catch-up on demand with `record digest --since 2h` (default:
+the last day), or `record digest --since 09:00 --width 48`. The view combines the
+selected record's reports and decisions with durable promotion/watch facts from
+`ORG/supervisor/inbox.log`. It never starts a model, reads a live pane, sends a
+notice, initializes a record, or writes state. A done report alone does not mean
+the lane landed. Missing journal evidence is stated; report checks without a
+matching watch notice are `unknown`. Checks mean report validation, not review
+or promotion validation. Journal promotion facts retain their reason and evidence
+paths in JSON; they describe recorded producer outcomes, not a fresh Git check.
+
+For a chat's next conversation, read `record digest --json`, keep its opaque
+`cursor` in that chat's own state, then call `record digest --after CURSOR --json`.
+Save the new cursor only after reading the result. Offsets include late and
+same-timestamp appends in both logs. A cursor belongs to the canonical record
+path, and rotated/truncated sources require a fresh `--since` read. Time windows
+are inclusive and accept the same forms as `record log`; cursor windows begin
+after the previous snapshots. Open operator questions and currently unresolved
+blocked sessions appear regardless of window, until record/watch evidence
+resolves or supersedes them. They are recorded evidence, not live session status.
+
+Text defaults to 72 columns and eight entries per section, with explicit omitted
+counts and bounded headlines. `--width` accepts 32–240 columns and `--limit`
+changes the text section cap. JSON always includes all facts and the next cursor;
+read it before advancing past a truncated text view. The cursor is never written
+to the record and grants no authority to act.
+
 All automatic supervisor notices use `prompt-supervisor.mjs`, including watch's
 intermediate/final notices, promotion outcomes, and settle/dispatch's correction
 watchers. Before delivery, [autopilot.mjs](autopilot.mjs) applies the model-free

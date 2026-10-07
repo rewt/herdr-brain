@@ -51,7 +51,7 @@ sessions and custom shells need their own entry transport; see the guide.
 
 | Module | Reference |
 | --- | --- |
-| Record | `node bin/org.mjs help` (`org` is the permanent `record` alias); [Lessons](docs/reference/lessons.md), [MCP adapter](mcp/README.md) |
+| Record | `node bin/org.mjs help` (`org` is the permanent `record` alias); [Chat digest](supervisor/README.md), [Lessons](docs/reference/lessons.md), [MCP adapter](mcp/README.md) |
 | Entry and project settings | [Discovery](discovery/README.md) |
 | Machine installation | [Herdr](herdr/README.md) |
 | Lanes and routes | [Lanes](lanes/README.md) |

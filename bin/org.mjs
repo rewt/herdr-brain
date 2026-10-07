@@ -20,6 +20,7 @@ import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, rep
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 import { blockJson, renderBlock } from '../lib/block.mjs';
+import { digestJson, readDigestJournal } from '../lib/digest.mjs';
 import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { desksCommand } from '../settle/desks-command.mjs';
 import { routesCommand } from '../lanes/routes-command.mjs';
@@ -29,6 +30,7 @@ import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mj
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate, renderPriorities, renderLessons,
+  renderDigest,
 } from '../lib/render.mjs';
 
 const BIN = fileURLToPath(import.meta.url);
@@ -87,6 +89,8 @@ Views (zero inference)
   record snapshot                         markdown state for a fresh session of any harness
   record show <ID> [--json]               an item or run with its reports and history
   record log [--since 2h|09:00|DATE] [--limit N] [--json]
+  record digest [--since 2h|09:00|DATE | --after CURSOR] [--limit N] [--width N] [--json]
+                                          chat catch-up; read-only, cursor belongs to the chat
   record today [--json]                   what waits on the operator, was decided, runs and finished today
   record recap [--back N] [--json]        the latest work block top down: threads, what they spawned,
                                           asked and were told, what is pending (--back 1: the one before)
@@ -134,9 +138,9 @@ function cliString(dir) {
   return `ORG_DIR=${shq(dir)} node ${shq(BIN)}`;
 }
 
-function openOrg() {
+function openOrg({ readOnly = false } = {}) {
   let dir = findOrgDir();
-  if (!dir && !process.env.ORG_DIR) {
+  if (!dir && !process.env.ORG_DIR && !readOnly) {
     try { const project = gitProject(); ignoreRuntime(project); dir = path.join(project.canonical, '.org'); }
     catch { /* Outside Git, explicit init remains necessary. */ }
     if (dir) initOrg(dir);
@@ -922,6 +926,24 @@ function today(argv) {
   return 0;
 }
 
+function digest(argv) {
+  const { values } = args(argv, { since: { type: 'string' }, after: { type: 'string' },
+    limit: { type: 'string' }, width: { type: 'string' }, json: { type: 'boolean' } },
+  { max: 0, usage: 'record digest [--since TIME | --after CURSOR] [--limit N] [--width N] [--json]' });
+  if (values.since !== undefined && values.after !== undefined) throw new UserError('choose --since or --after, not both');
+  const limit = values.limit === undefined ? 8 : Number(values.limit);
+  const width = values.width === undefined ? 72 : Number(values.width);
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new UserError('--limit expects a positive whole number');
+  if (!Number.isSafeInteger(width) || width < 32 || width > 240) throw new UserError('--width expects a whole number from 32 to 240');
+  const ctx = openOrg({ readOnly: true });
+  const { journal, warnings } = readDigestJournal(ctx.dir);
+  const doc = digestJson(ctx.state, ctx.events, journal, { orgDir: ctx.dir, now: ctx.now,
+    since: values.after === undefined ? parseSince(values.since ?? '1d', ctx.now) : null,
+    after: values.after, warnings: [...warnings, ...(ctx.tornTail ? ['Incomplete record tail ignored.'] : [])] });
+  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderDigest(doc, { limit, width }));
+  return 0;
+}
+
 function recap(argv) {
   const { values } = args(argv, { json: { type: 'boolean' }, back: { type: 'string' } }, { max: 0, usage: 'record recap [--back N] [--json]' });
   const back = values.back == null ? 0 : Number(values.back);
@@ -1017,7 +1039,7 @@ const COMMANDS = {
   release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
   releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
+  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
 };
 
 function main(argv) {

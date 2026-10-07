@@ -109,7 +109,7 @@ batch is attempted at most once per drain. Interruption notices keep the origina
 `promote:REQUEST_ID:complete`, since the inbox binds each notice ID to exact content.
 Refusals and lost acknowledgements retry through the input gate; every prompt
 includes the same visible `notice-id`, making at-least-once duplicates recognisable. It never turns an undelivered success into a
-new promotion. Gates have no invented time budget.
+new promotion. The declared gate retains its deadlines; optional affected-test extras have the estimated selection budget described below.
 
 Optional overrides:
 
@@ -309,30 +309,59 @@ job log; they do not produce a refused result.
 A canonical `.lane.validation.json` may declare `promotion_tests`, a relative
 path to a dependency-free Node planner. The train calls it with `--plan` and a
 JSON array containing the union of paths changed by the captured lanes, including
-both sides of renames and deletions, plus a JSON string naming the effective
-promotion command. It returns JSON `files` (additional full
-files), optional `covered` (files already run in full by the promotion command)
-and optional `graph` bounds. Selection is capped at 512 files and planning at
-20 seconds; invalid or oversized plans refuse integration. The planner receives
-`--run` and the selected JSON array after the declared promotion command, inside
-the same slot, log and green gate. The command includes the selection, so cached
-evidence cannot authorize a different plan. `attempt.test_plan` retains changed
-paths, selected files, coverage, command and graph bounds even for a red gate.
+both sides of renames and deletions, a JSON string naming the effective
+promotion command, and a JSON array of bound required test files. Settle and the
+train execute the planner and its imports from a private snapshot of the captured
+canonical base commit while inspecting the candidate tree. A lane-modified planner
+cannot invent coverage or shrink the bound selection.
 
-This repository's `test/helpers/affected-tests.mjs` selects every changed existing
-`.test.mjs` file outside whole-file promotion coverage and release files reached
-by reverse dependency closure. It recognizes static imports, re-exports, literal
-dynamic imports, `new URL` references and literal launched-script paths, including
-conservative basename matches for joined paths. Cycles terminate. The graph is
-bounded to 10,000 paths and 32 MiB of source; execution uses the release runner's
-at-most-four-file suites and existing per-file/suite deadlines. Selected mixed
-tier files are omitted from patterned promotion steps and run once in full.
-Computed runtime references need a literal path/import to enter this static graph;
-the full release gate remains the release candidate's final validation.
+The planner returns JSON `files` (additional full files), optional `covered`
+(files already run in full by the promotion command), optional `graph` bounds,
+and optional `selected`, `deferred` and `budget` details. Selected and deferred
+rows name the file, reason and estimated milliseconds; deferred rows name
+`release-candidate` as their destination. Selection is capped at 512 files and
+planning at 20 seconds; invalid or oversized plans refuse integration. The planner
+receives `--run` and the selected JSON array after the declared promotion command,
+inside the same slot, log and green gate. The command includes the selection, so
+cached evidence cannot authorize a different set. `attempt.test_plan` retains
+changed paths, required files, selected files, deferred files and reasons, coverage,
+command, budget and graph bounds even for a red gate. Deferred extras do not block
+promotion; the complete offline suites still run once per release candidate.
+
+This repository's `test/helpers/affected-tests.mjs` considers changed existing
+`.test.mjs` files outside whole-file promotion coverage and release files with a
+direct reference to a changed module (one hop). It recognizes static imports,
+re-exports, literal dynamic imports, `new URL` references and literal launched-script
+paths, including conservative basename matches for joined paths. It does not
+follow references through intermediate helpers or modules. Computed runtime
+references need a literal path/import to enter this static selection.
+
+Optional extras default to a **300,000 ms estimated budget and ten-file cap**.
+`MONITOR_PROMOTION_EXTRA_BUDGET_MS` and `MONITOR_PROMOTION_EXTRA_MAX_FILES` accept
+positive integers to override those limits. Bound required evidence always runs,
+even beyond either limit, and consumes the allowance before optional extras.
+Whole-file promotion coverage needs no extra run. Remaining candidates prefer
+changed tests, then cheaper direct references, with path order breaking ties.
+Files that do not fit are recorded as `time-budget` or `file-cap` deferrals to the
+release candidate. Required exceptions carry `bound-required` and
+`budget.required_over_budget` in the receipt.
+
+`test/helpers/test-durations.json` records the latest tracked whole-file
+measurements from the ENG-135 inventory, with a timestamp per file and a source
+path. Its 342,215 ms measurement for `lanes/test/lane.test.mjs` exceeds the default
+budget by itself. Unmeasured files use a conservative 60,000 ms estimate; every
+row identifies measured or fallback cost and retains the measurement timestamp when available. Update the tracked inventory from
+whole-file measurements collected during release preparation, without running
+extra suites in a lane. The estimates bound selection rather than impose a new
+execution timeout: machine load and changed test behavior can exceed them.
+
+The source scan is bounded to 10,000 paths and 32 MiB; execution uses the release
+runner's at-most-four-file suites and existing per-file/suite deadlines. Selected
+mixed-tier files are omitted from patterned promotion steps and run once in full.
 
 Settle can defer only entries of the exact form
 `- Test evidence not re-executed: path/to/file.test.mjs` under Unverified, with
 independent PASS and no other unresolved claims. Full-file coverage must be in
-the plan or in recorded re-execution evidence. Deferred files travel as
-`--required-tests` on the bound queue request; a later plan that omits them refuses
-before gating or integration. Other Unverified entries retain their escalation.
+the plan or in recorded re-execution evidence. Required evidence files travel as
+`--required-tests` on the bound queue request and bypass the optional-extra caps;
+a later plan that omits them refuses before gating or integration. Other Unverified entries retain their escalation.

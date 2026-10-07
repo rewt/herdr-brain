@@ -120,3 +120,14 @@ test('recorded re-execution permits supervisor-bound promotion; unrecorded or st
   assert.equal(args[args.indexOf('--expected-head') + 1], f.git(['rev-parse', 'HEAD'], f.workspace));
   assert.equal(f.calls().filter(args => args[1] === 'start').length, 1, 'test resolution preserves the independent review');
 });
+
+test('settle forwards scoped evidence as required files before applying optional caps', t => {
+  const f = setup(t, { plannerSource: `const required = JSON.parse(process.argv[5]);
+console.log(JSON.stringify({files:required,selected:required.map(file=>({file,reason:'bound-required',estimated_ms:342215,estimate:'measured'})),
+  budget:{time_ms:1,max_files:1,unknown_file_ms:60000,estimated_ms:required.length*342215,required_over_budget:true}}));\n` });
+  const settled = result(f.settle(f.run));
+  assert.equal(settled.result, 'promotable');
+  assert.deepEqual(settled.test_evidence.plan.required, ['checks.test.mjs']);
+  assert.deepEqual(settled.test_evidence.plan.files, ['checks.test.mjs']);
+  assert.equal(settled.test_evidence.plan.budget.required_over_budget, true);
+});

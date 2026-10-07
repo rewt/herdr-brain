@@ -771,7 +771,7 @@ function main() {
         let plan = null, plannerError;
         try {
           plan = canonicalTestPlan({ repo: job.repo, base: job.mainHead, cwd: workspace,
-            planner: declaration.promotion_tests, changed, baseCommand: declaration.tiers.promotion.command });
+            planner: declaration.promotion_tests, changed, required: files, baseCommand: declaration.tiers.promotion.command });
         } catch (error) { plannerError = error.message; }
         const covered = [...(plan?.files ?? [])];
         // Whole-file promotion inventory is supplied by the planner separately.

@@ -1,0 +1,45 @@
+TAP version 13
+# Subtest: one-hop selection includes changed tests and direct literals without following re-exports or cycles
+ok 1 - one-hop selection includes changed tests and direct literals without following re-exports or cycles
+  ---
+  duration_ms: 3.028959
+  ...
+# Subtest: a core-module change selects bounded one-hop extras and defers the expensive lane file
+ok 2 - a core-module change selects bounded one-hop extras and defers the expensive lane file
+  ---
+  duration_ms: 426.135959
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 3 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 221.716791
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 4 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 150.971875
+  ...
+# Subtest: a leaf change selects exactly its direct test
+ok 5 - a leaf change selects exactly its direct test
+  ---
+  duration_ms: 0.939584
+  ...
+# Subtest: time and file caps defer extras to release while bound requirements always run
+ok 6 - time and file caps defer extras to release while bound requirements always run
+  ---
+  duration_ms: 0.204042
+  ...
+# Subtest: the real planner forces required evidence beyond both caps and refuses missing required files
+ok 7 - the real planner forces required evidence beyond both caps and refuses missing required files
+  ---
+  duration_ms: 135.605792
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 973.98075

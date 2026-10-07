@@ -1,0 +1,447 @@
+{
+  "schema": "test-file-durations/v1",
+  "source": "docs/reports/ENG-135-suite-pass-evidence-20261003/measurements.json",
+  "method": "Observed Node child-process launch calls; excludes uninstrumented native/shell grandchildren. File seconds are child entry-to-exit, not summed across concurrent files.",
+  "files": {
+    "acceptance/test/boundary.test.mjs": {
+      "duration_ms": 34108,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/cases.test.mjs": {
+      "duration_ms": 29,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/cleanup.test.mjs": {
+      "duration_ms": 1139,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/cutover.test.mjs": {
+      "duration_ms": 1428,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/focus.test.mjs": {
+      "duration_ms": 17208,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/launch.test.mjs": {
+      "duration_ms": 15,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/load-round2.test.mjs": {
+      "duration_ms": 55183,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/load.test.mjs": {
+      "duration_ms": 121,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/probe.test.mjs": {
+      "duration_ms": 13,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/recovery.test.mjs": {
+      "duration_ms": 7186,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/results.test.mjs": {
+      "duration_ms": 55,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/security.test.mjs": {
+      "duration_ms": 318,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/signal.test.mjs": {
+      "duration_ms": 64,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/snapshot.test.mjs": {
+      "duration_ms": 71,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/validation.test.mjs": {
+      "duration_ms": 3628,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "acceptance/test/verification.test.mjs": {
+      "duration_ms": 838,
+      "measured_at": "2026-10-03T21:09:09.469Z"
+    },
+    "brain/test/capture.test.mjs": {
+      "duration_ms": 13,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "brain/test/projects.test.mjs": {
+      "duration_ms": 92,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/proto/autonomy.test.mjs": {
+      "duration_ms": 58,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/proto/prototype.test.mjs": {
+      "duration_ms": 58,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/proto/workflows.test.mjs": {
+      "duration_ms": 66,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/board.test.mjs": {
+      "duration_ms": 28,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/brain.test.mjs": {
+      "duration_ms": 41,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/control-plane.test.mjs": {
+      "duration_ms": 24570,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/control.test.mjs": {
+      "duration_ms": 21,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/controller.test.mjs": {
+      "duration_ms": 27,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/desks.test.mjs": {
+      "duration_ms": 15873,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/frame.test.mjs": {
+      "duration_ms": 66,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/housekeeping.test.mjs": {
+      "duration_ms": 9226,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/model.test.mjs": {
+      "duration_ms": 54,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/modern.test.mjs": {
+      "duration_ms": 264,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/names.test.mjs": {
+      "duration_ms": 17,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/paint.test.mjs": {
+      "duration_ms": 12,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/session.test.mjs": {
+      "duration_ms": 4206,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/sources.test.mjs": {
+      "duration_ms": 20,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/terminal.test.mjs": {
+      "duration_ms": 44,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "console/test/waiting.test.mjs": {
+      "duration_ms": 212,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/acceptance.test.mjs": {
+      "duration_ms": 14824,
+      "measured_at": "2026-10-03T21:03:59.469Z"
+    },
+    "discovery/test/alternatives.test.mjs": {
+      "duration_ms": 2663,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/confinement.test.mjs": {
+      "duration_ms": 19,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/entry.test.mjs": {
+      "duration_ms": 4186,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/lifecycle.test.mjs": {
+      "duration_ms": 11948,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/owner.test.mjs": {
+      "duration_ms": 15119,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/review-r2.test.mjs": {
+      "duration_ms": 21592,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/review-r3.test.mjs": {
+      "duration_ms": 13802,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/review-r4.test.mjs": {
+      "duration_ms": 409,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/review.test.mjs": {
+      "duration_ms": 17308,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/sandbox.test.mjs": {
+      "duration_ms": 16,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/settings.test.mjs": {
+      "duration_ms": 16385,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "discovery/test/validation-deadlines.test.mjs": {
+      "duration_ms": 11873,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "dispatch/test/dispatch.test.mjs": {
+      "duration_ms": 46963,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "housekeeping/test/housekeeping.test.mjs": {
+      "duration_ms": 16147,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "lanes/test/herdr-client.test.mjs": {
+      "duration_ms": 82,
+      "measured_at": "2026-10-03T20:57:21.784Z"
+    },
+    "lanes/test/lane.test.mjs": {
+      "duration_ms": 342215,
+      "measured_at": "2026-10-03T20:57:21.784Z"
+    },
+    "lanes/test/no-focus.test.mjs": {
+      "duration_ms": 11,
+      "measured_at": "2026-10-03T20:57:21.784Z"
+    },
+    "lanes/test/routes.test.mjs": {
+      "duration_ms": 18,
+      "measured_at": "2026-10-03T20:57:21.784Z"
+    },
+    "lanes/test/validation.test.mjs": {
+      "duration_ms": 8003,
+      "measured_at": "2026-10-03T20:57:21.784Z"
+    },
+    "promote/test/promote.test.mjs": {
+      "duration_ms": 33423,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "release/test/candidate.test.mjs": {
+      "duration_ms": 2587,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "release/test/release.test.mjs": {
+      "duration_ms": 26805,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/config.test.mjs": {
+      "duration_ms": 27958,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/rebase-paths.test.mjs": {
+      "duration_ms": 48931,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/rebase-review.test.mjs": {
+      "duration_ms": 57777,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/rebase-safety.test.mjs": {
+      "duration_ms": 20097,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/rebase.test.mjs": {
+      "duration_ms": 28209,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/receipts.test.mjs": {
+      "duration_ms": 50126,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/record-safety.test.mjs": {
+      "duration_ms": 56017,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/ref-deadlines.test.mjs": {
+      "duration_ms": 6074,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/ref-wallclock.test.mjs": {
+      "duration_ms": 47009,
+      "measured_at": "2026-10-03T21:03:59.469Z"
+    },
+    "settle/test/round-cap.test.mjs": {
+      "duration_ms": 90087,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/settle.test.mjs": {
+      "duration_ms": 97930,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/teardown.test.mjs": {
+      "duration_ms": 6947,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "settle/test/validation-tiers.test.mjs": {
+      "duration_ms": 12488,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "supervisor/test/delivery.test.mjs": {
+      "duration_ms": 14574,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "supervisor/test/supervisor.test.mjs": {
+      "duration_ms": 96337,
+      "measured_at": "2026-10-03T20:54:00.824Z"
+    },
+    "test-slot/test/test-slot.test.mjs": {
+      "duration_ms": 6478,
+      "measured_at": "2026-10-03T20:51:38.381Z"
+    },
+    "test/approvals.test.mjs": {
+      "duration_ms": 7049,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/brain-start.test.mjs": {
+      "duration_ms": 3420,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/console-launch.test.mjs": {
+      "duration_ms": 76,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/deadline-boundaries.test.mjs": {
+      "duration_ms": 31051,
+      "measured_at": "2026-10-03T21:03:59.469Z"
+    },
+    "test/discernment.test.mjs": {
+      "duration_ms": 871,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/file-wait.test.mjs": {
+      "duration_ms": 51,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/flow.test.mjs": {
+      "duration_ms": 3026,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/focus.test.mjs": {
+      "duration_ms": 198,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/git-seed.test.mjs": {
+      "duration_ms": 142,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/inbox.test.mjs": {
+      "duration_ms": 30,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/load-deadlines.test.mjs": {
+      "duration_ms": 783,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/mcp.test.mjs": {
+      "duration_ms": 11,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/name-alias.test.mjs": {
+      "duration_ms": 1767,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/offline-herdr.test.mjs": {
+      "duration_ms": 319,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/one-watcher.test.mjs": {
+      "duration_ms": 13,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/open-session.test.mjs": {
+      "duration_ms": 1341,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/plugin-install.test.mjs": {
+      "duration_ms": 66591,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/priorities.test.mjs": {
+      "duration_ms": 2651,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/processes.test.mjs": {
+      "duration_ms": 22,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/pty-cache.test.mjs": {
+      "duration_ms": 1087,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/pty.test.mjs": {
+      "duration_ms": 11548,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/recap.test.mjs": {
+      "duration_ms": 1284,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/release.test.mjs": {
+      "duration_ms": 11879,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/report.test.mjs": {
+      "duration_ms": 14,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/sanitization.test.mjs": {
+      "duration_ms": 386,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/settle-watch.test.mjs": {
+      "duration_ms": 949,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/startup-deadlines.test.mjs": {
+      "duration_ms": 944,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/suite.test.mjs": {
+      "duration_ms": 1232,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/test-hangs.test.mjs": {
+      "duration_ms": 57800,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/tidy-tabs.test.mjs": {
+      "duration_ms": 14,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/tier-plan.test.mjs": {
+      "duration_ms": 13,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/today.test.mjs": {
+      "duration_ms": 4240,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "test/workspace.test.mjs": {
+      "duration_ms": 719,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    },
+    "watch/test/watch.test.mjs": {
+      "duration_ms": 16694,
+      "measured_at": "2026-10-03T20:51:44.971Z"
+    }
+  }
+}

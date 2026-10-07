@@ -1,4 +1,4 @@
-// Conservative static dependency closure. Dynamic/computed references need an
+// Conservative one-hop static references. Dynamic/computed references need an
 // explicit import or literal path; this planner never executes product modules.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,6 +6,33 @@ import { execFileSync } from 'node:child_process';
 import { isMain } from '../../lib/cli-help.mjs';
 import { tierFiles } from './tier.mjs';
 import { main as runRelease } from './release-suites.mjs';
+const durations = JSON.parse(fs.readFileSync(new URL('./test-durations.json', import.meta.url), 'utf8'));
+export const DEFAULT_BUDGET_MS = 300000;
+export const DEFAULT_MAX_FILES = 10;
+export function boundAffectedTests({ candidates, changed, required = [], estimates = durations.files,
+  budgetMs = DEFAULT_BUDGET_MS, maxFiles = DEFAULT_MAX_FILES, unknownMs = 60000 }) {
+  for (const value of [budgetMs, maxFiles, unknownMs]) if (!Number.isSafeInteger(value) || value < 1) throw Error('invalid affected-test budget');
+  const requiredSet = new Set(required), changedSet = new Set(changed);
+  const cost = file => estimates[file]?.duration_ms ?? unknownMs;
+  const row = (file, reason) => ({ file, reason, estimated_ms: cost(file),
+    estimate: estimates[file] ? 'measured' : 'fallback',
+    ...(estimates[file]?.measured_at ? { measured_at: estimates[file].measured_at } : {}) });
+  const selected = [...requiredSet].sort().map(file => row(file, 'bound-required'));
+  const deferred = [];
+  let total = selected.reduce((sum, entry) => sum + entry.estimated_ms, 0);
+  // Prefer changed tests, then cheaper direct references. Required evidence is
+  // unconditional and consumes the allowance before optional extras.
+  const ordered = [...new Set(candidates)].filter(file => !requiredSet.has(file)).sort((a, b) =>
+    Number(changedSet.has(b)) - Number(changedSet.has(a)) || cost(a) - cost(b) || a.localeCompare(b));
+  for (const file of ordered) {
+    const reason = selected.length >= maxFiles ? 'file-cap' : total + cost(file) > budgetMs ? 'time-budget' : null;
+    if (reason) deferred.push({ ...row(file, reason), destination: 'release-candidate' });
+    else { selected.push(row(file, changedSet.has(file) ? 'changed-test' : 'direct-reference')); total += cost(file); }
+  }
+  return { files: selected.map(entry => entry.file).sort(), selected, deferred,
+    budget: { time_ms: budgetMs, max_files: maxFiles, unknown_file_ms: unknownMs, estimated_ms: total,
+      required_over_budget: total > budgetMs || selected.length > maxFiles, durations_source: durations.source } };
+}
 export function affectedTests({ root, changed, files, tests }) {
   if (files.length > 10000 || changed.length > 10000) throw Error('affected-test graph exceeds 10000 paths');
   const inventory = new Set([...files, ...changed]), graph = new Map();
@@ -25,16 +52,11 @@ export function affectedTests({ root, changed, files, tests }) {
     }
     graph.set(file, edges);
   }
-  const impacted = new Set(changed);
-  let added = true;
-  while (added) {
-    added = false;
-    for (const [file, edges] of graph) if (!impacted.has(file) && [...edges].some(e => impacted.has(e))) { impacted.add(file); added = true; }
-  }
-  return tests.filter(file => impacted.has(file)).sort();
+  const changedSet = new Set(changed);
+  return tests.filter(file => changedSet.has(file) || [...(graph.get(file) ?? [])].some(edge => changedSet.has(edge))).sort();
 }
 export function main(argv = process.argv.slice(2)) {
-  const [mode, json, commandJson] = argv;
+  const [mode, json, commandJson, requiredJson] = argv;
   const values = JSON.parse(json);
   if (!Array.isArray(values) || values.some(v => typeof v !== 'string')) throw Error('expected a path array');
   if (mode === '--run') {
@@ -46,7 +68,14 @@ export function main(argv = process.argv.slice(2)) {
     const promotion = ['npm run test:promotion', 'npm run test:promotion:steps'].includes(command)
       ? [...tierFiles('promotion', root), ...files.filter(file => /^test-slot\/test\/[^/]+\.test\.mjs$/.test(file))] : [];
     const tests = [...new Set([...tierFiles('release', root), ...values.filter(file => file.endsWith('.test.mjs') && files.includes(file))])].filter(file => !promotion.includes(file));
-    console.log(JSON.stringify({ covered: promotion.filter(file => files.includes(file)), files: affectedTests({ root, changed: values, files, tests }), graph: { paths: files.length, max_paths: 10000, max_bytes: 32 * 1024 * 1024, max_suite_files: 4 } }));
+    const required = requiredJson ? JSON.parse(requiredJson) : [];
+    if (!Array.isArray(required) || required.some(file => typeof file !== 'string' || !file.endsWith('.test.mjs') || !files.includes(file))) throw Error('required test file is missing from candidate');
+    const bound = boundAffectedTests({ candidates: affectedTests({ root, changed: values, files, tests }), changed: values,
+      required: required.filter(file => !promotion.includes(file)),
+      budgetMs: Number(process.env.MONITOR_PROMOTION_EXTRA_BUDGET_MS ?? DEFAULT_BUDGET_MS),
+      maxFiles: Number(process.env.MONITOR_PROMOTION_EXTRA_MAX_FILES ?? DEFAULT_MAX_FILES) });
+    console.log(JSON.stringify({ covered: promotion.filter(file => files.includes(file)), ...bound,
+      graph: { paths: files.length, max_paths: 10000, max_bytes: 32 * 1024 * 1024, max_suite_files: 4, hops: 1 } }));
   } else throw Error('expected --plan or --run');
 }
 if (isMain(import.meta.url)) main();

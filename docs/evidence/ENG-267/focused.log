@@ -1,0 +1,403 @@
+TAP version 13
+# Subtest: one-hop selection includes changed tests and direct literals without following re-exports or cycles
+ok 1 - one-hop selection includes changed tests and direct literals without following re-exports or cycles
+  ---
+  duration_ms: 3.518083
+  ...
+# Subtest: a core-module change selects bounded one-hop extras and defers the expensive lane file
+ok 2 - a core-module change selects bounded one-hop extras and defers the expensive lane file
+  ---
+  duration_ms: 449.145084
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 3 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 252.099708
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 4 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 163.713458
+  ...
+# Subtest: a leaf change selects exactly its direct test
+ok 5 - a leaf change selects exactly its direct test
+  ---
+  duration_ms: 0.867708
+  ...
+# Subtest: time and file caps defer extras to release while bound requirements always run
+ok 6 - time and file caps defer extras to release while bound requirements always run
+  ---
+  duration_ms: 0.213
+  ...
+# Subtest: the real planner forces required evidence beyond both caps and refuses missing required files
+ok 7 - the real planner forces required evidence beyond both caps and refuses missing required files
+  ---
+  duration_ms: 152.41875
+  ...
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 8 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 3040.710333
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 9 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 3455.161458
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 10 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1235.515
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 11 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 6793.752584
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 12 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 2023.145458
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 13 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 2675.599667
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 14 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 3252.017167
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 15 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1388.8035
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 16 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 3931.774709
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 17 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 3977.38825
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 18 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 2174.373583
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 19 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 4462.116625
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 20 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 8461.938292
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 21 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 1845.756083
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 22 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2220.442333
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 23 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2222.935584
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 24 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4620.988292
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 25 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4863.101125
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 26 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 6686.460791
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 27 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 6518.159417
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 28 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 4820.018917
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 29 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 6648.501458
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 30 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 1989.930958
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 31 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 5235.98
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 32 - a paused check exposes its clock atomically while validation is still running
+  ---
+  duration_ms: 1260.11025
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 33 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+  ---
+  duration_ms: 4493.651959
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 34 - red validation finishes the published clock and retains its real exit
+  ---
+  duration_ms: 1059.123958
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 35 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+  ---
+  duration_ms: 5439.153125
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 36 - validation that throws closes its telemetry clock without inventing green evidence
+  ---
+  duration_ms: 1154.918125
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 37 - affected test supplements run once in the batch gate, are recorded and block a red landing
+  ---
+  duration_ms: 3179.397167
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 38 - a changed gate cannot omit a bound deferred test file
+  ---
+  duration_ms: 935.943292
+  ...
+# Subtest: canonical planning receives the union of bound required files and executes them beyond the extra cap
+ok 39 - canonical planning receives the union of bound required files and executes them beyond the extra cap
+  ---
+  duration_ms: 2123.567459
+  ...
+# Subtest: the real canonical planner loads its transitive base imports while selecting tests from the lane
+ok 40 - the real canonical planner loads its transitive base imports while selecting tests from the lane
+  ---
+  duration_ms: 459.862583
+  ...
+# Subtest: the real canonical planner works with TMPDIR set to a symlinked directory and removes its snapshot
+ok 41 - the real canonical planner works with TMPDIR set to a symlinked directory and removes its snapshot
+  ---
+  duration_ms: 564.809292
+  ...
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.468375
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.181667
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.451417
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 27.468125
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.457625
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 28.298833
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.465417
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 28.881375
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.466417
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 27.519333
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.460541
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 28.48875
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.453
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 28.981625
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.456084
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 27.462917
+# Subtest: only scoped test deferrals become promotable through the planned gate
+ok 42 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 8308.160666
+  ...
+# Subtest: lane-modified planner and imports cannot shrink canonical coverage
+ok 43 - lane-modified planner and imports cannot shrink canonical coverage
+  ---
+  duration_ms: 4076.354708
+  ...
+# Subtest: lane-modified planner and imports cannot invent canonical coverage
+ok 44 - lane-modified planner and imports cannot invent canonical coverage
+  ---
+  duration_ms: 4061.679292
+  ...
+# Subtest: missing planner covers nothing, retains its error and allows recorded re-execution
+ok 45 - missing planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4804.304333
+  ...
+# Subtest: failed planner covers nothing, retains its error and allows recorded re-execution
+ok 46 - failed planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4739.922834
+  ...
+# Subtest: empty output covers nothing, retains its error and allows recorded re-execution
+ok 47 - empty output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4802.576833
+  ...
+# Subtest: whitespace output covers nothing, retains its error and allows recorded re-execution
+ok 48 - whitespace output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4839.03075
+  ...
+# Subtest: invalid JSON covers nothing, retains its error and allows recorded re-execution
+ok 49 - invalid JSON covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4734.777541
+  ...
+# Subtest: invalid coverage covers nothing, retains its error and allows recorded re-execution
+ok 50 - invalid coverage covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4804.525375
+  ...
+# Subtest: oversized output covers nothing, retains its error and allows recorded re-execution
+ok 51 - oversized output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4795.483458
+  ...
+# Subtest: hand-written receipt with matching filename and log hash must also match its derived key
+ok 52 - hand-written receipt with matching filename and log hash must also match its derived key
+  ---
+  duration_ms: 1.242125
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 53 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 6286.898
+  ...
+# Subtest: settle forwards scoped evidence as required files before applying optional caps
+ok 54 - settle forwards scoped evidence as required files before applying optional caps
+  ---
+  duration_ms: 4184.195709
+  ...
+1..54
+# tests 54
+# suites 0
+# pass 54
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 114232.065209

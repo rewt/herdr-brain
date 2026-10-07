@@ -549,7 +549,7 @@ test('validation that throws closes its telemetry clock without inventing green 
 test('affected test supplements run once in the batch gate, are recorded and block a red landing', t => {
   const f = fixture(t);
   const planner = `import fs from 'node:fs';
-if(process.argv[2]==='--plan') console.log(JSON.stringify({files:['extra.test.mjs'],graph:{max_suite_files:4}}));
+if(process.argv[2]==='--plan') console.log(JSON.stringify({files:['extra.test.mjs'],deferred:[{file:'slow.test.mjs',reason:'time-budget',estimated_ms:342215,estimate:'measured',destination:'release-candidate'}],budget:{time_ms:300000,max_files:10,unknown_file_ms:60000,estimated_ms:1000},graph:{max_suite_files:4}}));
 else { fs.appendFileSync(${JSON.stringify(path.join(f.root, 'extra-runs'))},'run\\n'); if(fs.existsSync('red-extra')) process.exitCode=1; }
 `;
   fs.writeFileSync(path.join(f.repo, 'planner.mjs'), planner);
@@ -562,6 +562,8 @@ else { fs.appendFileSync(${JSON.stringify(path.join(f.root, 'extra-runs'))},'run
   const landed = f.queue.load().results[0];
   const plan = JSON.parse(fs.readFileSync(landed.receipt));
   assert.deepEqual(plan.attempts[0].test_plan.files, ['extra.test.mjs']);
+  assert.deepEqual(plan.attempts[0].test_plan.deferred.map(row => [row.file, row.reason, row.destination]), [['slow.test.mjs', 'time-budget', 'release-candidate']]);
+  assert.equal(plan.attempts[0].test_plan.budget.time_ms, 300000);
   assert.ok(plan.attempts[0].test_plan.changed.includes('first'));
   assert.ok(plan.attempts[0].test_plan.changed.includes('second'));
   assert.match(plan.attempts[0].gate.command, /--run/);
@@ -625,4 +627,36 @@ test('a changed gate cannot omit a bound deferred test file', t => {
   assert.match(saved.results[0].reason, /no longer covers/);
   assert.equal(f.git(['rev-parse', 'main']), base);
   assert.equal(f.runs(), 0);
+});
+
+test('canonical planning receives the union of bound required files and executes them beyond the extra cap', t => {
+  const f = fixture(t);
+  const marker = path.join(f.root, 'required-runs');
+  const planner = `import fs from 'node:fs';
+if(process.argv[2]==='--plan') {
+  const required = JSON.parse(process.argv[5]);
+  console.log(JSON.stringify({files:required,selected:required.map(file=>({file,reason:'bound-required',estimated_ms:342215,estimate:'measured'})),
+    deferred:[{file:'optional.test.mjs',reason:'time-budget',estimated_ms:60000,estimate:'fallback',destination:'release-candidate'}],
+    budget:{time_ms:1,max_files:1,unknown_file_ms:60000,estimated_ms:required.length*342215,required_over_budget:true}}));
+} else fs.appendFileSync(${JSON.stringify(marker)},process.argv[3]+'\\n');`;
+  fs.writeFileSync(path.join(f.repo, 'planner.mjs'), planner);
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion: `${process.execPath} ${f.checker}`, promotion_tests: 'planner.mjs' }));
+  f.git(['add', '.']); f.git(['commit', '-qm', 'Declare capped canonical planner']);
+  const first = f.lane('first'); f.lane('second');
+  // A candidate planner tries to omit bound evidence. The canonical plan must
+  // retain it; the run branch still accepts the captured selection.
+  fs.writeFileSync(path.join(first, 'planner.mjs'), planner.replace('const required = JSON.parse(process.argv[5]);', 'const required = [];'));
+  f.git(['add', '.'], first); f.git(['commit', '-qm', 'Attempt to shrink required coverage'], first);
+  f.add('first', { requiredTests: ['first.test.mjs'] });
+  f.add('second', { requiredTests: ['second.test.mjs', 'first.test.mjs'] });
+  const result = f.drain(); assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(f.queue.load().results.map(row => row.outcome), ['promoted', 'promoted']);
+  const receipt = JSON.parse(fs.readFileSync(f.queue.load().results[0].receipt));
+  const plan = receipt.attempts[0].test_plan;
+  assert.deepEqual(plan.required, ['first.test.mjs', 'second.test.mjs']);
+  assert.deepEqual(plan.files, plan.required);
+  assert.equal(plan.budget.required_over_budget, true);
+  assert.equal(plan.selected.every(row => row.reason === 'bound-required'), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(marker, 'utf8').trim()), plan.required);
+  assert.equal(f.runs(), 1);
 });

@@ -250,7 +250,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))];
       // Coverage comes from the captured base and its imports; the candidate
       // supplies only the tree being inspected and the supplemental test run.
-      attempt.test_plan = canonicalTestPlan({ repo: canonical, base: attempt.base, cwd: attempt.scratch, planner: validation.promotion_tests, changed, baseCommand: validation.tiers.promotion.command, env });
+      const required = [...new Set(attempt.jobs.flatMap(job => job.requiredTests ?? []))].sort();
+      attempt.test_plan = canonicalTestPlan({ repo: canonical, base: attempt.base, cwd: attempt.scratch,
+        planner: validation.promotion_tests, changed, required, baseCommand: validation.tiers.promotion.command, env });
       const covered = [...(attempt.test_plan?.files ?? []), ...(attempt.test_plan?.covered ?? [])];
       if (attempt.jobs.some(job => (job.requiredTests ?? []).some(file => !covered.includes(file)))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
       const command = plannedCommand(validation.tiers.promotion.command, attempt.test_plan);

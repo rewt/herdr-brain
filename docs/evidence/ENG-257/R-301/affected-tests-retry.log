@@ -1,0 +1,30 @@
+TAP version 13
+# Subtest: affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+ok 1 - affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+  ---
+  duration_ms: 6.349292
+  ...
+# Subtest: real import closure selects the previously missed release files and records bounded coverage
+ok 2 - real import closure selects the previously missed release files and records bounded coverage
+  ---
+  duration_ms: 331.4365
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 3 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 220.449875
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 4 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 162.617667
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 757.785208

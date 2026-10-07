@@ -572,6 +572,49 @@ else { fs.appendFileSync(${JSON.stringify(path.join(f.root, 'extra-runs'))},'run
   assert.equal(fs.existsSync(path.join(f.repo, 'red-extra')), false);
 });
 
+for (const selected of [true, false]) test(`a lane-modified planner cannot ${selected ? 'shrink' : 'invent'} canonical bound test coverage`, t => {
+  const f = fixture(t), required = 'required.test.mjs';
+  const marker = path.join(f.root, 'lane-planner-ran'), runs = path.join(f.root, 'required-runs');
+  const runner = `else { fs.appendFileSync(${JSON.stringify(runs)},'run\\n'); process.exitCode=1; }`;
+  fs.writeFileSync(path.join(f.repo, 'coverage.mjs'), `export const files=${JSON.stringify(selected ? [required] : [])};\n`);
+  fs.writeFileSync(path.join(f.repo, 'planner.mjs'), `import fs from 'node:fs'; import { files } from './coverage.mjs';
+if(process.argv[2]==='--plan') {
+  if(!fs.existsSync('deferred') || !JSON.parse(process.argv[3]).includes('planner.mjs')) process.exit(1);
+  console.log(JSON.stringify({files,covered:[]}));
+} ${runner}\n`);
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion: `${process.execPath} ${f.checker}`, promotion_tests: 'planner.mjs' }));
+  f.git(['add', '.']); f.git(['commit', '-qm', 'Declare canonical bound coverage']);
+  const base = f.git(['rev-parse', 'main']), workspace = f.lane('deferred');
+  fs.writeFileSync(path.join(workspace, 'coverage.mjs'), `export const files=[];\n`);
+  fs.writeFileSync(path.join(workspace, 'planner.mjs'), `import fs from 'node:fs'; import { files } from './coverage.mjs';
+if(process.argv[2]==='--plan') {
+  fs.writeFileSync(${JSON.stringify(marker)},'ran');
+  console.log(JSON.stringify({files,covered:[${JSON.stringify(required)}]}));
+} ${runner}\n`);
+  f.git(['add', '.'], workspace); f.git(['commit', '-qm', 'Forge lane planner coverage'], workspace);
+  const head = f.git(['rev-parse', 'HEAD'], workspace);
+  f.add('deferred', { requiredTests: [required] });
+  const r = f.drain(); assert.equal(r.status, 0, r.stderr);
+  const result = f.queue.load().results[0], attempt = JSON.parse(fs.readFileSync(result.receipt)).attempts[0];
+  assert.equal(result.outcome, 'refused');
+  assert.equal(fs.existsSync(marker), false, 'planning never executes the lane planner');
+  assert.equal(attempt.base, base);
+  assert.deepEqual(attempt.test_plan.files, selected ? [required] : []);
+  assert.deepEqual(attempt.test_plan.covered, []);
+  assert.equal(f.git(['rev-parse', 'main']), base);
+  assert.equal(f.git(['rev-parse', 'HEAD'], workspace), head);
+  assert.equal(f.runs(), selected ? 1 : 0);
+  if (selected) {
+    assert.equal(fs.readFileSync(runs, 'utf8'), 'run\n', 'the required supplemental test executes once');
+    assert.match(result.reason, /batch validation failed/);
+    assert.equal(attempt.gate.exit_code, 1);
+  } else {
+    assert.equal(fs.existsSync(runs), false);
+    assert.match(result.reason, /no longer covers/);
+    assert.equal(attempt.gate, undefined);
+  }
+});
+
 test('a changed gate cannot omit a bound deferred test file', t => {
   const f = fixture(t), base = f.git(['rev-parse', 'main']);
   f.lane('deferred'); f.add('deferred', { requiredTests: ['required.test.mjs'] });

@@ -12,7 +12,8 @@ import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
-import { promotionTestPlan, changedPaths, plannedCommand } from './test-plan.mjs';
+import { changedPaths, plannedCommand } from './test-plan.mjs';
+import { canonicalTestPlan } from '../settle/test-plan.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
@@ -247,7 +248,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       }
       if (git(['rev-parse', 'HEAD'], attempt.scratch) !== attempt.tip || git(['symbolic-ref', '--short', 'HEAD'], attempt.scratch) !== attempt.branch) throw new Error('train scratch tip or branch changed during preparation');
       const changed = [...new Set(attempt.jobs.flatMap(job => changedPaths(attempt.scratch, git(['merge-base', attempt.base, job.sourceHead]), job.sourceHead)))];
-      attempt.test_plan = promotionTestPlan({ cwd: attempt.scratch, planner: validation.promotion_tests, changed, baseCommand: validation.tiers.promotion.command, env });
+      // Coverage comes from the captured base and its imports; the candidate
+      // supplies only the tree being inspected and the supplemental test run.
+      attempt.test_plan = canonicalTestPlan({ repo: canonical, base: attempt.base, cwd: attempt.scratch, planner: validation.promotion_tests, changed, baseCommand: validation.tiers.promotion.command, env });
       const covered = [...(attempt.test_plan?.files ?? []), ...(attempt.test_plan?.covered ?? [])];
       if (attempt.jobs.some(job => (job.requiredTests ?? []).some(file => !covered.includes(file)))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
       const command = plannedCommand(validation.tiers.promotion.command, attempt.test_plan);

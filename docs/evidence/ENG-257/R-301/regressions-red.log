@@ -1,0 +1,223 @@
+TAP version 13
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 1 - three ready lanes stack and fast-forward with one promotion-tier run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.615167
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 2 - safe bisection lands two good lanes with the third red in exactly three runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.048916
+  ...
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 3 - a lone ready lane goes immediately with one promotion run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032667
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 4 - STOP during a batch memory wait refuses promotion and permits retry after clearing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.078125
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 5 - completed batch notices wait for empty input and deliver each lane once with one gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040375
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 6 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.159292
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 7 - interrupted validation preserves main and drain resumes the batch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.054166
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 8 - a previously green identical tree is reused by the batch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.041708
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 9 - safe bisection lands all good work with first red in exactly five runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.22325
+  ...
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 10 - safe bisection lands all good work with second red in exactly five runs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.196875
+  ...
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 11 - a changed queued head and a dirty lane are refused without holding a clean lane # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.053042
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 12 - a crash after the fast-forward resumes bookkeeping without a second gate # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.086792
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 13 - recovery: a lost fast-forward is adopted after a later batch advances main # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.041167
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 14 - STOP and scratch mutation preserve main and produce refusals # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0655
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 15 - batch dirty canonical checkout returns refusals and notices before scratch work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029667
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 16 - batch off-main canonical checkout returns refusals and notices before scratch work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.074833
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 17 - resuming a prepared batch after main moves replans and preserves upstream work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031792
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 18 - resuming a validated batch after main moves replans and preserves upstream work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.154917
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 19 - resuming prepared capture refuses dirty input and drains the remaining lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.119625
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 20 - resuming prepared capture refuses moved input and drains the remaining lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040542
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 21 - resuming prepared capture refuses stop input and drains the remaining lanes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058459
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 22 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028916
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 23 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.08475
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 24 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036834
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 25 - a paused check exposes its clock atomically while validation is still running # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025833
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 26 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022167
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 27 - red validation finishes the published clock and retains its real exit # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022625
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 28 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024291
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 29 - validation that throws closes its telemetry clock without inventing green evidence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020708
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 30 - affected test supplements run once in the batch gate, are recorded and block a red landing # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020667
+  ...
+# Subtest: a lane-modified planner cannot shrink canonical bound test coverage
+not ok 31 - a lane-modified planner cannot shrink canonical bound test coverage
+  ---
+  duration_ms: 1821.158917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'promoted'
+    - 'refused'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'refused'
+  actual: 'promoted'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/promote/test/train.test.mjs:599:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a lane-modified planner cannot invent canonical bound test coverage
+not ok 32 - a lane-modified planner cannot invent canonical bound test coverage
+  ---
+  duration_ms: 1597.804833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'promoted'
+    - 'refused'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'refused'
+  actual: 'promoted'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/promote/test/train.test.mjs:599:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-planner/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 33 - a changed gate cannot omit a bound deferred test file # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.153667
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 31
+# todo 0
+# duration_ms 3486.3485

@@ -1,4 +1,4 @@
-// Settle executes trusted base code while the planner inspects the lane's tree.
+// Settle and the train execute trusted base code while inspecting the candidate tree.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

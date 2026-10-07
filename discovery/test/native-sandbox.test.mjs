@@ -2,13 +2,17 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import net from 'node:net';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { joinFleet } from '../../lib/fleet.mjs';
 import { command } from '../runtime.mjs';
 import { runTemporary, temporaryEnvironment } from '../temporary.mjs';
 import { nativeSandboxLaunch, nativeSession } from '../native-sandbox.mjs';
+import { toml } from '../confinement.mjs';
+
+const projectTrust = directories => `projects=${toml(Object.fromEntries([...new Set(directories)].map(directory => [directory, { trust_level: 'trusted' }])))}`;
 
 function fixture(t, fallbackState = 'owned') {
   const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'a18-'));
@@ -16,7 +20,7 @@ function fixture(t, fallbackState = 'owned') {
   const own = { checkout: path.join(root, 'a'), record: path.join(root, 'ar'), temp: path.join(root, 'at'), worktrees: path.join(root, 'aw') };
   const other = { checkout: path.join(root, 'b'), record: path.join(root, 'br'), temp: path.join(root, 'bt'), worktrees: path.join(root, 'bw') };
   for (const directory of [...Object.values(own), ...Object.values(other)]) fs.mkdirSync(directory);
-  const context = { workspace: own.checkout, canonical: own.checkout, org: own.record, tempRoot: own.temp, projects: [other] };
+  const context = { workspace: own.checkout, canonical: own.checkout, org: own.record, tempRoot: own.temp, worktrees: own.worktrees, projects: [other] };
   const binary = path.join(root, 'native');
   fs.writeFileSync(binary, '#!/bin/sh\nif [ "$1" = --help ] || [ "$2" = --help ]; then echo "--sandbox --add-dir --settings --permission-profile"; elif [ "$1" = --version ]; then echo "2.1.284"; fi\n', { mode: 0o755 });
   const codexHome = path.join(root, 'codex'); fs.mkdirSync(codexHome);
@@ -332,7 +336,8 @@ test('Codex respects inherited and CLI sandbox choices with one source-naming wa
     const warnings = [];
     const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: choice.args, context: f.context, warn: s => warnings.push(s) });
     t.after(launch.close);
-    assert.deepEqual(launch.args, choice.args, 'the operator sandbox choice remains untouched');
+    assert.deepEqual(launch.args.slice(0, choice.args.length), choice.args, 'the operator sandbox choice remains untouched');
+    assert.deepEqual(launch.args.slice(choice.args.length), ['-c', projectTrust([f.own.checkout])]);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /WARNING.*sandbox_mode.*danger-full-access/u);
     assert.ok(warnings[0].includes(choice.source), warnings[0]);
@@ -342,7 +347,139 @@ test('Codex respects inherited and CLI sandbox choices with one source-naming wa
   fs.writeFileSync(profile, 'sandbox_mode = "danger-full-access"\n');
   const warnings = [], args = ['--profile', 'weaker', 'Task'];
   const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args, context: f.context, warn: s => warnings.push(s) }); t.after(launch.close);
-  assert.deepEqual(launch.args, args); assert.equal(warnings.length, 1); assert.ok(warnings[0].includes(profile));
+  assert.deepEqual(launch.args.slice(0, args.length), args); assert.equal(warnings.length, 1); assert.ok(warnings[0].includes(profile));
+});
+
+test('both roles receive scoped working directories and launch-only trust for fleet worktrees', t => {
+  const f = fixture(t), workspace = path.join(f.own.worktrees, 'lane-worker'); fs.mkdirSync(workspace);
+  const codexFile = path.join(process.env.CODEX_HOME, 'config.toml');
+  const claudeFile = path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json');
+  const codexSettings = `sandbox_mode="workspace-write"\n[projects.${JSON.stringify(f.own.checkout)}]\ntrust_level="untrusted"\n`;
+  const claudeSettings = JSON.stringify({ permissions: { blockReadsOutsideWorkingDirectories: true }, sandbox: { filesystem: { denyRead: [f.root] } } });
+  fs.writeFileSync(codexFile, codexSettings); fs.writeFileSync(claudeFile, claudeSettings);
+  for (const role of ['worker', 'supervisor']) for (const kind of ['claude', 'codex']) {
+    const context = { ...f.context, role, workspace: role === 'worker' ? workspace : f.own.checkout };
+    const launch = nativeSandboxLaunch({ kind, binary: f.binary, args: ['--model', 'literal', 'Task'], context, warn: () => {} }); t.after(launch.close);
+    if (kind === 'claude') {
+      const directories = launch.args.filter((_, i) => launch.args[i - 1] === '--add-dir');
+      const expected = [f.own.worktrees, f.own.record, launch.env.TMPDIR];
+      assert.deepEqual(directories, expected);
+      assert.equal(launch.args[launch.args.lastIndexOf('--add-dir') + 2], '--settings', 'variadic directories end at a flag');
+      const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+      assert.deepEqual(settings.sandbox.filesystem.allowRead, expected);
+      assert.equal(settings.permissions.blockReadsOutsideWorkingDirectories, undefined, 'no global read-block override');
+      assert.ok(!settings.sandbox.filesystem.allowWrite.includes(f.own.worktrees), 'no explicit worktree-root write grant');
+      for (const directory of Object.values(f.other)) {
+        assert.ok(!directories.includes(directory));
+        assert.ok(settings.sandbox.filesystem.denyWrite.includes(directory));
+      }
+    } else {
+      const trust = launch.args.filter(arg => arg.startsWith('projects='));
+      assert.deepEqual(trust, [projectTrust([f.own.checkout, context.workspace])]);
+      assert.ok(!launch.args.some(arg => arg.startsWith('permissions.')), 'the inherited sandbox selector stays in control');
+    }
+    assert.equal(fs.readFileSync(codexFile, 'utf8'), codexSettings);
+    assert.equal(fs.readFileSync(claudeFile, 'utf8'), claudeSettings);
+    for (const directory of [f.root, f.own.temp, ...Object.values(f.other)]) assert.ok(!launch.args.includes(directory), directory);
+    const temporary = launch.env.TMPDIR; launch.close(); assert.ok(!fs.existsSync(temporary));
+  }
+});
+
+test('Codex generated and legacy sandbox branches both receive exact project trust', t => {
+  const f = fixture(t), workspace = path.join(f.own.worktrees, 'lane.with "quotes"'); fs.mkdirSync(workspace);
+  const context = { ...f.context, workspace };
+  for (const legacy of [false, true]) {
+    if (legacy) fs.writeFileSync(f.binary, '#!/bin/sh\nif [ "$1" = --help ]; then echo "--sandbox --add-dir"; fi\n', { mode: 0o755 });
+    const launch = nativeSandboxLaunch({ kind: 'codex', binary: f.binary, args: ['resume', 'session'], context }); t.after(launch.close);
+    assert.deepEqual(launch.args.filter(arg => arg.startsWith('projects=')), [projectTrust([f.own.checkout, workspace])]);
+    assert.ok(launch.args.includes(legacy ? 'sandbox_mode="workspace-write"' : 'default_permissions="monitor-worker"'));
+  }
+});
+
+test('native Codex config reader accepts dotted and quoted launch trust without persisting it', {
+  skip: !process.env.MONITOR_TEST_CODEX_CONFIG && 'set MONITOR_TEST_CODEX_CONFIG for the offline native config reader',
+}, async t => {
+  const f = fixture(t), binary = process.env.MONITOR_TEST_CODEX_CONFIG;
+  const workspace = path.join(f.own.worktrees, 'lane.with "quotes"'); fs.mkdirSync(workspace);
+  command('git', ['init', '-qb', 'main'], f.own.checkout);
+  command('git', ['config', 'user.name', 'Trust test'], f.own.checkout);
+  command('git', ['config', 'user.email', 'trust@example.invalid'], f.own.checkout);
+  fs.writeFileSync(path.join(f.own.checkout, 'seed'), 'seed');
+  command('git', ['add', '.'], f.own.checkout); command('git', ['commit', '-qm', 'Seed'], f.own.checkout);
+  fs.rmdirSync(workspace); command('git', ['worktree', 'add', '-qb', 'lane-worker', workspace], f.own.checkout);
+  const configFile = path.join(process.env.CODEX_HOME, 'config.toml');
+  const config = `sandbox_mode="workspace-write"\n[projects.${JSON.stringify(f.own.checkout)}]\ntrust_level="untrusted"\n[projects.${JSON.stringify(f.other.checkout)}]\ntrust_level="untrusted"\n`;
+  fs.writeFileSync(configFile, config);
+  fs.mkdirSync(path.join(workspace, '.codex'));
+  fs.writeFileSync(path.join(workspace, '.codex/config.toml'), 'developer_instructions="offline project trust marker"\n');
+  const launch = nativeSandboxLaunch({ kind: 'codex', binary, args: [], context: { ...f.context, workspace }, warn: () => {} }); t.after(launch.close);
+  const result = await new Promise((resolve, reject) => {
+    const child = spawn(binary, ['app-server', '--stdio', ...launch.args], { cwd: workspace, env: { ...launch.env, HOME: f.root }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const lines = createInterface({ input: child.stdout });
+    let reply, stderr = '', error;
+    const timer = setTimeout(() => { error = new Error('native config reader timed out'); child.kill('SIGKILL'); }, 10000);
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', e => { error = e; });
+    child.on('close', () => { clearTimeout(timer); lines.close(); if (error || !reply) reject(error ?? new Error(stderr)); else resolve(reply); });
+    lines.on('line', line => {
+      const message = JSON.parse(line);
+      if (message.id === 1) {
+        child.stdin.write(JSON.stringify({ method: 'initialized' }) + '\n');
+        child.stdin.write(JSON.stringify({ id: 2, method: 'config/read', params: { cwd: workspace, includeLayers: true } }) + '\n');
+      }
+      if (message.id === 2) { reply = message; child.kill('SIGTERM'); }
+    });
+    child.stdin.write(JSON.stringify({ id: 1, method: 'initialize', params: { clientInfo: { name: 'offline-trust-test', version: '1' }, capabilities: { experimentalApi: true } } }) + '\n');
+  });
+  assert.equal(result.error, undefined, JSON.stringify(result));
+  const loaded = result.result.config;
+  for (const directory of [f.own.checkout, workspace]) assert.equal(loaded.projects[directory].trust_level, 'trusted');
+  assert.equal(loaded.projects[f.other.checkout].trust_level, 'untrusted');
+  assert.equal(loaded.developer_instructions, 'offline project trust marker', 'native loader enables the trusted worktree project layer');
+  assert.equal(fs.readFileSync(configFile, 'utf8'), config);
+});
+
+test('Claude 2.1.292 native working-directory predicate covers generated read roots and excludes peers', {
+  skip: !process.env.MONITOR_TEST_CLAUDE_READ && 'set MONITOR_TEST_CLAUDE_READ for the offline native read predicate',
+}, t => {
+  const f = fixture(t), binary = process.env.MONITOR_TEST_CLAUDE_READ;
+  const version = spawnSync(binary, ['--version'], { encoding: 'utf8', timeout: 5000 });
+  assert.match(version.stdout, /^2\.1\.292 /u, 'private native predicate proof is pinned to this version');
+  const source = fs.readFileSync(binary, 'utf8');
+  const module = source.match(/import\{[^{}]*\bZh\b[^{}]*\}from"(\/\$bunfs\/root\/[^"\n]+)"/u)?.[1];
+  assert.ok(module, 'find the exported native working-directory predicate');
+  const preload = path.join(f.root, 'read-preload.mjs');
+  fs.writeFileSync(preload, `
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+try {
+  const input = JSON.parse(fs.readFileSync(process.env.MONITOR_READ_PROBE, 'utf8'));
+  const { Zh: insideWorkingDirectories } = await import(input.module);
+  for (const directory of input.allowed) {
+    const file = directory + '/report.md';
+    assert.equal(insideWorkingDirectories(file, {}, [file], new Set([input.workspace])), false, 'outside-read control');
+    assert.equal(insideWorkingDirectories(file, {}, [file], new Set([input.workspace, ...input.allowed])), true, directory);
+  }
+  for (const directory of input.peers) {
+    const file = directory + '/report.md';
+    assert.equal(insideWorkingDirectories(file, {}, [file], new Set([input.workspace, ...input.allowed])), false, directory);
+  }
+  console.log('native working-directory predicate passed');
+  process.exit(0);
+} catch (error) { console.error(error); process.exit(1); }
+`);
+  const workspace = path.join(f.own.worktrees, 'lane-worker'); fs.mkdirSync(workspace);
+  for (const role of ['supervisor', 'worker']) {
+    const context = { ...f.context, role, workspace: role === 'worker' ? workspace : f.own.checkout };
+    const launch = nativeSandboxLaunch({ kind: 'claude', binary, args: ['--setting-sources', ''], context, warn: () => {} }); t.after(launch.close);
+    const input = path.join(f.root, 'read-probe.json');
+    fs.writeFileSync(input, JSON.stringify({ module, workspace: context.workspace,
+      allowed: launch.args.filter((_, i) => launch.args[i - 1] === '--add-dir'), peers: Object.values(f.other) }));
+    const result = spawnSync(binary, ['--version'], { cwd: context.workspace,
+      env: { ...launch.env, HOME: f.root, MONITOR_READ_PROBE: input, BUN_OPTIONS: `--preload ${preload}` }, encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /native working-directory predicate passed/u);
+  }
 });
 
 test('Claude preserves interpreter exclusions from loaded settings and names their source once', t => {
@@ -432,6 +569,11 @@ test('assigned and headless adapters keep the checkout and run with native setti
   fs.writeFileSync(path.join(f.own.checkout, 'seed'), 'seed');
   command('git', ['add', '.'], f.own.checkout); command('git', ['commit', '-qm', 'Seed'], f.own.checkout);
   const fleet = joinFleet({ cwd: f.own.checkout, temp: f.own.temp });
+  assert.equal(path.basename(fleet.project.worktrees), 'worktrees', 'exercise the default fleet layout');
+  const workspace = path.join(fleet.project.worktrees, 'lane-worker');
+  command('git', ['worktree', 'add', '-qb', 'lane-worker', workspace], f.own.checkout);
+  const nativeConfig = path.join(process.env.CODEX_HOME, 'config.toml');
+  fs.writeFileSync(nativeConfig, 'sandbox_mode="workspace-write"\n');
   const receipt = path.join(f.root, 'receipt.json');
   fs.writeFileSync(f.binary, `#!${process.execPath}
 const fs=require('fs'),args=process.argv.slice(2);
@@ -440,18 +582,27 @@ if(args.includes('--version')){console.log('2.1.284');process.exit(0);}
 const env=process.env;
 fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,cwd:process.cwd(),temp:env.TMPDIR,tmp:env.TMP,temp2:env.TEMP,socket:env.HERDR_SOCKET_PATH,
  settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexOf('--settings')+1])):null}));`, { mode: 0o755 });
-  for (const kind of ['codex', 'claude']) {
-    const args = kind === 'codex' ? ['exec', '--model', 'literal', 'Task'] : ['--print', '--model', 'literal', 'Task'];
-    const result = spawnSync(process.execPath, [new URL(`../adapters/${kind}.mjs`, import.meta.url).pathname, '--auto-entry', '--repo', f.own.checkout, '--binary', f.binary, '--', ...args], {
-      cwd: f.own.checkout, env: { ...process.env, MONITOR_ENTRY_BYPASS: '1', HERDR_SOCKET_PATH: '/fake/herdr.sock' }, encoding: 'utf8',
+  for (const kind of ['codex', 'claude']) for (const role of ['supervisor', 'worker']) for (const resume of [false, true]) {
+    const repo = role === 'worker' ? workspace : f.own.checkout;
+    const args = resume ? ['--resume', 'fixture-session'] : kind === 'codex' ? ['exec', '--model', 'literal', 'Task'] : ['--print', '--model', 'literal', 'Task'];
+    const result = spawnSync(process.execPath, [new URL(`../adapters/${kind}.mjs`, import.meta.url).pathname, '--auto-entry', '--role', role, '--repo', repo, '--binary', f.binary, '--', ...args], {
+      cwd: repo, env: { ...process.env, MONITOR_ENTRY_BYPASS: '1', HERDR_SOCKET_PATH: '/fake/herdr.sock' }, encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const got = JSON.parse(fs.readFileSync(receipt));
-    assert.equal(got.cwd, f.own.checkout); assert.equal(path.dirname(got.temp), fleet.project.temp);
+    assert.equal(got.cwd, repo); assert.equal(path.dirname(got.temp), fleet.project.temp);
     assert.equal(got.temp, got.tmp); assert.equal(got.tmp, got.temp2); assert.equal(got.socket, '/fake/herdr.sock');
     assert.ok(!fs.existsSync(got.temp), 'finished run temp is removed');
-    if (kind === 'codex') assert.ok(got.args.includes('default_permissions="monitor-worker"'));
-    else assert.equal(got.settings.sandbox.enabled, true);
+    if (kind === 'codex') {
+      assert.deepEqual(got.args.filter(arg => arg.startsWith('projects=')), [projectTrust([f.own.checkout, repo])]);
+      assert.ok(!got.args.includes('default_permissions="monitor-worker"'));
+    } else {
+      assert.equal(got.settings.sandbox.enabled, true);
+      const expected = [fleet.project.worktrees, fleet.project.record, got.temp];
+      assert.deepEqual(got.args.filter((_, i) => got.args[i - 1] === '--add-dir'), expected);
+      assert.deepEqual(got.settings.sandbox.filesystem.allowRead, expected);
+    }
+    assert.equal(fs.readFileSync(nativeConfig, 'utf8'), 'sandbox_mode="workspace-write"\n');
   }
 });
 

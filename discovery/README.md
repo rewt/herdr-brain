@@ -214,12 +214,33 @@ that tree. Older Codex builds use native workspace-write roots with system temp
 excluded, and refuse main-mode workers when they cannot protect those receipts.
 Claude receives a per-session settings file that
 enables its sandbox, refuses unavailable containment and unsandboxed command
-retries, and grants the same write paths. Other fleet projects' checkout, record,
+retries, and grants record, request and run-temp writes. Other fleet projects' checkout, record,
 worktrees and temp have native write denies and matching file-edit deny rules.
 Existing CLI settings and hooks are merged into the session file; Herdr's socket
 environment is preserved. Claude's native OS sandbox
 covers shell commands; its file tools and hooks retain Claude's native permission
 behavior. No live model is needed to test the launch settings.
+
+Joined-project launches also prevent native access setup prompts. Claude gets
+`--add-dir` for its project's fleet worktree root, selected record, request queue
+(when present), private run temp and configured extra directories, plus matching
+`sandbox.filesystem.allowRead` entries. A supervisor can read a lane report under
+the default `~/.herdr-monitor/p/<identity-hash>/worktrees` layout without the
+outside-working-directories dialog. Claude's native additional-directory semantics
+also permit edits there according to the selected permission mode and sandbox;
+these are project access roots, not a read-only capability. Existing peer and
+worker coordination write denies remain. The fleet home, other projects and the
+project's entire temp root are never added automatically.
+
+Codex gets a per-launch `-c projects={...}` inline TOML table marking only the
+canonical checkout and current working checkout trusted. Linked-worktree folder
+trust resolves to the canonical repository; trusting just the fleet worktree
+parent does not cover that prompt. This applies even when an inherited or CLI
+sandbox selector keeps the operator's native policy. Trust enables Codex's native
+project settings, hooks and rules; it does not replace its sandbox or approval
+policy. No persistent Codex trust record or Claude settings file is rewritten.
+Unknown/unsupported builds retain the existing visible warning. Version evidence
+and proof limits are in [worktree access](docs/worktree-access.md).
 
 An inherited or CLI Codex permission selector is respected, including
 `sandbox_mode`, configuration profiles and `--yolo`. One visible warning names

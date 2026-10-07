@@ -142,9 +142,19 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     const writable = [...new Set([context.org, context.requests, temporary, ...extra].filter(Boolean).map(checkedDirectory))];
     if (kind === 'codex') {
       if (args.some(arg => ['--remote', '--worktree'].includes(arg) || /^(--remote=|--worktree=)/u.test(arg))) throw new Error('native sandbox launch cannot use a remote server or different worktree');
+      // Folder trust is independent of the tool sandbox. Linked worktrees use
+      // the canonical repository for trust; include the exact working checkout
+      // too for native versions that look there first. Never persist trust or
+      // trust a shared fleet/home ancestor.
+      // Codex 0.160.0 splits dotted -c keys literally, including quoted paths.
+      // Put paths in an inline TOML table value instead (.herdr-monitor, etc.).
+      const trustArgs = ['-c', `projects=${toml(Object.fromEntries(
+        [...new Set([context.canonical, context.workspace].map(checkedDirectory))]
+          .map(directory => [directory, { trust_level: 'trusted' }])))}`];
+      args = [...args, ...trustArgs];
       if (choice) {
         warn(`monitor sandbox: WARNING: ${choice.setting}=${JSON.stringify(choice.value)} from ${choice.source} selects the operator's native policy instead of generated project confinement`);
-        return { binary, args: requestedArgs, env: environment, close };
+        return { binary, args: [...requestedArgs, ...trustArgs], env: environment, close };
       }
       const provider = spawnSync(binary, ['sandbox', '--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
       if (provider.status === 0 && /--permission-profile\b/u.test(provider.stdout)) {
@@ -173,6 +183,10 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       settings = merge(settings, supplied);
     }
     const socketDirectories = claudeSocketDirectories(temporary, warn);
+    // The outside-read dialog checks working directories, not allowWrite or
+    // sandbox allowRead. Register only this project's roots and this run's temp;
+    // allowRead also reopens them beneath an inherited shell read restriction.
+    const workingDirectories = [...new Set([context.worktrees, ...writable].filter(Boolean).map(checkedDirectory))];
     const warnings = [];
     const approved = [checkedDirectory(context.workspace), ...writable];
     for (const { source, settings: loaded } of sources) {
@@ -203,7 +217,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       // Leave inherited arrays in their native scopes: Claude merges them and
       // can exclude repository grants when the sandbox is admin-required.
       network: { ...settings.sandbox?.network, allowUnixSockets: [...new Set([...(settings.sandbox?.network?.allowUnixSockets ?? []), ...socketDirectories])] },
-      filesystem: { ...settings.sandbox?.filesystem, allowWrite: [...new Set([...(settings.sandbox?.filesystem?.allowWrite ?? []), ...writable])], denyWrite: [...new Set([...(settings.sandbox?.filesystem?.denyWrite ?? []), ...denied])] } };
+      filesystem: { ...settings.sandbox?.filesystem, allowRead: [...new Set([...(settings.sandbox?.filesystem?.allowRead ?? []), ...workingDirectories])], allowWrite: [...new Set([...(settings.sandbox?.filesystem?.allowWrite ?? []), ...writable])], denyWrite: [...new Set([...(settings.sandbox?.filesystem?.denyWrite ?? []), ...denied])] } };
     const temporaryEnv = temporaryEnvironment(temporary, env);
     const pythonKeys = ['PYTHONPYCACHEPREFIX', 'PYTHONDONTWRITEBYTECODE'];
     if (sources.some(source => pythonKeys.some(key => source.settings.env?.[key]))) {
@@ -220,6 +234,8 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     const file = path.join(temporary, 'claude-settings.json');
     writeFileAtomic(file, JSON.stringify(settings, null, 2) + '\n', 0o600);
     environment.CLAUDE_CODE_TMPDIR = temporary;
-    return { binary, args: [...nativeArgs, ...extra.flatMap(directory => ['--add-dir', directory]), '--settings', file], env: environment, close };
+    // Put variadic --add-dir before a terminating option so it cannot consume
+    // the user's positional prompt as another directory.
+    return { binary, args: [...nativeArgs, ...workingDirectories.flatMap(directory => ['--add-dir', directory]), '--settings', file], env: environment, close };
   } catch (error) { close(); throw error; }
 }

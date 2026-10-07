@@ -30,12 +30,13 @@ function plain(file) {
   if (exists(file) && !fs.lstatSync(file).isFile()) throw new Error(`refusing non-plain machine file: ${file}`);
 }
 function read(file) { plain(file); return exists(file) ? fs.readFileSync(file, 'utf8') : ''; }
-function stageInstaller(runtime, args) {
+function stageInstaller(runtime, args, discovered) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-entry-plan-'));
   try {
     // v0.1.4 has no --check. Run its actual installer against a disposable bin,
     // then validate and commit its output ourselves with a recovery receipt.
-    const r = spawnSync(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', temporary, ...args], { encoding: 'utf8', timeout: 15000 });
+    const r = spawnSync(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', temporary, ...args], { encoding: 'utf8', timeout: 15000,
+      env: { ...process.env, MONITOR_INSTALL_DISCOVERED_NATIVES: JSON.stringify(discovered) } });
     if (r.error || r.status !== 0) throw new Error(r.error?.message ?? r.stderr.trim());
     const receipt = JSON.parse(read(path.join(temporary, '.monitor-entry.json')));
     if (receipt.product !== product || !receipt.files || Object.keys(receipt.files).some((name) => !names.includes(name))) throw new Error('invalid staged entry receipt');
@@ -53,7 +54,10 @@ function native(kind, prior) {
     if (prior?.[kind === 'codex' ? 'native' : 'claudeNative']) throw new Error(`retain ${kind} when upgrading its managed installation`);
     return undefined;
   }
+  const field = kind === 'codex' ? 'native' : 'claudeNative';
+  const explicitField = kind === 'codex' ? 'nativeExplicit' : 'claudeNativeExplicit';
   const candidates = supplied ? [supplied] : [
+    ...(prior?.[explicitField] ? [prior[field]] : []),
     ...(process.env.PATH ?? '').split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, kind)),
     prior?.[kind === 'codex' ? 'native' : 'claudeNative']];
   for (const candidate of candidates.filter(Boolean)) {
@@ -71,9 +75,9 @@ function native(kind, prior) {
       if (!original) continue; // The other harness may be the only managed one.
       if (!path.isAbsolute(original) || path.dirname(original) === bin) throw new Error(`invalid native ${kind} receipt`);
       fs.accessSync(original, fs.constants.X_OK);
-      return original;
+      return { binary: original, explicit: true };
     }
-    return candidate;
+    return { binary: candidate, explicit: !!supplied || (prior?.[explicitField] === true && candidate === prior[field]) };
   }
   if (supplied) throw new Error(`install native ${kind} or correct HERDR_MONITOR_${kind.toUpperCase()}`);
 }
@@ -140,9 +144,10 @@ try {
     if (!values.remove) {
       const codex = native('codex', priorEntry), claude = native('claude', priorEntry);
       if (!codex && !claude) throw new Error('install native Codex and/or Claude and put it on PATH before installing Monitor');
-      const args = [...(codex ? ['--codex', codex] : []), ...(claude ? ['--claude', claude] : [])];
+      const args = [...(codex ? ['--codex', codex.binary] : []), ...(claude ? ['--claude', claude.binary] : [])];
       if (values.snapshot) runtime = snapshot(product, runtimeRoot, owner.token);
-      entry = stageInstaller(runtime?.directory ?? product, args);
+      entry = stageInstaller(runtime?.directory ?? product, args,
+        [codex && !codex.explicit && 'codex', claude && !claude.explicit && 'claude'].filter(Boolean));
     }
     const cleanupNativeDirectories = planNativeHooks({ bin, runtime: values['hook-runtime'] ? path.resolve(values['hook-runtime']) : runtime?.directory ?? product,
       kinds: entry && exists(path.join(product, 'herdr/native-entry.mjs')) ? [entry.native && 'codex', entry.claudeNative && 'claude'].filter(Boolean) : [], inspect, change });

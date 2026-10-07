@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export function resolveNative(kind, { entryBin, fallback, env = process.env } = {}) {
+export function resolveNative(kind, { entryBin, fallback, explicit = false, env = process.env } = {}) {
   const canonical = file => { try { return fs.realpathSync(file); } catch { return path.resolve(file); } };
   const excluded = entryBin && canonical(entryBin);
   function executable(candidate) {
@@ -16,11 +16,12 @@ export function resolveNative(kind, { entryBin, fallback, env = process.env } = 
       return fs.statSync(target).isFile();
     } catch { return false; }
   }
+  if (explicit && fallback && path.isAbsolute(fallback) && executable(fallback)) return fallback;
   for (const directory of (env.PATH ?? '').split(path.delimiter)) {
     const candidate = path.resolve(directory || '.', kind);
     if (executable(candidate)) return candidate; // Keep the stable launcher/symlink.
   }
-  // Explicit installs outside PATH retain their launcher as a last resort.
+  // Discovered installs outside PATH retain their launcher as a last resort.
   if (fallback && path.isAbsolute(fallback) && executable(fallback)) return fallback;
   throw new Error(`native ${kind} is unavailable; put its current launcher on PATH outside Monitor entry directories`);
 }

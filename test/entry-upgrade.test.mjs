@@ -30,14 +30,18 @@ function fixture(t) {
   return { root, home, product, tools, bin, env, write, version, run, ok };
 }
 
-for (const selection of ['versioned executable', 'stable symlink']) test(`installed entry survives removal of an old ${selection} target without reinstall`, t => {
+for (const selection of ['versioned executable', 'stable symlink', 'discovered versioned executable']) test(`installed entry survives removal of an old ${selection} target without reinstall`, t => {
   const f = fixture(t), first = f.version('0.160.0'), second = f.version('0.160.1');
   for (const kind of ['codex', 'claude']) fs.symlinkSync(path.join(first, kind), path.join(f.tools, kind));
   const selected = selection === 'stable symlink' ? f.tools : first;
   f.ok(f.run(process.execPath, [path.join(f.product, 'herdr/entry-install.mjs'), '--product', f.product, '--snapshot'], {
-    HERDR_MONITOR_CODEX: path.join(selected, 'codex'), HERDR_MONITOR_CLAUDE: path.join(selected, 'claude'),
+    ...(selection.startsWith('discovered') ? { PATH: `${first}:${f.env.PATH}` } : {
+      HERDR_MONITOR_CODEX: path.join(selected, 'codex'), HERDR_MONITOR_CLAUDE: path.join(selected, 'claude'),
+    }),
   }));
   const receipt = JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-entry.json')));
+  assert.equal(receipt.nativeExplicit, !selection.startsWith('discovered'));
+  assert.equal(receipt.claudeNativeExplicit, !selection.startsWith('discovered'));
   assert.equal(receipt.native, path.join(selected, 'codex'));
   assert.equal(receipt.claudeNative, path.join(selected, 'claude'));
   const before = new Map(Object.keys(receipt.files).map(name => [name, fs.readFileSync(path.join(f.bin, name))]));
@@ -57,9 +61,10 @@ for (const selection of ['versioned executable', 'stable symlink']) test(`instal
   assert.equal(resolveNative('codex', { entryBin: f.bin, fallback: receipt.native, env: { PATH: extra.PATH } }), path.join(f.tools, 'codex'));
   f.ok(f.run(process.execPath, [path.join(f.product, 'herdr/entry-install.mjs'), '--product', f.product, '--check'], extra));
   for (const [name, bytes] of before) assert.deepEqual(fs.readFileSync(path.join(f.bin, name)), bytes, 'upgrade needs no wrapper rewrite');
-  // The default Claude validator also resolves Codex at launch, even outside a project.
+  // Claude passthrough does not need a validator; entry diagnoses its absence.
   fs.unlinkSync(path.join(f.tools, 'codex')); fs.rmSync(second + '/codex');
-  const missing = f.run(path.join(f.bin, 'monitor-claude'), ['--', '--version'], extra);
+  assert.match(f.ok(f.run(path.join(f.bin, 'claude'), ['--version'], extra)).stdout, /0\.160\.1/u);
+  const missing = f.run(path.join(f.bin, 'monitor-claude'), ['--policy-only'], extra);
   assert.notEqual(missing.status, 0); assert.match(missing.stderr, /native codex is unavailable/u);
   f.ok(f.run(path.join(f.bin, 'monitor-claude'), ['--validator', 'auto', '--', '--version'], extra));
   for (const kind of ['codex', 'claude']) f.ok(f.run(path.join(f.bin, `monitor-${kind}`), ['--help'], extra));
@@ -73,4 +78,36 @@ test('native lookup skips other managed installs and wrapper aliases, retains of
   fs.symlinkSync(path.join(foreign, 'codex'), path.join(f.tools, 'codex'));
   assert.equal(resolveNative('codex', { entryBin: f.bin, fallback: path.join(native, 'codex'), env: { PATH: `${f.bin}:${foreign}:${f.tools}` } }), path.join(native, 'codex'));
   assert.throws(() => resolveNative('codex', { entryBin: f.bin, fallback: path.join(foreign, 'codex'), env: { PATH: f.tools } }), /unavailable/u);
+});
+
+for (const installer of ['machine environment', 'direct arguments']) test(`explicit native selections beat competing PATH tools (${installer})`, t => {
+  const f = fixture(t), selected = f.version('selected'), competing = f.version('competing');
+  const extra = { PATH: `${competing}:${f.env.PATH}` };
+  if (installer === 'machine environment') f.ok(f.run(process.execPath, [path.join(f.product, 'herdr/entry-install.mjs'), '--product', f.product], {
+    ...extra, HERDR_MONITOR_CODEX: path.join(selected, 'codex'), HERDR_MONITOR_CLAUDE: path.join(selected, 'claude'),
+  }));
+  else f.ok(f.run(process.execPath, [path.join(f.product, 'discovery/install.mjs'), '--bin', f.bin,
+    '--codex', path.join(selected, 'codex'), '--claude', path.join(selected, 'claude')], extra));
+  const receipt = () => JSON.parse(fs.readFileSync(path.join(f.bin, '.monitor-entry.json')));
+  assert.equal(receipt().nativeExplicit, true); assert.equal(receipt().claudeNativeExplicit, true);
+  assert.match(receipt().files['monitor-claude'], /--codex-explicit/u);
+  for (const kind of ['codex', 'claude']) {
+    assert.match(f.ok(f.run(path.join(f.bin, kind), ['--version'], extra)).stdout, /selected/u);
+    assert.match(f.ok(f.run(path.join(f.bin, `monitor-${kind}`), ['--validator', 'auto', '--', '--version'], extra)).stdout, /selected/u);
+    assert.match(f.ok(f.run(path.join(f.bin, `monitor-${kind}`), ['--binary', path.join(competing, kind), '--validator', 'auto', '--', '--version'], extra)).stdout, /competing/u);
+  }
+  assert.equal(resolveNative('codex', { entryBin: f.bin, fallback: path.join(selected, 'codex'), explicit: true, env: extra }), path.join(selected, 'codex'));
+  if (installer === 'machine environment') {
+    // Release activation without repeating overrides retains their provenance.
+    f.ok(f.run(process.execPath, [path.join(f.product, 'herdr/entry-install.mjs'), '--product', f.product], extra));
+    assert.equal(receipt().native, path.join(selected, 'codex'));
+    assert.equal(receipt().claudeNative, path.join(selected, 'claude'));
+    assert.equal(receipt().nativeExplicit, true); assert.equal(receipt().claudeNativeExplicit, true);
+  }
+});
+
+test('discovered native follows PATH while its original receipt remains executable', t => {
+  const f = fixture(t), first = f.version('first'), current = f.version('current');
+  f.ok(f.run(process.execPath, [path.join(f.product, 'herdr/entry-install.mjs'), '--product', f.product], { PATH: `${first}:${f.env.PATH}` }));
+  for (const kind of ['codex', 'claude']) assert.match(f.ok(f.run(path.join(f.bin, kind), ['--version'], { PATH: `${current}:${f.env.PATH}` })).stdout, /current/u);
 });

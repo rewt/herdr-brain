@@ -1,4 +1,4 @@
-// Installed adapters discover on PATH: name each fake and isolate harness homes.
+// Isolate harness homes and name fakes for native PATH discovery in fixtures.
 import fs from 'node:fs';
 import path from 'node:path';
 

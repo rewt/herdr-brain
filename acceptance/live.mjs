@@ -77,14 +77,13 @@ export async function discovery({ root, scratchRoots, discoveryRoots, evidence, 
     // the candidate's installer when shipped rather than bypassing its adapter.
     const installer = path.join(installation, 'discovery/install.mjs');
     if (fs.existsSync(installer)) {
-      const native = path.join(root, `native-${name}`, 'codex'), entryBin = path.join(installation, `entry-${name}`);
+      const native = path.join(root, `native-${name}`), entryBin = path.join(installation, `entry-${name}`);
       write(native, `#!/bin/sh\nexec '${process.execPath}' '${nativeTransport}' '${root}' '${name}' "$@"\n`);
       fs.chmodSync(native, 0o755);
       run(process.execPath, [installer, '--bin', entryBin, '--codex', native], { isolatedEnv: clean });
       spec.entryBinary = path.join(entryBin, 'monitor-codex');
       if (!fs.existsSync(spec.entryBinary)) throw new Error('candidate installer did not expose its documented monitor-codex entry');
-      // Launch-time entry lookup must reach this owned transport before any host harness.
-      spec.path = `${entryBin}:${path.dirname(native)}:${spec.path}`;
+      spec.path = `${entryBin}:${spec.path}`;
       write(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
     }
     write(path.join(evidence, `${name}.prompt.txt`), scope);

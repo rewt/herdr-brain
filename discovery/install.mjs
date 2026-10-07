@@ -51,11 +51,16 @@ try {
     if (!values.codex && !values.claude) throw new Error('select --codex and/or --claude by absolute path');
     if (values.codex && !path.isAbsolute(values.codex)) throw new Error('--codex must name the native executable by absolute path');
     if (!values.codex && prior?.native) throw new Error('retain --codex when updating a managed Codex install');
+    // Machine discovery supplies provenance through the staging environment,
+    // so staging remains compatible with older installers without new flags.
+    const discovered = JSON.parse(process.env.MONITOR_INSTALL_DISCOVERED_NATIVES ?? '[]');
+    const nativeExplicit = !!values.codex && !discovered.includes('codex');
+    const claudeNativeExplicit = !!values.claude && !discovered.includes('claude');
     // Preserve a stable launcher/symlink in the receipt; never pin its current release.
     const native = values.codex && launcher(values.codex, 'native', directory);
     // Derive the actual installed directory, including during transactional staging.
     const prefix = `#!/bin/sh\nentry_bin=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) || exit 1\n`;
-    const adapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/codex.mjs`)} --entry-bin "$entry_bin" --binary ${quote(native ?? 'codex')}${values.validator ? ` --validator ${quote(values.validator)}` : ''} --repo "$PWD"`;
+    const adapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/codex.mjs`)} --entry-bin "$entry_bin" --native-fallback ${quote(native ?? 'codex')}${nativeExplicit ? ' --native-explicit' : ''}${values.validator ? ` --validator ${quote(values.validator)}` : ''} --repo "$PWD"`;
     const common = `${prefix}# Herdr Monitor: automatic fresh interactive entry only\nexec ${adapter} --auto-entry -- "$@"\n`;
     const files = { ...(native ? { codex: common, 'monitor-codex': `${prefix}exec ${adapter} "$@"\n` } : {}),
       monitor: `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(`${product}/discovery/client.mjs`)} "$@"\n` };
@@ -63,7 +68,7 @@ try {
     if (values.claude) {
       if (!path.isAbsolute(values.claude)) throw new Error('--claude must name the native executable by absolute path');
       claudeNative = launcher(values.claude, 'claudeNative', directory);
-      const claudeAdapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/claude.mjs`)} --entry-bin "$entry_bin" --binary ${quote(claudeNative)}${values.validator || !native ? ` --validator ${quote(values.validator ?? 'auto')}` : ` --codex-fallback ${quote(native)}`} --repo "$PWD"`;
+      const claudeAdapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/claude.mjs`)} --entry-bin "$entry_bin" --native-fallback ${quote(claudeNative)}${claudeNativeExplicit ? ' --native-explicit' : ''}${values.validator || !native ? ` --validator ${quote(values.validator ?? 'auto')}` : ` --codex-fallback ${quote(native)}${nativeExplicit ? ' --codex-explicit' : ''}`} --repo "$PWD"`;
       files.claude = `${prefix}exec ${claudeAdapter} --auto-entry -- "$@"\n`;
       files['monitor-claude'] = `${prefix}exec ${claudeAdapter} "$@"\n`;
     } else if (prior?.claudeNative) throw new Error('retain --claude when updating a managed Claude install');
@@ -74,7 +79,7 @@ try {
     if (values.check) { console.log('entry installation checked'); process.exit(0); }
     fs.mkdirSync(directory, { recursive: true });
     for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(directory, name), content, { mode: 0o755 });
-    fs.writeFileSync(marker, JSON.stringify({ product, native, claudeNative, validator: values.validator ?? native ?? 'auto', files }, null, 2) + '\n', { mode: 0o600 });
+    fs.writeFileSync(marker, JSON.stringify({ product, native, nativeExplicit, claudeNative, claudeNativeExplicit, validator: values.validator ?? native ?? 'auto', files }, null, 2) + '\n', { mode: 0o600 });
     console.log(`installed entry adapters in ${directory}; put this machine directory before the native harness directories on PATH`);
   }
 } catch (e) { console.error(`monitor install: ${e.message}`); process.exitCode = 1; }

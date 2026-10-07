@@ -65,10 +65,10 @@ export async function lessonsEntryCase({ opt = {}, root, scratchRoots, discovery
       });
       const requiresUi = kind === 'codex' || !!claudeProfile;
       const receipt = path.join(temp, 'entry.json'), nativeDone = path.join(temp, 'native.done.json');
-      const nativeSpec = path.join(temp, 'native.json'), transport = path.join(temp, 'native-bin', kind);
+      const nativeSpec = path.join(temp, 'native.json'), transport = path.join(temp, 'native');
       write(nativeSpec, JSON.stringify({ kind, binary: binaries[kind], installation, receipt, nativeDone }));
       write(transport, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(scratch, 'entry-native.mjs'))} ${quote(nativeSpec)} "$@"\n`); fs.chmodSync(transport, 0o755);
-      const env = { ...sessionEnv(process.env, { temp, runtimeHome, path: `${path.dirname(transport)}:${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`, name }),
+      const env = { ...sessionEnv(process.env, { temp, runtimeHome, path: `${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`, name }),
         HERDR_MONITOR_FLEET: path.join(scratch, 'f'), CLAUDE_CONFIG_DIR: claudeConfig,
         MONITOR_RUNTIME_DIR: path.join(temp, 'requests'), MONITOR_WORKTREE_ROOT: path.join(scratch, 'lanes'),
         TERM: 'xterm-256color', OPENAI_API_KEY: 'entry-ui-no-network' };

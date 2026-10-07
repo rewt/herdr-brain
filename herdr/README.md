@@ -50,8 +50,14 @@ Install native Codex, Claude, or both. On macOS, Claude-only worker validation
 uses the existing OS provider; Linux validation currently requires Codex.
 The installer checks Node/npm, Git, Python and Herdr before changing entry or
 installing pinned dependencies. Repeating the same build reuses dependencies
-with matching lockfile, Node ABI and platform receipts. It resolves native executables from PATH and
-retains their receipts across upgrades, without replacing them. Existing harness
+with matching lockfile, Node ABI and platform receipts. Entry resolves discovered
+native executables from PATH at launch, excluding managed entry directories;
+the install receipt retains their launchers as fallback. Receipts also preserve
+whether each native was explicitly selected. `HERDR_MONITOR_CODEX`,
+`HERDR_MONITOR_CLAUDE`, and installer `--codex`/`--claude` selections win while
+executable, then fall back to PATH if absent. Use stable launchers or symlinks
+for overrides to follow upgrades. An adapter `--binary` selects that invocation
+directly. Release activation retains explicit selections from the receipt. Existing harness
 settings are retained alongside a reversible user SessionStart hook. Defaults require no project or machine settings:
 
 | Environment override | Default |

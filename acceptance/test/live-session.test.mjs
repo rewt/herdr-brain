@@ -10,9 +10,12 @@ import { cases } from '../cases.mjs';
 import { sessionEnv } from '../security.mjs';
 import { runTemporary } from '../../discovery/temporary.mjs';
 import { createLiveSessionTemp } from '../temp.mjs';
+import { resolveNative } from '../../discovery/native-binary.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
-const nativeCodex = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout?.trim();
+// A managed entry wrapper does not forward the owner's fd 3 readiness pipe.
+// The offline sandbox provider must be native even when entry shadows PATH.
+const nativeCodex = (() => { try { return resolveNative('codex'); } catch { return undefined; } })();
 
 // Execute discovery's real setup through installation, stopping at the first
 // Herdr call. Only the boundary probe/native model executable are stand-ins.
@@ -145,9 +148,7 @@ if(result.error) throw result.error;process.exit(result.status??1);
         runtimeHome: path.join(root, `runtime-${name}`), toolRoots: [path.resolve(path.dirname(process.execPath), '..'), path.resolve(path.dirname(native), '..'), '/opt/homebrew'] };
       fs.mkdirSync(spec.runtimeHome);
       spec.worktreeRoot = path.join(spec.temp, 'entry-worktrees');
-      const transport = path.join(root, `transport-${name}`, 'codex'), bin = path.join(spec.installation, `bin-${name}`);
-      fs.mkdirSync(path.dirname(transport));
-      spec.path = `${path.dirname(transport)}:${spec.path}`;
+      const transport = path.join(root, `transport-${name}`), bin = path.join(spec.installation, `bin-${name}`);
       fs.writeFileSync(transport, `#!/bin/sh\nexec '${process.execPath}' '${path.join(root, 'transport/acceptance/native-transport.mjs')}' '${root}' '${name}' "$@"\n`, { mode: 0o755 });
       const installed = spawnSync(process.execPath, [path.join(spec.installation, 'discovery/install.mjs'), '--bin', bin, '--codex', transport],
         { cwd: spec.repo, env: sessionEnv({}, spec), encoding: 'utf8' });

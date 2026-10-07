@@ -20,14 +20,15 @@ const adapterArgs = process.argv.slice(2, separator < 0 ? undefined : separator)
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const { values } = parseArgs({ usage: "Usage: monitor-codex [--repo PROJECT] [--role worker|supervisor] [OPTIONS] [-- NATIVE_ARGS...]", args: adapterArgs, options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
-  binary: { type: 'string', default: 'codex' }, 'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' },
+  binary: { type: 'string' }, 'native-fallback': { type: 'string' }, 'native-explicit': { type: 'boolean' }, 'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' },
   validator: { type: 'string' }, 'entry-bin': { type: 'string' },
   'policy-only': { type: 'boolean' }, 'auto-entry': { type: 'boolean' },
 } });
-if (values['entry-bin']) {
-  try { values.binary = resolveNative('codex', { entryBin: values['entry-bin'], fallback: values.binary }); }
+if (!values.binary && values['entry-bin']) {
+  try { values.binary = resolveNative('codex', { entryBin: values['entry-bin'], fallback: values['native-fallback'], explicit: values['native-explicit'] }); }
   catch (error) { console.error(`monitor entry: ${error.message}`); process.exit(1); }
 }
+values.binary ??= 'codex';
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
 function passthrough() {

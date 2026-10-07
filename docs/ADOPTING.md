@@ -102,6 +102,13 @@ Optional machine destinations/native executable overrides are
 consistent during build, activate, rollback and removal; do not put machine
 paths or account data in tracked project routes. [Installation details](../herdr/README.md)
 cover ownership checks, interruption recovery and native executable receipts.
+Entry resolves discovered natives from PATH at every launch, skipping managed
+entry directories, and uses their receipt paths as fallback. Explicit executable
+overrides (including installer `--codex`/`--claude`) remain first choice while
+executable; an unavailable selection falls back to PATH. Prefer a stable native
+launcher or symlink for overrides so upgrades work without reinstalling entry.
+`monitor-codex --binary` and `monitor-claude --binary` select that invocation
+directly. Explicit validation providers retain their selection.
 
 For a future published GitHub plugin, Herdr's `plugin install` runs the manifest
 build automatically, installs pinned dependencies and snapshots entry to a stable

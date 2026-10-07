@@ -1,0 +1,12 @@
+Run: R-298
+Implementation HEAD: b6e1a446684e3b152f31b09439a3d5195ceb2d7d
+Scratch: /private/tmp/R-298-no-ui-b_t46v0a
+Created using git archive HEAD, extracted with tar; no packages installed.
+console/node_modules absent before and after: true
+Optional React and Ink imports are also forbidden by the new print-chat test loader.
+Command: node test/helpers/run.mjs console/test/board.test.mjs console/test/brain.test.mjs console/test/control-plane.test.mjs console/test/control.test.mjs console/test/controller.test.mjs console/test/desks.test.mjs console/test/detail-view.test.mjs console/test/details.test.mjs console/test/feed.test.mjs console/test/frame.test.mjs console/test/housekeeping.test.mjs console/test/minimal-input.test.mjs console/test/minimal.test.mjs console/test/model.test.mjs console/test/modern.test.mjs console/test/names.test.mjs console/test/paint.test.mjs console/test/pipeline-details.test.mjs console/test/pipeline-view.test.mjs console/test/pipelines.test.mjs console/test/print-chat.test.mjs console/test/session-input.test.mjs console/test/session.test.mjs console/test/sources.test.mjs console/test/table.test.mjs console/test/terminal.test.mjs console/test/waiting.test.mjs supervisor/test/chats.test.mjs
+Result: 346 tests; 309 passed; 0 failed; 37 explicit optional UI skips.
+Console: 329 tests; 292 passed; 0 failed; 37 explicit optional UI skips.
+Supervisor chats: 17 tests; 17 passed; 0 failed; 0 skipped.
+Additional scratch routing regressions: 2 passed; 0 failed; 87 excluded by name pattern.
+Installed checkout minimal C regression: 1 passed; 0 failed; 7 excluded by name pattern.

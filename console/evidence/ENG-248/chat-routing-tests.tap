@@ -1,0 +1,455 @@
+TAP version 13
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 1 - repository does not track a Codex project hook that can interrupt unattended workers # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.437875
+  ...
+# Subtest: durable supervisor pane binding survives native restore, clear and compact without adapter env
+ok 2 - durable supervisor pane binding survives native restore, clear and compact without adapter env # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.038958
+  ...
+# Subtest: claude adapter reuses the project SessionStart entry exactly once
+ok 3 - claude adapter reuses the project SessionStart entry exactly once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030333
+  ...
+# Subtest: codex supervisor adapter injects SessionStart without a project hook
+ok 4 - codex supervisor adapter injects SessionStart without a project hook # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031292
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 5 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030917
+  ...
+# Subtest: adapter exports its known supervisor agent identity
+ok 6 - adapter exports its known supervisor agent identity # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027625
+  ...
+# Subtest: project chat adapter and durable restore retain ops separately from the chat name
+ok 7 - project chat adapter and durable restore retain ops separately from the chat name
+  ---
+  duration_ms: 440.988791
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 8 - entry CLI is non-blocking and prints the cold start with paused housekeeping # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.175416
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 9 - entry twice restarts stopped housekeeping and dead open watchers only once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.10125
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 10 - entry respects {"enabled":false} # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.147708
+  ...
+# Subtest: entry respects {"resume":false}
+ok 11 - entry respects {"resume":false} # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.060542
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 12 - cold-start brief flags a dead housekeeping process without changing its lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.103292
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 13 - entry reports dead promotion, release and settle owners but preserves all locks and live owners # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032667
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 14 - failed cold start, housekeeping and watch print reasons and allow later recovery steps # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.114167
+  ...
+# Subtest: Claude project hook delivers supervisor entry on startup
+ok 15 - Claude project hook delivers supervisor entry on startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036333
+  ...
+# Subtest: Claude project hook delivers supervisor entry on resume
+ok 16 - Claude project hook delivers supervisor entry on resume # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.095708
+  ...
+# Subtest: Claude project hook delivers supervisor entry on clear
+ok 17 - Claude project hook delivers supervisor entry on clear # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036208
+  ...
+# Subtest: Claude project hook delivers supervisor entry on compact
+ok 18 - Claude project hook delivers supervisor entry on compact # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.069958
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 19 - hook skips or explains unmarked without blocking startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.063875
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 20 - hook skips or explains worker without blocking startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025417
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 21 - hook skips or explains lane without blocking startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021667
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 22 - hook skips or explains foreign without blocking startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020542
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 23 - hook skips or explains bad-input without blocking startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020291
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 24 - hook skips or explains missing-record without blocking startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.080083
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 25 - hook skips or explains worker-bypass without blocking startup # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033125
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 26 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024083
+  ...
+# Subtest: adapters use short fleet temp and bind both roles with native supervisor hooks
+ok 27 - adapters use short fleet temp and bind both roles with native supervisor hooks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023
+  ...
+# Subtest: entry safely handles STOP
+ok 28 - entry safely handles STOP # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028417
+  ...
+# Subtest: entry safely handles invalid-config
+ok 29 - entry safely handles invalid-config # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022375
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 30 - entry safely handles invalid-pid # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024083
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 31 - entry safely handles reported-during-entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024292
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 32 - housekeeping resume preserves a live owner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025459
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 33 - housekeeping resume preserves a invalid owner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.182667
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 34 - housekeeping resume preserves a foreign owner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.058125
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 35 - housekeeping resume preserves a missing-runtime owner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025834
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 36 - housekeeping resume preserves a resume-disabled owner # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02
+  ...
+# Subtest: watch recovery handles reused identity without blocking entry
+ok 37 - watch recovery handles reused identity without blocking entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019042
+  ...
+# Subtest: watch recovery handles unreadable identity without blocking entry
+ok 38 - watch recovery handles unreadable identity without blocking entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018708
+  ...
+# Subtest: watch recovery handles legacy-live identity without blocking entry
+ok 39 - watch recovery handles legacy-live identity without blocking entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.01775
+  ...
+# Subtest: watch recovery handles changed-during-entry identity without blocking entry
+ok 40 - watch recovery handles changed-during-entry identity without blocking entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02725
+  ...
+# Subtest: empty supervisor environment and null dispatch recipient use the supervisor fallback
+ok 41 - empty supervisor environment and null dispatch recipient use the supervisor fallback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037167
+  ...
+# Subtest: housekeeping snapshot reports reused birth without changing the lock
+ok 42 - housekeeping snapshot reports reused birth without changing the lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055625
+  ...
+# Subtest: housekeeping snapshot reports unreadable birth without changing the lock
+ok 43 - housekeeping snapshot reports unreadable birth without changing the lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020083
+  ...
+# Subtest: housekeeping snapshot reports legacy-live birth without changing the lock
+ok 44 - housekeeping snapshot reports legacy-live birth without changing the lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019541
+  ...
+# Subtest: housekeeping resume replaces a reused PID without signaling the replacement process
+ok 45 - housekeeping resume replaces a reused PID without signaling the replacement process # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.017666
+  ...
+# Subtest: claude interactive --resume through automatic adapter preserves supervisor entry and worker guards
+ok 46 - claude interactive --resume through automatic adapter preserves supervisor entry and worker guards # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.016459
+  ...
+# Subtest: claude interactive --continue through automatic adapter preserves supervisor entry and worker guards
+ok 47 - claude interactive --continue through automatic adapter preserves supervisor entry and worker guards # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.080542
+  ...
+# Subtest: codex interactive resume through automatic adapter preserves supervisor entry and worker guards
+ok 48 - codex interactive resume through automatic adapter preserves supervisor entry and worker guards # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019292
+  ...
+# Subtest: Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+ok 49 - Linux watcher recovery round-trips textual identities through record set and compares changed ticks # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.105292
+  ...
+# Subtest: claude nested headless launch cannot inherit supervisor recognition
+ok 50 - claude nested headless launch cannot inherit supervisor recognition # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039708
+  ...
+# Subtest: codex nested headless launch cannot inherit supervisor recognition
+ok 51 - codex nested headless launch cannot inherit supervisor recognition # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.053125
+  ...
+# Subtest: awaited dispatch records the notification and plan step before launching and preserves retry flags
+ok 52 - awaited dispatch records the notification and plan step before launching and preserves retry flags # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.681875
+  ...
+# Subtest: fake watcher receipt refuses PID reuse before registration and retains ownership across retries
+ok 53 - fake watcher receipt refuses PID reuse before registration and retains ownership across retries # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.047125
+  ...
+# Subtest: real watcher journal refuses PID reuse before registration and retains ownership across retries
+ok 54 - real watcher journal refuses PID reuse before registration and retains ownership across retries # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.403209
+  ...
+# Subtest: dispatch defaults to project ops from a chat environment and explicit --to wins
+ok 55 - dispatch defaults to project ops from a chat environment and explicit --to wins
+  ---
+  duration_ms: 1325.944416
+  ...
+# Subtest: captured Codex hooks event table detects the warning count while quoted task text stays safe
+ok 56 - captured Codex hooks event table detects the warning count while quoted task text stays safe # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.13975
+  ...
+# Subtest: hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose
+ok 57 - hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.048458
+  ...
+# Subtest: Codex startup dialog blocks the brief visibly in the default profile and ordinary retry delivers once
+ok 58 - Codex startup dialog blocks the brief visibly in the default profile and ordinary retry delivers once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.077292
+  ...
+# Subtest: Codex startup dialog blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+ok 59 - Codex startup dialog blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.095292
+  ...
+# Subtest: Codex captured hooks event table blocks the brief visibly in the default profile and ordinary retry delivers once
+ok 60 - Codex captured hooks event table blocks the brief visibly in the default profile and ordinary retry delivers once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.316791
+  ...
+# Subtest: Codex captured hooks event table blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+ok 61 - Codex captured hooks event table blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.059208
+  ...
+# Subtest: screen read failure leaves delivery unsent and retryable
+ok 62 - screen read failure leaves delivery unsent and retryable # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031209
+  ...
+# Subtest: an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery
+ok 63 - an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.077167
+  ...
+# Subtest: Linux dispatch watcher receipt and journal round-trip as strings through record set
+ok 64 - Linux dispatch watcher receipt and journal round-trip as strings through record set # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039
+  ...
+# Subtest: dispatch waits under simulated swap pressure before opening a lane and resumes the same request
+ok 65 - dispatch waits under simulated swap pressure before opening a lane and resumes the same request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079667
+  ...
+# Subtest: STOP during dispatch open memory wait retains the request without a worker launch
+ok 66 - STOP during dispatch open memory wait retains the request without a worker launch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042459
+  ...
+# Subtest: STOP during dispatch worker memory wait retains the request without a worker launch
+ok 67 - STOP during dispatch worker memory wait retains the request without a worker launch # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.095834
+  ...
+# Subtest: dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work
+ok 68 - dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036
+  ...
+# Subtest: one command records exact route/worker fields, arms watch before prompt, and preserves briefs
+ok 69 - one command records exact route/worker fields, arms watch before prompt, and preserves briefs # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066833
+  ...
+# Subtest: open/prepare failures keep a visible request, create no run, and retry cleanly
+ok 70 - open/prepare failures keep a visible request, create no run, and retry cleanly # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.061542
+  ...
+# Subtest: watch failure records a worker but never sends work; retry reuses the same worker/run
+ok 71 - watch failure records a worker but never sends work; retry reuses the same worker/run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027875
+  ...
+# Subtest: uncertain launch refuses automatic replay and requires explicit adoption
+ok 72 - uncertain launch refuses automatic replay and requires explicit adoption # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.026208
+  ...
+# Subtest: uncertain prompt refuses automatic resend; caller can authorize it after inspection
+ok 73 - uncertain prompt refuses automatic resend; caller can authorize it after inspection # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.053292
+  ...
+# Subtest: a fix round can reuse a stopped worker or start fresh; changed route is refused
+ok 74 - a fix round can reuse a stopped worker or start fresh; changed route is refused # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.025959
+  ...
+# Subtest: retry pins routes across config edits and detects a replaced occupant
+ok 75 - retry pins routes across config edits and detects a replaced occupant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020625
+  ...
+# Subtest: base moves a clean reused lane only by fast-forward; dirty lane is preserved
+ok 76 - base moves a clean reused lane only by fast-forward; dirty lane is preserved # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022125
+  ...
+# Subtest: a real detached watcher acknowledges initialization and sheds supervisor pane identity
+ok 77 - a real detached watcher acknowledges initialization and sheds supervisor pane identity # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02
+  ...
+# Subtest: lost record start result is visible and recovered without starting a second run
+ok 78 - lost record start result is visible and recovered without starting a second run # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020791
+  ...
+# Subtest: live request locks refuse retries without changing the journal
+ok 79 - live request locks refuse retries without changing the journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020459
+  ...
+# Subtest: explicit fresh launch and accepted delivery recover uncertain attempts
+ok 80 - explicit fresh launch and accepted delivery recover uncertain attempts # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023209
+  ...
+# Subtest: invalid route and empty brief mutate neither lane nor record
+ok 81 - invalid route and empty brief mutate neither lane nor record # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021708
+  ...
+# Subtest: a refused record start with no matching run retries the saved request
+ok 82 - a refused record start with no matching run retries the saved request # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019916
+  ...
+# Subtest: a run ID supplied as ITEM is refused before creating a lane or journal
+ok 83 - a run ID supplied as ITEM is refused before creating a lane or journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02025
+  ...
+# Subtest: reuse refuses an idle worker whose previous run is still open
+ok 84 - reuse refuses an idle worker whose previous run is still open # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.092459
+  ...
+# Subtest: reuse accepts an abandoned run with the same stopped occupant
+ok 85 - reuse accepts an abandoned run with the same stopped occupant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022125
+  ...
+# Subtest: retry locks before reading its journal so another retry cannot replay stale progress
+ok 86 - retry locks before reading its journal so another retry cannot replay stale progress # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.04125
+  ...
+# Subtest: two retries cannot both take over a dead-owner lock
+ok 87 - two retries cannot both take over a dead-owner lock # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021125
+  ...
+# Subtest: an unknown start outcome with no match stays conservative; multiple matches require explicit recovery
+ok 88 - an unknown start outcome with no match stays conservative; multiple matches require explicit recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021792
+  ...
+# Subtest: dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24
+ok 89 - dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.030958
+  ...
+1..89
+# tests 89
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 87
+# todo 0
+# duration_ms 1881.642791

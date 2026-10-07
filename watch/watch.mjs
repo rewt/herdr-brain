@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 
 import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
@@ -29,7 +29,7 @@ import {
 const SELF = fileURLToPath(import.meta.url);
 const LOCAL_ORG = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 
-const { values: opt, positionals } = parseArgs({
+const { values: opt, positionals } = parseArgs({ usage: "Usage: node watch/watch.mjs R-n --org DIR [OPTIONS]",
   allowPositionals: true,
   options: {
     org: { type: 'string' },

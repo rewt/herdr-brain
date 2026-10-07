@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../../lib/cli-help.mjs';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive, interactiveResume } from '../launch.mjs';
@@ -14,15 +14,20 @@ import { spawnNative } from '../session.mjs';
 import { FleetError } from '../../lib/fleet.mjs';
 import { nativeSandboxLaunch, nativeSessionContext, nativeSession } from '../native-sandbox.mjs';
 import { TemporaryError } from '../temporary.mjs';
+import { resolveNative } from '../native-binary.mjs';
 const separator = process.argv.indexOf('--');
 const adapterArgs = process.argv.slice(2, separator < 0 ? undefined : separator);
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);
-const { values } = parseArgs({ args: adapterArgs, options: {
+const { values } = parseArgs({ usage: "Usage: monitor-codex [--repo PROJECT] [--role worker|supervisor] [OPTIONS] [-- NATIVE_ARGS...]", args: adapterArgs, options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
   binary: { type: 'string', default: 'codex' }, 'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' },
-  validator: { type: 'string' },
+  validator: { type: 'string' }, 'entry-bin': { type: 'string' },
   'policy-only': { type: 'boolean' }, 'auto-entry': { type: 'boolean' },
 } });
+if (values['entry-bin']) {
+  try { values.binary = resolveNative('codex', { entryBin: values['entry-bin'], fallback: values.binary }); }
+  catch (error) { console.error(`monitor entry: ${error.message}`); process.exit(1); }
+}
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;
 function passthrough() {

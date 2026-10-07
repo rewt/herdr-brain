@@ -18,7 +18,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 
 const WATCHER = /^(watch|deliver) R-\d+$/;

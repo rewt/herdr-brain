@@ -6,6 +6,8 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node console/dev.mjs [--project NAME] [OPTIONS]\nWatch console sources and restart the development console.");
 
 const root = path.resolve(import.meta.dirname, '..');
 const args = [path.join(root, 'console/app.mjs'), '--modern', ...process.argv.slice(2)];

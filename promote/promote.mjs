@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -365,7 +365,7 @@ async function start(queue) {
 }
 
 async function main() {
-  const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
+  const { values: opt, positionals } = parseArgs({ usage: "Usage: node promote/promote.mjs TOPIC [TOPIC ...] [OPTIONS] | --status | --drain", allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, to: { type: 'string' },
     validate: { type: 'string' }, herdr: { type: 'string' }, 'lane-cli': { type: 'string' },
     'delivery-attempts': { type: 'string' }, 'retry-seconds': { type: 'string' },

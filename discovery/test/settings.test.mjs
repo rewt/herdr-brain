@@ -1,3 +1,4 @@
+import { nativeEnvironment } from '../../test/helpers/native-environment.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -43,7 +44,7 @@ if(args[0]==='sandbox'){
 fs.writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args,cwd:process.cwd(),org:process.env.ORG_DIR,requests:process.env.MONITOR_REQUEST_DIR,
   settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexOf('--settings')+1])):null}));`, { mode: 0o755 });
   command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--codex', native, '--claude', native], f.repo);
-  const env = { ORG_ACTOR: 'settings-test-agent', PATH: `${bin}${path.delimiter}${process.env.PATH}`, NATIVE_RECEIPT: receipt, NATIVE_GUARD_RECEIPT: guard,
+  const env = { ORG_ACTOR: 'settings-test-agent', ...nativeEnvironment(f.scratch, { codex: native, claude: native }, [bin]), NATIVE_RECEIPT: receipt, NATIVE_GUARD_RECEIPT: guard,
     CODEX_HOME: path.join(f.scratch, 'codex-home'), CLAUDE_CONFIG_DIR: path.join(f.scratch, 'claude-home'),
     ORG_DIR: path.join(f.scratch, 'foreign-record'), MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
     HERDR_ENV: '', HERDR_PANE_ID: '', HERDR_INTEGRATION_ID: '',

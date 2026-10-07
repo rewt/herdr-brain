@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 import { copyProduct } from '../lib/product-files.mjs';

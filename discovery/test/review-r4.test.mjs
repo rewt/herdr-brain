@@ -87,7 +87,7 @@ actorTest('installation requires and preserves experimental selection while Code
   const codex = invoke([installer, '--bin', stable, '--codex', f.native, '--claude', f.native]);
   assert.equal(codex.status, 0, codex.stderr);
   assert.equal(JSON.parse(fs.readFileSync(path.join(stable, '.monitor-entry.json'))).validator, f.native);
-  assert.ok(fs.readFileSync(path.join(stable, 'monitor-claude'), 'utf8').includes(`--validator '${f.native}'`));
+  assert.ok(fs.readFileSync(path.join(stable, 'monitor-claude'), 'utf8').includes(`--codex-fallback '${f.native}'`));
   assert.ok(!fs.existsSync(f.invoked));
 });
 for (const [name, provider] of [['macOS', process.env.MONITOR_TEST_ALTERNATIVE], ['Codex', process.env.MONITOR_TEST_SANDBOX]])

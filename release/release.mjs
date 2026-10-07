@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -178,7 +178,7 @@ export function main(argv = process.argv.slice(2)) {
     process.stdout.write(JSON.stringify(releaseOnce({ ...options, slotHeld: true })) + '\n');
     return;
   }
-  const { values: opt, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
+  const { values: opt, positionals } = parseArgs({ usage: "Usage: node release/release.mjs --once --role supervisor [OPTIONS] | --prune [--dry-run]", args: argv, allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
     once: { type: 'boolean' }, tag: { type: 'string' }, 'dry-run': { type: 'boolean' }, 'skip-live': { type: 'boolean' },
     'max-load-per-cpu': { type: 'string' },

@@ -9,6 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { runTestSlotSync } from '../test-slot/run.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node promote/host-gate.mjs [--lock|--held|--execute] CANONICAL RECEIPT [COMMAND ARGS...]");
 
 const args = process.argv.slice(2);
 const mode = args[0]?.startsWith('--') ? args.shift() : '--lock';

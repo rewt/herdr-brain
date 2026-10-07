@@ -34,6 +34,8 @@ import { fileURLToPath } from "node:url";
 import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
 import { lookupProcess } from "../lib/processes.mjs";
 import { writeFileAtomic } from "../lib/files.mjs";
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node test-slot/test-slot.mjs run LABEL [--wait SECONDS] -- COMMAND [ARGS...] | status");
 
 export const TEST_SLOT_PATH = process.platform === "darwin" ? "/private/tmp/bch-cloak-test-slot.lock" : "/tmp/bch-cloak-test-slot.lock";
 export const COMPAT_PATH_ENV = "MONITOR_TEST_SLOT_COMPAT_PATH";

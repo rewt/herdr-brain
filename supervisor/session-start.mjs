@@ -4,6 +4,8 @@
 import fs from 'node:fs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { supervisorBinding, rememberSupervisor } from './session-binding.mjs';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node supervisor/session-start.mjs < SESSION_START_JSON\nRead a native SessionStart hook from stdin.");
 try {
   const env = process.env;
   if (env.MONITOR_ENTRY_BYPASS !== '1' && (!env.MONITOR_SESSION_ROLE || env.MONITOR_SESSION_ROLE === 'supervisor')) {

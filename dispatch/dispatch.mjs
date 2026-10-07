@@ -6,7 +6,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
@@ -14,7 +14,7 @@ import { gitProject } from '../lib/project.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
-const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
+const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL", allowPositionals: true, options: {
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
   serves: { type: 'string' }, awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },

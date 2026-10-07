@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Check machine inputs before dependency installation or machine entry writes.
 import { spawnSync } from 'node:child_process';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node herdr/prerequisites.mjs\nCheck Node, npm, Git, Python and Herdr prerequisites.");
 
 const version = text => text.match(/\d+\.\d+(?:\.\d+)?/u)?.[0].split('.').map(Number);
 function requireVersion(file, args, minimum, instruction) {

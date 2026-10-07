@@ -10,6 +10,8 @@ import { removePlainDirectory } from '../lib/files.mjs';
 import { lifetimeScope, closeScope, boundedArgs } from './lifetime.mjs';
 import { sandboxCommand } from './confinement.mjs';
 import { validationTimeout, validationStepTimeout, VALIDATION_WRAPPER_GRACE } from './deadlines.mjs';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node discovery/validate.mjs NATIVE_SANDBOX CHECKOUT SHARED_PATHS_JSON [COMMAND]");
 const [binary, cwd, sharedPathsJSON, declaredCommand] = process.argv.slice(2);
 try {
   const sharedPaths = JSON.parse(sharedPathsJSON);

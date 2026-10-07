@@ -6,6 +6,8 @@ import { spawnSync } from 'node:child_process';
 import { lifetimeScope, closeScope, boundedArgs } from './lifetime.mjs';
 import { sandboxCommand } from './confinement.mjs';
 import { validationTemporary } from './paths.mjs';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node discovery/git-driver.mjs NATIVE_SANDBOX SHARED_PATHS_JSON BASE64_COMMAND FILENAME");
 const [binary, sharedJSON, encoded, filename] = process.argv.slice(2);
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 try {

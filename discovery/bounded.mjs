@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { prepareOwner } from './owner.mjs';
 import { lifetimeScope, closeScope } from './lifetime.mjs';
 import { FAST_VALIDATION_TIMEOUT, MAX_ENTRY_TIMEOUT } from './deadlines.mjs';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node discovery/bounded.mjs [--timeout-ms N] [--scope JSON] BINARY [ARGS...] [--command COMMAND ARGS...]");
 let helper;
 function supervisor() {
   if (helper) return helper;

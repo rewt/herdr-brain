@@ -2,7 +2,7 @@
 // Claude's prompt transport lives here, outside the neutral entry runtime/core.
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../../lib/cli-help.mjs';
 import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive, interactiveResume } from '../launch.mjs';
@@ -11,12 +11,21 @@ import { spawnNative } from '../session.mjs';
 import { FleetError } from '../../lib/fleet.mjs';
 import { nativeSandboxLaunch, nativeSessionContext, nativeSession } from '../native-sandbox.mjs';
 import { TemporaryError } from '../temporary.mjs';
+import { resolveNative } from '../native-binary.mjs';
 const separator = process.argv.indexOf('--');
-const { values } = parseArgs({ args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
+const { values } = parseArgs({ usage: "Usage: monitor-claude [--repo PROJECT] [--role worker|supervisor] [OPTIONS] [-- NATIVE_ARGS...]", args: process.argv.slice(2, separator < 0 ? undefined : separator), options: {
   repo: { type: 'string', default: process.cwd() }, role: { type: 'string', default: 'worker' },
-  binary: { type: 'string', default: 'claude' }, validator: { type: 'string', default: 'auto' },
+  binary: { type: 'string', default: 'claude' }, validator: { type: 'string' },
+  'entry-bin': { type: 'string' }, 'codex-fallback': { type: 'string' },
   'runtime-dir': { type: 'string' }, 'worktree-root': { type: 'string' }, 'policy-only': { type: 'boolean' }, 'auto-entry': { type: 'boolean' },
 } });
+if (values['entry-bin']) {
+  try {
+    values.binary = resolveNative('claude', { entryBin: values['entry-bin'], fallback: values.binary });
+    if (!values.validator && values['codex-fallback']) values.validator = resolveNative('codex', { entryBin: values['entry-bin'], fallback: values['codex-fallback'] });
+  } catch (error) { console.error(`monitor entry: ${error.message}`); process.exit(1); }
+}
+values.validator ??= 'auto';
 const native = separator < 0 ? [] : process.argv.slice(separator + 1);
 const root = fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/u, '');
 let entry;

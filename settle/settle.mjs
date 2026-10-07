@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { findOrgDir } from '../lib/store.mjs';
 import { gitProject, ignoreRuntime } from '../lib/project.mjs';
@@ -19,7 +19,7 @@ import { acquire } from './lock.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
-const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: {
+const { values: opt, positionals } = parseArgs({ usage: "Usage: node settle/settle.mjs R-n [OPTIONS]", allowPositionals: true, options: {
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   brief: { type: 'string' }, 'review-route': { type: 'string' }, 'fix-route': { type: 'string' },
   to: { type: 'string' }, reuse: { type: 'boolean' }, retry: { type: 'boolean' },

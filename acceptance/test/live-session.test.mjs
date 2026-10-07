@@ -145,7 +145,9 @@ if(result.error) throw result.error;process.exit(result.status??1);
         runtimeHome: path.join(root, `runtime-${name}`), toolRoots: [path.resolve(path.dirname(process.execPath), '..'), path.resolve(path.dirname(native), '..'), '/opt/homebrew'] };
       fs.mkdirSync(spec.runtimeHome);
       spec.worktreeRoot = path.join(spec.temp, 'entry-worktrees');
-      const transport = path.join(root, `transport-${name}`), bin = path.join(spec.installation, `bin-${name}`);
+      const transport = path.join(root, `transport-${name}`, 'codex'), bin = path.join(spec.installation, `bin-${name}`);
+      fs.mkdirSync(path.dirname(transport));
+      spec.path = `${path.dirname(transport)}:${spec.path}`;
       fs.writeFileSync(transport, `#!/bin/sh\nexec '${process.execPath}' '${path.join(root, 'transport/acceptance/native-transport.mjs')}' '${root}' '${name}' "$@"\n`, { mode: 0o755 });
       const installed = spawnSync(process.execPath, [path.join(spec.installation, 'discovery/install.mjs'), '--bin', bin, '--codex', transport],
         { cwd: spec.repo, env: sessionEnv({}, spec), encoding: 'utf8' });

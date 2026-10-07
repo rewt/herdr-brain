@@ -441,7 +441,7 @@ test('plugin build discovers native CLIs and installs default machine paths with
   f.ok('bash', [path.join(f.repo, 'herdr/install.sh')], f.repo, defaults);
   const bin = path.join(f.home, '.local/share/herdr-monitor/entry/bin');
   const receipt = JSON.parse(fs.readFileSync(path.join(bin, '.monitor-entry.json')));
-  assert.equal(receipt.native, f.native); assert.equal(receipt.claudeNative, f.native);
+  assert.equal(receipt.native, f.native); assert.equal(receipt.claudeNative, path.join(path.dirname(f.native), 'claude'));
   assert.match(receipt.product, /entry\/runtimes\/[a-f0-9]{64}$/u);
   assert.ok(fs.existsSync(path.join(receipt.product, 'discovery/adapters/codex.mjs')));
   const restored = f.run(process.execPath, [path.join(source, 'herdr/entry-install.mjs'), '--remove'], f.repo, defaults);

@@ -1,3 +1,4 @@
+import { nativeEnvironment } from '../../test/helpers/native-environment.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -64,7 +65,7 @@ test('both installed adapters deliver shared lessons for nested entry to native 
   const native = path.join(f.scratch, 'native');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
   command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--codex', native, '--claude', native], f.repo);
-  const env = { MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'worktrees') };
+  const env = { ...nativeEnvironment(f.scratch, { codex: native, claude: native }), MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'worktrees') };
   const policies = [];
   for (const kind of ['codex', 'claude']) {
     command(path.join(bin, `monitor-${kind}`), ['--repo', path.join(f.repo, 'area/deep'), '--'], f.repo, env);
@@ -98,7 +99,7 @@ for (const populated of [false, true]) test(`installed adapters launch from lite
   const bin = path.join(f.scratch, 'bin'), receipt = path.join(f.scratch, 'receipt.json'), native = path.join(f.scratch, 'native');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(${JSON.stringify(receipt)}, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
   command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--codex', native, '--claude', native], f.repo);
-  const env = { MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'worktrees') };
+  const env = { ...nativeEnvironment(f.scratch, { codex: native, claude: native }), MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'worktrees') };
   const lessonEvents = () => fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(event => event.type.startsWith('lesson.'));
   const before = lessonEvents();
   for (const kind of ['codex', 'claude']) {

@@ -1,3 +1,4 @@
+import { nativeEnvironment } from '../../test/helpers/native-environment.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
@@ -27,7 +28,7 @@ function install(f) {
   const native = path.join(f.scratch, 'native'), receipt = path.join(f.scratch, 'receipt.json'), bin = path.join(f.scratch, 'bin');
   fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.NATIVE_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),org:process.env.ORG_DIR,actor:process.env.ORG_ACTOR,tty:process.stdin.isTTY}));`, { mode: 0o755 });
   command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--codex', native, '--claude', native], f.repo);
-  const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, TEST_PTY_SCRIPT: SCRIPT, NATIVE_RECEIPT: receipt, ORG_DIR: '', ORG_ACTOR: '', HERDR_ENV: '', HERDR_PANE_ID: '', HERDR_INTEGRATION_ID: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '', MONITOR_RUNTIME_DIR: f.options.runtimeDir, MONITOR_WORKTREE_ROOT: f.options.worktreeRoot };
+  const env = { ...process.env, ...nativeEnvironment(f.scratch, { codex: native, claude: native }, [bin]), TEST_PTY_SCRIPT: SCRIPT, NATIVE_RECEIPT: receipt, ORG_DIR: '', ORG_ACTOR: '', HERDR_ENV: '', HERDR_PANE_ID: '', HERDR_INTEGRATION_ID: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '', MONITOR_RUNTIME_DIR: f.options.runtimeDir, MONITOR_WORKTREE_ROOT: f.options.worktreeRoot };
   return { bin, receipt, env };
 }
 function interactive(binary, args, cwd, env) {

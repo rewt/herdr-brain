@@ -23,8 +23,9 @@ import { startSession } from '../lib/start.mjs';
 import { explainItem } from '../lib/explain.mjs';
 import * as service from '../lib/service.mjs';
 import { loadProjects, withProject } from '../lib/projects.mjs';
-import { parseArgs } from 'node:util';
+import { parseArgs, cliHelp } from '../../lib/cli-help.mjs';
 import { recordDigest, renderDigest } from '../lib/signals.mjs';
+cliHelp(import.meta.url, "Usage: brain watch|queue|show|send|key|later|never|answer|digest|explain|status|service|start [OPTIONS]");
 
 const argv = process.argv.slice(2);
 const cmd = argv[0] ?? 'queue';

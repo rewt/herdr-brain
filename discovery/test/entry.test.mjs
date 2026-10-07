@@ -1,3 +1,4 @@
+import { nativeEnvironment } from '../../test/helpers/native-environment.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
@@ -127,7 +128,7 @@ test('machine installer retains native flags, reaches Claude too and restores on
   fs.writeFileSync(fake, `#!/usr/bin/env node\nrequire('fs').writeFileSync(process.env.TEST_NATIVE_RECEIPT, JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),org:process.env.ORG_DIR}));\n`, { mode: 0o755 });
   const installer = path.join(root, 'discovery/install.mjs');
   command(process.execPath, [installer, '--bin', bin, '--codex', fake, '--claude', fake], f.repo);
-  const extra = { TEST_NATIVE_RECEIPT: receipt, MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'lanes') };
+  const extra = { ...nativeEnvironment(f.scratch, { codex: fake, claude: fake }), TEST_NATIVE_RECEIPT: receipt, MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'lanes') };
   command(path.join(bin, 'monitor-codex'), ['--', 'exec', '--model', 'literal-model', '-c', 'model_reasoning_effort=low', 'Literal task'], f.repo, extra);
   let got = JSON.parse(fs.readFileSync(receipt, 'utf8'));
   assert.equal(got.args[got.args.indexOf('--model') + 1], 'literal-model');

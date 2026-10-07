@@ -6,7 +6,7 @@ import os from 'node:os';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
 import { lessonsEntryCase } from './lessons.mjs';

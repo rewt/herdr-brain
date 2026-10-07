@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../../lib/cli-help.mjs';
 import { ownerTargets, bundledOwner, sha256, verifyOwner } from '../owner.mjs';
 
 const { values } = parseArgs({ options: {

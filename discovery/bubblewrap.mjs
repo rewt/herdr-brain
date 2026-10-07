@@ -7,6 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { cliHelp } from '../lib/cli-help.mjs';
+cliHelp(import.meta.url, "Usage: node discovery/bubblewrap.mjs --experimental-bubblewrap ABSOLUTE_BWRAP [ARGS...]");
 export function socketFilter(arch = process.arch) {
   const spec = { x64: { audit: 0xc000003e, column: 1 }, arm64: { audit: 0xc00000b7, column: 2 } }[arch];
   if (!spec) throw new Error(`bubblewrap socket guard unavailable on ${arch}`);

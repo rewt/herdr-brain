@@ -2,7 +2,7 @@
 // Native lifecycle transport for absolute executable, desktop and restored entry.
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { joinFleet } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';

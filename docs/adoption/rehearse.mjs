@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../../lib/cli-help.mjs';
 import { freshAccount } from './account.mjs';
 
 const { values } = parseArgs({ options: { 'native-codex': { type: 'string' }, 'native-claude': { type: 'string' }, 'fresh-account': { type: 'boolean' }, 'npm-cache': { type: 'string' }, evidence: { type: 'string' } } });

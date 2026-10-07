@@ -11,6 +11,7 @@
 // else. Configuration is layered from parent and repository .lane.json files
 // (see README).
 
+import { cliHelp } from '../lib/cli-help.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { projectFleet } from '../lib/fleet.mjs';
@@ -47,6 +48,8 @@ import {
   selectRoute,
   validateRoutesConfig,
 } from "./routes.mjs";
+
+cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|close [TOPIC] [OPTIONS]');
 
 const IS_REVIEW_COMMAND = process.argv[2] === "review";
 const CALLER_CWD = process.cwd();

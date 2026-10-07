@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { quote } from '../discovery/runtime.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
 import { scratchProductHomes, assertScratchHomes } from './environment.mjs';

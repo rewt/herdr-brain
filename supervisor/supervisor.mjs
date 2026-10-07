@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { writeFileAtomic } from '../lib/store.mjs';
 import { enterSupervisor } from './entry.mjs';
@@ -29,7 +29,7 @@ const completedJob = (queue, id) => {
 };
 const jobAttempt = (receipt, id) => attempts(receipt).find((a) => a.queue?.jobs?.some((j) => j.id === id));
 export function main(argv = process.argv.slice(2)) {
-  const { values: opt, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
+  const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|status|entry|checkpoint|handle|promote|release [OPTIONS]", args: argv, allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
     json: { type: 'boolean' }, 'since-seq': { type: 'string' }, through: { type: 'string' },
     notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string' }, brief: { type: 'string' },

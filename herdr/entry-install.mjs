@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from 'node:util';
+import { parseArgs } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { quote } from '../discovery/runtime.mjs';
 import { state, same, bytes, writable, recover, transact } from './entry-transaction.mjs';
@@ -53,23 +53,27 @@ function native(kind, prior) {
     if (prior?.[kind === 'codex' ? 'native' : 'claudeNative']) throw new Error(`retain ${kind} when upgrading its managed installation`);
     return undefined;
   }
-  const candidates = supplied ? [supplied] : [prior?.[kind === 'codex' ? 'native' : 'claudeNative'],
-    ...(process.env.PATH ?? '').split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, kind))];
+  const candidates = supplied ? [supplied] : [
+    ...(process.env.PATH ?? '').split(path.delimiter).filter(Boolean).map((dir) => path.join(dir, kind)),
+    prior?.[kind === 'codex' ? 'native' : 'claudeNative']];
   for (const candidate of candidates.filter(Boolean)) {
     if (!path.isAbsolute(candidate)) throw new Error(`native ${kind} path must be absolute`);
     try {
       fs.accessSync(candidate, fs.constants.X_OK);
       if (!fs.statSync(candidate).isFile()) continue;
     } catch (e) { if (supplied) throw new Error(`install native ${kind} or correct HERDR_MONITOR_${kind.toUpperCase()}: ${e.message}`); continue; }
-    const receipt = path.join(path.dirname(candidate), '.monitor-entry.json');
-    if (exists(receipt)) {
+    const target = fs.realpathSync(candidate);
+    const receipt = [...new Set([path.dirname(candidate), path.dirname(target)])]
+      .map(directory => path.join(directory, '.monitor-entry.json')).find(exists);
+    if (receipt) {
+      if (!supplied) continue; // Prefer the current native PATH launcher over old receipts.
       const original = JSON.parse(read(receipt))[kind === 'codex' ? 'native' : 'claudeNative'];
       if (!original) continue; // The other harness may be the only managed one.
       if (!path.isAbsolute(original) || path.dirname(original) === bin) throw new Error(`invalid native ${kind} receipt`);
       fs.accessSync(original, fs.constants.X_OK);
       return original;
     }
-    return fs.realpathSync(candidate);
+    return candidate;
   }
   if (supplied) throw new Error(`install native ${kind} or correct HERDR_MONITOR_${kind.toUpperCase()}`);
 }

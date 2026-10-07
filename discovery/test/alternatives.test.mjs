@@ -1,3 +1,4 @@
+import { nativeEnvironment } from '../../test/helpers/native-environment.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
@@ -53,7 +54,7 @@ test('Claude-only scratch installation does not require or install Codex', { tim
   assert.ok(!fs.existsSync(path.join(bin, 'codex')));
   assert.match(fs.readFileSync(path.join(bin, 'monitor-claude'), 'utf8'), /--validator 'auto'/u);
   assert.match(command(path.join(bin, 'monitor-claude'), ['--', '--print', '--model', 'haiku', 'Task'], f.repo,
-    { MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'lanes') }), /--append-system-prompt/u);
+    { ...nativeEnvironment(f.scratch, { claude: fake }), MONITOR_RUNTIME_DIR: path.join(f.scratch, 'runtime'), MONITOR_WORKTREE_ROOT: path.join(f.scratch, 'lanes') }), /--append-system-prompt/u);
   command(process.execPath, [path.join(product, 'discovery/install.mjs'), '--bin', bin, '--remove'], f.repo);
 });
 

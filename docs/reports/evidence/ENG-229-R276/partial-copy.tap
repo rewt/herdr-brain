@@ -1,0 +1,428 @@
+TAP version 13
+# Subtest: the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+ok 1 - the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+  ---
+  duration_ms: 488.539125
+  ...
+# Subtest: missing input setup and missing build evidence fail before invoking acceptance
+ok 2 - missing input setup and missing build evidence fail before invoking acceptance
+  ---
+  duration_ms: 3.817416
+  ...
+# Subtest: private cache copies only pinned dependency tarballs and refuses missing content
+ok 3 - private cache copies only pinned dependency tarballs and refuses missing content
+  ---
+  duration_ms: 6.379834
+  ...
+# Subtest: unset compatibility input is optional through the declared build and gate
+ok 4 - unset compatibility input is optional through the declared build and gate
+  ---
+  duration_ms: 486.378083
+  ...
+# Subtest: real project preflight leaves invalid inputs uncut and retries the same commit
+ok 5 - real project preflight leaves invalid inputs uncut and retries the same commit
+  ---
+  duration_ms: 2080.852125
+  ...
+# Subtest: release safety checks stop the gate on failure and precede acceptance on success
+ok 6 - release safety checks stop the gate on failure and precede acceptance on success
+  ---
+  duration_ms: 924.348584
+  ...
+# Subtest: failed offline release coverage prevents build evidence and acceptance
+ok 7 - failed offline release coverage prevents build evidence and acceptance
+  ---
+  duration_ms: 477.005125
+  ...
+# Subtest: bin/org.mjs --help exits successfully before operational work
+ok 8 - bin/org.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.431417
+  ...
+# Subtest: brain/bin/brain.mjs --help exits successfully before operational work
+ok 9 - brain/bin/brain.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.774959
+  ...
+# Subtest: console/app.mjs --help exits successfully before operational work
+ok 10 - console/app.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 44.511125
+  ...
+# Subtest: console/dev.mjs --help exits successfully before operational work
+ok 11 - console/dev.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 22.346958
+  ...
+# Subtest: console/proto/main.mjs --help exits successfully before operational work
+ok 12 - console/proto/main.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.277792
+  ...
+# Subtest: contrib/settle-watch.mjs --help exits successfully before operational work
+ok 13 - contrib/settle-watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.263667
+  ...
+# Subtest: discovery/acceptance.mjs --help exits successfully before operational work
+ok 14 - discovery/acceptance.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.897958
+  ...
+# Subtest: discovery/adapters/codex.mjs --help exits successfully before operational work
+ok 15 - discovery/adapters/codex.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.131708
+  ...
+# Subtest: discovery/adapters/claude.mjs --help exits successfully before operational work
+ok 16 - discovery/adapters/claude.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.128333
+  ...
+# Subtest: discovery/install.mjs --help exits successfully before operational work
+ok 17 - discovery/install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.954584
+  ...
+# Subtest: discovery/native/build.mjs --help exits successfully before operational work
+ok 18 - discovery/native/build.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.423708
+  ...
+# Subtest: discovery/validate.mjs --help exits successfully before operational work
+ok 19 - discovery/validate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.772125
+  ...
+# Subtest: discovery/git-driver.mjs --help exits successfully before operational work
+ok 20 - discovery/git-driver.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.230625
+  ...
+# Subtest: discovery/bounded.mjs --help exits successfully before operational work
+ok 21 - discovery/bounded.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.640417
+  ...
+# Subtest: discovery/bubblewrap.mjs --help exits successfully before operational work
+ok 22 - discovery/bubblewrap.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 22.9515
+  ...
+# Subtest: discovery/client.mjs --help exits successfully before operational work
+ok 23 - discovery/client.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.763583
+  ...
+# Subtest: dispatch/dispatch.mjs --help exits successfully before operational work
+ok 24 - dispatch/dispatch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.223541
+  ...
+# Subtest: docs/adoption/rehearse.mjs --help exits successfully before operational work
+ok 25 - docs/adoption/rehearse.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.994625
+  ...
+# Subtest: herdr/dependencies.mjs --help exits successfully before operational work
+ok 26 - herdr/dependencies.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.149083
+  ...
+# Subtest: herdr/entry-install.mjs --help exits successfully before operational work
+ok 27 - herdr/entry-install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.500208
+  ...
+# Subtest: herdr/native-entry.mjs --help exits successfully before operational work
+ok 28 - herdr/native-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.863875
+  ...
+# Subtest: herdr/prerequisites.mjs --help exits successfully before operational work
+ok 29 - herdr/prerequisites.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 22.910167
+  ...
+# Subtest: herdr/release-candidate.mjs --help exits successfully before operational work
+ok 30 - herdr/release-candidate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.462417
+  ...
+# Subtest: housekeeping/housekeeping.mjs --help exits successfully before operational work
+ok 31 - housekeeping/housekeeping.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.257
+  ...
+# Subtest: lanes/lane.mjs --help exits successfully before operational work
+ok 32 - lanes/lane.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.641208
+  ...
+# Subtest: promote/host-gate.mjs --help exits successfully before operational work
+ok 33 - promote/host-gate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.494
+  ...
+# Subtest: promote/promote.mjs --help exits successfully before operational work
+ok 34 - promote/promote.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.2425
+  ...
+# Subtest: promote/metrics.mjs --help exits successfully before operational work
+ok 35 - promote/metrics.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.32975
+  ...
+# Subtest: release/release.mjs --help exits successfully before operational work
+ok 36 - release/release.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.017375
+  ...
+# Subtest: settle/settle.mjs --help exits successfully before operational work
+ok 37 - settle/settle.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.466208
+  ...
+# Subtest: supervisor/open-session.mjs --help exits successfully before operational work
+ok 38 - supervisor/open-session.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.731708
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+ok 39 - supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.112
+  ...
+# Subtest: supervisor/session-start.mjs --help exits successfully before operational work
+ok 40 - supervisor/session-start.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.461916
+  ...
+# Subtest: supervisor/supervisor.mjs --help exits successfully before operational work
+ok 41 - supervisor/supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.89375
+  ...
+# Subtest: supervisor/tidy-tabs.mjs --help exits successfully before operational work
+ok 42 - supervisor/tidy-tabs.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.636291
+  ...
+# Subtest: test-slot/test-slot.mjs --help exits successfully before operational work
+ok 43 - test-slot/test-slot.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.736958
+  ...
+# Subtest: watch/watch.mjs --help exits successfully before operational work
+ok 44 - watch/watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.918667
+  ...
+# Subtest: acceptance/run.mjs --help exits successfully before operational work
+ok 45 - acceptance/run.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.999166
+  ...
+# Subtest: acceptance/plugin-entry.mjs --help exits successfully before operational work
+ok 46 - acceptance/plugin-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.444083
+  ...
+# Subtest: lanes/lane.mjs via release symlinks --help exits successfully before operational work
+ok 47 - lanes/lane.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 31.750375
+  ...
+# Subtest: brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+ok 48 - brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 28.929666
+  ...
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 49 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1366.864083
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 50 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1318.317917
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 51 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 2113.5845
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 52 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 65.373375
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 53 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+  ---
+  duration_ms: 1282.351625
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 54 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 62.030416
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 55 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 280.249875
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 56 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 262.405666
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 57 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 361.620208
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 58 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 1691.776292
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 59 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1105.353959
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 60 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1141.720166
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 61 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1092.546584
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 62 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1164.620125
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 63 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 1492.574833
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 64 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 2241.095833
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 65 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.34525
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 66 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 892.254375
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 67 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 1882.157917
+  ...
+# Subtest: installed product contains every relative module import, including fleet dependencies
+ok 68 - installed product contains every relative module import, including fleet dependencies
+  ---
+  duration_ms: 2509.23475
+  ...
+# Subtest: native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+not ok 69 - native direct session can commit/worktree/ref but cannot write common or worktree config and hooks
+  ---
+  duration_ms: 223.094875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    
+    
+    71 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    run (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/verification.test.mjs:99:38)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/verification.test.mjs:124:19
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+not ok 70 - model-controlled tests and Git filters execute only sandboxed; fsmonitor/hooks stay disabled
+  ---
+  duration_ms: 98.204542
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted /private/tmp/acceptance-native-57vPRB/operator.sock'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1886:21)
+    listenInCluster (node:net:1965:12)
+    Server.listen (node:net:2084:5)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/verification.test.mjs:133:81
+    new Promise (<anonymous>)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/verification.test.mjs:133:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Subtest: record verification and scripted answer are kernel-confined even if model output redirects .org
+not ok 71 - record verification and scripted answer are kernel-confined even if model output redirects .org
+  ---
+  duration_ms: 131.77475
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    
+    
+    71 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    run (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/verification.test.mjs:99:38)
+    Object.record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/verify.mjs:27:40)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/verification.test.mjs:158:27
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+  ...
+1..71
+# tests 71
+# suites 0
+# pass 68
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 21067.149375

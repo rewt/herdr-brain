@@ -1,0 +1,2 @@
+--help: standalone driver exits 0 and leaves scratch home unchanged
+-h: standalone driver exits 0 and leaves scratch home unchanged

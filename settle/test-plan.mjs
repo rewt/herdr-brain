@@ -14,7 +14,7 @@ function git(repo, args, input) {
 export function canonicalTestPlan({ repo, base, ...options }) {
   if (!options.planner) return null;
   if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(base)) throw Error('test planner requires a captured canonical base commit');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'settle-test-plan-'));
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'settle-test-plan-'));
   try {
     const entries = git(repo, ['ls-tree', '-rz', base]).toString('utf8').split('\0').filter(Boolean);
     if (entries.length > 10000) throw Error('canonical test planner snapshot exceeds 10000 paths');

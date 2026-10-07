@@ -10,6 +10,7 @@ export function promotionTestPlan({ cwd, plannerRoot = cwd, planner, changed, ba
   if (!fs.statSync(file).isFile()) throw Error('promotion test planner must be a regular file');
   const r = spawnSync(process.execPath, [file, '--plan', JSON.stringify(changed), JSON.stringify(baseCommand)], { cwd, env, encoding: 'utf8', timeout: 20000, maxBuffer: 1024 * 1024 });
   if (r.error || r.status !== 0) throw Error(r.stderr || r.error?.message || 'promotion test planning failed');
+  if (!r.stdout.trim()) throw Error(`promotion test planner produced no output${r.stderr.trim() ? ': ' + r.stderr.trim() : ''}`);
   const plan = JSON.parse(r.stdout);
   if (!plan || Object.keys(plan).some(key => !['files', 'covered', 'graph'].includes(key))) throw Error('invalid promotion test plan fields');
   if (plan.covered !== undefined && (!Array.isArray(plan.covered) || plan.covered.length > 512 || plan.covered.some(f => typeof f !== 'string' || !/^[\w./-]+\.test\.mjs$/.test(f) || f.split('/').includes('..') || path.isAbsolute(f)))) throw Error('invalid promotion test coverage');

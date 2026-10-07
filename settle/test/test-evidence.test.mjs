@@ -49,6 +49,8 @@ for (const claimsCoverage of [false, true]) test(`lane-modified planner and impo
 for (const [name, options, error] of [
   ['missing planner', { missingPlanner: true }, /ENOENT/],
   ['failed planner', { plannerSource: "console.error('canonical planner failed'); process.exit(1);\n" }, /canonical planner failed/],
+  ['empty output', { plannerSource: '' }, /promotion test planner produced no output/],
+  ['whitespace output', { plannerSource: "console.log('  '); console.error('planner did not emit a plan');\n" }, /promotion test planner produced no output: planner did not emit a plan/],
   ['invalid JSON', { plannerSource: "console.log('invalid plan');\n" }, /JSON|Unexpected/],
   ['invalid coverage', { plannerSource: "console.log(JSON.stringify({files:[],covered:['../checks.test.mjs']}));\n" }, /invalid promotion test coverage/],
   ['oversized output', { plannerSource: "console.log('x'.repeat(2*1024*1024));\n" }, /ENOBUFS/],

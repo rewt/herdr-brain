@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isMain } from '../../lib/cli-help.mjs';
 import { commandAllowance } from './command-allowance.mjs';
 
 function findScript() {
@@ -63,7 +64,7 @@ export function runPTY(binary, args, options = {}) {
   });
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv[2] === '--run') {
+if (isMain(import.meta.url) && process.argv[2] === '--run') {
   const result = runPTY(process.argv[3], process.argv.slice(4));
   process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? result.error?.message ?? '');
   process.exitCode = result.status ?? 1;

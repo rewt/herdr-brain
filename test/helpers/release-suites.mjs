@@ -2,6 +2,7 @@
 // The host slot spans the command; only an individual suite may retry.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMain } from '../../lib/cli-help.mjs';
 import { tierFiles } from './tier.mjs';
 import { runTestSlotSync } from '../../test-slot/run.mjs';
 
@@ -49,4 +50,4 @@ export function main(argv = process.argv.slice(2)) {
   console.log('All release-tier suites passed.');
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (isMain(import.meta.url)) main();

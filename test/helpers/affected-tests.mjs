@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { isMain } from '../../lib/cli-help.mjs';
 import { tierFiles } from './tier.mjs';
 import { main as runRelease } from './release-suites.mjs';
 export function affectedTests({ root, changed, files, tests }) {
@@ -49,4 +49,4 @@ export function main(argv = process.argv.slice(2)) {
     console.log(JSON.stringify({ covered: promotion.filter(file => files.includes(file)), files: affectedTests({ root, changed: values, files, tests }), graph: { paths: files.length, max_paths: 10000, max_bytes: 32 * 1024 * 1024, max_suite_files: 4 } }));
   } else throw Error('expected --plan or --run');
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (isMain(import.meta.url)) main();

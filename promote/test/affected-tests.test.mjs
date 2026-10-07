@@ -43,6 +43,15 @@ test('real import closure selects the previously missed release files and record
   assert.match(plannedCommand('npm run test:promotion', plan), /MONITOR_PROMOTION_TEST_FILES=.*&&/);
 });
 
+test('the planner CLI launched through a symlinked directory emits the same plan', t => {
+  const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'affected-linked-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const linked = path.join(scratch, 'project'); fs.symlinkSync(root, linked, 'dir');
+  const options = { cwd: root, planner: 'test/helpers/affected-tests.mjs',
+    changed: ['settle/test/test-evidence.test.mjs'], baseCommand: 'npm run test:promotion' };
+  assert.deepEqual(promotionTestPlan({ ...options, plannerRoot: linked }), promotionTestPlan(options));
+});
+
 test('a selected mixed file skips the patterned step and executes once in full', t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-runner-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));

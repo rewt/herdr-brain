@@ -1,8 +1,8 @@
 // The complete npm test list, split into finite suites to avoid aggregate timeout
 // and isolate the copied-entry probes. Fixture/command bounds remain unchanged.
 import { spawnSync } from 'node:child_process';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMain } from '../../lib/cli-help.mjs';
 
 export function phases(files) {
   if (!files.length || new Set(files).size !== files.length) throw new Error('supply a nonempty, unique test file list');
@@ -30,4 +30,4 @@ export function main(argv = process.argv.slice(2)) {
   console.log('All supplied test files passed in bounded phases.');
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (isMain(import.meta.url)) main();

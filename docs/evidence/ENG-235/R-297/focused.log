@@ -1,0 +1,445 @@
+TAP version 13
+# Subtest: affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+ok 1 - affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+  ---
+  duration_ms: 4.076541
+  ...
+# Subtest: real import closure selects the previously missed release files and records bounded coverage
+ok 2 - real import closure selects the previously missed release files and records bounded coverage
+  ---
+  duration_ms: 336.420125
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 3 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 219.947042
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 4 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 187.018208
+  ...
+# Subtest: the real canonical planner loads its transitive base imports while selecting tests from the lane
+ok 5 - the real canonical planner loads its transitive base imports while selecting tests from the lane
+  ---
+  duration_ms: 441.765291
+  ...
+# Subtest: the real canonical planner works with TMPDIR set to a symlinked directory and removes its snapshot
+ok 6 - the real canonical planner works with TMPDIR set to a symlinked directory and removes its snapshot
+  ---
+  duration_ms: 528.414833
+  ...
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.462709
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.588583
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.476458
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 30.943917
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.771542
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 34.66675
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.629583
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 34.605458
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.490166
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.857125
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.465
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.1815
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.476167
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.424417
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.645
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 33.455458
+# Subtest: only scoped test deferrals become promotable through the planned gate
+ok 7 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 8556.295875
+  ...
+# Subtest: lane-modified planner and imports cannot shrink canonical coverage
+ok 8 - lane-modified planner and imports cannot shrink canonical coverage
+  ---
+  duration_ms: 4166.242458
+  ...
+# Subtest: lane-modified planner and imports cannot invent canonical coverage
+ok 9 - lane-modified planner and imports cannot invent canonical coverage
+  ---
+  duration_ms: 4075.362375
+  ...
+# Subtest: missing planner covers nothing, retains its error and allows recorded re-execution
+ok 10 - missing planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4870.231208
+  ...
+# Subtest: failed planner covers nothing, retains its error and allows recorded re-execution
+ok 11 - failed planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4880.186625
+  ...
+# Subtest: empty output covers nothing, retains its error and allows recorded re-execution
+ok 12 - empty output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4977.584625
+  ...
+# Subtest: whitespace output covers nothing, retains its error and allows recorded re-execution
+ok 13 - whitespace output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4976.420416
+  ...
+# Subtest: invalid JSON covers nothing, retains its error and allows recorded re-execution
+ok 14 - invalid JSON covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4948.1975
+  ...
+# Subtest: invalid coverage covers nothing, retains its error and allows recorded re-execution
+ok 15 - invalid coverage covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4921.684084
+  ...
+# Subtest: oversized output covers nothing, retains its error and allows recorded re-execution
+ok 16 - oversized output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4866.039791
+  ...
+# Subtest: hand-written receipt with matching filename and log hash must also match its derived key
+ok 17 - hand-written receipt with matching filename and log hash must also match its derived key
+  ---
+  duration_ms: 1.428375
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 18 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 7619.344666
+  ...
+# Subtest: tier.mjs executes its CLI through a symlinked directory
+ok 19 - tier.mjs executes its CLI through a symlinked directory
+  ---
+  duration_ms: 24.243542
+  ...
+# Subtest: suite.mjs executes its CLI through a symlinked directory
+ok 20 - suite.mjs executes its CLI through a symlinked directory
+  ---
+  duration_ms: 22.296125
+  ...
+# Subtest: release-suites.mjs executes its CLI through a symlinked directory
+ok 21 - release-suites.mjs executes its CLI through a symlinked directory
+  ---
+  duration_ms: 25.515125
+  ...
+# Subtest: the PTY helper executes its CLI through a symlinked directory
+ok 22 - the PTY helper executes its CLI through a symlinked directory
+  ---
+  duration_ms: 275.981125
+  ...
+# Subtest: bin/org.mjs --help exits successfully before operational work
+ok 23 - bin/org.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.761458
+  ...
+# Subtest: brain/bin/brain.mjs --help exits successfully before operational work
+ok 24 - brain/bin/brain.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.136583
+  ...
+# Subtest: console/app.mjs --help exits successfully before operational work
+ok 25 - console/app.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 51.351167
+  ...
+# Subtest: console/dev.mjs --help exits successfully before operational work
+ok 26 - console/dev.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.962958
+  ...
+# Subtest: console/proto/main.mjs --help exits successfully before operational work
+ok 27 - console/proto/main.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.18875
+  ...
+# Subtest: contrib/settle-watch.mjs --help exits successfully before operational work
+ok 28 - contrib/settle-watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.014083
+  ...
+# Subtest: discovery/acceptance.mjs --help exits successfully before operational work
+ok 29 - discovery/acceptance.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.145833
+  ...
+# Subtest: discovery/adapters/codex.mjs --help exits successfully before operational work
+ok 30 - discovery/adapters/codex.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 45.506625
+  ...
+# Subtest: discovery/adapters/claude.mjs --help exits successfully before operational work
+ok 31 - discovery/adapters/claude.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 42.809459
+  ...
+# Subtest: discovery/install.mjs --help exits successfully before operational work
+ok 32 - discovery/install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.916708
+  ...
+# Subtest: discovery/native/build.mjs --help exits successfully before operational work
+ok 33 - discovery/native/build.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.900625
+  ...
+# Subtest: discovery/validate.mjs --help exits successfully before operational work
+ok 34 - discovery/validate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.185958
+  ...
+# Subtest: discovery/git-driver.mjs --help exits successfully before operational work
+ok 35 - discovery/git-driver.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.972625
+  ...
+# Subtest: discovery/bounded.mjs --help exits successfully before operational work
+ok 36 - discovery/bounded.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.238417
+  ...
+# Subtest: discovery/bubblewrap.mjs --help exits successfully before operational work
+ok 37 - discovery/bubblewrap.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.499417
+  ...
+# Subtest: discovery/client.mjs --help exits successfully before operational work
+ok 38 - discovery/client.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.085875
+  ...
+# Subtest: dispatch/dispatch.mjs --help exits successfully before operational work
+ok 39 - dispatch/dispatch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.08775
+  ...
+# Subtest: docs/adoption/rehearse.mjs --help exits successfully before operational work
+ok 40 - docs/adoption/rehearse.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.734833
+  ...
+# Subtest: herdr/dependencies.mjs --help exits successfully before operational work
+ok 41 - herdr/dependencies.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.423875
+  ...
+# Subtest: herdr/entry-install.mjs --help exits successfully before operational work
+ok 42 - herdr/entry-install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.224583
+  ...
+# Subtest: herdr/native-entry.mjs --help exits successfully before operational work
+ok 43 - herdr/native-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.349459
+  ...
+# Subtest: herdr/prerequisites.mjs --help exits successfully before operational work
+ok 44 - herdr/prerequisites.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 22.119375
+  ...
+# Subtest: herdr/release-candidate.mjs --help exits successfully before operational work
+ok 45 - herdr/release-candidate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.317833
+  ...
+# Subtest: housekeeping/housekeeping.mjs --help exits successfully before operational work
+ok 46 - housekeeping/housekeeping.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.905083
+  ...
+# Subtest: lanes/lane.mjs --help exits successfully before operational work
+ok 47 - lanes/lane.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.535959
+  ...
+# Subtest: promote/host-gate.mjs --help exits successfully before operational work
+ok 48 - promote/host-gate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.038791
+  ...
+# Subtest: promote/promote.mjs --help exits successfully before operational work
+ok 49 - promote/promote.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.53125
+  ...
+# Subtest: promote/metrics.mjs --help exits successfully before operational work
+ok 50 - promote/metrics.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 22.887084
+  ...
+# Subtest: release/release.mjs --help exits successfully before operational work
+ok 51 - release/release.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.449625
+  ...
+# Subtest: settle/settle.mjs --help exits successfully before operational work
+ok 52 - settle/settle.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.769708
+  ...
+# Subtest: supervisor/open-session.mjs --help exits successfully before operational work
+ok 53 - supervisor/open-session.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.639958
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+ok 54 - supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.134333
+  ...
+# Subtest: supervisor/session-start.mjs --help exits successfully before operational work
+ok 55 - supervisor/session-start.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 23.861916
+  ...
+# Subtest: supervisor/supervisor.mjs --help exits successfully before operational work
+ok 56 - supervisor/supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.204792
+  ...
+# Subtest: supervisor/tidy-tabs.mjs --help exits successfully before operational work
+ok 57 - supervisor/tidy-tabs.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 22.108542
+  ...
+# Subtest: test-slot/test-slot.mjs --help exits successfully before operational work
+ok 58 - test-slot/test-slot.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.873292
+  ...
+# Subtest: watch/watch.mjs --help exits successfully before operational work
+ok 59 - watch/watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.403792
+  ...
+# Subtest: acceptance/run.mjs --help exits successfully before operational work
+ok 60 - acceptance/run.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.408916
+  ...
+# Subtest: acceptance/plugin-entry.mjs --help exits successfully before operational work
+ok 61 - acceptance/plugin-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.251708
+  ...
+# Subtest: lanes/lane.mjs via release symlinks --help exits successfully before operational work
+ok 62 - lanes/lane.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 31.609458
+  ...
+# Subtest: brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+ok 63 - brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 29.691125
+  ...
+1..63
+# tests 63
+# suites 0
+# pass 63
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 59689.222292

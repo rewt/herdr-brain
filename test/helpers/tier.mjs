@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMain } from '../../lib/cli-help.mjs';
 import { main as suite } from './suite.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -101,7 +102,7 @@ export function tierFiles(tier, directory = root) {
   return directories[tier].flatMap(dir => fs.readdirSync(path.join(directory, dir))
     .filter(file => file.endsWith('.test.mjs')).sort().map(file => `${dir}/${file}`)).filter(file => promotion.includes(file));
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const [tier, ...options] = process.argv.slice(2);
   if (options.some(option => !option.startsWith('--'))) throw Error('expected runner options after tier');
   process.chdir(root);

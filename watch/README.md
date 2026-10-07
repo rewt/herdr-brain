@@ -32,13 +32,15 @@ An existing project can use a small wrapper around the activated release:
 ```sh
 RUN=${1:?run required}; shift
 exec sh "$HOME/.local/share/herdr-monitor/current/supervisor/arm-watch.sh" "$RUN" \
-  --org /Users/rewt/development/bastian/.org \
-  --cwd /Users/rewt/development/bastian/bch-cloak --to supervisor-opus \
+  --org "$RECORD" \
+  --cwd "$PROJECT" --to supervisor-opus \
   --idle-grace 900 "$@" --detach \
-  --log "/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/watch-logs/$RUN.log"
+  --log "$LOG"
 ```
 
-This journals at `bastian/.org/supervisor/inbox.log`; it needs no separately
+Set `PROJECT` to the adopting checkout, `RECORD` to its record directory and
+`LOG` to this run's watcher log path. This journals at
+`RECORD/supervisor/inbox.log`; it needs no separately
 installed notice daemon. `--dry-run` with detached settings validates the run
 without starting a child or creating a log. The returned detached receipt can be
 retained as `watcher_pid`, `watcher_identity` and `watcher_log` through the record

@@ -21,11 +21,10 @@ test('relocation requires the expected launcher and audits every transitive copi
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-relocation-')));
   try {
     const copy = path.join(root, 'copy'); fs.mkdirSync(copy);
-    // Match the rehearsal's copy-home name: /home/ is deliberately rejected
-    // by the transitive copied-code audit as a possible operator home path.
-    const settings = { root, copy, live: '/Users/operator/project', home: '/Users/operator', scratchHome: path.join(root, 'copy-home'), candidate: path.join(root, 'candidate') };
+    const settings = { root, copy, live: '/Users/operator/project', home: '/Users/operator', scratchHome: path.join(root, 'home'), candidate: path.join(root, 'candidate') };
     const source = 'const TARGET = resolve(homedir(), ".local/share/herdr-monitor/current/contrib/settle-watch.mjs");\nconst ROOT="/Users/operator/project";';
     fs.writeFileSync(path.join(copy, 'launch.mjs'), relocate(source, { ...settings, launcher: true }));
+    assert.ok(fs.readFileSync(path.join(copy, 'launch.mjs'), 'utf8').includes(`const ROOT="${path.join(path.dirname(copy), 'project')}";`));
     auditCopies(copy, settings);
     assert.throws(() => relocate(source.replace('resolve(homedir()', 'changed(homedir()'), { ...settings, launcher: true }), /did not match/);
     fs.writeFileSync(path.join(copy, 'new-callee.sh'), 'ORG_DIR=/Users/operator/.org\norg add wrong');
@@ -33,6 +32,15 @@ test('relocation requires the expected launcher and audits every transitive copi
     fs.writeFileSync(path.join(copy, 'new-callee.sh'), 'ROOT=$HOME/production\nnode "$ROOT/current/code.mjs"');
     assert.throws(() => auditCopies(copy, settings), /home-relative path/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('relocation gives the project parent precedence over a colliding live home without replacing scratch paths again', () => {
+  const root = '/Users/operator/.herdr-monitor/scratch';
+  const settings = { root, live: '/Users/operator/project', home: '/Users/operator',
+    copy: `${root}/copy`, scratchHome: `${root}/home`, candidate: `${root}/candidate` };
+  assert.equal(path.dirname(settings.live), settings.home);
+  assert.equal(relocate('PROJECT=/Users/operator/project; RECORD=/Users/operator/.org; HOME=$HOME; LOCK=/private/tmp/lock', settings),
+    `PROJECT=${root}/project; RECORD=${root}/.org; HOME=${root}/home; LOCK=${root}/lock`);
 });
 
 test('kernel boundary denies dynamically computed external code reads and record writes', { skip: process.platform !== 'darwin' }, () => {

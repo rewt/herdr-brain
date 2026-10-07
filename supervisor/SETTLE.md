@@ -138,7 +138,8 @@ and correction rounds with the send-back cap you just read from `org show
      `lane dispatch "$LANE" --route engineer @"$ORG_DIR/runs/$R/brief.md"`.
   4. Record the printed agent with `org set "$R" agent=<name> lane="$LANE"`,
      and confirm it is working with `herdr agent get <name>`.
-  5. Arm its watcher with `supervisor/arm-watch.sh "$R"`.
+  5. Arm its watcher with
+     `supervisor/arm-watch.sh "$R" --org "$ORG_DIR" --cwd "$CHECKOUT" --to supervisor-herdr`.
 - **Still failing after the goal's send-back cap:** ask the operator with
   `org add … --role human`. Give the findings and recommend whether to keep
   going, change scope, or stop.

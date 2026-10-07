@@ -141,12 +141,13 @@ Do not reuse bch-cloak's existing plain-text inbox as this JSONL journal; select
 a new file when switching and retain the old inbox as evidence.
 
 For an existing project, use the activated release's
-`supervisor/arm-watch.sh RUN --org RECORD --cwd PROJECT --to SUPERVISOR --detach --log FILE`.
+`supervisor/arm-watch.sh RUN --org RECORD --cwd PROJECT --to SUPERVISOR --detach --log LOG`.
 The helper discovers from the caller's project when record/cwd are omitted;
-pass the named recipient explicitly in a project wrapper. For bch-cloak these
-bindings are `/Users/rewt/development/bastian/.org`,
-`/Users/rewt/development/bastian/bch-cloak` and `supervisor-opus`, with
-`--idle-grace 900`. The journal belongs to that record, and the action receipts
+pass the named recipient explicitly in a project wrapper. Set `PROJECT` to
+the adopting checkout, `RECORD` to its record directory and `LOG` to the run's
+watcher log path. bch-cloak uses `supervisor-opus` with `--idle-grace 900`;
+its concrete bindings belong to the ENG-64 cutover rehearsal.
+The journal belongs to that record, and the action receipts
 use that project's canonical Git identity. Tooling must already be `auto` in
 that record's approvals for routine autopilot actions; otherwise exceptions
 wake the named supervisor with the policy reason.

@@ -28,10 +28,11 @@ export function relocate(text, { live, home, scratchHome, copy, candidate, root,
   // Replace source paths once: inserted scratch paths can themselves contain
   // the live home or /private/tmp, and must never be relocated again.
   const replacements = new Map([
-    [path.dirname(live), path.dirname(copy)],
     [path.join(home, '.herdr/worktrees/bch-cloak'), path.join(scratchHome, '.herdr/worktrees/bch-cloak')],
     ['${HOME}', scratchHome], ['$HOME', scratchHome],
     ['homedir()', JSON.stringify(scratchHome)], [home, scratchHome], ['~/', `${scratchHome}/`],
+    // Preserve the original project-parent precedence when it equals home.
+    [path.dirname(live), path.dirname(copy)],
   ]);
   if (launcher) {
     const target = 'resolve(homedir(), ".local/share/herdr-monitor/current/contrib/settle-watch.mjs")';

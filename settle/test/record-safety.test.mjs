@@ -106,10 +106,9 @@ test('conditional reopen accepts no-op retries and a late older report cannot bl
   f.record(['reopen', f.show(latest).item, '--if-current-run', latest]);
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
   ingest(f, earlier); const before = f.show(f.show(latest).item);
-  assert.equal(before.outcome.run, latest);
+  assert.equal(before.outcome, null);
+  assert.equal(before.status, 'ready');
   assert.equal(f.show(earlier).report.late, true);
-  f.record(['reopen', before.id, '--if-current-run', latest]);
-  assert.equal(f.show(before.id).outcome, null);
   assert.equal(result(f.settle(latest)).result, 'promotable');
   assert.equal(f.calls().filter((a) => a[1] === 'start').length, 1, 'only the independent reviewer starts');
 });

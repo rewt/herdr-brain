@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { report, setupOrg } from './helpers.mjs';
+import { fold } from '../lib/state.mjs';
+import { todayJson } from '../lib/today.mjs';
 
 // America/Chicago is UTC-5 in September: the local day 2026-09-15 runs 05:00Z to 05:00Z.
 const YESTERDAY = '2026-09-15T04:30:00Z';
@@ -102,6 +104,25 @@ test('org today --json builds the console read model deterministically', () => {
   assert.deepEqual(doc.approvals.counts.design, { answered: 1, answered_as_recommended: 1, overruled: 0, auto: 0 });
   assert.deepEqual(doc.approvals.counts.publish, { answered: 1, answered_as_recommended: 0, overruled: 0, auto: 0 });
   assert.deepEqual(doc.attention.map((a) => [a.id, a.kind]), [['G-1', 'budget']]);
+});
+
+test('org today distinguishes historical abandoned reports from newer-run late reports', () => {
+  const events = [
+    { type: 'item.added', id: 'ENG-1', title: 'Historical reports' },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1' },
+    { type: 'run.abandoned', id: 'R-1' },
+    { type: 'run.started', id: 'R-2', item: 'ENG-1' },
+    { type: 'run.started', id: 'R-3', item: 'ENG-1' },
+    { type: 'report.ingested', run: 'R-3', report: { outcome: 'done' }, file: 'R-3.md' },
+    { type: 'report.ingested', run: 'R-2', report: { outcome: 'failed' }, file: 'R-2.md' },
+    { type: 'report.ingested', run: 'R-1', report: { outcome: 'failed' }, file: 'R-1.md', late: true },
+  ].map((event, index) => ({ ...event, seq: index + 1, at: MORNING, by: 'test' }));
+  const doc = todayJson(fold(events), { now: new Date(NOW), orgDir: '/tmp/org', config: {} });
+  assert.deepEqual(doc.finished.map(({ run, late, abandoned }) => ({ run, late, abandoned })), [
+    { run: 'R-1', late: true, abandoned: true },
+    { run: 'R-2', late: true, abandoned: false },
+    { run: 'R-3', late: false, abandoned: false },
+  ]);
 });
 
 test('org today follows the local day of TZ', () => {

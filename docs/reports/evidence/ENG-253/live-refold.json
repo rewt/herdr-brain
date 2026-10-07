@@ -1,11 +1,11 @@
 {
   "record": "/Users/rewt/development/rewt/.org",
   "baseline": "f84602d4",
-  "events": 3681,
-  "last_seq": 3681,
-  "snapshot_sha256": "28455d04b43c06030ab34590d7f90ffacfada88c496f7d56a8b2351c9c933537",
-  "items": 318,
-  "runs": 291,
+  "events": 3748,
+  "last_seq": 3748,
+  "snapshot_sha256": "7d0e856823171d5b3e8523863e4626fd74626c19f6e4e77c3a21dc492649c3e2",
+  "items": 321,
+  "runs": 296,
   "outcome_changes": [
     {
       "item": "ENG-242",
@@ -15,14 +15,10 @@
         "at": "2026-10-07T14:30:29.722Z",
         "seq": 3661
       },
-      "after": {
-        "value": "done",
-        "run": "R-284",
-        "at": "2026-10-07T14:30:18.715Z",
-        "seq": 3658
-      },
+      "after": null,
       "status_before": "done",
-      "status_after": "done"
+      "status_after": "ready",
+      "preserved_reopen_seq": 3659
     }
   ],
   "late_changes": [

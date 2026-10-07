@@ -1,0 +1,412 @@
+TAP version 13
+# (node:43340) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: in-order reports keep the newest reported outcome while an unreported run stays active
+ok 1 - in-order reports keep the newest reported outcome while an unreported run stays active
+  ---
+  duration_ms: 1.253709
+  ...
+# Subtest: all report ingestion orders select the newest started reported run and retain older late reports
+ok 2 - all report ingestion orders select the newest started reported run and retain older late reports
+  ---
+  duration_ms: 0.84925
+  ...
+# Subtest: abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+ok 3 - abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+  ---
+  duration_ms: 0.481166
+  ...
+# Subtest: reopening still clears completion and unknown events are ignored by current and older folds
+ok 4 - reopening still clears completion and unknown events are ignored by current and older folds
+  ---
+  duration_ms: 0.281208
+  ...
+# Subtest: ingesting an older report after a correction records it as late without displacing the correction
+ok 5 - ingesting an older report after a correction records it as late without displacing the correction
+  ---
+  duration_ms: 353.591208
+  ...
+# Subtest: a blocked worker decomposes its own blocker and fresh runs pick up the thread
+ok 6 - a blocked worker decomposes its own blocker and fresh runs pick up the thread
+  ---
+  duration_ms: 561.69975
+  ...
+# Subtest: record start resolves a named route without copied harness metadata
+ok 7 - record start resolves a named route without copied harness metadata
+  ---
+  duration_ms: 212.731458
+  ...
+# Subtest: record start discovers canonical parent and repository routes from a linked worktree
+ok 8 - record start discovers canonical parent and repository routes from a linked worktree
+  ---
+  duration_ms: 272.990875
+  ...
+# Subtest: record start discovers the nearest route config from a non-Git record root
+ok 9 - record start discovers the nearest route config from a non-Git record root
+  ---
+  duration_ms: 169.847708
+  ...
+# Subtest: budgets are advisory: exceeding them is surfaced, never refused
+ok 10 - budgets are advisory: exceeding them is surfaced, never refused
+  ---
+  duration_ms: 221.080833
+  ...
+# Subtest: only record consistency is refused
+ok 11 - only record consistency is refused
+  ---
+  duration_ms: 436.464791
+  ...
+# Subtest: dropping a blocker unblocks the work it was blocking
+ok 12 - dropping a blocker unblocks the work it was blocking
+  ---
+  duration_ms: 251.8075
+  ...
+# Subtest: a brief shows sibling work and points at full reports
+ok 13 - a brief shows sibling work and points at full reports
+  ---
+  duration_ms: 193.311625
+  ...
+# Subtest: an abandoned run frees its item and a late report is not ingested
+ok 14 - an abandoned run frees its item and a late report is not ingested
+  ---
+  duration_ms: 358.678458
+  ...
+# Subtest: an interrupted write is ignored on read and repaired on the next write
+ok 15 - an interrupted write is ignored on read and repaired on the next write
+  ---
+  duration_ms: 143.724084
+  ...
+# Subtest: concurrent writers never collide
+ok 16 - concurrent writers never collide
+  ---
+  duration_ms: 180.257208
+  ...
+# Subtest: log filters by time and starting closed work reopens it
+ok 17 - log filters by time and starting closed work reopens it
+  ---
+  duration_ms: 254.777792
+  ...
+# Subtest: org today --json builds the console read model deterministically
+ok 18 - org today --json builds the console read model deterministically
+  ---
+  duration_ms: 1039.728542
+  ...
+# Subtest: org today distinguishes historical abandoned reports from newer-run late reports
+ok 19 - org today distinguishes historical abandoned reports from newer-run late reports
+  ---
+  duration_ms: 8.257167
+  ...
+# Subtest: org today follows the local day of TZ
+ok 20 - org today follows the local day of TZ
+  ---
+  duration_ms: 990.2965
+  ...
+# Subtest: org today prints plain text with codes only in parentheses
+ok 21 - org today prints plain text with codes only in parentheses
+  ---
+  duration_ms: 973.940667
+  ...
+# Subtest: org today --json names the latest run of each agent, finished runs included, so a front end can name idle agents
+ok 22 - org today --json names the latest run of each agent, finished runs included, so a front end can name idle agents
+  ---
+  duration_ms: 536.203125
+  ...
+# Subtest: org today says which stage is open and which stage each question belongs to
+ok 23 - org today says which stage is open and which stage each question belongs to
+  ---
+  duration_ms: 1096.333167
+  ...
+# Subtest: rows use plain language and mark records without it
+ok 24 - rows use plain language and mark records without it
+  ---
+  duration_ms: 1.9505
+  ...
+# Subtest: report summaries distinguish older late reports from abandoned runs
+ok 25 - report summaries distinguish older late reports from abandoned runs
+  ---
+  duration_ms: 0.356417
+  ...
+# Subtest: stripping codes keeps the sentence readable
+ok 26 - stripping codes keeps the sentence readable
+  ---
+  duration_ms: 0.078
+  ...
+# Subtest: only codes the organization issues are stripped; real names with numbers stay
+ok 27 - only codes the organization issues are stripped; real names with numbers stay
+  ---
+  duration_ms: 0.46775
+  ...
+# Subtest: a possessive record code does not leave a broken question title
+ok 28 - a possessive record code does not leave a broken question title
+  ---
+  duration_ms: 0.249625
+  ...
+# Subtest: a decision summary is shown without codes, and marked when it had some
+ok 29 - a decision summary is shown without codes, and marked when it had some
+  ---
+  duration_ms: 0.446833
+  ...
+# Subtest: the Summary after a no says what happened to each dependent
+ok 30 - the Summary after a no says what happened to each dependent
+  ---
+  duration_ms: 0.399625
+  ...
+# Subtest: the fallback viewer always opens a text editor, never the file itself
+ok 31 - the fallback viewer always opens a text editor, never the file itself
+  ---
+  duration_ms: 0.148458
+  ...
+# Subtest: waiting rows keep the ranking org today gives
+ok 32 - waiting rows keep the ranking org today gives
+  ---
+  duration_ms: 0.352875
+  ...
+# Subtest: rows keep their places, and selection its row or nearest neighbour
+ok 33 - rows keep their places, and selection its row or nearest neighbour
+  ---
+  duration_ms: 0.203125
+  ...
+# Subtest: no codes appear outside the Context tab, except a waiting row's own id as its handle
+ok 34 - no codes appear outside the Context tab, except a waiting row's own id as its handle
+  ---
+  duration_ms: 18.080958
+  ...
+# Subtest: transcripts are found by agent name across config dirs and give the last assistant text
+ok 35 - transcripts are found by agent name across config dirs and give the last assistant text
+  ---
+  duration_ms: 1.658583
+  ...
+# Subtest: a growing transcript is read only from where the last read stopped
+ok 36 - a growing transcript is read only from where the last read stopped
+  ---
+  duration_ms: 2.962041
+  ...
+# Subtest: the ledger, Herdr output and note paths parse
+ok 37 - the ledger, Herdr output and note paths parse
+  ---
+  duration_ms: 0.318208
+  ...
+# Subtest: document paths follow the row kind
+ok 38 - document paths follow the row kind
+  ---
+  duration_ms: 1.282333
+  ...
+# Subtest: markdown renders headings, lists, tables and code within the width
+ok 39 - markdown renders headings, lists, tables and code within the width
+  ---
+  duration_ms: 0.759292
+  ...
+# Subtest: a long title never hides the reason, its cursor or the keys
+ok 40 - a long title never hides the reason, its cursor or the keys
+  ---
+  duration_ms: 1.02675
+  ...
+# Subtest: agent text cannot drive the terminal
+ok 41 - agent text cannot drive the terminal
+  ---
+  duration_ms: 2.006125
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: settling an ingested older report preserves every newer reported outcome without review or correction
+ok 42 - settling an ingested older report preserves every newer reported outcome without review or correction
+  ---
+  duration_ms: 7772.383333
+  ...
+# Subtest: an unrecorded stale report cannot overwrite a newer outcome through ingestion
+ok 43 - an unrecorded stale report cannot overwrite a newer outcome through ingestion
+  ---
+  duration_ms: 882.55925
+  ...
+# Subtest: cached readiness and uncertain review retries hand off superseded runs
+ok 44 - cached readiness and uncertain review retries hand off superseded runs
+  ---
+  duration_ms: 6906.053041
+  ...
+# Subtest: conditional ingest and reopen protect a newer report arriving immediately before the record write
+ok 45 - conditional ingest and reopen protect a newer report arriving immediately before the record write
+  ---
+  duration_ms: 2655.435208
+  ...
+# Subtest: a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+ok 46 - a newer report arriving during PASS or NEEDS-WORK review retains its outcome and prevents follow-up work
+  ---
+  duration_ms: 8453.294542
+  ...
+# Subtest: conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+ok 47 - conditional reopen accepts no-op retries and a late older report cannot block settling the correction
+  ---
+  duration_ms: 4542.947083
+  ...
+# Subtest: incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+ok 48 - incomplete correction retry respects unresolved links hidden by active status and sends no worker prompt
+  ---
+  duration_ms: 12693.92125
+  ...
+# Subtest: resolved blocker links allow recovery of only the recorded correction run
+not ok 49 - resolved blocker links allow recovery of only the recorded correction run
+  ---
+  duration_ms: 5184.228
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:91:15)
+    Object.settle (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:127:37)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-safety.test.mjs:141:53
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+ok 50 - correction creation cannot clear a newer outcome arriving inside the dispatch boundary
+  ---
+  duration_ms: 4714.264166
+  ...
+# Subtest: legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+not ok 51 - legacy incomplete creation binds its origin on retry and preserves a concurrently newer outcome
+  ---
+  duration_ms: 5726.754333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:91:15)
+    checked (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:93:59)
+    record (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:118:28)
+    Object.show (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:123:35)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-safety.test.mjs:199:104
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold before reviewing
+ok 52 - legacy outcome-owner refusal rechecks the repaired fold before reviewing
+  ---
+  duration_ms: 6153.014541
+  ...
+# Subtest: legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+ok 53 - legacy outcome-owner refusal rechecks the repaired fold and refuses a truly superseding run
+  ---
+  duration_ms: 1615.924375
+  ...
+# Subtest: recovery: older overlapping run clears a new refusal
+ok 54 - recovery: older overlapping run clears a new refusal
+  ---
+  duration_ms: 5861.328792
+  ...
+# Subtest: recovery: older overlapping run clears a legacy refusal after main moves
+ok 55 - recovery: older overlapping run clears a legacy refusal after main moves
+  ---
+  duration_ms: 6520.325
+  ...
+# Subtest: a fresh handle also rechecks an existing completed overlapping-run refusal
+ok 56 - a fresh handle also rechecks an existing completed overlapping-run refusal
+  ---
+  duration_ms: 4815.441917
+  ...
+# Subtest: record readiness recovery retains the completed review
+ok 57 - record readiness recovery retains the completed review
+  ---
+  duration_ms: 6232.234792
+  ...
+# Subtest: record readiness recovery retains the completed review from a legacy receipt
+ok 58 - record readiness recovery retains the completed review from a legacy receipt
+  ---
+  duration_ms: 6172.993917
+  ...
+# Subtest: a legacy correction refusal resumes the fix stage after blockers clear and main moves
+not ok 59 - a legacy correction refusal resumes the fix stage after blockers clear and main moves
+  ---
+  duration_ms: 6591.489916
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:91:15)
+    Object.retry (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:128:36)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-recovery.test.mjs:109:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: a legacy dispatching refusal adopts only its existing correction after blockers clear
+not ok 60 - a legacy dispatching refusal adopts only its existing correction after blockers clear
+  ---
+  duration_ms: 5213.805625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Cannot confirm fixture watcher ownership'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    rememberWatchers (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:46:28)
+    exec (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:91:15)
+    Object.settle (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/fixture.mjs:127:37)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/settle/test/record-recovery.test.mjs:123:55
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: legacy refusal recovery rechecks identity before reviewing
+ok 61 - legacy refusal recovery rechecks identity before reviewing
+  ---
+  duration_ms: 1103.5875
+  ...
+# Subtest: legacy refusal recovery rechecks head before reviewing
+ok 62 - legacy refusal recovery rechecks head before reviewing
+  ---
+  duration_ms: 1241.799917
+  ...
+# Subtest: legacy refusal recovery rechecks dirty before reviewing
+ok 63 - legacy refusal recovery rechecks dirty before reviewing
+  ---
+  duration_ms: 1230.377583
+  ...
+# Subtest: legacy refusal recovery rechecks report before reviewing
+ok 64 - legacy refusal recovery rechecks report before reviewing
+  ---
+  duration_ms: 1352.107791
+  ...
+# Subtest: legacy refusal recovery rechecks superseded before reviewing
+ok 65 - legacy refusal recovery rechecks superseded before reviewing
+  ---
+  duration_ms: 1537.719583
+  ...
+# Subtest: legacy refusal recovery rechecks blocked before reviewing
+ok 66 - legacy refusal recovery rechecks blocked before reviewing
+  ---
+  duration_ms: 1552.348084
+  ...
+# Subtest: unverified acceptance remains a terminal escalation on retry
+ok 67 - unverified acceptance remains a terminal escalation on retry
+  ---
+  duration_ms: 4227.287917
+  ...
+1..67
+# tests 67
+# suites 0
+# pass 63
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 65110.5645
+Surviving fixture: PID 32782, command /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-outcome-order/supervisor/prompt-supervisor.mjs --inbox /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-b8VAw0/settle-test-yNWZrv/project/.org/supervisor/inbox.log --owner-worker --settings {}. Files: test/flow.test.mjs, test/today.test.mjs, console/test/model.test.mjs, settle/test/record-safety.test.mjs, settle/test/record-recovery.test.mjs

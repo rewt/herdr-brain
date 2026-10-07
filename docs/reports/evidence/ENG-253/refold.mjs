@@ -27,11 +27,25 @@ for (const [id, item] of current.items) {
   if (JSON.stringify(item.outcome) === JSON.stringify(oldItem.outcome)) continue;
   const oldRun = current.runs.get(oldItem.outcome?.run);
   const newRun = current.runs.get(item.outcome?.run);
-  assert.ok(oldRun && newRun, `${id}: both outcomes must have reported runs`);
-  assert.ok(oldRun.started.seq < newRun.started.seq, `${id}: only newer starts may take ownership`);
-  assert.ok(oldRun.report.seq > newRun.report.seq, `${id}: only out-of-order reports may change ownership`);
+  assert.ok(oldRun, `${id}: the previous outcome must have a reported run`);
+  const newestReported = item.runs.map((runId) => current.runs.get(runId))
+    .findLast((run) => run.report?.seq <= oldRun.report.seq);
+  assert.ok(oldRun.started.seq < newestReported.started.seq, `${id}: only older late reports may change outcomes`);
+  assert.ok(oldRun.report.seq > newestReported.report.seq, `${id}: only out-of-order reports may change outcomes`);
+  let preservedReopen;
+  if (newRun) {
+    assert.ok(oldRun.started.seq < newRun.started.seq, `${id}: only newer starts may take ownership`);
+    assert.ok(oldRun.report.seq > newRun.report.seq, `${id}: only out-of-order reports may change ownership`);
+  } else {
+    assert.equal(item.outcome, null);
+    preservedReopen = events.findLast((event) => event.type === 'item.reopened' && event.id === id);
+    assert.ok(preservedReopen, `${id}: cleared outcomes require a reopen`);
+    assert.ok(newestReported.report.seq < preservedReopen.seq && preservedReopen.seq < oldRun.report.seq,
+      `${id}: the late report must follow a reopen of the newer report`);
+  }
   outcomeChanges.push({ item: id, before: oldItem.outcome, after: item.outcome,
-    status_before: previousStatus(previous, id), status_after: itemStatus(current, id) });
+    status_before: previousStatus(previous, id), status_after: itemStatus(current, id),
+    ...(preservedReopen ? { preserved_reopen_seq: preservedReopen.seq } : {}) });
 }
 for (const [id, run] of current.runs) {
   const oldRun = previous.runs.get(id);

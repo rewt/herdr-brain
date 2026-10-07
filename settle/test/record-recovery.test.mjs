@@ -31,7 +31,8 @@ for (const superseding of [false, true]) test(`legacy outcome-owner refusal rech
   const f = fixture(t), { older, run } = overlap(f);
   f.report(older, 'needs_human');
   f.record(['ingest', f.show(older).report_path]);
-  assert.equal(f.show(f.show(run).item).outcome.run, run);
+  assert.equal(f.show(f.show(run).item).outcome, null);
+  assert.equal(f.show(f.show(run).item).status, 'ready');
   // Before the ordering fix this late ingest displaced the correction, and a
   // retry saved this terminal refusal. Preserve its receipt shape for recovery.
   const saved = receipt(f, run);

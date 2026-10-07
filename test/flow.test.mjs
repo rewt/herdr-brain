@@ -130,9 +130,23 @@ test('reopening still clears completion and unknown events are ignored by curren
     startRun('R-1'), startRun('R-2'), ingestReport('R-2', 'done'),
     { type: 'item.reopened', id: 'ENG-1' }, ingestReport('R-1', 'failed'),
   ]);
-  assert.deepEqual(fold(staleAfterReopen).items.get('ENG-1').outcome,
-    { value: 'done', run: 'R-2', at: T0, seq: 4 });
+  assert.equal(fold(staleAfterReopen).items.get('ENG-1').outcome, null);
+  assert.equal(itemStatus(fold(staleAfterReopen), 'ENG-1'), 'ready');
   assert.equal(fold(staleAfterReopen).runs.get('R-1').report.late, true);
+  const afterRework = outcomeEvents([
+    ...staleAfterReopen.slice(1), startRun('R-3'), ingestReport('R-3', 'blocked'),
+  ]);
+  assert.deepEqual(fold(afterRework).items.get('ENG-1').outcome,
+    { value: 'blocked', run: 'R-3', at: T0, seq: 8 });
+  assert.equal(itemStatus(fold(afterRework), 'ENG-1'), 'blocked');
+  // The newest run's own report may arrive after a reopen even if it started
+  // before that reopen; only the older report must leave the reopen intact.
+  const newestAfterReopen = outcomeEvents([
+    startRun('R-1'), ingestReport('R-1', 'done'), startRun('R-2'),
+    { type: 'item.reopened', id: 'ENG-1' }, ingestReport('R-2', 'needs_human'),
+  ]);
+  assert.equal(fold(newestAfterReopen).items.get('ENG-1').outcome.run, 'R-2');
+  assert.equal(itemStatus(fold(newestAfterReopen), 'ENG-1'), 'needs_human');
 });
 
 test('ingesting an older report after a correction records it as late without displacing the correction', () => {

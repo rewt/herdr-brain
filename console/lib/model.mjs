@@ -657,7 +657,7 @@ function rawParagraphs(row) {
     case 'report':
       return [
         row.headline,
-        `${d.title ?? 'untitled work'}: ${outcomeWords(d.outcome)} at ${hhmm(d.at)}${d.late ? ' (reported after the run was given up)' : ''}.`,
+        `${d.title ?? 'untitled work'}: ${outcomeWords(d.outcome)} at ${hhmm(d.at)}${d.late ? (d.abandoned ? ' (reported after the run was given up)' : ' (late: a newer run had already reported)') : ''}.`,
         d.headline ? null : 'The report has no plain headline.',
         `Summary: ${d.summary}`,
       ].filter(Boolean);

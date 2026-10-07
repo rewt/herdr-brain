@@ -120,6 +120,18 @@ test('rows use plain language and mark records without it', () => {
   }
 });
 
+test('report summaries distinguish older late reports from abandoned runs', () => {
+  const report = today().finished.find((entry) => entry.kind === 'report');
+  const paragraphs = (fields) => {
+    const board = buildBoard({ today: { finished: [{ ...report, ...fields }] } });
+    return summaryParagraphs(boardRows(board, 'history').find((row) => row.kind === 'report')).join('\n');
+  };
+  assert.match(paragraphs({ late: true }), /late: a newer run had already reported/);
+  assert.doesNotMatch(paragraphs({ late: true }), /given up/);
+  assert.match(paragraphs({ late: true, abandoned: true }), /reported after the run was given up/);
+  assert.doesNotMatch(paragraphs({ late: false }), /late:|given up/);
+});
+
 test('stripping codes keeps the sentence readable', () => {
   assert.equal(stripCodes('Skip per R-4 (deadbeef12): see ENG-7, and 35109079233; defaced.'), 'Skip per: see, and 35109079233; defaced.');
   assert.equal(decisionHeadline({ text: 'R-3 ENG-2' }).text, `decision recorded ${NO_PLAIN}`);

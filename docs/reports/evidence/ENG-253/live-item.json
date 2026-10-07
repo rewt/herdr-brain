@@ -17,12 +17,7 @@
     "why": null
   },
   "closed": null,
-  "outcome": {
-    "value": "done",
-    "run": "R-284",
-    "at": "2026-10-07T14:30:18.715Z",
-    "seq": 3658
-  },
+  "outcome": null,
   "runs": [
     "R-281",
     "R-284"
@@ -52,7 +47,7 @@
       "seq": 3675
     }
   ],
-  "status": "done",
+  "status": "ready",
   "blocked_by": [],
   "blocks": [],
   "children": []

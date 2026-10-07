@@ -234,7 +234,12 @@ An explicit `--role supervisor` always uses the canonical checkout and its exist
 supervisor workflow, unless the project opts out.
 
 Each launch and validation step creates `<fleet-project-temp>/r-XXXXXX` with mode
-0700 and exports `TMPDIR`, `TMP` and `TEMP`. Claude also receives
+0700 and exports `TMPDIR`, `TMP` and `TEMP`. Both harnesses also export
+`PYTHONPYCACHEPREFIX=<run-temp>/pycache`, keeping Python import bytecode out of
+the worktree. An inherited `PYTHONPYCACHEPREFIX` or `PYTHONDONTWRITEBYTECODE`
+is preserved instead (including an explicitly empty value); no default cache
+prefix is added in that case. Claude's generated `settings.env` carries the
+same values for its shell commands. Claude also receives
 `CLAUDE_CODE_TMPDIR` for internal files. Claude Code 2.1.292 appends
 `claude-<uid>` and exports that directory as sandboxed shell `TMPDIR` only when
 the resulting path uses at most **44 bytes**. Longer paths fall back to

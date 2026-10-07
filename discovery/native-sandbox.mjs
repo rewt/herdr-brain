@@ -127,7 +127,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
   const temporary = runTemporary(context.tempRoot);
   const close = () => removePlainDirectory(temporary);
   try {
-    const environment = { ...env, ...temporaryEnvironment(temporary) };
+    const environment = { ...env, ...temporaryEnvironment(temporary, env) };
     const help = spawnSync(binary, ['--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
     const version = kind === 'claude' ? spawnSync(binary, ['--version'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 }) : null;
     const claudeVersion = version?.stdout?.match(/\b(\d+)\.(\d+)\.(\d+)\b/u)?.slice(1).map(Number);
@@ -204,7 +204,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       // can exclude repository grants when the sandbox is admin-required.
       network: { ...settings.sandbox?.network, allowUnixSockets: [...new Set([...(settings.sandbox?.network?.allowUnixSockets ?? []), ...socketDirectories])] },
       filesystem: { ...settings.sandbox?.filesystem, allowWrite: [...new Set([...(settings.sandbox?.filesystem?.allowWrite ?? []), ...writable])], denyWrite: [...new Set([...(settings.sandbox?.filesystem?.denyWrite ?? []), ...denied])] } };
-    settings.env = { ...settings.env, ...temporaryEnvironment(temporary), CLAUDE_CODE_TMPDIR: temporary };
+    settings.env = { ...settings.env, ...temporaryEnvironment(temporary, env), CLAUDE_CODE_TMPDIR: temporary };
     settings.permissions = { ...settings.permissions, deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.map(directory => `Edit(/${directory}/**)`)])] };
     const file = path.join(temporary, 'claude-settings.json');
     writeFileAtomic(file, JSON.stringify(settings, null, 2) + '\n', 0o600);

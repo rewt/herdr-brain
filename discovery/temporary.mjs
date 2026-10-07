@@ -19,4 +19,9 @@ export function runTemporary(root) {
   fs.chmodSync(temporary, 0o700);
   return checkedDirectory(temporary);
 }
-export const temporaryEnvironment = temporary => ({ TMPDIR: temporary, TMP: temporary, TEMP: temporary });
+export function temporaryEnvironment(temporary, env = process.env) {
+  const python = Object.fromEntries(['PYTHONPYCACHEPREFIX', 'PYTHONDONTWRITEBYTECODE']
+    .filter(key => env[key] !== undefined).map(key => [key, env[key]]));
+  if (!Object.keys(python).length) python.PYTHONPYCACHEPREFIX = path.join(temporary, 'pycache');
+  return { TMPDIR: temporary, TMP: temporary, TEMP: temporary, ...python };
+}

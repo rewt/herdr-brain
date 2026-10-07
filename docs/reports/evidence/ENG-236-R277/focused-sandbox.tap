@@ -1,0 +1,419 @@
+TAP version 13
+# Subtest: awaited dispatch records the notification and plan step before launching and preserves retry flags
+ok 1 - awaited dispatch records the notification and plan step before launching and preserves retry flags
+  ---
+  duration_ms: 1823.805083
+  ...
+# Subtest: fake watcher receipt refuses PID reuse before registration and retains ownership across retries
+ok 2 - fake watcher receipt refuses PID reuse before registration and retains ownership across retries
+  ---
+  duration_ms: 1.479083
+  ...
+# Subtest: real watcher journal refuses PID reuse before registration and retains ownership across retries
+ok 3 - real watcher journal refuses PID reuse before registration and retains ownership across retries
+  ---
+  duration_ms: 0.877833
+  ...
+# Subtest: captured Codex hooks event table detects the warning count while quoted task text stays safe
+ok 4 - captured Codex hooks event table detects the warning count while quoted task text stays safe
+  ---
+  duration_ms: 1.112958
+  ...
+# Subtest: hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose
+ok 5 - hook dialog detection handles ANSI, borders, plural counts and wrapping without matching task prose
+  ---
+  duration_ms: 0.699041
+  ...
+# Subtest: Codex startup dialog blocks the brief visibly in the default profile and ordinary retry delivers once
+ok 6 - Codex startup dialog blocks the brief visibly in the default profile and ordinary retry delivers once
+  ---
+  duration_ms: 2279.833875
+  ...
+# Subtest: Codex startup dialog blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+ok 7 - Codex startup dialog blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+  ---
+  duration_ms: 2524.129959
+  ...
+# Subtest: Codex captured hooks event table blocks the brief visibly in the default profile and ordinary retry delivers once
+ok 8 - Codex captured hooks event table blocks the brief visibly in the default profile and ordinary retry delivers once
+  ---
+  duration_ms: 2074.792625
+  ...
+# Subtest: Codex captured hooks event table blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+ok 9 - Codex captured hooks event table blocks the brief visibly in claude-mem-bastian and ordinary retry delivers once
+  ---
+  duration_ms: 2415.901958
+  ...
+# Subtest: screen read failure leaves delivery unsent and retryable
+ok 10 - screen read failure leaves delivery unsent and retryable
+  ---
+  duration_ms: 1619.347375
+  ...
+# Subtest: an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery
+ok 11 - an explicitly authorized resend also checks the hook dialog and preserves uncertain delivery
+  ---
+  duration_ms: 2006.950625
+  ...
+# Subtest: Linux dispatch watcher receipt and journal round-trip as strings through record set
+ok 12 - Linux dispatch watcher receipt and journal round-trip as strings through record set
+  ---
+  duration_ms: 1420.028875
+  ...
+# Subtest: dispatch waits under simulated swap pressure before opening a lane and resumes the same request
+ok 13 - dispatch waits under simulated swap pressure before opening a lane and resumes the same request
+  ---
+  duration_ms: 6175.033459
+  ...
+# Subtest: STOP during dispatch open memory wait retains the request without a worker launch
+ok 14 - STOP during dispatch open memory wait retains the request without a worker launch
+  ---
+  duration_ms: 6226.926334
+  ...
+# Subtest: STOP during dispatch worker memory wait retains the request without a worker launch
+ok 15 - STOP during dispatch worker memory wait retains the request without a worker launch
+  ---
+  duration_ms: 6393.495959
+  ...
+# Subtest: dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work
+ok 16 - dispatch serves a validated operator priority, preserves it through recovery and permits unaligned work
+  ---
+  duration_ms: 2914.810333
+  ...
+# Subtest: one command records exact route/worker fields, arms watch before prompt, and preserves briefs
+ok 17 - one command records exact route/worker fields, arms watch before prompt, and preserves briefs
+  ---
+  duration_ms: 1370.359708
+  ...
+# Subtest: open/prepare failures keep a visible request, create no run, and retry cleanly
+ok 18 - open/prepare failures keep a visible request, create no run, and retry cleanly
+  ---
+  duration_ms: 2462.358459
+  ...
+# Subtest: watch failure records a worker but never sends work; retry reuses the same worker/run
+ok 19 - watch failure records a worker but never sends work; retry reuses the same worker/run
+  ---
+  duration_ms: 1415.139333
+  ...
+# Subtest: uncertain launch refuses automatic replay and requires explicit adoption
+ok 20 - uncertain launch refuses automatic replay and requires explicit adoption
+  ---
+  duration_ms: 1505.010416
+  ...
+# Subtest: uncertain prompt refuses automatic resend; caller can authorize it after inspection
+ok 21 - uncertain prompt refuses automatic resend; caller can authorize it after inspection
+  ---
+  duration_ms: 1722.018417
+  ...
+# Subtest: a fix round can reuse a stopped worker or start fresh; changed route is refused
+ok 22 - a fix round can reuse a stopped worker or start fresh; changed route is refused
+  ---
+  duration_ms: 3020.696166
+  ...
+# Subtest: retry pins routes across config edits and detects a replaced occupant
+ok 23 - retry pins routes across config edits and detects a replaced occupant
+  ---
+  duration_ms: 1608.641125
+  ...
+# Subtest: base moves a clean reused lane only by fast-forward; dirty lane is preserved
+ok 24 - base moves a clean reused lane only by fast-forward; dirty lane is preserved
+  ---
+  duration_ms: 2047.332541
+  ...
+# Subtest: a real detached watcher acknowledges initialization and sheds supervisor pane identity
+ok 25 - a real detached watcher acknowledges initialization and sheds supervisor pane identity
+  ---
+  duration_ms: 1202.700709
+  ...
+# Subtest: lost record start result is visible and recovered without starting a second run
+ok 26 - lost record start result is visible and recovered without starting a second run
+  ---
+  duration_ms: 1491.596083
+  ...
+# Subtest: live request locks refuse retries without changing the journal
+ok 27 - live request locks refuse retries without changing the journal
+  ---
+  duration_ms: 963.93175
+  ...
+# Subtest: explicit fresh launch and accepted delivery recover uncertain attempts
+ok 28 - explicit fresh launch and accepted delivery recover uncertain attempts
+  ---
+  duration_ms: 1597.299334
+  ...
+# Subtest: invalid route and empty brief mutate neither lane nor record
+ok 29 - invalid route and empty brief mutate neither lane nor record
+  ---
+  duration_ms: 324.474792
+  ...
+# Subtest: a refused record start with no matching run retries the saved request
+ok 30 - a refused record start with no matching run retries the saved request
+  ---
+  duration_ms: 1716.67575
+  ...
+# Subtest: a run ID supplied as ITEM is refused before creating a lane or journal
+ok 31 - a run ID supplied as ITEM is refused before creating a lane or journal
+  ---
+  duration_ms: 227.238959
+  ...
+# Subtest: reuse refuses an idle worker whose previous run is still open
+ok 32 - reuse refuses an idle worker whose previous run is still open
+  ---
+  duration_ms: 1295.416667
+  ...
+# Subtest: reuse accepts an abandoned run with the same stopped occupant
+ok 33 - reuse accepts an abandoned run with the same stopped occupant
+  ---
+  duration_ms: 1994.158291
+  ...
+# Subtest: retry locks before reading its journal so another retry cannot replay stale progress
+ok 34 - retry locks before reading its journal so another retry cannot replay stale progress
+  ---
+  duration_ms: 1603.156958
+  ...
+# Subtest: two retries cannot both take over a dead-owner lock
+ok 35 - two retries cannot both take over a dead-owner lock
+  ---
+  duration_ms: 1384.605792
+  ...
+# Subtest: an unknown start outcome with no match stays conservative; multiple matches require explicit recovery
+ok 36 - an unknown start outcome with no match stays conservative; multiple matches require explicit recovery
+  ---
+  duration_ms: 1798.472041
+  ...
+# Subtest: dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24
+ok 37 - dispatch waits for a real watcher whose configuration read exceeds the old startup deadline at load 24
+  ---
+  duration_ms: 12138.773834
+  ...
+# Subtest: spawn freezes supplied bindings once and preserves the other arguments
+ok 38 - spawn freezes supplied bindings once and preserves the other arguments
+  ---
+  duration_ms: 36.907583
+  ...
+# Subtest: spawn freezes repeated bindings once and preserves the other arguments
+ok 39 - spawn freezes repeated bindings once and preserves the other arguments
+  ---
+  duration_ms: 34.597958
+  ...
+# Subtest: spawn freezes discovered bindings once and preserves the other arguments
+ok 40 - spawn freezes discovered bindings once and preserves the other arguments
+  ---
+  duration_ms: 34.8485
+  ...
+# Subtest: an existing project autopilots a done notice with a busy supervisor from a foreign caller and detached arm
+ok 41 - an existing project autopilots a done notice with a busy supervisor from a foreign caller and detached arm
+  ---
+  duration_ms: 1208.586833
+  ...
+# Subtest: an existing project exception reaches its named supervisor through its own record inbox
+ok 42 - an existing project exception reaches its named supervisor through its own record inbox
+  ---
+  duration_ms: 1014.341792
+  ...
+# Subtest: arming discovers the caller record and adapter recipient and dry-runs detached settings
+ok 43 - arming discovers the caller record and adapter recipient and dry-runs detached settings
+  ---
+  duration_ms: 484.610625
+  ...
+# Subtest: watcher lock handles reused process identity
+ok 44 - watcher lock handles reused process identity
+  ---
+  duration_ms: 2.932708
+  ...
+# Subtest: watcher lock handles dead process identity
+ok 45 - watcher lock handles dead process identity
+  ---
+  duration_ms: 0.842917
+  ...
+# Subtest: watcher lock handles legacy-dead process identity
+ok 46 - watcher lock handles legacy-dead process identity
+  ---
+  duration_ms: 0.631458
+  ...
+# Subtest: watcher lock handles unreadable process identity
+ok 47 - watcher lock handles unreadable process identity
+  ---
+  duration_ms: 0.700833
+  ...
+# Subtest: watcher lock handles legacy-live process identity
+ok 48 - watcher lock handles legacy-live process identity
+  ---
+  duration_ms: 0.579292
+  ...
+# Subtest: watcher lock handles live process identity
+ok 49 - watcher lock handles live process identity
+  ---
+  duration_ms: 0.788375
+  ...
+# Subtest: watcher lock handles malformed process identity
+ok 50 - watcher lock handles malformed process identity
+  ---
+  duration_ms: 0.669834
+  ...
+# Subtest: every terminal condition has a distinct, compact supervisor notice
+ok 51 - every terminal condition has a distinct, compact supervisor notice
+  ---
+  duration_ms: 0.874667
+  ...
+# Subtest: spawn resolves the cwd workspace when it is run outside a Herdr pane
+ok 52 - spawn resolves the cwd workspace when it is run outside a Herdr pane
+  ---
+  duration_ms: 238.566875
+  ...
+# Subtest: a valid report is checked and delivered without Herdr being present
+ok 53 - a valid report is checked and delivered without Herdr being present
+  ---
+  duration_ms: 790.684917
+  ...
+# Subtest: final watch notice waits for fake operator typing, then sends once across watcher restart
+not ok 54 - final watch notice waits for fake operator typing, then sends once across watcher restart
+  ---
+  duration_ms: 16.28825
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-args/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a capped final watcher exits while its owned notice later delivers without another watcher
+not ok 55 - a capped final watcher exits while its owned notice later delivers without another watcher
+  ---
+  duration_ms: 918.579834
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-args/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a report landing wakes the watcher without polling Herdr
+ok 56 - a report landing wakes the watcher without polling Herdr # SKIP filesystem notifications unavailable: EMFILE
+  ---
+  duration_ms: 0.747
+  ...
+# Subtest: a valid report also waits while the worker state is unknown
+not ok 57 - a valid report also waits while the worker state is unknown
+  ---
+  duration_ms: 7.348959
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-args/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a mismatched report is invalid even when org check passes
+ok 58 - a mismatched report is invalid even when org check passes
+  ---
+  duration_ms: 1041.521584
+  ...
+# Subtest: a vanished worker delivers exited-without-report and stops
+ok 59 - a vanished worker delivers exited-without-report and stops
+  ---
+  duration_ms: 540.058875
+  ...
+# Subtest: an initially idle worker is not terminal until it has worked
+ok 60 - an initially idle worker is not terminal until it has worked
+  ---
+  duration_ms: 1041.051583
+  ...
+# Subtest: idle grace waits for a late report before sending a no-report notice
+not ok 61 - idle grace waits for a late report before sending a no-report notice
+  ---
+  duration_ms: 9.855333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-args/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: idle grace does not start before the worker has been seen working
+ok 62 - idle grace does not start before the worker has been seen working
+  ---
+  duration_ms: 1019.017958
+  ...
+# Subtest: idle grace notices a blocked worker immediately and keeps watching
+not ok 63 - idle grace notices a blocked worker immediately and keeps watching
+  ---
+  duration_ms: 8.502375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-args/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: idle, working, idle without a report delivers both stop notices
+ok 64 - idle, working, idle without a report delivers both stop notices
+  ---
+  duration_ms: 1327.564125
+  ...
+# Subtest: a blocked worker delivers its distinct notice
+ok 65 - a blocked worker delivers its distinct notice
+  ---
+  duration_ms: 941.802
+  ...
+# Subtest: a valid report stays intermediate while blocked and is final only after idle
+not ok 66 - a valid report stays intermediate while blocked and is final only after idle
+  ---
+  duration_ms: 6.172166
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-args/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a refused intermediate delivery stays first in the inbox and recovers before the final report
+ok 67 - a refused intermediate delivery stays first in the inbox and recovers before the final report
+  ---
+  duration_ms: 1009.222708
+  ...
+# Subtest: a still-working worker delivers the long-running notice
+ok 68 - a still-working worker delivers the long-running notice
+  ---
+  duration_ms: 1054.293917
+  ...
+# Subtest: a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+not ok 69 - a capped long-running notice keeps one owned ID and payload across minutes and watcher restarts
+  ---
+  duration_ms: 1140.583125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-watch-args/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: a Herdr outage is delivered after Herdr recovers, never reported as gone
+ok 70 - a Herdr outage is delivered after Herdr recovers, never reported as gone
+  ---
+  duration_ms: 1119.766958
+  ...
+# Subtest: the supervisor arms the standalone watcher and launches settle separately
+ok 71 - the supervisor arms the standalone watcher and launches settle separately
+  ---
+  duration_ms: 1.410292
+  ...
+# Subtest: Brain remains an operator-queue capture service, not a run-report delivery path
+ok 72 - Brain remains an operator-queue capture service, not a run-report delivery path
+  ---
+  duration_ms: 0.184542
+  ...
+1..72
+# tests 72
+# suites 0
+# pass 64
+# fail 7
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 80805.848708

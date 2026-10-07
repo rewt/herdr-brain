@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: spawn freezes supplied bindings once and preserves the other arguments
+ok 1 - spawn freezes supplied bindings once and preserves the other arguments
+  ---
+  duration_ms: 32.864084
+  ...
+# Subtest: spawn freezes repeated bindings once and preserves the other arguments
+ok 2 - spawn freezes repeated bindings once and preserves the other arguments
+  ---
+  duration_ms: 31.533875
+  ...
+# Subtest: spawn freezes discovered bindings once and preserves the other arguments
+ok 3 - spawn freezes discovered bindings once and preserves the other arguments
+  ---
+  duration_ms: 34.332458
+  ...
+# Subtest: detach carries supplied bindings once into the real child
+ok 4 - detach carries supplied bindings once into the real child
+  ---
+  duration_ms: 235.039167
+  ...
+# Subtest: detach carries repeated bindings once into the real child
+ok 5 - detach carries repeated bindings once into the real child
+  ---
+  duration_ms: 232.009292
+  ...
+# Subtest: detach carries discovered bindings once into the real child
+ok 6 - detach carries discovered bindings once into the real child
+  ---
+  duration_ms: 210.870917
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 811.175333

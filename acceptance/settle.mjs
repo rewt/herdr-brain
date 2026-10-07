@@ -2,6 +2,7 @@
 // Offline candidate harness: product modules are real; Herdr/model transport is
 // scripted. This case does not claim live PTY or default supervisor discovery.
 import fs from 'node:fs';
+import { isMain } from '../lib/cli-help.mjs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -36,7 +37,7 @@ export async function settleCase(candidate, { load, execute = spawnSync,
     return { receipts, calls: f.calls(), artifacts, detail: `${run} -> ${fix.fix.run}: actual record/review/dispatch/watch, suite deferred to promotion, no project config, scripted transport and claim check, no model` };
   } finally { for (const fn of cleanup) await fn(); }
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const candidate = path.resolve(process.argv[2] ?? fileURLToPath(new URL('../', import.meta.url)));
   try { process.stdout.write(`${JSON.stringify(await settleCase(candidate), null, 2)}\n`); }
   catch (e) { process.stderr.write(`${e.stack}\n`); process.exitCode = 1; }

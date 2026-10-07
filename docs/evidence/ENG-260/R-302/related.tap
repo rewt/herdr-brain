@@ -1,0 +1,1632 @@
+TAP version 13
+# Subtest: provider selection refuses automatic Linux bubblewrap and retains explicit providers
+ok 1 - provider selection refuses automatic Linux bubblewrap and retains explicit providers
+  ---
+  duration_ms: 61.156167
+  ...
+# Subtest: alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+ok 2 - alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+  ---
+  duration_ms: 59.391041
+  ...
+# Subtest: Claude-only scratch installation does not require or install Codex
+ok 3 - Claude-only scratch installation does not require or install Codex
+  ---
+  duration_ms: 1838.142084
+  ...
+# Subtest: real alternative sandbox denies outside, symlink, metadata, record, rename and network writes
+ok 4 - real alternative sandbox denies outside, symlink, metadata, record, rename and network writes # SKIP set MONITOR_TEST_ALTERNATIVE to sandbox-exec or bwrap outside a nested sandbox
+  ---
+  duration_ms: 0.078125
+  ...
+# Subtest: real filters remain functional through allocation, commit, check and fast-forward promotion
+ok 5 - real filters remain functional through allocation, commit, check and fast-forward promotion # SKIP set MONITOR_TEST_ALTERNATIVE to exercise real bounded Git filters
+  ---
+  duration_ms: 0.110792
+  ...
+# Subtest: real main-mode alternative guard protects linked shared records and leaves the native runtime writable
+ok 6 - real main-mode alternative guard protects linked shared records and leaves the native runtime writable # SKIP set MONITOR_TEST_ALTERNATIVE for the main-mode guard regression
+  ---
+  duration_ms: 0.044208
+  ...
+# sandbox-exec: sandbox_apply: Operation not permitted
+# Subtest: bounded commands kill descendants before they can write after a deadline
+not ok 7 - bounded commands kill descendants before they can write after a deadline
+  ---
+  duration_ms: 472.847459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    71 !== 124
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 124
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/alternatives.test.mjs:132:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+ok 8 - Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+  ---
+  duration_ms: 66.375458
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 9 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 591.005458
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 10 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 570.731167
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 11 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1456.441625
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 12 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 1204.933792
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 13 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 374.821
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 14 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 598.984041
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 15 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 3085.739833
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 16 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 966.24775
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 17 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 984.991042
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 18 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 912.983916
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 19 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1060.060583
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 20 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1754.534125
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 21 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1481.608167
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 22 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1460.7445
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 23 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1698.973458
+  ...
+# Subtest: each bundled target matches its checksum, current source and native architecture
+ok 24 - each bundled target matches its checksum, current source and native architecture
+  ---
+  duration_ms: 4.482625
+  ...
+# Subtest: validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+not ok 25 - validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+  ---
+  duration_ms: 364.172458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:62:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: verified owner bytes are copied into private scratch with restricted modes
+ok 26 - verified owner bytes are copied into private scratch with restricted modes
+  ---
+  duration_ms: 3.831917
+  ...
+# Subtest: staged owner preserves the installed validation transport lifetime protocol
+ok 27 - staged owner preserves the installed validation transport lifetime protocol
+  ---
+  duration_ms: 5.537292
+  ...
+# Subtest: installed runtime snapshot carries the verified owner and validates without a compiler
+not ok 28 - installed runtime snapshot carries the verified owner and validates without a compiler
+  ---
+  duration_ms: 1218.102791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:90:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: missing binary uses only the bounded source-build fallback
+not ok 29 - missing binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 599.306
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    validation prebuilt owner unavailable (ENOENT: no such file or directory, open 'owner-darwin-arm64'); trying /usr/bin/cc
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:111:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: missing manifest uses only the bounded source-build fallback
+not ok 30 - missing manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 361.107667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    validation prebuilt owner unavailable (ENOENT: no such file or directory, open 'manifest.json'); trying /usr/bin/cc
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:111:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: invalid manifest uses only the bounded source-build fallback
+not ok 31 - invalid manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 380.586834
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    validation prebuilt owner unavailable (validation owner manifest missing darwin-arm64); trying /usr/bin/cc
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:111:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: corrupt binary uses only the bounded source-build fallback
+not ok 32 - corrupt binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 372.369584
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    validation prebuilt owner unavailable (validation owner binary checksum mismatch); trying /usr/bin/cc
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:111:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: stale source uses only the bounded source-build fallback
+not ok 33 - stale source uses only the bounded source-build fallback
+  ---
+  duration_ms: 339.04725
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    validation prebuilt owner unavailable (validation owner source checksum mismatch; rebuild bundled owners); trying /usr/bin/cc
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:111:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: symlink binary uses only the bounded source-build fallback
+not ok 34 - symlink binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 503.823083
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    validation prebuilt owner unavailable (ELOOP: too many symbolic links encountered, open 'owner-darwin-arm64'); trying /usr/bin/cc
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:111:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: redirected bundle directory uses only the bounded source-build fallback
+not ok 35 - redirected bundle directory uses only the bounded source-build fallback
+  ---
+  duration_ms: 414.614959
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    validation prebuilt owner unavailable (ENOTDIR: not a directory, open 'native'); trying /usr/bin/cc
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:111:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:21:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: unavailable bundle and missing compiler refuse project execution
+ok 36 - unavailable bundle and missing compiler refuse project execution
+  ---
+  duration_ms: 76.370416
+  ...
+# Subtest: unavailable bundle and failure compiler refuse project execution
+ok 37 - unavailable bundle and failure compiler refuse project execution
+  ---
+  duration_ms: 69.030625
+  ...
+# Subtest: unavailable bundle and timeout compiler refuse project execution
+ok 38 - unavailable bundle and timeout compiler refuse project execution
+  ---
+  duration_ms: 73.224208
+  ...
+# Subtest: owner verification rejects a checksummed binary for the wrong architecture
+ok 39 - owner verification rejects a checksummed binary for the wrong architecture
+  ---
+  duration_ms: 76.494875
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: no compiler preserves detached descendant cleanup after completion
+not ok 40 - no compiler preserves detached descendant cleanup after completion
+  ---
+  duration_ms: 426.900791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    node:internal/modules/run_main:123
+        triggerUncaughtException(
+        ^
+
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+    71 !== 0
+
+        at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+        at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 71,
+      expected: 0,
+      operator: 'strictEqual'
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:148:12
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: no compiler preserves detached descendant cleanup after deadline
+not ok 41 - no compiler preserves detached descendant cleanup after deadline
+  ---
+  duration_ms: 376.174292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    node:internal/modules/run_main:123
+        triggerUncaughtException(
+        ^
+
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+    71 !== 124
+
+        at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+        at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 71,
+      expected: 124,
+      operator: 'strictEqual'
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:148:12
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after wrapper-death
+not ok 42 - no compiler preserves detached descendant cleanup after wrapper-death
+  ---
+  duration_ms: 11879.191166
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    node:internal/modules/run_main:123
+        triggerUncaughtException(
+        ^
+
+    AssertionError [ERR_ASSERTION]: detached leaf actually launched
+        at launched (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:26:10)
+        at async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:50:3 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '=='
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    launched (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:26:10)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:50:3 {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/owner.test.mjs:148:12
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 43 - x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 1.678917
+  ...
+# Subtest: arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 44 - arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 0.283042
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: detached double-fork descendants are gone after completion; unrelated same-group processes survive
+not ok 45 - detached double-fork descendants are gone after completion; unrelated same-group processes survive
+  ---
+  duration_ms: 743.973458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    node:internal/modules/run_main:123
+        triggerUncaughtException(
+        ^
+
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+    71 !== 0
+
+        at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+        at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 71,
+      expected: 0,
+      operator: 'strictEqual'
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:57:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+not ok 46 - detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+  ---
+  duration_ms: 1183.5205
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    node:internal/modules/run_main:123
+        triggerUncaughtException(
+        ^
+
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+    71 !== 124
+
+        at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+        at process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 71,
+      expected: 124,
+      operator: 'strictEqual'
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:38:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5) {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:57:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: descendants are cleaned after the JavaScript wrapper is killed
+not ok 47 - descendants are cleaned after the JavaScript wrapper is killed
+  ---
+  duration_ms: 11344.014042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    node:internal/modules/run_main:123
+        triggerUncaughtException(
+        ^
+
+    AssertionError [ERR_ASSERTION]: detached leaf actually launched
+        at launched (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:26:10)
+        at async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:50:3 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '=='
+    }
+
+    Node.js v20.19.4
+
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    launched (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:26:10)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/helpers/detached-descendants.mjs:50:3 {
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:57:10
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# validation lifetime marker is absent
+# sandbox-exec: sandbox_apply: Operation not permitted
+# Subtest: macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+ok 48 - macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+  ---
+  duration_ms: 588.25775
+  ...
+# sandbox-exec: sandbox_apply: Operation not permitted
+# Subtest: validation cannot signal an owner outside its inherited kernel boundary
+not ok 49 - validation cannot signal an owner outside its inherited kernel boundary
+  ---
+  duration_ms: 167.727458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    /usr/bin/sandbox-exec
+
+    71 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    actorTest.skip (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:78:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: lifetime markers reject redirected scratch roots before provider construction
+ok 50 - lifetime markers reject redirected scratch roots before provider construction
+  ---
+  duration_ms: 2.39725
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (no-auth)
+not ok 51 - pending Claude probe emits Linux evidence without a platform guard (no-auth)
+  ---
+  duration_ms: 125.02425
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:101:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:17:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (skip-live)
+not ok 52 - pending Claude probe emits Linux evidence without a platform guard (skip-live)
+  ---
+  duration_ms: 129.742667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:101:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r3.test.mjs:17:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: acceptance setup failure removes its installed snapshot and keeps only evidence
+ok 53 - acceptance setup failure removes its installed snapshot and keeps only evidence
+  ---
+  duration_ms: 114.586583
+  ...
+# Subtest: acceptance allocation failure removes the first temporary root
+ok 54 - acceptance allocation failure removes the first temporary root
+  ---
+  duration_ms: 30.593709
+  ...
+# Subtest: acceptance evidence directory failure still removes its installed snapshot
+ok 55 - acceptance evidence directory failure still removes its installed snapshot
+  ---
+  duration_ms: 32.192125
+  ...
+# Subtest: Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection
+ok 56 - Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection # SKIP requires a Linux kernel with io_uring enabled
+  ---
+  duration_ms: 0.042125
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: discovery/test/review-r4.test.mjs
+not ok 5 - discovery/test/review-r4.test.mjs
+  ---
+  duration_ms: 37.835625
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/test/review-r4.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: housekeeping/test/auto-tidy.test.mjs
+not ok 6 - housekeeping/test/auto-tidy.test.mjs
+  ---
+  duration_ms: 43.407375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/housekeeping/test/auto-tidy.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: promote/test/affected-tests.test.mjs
+not ok 7 - promote/test/affected-tests.test.mjs
+  ---
+  duration_ms: 34.633917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/promote/test/affected-tests.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+ok 60 - bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+  ---
+  duration_ms: 139.228584
+  ...
+# Subtest: unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+ok 61 - unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+  ---
+  duration_ms: 113.30775
+  ...
+# Subtest: cached and duplicated green proofs never inflate gate time or executions
+ok 62 - cached and duplicated green proofs never inflate gate time or executions
+  ---
+  duration_ms: 110.451875
+  ...
+# Subtest: window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+ok 63 - window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+  ---
+  duration_ms: 131.119875
+  ...
+# Subtest: linked worktrees read the same canonical receipts; text and JSON commands make no changes
+ok 64 - linked worktrees read the same canonical receipts; text and JSON commands make no changes
+  ---
+  duration_ms: 297.495459
+  ...
+# Subtest: missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+ok 65 - missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+  ---
+  duration_ms: 145.875917
+  ...
+# Subtest: TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+ok 66 - TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+  ---
+  duration_ms: 0.7425
+  ...
+# Subtest: slowest steps sum sequential streams per gate rather than treating streams as whole steps
+ok 67 - slowest steps sum sequential streams per gate rather than treating streams as whole steps
+  ---
+  duration_ms: 114.377625
+  ...
+# Subtest: unattributed failures and unavailable Git history remain explicit hints
+ok 68 - unattributed failures and unavailable Git history remain explicit hints
+  ---
+  duration_ms: 134.578042
+  ...
+# Subtest: malformed receipts are skipped with evidence rather than crashing the project report
+ok 69 - malformed receipts are skipped with evidence rather than crashing the project report
+  ---
+  duration_ms: 112.329583
+  ...
+# Subtest: empty projects return unavailable rates and medians instead of invented zero timings
+ok 70 - empty projects return unavailable rates and medians instead of invented zero timings
+  ---
+  duration_ms: 114.582125
+  ...
+# Subtest: archived baseline imports read-only with selection bias and lower bounds separate from the current window
+ok 71 - archived baseline imports read-only with selection bias and lower bounds separate from the current window
+  ---
+  duration_ms: 181.997875
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: promote/test/promote.test.mjs
+not ok 9 - promote/test/promote.test.mjs
+  ---
+  duration_ms: 45.463416
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/promote/test/promote.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: promote/test/train.test.mjs
+not ok 10 - promote/test/train.test.mjs
+  ---
+  duration_ms: 45.117583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/promote/test/train.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: promote/test/workflow-train.test.mjs
+not ok 11 - promote/test/workflow-train.test.mjs
+  ---
+  duration_ms: 41.475417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/promote/test/workflow-train.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: release/test/release.test.mjs
+not ok 12 - release/test/release.test.mjs
+  ---
+  duration_ms: 60.209417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/release/test/release.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: supervisor/test/autopilot.test.mjs
+not ok 13 - supervisor/test/autopilot.test.mjs
+  ---
+  duration_ms: 47.08425
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/supervisor/test/autopilot.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: supervisor/test/delivery.test.mjs
+not ok 14 - supervisor/test/delivery.test.mjs
+  ---
+  duration_ms: 46.349125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/supervisor/test/delivery.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: supervisor/test/entry.test.mjs
+not ok 15 - supervisor/test/entry.test.mjs
+  ---
+  duration_ms: 46.219667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/supervisor/test/entry.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: supervisor/test/status.test.mjs
+not ok 16 - supervisor/test/status.test.mjs
+  ---
+  duration_ms: 45.197958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/supervisor/test/status.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: supervisor/test/supervisor.test.mjs
+not ok 17 - supervisor/test/supervisor.test.mjs
+  ---
+  duration_ms: 52.199459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/supervisor/test/supervisor.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392
+# if (isMain(import.meta.url)) {
+# ^
+# ReferenceError: isMain is not defined
+#     at file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs:392:1
+#     at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+#     at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+# Node.js v20.19.4
+# Subtest: test/deadline-boundaries.test.mjs
+not ok 18 - test/deadline-boundaries.test.mjs
+  ---
+  duration_ms: 34.825125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/deadline-boundaries.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: teardown confirms the detached owner group and stops its transport first
+ok 82 - teardown confirms the detached owner group and stops its transport first
+  ---
+  duration_ms: 2.716542
+  ...
+# Subtest: teardown confirms the contained test group and stops its transport first
+ok 83 - teardown confirms the contained test group and stops its transport first
+  ---
+  duration_ms: 1.117792
+  ...
+# Subtest: a absent owner candidate never authorizes a signal
+ok 84 - a absent owner candidate never authorizes a signal
+  ---
+  duration_ms: 1.124791
+  ...
+# Subtest: a zombie owner candidate never authorizes a signal
+ok 85 - a zombie owner candidate never authorizes a signal
+  ---
+  duration_ms: 1.416708
+  ...
+# Subtest: a foreign command owner candidate never authorizes a signal
+ok 86 - a foreign command owner candidate never authorizes a signal
+  ---
+  duration_ms: 0.710667
+  ...
+# Subtest: a birth change before the first signal reads as owner gone
+ok 87 - a birth change before the first signal reads as owner gone
+  ---
+  duration_ms: 1.605792
+  ...
+# Subtest: a command change before the first signal reads as owner gone
+ok 88 - a command change before the first signal reads as owner gone
+  ---
+  duration_ms: 0.92375
+  ...
+# Subtest: a replacement observed after suspension is never killed or resumed
+ok 89 - a replacement observed after suspension is never killed or resumed
+  ---
+  duration_ms: 0.705292
+  ...
+# Subtest: wrong group ownership fails closed without signalling
+ok 90 - wrong group ownership fails closed without signalling
+  ---
+  duration_ms: 0.9905
+  ...
+# Subtest: missing birth ownership fails closed without signalling
+ok 91 - missing birth ownership fails closed without signalling
+  ---
+  duration_ms: 0.9115
+  ...
+# Subtest: failed snapshot ownership fails closed without signalling
+ok 92 - failed snapshot ownership fails closed without signalling
+  ---
+  duration_ms: 0.718375
+  ...
+# Subtest: failed signal lookup ownership fails closed without signalling
+ok 93 - failed signal lookup ownership fails closed without signalling
+  ---
+  duration_ms: 0.948209
+  ...
+# Subtest: invalid argv ownership fails closed without signalling
+ok 94 - invalid argv ownership fails closed without signalling
+  ---
+  duration_ms: 0.979916
+  ...
+# Subtest: a transport outside the confirmed owner group retains evidence and resumes the owner
+ok 95 - a transport outside the confirmed owner group retains evidence and resumes the owner
+  ---
+  duration_ms: 0.755958
+  ...
+# Subtest: Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+ok 96 - Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+  ---
+  duration_ms: 2.746417
+  ...
+# Subtest: a reused PID with identical argv and a different birth time never licenses PID or group signals
+ok 97 - a reused PID with identical argv and a different birth time never licenses PID or group signals
+  ---
+  duration_ms: 4.167458
+  ...
+# Subtest: unavailable sources refuse clearly without falling back to ps or signalling
+ok 98 - unavailable sources refuse clearly without falling back to ps or signalling
+  ---
+  duration_ms: 0.866292
+  ...
+# Subtest: Linux durable owner distinguishes identical PID and start tick across boots and refuses unknown boots
+ok 99 - Linux durable owner distinguishes identical PID and start tick across boots and refuses unknown boots
+  ---
+  duration_ms: 0.769292
+  ...
+# Subtest: Linux legacy tick-only durable owners remain unknown while the PID exists
+ok 100 - Linux legacy tick-only durable owners remain unknown while the PID exists
+  ---
+  duration_ms: 0.106584
+  ...
+# Subtest: Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+ok 101 - Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+  ---
+  duration_ms: 0.231625
+  ...
+# Subtest: Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+ok 102 - Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+  ---
+  duration_ms: 0.275542
+  ...
+# Subtest: identity-only reads preserve kernel births and ancestry when argv is inaccessible
+ok 103 - identity-only reads preserve kernel births and ancestry when argv is inaccessible
+  ---
+  duration_ms: 0.508125
+  ...
+# Subtest: Darwin identity-only reads can date root-owned PID 1 from an unprivileged caller
+ok 104 - Darwin identity-only reads can date root-owned PID 1 from an unprivileged caller
+  ---
+  duration_ms: 8.107125
+  ...
+# Subtest: Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+ok 105 - Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+  ---
+  duration_ms: 13.980583
+  ...
+# host sandbox strips setuid chmod; verify mode refusal on the promotion host
+# Subtest: the installed native reader returns exact unicode and multiline argv without any tools on PATH
+ok 106 - the installed native reader returns exact unicode and multiline argv without any tools on PATH
+  ---
+  duration_ms: 81.854709
+  ...
+# Subtest: live kernel reads preserve stopped states through confirmed fixture cleanup
+ok 107 - live kernel reads preserve stopped states through confirmed fixture cleanup
+  ---
+  duration_ms: 20.900417
+  ...
+# Subtest: the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute
+ok 108 - the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute # SKIP seatbelt cannot nest; run this acceptance on the unsandboxed promotion host
+  ---
+  duration_ms: 7.624167
+  ...
+# Subtest: the runner refuses before running fixtures when the native source is unavailable
+ok 109 - the runner refuses before running fixtures when the native source is unavailable
+  ---
+  duration_ms: 66.352834
+  ...
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 110 - offline fleet fixtures keep default run temp within the Unix socket budget
+  ---
+  duration_ms: 5.520375
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+not ok 111 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 410.207416
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    edit must occur during staged planning
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/plugin-install.test.mjs:123:14
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+not ok 112 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 516.882291
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    edit must occur during staged planning
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/plugin-install.test.mjs:123:14
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+not ok 113 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 634.127958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/plugin-install.test.mjs:108:29
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+not ok 114 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 621.308833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/plugin-install.test.mjs:108:29
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+not ok 115 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 786.522667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    1 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/plugin-install.test.mjs:108:29
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 116 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1795.034667
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 117 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 1875.79125
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 118 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1551.080958
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 119 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1728.017542
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 120 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 13676.279333
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 121 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 2255.033041
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 122 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1712.959583
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 123 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 1167.3135
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 124 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1327.289166
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 125 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 2281.480917
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 126 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1422.781542
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 127 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1483.612542
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 128 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1582.708667
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 129 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1568.613458
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 130 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1484.13575
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 131 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1572.143791
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 132 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1760.822833
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 133 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 2187.431042
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 134 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1867.882958
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 135 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 2258.609917
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 136 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 4080.50225
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 137 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 543.465542
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 138 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1957.977834
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 139 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1833.842333
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 140 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 3393.099541
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 141 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 2505.828917
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 142 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3995.821625
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 143 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 351.616375
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 144 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 2830.881833
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 145 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 4101.825708
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 146 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 4876.729291
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 147 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 3543.874583
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 148 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 3120.704209
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 149 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 4105.202542
+  ...
+# Subtest: watch acknowledges a delayed startup at load 24, without launching real background work
+ok 150 - watch acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 234.421792
+  ...
+# Subtest: promote acknowledges a delayed startup at load 24, without launching real background work
+ok 151 - promote acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 280.407584
+  ...
+# Subtest: inbox acknowledges a delayed startup at load 24, without launching real background work
+ok 152 - inbox acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 166.805625
+  ...
+# Subtest: housekeeping acknowledges a delayed startup at load 24, without launching real background work
+ok 153 - housekeeping acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 532.000917
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: real detached fixture cleanup survives an assertion failure
+not ok 154 - real detached fixture cleanup survives an assertion failure
+  ---
+  duration_ms: 1027.253875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    waitForDetachedCleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/detached.mjs:21:12)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/test-hangs.test.mjs:41:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...

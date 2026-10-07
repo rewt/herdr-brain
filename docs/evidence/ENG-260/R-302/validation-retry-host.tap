@@ -1,0 +1,75 @@
+TAP version 13
+# monitor entry: keeping lane/entry-d357884f882b at /private/tmp/as-N0HyDh/lanes/lane-entry-d357884f882b: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 1 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 185.027
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 2 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 132.221167
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 3 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 165.87425
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+not ok 4 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 2548.56575
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/as-N0HyDh/lanes/lane-entry-d357884f882b/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/av-Gmm7C1/project/.lane.json)): node --test
+    TAP version 13
+    # Subtest: gate and product boundaries
+    ok 1 - gate and product boundaries
+      ---
+      duration_ms: 9.9665
+      ...
+    # Subtest: green
+    ok 2 - green
+      ---
+      duration_ms: 0.454875
+      ...
+    1..2
+    # tests 2
+    # suites 0
+    # pass 2
+    # fail 0
+    # cancelled 0
+    # skipped 0
+    # todo 0
+    # duration_ms 44.148833
+    monitor validation: sandboxed validation exited 125
+    GATE 4625ce0afe3a8079722c8e30c669f111e0232718 exit=1 (0.758s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/runtime.mjs:26:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/runtime.mjs:225:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/discovery/runtime.mjs:305:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/validation.test.mjs:145:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+ok 5 - native per-run validation temp is admitted only by its private identity and exact environment handoff
+  ---
+  duration_ms: 205.930042
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 4
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3300.175125

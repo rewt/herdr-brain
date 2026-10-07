@@ -17,8 +17,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 
 const WATCHER = /^(watch|deliver) R-\d+$/;
@@ -361,6 +360,6 @@ function main() {
   if (!opt['dry-run']) console.log(`tidy-tabs: closed ${closed} of ${close.length} finished tab(s) for ${path.basename(checkout)}`);
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try { main(); } catch (error) { console.error(`tidy-tabs: ${error.message}`); process.exitCode = 1; }
 }

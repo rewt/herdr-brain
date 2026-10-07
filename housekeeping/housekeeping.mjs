@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { planTidy, isShellOnly, matchingRun, waitingOnRecord } from '../supervisor/tidy-tabs.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { readConfig } from './config.mjs';
@@ -370,6 +370,6 @@ async function main() {
     process.off('SIGINT', stop); process.off('SIGTERM', stop);
   }
 }
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   main().catch((error) => { console.error(`housekeeping: ${error.message}`); process.exitCode = 1; });
 }

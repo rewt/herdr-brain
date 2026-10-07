@@ -1,0 +1,1050 @@
+TAP version 13
+# Subtest: native adapter pins the original socket despite an isolated HOME or caller override
+ok 1 - native adapter pins the original socket despite an isolated HOME or caller override
+  ---
+  duration_ms: 303.104375
+  ...
+# Subtest: foreign pane/workspace targets and symlink escapes never reach mutation APIs
+ok 2 - foreign pane/workspace targets and symlink escapes never reach mutation APIs
+  ---
+  duration_ms: 460.896292
+  ...
+# Subtest: model launch requests are always replaced by the scratch worker script
+ok 3 - model launch requests are always replaced by the scratch worker script
+  ---
+  duration_ms: 332.441542
+  ...
+# Subtest: entry canary launch is confined to its fixed worker path and owned pane
+ok 4 - entry canary launch is confined to its fixed worker path and owned pane
+  ---
+  duration_ms: 315.424791
+  ...
+# Subtest: parent-focusing worktree removal is refused before any native mutation
+ok 5 - parent-focusing worktree removal is refused before any native mutation
+  ---
+  duration_ms: 32.845584
+  ...
+# Subtest: the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+ok 6 - the focus gate fails when a lane-close caller swallows unsafe removal and succeeds via Git
+  ---
+  duration_ms: 121.571416
+  ...
+# Subtest: creation receipts grant the only new targets and force no-focus
+ok 7 - creation receipts grant the only new targets and force no-focus
+  ---
+  duration_ms: 520.802708
+  ...
+# Subtest: explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+ok 8 - explicit focus, attach, zoom and creation focus flags leave typed refusal receipts
+  ---
+  duration_ms: 120.709041
+  ...
+# Subtest: agent send-keys requires an owned target and checks its live cwd
+ok 9 - agent send-keys requires an owned target and checks its live cwd
+  ---
+  duration_ms: 12289.402708
+  ...
+# Subtest: named-agent mutation receipts retain the pane resolved by native identity lookup
+ok 10 - named-agent mutation receipts retain the pane resolved by native identity lookup
+  ---
+  duration_ms: 304.914291
+  ...
+# Subtest: late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+ok 11 - late pane needs a live owned workspace and scratch cwd, then gets an atomic receipt
+  ---
+  duration_ms: 358.117459
+  ...
+# Subtest: non-zero native Herdr replies are harness failures through both body and forwarding paths
+ok 12 - non-zero native Herdr replies are harness failures through both body and forwarding paths
+  ---
+  duration_ms: 669.468875
+  ...
+# Subtest: stand-in registration timeout is harness pending without a safety marker
+ok 13 - stand-in registration timeout is harness pending without a safety marker
+  ---
+  duration_ms: 14513.770709
+  ...
+# Subtest: scripted PTY acknowledgement timeout is harness pending without a safety marker
+ok 14 - scripted PTY acknowledgement timeout is harness pending without a safety marker
+  ---
+  duration_ms: 23078.989916
+  ...
+# Subtest: actual capability refusals stay product FAIL even when wrapped by cleanup
+ok 15 - actual capability refusals stay product FAIL even when wrapped by cleanup
+  ---
+  duration_ms: 11456.021292
+  ...
+# Subtest: missing live pane cwd receipt is a harness limit, not a candidate capability violation
+ok 16 - missing live pane cwd receipt is a harness limit, not a candidate capability violation
+  ---
+  duration_ms: 298.117375
+  ...
+# Subtest: native transport pins the original socket when copied HOME changes
+ok 17 - native transport pins the original socket when copied HOME changes
+  ---
+  duration_ms: 277.86575
+  ...
+# Subtest: final tab rename is allowed only for receipt-owned tabs
+ok 18 - final tab rename is allowed only for receipt-owned tabs
+  ---
+  duration_ms: 215.693459
+  ...
+# Subtest: private lane environment preparation reaches only an owned pane with a live scratch cwd
+ok 19 - private lane environment preparation reaches only an owned pane with a live scratch cwd
+  ---
+  duration_ms: 11728.516584
+  ...
+# Subtest: inserting a case anywhere leaves every production dependency and outcome unchanged
+ok 20 - inserting a case anywhere leaves every production dependency and outcome unchanged
+  ---
+  duration_ms: 17.551875
+  ...
+# Subtest: optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+ok 21 - optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+  ---
+  duration_ms: 0.353458
+  ...
+# Subtest: a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+ok 22 - a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+  ---
+  duration_ms: 0.16375
+  ...
+# Subtest: independent product and explicit safety failures retain precedence over genuine canary limits
+ok 23 - independent product and explicit safety failures retain precedence over genuine canary limits
+  ---
+  duration_ms: 0.123458
+  ...
+# Subtest: case keys are required and unique even when display names differ
+ok 24 - case keys are required and unique even when display names differ
+  ---
+  duration_ms: 0.416709
+  ...
+# Subtest: no configured existing project skips all five compatibility bodies visibly and permits a green gate
+ok 25 - no configured existing project skips all five compatibility bodies visibly and permits a green gate
+  ---
+  duration_ms: 0.2565
+  ...
+# Subtest: optional compatibility never hides other failures or pending live cases
+ok 26 - optional compatibility never hides other failures or pending live cases
+  ---
+  duration_ms: 0.378041
+  ...
+# Subtest: configured compatibility retains strict failures and prerequisites
+ok 27 - configured compatibility retains strict failures and prerequisites
+  ---
+  duration_ms: 0.444583
+  ...
+# Subtest: cleanup closes main and linked workspaces after pass, including an unfurled creation receipt
+ok 28 - cleanup closes main and linked workspaces after pass, including an unfurled creation receipt
+  ---
+  duration_ms: 48.508542
+  ...
+# Subtest: cleanup closes main and linked workspaces after fail, including an unfurled creation receipt
+ok 29 - cleanup closes main and linked workspaces after fail, including an unfurled creation receipt
+  ---
+  duration_ms: 48.898167
+  ...
+# Subtest: failed inventory still attempts every owned receipt and audits the actual residue by ID and label
+ok 30 - failed inventory still attempts every owned receipt and audits the actual residue by ID and label
+  ---
+  duration_ms: 32.40275
+  ...
+# Subtest: unreceipted scratch workspace is named by the raw audit without gaining closure authority
+ok 31 - unreceipted scratch workspace is named by the raw audit without gaining closure authority
+  ---
+  duration_ms: 24.016541
+  ...
+# Subtest: direct linked creation receipt survives a failed pane-layout read
+ok 32 - direct linked creation receipt survives a failed pane-layout read
+  ---
+  duration_ms: 296.86975
+  ...
+# Subtest: nested linked creation receipt survives a failed pane-layout read
+ok 33 - nested linked creation receipt survives a failed pane-layout read
+  ---
+  duration_ms: 282.194292
+  ...
+# Subtest: cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost
+ok 34 - cleanup recovers implicit main and linked workspaces from a confined creation intent when the reply is lost
+  ---
+  duration_ms: 16.885042
+  ...
+# Subtest: a malformed journal entry does not prevent closing other receipt-owned workspaces
+ok 35 - a malformed journal entry does not prevent closing other receipt-owned workspaces
+  ---
+  duration_ms: 16.452167
+  ...
+# Subtest: SIGINT closes receipt-owned main and linked workspaces before emitting summary
+ok 36 - SIGINT closes receipt-owned main and linked workspaces before emitting summary
+  ---
+  duration_ms: 72.618
+  ...
+# Subtest: SIGTERM closes receipt-owned main and linked workspaces before emitting summary
+ok 37 - SIGTERM closes receipt-owned main and linked workspaces before emitting summary
+  ---
+  duration_ms: 72.536208
+  ...
+# Subtest: adapter records the implicit main workspace as well as the explicit linked creation reply
+ok 38 - adapter records the implicit main workspace as well as the explicit linked creation reply
+  ---
+  duration_ms: 394.739084
+  ...
+# Subtest: rollback restores every file byte and executable mode
+ok 39 - rollback restores every file byte and executable mode
+  ---
+  duration_ms: 89.567333
+  ...
+# Subtest: contrib cannot retire with an extra executable caller, and scans refuse symlinks
+ok 40 - contrib cannot retire with an extra executable caller, and scans refuse symlinks
+  ---
+  duration_ms: 50.469542
+  ...
+# Subtest: all current edits apply to relocated inventory scripts and refuse premise drift
+ok 41 - all current edits apply to relocated inventory scripts and refuse premise drift
+  ---
+  duration_ms: 127.765792
+  ...
+# Subtest: current snapshot covers every switch and active caller and relocates all fixed temp paths
+not ok 42 - current snapshot covers every switch and active caller and relocates all fixed temp paths
+  ---
+  duration_ms: 117.226334
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'unrelocated live path in /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/cutover-boundary-jJREYL/existing/bch-cloak/.claude/skills/lane/SKILL.md: /Users/rewt'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:70:13)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:66:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/cutover.test.mjs:59:3
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+  ...
+# Subtest: mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+ok 43 - mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+  ---
+  duration_ms: 228.955666
+  ...
+# Subtest: current legacy notify queues its report in scratch and needs an event-service delivery consumer
+ok 44 - current legacy notify queues its report in scratch and needs an event-service delivery consumer
+  ---
+  duration_ms: 535.908417
+  ...
+# Subtest: relocated dispatch keeps the lock and session cap in baseline and switched copies
+not ok 45 - relocated dispatch keeps the lock and session cap in baseline and switched copies
+  ---
+  duration_ms: 171.470917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'unrelocated live path in /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/cutover-boundary-DzUy9Y/existing/bch-cloak/.claude/skills/lane/SKILL.md: /Users/rewt'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:70:13)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:66:32)
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/security.mjs:66:32)
+    invoke (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/cutover.test.mjs:157:5)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/cutover.test.mjs:172:20
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+ok 46 - cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+  ---
+  duration_ms: 18.565708
+  ...
+# Subtest: production notice contract accepts rewritten current documents and rejects missing obligations
+ok 47 - production notice contract accepts rewritten current documents and rejects missing obligations
+  ---
+  duration_ms: 28.664791
+  ...
+# Subtest: retirement scans nested Python, executable extensionless and notify entry callers
+ok 48 - retirement scans nested Python, executable extensionless and notify entry callers
+  ---
+  duration_ms: 6.070167
+  ...
+# Subtest: installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+ok 49 - installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+  ---
+  duration_ms: 561.739375
+  ...
+# Subtest: installed tidy recovers a bounded tail from each log including a late older run
+ok 50 - installed tidy recovers a bounded tail from each log including a late older run
+  ---
+  duration_ms: 651.32625
+  ...
+# Subtest: only unreferenced timestamped script backups qualify as historical material
+ok 51 - only unreferenced timestamped script backups qualify as historical material
+  ---
+  duration_ms: 35.007917
+  ...
+# Subtest: executable shell case arms cannot hide contrib callers or references to historical backups
+ok 52 - executable shell case arms cannot hide contrib callers or references to historical backups
+  ---
+  duration_ms: 22.048
+  ...
+# Subtest: referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+ok 53 - referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+  ---
+  duration_ms: 9.672
+  ...
+# Subtest: ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+not ok 54 - ENG-64: every file switch and rollback: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 167.201333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+
+    'FAIL' !== 'PASS'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PASS'
+  actual: 'FAIL'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/deadlines.test.mjs:78:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+not ok 55 - ENG-64: final contrib removal and restoration: sandbox-exec completes beyond the old deadline at load 24
+  ---
+  duration_ms: 52.123334
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+
+
+    71 !== 0
+
+
+    'FAIL' !== 'PASS'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PASS'
+  actual: 'FAIL'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/deadlines.test.mjs:78:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 24
+not ok 56 - a genuinely hung sandbox-exec reaches its finite deadline at load 24
+  ---
+  duration_ms: 6.598417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/deadlines.test.mjs:95:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: a genuinely hung sandbox-exec reaches its finite deadline at load 0
+not ok 57 - a genuinely hung sandbox-exec reaches its finite deadline at load 0
+  ---
+  duration_ms: 6.675167
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/deadlines.test.mjs:95:10
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: report polling scales once from its own operation load and stays bounded
+ok 58 - report polling scales once from its own operation load and stays bounded
+  ---
+  duration_ms: 0.434417
+  ...
+# Subtest: each command samples current load, preserves zero, and supplies a bounded default
+ok 59 - each command samples current load, preserves zero, and supplies a bounded default
+  ---
+  duration_ms: 0.380084
+  ...
+# Subtest: real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused
+ok 60 - real default-cycle dispatch admits its owned fleet worktree and cwd while foreign roots remain refused
+  ---
+  duration_ms: 16419.974125
+  ...
+# Subtest: acceptance admits the exact private lane environment handoff including literal shell metacharacters
+ok 61 - acceptance admits the exact private lane environment handoff including literal shell metacharacters
+  ---
+  duration_ms: 28.10525
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: outside
+ok 62 - acceptance refuses altered lane environment handoff: outside
+  ---
+  duration_ms: 10.032334
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: suffix
+ok 63 - acceptance refuses altered lane environment handoff: suffix
+  ---
+  duration_ms: 23.75375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: cleanup
+ok 64 - acceptance refuses altered lane environment handoff: cleanup
+  ---
+  duration_ms: 23.885625
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: mode
+ok 65 - acceptance refuses altered lane environment handoff: mode
+  ---
+  duration_ms: 7.921083
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: symlink
+ok 66 - acceptance refuses altered lane environment handoff: symlink
+  ---
+  duration_ms: 27.539959
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: script
+ok 67 - acceptance refuses altered lane environment handoff: script
+  ---
+  duration_ms: 16.116709
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: verifier
+ok 68 - acceptance refuses altered lane environment handoff: verifier
+  ---
+  duration_ms: 13.017417
+  ...
+# Subtest: existing-project copy follows new untracked supervisor scripts and required documents
+ok 69 - existing-project copy follows new untracked supervisor scripts and required documents
+  ---
+  duration_ms: 605.89825
+  ...
+# Subtest: existing-project copy excludes logs, queues, runtime state and unreferenced backups
+ok 70 - existing-project copy excludes logs, queues, runtime state and unreferenced backups
+  ---
+  duration_ms: 287.223459
+  ...
+# Subtest: existing-project copy retains transitive referenced readable script backups for retirement
+ok 71 - existing-project copy retains transitive referenced readable script backups for retirement
+  ---
+  duration_ms: 38.801916
+  ...
+# Subtest: existing-project copy refuses support symlinks and missing required regular inputs
+ok 72 - existing-project copy refuses support symlinks and missing required regular inputs
+  ---
+  duration_ms: 27.125334
+  ...
+# Subtest: focus sampling continues while the acceptance parent blocks and spans cleanup
+not ok 73 - focus sampling continues while the acceptance parent blocks and spans cleanup
+  ---
+  duration_ms: 29.222666
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: native pane_focused events catch a transient change between unchanged samples and name both calls
+not ok 74 - native pane_focused events catch a transient change between unchanged samples and name both calls
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: native startup replay settles before the baseline and subsequent transient owned moves still fail
+not ok 75 - native startup replay settles before the baseline and subsequent transient owned moves still fail
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: continuous operator focus starts without silence and an immediate transient harness move still fails
+not ok 76 - continuous operator focus starts without silence and an immediate transient harness move still fails
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: continuous operator activity alone passes after bounded replay
+not ok 77 - continuous operator activity alone passes after bounded replay
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: a busy stream from an unknown server never assumes the verified replay bound
+not ok 78 - a busy stream from an unknown server never assumes the verified replay bound
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: owned changes need no correlated call and incomplete monitoring never passes
+not ok 79 - owned changes need no correlated call and incomplete monitoring never passes
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: external sampled and transient event moves are recorded and re-baseline without failing
+not ok 80 - external sampled and transient event moves are recorded and re-baseline without failing
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+not ok 81 - an unlisted pane in an owned workspace fails after an external re-baseline, even through cleanup
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: external moves during unrelated active and completed calls re-baseline without failing
+not ok 82 - external moves during unrelated active and completed calls re-baseline without failing
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: a move to the pane targeted by a concurrent call fails after an external re-baseline
+not ok 83 - a move to the pane targeted by a concurrent call fails after an external re-baseline
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: workspace destinations correlate only with their matching call despite a newer unrelated completion
+not ok 84 - workspace destinations correlate only with their matching call despite a newer unrelated completion
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: a resolved agent target receipt correlates a named call without guessing pane IDs
+not ok 85 - a resolved agent target receipt correlates a named call without guessing pane IDs
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: a creation receipt attributes a transient move before ownership is registered
+not ok 86 - a creation receipt attributes a transient move before ownership is registered
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: a focus event after a slow completed call names that call using its completion time
+not ok 87 - a focus event after a slow completed call names that call using its completion time
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: an unreachable read-only focus socket is an explicit harness limitation
+not ok 88 - an unreachable read-only focus socket is an explicit harness limitation
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: the monitor retains forbidden attempts even when every sample remains unchanged
+not ok 89 - the monitor retains forbidden attempts even when every sample remains unchanged
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+not ok 90 - unattributed owned focus failures retain the previous operator pane and nearest harness and product calls
+  ---
+  duration_ms: 0
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'cancelledByParent'
+  error: 'Promise resolution is still pending but the event loop has already resolved'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    process.emit (node:events:524:28)
+  ...
+# Subtest: the real scripted supervisor presents an empty composer before publishing idle and after each notice
+not ok 91 - the real scripted supervisor presents an empty composer before publishing idle and after each notice
+  ---
+  duration_ms: 10029.357458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'fixture ready'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    until (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/harness.test.mjs:25:26)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/harness.test.mjs:36:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+not ok 92 - scratch promotion inherits the actual gate slot while project and session metadata are scrubbed
+  ---
+  duration_ms: 20.062875
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'acceptance refuses HOME under the real home'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    assertScratchHomes (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/environment.mjs:57:55)
+    harnessEnvironment (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/run.mjs:43:10)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/harness.test.mjs:58:15
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: native polling bounds each call and rejects nonresponse at the real deadline
+ok 93 - native polling bounds each call and rejects nonresponse at the real deadline
+  ---
+  duration_ms: 0.419791
+  ...
+# Subtest: native polling bounds each call and rejects late success at the real deadline
+ok 94 - native polling bounds each call and rejects late success at the real deadline
+  ---
+  duration_ms: 0.065958
+  ...
+# Subtest: run.mjs cutover wiring propagates quiet FAIL into retirement
+ok 95 - run.mjs cutover wiring propagates quiet FAIL into retirement
+  ---
+  duration_ms: 0.96925
+  ...
+# Subtest: run.mjs cutover wiring propagates loaded PENDING into retirement
+ok 96 - run.mjs cutover wiring propagates loaded PENDING into retirement
+  ---
+  duration_ms: 0.253083
+  ...
+# Subtest: harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+ok 97 - harness cleanup stops only verified inbox owners under its scratch root and retains receipts
+  ---
+  duration_ms: 314.780333
+  ...
+# Subtest: product tidy preserves a focused finished tab while closing the same tab in the background
+ok 98 - product tidy preserves a focused finished tab while closing the same tab in the background
+  ---
+  duration_ms: 1.444375
+  ...
+# Subtest: the real adapter bounds a slow cwd native read by the polling deadline
+ok 99 - the real adapter bounds a slow cwd native read by the polling deadline
+  ---
+  duration_ms: 1557.00925
+  ...
+# Subtest: the real adapter bounds a slow registration native read by the polling deadline
+ok 100 - the real adapter bounds a slow registration native read by the polling deadline
+  ---
+  duration_ms: 1750.88975
+  ...
+# Subtest: failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+ok 101 - failure-path teardown holds the worker transition through delayed notice confirmation until abandonment is observed
+  ---
+  duration_ms: 0.750625
+  ...
+# Subtest: housekeeping accepts either its direct closure or auto-tidy for the eligible worker
+ok 102 - housekeeping accepts either its direct closure or auto-tidy for the eligible worker
+  ---
+  duration_ms: 0.869708
+  ...
+# Subtest: housekeeping rejects unrelated closures, dry runs and failed tidy output
+ok 103 - housekeeping rejects unrelated closures, dry runs and failed tidy output
+  ---
+  duration_ms: 0.519166
+  ...
+# Subtest: housekeeping rejects closure of any ineligible worker through either path
+ok 104 - housekeeping rejects closure of any ineligible worker through either path
+  ---
+  duration_ms: 0.144417
+  ...
+# Subtest: housekeeping requires a keep action for every ineligible worker
+ok 105 - housekeeping requires a keep action for every ineligible worker
+  ---
+  duration_ms: 0.100584
+  ...
+# Subtest: native creation envelopes retain their result once and exclude failed creates and reads
+ok 106 - native creation envelopes retain their result once and exclude failed creates and reads
+  ---
+  duration_ms: 1.146333
+  ...
+# Subtest: a leaking refusal fails even when the separate configured workspace is unchanged
+ok 107 - a leaking refusal fails even when the separate configured workspace is unchanged
+  ---
+  duration_ms: 1.5815
+  ...
+# Subtest: an exit-zero no-op retry fails the production busy-retry check
+ok 108 - an exit-zero no-op retry fails the production busy-retry check
+  ---
+  duration_ms: 0.17625
+  ...
+# Subtest: a refusal with no effects and one registered, prompted retry session qualify
+ok 109 - a refusal with no effects and one registered, prompted retry session qualify
+  ---
+  duration_ms: 0.142167
+  ...
+# Subtest: retry requires destination, native creation, live topology, registration and exact prompt attribution
+ok 110 - retry requires destination, native creation, live topology, registration and exact prompt attribution
+  ---
+  duration_ms: 0.730875
+  ...
+# Subtest: refusal also rejects topology or prompt changes without a creation receipt
+ok 111 - refusal also rejects topology or prompt changes without a creation receipt
+  ---
+  duration_ms: 0.285916
+  ...
+# Subtest: rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+not ok 112 - rollback done report reaches the scratch supervisor exactly once through the real outbox consumer
+  ---
+  duration_ms: 4032.298375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timeout: scripted supervisor ready'
+  code: 'ERR_TEST_FAILURE'
+  name: 'LoadTimeout'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/load.mjs:53:9)
+    async renderedSupervisor (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/legacy-consumer.test.mjs:73:3)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/legacy-consumer.test.mjs:99:13
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: legacy consumer defers a queued report while the scratch supervisor input is busy
+not ok 113 - legacy consumer defers a queued report while the scratch supervisor input is busy
+  ---
+  duration_ms: 3943.151458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'timeout: scripted supervisor ready'
+  code: 'ERR_TEST_FAILURE'
+  name: 'LoadTimeout'
+  stack: |-
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/load.mjs:53:9)
+    async renderedSupervisor (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/legacy-consumer.test.mjs:73:3)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/legacy-consumer.test.mjs:127:13
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: inherited live consumer settings cannot select its queues, target or fixed port
+not ok 114 - inherited live consumer settings cannot select its queues, target or fixed port
+  ---
+  duration_ms: 13.596
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'listen EPERM: operation not permitted 127.0.0.1'
+  code: 'EPERM'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1886:21)
+    listenInCluster (node:net:1965:12)
+    doListen (node:net:2139:7)
+    process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+  ...
+# Subtest: an exited or unready consumer fails startup and remains receipted for cleanup
+ok 115 - an exited or unready consumer fails startup and remains receipted for cleanup
+  ---
+  duration_ms: 3660.72
+  ...
+# Subtest: failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+not ok 116 - failed lifecycle writes still stop the owned consumer before reporting cleanup failure
+  ---
+  duration_ms: 230.935916
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'legacy consumer exited before ready; see /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/cutover-boundary-SuWHFA/evidence/legacy-consumer-F7OXp7.log'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    waitUntil.load.load (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/legacy-consumer.mjs:102:35)
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/load.mjs:50:9)
+    async startLegacyConsumer (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/legacy-consumer.mjs:101:5)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/legacy-consumer.test.mjs:173:20
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: consumer refuses outside or symlinked scratch paths before spawning
+ok 117 - consumer refuses outside or symlinked scratch paths before spawning
+  ---
+  duration_ms: 14.802375
+  ...
+# Subtest: the real queued transport delivers inside the independent copied-code sandbox
+not ok 118 - the real queued transport delivers inside the independent copied-code sandbox
+  ---
+  duration_ms: 168.521375
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'legacy consumer exited before ready; see /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/cutover-boundary-UyWHZO/evidence/legacy-consumer-OdQ2sd.log'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    waitUntil.load.load (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/legacy-consumer.mjs:102:35)
+    waitUntil (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/load.mjs:50:9)
+    async startLegacyConsumer (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/legacy-consumer.mjs:101:5)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/legacy-consumer.test.mjs:199:20
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: native receipts require actual lesson prompt arguments for each transport
+ok 119 - native receipts require actual lesson prompt arguments for each transport
+  ---
+  duration_ms: 1.964459
+  ...
+# Subtest: skipped fresh lessons sessions keep the release gate pending without launching anything
+ok 120 - skipped fresh lessons sessions keep the release gate pending without launching anything
+  ---
+  duration_ms: 0.646875
+  ...
+# Subtest: native interactive readiness requires more than a retained banner
+ok 121 - native interactive readiness requires more than a retained banner
+  ---
+  duration_ms: 0.315542
+  ...
+# Subtest: release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+not ok 122 - release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+  ---
+  duration_ms: 525.145333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    codex entry exited before interactive readiness: {"code":71,"signal":null}
+    ^Dsandbox-exec: sandbox_apply: Operation not permitted
+
+  code: 'ERR_TEST_FAILURE'
+  name: 'HarnessLimit'
+  stack: |-
+    commandFailure (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/limits.mjs:59:106)
+    assertRunning (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/lessons.mjs:94:17)
+    lessonsEntryCase (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/lessons.mjs:113:11)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/lessons.test.mjs:167:16
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: uncredentialed Claude banner then exit 0 passes only delivery and start
+not ok 123 - uncredentialed Claude banner then exit 0 passes only delivery and start
+  ---
+  duration_ms: 677.560459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    codex entry exited before interactive readiness: {"code":71,"signal":null}
+    ^Dsandbox-exec: sandbox_apply: Operation not permitted
+
+    + actual - expected
+
+    + 'PENDING'
+    - 'PASS'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PASS'
+  actual: 'PENDING'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/lessons.test.mjs:191:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: uncredentialed Claude prompt then exit 0 passes only delivery and start
+not ok 124 - uncredentialed Claude prompt then exit 0 passes only delivery and start
+  ---
+  duration_ms: 611.049833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    codex entry exited before interactive readiness: {"code":71,"signal":null}
+    ^Dsandbox-exec: sandbox_apply: Operation not permitted
+
+    + actual - expected
+
+    + 'PENDING'
+    - 'PASS'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PASS'
+  actual: 'PENDING'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/lessons.test.mjs:191:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: uncredentialed Claude banner then exit 1 passes only delivery and start
+not ok 125 - uncredentialed Claude banner then exit 1 passes only delivery and start
+  ---
+  duration_ms: 1446.523125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    codex entry exited before interactive readiness: {"code":71,"signal":null}
+    ^Dsandbox-exec: sandbox_apply: Operation not permitted
+
+    + actual - expected
+
+    + 'PENDING'
+    - 'PASS'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PASS'
+  actual: 'PENDING'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/lessons.test.mjs:191:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: uncredentialed Claude prompt then exit 1 passes only delivery and start
+not ok 126 - uncredentialed Claude prompt then exit 1 passes only delivery and start
+  ---
+  duration_ms: 801.700125
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    codex entry exited before interactive readiness: {"code":71,"signal":null}
+    ^Dsandbox-exec: sandbox_apply: Operation not permitted
+
+    + actual - expected
+
+    + 'PENDING'
+    - 'PASS'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PASS'
+  actual: 'PENDING'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/lessons.test.mjs:191:12
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: uncredentialed Claude still stops a running native child after delivery proof
+not ok 127 - uncredentialed Claude still stops a running native child after delivery proof
+  ---
+  duration_ms: 589.59275
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    codex entry exited before interactive readiness: {"code":71,"signal":null}
+    ^Dsandbox-exec: sandbox_apply: Operation not permitted
+
+  code: 'ERR_TEST_FAILURE'
+  name: 'HarnessLimit'
+  stack: |-
+    commandFailure (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/limits.mjs:59:106)
+    assertRunning (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/lessons.mjs:94:17)
+    lessonsEntryCase (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/lessons.mjs:113:11)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/lessons.test.mjs:213:16
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: uncredentialed Claude cannot pass without a native spawn receipt
+not ok 128 - uncredentialed Claude cannot pass without a native spawn receipt
+  ---
+  duration_ms: 655.573542
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    codex entry exited before interactive readiness: {"code":71,"signal":null}
+    ^Dsandbox-exec: sandbox_apply: Operation not permitted
+
+    + actual - expected
+
+    + 'PENDING'
+    - 'FAIL'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'FAIL'
+  actual: 'PENDING'
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/acceptance/test/lessons.test.mjs:224:10
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...

@@ -1,0 +1,235 @@
+TAP version 13
+# Subtest: product scripts never compare a resolved argv launch path to a module path
+ok 1 - product scripts never compare a resolved argv launch path to a module path
+  ---
+  duration_ms: 37.288542
+  ...
+# Subtest: discovery/bounded.mjs executes through a directory symlink
+ok 2 - discovery/bounded.mjs executes through a directory symlink
+  ---
+  duration_ms: 46.543875
+  ...
+# Subtest: discovery/bounded.mjs executes through a file symlink
+ok 3 - discovery/bounded.mjs executes through a file symlink
+  ---
+  duration_ms: 40.084
+  ...
+# Subtest: discovery/bubblewrap.mjs executes through a directory symlink
+ok 4 - discovery/bubblewrap.mjs executes through a directory symlink
+  ---
+  duration_ms: 27.844458
+  ...
+# Subtest: discovery/bubblewrap.mjs executes through a file symlink
+ok 5 - discovery/bubblewrap.mjs executes through a file symlink
+  ---
+  duration_ms: 35.237959
+  ...
+# Subtest: discovery/lane-file-access.mjs executes through a directory symlink
+ok 6 - discovery/lane-file-access.mjs executes through a directory symlink
+  ---
+  duration_ms: 34.816083
+  ...
+# Subtest: discovery/lane-file-access.mjs executes through a file symlink
+ok 7 - discovery/lane-file-access.mjs executes through a file symlink
+  ---
+  duration_ms: 31.308875
+  ...
+# Subtest: herdr/release-candidate.mjs executes through a directory symlink
+ok 8 - herdr/release-candidate.mjs executes through a directory symlink
+  ---
+  duration_ms: 31.396708
+  ...
+# Subtest: herdr/release-candidate.mjs executes through a file symlink
+ok 9 - herdr/release-candidate.mjs executes through a file symlink
+  ---
+  duration_ms: 31.183166
+  ...
+# Subtest: promote/metrics.mjs executes through a directory symlink
+ok 10 - promote/metrics.mjs executes through a directory symlink
+  ---
+  duration_ms: 29.002292
+  ...
+# Subtest: promote/metrics.mjs executes through a file symlink
+ok 11 - promote/metrics.mjs executes through a file symlink
+  ---
+  duration_ms: 31.560084
+  ...
+# Subtest: promote/promote.mjs executes through a directory symlink
+ok 12 - promote/promote.mjs executes through a directory symlink
+  ---
+  duration_ms: 43.550167
+  ...
+# Subtest: promote/promote.mjs executes through a file symlink
+ok 13 - promote/promote.mjs executes through a file symlink
+  ---
+  duration_ms: 45.662833
+  ...
+# Subtest: release/release.mjs executes through a directory symlink
+ok 14 - release/release.mjs executes through a directory symlink
+  ---
+  duration_ms: 36.076375
+  ...
+# Subtest: release/release.mjs executes through a file symlink
+ok 15 - release/release.mjs executes through a file symlink
+  ---
+  duration_ms: 34.238875
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a directory symlink
+ok 16 - supervisor/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 42.286834
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a file symlink
+ok 17 - supervisor/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 43.92725
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a directory symlink
+ok 18 - supervisor/prompt-supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 45.251416
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a file symlink
+ok 19 - supervisor/prompt-supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 39.606875
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a directory symlink
+ok 20 - supervisor/tidy-tabs.mjs executes through a directory symlink
+  ---
+  duration_ms: 31.478
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a file symlink
+ok 21 - supervisor/tidy-tabs.mjs executes through a file symlink
+  ---
+  duration_ms: 28.327875
+  ...
+# Subtest: acceptance/run.mjs executes through a directory symlink
+ok 22 - acceptance/run.mjs executes through a directory symlink
+  ---
+  duration_ms: 41.060833
+  ...
+# Subtest: acceptance/run.mjs executes through a file symlink
+ok 23 - acceptance/run.mjs executes through a file symlink
+  ---
+  duration_ms: 47.446583
+  ...
+# Subtest: acceptance/settle.mjs executes through a directory symlink
+ok 24 - acceptance/settle.mjs executes through a directory symlink
+  ---
+  duration_ms: 401.828542
+  ...
+# Subtest: acceptance/settle.mjs executes through a file symlink
+ok 25 - acceptance/settle.mjs executes through a file symlink
+  ---
+  duration_ms: 331.175083
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a directory symlink
+ok 26 - acceptance/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 321.888916
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a file symlink
+ok 27 - acceptance/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 180.03675
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a directory symlink
+ok 28 - housekeeping/housekeeping.mjs executes through a directory symlink
+  ---
+  duration_ms: 36.268542
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a file symlink
+ok 29 - housekeeping/housekeeping.mjs executes through a file symlink
+  ---
+  duration_ms: 39.653541
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a directory symlink
+ok 30 - test-slot/test-slot.mjs executes through a directory symlink
+  ---
+  duration_ms: 31.039959
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a file symlink
+ok 31 - test-slot/test-slot.mjs executes through a file symlink
+  ---
+  duration_ms: 30.168667
+  ...
+# Subtest: acceptance/focus.mjs executes through a directory symlink
+ok 32 - acceptance/focus.mjs executes through a directory symlink
+  ---
+  duration_ms: 30.110334
+  ...
+# Subtest: acceptance/focus.mjs executes through a file symlink
+ok 33 - acceptance/focus.mjs executes through a file symlink
+  ---
+  duration_ms: 29.424959
+  ...
+# Subtest: isMain resolves both paths and returns false for missing, dangling or different launchers
+ok 34 - isMain resolves both paths and returns false for missing, dangling or different launchers
+  ---
+  duration_ms: 27.011
+  ...
+# Subtest: PTY transport uses native BSD arguments and shell-safe util-linux arguments
+ok 35 - PTY transport uses native BSD arguments and shell-safe util-linux arguments
+  ---
+  duration_ms: 31.064
+  ...
+# Subtest: PTY completion retains TTY, arguments, output and exit status
+ok 36 - PTY completion retains TTY, arguments, output and exit status
+  ---
+  duration_ms: 260.714875
+  ...
+# Subtest: PTY native owner accepts the measured-load allowance above its fifteen-second base
+ok 37 - PTY native owner accepts the measured-load allowance above its fifteen-second base
+  ---
+  duration_ms: 75.063667
+  ...
+# Subtest: PTY cleanup completes when native enumeration exceeds its former three-second allowance
+ok 38 - PTY cleanup completes when native enumeration exceeds its former three-second allowance
+  ---
+  duration_ms: 3564.918958
+  ...
+# Subtest: PTY cleanup refusal still returns unconfirmed status with a loaded allowance
+ok 39 - PTY cleanup refusal still returns unconfirmed status with a loaded allowance
+  ---
+  duration_ms: 207.060625
+  ...
+# Subtest: PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops
+ok 40 - PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops
+  ---
+  duration_ms: 1653.49175
+  ...
+# Subtest: normal exit of the outer suite clears the independently owned PTY session
+ok 41 - normal exit of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 652.72325
+  ...
+# Subtest: SIGTERM of the outer suite clears the independently owned PTY session
+ok 42 - SIGTERM of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 591.165916
+  ...
+# Subtest: SIGKILL of the outer suite clears the independently owned PTY session
+ok 43 - SIGKILL of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 652.742875
+  ...
+# Subtest: SIGKILL shell job of the outer suite clears the independently owned PTY session
+ok 44 - SIGKILL shell job of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 548.747333
+  ...
+# Subtest: suite deadline of the outer suite clears the independently owned PTY session
+ok 45 - suite deadline of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 3182.380709
+  ...
+1..45
+# tests 45
+# suites 0
+# pass 45
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 13817.202792

@@ -1,0 +1,196 @@
+TAP version 13
+# Subtest: cancel signals compound gate descendants in a top-level slot
+not ok 1 - cancel signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 1573.430791
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:11:37'
+  failureType: 'testCodeFailure'
+  error: |-
+    the Node descendant receives the signal
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:41:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cancel signals compound gate descendants in a nested slot
+not ok 2 - cancel signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 1621.888041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:11:37'
+  failureType: 'testCodeFailure'
+  error: |-
+    the Node descendant receives the signal
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:41:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: spawnSync timeout signals compound gate descendants in a top-level slot
+not ok 3 - spawnSync timeout signals compound gate descendants in a top-level slot
+  ---
+  duration_ms: 15389.668041
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:45:37'
+  failureType: 'testCodeFailure'
+  error: ''
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ~
+  actual: ~
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:67:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: spawnSync timeout signals compound gate descendants in a nested slot
+not ok 4 - spawnSync timeout signals compound gate descendants in a nested slot
+  ---
+  duration_ms: 13956.881042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:45:37'
+  failureType: 'testCodeFailure'
+  error: ''
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ~
+  actual: ~
+  operator: 'notStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:67:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: the live synchronous caller watch spawns and hashes nothing after gate startup
+ok 5 - the live synchronous caller watch spawns and hashes nothing after gate startup
+  ---
+  duration_ms: 1123.862042
+  ...
+# Subtest: stopping the synchronous gate caller signals its top-level compound gate group
+not ok 6 - stopping the synchronous gate caller signals its top-level compound gate group
+  ---
+  duration_ms: 1593.237833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:95:37'
+  failureType: 'testCodeFailure'
+  error: 'orphaned gate descendant receives cancellation'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:116:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: stopping the synchronous gate caller signals its nested compound gate group
+not ok 7 - stopping the synchronous gate caller signals its nested compound gate group
+  ---
+  duration_ms: 1638.801292
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:95:37'
+  failureType: 'testCodeFailure'
+  error: 'orphaned gate descendant receives cancellation'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test/conformance.test.mjs:116:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+ok 8 - project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+  ---
+  duration_ms: 1558.379459
+  ...
+# Subtest: busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+ok 9 - busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+  ---
+  duration_ms: 2443.425541
+  ...
+# Subtest: a released legacy lock admits the waiting train and stays held for the complete batch
+ok 10 - a released legacy lock admits the waiting train and stays held for the complete batch
+  ---
+  duration_ms: 1716.27125
+  ...
+# Subtest: a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+not ok 11 - a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+  ---
+  duration_ms: 27895.780833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome: child /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs run fixture owner --lock-path /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-Quj2t3/slot -- /Users/rewt/.nvm/versions/node/v20.19.4/bin/node -e require('fs').writeFileSync("/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-Quj2t3/slot-ready",'ready');setInterval(()=>{},1000) did not exit within 27549ms
+
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Timeout.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/child.mjs:63:14)
+    listOnTimeout (node:internal/timers:581:17)
+    process.processTimers (node:internal/timers:519:7)
+  ...
+# Subtest: a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+not ok 12 - a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+  ---
+  duration_ms: 29287.922333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate: child /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs run fixture owner --lock-path /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-KhiZzt/slot -- /Users/rewt/.nvm/versions/node/v20.19.4/bin/node -e require('fs').writeFileSync("/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-KhiZzt/slot-ready",'ready');setInterval(()=>{},1000) did not exit within 28481ms
+
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Timeout.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/child.mjs:63:14)
+    listOnTimeout (node:internal/timers:581:17)
+    process.processTimers (node:internal/timers:519:7)
+  ...
+# Subtest: busy host slot has a live bounded receipt and the train inherits it after release
+not ok 13 - busy host slot has a live bounded receipt and the train inherits it after release
+  ---
+  duration_ms: 26239.578417
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    busy host slot has a live bounded receipt and the train inherits it after release: child /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs run fixture owner --lock-path /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-5eW2E2/slot -- /Users/rewt/.nvm/versions/node/v20.19.4/bin/node -e require('fs').writeFileSync("/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-5eW2E2/slot-ready",'ready');setInterval(()=>{},1000) did not exit within 26115ms
+
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Timeout.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/child.mjs:63:14)
+    listOnTimeout (node:internal/timers:581:17)
+    process.processTimers (node:internal/timers:519:7)
+  ...
+# Subtest: busy host slot caps without a red gate receipt or integration
+not ok 14 - busy host slot caps without a red gate receipt or integration
+  ---
+  duration_ms: 23729.954
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    busy host slot caps without a red gate receipt or integration: child /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test-slot/test-slot.mjs run fixture owner --lock-path /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-yOqYaT/slot -- /Users/rewt/.nvm/versions/node/v20.19.4/bin/node -e require('fs').writeFileSync("/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-HcHhUc/gate-profile-yOqYaT/slot-ready",'ready');setInterval(()=>{},1000) did not exit within 23612ms
+
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    Timeout.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/child.mjs:63:14)
+    listOnTimeout (node:internal/timers:581:17)
+    process.processTimers (node:internal/timers:519:7)
+  ...
+# Subtest: a declared competing process refuses before taking the slot or building
+ok 15 - a declared competing process refuses before taking the slot or building
+  ---
+  duration_ms: 261.686916
+  ...

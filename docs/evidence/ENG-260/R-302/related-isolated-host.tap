@@ -1,0 +1,2533 @@
+TAP version 13
+# Subtest: provider selection refuses automatic Linux bubblewrap and retains explicit providers
+ok 1 - provider selection refuses automatic Linux bubblewrap and retains explicit providers
+  ---
+  duration_ms: 51.152667
+  ...
+# Subtest: alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+ok 2 - alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+  ---
+  duration_ms: 46.671458
+  ...
+# Subtest: Claude-only scratch installation does not require or install Codex
+ok 3 - Claude-only scratch installation does not require or install Codex
+  ---
+  duration_ms: 1225.304792
+  ...
+# Subtest: real alternative sandbox denies outside, symlink, metadata, record, rename and network writes
+ok 4 - real alternative sandbox denies outside, symlink, metadata, record, rename and network writes # SKIP set MONITOR_TEST_ALTERNATIVE to sandbox-exec or bwrap outside a nested sandbox
+  ---
+  duration_ms: 0.07075
+  ...
+# Subtest: real filters remain functional through allocation, commit, check and fast-forward promotion
+ok 5 - real filters remain functional through allocation, commit, check and fast-forward promotion # SKIP set MONITOR_TEST_ALTERNATIVE to exercise real bounded Git filters
+  ---
+  duration_ms: 0.109125
+  ...
+# Subtest: real main-mode alternative guard protects linked shared records and leaves the native runtime writable
+ok 6 - real main-mode alternative guard protects linked shared records and leaves the native runtime writable # SKIP set MONITOR_TEST_ALTERNATIVE for the main-mode guard regression
+  ---
+  duration_ms: 0.039667
+  ...
+# sandbox command exceeded 300 milliseconds
+# Subtest: bounded commands kill descendants before they can write after a deadline
+ok 7 - bounded commands kill descendants before they can write after a deadline
+  ---
+  duration_ms: 1406.141167
+  ...
+# Subtest: Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+ok 8 - Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+  ---
+  duration_ms: 47.986917
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 9 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 498.606
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 10 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 469.431333
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 11 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1102.610417
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 12 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 874.031458
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 13 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 203.311708
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 14 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 522.985208
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 15 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 2608.745333
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 16 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 765.956167
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 17 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 796.459416
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 18 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 777.640375
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 19 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 937.8985
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 20 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1513.127166
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 21 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1307.412375
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 22 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1269.404291
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 23 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1543.443167
+  ...
+# Subtest: each bundled target matches its checksum, current source and native architecture
+ok 24 - each bundled target matches its checksum, current source and native architecture
+  ---
+  duration_ms: 3.981584
+  ...
+# Subtest: validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+ok 25 - validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+  ---
+  duration_ms: 348.711167
+  ...
+# Subtest: verified owner bytes are copied into private scratch with restricted modes
+ok 26 - verified owner bytes are copied into private scratch with restricted modes
+  ---
+  duration_ms: 2.888583
+  ...
+# Subtest: staged owner preserves the installed validation transport lifetime protocol
+ok 27 - staged owner preserves the installed validation transport lifetime protocol
+  ---
+  duration_ms: 4.004042
+  ...
+# Subtest: installed runtime snapshot carries the verified owner and validates without a compiler
+ok 28 - installed runtime snapshot carries the verified owner and validates without a compiler
+  ---
+  duration_ms: 1265.405875
+  ...
+# Subtest: missing binary uses only the bounded source-build fallback
+ok 29 - missing binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 330.749667
+  ...
+# Subtest: missing manifest uses only the bounded source-build fallback
+ok 30 - missing manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 396.456042
+  ...
+# Subtest: invalid manifest uses only the bounded source-build fallback
+ok 31 - invalid manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 318.996666
+  ...
+# Subtest: corrupt binary uses only the bounded source-build fallback
+ok 32 - corrupt binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 350.163041
+  ...
+# Subtest: stale source uses only the bounded source-build fallback
+ok 33 - stale source uses only the bounded source-build fallback
+  ---
+  duration_ms: 328.840042
+  ...
+# Subtest: symlink binary uses only the bounded source-build fallback
+ok 34 - symlink binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 335.556208
+  ...
+# Subtest: redirected bundle directory uses only the bounded source-build fallback
+ok 35 - redirected bundle directory uses only the bounded source-build fallback
+  ---
+  duration_ms: 383.73575
+  ...
+# Subtest: unavailable bundle and missing compiler refuse project execution
+ok 36 - unavailable bundle and missing compiler refuse project execution
+  ---
+  duration_ms: 60.729208
+  ...
+# Subtest: unavailable bundle and failure compiler refuse project execution
+ok 37 - unavailable bundle and failure compiler refuse project execution
+  ---
+  duration_ms: 57.957417
+  ...
+# Subtest: unavailable bundle and timeout compiler refuse project execution
+ok 38 - unavailable bundle and timeout compiler refuse project execution
+  ---
+  duration_ms: 63.464916
+  ...
+# Subtest: owner verification rejects a checksummed binary for the wrong architecture
+ok 39 - owner verification rejects a checksummed binary for the wrong architecture
+  ---
+  duration_ms: 65.249
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after completion
+ok 40 - no compiler preserves detached descendant cleanup after completion
+  ---
+  duration_ms: 3387.265583
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after deadline
+ok 41 - no compiler preserves detached descendant cleanup after deadline
+  ---
+  duration_ms: 4724.879792
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after wrapper-death
+ok 42 - no compiler preserves detached descendant cleanup after wrapper-death
+  ---
+  duration_ms: 3396.570834
+  ...
+# Subtest: x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 43 - x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 1.6825
+  ...
+# Subtest: arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 44 - arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 0.292209
+  ...
+# Subtest: detached double-fork descendants are gone after completion; unrelated same-group processes survive
+ok 45 - detached double-fork descendants are gone after completion; unrelated same-group processes survive
+  ---
+  duration_ms: 3411.167541
+  ...
+# Subtest: detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+ok 46 - detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+  ---
+  duration_ms: 4780.895667
+  ...
+# Subtest: descendants are cleaned after the JavaScript wrapper is killed
+ok 47 - descendants are cleaned after the JavaScript wrapper is killed
+  ---
+  duration_ms: 3232.536833
+  ...
+# validation lifetime marker is absent
+# sandbox-exec: sandbox_apply: Operation not permitted
+# Subtest: macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+ok 48 - macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+  ---
+  duration_ms: 555.233416
+  ...
+# Subtest: validation cannot signal an owner outside its inherited kernel boundary
+ok 49 - validation cannot signal an owner outside its inherited kernel boundary
+  ---
+  duration_ms: 165.31425
+  ...
+# Subtest: lifetime markers reject redirected scratch roots before provider construction
+ok 50 - lifetime markers reject redirected scratch roots before provider construction
+  ---
+  duration_ms: 7.979334
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (no-auth)
+ok 51 - pending Claude probe emits Linux evidence without a platform guard (no-auth)
+  ---
+  duration_ms: 951.52225
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (skip-live)
+ok 52 - pending Claude probe emits Linux evidence without a platform guard (skip-live)
+  ---
+  duration_ms: 1000.832167
+  ...
+# Subtest: acceptance setup failure removes its installed snapshot and keeps only evidence
+ok 53 - acceptance setup failure removes its installed snapshot and keeps only evidence
+  ---
+  duration_ms: 108.811667
+  ...
+# Subtest: acceptance allocation failure removes the first temporary root
+ok 54 - acceptance allocation failure removes the first temporary root
+  ---
+  duration_ms: 26.320292
+  ...
+# Subtest: acceptance evidence directory failure still removes its installed snapshot
+ok 55 - acceptance evidence directory failure still removes its installed snapshot
+  ---
+  duration_ms: 29.632833
+  ...
+# Subtest: Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection
+ok 56 - Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection # SKIP requires a Linux kernel with io_uring enabled
+  ---
+  duration_ms: 0.051917
+  ...
+# Subtest: Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+ok 57 - Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+  ---
+  duration_ms: 3.02975
+  ...
+# Subtest: bare bubblewrap and renamed symlink aliases require experimental selection
+ok 58 - bare bubblewrap and renamed symlink aliases require experimental selection
+  ---
+  duration_ms: 1.747708
+  ...
+# Subtest: explicit experimental selection survives repeated selection and builds the gated provider command
+ok 59 - explicit experimental selection survives repeated selection and builds the gated provider command
+  ---
+  duration_ms: 1.701375
+  ...
+# Subtest: direct bubblewrap launcher requires opt-in before launching a provider
+ok 60 - direct bubblewrap launcher requires opt-in before launching a provider
+  ---
+  duration_ms: 278.872625
+  ...
+# Subtest: Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+ok 61 - Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+  ---
+  duration_ms: 113.875416
+  ...
+# Subtest: installation requires and preserves experimental selection while Codex installs keep their native default
+ok 62 - installation requires and preserves experimental selection while Codex installs keep their native default
+  ---
+  duration_ms: 96.174958
+  ...
+# Subtest: macOS copies nonempty files and refuses a redirected temporary root after profile construction
+ok 63 - macOS copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.158709
+  ...
+# Subtest: Codex copies nonempty files and refuses a redirected temporary root after profile construction
+ok 64 - Codex copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.139292
+  ...
+# Subtest: finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+ok 65 - finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+  ---
+  duration_ms: 1755.190125
+  ...
+# Subtest: dry-run previews finished tabs and never closes, including through housekeeping --once
+ok 66 - dry-run previews finished tabs and never closes, including through housekeeping --once
+  ---
+  duration_ms: 1190.761916
+  ...
+# Subtest: a working or blocked change at the final recheck preserves the finished tab
+ok 67 - a working or blocked change at the final recheck preserves the finished tab
+  ---
+  duration_ms: 1277.513292
+  ...
+# Subtest: new occupants revealed after the final pane list preserve their tab
+ok 68 - new occupants revealed after the final pane list preserve their tab
+  ---
+  duration_ms: 2192.115333
+  ...
+# Subtest: conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+ok 69 - conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+  ---
+  duration_ms: 0.351959
+  ...
+# Subtest: housekeeping --once preserves waiting reports, blocking items and missing item evidence
+ok 70 - housekeeping --once preserves waiting reports, blocking items and missing item evidence
+  ---
+  duration_ms: 5734.853875
+  ...
+# Subtest: automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+ok 71 - automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+  ---
+  duration_ms: 3326.606792
+  ...
+# Subtest: replacement identity and a waiting report at the final observation prevent closing
+ok 72 - replacement identity and a waiting report at the final observation prevent closing
+  ---
+  duration_ms: 2012.083083
+  ...
+# Subtest: a reused worker name with a newer open run and an extra unnamed occupant never close
+ok 73 - a reused worker name with a newer open run and an extra unnamed occupant never close
+  ---
+  duration_ms: 724.687417
+  ...
+# Subtest: a matching worker cannot authorize another occupant reusing its name
+ok 74 - a matching worker cannot authorize another occupant reusing its name
+  ---
+  duration_ms: 1123.883375
+  ...
+# Subtest: only this Git project is tidied and the caller tab is preserved
+ok 75 - only this Git project is tidied and the caller tab is preserved
+  ---
+  duration_ms: 692.495125
+  ...
+# Subtest: finished reviews and old settle sessions use the existing tidy policy
+ok 76 - finished reviews and old settle sessions use the existing tidy policy
+  ---
+  duration_ms: 1531.784167
+  ...
+# Subtest: three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+ok 77 - three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+  ---
+  duration_ms: 3046.831458
+  ...
+# Subtest: supported review routes need a matching topic verdict newer than their session
+ok 78 - supported review routes need a matching topic verdict newer than their session
+  ---
+  duration_ms: 0.215458
+  ...
+# Subtest: automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+ok 79 - automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+  ---
+  duration_ms: 13093.342
+  ...
+# Subtest: replacement reviewers at the final observation keep their tabs without worker runs
+ok 80 - replacement reviewers at the final observation keep their tabs without worker runs
+  ---
+  duration_ms: 6369.95475
+  ...
+# Subtest: review evidence cannot override a recorded worker waiting on a blocker
+ok 81 - review evidence cannot override a recorded worker waiting on a blocker
+  ---
+  duration_ms: 567.268458
+  ...
+# Subtest: failed and incomplete reads close nothing and are logged without stopping housekeeping
+ok 82 - failed and incomplete reads close nothing and are logged without stopping housekeeping
+  ---
+  duration_ms: 2151.172833
+  ...
+# Subtest: every tick tidies despite the ten-minute cleanup interval and a tidy failure
+ok 83 - every tick tidies despite the ten-minute cleanup interval and a tidy failure
+  ---
+  duration_ms: 5345.783542
+  ...
+# Subtest: auto-tidy preserves a focused finished worker at initial and final observation
+ok 84 - auto-tidy preserves a focused finished worker at initial and final observation
+  ---
+  duration_ms: 1281.623792
+  ...
+# Subtest: affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+ok 85 - affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+  ---
+  duration_ms: 3.906125
+  ...
+# Subtest: real import closure selects the previously missed release files and records bounded coverage
+ok 86 - real import closure selects the previously missed release files and records bounded coverage
+  ---
+  duration_ms: 369.672708
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 87 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 233.02225
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 88 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 161.36475
+  ...
+# Subtest: bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+ok 89 - bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+  ---
+  duration_ms: 124.193666
+  ...
+# Subtest: unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+ok 90 - unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+  ---
+  duration_ms: 102.0045
+  ...
+# Subtest: cached and duplicated green proofs never inflate gate time or executions
+ok 91 - cached and duplicated green proofs never inflate gate time or executions
+  ---
+  duration_ms: 97.504625
+  ...
+# Subtest: window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+ok 92 - window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+  ---
+  duration_ms: 108.481667
+  ...
+# Subtest: linked worktrees read the same canonical receipts; text and JSON commands make no changes
+ok 93 - linked worktrees read the same canonical receipts; text and JSON commands make no changes
+  ---
+  duration_ms: 238.865875
+  ...
+# Subtest: missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+ok 94 - missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+  ---
+  duration_ms: 113.810458
+  ...
+# Subtest: TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+ok 95 - TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+  ---
+  duration_ms: 0.671542
+  ...
+# Subtest: slowest steps sum sequential streams per gate rather than treating streams as whole steps
+ok 96 - slowest steps sum sequential streams per gate rather than treating streams as whole steps
+  ---
+  duration_ms: 101.561541
+  ...
+# Subtest: unattributed failures and unavailable Git history remain explicit hints
+ok 97 - unattributed failures and unavailable Git history remain explicit hints
+  ---
+  duration_ms: 132.045542
+  ...
+# Subtest: malformed receipts are skipped with evidence rather than crashing the project report
+ok 98 - malformed receipts are skipped with evidence rather than crashing the project report
+  ---
+  duration_ms: 125.648833
+  ...
+# Subtest: empty projects return unavailable rates and medians instead of invented zero timings
+ok 99 - empty projects return unavailable rates and medians instead of invented zero timings
+  ---
+  duration_ms: 141.129416
+  ...
+# Subtest: archived baseline imports read-only with selection bias and lower bounds separate from the current window
+ok 100 - archived baseline imports read-only with selection bias and lower bounds separate from the current window
+  ---
+  duration_ms: 196.076292
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 101 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6705.638583
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 102 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2874.965084
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 103 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1645.411917
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 104 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 2285.059541
+  ...
+# Fixture cleanup: PID 41142 start time or command changed; SIGKILL skipped
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 105 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1890.995292
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 106 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 661.799625
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 107 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 2138.001708
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 108 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2217.98325
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 109 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 3490.506167
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 110 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2409.460416
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 111 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2547.623709
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 112 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 4964.561583
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 113 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1741.669333
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 114 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 4707.238833
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 115 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 3709.333458
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 116 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 939.394333
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+not ok 117 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 307.8205
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'hookFailed'
+  error: 'Cannot confirm fixture inbox owner argv: /Users/rewt/development/rewt/.org/supervisor/inbox.log'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    stopFixtureInbox (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/inbox.mjs:17:11)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/promote/test/promote.test.mjs:90:41)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 118 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 404.469042
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 119 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 833.543584
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 120 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4502.149458
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 121 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4444.756125
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 122 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 2024.621333
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 123 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 2449.378959
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 124 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 498.645625
+  ...
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 125 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 3230.007375
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 126 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 3923.232792
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 127 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1365.352792
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 128 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 7040.542334
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 129 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 2405.464375
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 130 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 3004.17125
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 131 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 3815.677625
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 132 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1456.0735
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 133 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 4262.090375
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 134 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 4429.130667
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 135 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 2356.265333
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 136 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 4568.605041
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 137 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 9062.0665
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 138 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 2016.525875
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 139 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2312.668625
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 140 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2575.311041
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 141 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 5006.109292
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 142 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 5588.52475
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 143 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 7148.623708
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 144 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 7516.956667
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 145 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 5936.6985
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 146 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 9222.579
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 147 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 3659.774583
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 148 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 8177.155542
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 149 - a paused check exposes its clock atomically while validation is still running
+  ---
+  duration_ms: 2393.315542
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 150 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+  ---
+  duration_ms: 6402.032791
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 151 - red validation finishes the published clock and retains its real exit
+  ---
+  duration_ms: 1465.843
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 152 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+  ---
+  duration_ms: 7729.201542
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 153 - validation that throws closes its telemetry clock without inventing green evidence
+  ---
+  duration_ms: 1467.132167
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 154 - affected test supplements run once in the batch gate, are recorded and block a red landing
+  ---
+  duration_ms: 4597.8775
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 155 - a changed gate cannot omit a bound deferred test file
+  ---
+  duration_ms: 1517.179333
+  ...
+# Subtest: copied default train promotes without the opt-in engine or workflow definitions
+ok 156 - copied default train promotes without the opt-in engine or workflow definitions
+  ---
+  duration_ms: 1040.399584
+  ...
+# Subtest: copied opt-in train carries its engine and workflow definitions and promotes with receipts
+ok 157 - copied opt-in train carries its engine and workflow definitions and promotes with receipts
+  ---
+  duration_ms: 1067.1515
+  ...
+# Subtest: promotion lock stays held while the opt-in engine loads and releases on a load failure
+ok 158 - promotion lock stays held while the opt-in engine loads and releases on a load failure
+  ---
+  duration_ms: 1292.477375
+  ...
+# Subtest: explicit train workflow flag produces per-stage receipts and preserves the actual green gate proof
+ok 159 - explicit train workflow flag produces per-stage receipts and preserves the actual green gate proof
+  ---
+  duration_ms: 854.466125
+  ...
+# Subtest: engine red receipts retain the real gate exit and cannot reach integration
+ok 160 - engine red receipts retain the real gate exit and cannot reach integration
+  ---
+  duration_ms: 655.902417
+  ...
+# Subtest: default train does not execute a workflow or create workflow receipts
+ok 161 - default train does not execute a workflow or create workflow receipts
+  ---
+  duration_ms: 994.022458
+  ...
+# Subtest: a pinned workflow hash refuses a changed definition even when resumed without the flag
+ok 162 - a pinned workflow hash refuses a changed definition even when resumed without the flag
+  ---
+  duration_ms: 228.615542
+  ...
+# Subtest: the promotion queue persists and forwards the workflow choice independently of worker environment
+ok 163 - the promotion queue persists and forwards the workflow choice independently of worker environment
+  ---
+  duration_ms: 1692.023458
+  ...
+# Subtest: release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+ok 164 - release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+  ---
+  duration_ms: 934.409458
+  ...
+# Subtest: unconfigured release uses npm test, initializes its record and never executes ship
+ok 165 - unconfigured release uses npm test, initializes its record and never executes ship
+  ---
+  duration_ms: 1310.525875
+  ...
+# Subtest: unset and missing preflight inputs remain retryable on the same commit
+ok 166 - unset and missing preflight inputs remain retryable on the same commit
+  ---
+  duration_ms: 2016.312834
+  ...
+# Subtest: unset and missing preflight inputs remain retryable after main advances
+ok 167 - unset and missing preflight inputs remain retryable after main advances
+  ---
+  duration_ms: 2169.06125
+  ...
+# Subtest: a signaled preflight is retryable and malformed preflight declarations are rejected
+ok 168 - a signaled preflight is retryable and malformed preflight declarations are rejected
+  ---
+  duration_ms: 1632.762417
+  ...
+# Subtest: a preflight launch error creates no candidate and can be corrected on a later commit
+ok 169 - a preflight launch error creates no candidate and can be corrected on a later commit
+  ---
+  duration_ms: 1557.563417
+  ...
+# Subtest: two real lane promotions become one tagged batch and one operator question
+ok 170 - two real lane promotions become one tagged batch and one operator question
+  ---
+  duration_ms: 2673.363208
+  ...
+# Subtest: publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+ok 171 - publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+  ---
+  duration_ms: 2104.905917
+  ...
+# Subtest: release replies require normalized yes and leave later promotions eligible
+ok 172 - release replies require normalized yes and leave later promotions eligible
+  ---
+  duration_ms: 4376.767208
+  ...
+# Subtest: release replies require normalized no and leave later promotions eligible
+ok 173 - release replies require normalized no and leave later promotions eligible
+  ---
+  duration_ms: 4257.182542
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered yes
+ok 174 - agents cannot start a run on an operator-reserved question answered yes
+  ---
+  duration_ms: 2637.535667
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered no
+ok 175 - agents cannot start a run on an operator-reserved question answered no
+  ---
+  duration_ms: 2781.513917
+  ...
+# Subtest: low load, drained promotion queue, clean base and supervisor ownership are required
+ok 176 - low load, drained promotion queue, clean base and supervisor ownership are required
+  ---
+  duration_ms: 586.986167
+  ...
+# Subtest: red gate is durable, never repeated, and a later promotion may become a new candidate
+ok 177 - red gate is durable, never repeated, and a later promotion may become a new candidate
+  ---
+  duration_ms: 2422.572834
+  ...
+# Subtest: interrupted start, duplicate record writes and older folds preserve once-only semantics
+ok 178 - interrupted start, duplicate record writes and older folds preserve once-only semantics
+  ---
+  duration_ms: 702.989542
+  ...
+# Subtest: tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+ok 179 - tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+  ---
+  duration_ms: 1708.467625
+  ...
+# Subtest: snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+ok 180 - snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+  ---
+  duration_ms: 1067.257625
+  ...
+# Subtest: supervisor, discovery and console recover gate evidence and the operator decision from the record
+ok 181 - supervisor, discovery and console recover gate evidence and the operator decision from the record
+  ---
+  duration_ms: 1682.502709
+  ...
+# Subtest: a running gate excludes a second release and a direct promotion with the shared lock
+ok 182 - a running gate excludes a second release and a direct promotion with the shared lock
+  ---
+  duration_ms: 1244.021292
+  ...
+# Subtest: gate result receipts are immutable and duplicate completion creates no extra operator question
+ok 183 - gate result receipts are immutable and duplicate completion creates no extra operator question
+  ---
+  duration_ms: 1095.969584
+  ...
+# Subtest: preparation env is scoped and a signaled gate records interruption without a replay
+ok 184 - preparation env is scoped and a signaled gate records interruption without a replay
+  ---
+  duration_ms: 1315.896084
+  ...
+# Subtest: scratch preview runs preparation with inherited dependency-skip switches removed
+ok 185 - scratch preview runs preparation with inherited dependency-skip switches removed
+  ---
+  duration_ms: 1099.071458
+  ...
+# Subtest: a moved candidate tag cannot reuse its green evidence
+ok 186 - a moved candidate tag cannot reuse its green evidence
+  ---
+  duration_ms: 1149.3335
+  ...
+# Subtest: a held host slot defers release before cutting or claiming a candidate
+ok 187 - a held host slot defers release before cutting or claiming a candidate
+  ---
+  duration_ms: 1029.710583
+  ...
+# Subtest: result recovery preserves an interrupted claim until the actual result is durable and never replays its gate
+ok 188 - result recovery preserves an interrupted claim until the actual result is durable and never replays its gate
+  ---
+  duration_ms: 1493.944
+  ...
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 189 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 727.942875
+  ...
+# Subtest: fix_round is left in flight
+ok 190 - fix_round is left in flight
+  ---
+  duration_ms: 487.943917
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 191 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 603.964625
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 192 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 671.7885
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 193 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 537.491167
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 194 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 519.4365
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 195 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 503.697125
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 196 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 501.118125
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 197 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 500.4545
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 198 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 465.892833
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 199 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 643.507292
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 200 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 494.719583
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 201 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 476.749625
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 202 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 481.178875
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 203 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 485.565584
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 204 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 469.371542
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 205 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 490.291833
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 206 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 477.761917
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 207 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 490.345416
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 208 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 486.25075
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 209 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 382.347583
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 210 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 345.892458
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 211 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 373.20175
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 212 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 343.4175
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 213 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 333.743959
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 214 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 363.917208
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 215 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 444.382333
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 216 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 462.9065
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 217 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 633.950875
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 218 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 385.304792
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 219 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 386.109167
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 220 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 342.012625
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 221 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 438.762334
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 222 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 394.891125
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 223 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 530.896334
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 224 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 549.139584
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 225 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 492.188375
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 226 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 504.615375
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 227 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 380.275834
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 228 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 396.988333
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 229 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 400.184833
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 230 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 384.8985
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 231 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 366.072792
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 232 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 373.34725
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 233 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 388.969125
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 234 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 364.400833
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 235 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 404.036416
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 236 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 405.493291
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 237 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 401.067833
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 238 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 494.464291
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 239 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 482.338583
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 240 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 663.174167
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 241 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 359.58175
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 242 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 479.670959
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 243 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 428.874708
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 244 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 472.064625
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 245 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 454.652625
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 246 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 438.34175
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 247 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 453.587583
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 248 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 464.476542
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 249 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 642.1045
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 250 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 333.486208
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 251 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 367.845166
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 252 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 606.045291
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 253 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 322.576542
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 254 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 311.981542
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 255 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 309.392
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 256 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 348.226583
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 257 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 708.027917
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 258 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 539.491833
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 259 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 800.31375
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 260 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 405.98325
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 261 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 400.0715
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 262 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 612.065333
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 263 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1045.088834
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 264 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 866.659834
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 265 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 799.152584
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 266 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 827.619833
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 267 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 553.596792
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 268 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 5476.962167
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 269 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 6097.849166
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 270 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 6857.224166
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+ok 271 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 7602.000458
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+ok 272 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 7110.288791
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 273 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 8578.171416
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing:
+ok 274 - stderr-only failed action preserves refusal instead of JSON parsing:
+  ---
+  duration_ms: 464.218333
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 275 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 455.7345
+  ...
+# Subtest: claude: captured ANSI empty, typed and placeholder composers
+ok 276 - claude: captured ANSI empty, typed and placeholder composers
+  ---
+  duration_ms: 1.192334
+  ...
+# Subtest: codex: captured ANSI empty, typed and placeholder composers
+ok 277 - codex: captured ANSI empty, typed and placeholder composers
+  ---
+  duration_ms: 0.50675
+  ...
+# Subtest: compound styles, wrapped typing, and normal text identical to a placeholder remain busy
+ok 278 - compound styles, wrapped typing, and normal text identical to a placeholder remain busy
+  ---
+  duration_ms: 0.19375
+  ...
+# Subtest: Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome
+ok 279 - Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome
+  ---
+  duration_ms: 0.325334
+  ...
+# Subtest: claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 280 - claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+  ---
+  duration_ms: 469.951
+  ...
+# Subtest: codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 281 - codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+  ---
+  duration_ms: 529.526
+  ...
+# Subtest: two quiet reads use the default three-second separation
+ok 282 - two quiet reads use the default three-second separation
+  ---
+  duration_ms: 3489.349416
+  ...
+# Subtest: typing between quiet reads restarts the confirmation window
+ok 283 - typing between quiet reads restarts the confirmation window
+  ---
+  duration_ms: 777.011208
+  ...
+# Subtest: the immediate final read catches a draft introduced after the confirmation pair
+ok 284 - the immediate final read catches a draft introduced after the confirmation pair
+  ---
+  duration_ms: 756.584291
+  ...
+# Subtest: non-idle status, unknown layout and failed reads retain capped notices
+ok 285 - non-idle status, unknown layout and failed reads retain capped notices
+  ---
+  duration_ms: 2814.494708
+  ...
+# Subtest: cap retains FIFO; a later caller drains older notices once, with stable-id deduplication
+ok 286 - cap retains FIFO; a later caller drains older notices once, with stable-id deduplication
+  ---
+  duration_ms: 955.321
+  ...
+# Subtest: concurrent callers serialize notices without interleaving or duplicate prompts
+ok 287 - concurrent callers serialize notices without interleaving or duplicate prompts
+  ---
+  duration_ms: 927.416709
+  ...
+# Subtest: a definite pre-input refusal retries through the empty-composer gate
+ok 288 - a definite pre-input refusal retries through the empty-composer gate
+  ---
+  duration_ms: 681.056125
+  ...
+# Subtest: lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate
+ok 289 - lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate
+  ---
+  duration_ms: 1104.909292
+  ...
+# Subtest: a lone capped notice delivers after its caller exits, without another enqueue or manual drain
+ok 290 - a lone capped notice delivers after its caller exits, without another enqueue or manual drain
+  ---
+  duration_ms: 603.245125
+  ...
+# Subtest: a dead sender before the prompt side effect replays pending intent with the same ID
+ok 291 - a dead sender before the prompt side effect replays pending intent with the same ID
+  ---
+  duration_ms: 1417.010209
+  ...
+# Subtest: a dead sender after the prompt side effect replays pending intent with the same ID
+ok 292 - a dead sender after the prompt side effect replays pending intent with the same ID
+  ---
+  duration_ms: 1399.985834
+  ...
+# Subtest: torn inbox tails fail closed and preserve their bytes
+ok 293 - torn inbox tails fail closed and preserve their bytes
+  ---
+  duration_ms: 5.770084
+  ...
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 294 - repository does not track a Codex project hook that can interrupt unattended workers
+  ---
+  duration_ms: 6.223042
+  ...
+# Subtest: durable supervisor pane binding survives native restore, clear and compact without adapter env
+ok 295 - durable supervisor pane binding survives native restore, clear and compact without adapter env
+  ---
+  duration_ms: 2186.784083
+  ...
+# Subtest: claude adapter reuses the project SessionStart entry exactly once
+ok 296 - claude adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 1372.02525
+  ...
+# Subtest: codex supervisor adapter injects SessionStart without a project hook
+ok 297 - codex supervisor adapter injects SessionStart without a project hook
+  ---
+  duration_ms: 1362.363208
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 298 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 1169.243083
+  ...
+# Subtest: adapter exports its known supervisor agent identity
+ok 299 - adapter exports its known supervisor agent identity
+  ---
+  duration_ms: 94.5565
+  ...
+# Subtest: project chat adapter and durable restore retain ops separately from the chat name
+ok 300 - project chat adapter and durable restore retain ops separately from the chat name
+  ---
+  duration_ms: 425.403459
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 301 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 369.370125
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 302 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 968.764958
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 303 - entry respects {"enabled":false}
+  ---
+  duration_ms: 211.210125
+  ...
+# Subtest: entry respects {"resume":false}
+ok 304 - entry respects {"resume":false}
+  ---
+  duration_ms: 215.565834
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 305 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 194.0225
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 306 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 224.960167
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 307 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 405.766958
+  ...
+# Subtest: Claude project hook delivers supervisor entry on startup
+ok 308 - Claude project hook delivers supervisor entry on startup
+  ---
+  duration_ms: 412.275875
+  ...
+# Subtest: Claude project hook delivers supervisor entry on resume
+ok 309 - Claude project hook delivers supervisor entry on resume
+  ---
+  duration_ms: 409.104666
+  ...
+# Subtest: Claude project hook delivers supervisor entry on clear
+ok 310 - Claude project hook delivers supervisor entry on clear
+  ---
+  duration_ms: 387.056292
+  ...
+# Subtest: Claude project hook delivers supervisor entry on compact
+ok 311 - Claude project hook delivers supervisor entry on compact
+  ---
+  duration_ms: 420.702334
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 312 - hook skips or explains unmarked without blocking startup
+  ---
+  duration_ms: 143.460875
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 313 - hook skips or explains worker without blocking startup
+  ---
+  duration_ms: 113.061959
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 314 - hook skips or explains lane without blocking startup
+  ---
+  duration_ms: 163.554042
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 315 - hook skips or explains foreign without blocking startup
+  ---
+  duration_ms: 150.55825
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 316 - hook skips or explains bad-input without blocking startup
+  ---
+  duration_ms: 150.239041
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 317 - hook skips or explains missing-record without blocking startup
+  ---
+  duration_ms: 359.957917
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 318 - hook skips or explains worker-bypass without blocking startup
+  ---
+  duration_ms: 123.959583
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 319 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 514.749833
+  ...
+# Subtest: adapters use short fleet temp and bind both roles with native supervisor hooks
+ok 320 - adapters use short fleet temp and bind both roles with native supervisor hooks
+  ---
+  duration_ms: 4152.854
+  ...
+# Subtest: entry safely handles STOP
+ok 321 - entry safely handles STOP
+  ---
+  duration_ms: 330.458916
+  ...
+# Subtest: entry safely handles invalid-config
+ok 322 - entry safely handles invalid-config
+  ---
+  duration_ms: 480.695375
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 323 - entry safely handles invalid-pid
+  ---
+  duration_ms: 386.959958
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 324 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 405.55475
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 325 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 288.780125
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 326 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 218.325833
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 327 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 216.412084
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 328 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 212.825542
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 329 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 185.721791
+  ...
+# Subtest: watch recovery handles reused identity without blocking entry
+ok 330 - watch recovery handles reused identity without blocking entry
+  ---
+  duration_ms: 543.818083
+  ...
+# Subtest: watch recovery handles unreadable identity without blocking entry
+ok 331 - watch recovery handles unreadable identity without blocking entry
+  ---
+  duration_ms: 366.76025
+  ...
+# Subtest: watch recovery handles legacy-live identity without blocking entry
+ok 332 - watch recovery handles legacy-live identity without blocking entry
+  ---
+  duration_ms: 410.35475
+  ...
+# Subtest: watch recovery handles changed-during-entry identity without blocking entry
+ok 333 - watch recovery handles changed-during-entry identity without blocking entry
+  ---
+  duration_ms: 413.583292
+  ...
+# Subtest: empty supervisor environment and null dispatch recipient use the supervisor fallback
+ok 334 - empty supervisor environment and null dispatch recipient use the supervisor fallback
+  ---
+  duration_ms: 504.570625
+  ...
+# Subtest: housekeeping snapshot reports reused birth without changing the lock
+ok 335 - housekeeping snapshot reports reused birth without changing the lock
+  ---
+  duration_ms: 136.779292
+  ...
+# Subtest: housekeeping snapshot reports unreadable birth without changing the lock
+ok 336 - housekeeping snapshot reports unreadable birth without changing the lock
+  ---
+  duration_ms: 115.221125
+  ...
+# Subtest: housekeeping snapshot reports legacy-live birth without changing the lock
+ok 337 - housekeeping snapshot reports legacy-live birth without changing the lock
+  ---
+  duration_ms: 131.816291
+  ...
+# Subtest: housekeeping resume replaces a reused PID without signaling the replacement process
+ok 338 - housekeeping resume replaces a reused PID without signaling the replacement process
+  ---
+  duration_ms: 672.8385
+  ...
+# Subtest: claude interactive --resume through automatic adapter preserves supervisor entry and worker guards
+ok 339 - claude interactive --resume through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1394.1305
+  ...
+# Subtest: claude interactive --continue through automatic adapter preserves supervisor entry and worker guards
+ok 340 - claude interactive --continue through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1445.304459
+  ...
+# Subtest: codex interactive resume through automatic adapter preserves supervisor entry and worker guards
+ok 341 - codex interactive resume through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1347.732167
+  ...
+# Subtest: Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+ok 342 - Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+  ---
+  duration_ms: 1020.463125
+  ...
+# Subtest: claude nested headless launch cannot inherit supervisor recognition
+ok 343 - claude nested headless launch cannot inherit supervisor recognition
+  ---
+  duration_ms: 639.792208
+  ...
+# Subtest: codex nested headless launch cannot inherit supervisor recognition
+ok 344 - codex nested headless launch cannot inherit supervisor recognition
+  ---
+  duration_ms: 691.428917
+  ...
+# Subtest: status derives all lane stages and timing without record mutations or model calls
+ok 345 - status derives all lane stages and timing without record mutations or model calls
+  ---
+  duration_ms: 576.377125
+  ...
+# Subtest: status shows correction runs as fix and retains recent autopilot receipts
+ok 346 - status shows correction runs as fix and retains recent autopilot receipts
+  ---
+  duration_ms: 389.363416
+  ...
+# Subtest: a correction moves from fix to its own review and displays the active reviewer metadata
+ok 347 - a correction moves from fix to its own review and displays the active reviewer metadata
+  ---
+  duration_ms: 442.471916
+  ...
+# Subtest: status warns and omits structurally damaged action receipts before sorting or mapping
+ok 348 - status warns and omits structurally damaged action receipts before sorting or mapping
+  ---
+  duration_ms: 235.923042
+  ...
+# Subtest: unavailable Herdr and malformed receipts are visible without changing state
+ok 349 - unavailable Herdr and malformed receipts are visible without changing state
+  ---
+  duration_ms: 189.282042
+  ...
+# Subtest: status CLI is read-only from a linked checkout and does not require a supervisor role
+ok 350 - status CLI is read-only from a linked checkout and does not require a supervisor role
+  ---
+  duration_ms: 393.768917
+  ...
+# Subtest: review display uses matching session provider/model and excludes foreign session metadata
+ok 351 - review display uses matching session provider/model and excludes foreign session metadata
+  ---
+  duration_ms: 242.377625
+  ...
+# Subtest: removed completed legacy lanes are history rather than active review lanes
+ok 352 - removed completed legacy lanes are history rather than active review lanes
+  ---
+  duration_ms: 305.293541
+  ...
+# Subtest: the current reviewer matches the configured opaque route and verified occupant, working before idle
+ok 353 - the current reviewer matches the configured opaque route and verified occupant, working before idle
+  ---
+  duration_ms: 348.606416
+  ...
+# Subtest: recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+ok 354 - recorded reports in retained checkouts are not active review without live work or an in-progress settlement
+  ---
+  duration_ms: 557.790333
+  ...
+# Subtest: open runs precede only today’s landed runs and refused promotion is blocked
+ok 355 - open runs precede only today’s landed runs and refused promotion is blocked
+  ---
+  duration_ms: 759.660583
+  ...
+# Subtest: a blocked report with no live session keeps its completed duration instead of counting idle hours
+ok 356 - a blocked report with no live session keeps its completed duration instead of counting idle hours
+  ---
+  duration_ms: 550.401708
+  ...
+# Subtest: cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+ok 357 - cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+  ---
+  duration_ms: 1404.854583
+  ...
+# Subtest: cold start Lessons handles empty records and terminal controls in claims
+ok 358 - cold start Lessons handles empty records and terminal controls in claims
+  ---
+  duration_ms: 682.529667
+  ...
+# Subtest: cold start surfaces host pressure and memory/CPU process evidence without changing record status
+ok 359 - cold start surfaces host pressure and memory/CPU process evidence without changing record status
+  ---
+  duration_ms: 153.460584
+  ...
+# Subtest: cold start and entry policy expose command basenames and resource figures without process argv
+ok 360 - cold start and entry policy expose command basenames and resource figures without process argv
+  ---
+  duration_ms: 270.139084
+  ...
+# Subtest: supervisor handle exposes review memory wait before pressure clears
+ok 361 - supervisor handle exposes review memory wait before pressure clears
+  ---
+  duration_ms: 9317.098708
+  ...
+# Subtest: supervisor handle exposes correction memory wait before pressure clears
+ok 362 - supervisor handle exposes correction memory wait before pressure clears
+  ---
+  duration_ms: 11578.050708
+  ...
+# Subtest: handle returns capped findings and promotion records explicit acceptance with exact heads
+ok 363 - handle returns capped findings and promotion records explicit acceptance with exact heads
+  ---
+  duration_ms: 7985.540708
+  ...
+# Subtest: handle explicitly sends capped findings back once and adopts its saved correction
+ok 364 - handle explicitly sends capped findings back once and adopts its saved correction
+  ---
+  duration_ms: 7951.153
+  ...
+# Subtest: STOP arriving during review retains a resumable correction without launching another worker
+ok 365 - STOP arriving during review retains a resumable correction without launching another worker
+  ---
+  duration_ms: 7334.0695
+  ...
+# Subtest: supervisor binds head and run into the queue and retries confirmed refusals with history
+ok 366 - supervisor binds head and run into the queue and retries confirmed refusals with history
+  ---
+  duration_ms: 9525.508458
+  ...
+# Subtest: bound promotion rechecks queued runs and record changes during validation before integration
+ok 367 - bound promotion rechecks queued runs and record changes during validation before integration
+  ---
+  duration_ms: 18776.085375
+  ...
+# Subtest: late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+ok 368 - late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+  ---
+  duration_ms: 10004.82125
+  ...
+# Subtest: late original and correction notices after lane removal preserve promotion guards and never replay settlement
+ok 369 - late original and correction notices after lane removal preserve promotion guards and never replay settlement
+  ---
+  duration_ms: 15183.897375
+  ...
+# Subtest: refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+ok 370 - refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+  ---
+  duration_ms: 5998.030292
+  ...
+# Subtest: supervisor entry and final notices carry the unconfigured cycle through actual promotion
+ok 371 - supervisor entry and final notices carry the unconfigured cycle through actual promotion
+  ---
+  duration_ms: 19118.400125
+  ...
+# Subtest: cold start includes routes, priorities, history across midnight and a durable explicit reading cursor
+ok 372 - cold start includes routes, priorities, history across midnight and a durable explicit reading cursor
+  ---
+  duration_ms: 1209.003583
+  ...
+# Subtest: ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+ok 373 - ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+  ---
+  duration_ms: 1838.083291
+  ...
+# Subtest: workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+ok 374 - workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+  ---
+  duration_ms: 1731.157083
+  ...
+# Subtest: non-done reports hand off substance without review; saved enqueue uncertainty never replays
+ok 375 - non-done reports hand off substance without review; saved enqueue uncertainty never replays
+  ---
+  duration_ms: 1344.355292
+  ...
+# Subtest: full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+ok 376 - full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+  ---
+  duration_ms: 1062.290542
+  ...
+# Subtest: conditional record completion preserves newer work, unresolved and declined blockers
+ok 377 - conditional record completion preserves newer work, unresolved and declined blockers
+  ---
+  duration_ms: 924.495417
+  ...
+# Subtest: a disappeared checkout retains its open record run through a dispatch identity receipt
+ok 378 - a disappeared checkout retains its open record run through a dispatch identity receipt
+  ---
+  duration_ms: 274.444666
+  ...
+# Subtest: promotion validation can read Git after the old injected 15-second command deadline
+ok 379 - promotion validation can read Git after the old injected 15-second command deadline
+  ---
+  duration_ms: 15362.216708
+  ...
+# Subtest: a nested bounded suite may exceed one command deadline while ordinary commands retain their bound
+ok 380 - a nested bounded suite may exceed one command deadline while ordinary commands retain their bound
+  ---
+  duration_ms: 15635.977583
+  ...
+# Subtest: teardown confirms the detached owner group and stops its transport first
+ok 381 - teardown confirms the detached owner group and stops its transport first
+  ---
+  duration_ms: 3.181709
+  ...
+# Subtest: teardown confirms the contained test group and stops its transport first
+ok 382 - teardown confirms the contained test group and stops its transport first
+  ---
+  duration_ms: 1.010875
+  ...
+# Subtest: a absent owner candidate never authorizes a signal
+ok 383 - a absent owner candidate never authorizes a signal
+  ---
+  duration_ms: 0.724292
+  ...
+# Subtest: a zombie owner candidate never authorizes a signal
+ok 384 - a zombie owner candidate never authorizes a signal
+  ---
+  duration_ms: 0.548583
+  ...
+# Subtest: a foreign command owner candidate never authorizes a signal
+ok 385 - a foreign command owner candidate never authorizes a signal
+  ---
+  duration_ms: 0.734625
+  ...
+# Subtest: a birth change before the first signal reads as owner gone
+ok 386 - a birth change before the first signal reads as owner gone
+  ---
+  duration_ms: 0.780417
+  ...
+# Subtest: a command change before the first signal reads as owner gone
+ok 387 - a command change before the first signal reads as owner gone
+  ---
+  duration_ms: 1.100459
+  ...
+# Subtest: a replacement observed after suspension is never killed or resumed
+ok 388 - a replacement observed after suspension is never killed or resumed
+  ---
+  duration_ms: 0.753292
+  ...
+# Subtest: wrong group ownership fails closed without signalling
+ok 389 - wrong group ownership fails closed without signalling
+  ---
+  duration_ms: 0.932042
+  ...
+# Subtest: missing birth ownership fails closed without signalling
+ok 390 - missing birth ownership fails closed without signalling
+  ---
+  duration_ms: 0.753583
+  ...
+# Subtest: failed snapshot ownership fails closed without signalling
+ok 391 - failed snapshot ownership fails closed without signalling
+  ---
+  duration_ms: 0.820542
+  ...
+# Subtest: failed signal lookup ownership fails closed without signalling
+ok 392 - failed signal lookup ownership fails closed without signalling
+  ---
+  duration_ms: 0.53875
+  ...
+# Subtest: invalid argv ownership fails closed without signalling
+ok 393 - invalid argv ownership fails closed without signalling
+  ---
+  duration_ms: 0.504333
+  ...
+# Subtest: a transport outside the confirmed owner group retains evidence and resumes the owner
+ok 394 - a transport outside the confirmed owner group retains evidence and resumes the owner
+  ---
+  duration_ms: 0.618917
+  ...
+# Subtest: Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+ok 395 - Darwin lookup uses a non-setuid source and preserves microsecond birth identity
+  ---
+  duration_ms: 2.826792
+  ...
+# Subtest: a reused PID with identical argv and a different birth time never licenses PID or group signals
+ok 396 - a reused PID with identical argv and a different birth time never licenses PID or group signals
+  ---
+  duration_ms: 4.304875
+  ...
+# Subtest: unavailable sources refuse clearly without falling back to ps or signalling
+ok 397 - unavailable sources refuse clearly without falling back to ps or signalling
+  ---
+  duration_ms: 1.395917
+  ...
+# Subtest: Linux durable owner distinguishes identical PID and start tick across boots and refuses unknown boots
+ok 398 - Linux durable owner distinguishes identical PID and start tick across boots and refuses unknown boots
+  ---
+  duration_ms: 1.001542
+  ...
+# Subtest: Linux legacy tick-only durable owners remain unknown while the PID exists
+ok 399 - Linux legacy tick-only durable owners remain unknown while the PID exists
+  ---
+  duration_ms: 0.146666
+  ...
+# Subtest: Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+ok 400 - Linux proc lookup brackets argv with a stable kernel start tick and fails closed on races
+  ---
+  duration_ms: 0.32725
+  ...
+# Subtest: Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+ok 401 - Linux snapshots retain parentless group members, omit proven exits and refuse partial or unanchored reads
+  ---
+  duration_ms: 0.363458
+  ...
+# Subtest: identity-only reads preserve kernel births and ancestry when argv is inaccessible
+ok 402 - identity-only reads preserve kernel births and ancestry when argv is inaccessible
+  ---
+  duration_ms: 0.500208
+  ...
+# Subtest: Darwin identity-only reads can date root-owned PID 1 from an unprivileged caller
+ok 403 - Darwin identity-only reads can date root-owned PID 1 from an unprivileged caller
+  ---
+  duration_ms: 7.580417
+  ...
+# Subtest: Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+ok 404 - Darwin bundles refuse missing, damaged, stale, redirected and setuid sources before execution
+  ---
+  duration_ms: 9.232208
+  ...
+# Subtest: the installed native reader returns exact unicode and multiline argv without any tools on PATH
+ok 405 - the installed native reader returns exact unicode and multiline argv without any tools on PATH
+  ---
+  duration_ms: 64.128208
+  ...
+# Subtest: live kernel reads preserve stopped states through confirmed fixture cleanup
+ok 406 - live kernel reads preserve stopped states through confirmed fixture cleanup
+  ---
+  duration_ms: 15.876292
+  ...
+# Subtest: the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute
+ok 407 - the bounded runner executes and cleans up under seatbelt, where setuid ps cannot execute
+  ---
+  duration_ms: 140.198333
+  ...
+# Subtest: the runner refuses before running fixtures when the native source is unavailable
+ok 408 - the runner refuses before running fixtures when the native source is unavailable
+  ---
+  duration_ms: 53.8655
+  ...
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 409 - offline fleet fixtures keep default run temp within the Unix socket budget
+  ---
+  duration_ms: 4.334875
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 410 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 389.969792
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 411 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 325.433083
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 412 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 1446.306958
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 413 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1531.472917
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 414 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 1466.841041
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 415 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 1662.533625
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 416 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 1644.431709
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 417 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1426.990209
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 418 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 1518.9835
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 419 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 13417.79525
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 420 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 1927.988791
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 421 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 1778.833333
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 422 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 1321.147958
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 423 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1422.9115
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 424 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 2382.839042
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 425 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1508.02925
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 426 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1577.2575
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 427 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 1537.956875
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 428 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1617.608167
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 429 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 1516.614458
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 430 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 1861.685667
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 431 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 1680.986958
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 432 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1704.390666
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 433 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 1935.663958
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 434 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 2318.745834
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 435 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 4246.052042
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 436 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 495.090375
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 437 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 1753.421667
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 438 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 1896.738625
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 439 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 2669.708417
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 440 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 2569.246709
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 441 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 3948.60425
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 442 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 351.710834
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 443 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 2927.16025
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 444 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 3068.046792
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 445 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2464.000959
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 446 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1606.155458
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 447 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1483.261375
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 448 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 2070.159667
+  ...
+# Subtest: watch acknowledges a delayed startup at load 24, without launching real background work
+ok 449 - watch acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 198.189125
+  ...
+# Subtest: promote acknowledges a delayed startup at load 24, without launching real background work
+ok 450 - promote acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 224.874
+  ...
+# Subtest: inbox acknowledges a delayed startup at load 24, without launching real background work
+ok 451 - inbox acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 158.003792
+  ...
+# Subtest: housekeeping acknowledges a delayed startup at load 24, without launching real background work
+ok 452 - housekeeping acknowledges a delayed startup at load 24, without launching real background work
+  ---
+  duration_ms: 291.787583
+  ...
+# Subtest: real detached fixture cleanup survives an assertion failure
+ok 453 - real detached fixture cleanup survives an assertion failure
+  ---
+  duration_ms: 6587.776625
+  ...
+# Subtest: SIGTERM cleanup bounds genuinely detached fixtures outside the suite group
+ok 454 - SIGTERM cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 17560.440666
+  ...
+# Subtest: SIGKILL cleanup bounds genuinely detached fixtures outside the suite group
+ok 455 - SIGKILL cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6573.439208
+  ...
+# Subtest: SIGKILL-before-receipt cleanup bounds genuinely detached fixtures outside the suite group
+ok 456 - SIGKILL-before-receipt cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6621.672167
+  ...
+# Subtest: blocked cleanup bounds genuinely detached fixtures outside the suite group
+ok 457 - blocked cleanup bounds genuinely detached fixtures outside the suite group
+  ---
+  duration_ms: 6626.739458
+  ...
+# Subtest: compound fixture scenarios have an explicit aggregate bound and owned cleanup
+ok 458 - compound fixture scenarios have an explicit aggregate bound and owned cleanup
+  ---
+  duration_ms: 72.363334
+  ...
+# Subtest: a late waiter receives a child result and output after close
+ok 459 - a late waiter receives a child result and output after close
+  ---
+  duration_ms: 20.686083
+  ...
+# Subtest: a completed fixture never looks up or signals its historical PID during teardown
+ok 460 - a completed fixture never looks up or signals its historical PID during teardown
+  ---
+  duration_ms: 151.243833
+  ...
+# Subtest: leak names the failed test and reaps its fixture child and grandchild
+ok 461 - leak names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 937.511916
+  ...
+# Subtest: assertion names the failed test and reaps its fixture child and grandchild
+ok 462 - assertion names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 902.849959
+  ...
+# Subtest: test timeout names the failed test and reaps its fixture child and grandchild
+ok 463 - test timeout names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 1612.002084
+  ...
+# Subtest: child timeout names the failed test and reaps its fixture child and grandchild
+ok 464 - child timeout names the failed test and reaps its fixture child and grandchild
+  ---
+  duration_ms: 1385.534917
+  ...
+# Subtest: file watchdog bounds a blocked event loop and clears the fixture group
+ok 465 - file watchdog bounds a blocked event loop and clears the fixture group
+  ---
+  duration_ms: 3065.220917
+  ...
+# Subtest: suite watchdog bounds a blocked event loop and clears the fixture group
+ok 466 - suite watchdog bounds a blocked event loop and clears the fixture group
+  ---
+  duration_ms: 3034.696792
+  ...
+# Subtest: SIGTERM of an outer runner reaps every nested worker and blocked fixture descendant
+ok 467 - SIGTERM of an outer runner reaps every nested worker and blocked fixture descendant
+  ---
+  duration_ms: 244.899334
+  ...
+# Subtest: SIGKILL of an outer runner reaps every nested worker and blocked fixture descendant
+ok 468 - SIGKILL of an outer runner reaps every nested worker and blocked fixture descendant
+  ---
+  duration_ms: 241.381333
+  ...
+# Subtest: a leader exiting before its redirected background child fails the suite and leaves no survivor
+ok 469 - a leader exiting before its redirected background child fails the suite and leaves no survivor
+  ---
+  duration_ms: 152.734459
+  ...
+# Subtest: a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures
+ok 470 - a failed end-of-suite lookup still performs freshly confirmed group teardown without suspending fixtures
+  ---
+  duration_ms: 162.565708
+  ...
+# Subtest: suite cancellation clears a detached spawn frozen before its ownership lookup
+ok 471 - suite cancellation clears a detached spawn frozen before its ownership lookup
+  ---
+  duration_ms: 2533.773875
+  ...
+# Subtest: fixture environment overrides cannot detach a grandchild from the suite group
+ok 472 - fixture environment overrides cannot detach a grandchild from the suite group
+  ---
+  duration_ms: 194.631625
+  ...
+# Subtest: a fresh signal confirms the same owned birth tuple across caller timezone changes
+ok 473 - a fresh signal confirms the same owned birth tuple across caller timezone changes
+  ---
+  duration_ms: 8.992167
+  ...
+# Subtest: closes exited watchers and old finished sessions, keeps the newest session
+ok 474 - closes exited watchers and old finished sessions, keeps the newest session
+  ---
+  duration_ms: 1.764791
+  ...
+# Subtest: never closes active, unnamed or still-running tabs, or its own tab
+ok 475 - never closes active, unnamed or still-running tabs, or its own tab
+  ---
+  duration_ms: 0.105959
+  ...
+# Subtest: an operator chat (unnamed agent) is kept even in a session or lane tab
+ok 476 - an operator chat (unnamed agent) is kept even in a session or lane tab
+  ---
+  duration_ms: 0.093042
+  ...
+# Subtest: closes lane worker tabs only when every worker there has a recorded report
+ok 477 - closes lane worker tabs only when every worker there has a recorded report
+  ---
+  duration_ms: 0.136208
+  ...
+# Subtest: a newer lane review verdict finishes its idle review tab, but an older verdict does not
+ok 478 - a newer lane review verdict finishes its idle review tab, but an older verdict does not
+  ---
+  duration_ms: 0.483708
+  ...
+# Subtest: a FAIL review record on its first nonempty line finishes an older review session
+ok 479 - a FAIL review record on its first nonempty line finishes an older review session
+  ---
+  duration_ms: 0.10525
+  ...
+# Subtest: a watcher label in a lane workspace or with an agent inside is left alone
+ok 480 - a watcher label in a lane workspace or with an agent inside is left alone
+  ---
+  duration_ms: 0.097375
+  ...
+# Subtest: shell-only detection
+ok 481 - shell-only detection
+  ---
+  duration_ms: 0.060875
+  ...
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 482 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1353.131292
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 483 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1389.334333
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 484 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1403.351708
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 485 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 63.0935
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 486 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+  ---
+  duration_ms: 1211.44925
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 487 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 52.201791
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 488 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 203.131167
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 489 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 290.605959
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 490 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 365.550916
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 491 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 1873.055833
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 492 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1308.00675
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 493 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1236.805792
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 494 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1291.529416
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 495 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1265.028291
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 496 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 1550.913917
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 497 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 2324.143417
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 498 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.33025
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 499 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 947.227333
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 500 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 2054.678167
+  ...
+1..500
+# tests 500
+# suites 0
+# pass 493
+# fail 1
+# cancelled 0
+# skipped 6
+# todo 0
+# duration_ms 812739.888959

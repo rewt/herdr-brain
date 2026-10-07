@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { noticeLock, ownerPid } from './notice-lock.mjs';
@@ -384,4 +384,4 @@ async function main() {
   process.stdout.write(JSON.stringify(result) + '\n');
   if (!result.delivered) process.exitCode = /uncertain/.test(result.delivery_error ?? '') ? 1 : 3;
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === SELF) main().catch((error) => { console.error(`prompt-supervisor: ${error.message}`); process.exitCode = 1; });
+if (isMain(import.meta.url)) main().catch((error) => { console.error(`prompt-supervisor: ${error.message}`); process.exitCode = 1; });

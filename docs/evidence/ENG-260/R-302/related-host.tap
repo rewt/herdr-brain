@@ -1,0 +1,751 @@
+TAP version 13
+# Subtest: provider selection refuses automatic Linux bubblewrap and retains explicit providers
+ok 1 - provider selection refuses automatic Linux bubblewrap and retains explicit providers
+  ---
+  duration_ms: 48.864042
+  ...
+# Subtest: alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+ok 2 - alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+  ---
+  duration_ms: 54.088709
+  ...
+# Subtest: Claude-only scratch installation does not require or install Codex
+ok 3 - Claude-only scratch installation does not require or install Codex
+  ---
+  duration_ms: 1402.238291
+  ...
+# Subtest: real alternative sandbox denies outside, symlink, metadata, record, rename and network writes
+ok 4 - real alternative sandbox denies outside, symlink, metadata, record, rename and network writes # SKIP set MONITOR_TEST_ALTERNATIVE to sandbox-exec or bwrap outside a nested sandbox
+  ---
+  duration_ms: 0.074292
+  ...
+# Subtest: real filters remain functional through allocation, commit, check and fast-forward promotion
+ok 5 - real filters remain functional through allocation, commit, check and fast-forward promotion # SKIP set MONITOR_TEST_ALTERNATIVE to exercise real bounded Git filters
+  ---
+  duration_ms: 0.106375
+  ...
+# Subtest: real main-mode alternative guard protects linked shared records and leaves the native runtime writable
+ok 6 - real main-mode alternative guard protects linked shared records and leaves the native runtime writable # SKIP set MONITOR_TEST_ALTERNATIVE for the main-mode guard regression
+  ---
+  duration_ms: 0.041833
+  ...
+# sandbox command exceeded 300 milliseconds
+# Subtest: bounded commands kill descendants before they can write after a deadline
+ok 7 - bounded commands kill descendants before they can write after a deadline
+  ---
+  duration_ms: 1491.687625
+  ...
+# Subtest: Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+ok 8 - Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+  ---
+  duration_ms: 47.711333
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 9 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 620.221334
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 10 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 840.726834
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 11 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1266.444625
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 12 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 1041.567708
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 13 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 456.39675
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 14 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 759.965958
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 15 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 2938.480292
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 16 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1057.148709
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 17 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 855.43025
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 18 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 803.772833
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 19 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 877.579667
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 20 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1486.58425
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 21 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1306.645042
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 22 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1320.216125
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 23 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1634.77275
+  ...
+# Subtest: each bundled target matches its checksum, current source and native architecture
+ok 24 - each bundled target matches its checksum, current source and native architecture
+  ---
+  duration_ms: 4.304834
+  ...
+# Subtest: validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+ok 25 - validation runs with no compiler and ignores CC, flags and TMPDIR overrides
+  ---
+  duration_ms: 417.583459
+  ...
+# Subtest: verified owner bytes are copied into private scratch with restricted modes
+ok 26 - verified owner bytes are copied into private scratch with restricted modes
+  ---
+  duration_ms: 3.192875
+  ...
+# Subtest: staged owner preserves the installed validation transport lifetime protocol
+ok 27 - staged owner preserves the installed validation transport lifetime protocol
+  ---
+  duration_ms: 6.2135
+  ...
+# Subtest: installed runtime snapshot carries the verified owner and validates without a compiler
+ok 28 - installed runtime snapshot carries the verified owner and validates without a compiler
+  ---
+  duration_ms: 1420.580334
+  ...
+# Subtest: missing binary uses only the bounded source-build fallback
+ok 29 - missing binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 430.481666
+  ...
+# Subtest: missing manifest uses only the bounded source-build fallback
+ok 30 - missing manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 452.775375
+  ...
+# Subtest: invalid manifest uses only the bounded source-build fallback
+ok 31 - invalid manifest uses only the bounded source-build fallback
+  ---
+  duration_ms: 391.124875
+  ...
+# Subtest: corrupt binary uses only the bounded source-build fallback
+ok 32 - corrupt binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 353.18375
+  ...
+# Subtest: stale source uses only the bounded source-build fallback
+ok 33 - stale source uses only the bounded source-build fallback
+  ---
+  duration_ms: 452.919959
+  ...
+# Subtest: symlink binary uses only the bounded source-build fallback
+ok 34 - symlink binary uses only the bounded source-build fallback
+  ---
+  duration_ms: 325.644
+  ...
+# Subtest: redirected bundle directory uses only the bounded source-build fallback
+ok 35 - redirected bundle directory uses only the bounded source-build fallback
+  ---
+  duration_ms: 385.739291
+  ...
+# Subtest: unavailable bundle and missing compiler refuse project execution
+ok 36 - unavailable bundle and missing compiler refuse project execution
+  ---
+  duration_ms: 52.19625
+  ...
+# Subtest: unavailable bundle and failure compiler refuse project execution
+ok 37 - unavailable bundle and failure compiler refuse project execution
+  ---
+  duration_ms: 54.485042
+  ...
+# Subtest: unavailable bundle and timeout compiler refuse project execution
+ok 38 - unavailable bundle and timeout compiler refuse project execution
+  ---
+  duration_ms: 54.883375
+  ...
+# Subtest: owner verification rejects a checksummed binary for the wrong architecture
+ok 39 - owner verification rejects a checksummed binary for the wrong architecture
+  ---
+  duration_ms: 61.698375
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after completion
+ok 40 - no compiler preserves detached descendant cleanup after completion
+  ---
+  duration_ms: 3671.217458
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after deadline
+ok 41 - no compiler preserves detached descendant cleanup after deadline
+  ---
+  duration_ms: 4778.447084
+  ...
+# Subtest: no compiler preserves detached descendant cleanup after wrapper-death
+ok 42 - no compiler preserves detached descendant cleanup after wrapper-death
+  ---
+  duration_ms: 3256.735917
+  ...
+# Subtest: x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 43 - x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 1.756959
+  ...
+# Subtest: arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 44 - arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 0.303583
+  ...
+# Subtest: detached double-fork descendants are gone after completion; unrelated same-group processes survive
+ok 45 - detached double-fork descendants are gone after completion; unrelated same-group processes survive
+  ---
+  duration_ms: 3469.911333
+  ...
+# Subtest: detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+ok 46 - detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+  ---
+  duration_ms: 4809.393042
+  ...
+# Subtest: descendants are cleaned after the JavaScript wrapper is killed
+ok 47 - descendants are cleaned after the JavaScript wrapper is killed
+  ---
+  duration_ms: 3321.310083
+  ...
+# validation lifetime marker is absent
+# sandbox-exec: sandbox_apply: Operation not permitted
+# Subtest: macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+ok 48 - macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+  ---
+  duration_ms: 551.420208
+  ...
+# Subtest: validation cannot signal an owner outside its inherited kernel boundary
+ok 49 - validation cannot signal an owner outside its inherited kernel boundary
+  ---
+  duration_ms: 196.563209
+  ...
+# Subtest: lifetime markers reject redirected scratch roots before provider construction
+ok 50 - lifetime markers reject redirected scratch roots before provider construction
+  ---
+  duration_ms: 6.10075
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (no-auth)
+ok 51 - pending Claude probe emits Linux evidence without a platform guard (no-auth)
+  ---
+  duration_ms: 1218.739
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (skip-live)
+ok 52 - pending Claude probe emits Linux evidence without a platform guard (skip-live)
+  ---
+  duration_ms: 1135.766958
+  ...
+# Subtest: acceptance setup failure removes its installed snapshot and keeps only evidence
+ok 53 - acceptance setup failure removes its installed snapshot and keeps only evidence
+  ---
+  duration_ms: 146.39675
+  ...
+# Subtest: acceptance allocation failure removes the first temporary root
+ok 54 - acceptance allocation failure removes the first temporary root
+  ---
+  duration_ms: 30.770334
+  ...
+# Subtest: acceptance evidence directory failure still removes its installed snapshot
+ok 55 - acceptance evidence directory failure still removes its installed snapshot
+  ---
+  duration_ms: 32.220292
+  ...
+# Subtest: Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection
+ok 56 - Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection # SKIP requires a Linux kernel with io_uring enabled
+  ---
+  duration_ms: 0.041542
+  ...
+# Subtest: Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+ok 57 - Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+  ---
+  duration_ms: 3.121375
+  ...
+# Subtest: bare bubblewrap and renamed symlink aliases require experimental selection
+ok 58 - bare bubblewrap and renamed symlink aliases require experimental selection
+  ---
+  duration_ms: 1.287417
+  ...
+# Subtest: explicit experimental selection survives repeated selection and builds the gated provider command
+ok 59 - explicit experimental selection survives repeated selection and builds the gated provider command
+  ---
+  duration_ms: 1.466375
+  ...
+# Subtest: direct bubblewrap launcher requires opt-in before launching a provider
+ok 60 - direct bubblewrap launcher requires opt-in before launching a provider
+  ---
+  duration_ms: 206.66925
+  ...
+# Subtest: Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+ok 61 - Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+  ---
+  duration_ms: 104.514458
+  ...
+# Subtest: installation requires and preserves experimental selection while Codex installs keep their native default
+ok 62 - installation requires and preserves experimental selection while Codex installs keep their native default
+  ---
+  duration_ms: 89.339792
+  ...
+# Subtest: macOS copies nonempty files and refuses a redirected temporary root after profile construction
+ok 63 - macOS copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.056625
+  ...
+# Subtest: Codex copies nonempty files and refuses a redirected temporary root after profile construction
+ok 64 - Codex copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.088125
+  ...
+# Subtest: finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+ok 65 - finished worker tabs close before promotion while working, blocked, unnamed and operator tabs stay
+  ---
+  duration_ms: 1819.488208
+  ...
+# Subtest: dry-run previews finished tabs and never closes, including through housekeeping --once
+ok 66 - dry-run previews finished tabs and never closes, including through housekeeping --once
+  ---
+  duration_ms: 1198.821916
+  ...
+# Subtest: a working or blocked change at the final recheck preserves the finished tab
+ok 67 - a working or blocked change at the final recheck preserves the finished tab
+  ---
+  duration_ms: 1138.239459
+  ...
+# Subtest: new occupants revealed after the final pane list preserve their tab
+ok 68 - new occupants revealed after the final pane list preserve their tab
+  ---
+  duration_ms: 2211.209209
+  ...
+# Subtest: conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+ok 69 - conflicting agent tab/workspace and duplicate pane topology cannot authorize a close
+  ---
+  duration_ms: 0.330667
+  ...
+# Subtest: housekeeping --once preserves waiting reports, blocking items and missing item evidence
+ok 70 - housekeeping --once preserves waiting reports, blocking items and missing item evidence
+  ---
+  duration_ms: 5470.356084
+  ...
+# Subtest: automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+ok 71 - automatic tidy requires the newest recorded occupant and preserves absent or mismatched identity
+  ---
+  duration_ms: 3435.227167
+  ...
+# Subtest: replacement identity and a waiting report at the final observation prevent closing
+ok 72 - replacement identity and a waiting report at the final observation prevent closing
+  ---
+  duration_ms: 2049.160625
+  ...
+# Subtest: a reused worker name with a newer open run and an extra unnamed occupant never close
+ok 73 - a reused worker name with a newer open run and an extra unnamed occupant never close
+  ---
+  duration_ms: 725.497792
+  ...
+# Subtest: a matching worker cannot authorize another occupant reusing its name
+ok 74 - a matching worker cannot authorize another occupant reusing its name
+  ---
+  duration_ms: 1116.1745
+  ...
+# Subtest: only this Git project is tidied and the caller tab is preserved
+ok 75 - only this Git project is tidied and the caller tab is preserved
+  ---
+  duration_ms: 681.803833
+  ...
+# Subtest: finished reviews and old settle sessions use the existing tidy policy
+ok 76 - finished reviews and old settle sessions use the existing tidy policy
+  ---
+  duration_ms: 1459.830792
+  ...
+# Subtest: three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+ok 77 - three fix rounds clear reported workers and review-codex verdict tabs, leaving the working round
+  ---
+  duration_ms: 3237.060709
+  ...
+# Subtest: supported review routes need a matching topic verdict newer than their session
+ok 78 - supported review routes need a matching topic verdict newer than their session
+  ---
+  duration_ms: 0.231458
+  ...
+# Subtest: automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+ok 79 - automatic review tidy preserves missing or mismatched occupant evidence without worker runs
+  ---
+  duration_ms: 13626.422667
+  ...
+# Subtest: replacement reviewers at the final observation keep their tabs without worker runs
+ok 80 - replacement reviewers at the final observation keep their tabs without worker runs
+  ---
+  duration_ms: 6546.341917
+  ...
+# Subtest: review evidence cannot override a recorded worker waiting on a blocker
+ok 81 - review evidence cannot override a recorded worker waiting on a blocker
+  ---
+  duration_ms: 894.591917
+  ...
+# Subtest: failed and incomplete reads close nothing and are logged without stopping housekeeping
+ok 82 - failed and incomplete reads close nothing and are logged without stopping housekeeping
+  ---
+  duration_ms: 2127.320458
+  ...
+# Subtest: every tick tidies despite the ten-minute cleanup interval and a tidy failure
+ok 83 - every tick tidies despite the ten-minute cleanup interval and a tidy failure
+  ---
+  duration_ms: 5365.86675
+  ...
+# Subtest: auto-tidy preserves a focused finished worker at initial and final observation
+ok 84 - auto-tidy preserves a focused finished worker at initial and final observation
+  ---
+  duration_ms: 1040.110167
+  ...
+# Subtest: affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+ok 85 - affected tests include changed files and transitive imports, re-exports, cycles and launched literal paths
+  ---
+  duration_ms: 5.825541
+  ...
+# Subtest: real import closure selects the previously missed release files and records bounded coverage
+ok 86 - real import closure selects the previously missed release files and records bounded coverage
+  ---
+  duration_ms: 341.825958
+  ...
+# Subtest: the planner CLI launched through a symlinked directory emits the same plan
+ok 87 - the planner CLI launched through a symlinked directory emits the same plan
+  ---
+  duration_ms: 225.563583
+  ...
+# Subtest: a selected mixed file skips the patterned step and executes once in full
+ok 88 - a selected mixed file skips the patterned step and executes once in full
+  ---
+  duration_ms: 149.994083
+  ...
+# Subtest: bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+ok 89 - bisected red batches count gate executions rather than per-lane outcomes and attribute changed files
+  ---
+  duration_ms: 108.955167
+  ...
+# Subtest: unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+ok 90 - unfinished, signalled, exception and refused receipts stay separate from completed gates and first-pass rate
+  ---
+  duration_ms: 84.510917
+  ...
+# Subtest: cached and duplicated green proofs never inflate gate time or executions
+ok 91 - cached and duplicated green proofs never inflate gate time or executions
+  ---
+  duration_ms: 80.304959
+  ...
+# Subtest: window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+ok 92 - window uses batch start, including bisection outside the window; missing clocks and foreign receipts are visible
+  ---
+  duration_ms: 99.303125
+  ...
+# Subtest: linked worktrees read the same canonical receipts; text and JSON commands make no changes
+ok 93 - linked worktrees read the same canonical receipts; text and JSON commands make no changes
+  ---
+  duration_ms: 245.800334
+  ...
+# Subtest: missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+ok 94 - missing and altered gate logs cannot supply attribution or durations; combined train log is not assigned to a red attempt
+  ---
+  duration_ms: 98.716084
+  ...
+# Subtest: TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+ok 95 - TAP and Vitest timings keep test streams and identifiable files separate and strip ANSI
+  ---
+  duration_ms: 0.66825
+  ...
+# Subtest: slowest steps sum sequential streams per gate rather than treating streams as whole steps
+ok 96 - slowest steps sum sequential streams per gate rather than treating streams as whole steps
+  ---
+  duration_ms: 75.823959
+  ...
+# Subtest: unattributed failures and unavailable Git history remain explicit hints
+ok 97 - unattributed failures and unavailable Git history remain explicit hints
+  ---
+  duration_ms: 87.600125
+  ...
+# Subtest: malformed receipts are skipped with evidence rather than crashing the project report
+ok 98 - malformed receipts are skipped with evidence rather than crashing the project report
+  ---
+  duration_ms: 78.91575
+  ...
+# Subtest: empty projects return unavailable rates and medians instead of invented zero timings
+ok 99 - empty projects return unavailable rates and medians instead of invented zero timings
+  ---
+  duration_ms: 79.863625
+  ...
+# Subtest: archived baseline imports read-only with selection bias and lower bounds separate from the current window
+ok 100 - archived baseline imports read-only with selection bias and lower bounds separate from the current window
+  ---
+  duration_ms: 152.66175
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 101 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6554.507042
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 102 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2478.2695
+  ...
+# Fixture cleanup: PID 55517 start time or command changed; SIGKILL skipped
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 103 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1665.176084
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 104 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 2209.944958
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 105 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1597.894666
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 106 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 582.468625
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 107 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 2030.903458
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 108 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2056.900208
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 109 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 3250.554666
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 110 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2283.943666
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 111 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2514.061459
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 112 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 4205.0785
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 113 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 2086.850708
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 114 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 5007.443292
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 115 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 3163.618917
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 116 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 745.976042
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 117 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 293.237625
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 118 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 382.805541
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 119 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 806.616667
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 120 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4380.943208
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 121 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4249.237209
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 122 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1651.727583
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 123 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 2215.886417
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 124 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 466.057417
+  ...
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 125 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 3306.351
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 126 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 4098.313334
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 127 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1486.315875
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 128 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 7115.664333
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 129 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 2474.514791
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 130 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 3377.185458
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 131 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 3866.23575
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 132 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1639.3775
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 133 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 5264.628083
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 134 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 7011.615375
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 135 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 3524.625417
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 136 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 6344.062667
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 137 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 11464.669667
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 138 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 2483.974875
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 139 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 3097.983458
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 140 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 3047.750416
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 141 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 5563.144083
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 142 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 6072.29875
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 143 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 7046.402
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 144 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 7065.833584
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 145 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 5180.64375
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 146 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 8199.33725
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 147 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 2555.046958
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 148 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 6649.488958
+  ...

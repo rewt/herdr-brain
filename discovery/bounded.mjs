@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 // The native foreground owner confirms descendant cleanup before returning.
 // Provisioning/containment failures propagate; there is no unbounded retry.
-import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { prepareOwner } from './owner.mjs';
 import { lifetimeScope, closeScope } from './lifetime.mjs';
 import { FAST_VALIDATION_TIMEOUT, MAX_ENTRY_TIMEOUT } from './deadlines.mjs';
-import { cliHelp } from '../lib/cli-help.mjs';
+import { cliHelp, isMain } from '../lib/cli-help.mjs';
 cliHelp(import.meta.url, "Usage: node discovery/bounded.mjs [--timeout-ms N] [--scope JSON] BINARY [ARGS...] [--command COMMAND ARGS...]");
 let helper;
 function supervisor() {
@@ -48,7 +46,7 @@ export function runBounded(binary, args, { timeoutMs = FAST_VALIDATION_TIMEOUT, 
     });
   });
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   let timeoutMs = FAST_VALIDATION_TIMEOUT;
   if (args[0] === '--timeout-ms') { timeoutMs = Number(args[1]); args.splice(0, 2); }

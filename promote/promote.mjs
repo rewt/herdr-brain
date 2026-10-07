@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -382,4 +382,4 @@ async function main() {
   const worker = await start(queue);
   process.stdout.write(JSON.stringify({ jobs, worker, queue: queue.file }) + '\n');
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === SELF) main().catch((error) => { console.error(`promote: ${error.message}`); process.exitCode = 1; });
+if (isMain(import.meta.url)) main().catch((error) => { console.error(`promote: ${error.message}`); process.exitCode = 1; });

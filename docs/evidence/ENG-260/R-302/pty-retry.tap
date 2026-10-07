@@ -1,0 +1,125 @@
+TAP version 13
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: PTY transport uses native BSD arguments and shell-safe util-linux arguments
+ok 1 - PTY transport uses native BSD arguments and shell-safe util-linux arguments
+  ---
+  duration_ms: 35.506208
+  ...
+# Subtest: PTY completion retains TTY, arguments, output and exit status
+ok 2 - PTY completion retains TTY, arguments, output and exit status
+  ---
+  duration_ms: 264.891209
+  ...
+# Subtest: PTY native owner accepts the measured-load allowance above its fifteen-second base
+ok 3 - PTY native owner accepts the measured-load allowance above its fifteen-second base
+  ---
+  duration_ms: 84.05675
+  ...
+# Subtest: PTY cleanup completes when native enumeration exceeds its former three-second allowance
+ok 4 - PTY cleanup completes when native enumeration exceeds its former three-second allowance
+  ---
+  duration_ms: 3616.947458
+  ...
+# Subtest: PTY cleanup refusal still returns unconfirmed status with a loaded allowance
+ok 5 - PTY cleanup refusal still returns unconfirmed status with a loaded allowance
+  ---
+  duration_ms: 228.240334
+  ...
+# Subtest: PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops
+not ok 6 - PTY command timeout clears its separate group, including SIGHUP handlers with blocked loops
+  ---
+  duration_ms: 1621.549333
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    waitForCleanup (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/pty.test.mjs:62:49)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/pty.test.mjs:134:9
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: normal exit of the outer suite clears the independently owned PTY session
+not ok 7 - normal exit of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 100.095167
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: SIGTERM of the outer suite clears the independently owned PTY session
+not ok 8 - SIGTERM of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 177.572416
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: SIGKILL of the outer suite clears the independently owned PTY session
+not ok 9 - SIGKILL of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 24.302083
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: SIGKILL shell job of the outer suite clears the independently owned PTY session
+not ok 10 - SIGKILL shell job of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 24.683708
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent
+# Subtest: suite deadline of the outer suite clears the independently owned PTY session
+not ok 11 - suite deadline of the outer suite clears the independently owned PTY session
+  ---
+  duration_ms: 837.003
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 5
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7068.119959

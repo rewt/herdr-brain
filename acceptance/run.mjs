@@ -6,7 +6,7 @@ import os from 'node:os';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { discovery } from './live.mjs';
 import { lessonsEntryCase } from './lessons.mjs';
@@ -1122,4 +1122,4 @@ try {
 }
 
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+if (isMain(import.meta.url)) await main();

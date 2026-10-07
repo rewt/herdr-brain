@@ -1,0 +1,38 @@
+All final tests are offline. Host runs allow local fixture sockets, file
+watchers and nested sandbox-exec, which the worker sandbox restricts.
+
+main-and-pty-host.tap:
+  node test/helpers/run.mjs test/main-module.test.mjs test/pty.test.mjs
+
+helpers-final-host.tap (TMPDIR, TMP, TEMP=/private/tmp):
+  node test/helpers/run.mjs test/helper-main.test.mjs test/tier-plan.test.mjs test/cli-help.test.mjs test/suite.test.mjs test/release-suites.test.mjs test/pty-cache.test.mjs release/test/candidate.test.mjs
+
+related-isolated-host.tap (TMPDIR, TMP, TEMP=/private/tmp; MONITOR_TEST_SLOT_PATH
+and MONITOR_TEST_SLOT_COMPAT_PATH point at one lock in a new owned scratch dir):
+  node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 $(cat docs/evidence/ENG-260/R-302/related-files.txt)
+
+acceptance-isolated-host.tap (same temp settings, separate owned scratch slot):
+  node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 acceptance/test/*.test.mjs
+
+slot-direct-host.tap (offlineHerdr wrapper, no fixture detachment policy):
+  node docs/evidence/ENG-260/R-302/direct-tests.mjs test-slot/test/*.test.mjs
+  The executed wrapper was /private/tmp/eng260-direct-tests.mjs with the same
+  body and an absolute import of the same offlineHerdr module.
+
+additional-related-host.tap:
+  node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 housekeeping/test/housekeeping.test.mjs lanes/test/validation.test.mjs lanes/test/workspace-native.test.mjs test/load-deadlines.test.mjs
+
+promote-clean-env-host.tap (outside-home temp, own slot; ORG_DIR and
+HERDR_AGENT_NAME removed from the parent environment):
+  node test/helpers/run.mjs promote/test/promote.test.mjs
+
+promote-cleanup-retry-host.tap (same parent scrub, outside-home temp):
+  node test/helpers/run.mjs '--test-name-pattern=^capped promotion notices retain an owner' promote/test/promote.test.mjs
+
+validation-retry-host.tap (outside-home temp, own slot, same parent scrub):
+  node test/helpers/run.mjs acceptance/test/validation.test.mjs
+
+before.tap records the initial regression against unchanged product code:
+24 symlink invocations silently exited; the preliminary static guard also
+failed. Its final matcher excludes ordinary argv path resolution that is
+not a comparison. Other logs retain sandbox/environment/runner retries.

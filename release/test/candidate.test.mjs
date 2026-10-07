@@ -26,6 +26,8 @@ function fixture(t) {
   fs.mkdirSync(bch);
   fs.writeFileSync(path.join(candidate, '.release-commit'), 'a'.repeat(40) + '\n');
   fs.copyFileSync(path.join(ROOT, 'herdr/release-candidate.mjs'), path.join(candidate, 'herdr/release-candidate.mjs'));
+  fs.mkdirSync(path.join(candidate, 'lib'));
+  fs.copyFileSync(path.join(ROOT, 'lib/cli-help.mjs'), path.join(candidate, 'lib/cli-help.mjs'));
   fs.copyFileSync(path.join(ROOT, 'herdr/install.sh'), path.join(candidate, 'herdr/install.sh'));
   for (const module of ['console', 'mcp']) {
     fs.mkdirSync(path.join(candidate, module));

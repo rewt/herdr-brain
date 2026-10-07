@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { fileURLToPath } from 'node:url';
 import { writeFileAtomic } from '../lib/store.mjs';
 import { enterSupervisor } from './entry.mjs';
@@ -14,7 +14,6 @@ import { verifyTrainResult } from '../promote/train.mjs';
 import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
 
-const SELF = fileURLToPath(import.meta.url);
 const local = (name) => fileURLToPath(new URL(name, import.meta.url));
 export function noticeRun(notice) {
   if (typeof notice !== 'string' || !notice.startsWith('[org-report] ')) return null;
@@ -199,6 +198,6 @@ export function main(argv = process.argv.slice(2)) {
     writeFileAtomic(file, JSON.stringify(saved, null, 2) + '\n'); print(saved);
   } finally { release(); }
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
+if (isMain(import.meta.url)) {
   try { main(); } catch (e) { process.stderr.write(`supervisor: ${e.message}\n`); process.exitCode = 1; }
 }

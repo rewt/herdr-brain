@@ -1,9 +1,9 @@
 // Claude's native PreToolUse boundary for lanes created after session launch.
 // Read grants never depend on this hook. It only rejects cross-lane file writes.
 import fs from 'node:fs';
+import { isMain } from '../lib/cli-help.mjs';
 import path from 'node:path';
 import os from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { within } from './paths.mjs';
 
 function resolveExisting(file) {
@@ -35,7 +35,7 @@ export function laneFileAccess(event, workspace, worktrees) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   let reason;
   try { reason = laneFileAccess(JSON.parse(fs.readFileSync(0, 'utf8')), process.argv[2], process.argv[3]); }
   catch { reason = 'Cannot safely inspect the file write request.'; }

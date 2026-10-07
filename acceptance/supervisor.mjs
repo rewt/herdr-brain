@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real entry/record/watch/settle/review/dispatch/promotion, scripted transport.
 import fs from 'node:fs';
+import { isMain } from '../lib/cli-help.mjs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -121,7 +122,7 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     for (const fn of cleanup) await fn();
   }
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const candidate = path.resolve(process.argv[2] ?? fileURLToPath(new URL('../', import.meta.url)));
   try { process.stdout.write(JSON.stringify(await supervisorCase(candidate), null, 2) + '\n'); }
   catch (e) { process.stderr.write(e.stack + '\n'); process.exitCode = 1; }

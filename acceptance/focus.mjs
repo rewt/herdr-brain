@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { HerdrClient } from '../lanes/board/herdr-client.mjs';
 import { HarnessLimit, ProductBoundary } from './limits.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
+import { isMain } from '../lib/cli-help.mjs';
 
 const FILE = fileURLToPath(import.meta.url);
 // Herdr 0.8.2's EventHub retains at most 512 lifecycle events (all kinds).
@@ -273,4 +274,4 @@ async function monitor({ socketPath, evidence, ownership, intervalMs }) {
   timer = setTimeout(tick, intervalMs);
 }
 
-if (process.argv[1] === FILE && process.argv[2] === '--monitor') await monitor(JSON.parse(process.argv[3]));
+if (isMain(import.meta.url) && process.argv[2] === '--monitor') await monitor(JSON.parse(process.argv[3]));

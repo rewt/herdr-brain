@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // This project's build/gate declaration. Machine paths stay in the environment.
 import fs from 'node:fs';
+import { isMain } from '../lib/cli-help.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
-import { fileURLToPath } from 'node:url';
 
 const MODULES = ['console', 'mcp'];
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -92,8 +92,7 @@ export function candidateCommand(stage, candidate, { env = process.env, skipLive
 }
 
 export function main(argv = process.argv.slice(2)) {
-  // Build-only candidates copy this driver and install.sh without lib/.
-  // Keep help local so those partial distributions remain self-contained.
+  // Keep the candidate driver's stage-specific help local.
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     candidate: { type: 'string' }, 'skip-live': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
   } });
@@ -129,6 +128,6 @@ export function main(argv = process.argv.slice(2)) {
   process.exitCode = result.status ?? 1;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try { main(); } catch (error) { console.error(`release candidate: ${error.message}`); process.exitCode = 1; }
 }

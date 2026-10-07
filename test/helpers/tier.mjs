@@ -5,7 +5,7 @@ import { isMain } from '../../lib/cli-help.mjs';
 import { main as suite } from './suite.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const fast = ['test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'brain/test/capture.test.mjs', 'console/test/model.test.mjs', 'console/test/modern.test.mjs', 'console/test/frame.test.mjs', 'console/test/paint.test.mjs', 'console/test/names.test.mjs', 'console/test/waiting.test.mjs', 'console/test/terminal.test.mjs', 'console/proto/prototype.test.mjs', 'lanes/test/routes.test.mjs'];
+const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'brain/test/capture.test.mjs', 'console/test/model.test.mjs', 'console/test/modern.test.mjs', 'console/test/frame.test.mjs', 'console/test/paint.test.mjs', 'console/test/names.test.mjs', 'console/test/waiting.test.mjs', 'console/test/terminal.test.mjs', 'console/proto/prototype.test.mjs', 'lanes/test/routes.test.mjs'];
 // Whole-file promotion coverage stays explicit; future files default to release.
 // Mixed files also supply selected fast cases through the promotion scripts.
 const promotion = [
@@ -71,6 +71,7 @@ const promotion = [
   'test/git-seed.test.mjs',
   'test/inbox.test.mjs',
   'test/lessons.test.mjs',
+  'test/main-module.test.mjs',
   'test/memory.test.mjs',
   'test/name-alias.test.mjs',
   'test/no-setuid-processes.test.mjs',

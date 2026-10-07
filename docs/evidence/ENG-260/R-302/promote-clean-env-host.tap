@@ -1,0 +1,145 @@
+TAP version 13
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 1 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 7000.774833
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 2 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2658.871416
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 3 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1583.75975
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 4 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 2261.640167
+  ...
+# Fixture cleanup: PID 62603 start time or command changed; SIGKILL skipped
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 5 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1739.704541
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 6 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 718.803
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 7 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 2227.217
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 8 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2377.764875
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 9 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 4302.016041
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 10 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 4126.247542
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 11 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 4390.208333
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+not ok 12 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 5536.471917
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'hookFailed'
+  error: "ENOENT: no such file or directory, open '/private/tmp/pt-xTPVKo/project/.git/supervisor/inbox.log.owner.lock/owner.json'"
+  code: 'ENOENT'
+  stack: |-
+    Object.readFileSync (node:fs:449:20)
+    fs.readFileSync (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/memory-fixture.mjs:21:23)
+    stopFixtureInbox (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/test/helpers/inbox.mjs:13:31)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/promote/test/promote.test.mjs:90:41)
+    async TestHook.run (node:internal/test_runner/test:797:9)
+    async Test.runHook (node:internal/test_runner/test:723:9)
+    async after (node:internal/test_runner/test:755:9)
+    async Test.run (node:internal/test_runner/test:804:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 13 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 2562.729417
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 14 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 5521.762333
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 15 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 4344.862583
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 16 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 1070.268125
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 17 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 436.344583
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 18 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 513.755083
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 19 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 905.539834
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 20 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 5106.213209
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 21 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4949.696167
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 22 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 2158.368209
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 23 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 2424.661334
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 24 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 624.378167
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 23
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 69594.728708

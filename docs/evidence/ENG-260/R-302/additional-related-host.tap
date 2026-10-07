@@ -1,0 +1,470 @@
+TAP version 13
+# Subtest: interruption requires the current banner and an exclusively wheel-junk composer
+ok 1 - interruption requires the current banner and an exclusively wheel-junk composer
+  ---
+  duration_ms: 0.9555
+  ...
+# Subtest: recorded promoted workers close through the shared tidy planner
+ok 2 - recorded promoted workers close through the shared tidy planner
+  ---
+  duration_ms: 381.859417
+  ...
+# Subtest: abandoned promoted workers may close
+ok 3 - abandoned promoted workers may close
+  ---
+  duration_ms: 348.005208
+  ...
+# Subtest: CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+ok 4 - CLI-closed unmerged work is authorized by its Git archive, never a session done marker
+  ---
+  duration_ms: 291.129417
+  ...
+# Subtest: preserves open workers/tabs
+ok 5 - preserves open workers/tabs
+  ---
+  duration_ms: 280.071708
+  ...
+# Subtest: preserves unpromoted workers/tabs
+ok 6 - preserves unpromoted workers/tabs
+  ---
+  duration_ms: 232.197667
+  ...
+# Subtest: preserves dirty workers/tabs
+ok 7 - preserves dirty workers/tabs
+  ---
+  duration_ms: 368.170875
+  ...
+# Subtest: preserves blocked workers/tabs
+ok 8 - preserves blocked workers/tabs
+  ---
+  duration_ms: 296.333625
+  ...
+# Subtest: preserves working workers/tabs
+ok 9 - preserves working workers/tabs
+  ---
+  duration_ms: 244.936625
+  ...
+# Subtest: preserves unknown workers/tabs
+ok 10 - preserves unknown workers/tabs
+  ---
+  duration_ms: 251.206667
+  ...
+# Subtest: preserves unnamed workers/tabs
+ok 11 - preserves unnamed workers/tabs
+  ---
+  duration_ms: 237.561
+  ...
+# Subtest: preserves unrecorded workers/tabs
+ok 12 - preserves unrecorded workers/tabs
+  ---
+  duration_ms: 282.018375
+  ...
+# Subtest: preserves replaced workers/tabs
+ok 13 - preserves replaced workers/tabs
+  ---
+  duration_ms: 258.114333
+  ...
+# Subtest: preserves waiting workers/tabs
+ok 14 - preserves waiting workers/tabs
+  ---
+  duration_ms: 315.962542
+  ...
+# Subtest: preserves report-blocked workers/tabs
+ok 15 - preserves report-blocked workers/tabs
+  ---
+  duration_ms: 209.801291
+  ...
+# Subtest: preserves report-needs-human workers/tabs
+ok 16 - preserves report-needs-human workers/tabs
+  ---
+  duration_ms: 202.51925
+  ...
+# Subtest: preserves new-open-run workers/tabs
+ok 17 - preserves new-open-run workers/tabs
+  ---
+  duration_ms: 201.516666
+  ...
+# Subtest: preserves declined workers/tabs
+ok 18 - preserves declined workers/tabs
+  ---
+  duration_ms: 172.385042
+  ...
+# Subtest: preserves wrong-repo workers/tabs
+ok 19 - preserves wrong-repo workers/tabs
+  ---
+  duration_ms: 250.733958
+  ...
+# Subtest: preserves mixed-pane workers/tabs
+ok 20 - preserves mixed-pane workers/tabs
+  ---
+  duration_ms: 337.910459
+  ...
+# Subtest: preserves running-shell workers/tabs
+ok 21 - preserves running-shell workers/tabs
+  ---
+  duration_ms: 351.268458
+  ...
+# Subtest: preserves session-done workers/tabs
+ok 22 - preserves session-done workers/tabs
+  ---
+  duration_ms: 262.904125
+  ...
+# Subtest: preserves review-file workers/tabs
+ok 23 - preserves review-file workers/tabs
+  ---
+  duration_ms: 346.852083
+  ...
+# Subtest: latest open fix round defeats an older reported run using the same worker name
+ok 24 - latest open fix round defeats an older reported run using the same worker name
+  ---
+  duration_ms: 299.183625
+  ...
+# Subtest: unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+ok 25 - unknown finished sessions stay; exited watcher shell tabs use tidy-tabs
+  ---
+  duration_ms: 220.532125
+  ...
+# Subtest: never closes or resumes its own tab
+ok 26 - never closes or resumes its own tab
+  ---
+  duration_ms: 220.513875
+  ...
+# Subtest: an interrupted open worker resumes once, and durable attempts survive a new runner
+ok 27 - an interrupted open worker resumes once, and durable attempts survive a new runner
+  ---
+  duration_ms: 308.28875
+  ...
+# Subtest: failed prompt is logged and never replayed at the same state sequence
+ok 28 - failed prompt is logged and never replayed at the same state sequence
+  ---
+  duration_ms: 285.847208
+  ...
+# Subtest: unrecorded disk report, human words, other harness and absent identity prevent resume
+ok 29 - unrecorded disk report, human words, other harness and absent identity prevent resume
+  ---
+  duration_ms: 263.795334
+  ...
+# Subtest: dry run reports close/resume plans and persists no attempts or live actions
+ok 30 - dry run reports close/resume plans and persists no attempts or live actions
+  ---
+  duration_ms: 293.154042
+  ...
+# Subtest: fresh state or record changes prevent deletion
+ok 31 - fresh state or record changes prevent deletion
+  ---
+  duration_ms: 314.890542
+  ...
+# Subtest: a run completed during the pre-input recheck receives no resume input
+ok 32 - a run completed during the pre-input recheck receives no resume input
+  ---
+  duration_ms: 257.685291
+  ...
+# Subtest: a record change after clearing composer suppresses the prompt
+ok 33 - a record change after clearing composer suppresses the prompt
+  ---
+  duration_ms: 424.451167
+  ...
+# Subtest: incomplete or failed reads never authorize any action
+ok 34 - incomplete or failed reads never authorize any action
+  ---
+  duration_ms: 310.95875
+  ...
+# Subtest: one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+ok 35 - one-shot logs actions, disabled config stops, invalid config refuses, and overlap refuses
+  ---
+  duration_ms: 1431.409084
+  ...
+# Subtest: the loop rereads opt-in and shuts down with its lock removed
+ok 36 - the loop rereads opt-in and shuts down with its lock removed
+  ---
+  duration_ms: 2004.17275
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a canonical checkout
+ok 37 - no configuration defaults on and project record/main are discovered from a canonical checkout
+  ---
+  duration_ms: 899.872625
+  ...
+# Subtest: no configuration defaults on and project record/main are discovered from a linked preview
+ok 38 - no configuration defaults on and project record/main are discovered from a linked preview
+  ---
+  duration_ms: 941.315417
+  ...
+# Subtest: no record and no Git project are quiet no-ops
+ok 39 - no record and no Git project are quiet no-ops
+  ---
+  duration_ms: 390.315291
+  ...
+# Subtest: an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+ok 40 - an existing housekeeping tick recovers pending notice intent while dry-run starts no delivery
+  ---
+  duration_ms: 1345.57925
+  ...
+# Subtest: housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+ok 41 - housekeeping lock cleanup refuses PID reuse before registration and retains ownership on start retries
+  ---
+  duration_ms: 1.508458
+  ...
+# Subtest: canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 42 - canonical checkout startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 1016.21725
+  ...
+# Subtest: installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+ok 43 - installed copy startup assertion failure stops a real schedule before removing a symlinked fixture
+  ---
+  duration_ms: 1074.523583
+  ...
+# Subtest: canonical checkout start stays idempotent after a lane is removed
+ok 44 - canonical checkout start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1900.967417
+  ...
+# Subtest: installed copy start stays idempotent after a lane is removed
+ok 45 - installed copy start stays idempotent after a lane is removed
+  ---
+  duration_ms: 1999.6885
+  ...
+# Subtest: dry-run start leaves no timer process
+ok 46 - dry-run start leaves no timer process
+  ---
+  duration_ms: 408.066084
+  ...
+# Subtest: old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+ok 47 - old interruption with forty blank rows and a final reply is rejected within a bounded subprocess
+  ---
+  duration_ms: 42.090417
+  ...
+# Subtest: lane code cannot --once live housekeeping even with the canonical target
+ok 48 - lane code cannot --once live housekeeping even with the canonical target
+  ---
+  duration_ms: 427.2655
+  ...
+# Subtest: canonical code cannot --once live housekeeping from a linked target
+ok 49 - canonical code cannot --once live housekeeping from a linked target
+  ---
+  duration_ms: 283.847417
+  ...
+# Subtest: lane code cannot --start live housekeeping even with the canonical target
+ok 50 - lane code cannot --start live housekeeping even with the canonical target
+  ---
+  duration_ms: 274.620833
+  ...
+# Subtest: canonical code cannot --start live housekeeping from a linked target
+ok 51 - canonical code cannot --start live housekeeping from a linked target
+  ---
+  duration_ms: 265.667958
+  ...
+# Subtest: lane code cannot --loop live housekeeping even with the canonical target
+ok 52 - lane code cannot --loop live housekeeping even with the canonical target
+  ---
+  duration_ms: 356.172959
+  ...
+# Subtest: canonical code cannot --loop live housekeeping from a linked target
+ok 53 - canonical code cannot --loop live housekeeping from a linked target
+  ---
+  duration_ms: 416.887625
+  ...
+# Subtest: a record CLI override in a lane cannot pin a live schedule to removable code
+ok 54 - a record CLI override in a lane cannot pin a live schedule to removable code
+  ---
+  duration_ms: 283.485
+  ...
+# Subtest: linked code remains usable for isolated dry-run previews
+ok 55 - linked code remains usable for isolated dry-run previews
+  ---
+  duration_ms: 773.131625
+  ...
+# Subtest: an existing different-script owner never reports already-running or alters the old lock
+ok 56 - an existing different-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 346.229542
+  ...
+# Subtest: an existing different-record owner never reports already-running or alters the old lock
+ok 57 - an existing different-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 309.273291
+  ...
+# Subtest: an existing missing-script owner never reports already-running or alters the old lock
+ok 58 - an existing missing-script owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 446.2735
+  ...
+# Subtest: an existing missing-record owner never reports already-running or alters the old lock
+ok 59 - an existing missing-record owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 450.449833
+  ...
+# Subtest: an existing legacy owner never reports already-running or alters the old lock
+ok 60 - an existing legacy owner never reports already-running or alters the old lock
+  ---
+  duration_ms: 396.587833
+  ...
+# Subtest: promotion cleanup inspects and closes only the requested lane workspace
+ok 61 - promotion cleanup inspects and closes only the requested lane workspace
+  ---
+  duration_ms: 342.323792
+  ...
+# Subtest: defaults, legacy commands, partial tracked overrides and invalid declarations
+ok 62 - defaults, legacy commands, partial tracked overrides and invalid declarations
+  ---
+  duration_ms: 388.381625
+  ...
+# Subtest: a worker check, promotion check and promotion reuse their exact commands; release never runs
+ok 63 - a worker check, promotion check and promotion reuse their exact commands; release never runs
+  ---
+  duration_ms: 1588.692709
+  ...
+# Subtest: pane identities are absent from preparation, validation and fingerprints
+ok 64 - pane identities are absent from preparation, validation and fingerprints
+  ---
+  duration_ms: 1039.376459
+  ...
+# Subtest: same tree after empty commits and a clean rebase reuses validation across tiers
+ok 65 - same tree after empty commits and a clean rebase reuses validation across tiers
+  ---
+  duration_ms: 1034.863125
+  ...
+# Subtest: tree, command, environment, preparation and declared environment changes invalidate reuse
+ok 66 - tree, command, environment, preparation and declared environment changes invalidate reuse
+  ---
+  duration_ms: 1977.415875
+  ...
+# Subtest: red, signal, dirty and moved-head executions never supply reusable green evidence
+ok 67 - red, signal, dirty and moved-head executions never supply reusable green evidence
+  ---
+  duration_ms: 1895.026334
+  ...
+# Subtest: commands that start and exit 75 record failed receipts in both validation tiers
+ok 68 - commands that start and exit 75 record failed receipts in both validation tiers
+  ---
+  duration_ms: 1507.5895
+  ...
+# Subtest: worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+ok 69 - worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+  ---
+  duration_ms: 1224.550833
+  ...
+# Subtest: a started command exiting 75 is a failure in check and promote, never a slot refusal
+ok 70 - a started command exiting 75 is a failure in check and promote, never a slot refusal
+  ---
+  duration_ms: 1734.904125
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retries
+ok 71 - promotion holds the slot without replaying the chain when leaf retries
+  ---
+  duration_ms: 603.254042
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retry exhausted
+ok 72 - promotion holds the slot without replaying the chain when leaf retry exhausted
+  ---
+  duration_ms: 645.909
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf declines
+ok 73 - promotion holds the slot without replaying the chain when leaf declines
+  ---
+  duration_ms: 584.781667
+  ...
+# Subtest: promotion holds the slot without replaying the chain when earlier timeout text
+ok 74 - promotion holds the slot without replaying the chain when earlier timeout text
+  ---
+  duration_ms: 514.945792
+  ...
+# Subtest: a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+ok 75 - a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+  ---
+  duration_ms: 925.384166
+  ...
+# Subtest: overlapping checks serialize evidence without running the same command twice
+ok 76 - overlapping checks serialize evidence without running the same command twice
+  ---
+  duration_ms: 816.827042
+  ...
+# Subtest: promotion checks in different projects serialize and a nested command uses the held slot
+ok 77 - promotion checks in different projects serialize and a nested command uses the held slot
+  ---
+  duration_ms: 1064.258792
+  ...
+# Subtest: bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+ok 78 - bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+  ---
+  duration_ms: 969.707625
+  ...
+# Subtest: native dispatch opens a one-tab lane from a project with no Herdr workspace and preserves focus
+ok 79 - native dispatch opens a one-tab lane from a project with no Herdr workspace and preserves focus # SKIP opt in with LANE_HERDR_WORKSPACE_TEST=1 for scratch Herdr checks
+  ---
+  duration_ms: 0.763709
+  ...
+# Subtest: measured load expands internal allowances without shorter, infinite or overflowing timers
+ok 80 - measured load expands internal allowances without shorter, infinite or overflowing timers
+  ---
+  duration_ms: 1.258875
+  ...
+# Subtest: a loaded native lookup receives time to answer and timeout retries back off with fresh output
+ok 81 - a loaded native lookup receives time to answer and timeout retries back off with fresh output
+  ---
+  duration_ms: 2.903542
+  ...
+# Subtest: the default native executor under the bounded helper scales each response allowance once
+ok 82 - the default native executor under the bounded helper scales each response allowance once
+  ---
+  duration_ms: 37.277916
+  ...
+# Subtest: the record lock waits past ten seconds for a live holder under load before appending
+ok 83 - the record lock waits past ten seconds for a live holder under load before appending
+  ---
+  duration_ms: 51.682291
+  ...
+# Subtest: exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+ok 84 - exhausted record-lock waits preserve live, refused and initializing owners and log bytes
+  ---
+  duration_ms: 226.04275
+  ...
+# Subtest: exhausted, refused and malformed lookups never authorize a signal, including after timeout
+ok 85 - exhausted, refused and malformed lookups never authorize a signal, including after timeout
+  ---
+  duration_ms: 3.3975
+  ...
+# Subtest: a replacement PID discovered after a retry remains unauthorized
+ok 86 - a replacement PID discovered after a retry remains unauthorized
+  ---
+  duration_ms: 1.010959
+  ...
+# Subtest: slow Herdr transport responds within a loaded allowance; refusals stay refusals
+ok 87 - slow Herdr transport responds within a loaded allowance; refusals stay refusals
+  ---
+  duration_ms: 103.606167
+  ...
+# Subtest: housekeeping gives each evidence read a loaded response allowance and preserves refusals
+ok 88 - housekeeping gives each evidence read a loaded response allowance and preserves refusals
+  ---
+  duration_ms: 17.449417
+  ...
+# Subtest: queue and notice locks wait through loaded contention and never remove a live lock
+ok 89 - queue and notice locks wait through loaded contention and never remove a live lock
+  ---
+  duration_ms: 20.101583
+  ...
+# Subtest: inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+ok 90 - inbox fixture teardown waits through loaded owner shutdown and preserves an unresponsive owner
+  ---
+  duration_ms: 402.4385
+  ...
+# Subtest: owned inbox teardown allows loaded stop confirmation before clearing its processes
+ok 91 - owned inbox teardown allows loaded stop confirmation before clearing its processes
+  ---
+  duration_ms: 23.112792
+  ...
+# Subtest: owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+ok 92 - owned inbox teardown allows loaded shutdown confirmation before clearing its processes
+  ---
+  duration_ms: 22.443417
+  ...
+1..92
+# tests 92
+# suites 0
+# pass 91
+# fail 0
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 28211.942167

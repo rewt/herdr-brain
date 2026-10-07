@@ -6,8 +6,7 @@ import { validationSyscalls } from './syscalls.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { cliHelp } from '../lib/cli-help.mjs';
+import { cliHelp, isMain } from '../lib/cli-help.mjs';
 cliHelp(import.meta.url, "Usage: node discovery/bubblewrap.mjs --experimental-bubblewrap ABSOLUTE_BWRAP [ARGS...]");
 export function socketFilter(arch = process.arch) {
   const spec = { x64: { audit: 0xc000003e, column: 1 }, arm64: { audit: 0xc00000b7, column: 2 } }[arch];
@@ -30,7 +29,7 @@ export function socketFilter(arch = process.arch) {
   });
   return bytes;
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const [optIn, binary, ...args] = process.argv.slice(2);
   let fd;
   try {

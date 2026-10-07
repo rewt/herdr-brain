@@ -29,12 +29,11 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
 
 import { probe, processStartRecord, processState, removeStaleLock } from "./lock-support.mjs";
 import { lookupProcess } from "../lib/processes.mjs";
 import { writeFileAtomic } from "../lib/files.mjs";
-import { cliHelp } from '../lib/cli-help.mjs';
+import { cliHelp, isMain } from '../lib/cli-help.mjs';
 cliHelp(import.meta.url, "Usage: node test-slot/test-slot.mjs run LABEL [--wait SECONDS] -- COMMAND [ARGS...] | status");
 
 export const TEST_SLOT_PATH = process.platform === "darwin" ? "/private/tmp/bch-cloak-test-slot.lock" : "/tmp/bch-cloak-test-slot.lock";
@@ -389,8 +388,7 @@ function status({ options }) {
   return state.state === "live" ? 1 : state.state === "unknown" ? 2 : 0;
 }
 
-const invokedDirectly = () => { try { return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); } catch { return false; } };
-if (invokedDirectly()) {
+if (isMain(import.meta.url)) {
   let callerWatch;
   try {
     const parsed = parse(process.argv.slice(2));

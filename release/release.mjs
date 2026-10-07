@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from '../lib/cli-help.mjs';
+import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -230,6 +230,6 @@ export function main(argv = process.argv.slice(2)) {
     else process.stdout.write(JSON.stringify(result) + '\n');
   }
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === SELF) {
+if (isMain(import.meta.url)) {
   try { main(); } catch (error) { process.stderr.write(`release: ${error.message}\n`); process.exitCode = 1; }
 }

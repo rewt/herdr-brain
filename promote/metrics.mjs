@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Read-only train measurements. No record writes, model calls or gate execution.
 import fs from 'node:fs';
+import { isMain } from '../lib/cli-help.mjs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
 const git = (project, args) => {
@@ -294,6 +294,6 @@ export function main(args = process.argv.slice(2)) {
   if (baseline) data.baseline = importBaseline(baseline);
   process.stdout.write(json ? JSON.stringify(data, null, 2) + '\n' : renderMetrics(data));
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   try { main(); } catch (error) { process.stderr.write(`train metrics: ${error.message}\n`); process.exitCode = 1; }
 }

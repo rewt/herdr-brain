@@ -59,7 +59,9 @@ try {
     // Preserve a stable launcher/symlink in the receipt; never pin its current release.
     const native = values.codex && launcher(values.codex, 'native', directory);
     // Derive the actual installed directory, including during transactional staging.
-    const prefix = `#!/bin/sh\nentry_bin=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) || exit 1\n`;
+    // Dispatch may supply a minimal PATH. Locate the wrapper with shell
+    // builtins so an unrelated utility cannot prevent the native launch.
+    const prefix = `#!/bin/sh\ncase "$0" in\n  */*) entry_dir=\${0%/*}; entry_dir=\${entry_dir:-/} ;;\n  *) entry_dir=. ;;\nesac\nentry_bin=$(CDPATH= cd -P -- "$entry_dir" && pwd) || exit 1\n`;
     const adapter = `${quote(process.execPath)} ${quote(`${product}/discovery/adapters/codex.mjs`)} --entry-bin "$entry_bin" --native-fallback ${quote(native ?? 'codex')}${nativeExplicit ? ' --native-explicit' : ''}${values.validator ? ` --validator ${quote(values.validator)}` : ''} --repo "$PWD"`;
     const common = `${prefix}# Herdr Monitor: automatic fresh interactive entry only\nexec ${adapter} --auto-entry -- "$@"\n`;
     const files = { ...(native ? { codex: common, 'monitor-codex': `${prefix}exec ${adapter} "$@"\n` } : {}),

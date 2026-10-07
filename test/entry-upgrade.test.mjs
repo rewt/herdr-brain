@@ -111,3 +111,24 @@ test('discovered native follows PATH while its original receipt remains executab
   f.ok(f.run(process.execPath, [path.join(f.product, 'herdr/entry-install.mjs'), '--product', f.product], { PATH: `${first}:${f.env.PATH}` }));
   for (const kind of ['codex', 'claude']) assert.match(f.ok(f.run(path.join(f.bin, kind), ['--version'], { PATH: `${current}:${f.env.PATH}` })).stdout, /current/u);
 });
+
+test('installed wrappers launch explicit natives without dirname on PATH', t => {
+  const f = fixture(t), selected = f.version('selected');
+  f.ok(f.run(process.execPath, [path.join(f.product, 'discovery/install.mjs'), '--bin', f.bin,
+    '--codex', path.join(selected, 'codex'), '--claude', path.join(selected, 'claude')]));
+  const alias = path.join(f.root, 'entry bin [alias]');
+  fs.symlinkSync(f.bin, alias);
+  // Explicit monitor-* entry still needs Git to inspect the checkout.
+  const git = f.ok(f.run('/bin/sh', ['-c', 'command -v git'])).stdout.trim();
+  fs.symlinkSync(git, path.join(f.tools, 'git'));
+  const extra = { PATH: `${alias}:${f.tools}`, CDPATH: f.root, MONITOR_ENTRY_BYPASS: '1' };
+  for (const kind of ['codex', 'claude']) {
+    for (const name of [kind, `monitor-${kind}`]) {
+      const args = ['--version', 'literal argument'];
+      const result = f.ok(f.run(path.join(alias, name), name.startsWith('monitor-') ? ['--', ...args] : args, extra));
+      assert.match(result.stdout, /selected/u);
+      assert.match(result.stdout, /<literal argument>/u);
+      assert.equal(result.stderr, '');
+    }
+  }
+});

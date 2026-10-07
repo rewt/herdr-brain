@@ -984,7 +984,8 @@ try {
       for (const [index, job] of jobs.entries()) {
         if (index === 0) continue;
         assert.ok(preview.split('\n').some(line => line.startsWith(`[dry-run] keep ${before[index].tab} `) &&
-          line.endsWith(`: no recorded report for ${job.info.meta.agent}`)), 'waiting worker must reach the recorded-outcome guard');
+          line.endsWith(`: waiting on recorded ${before[index].outcome} outcome for ${job.info.meta.agent}`)),
+          `${before[index].outcome} worker must reach the recorded-outcome guard`);
       }
       write(path.join(evidence, 'cutover-cleanup-preview.txt'), preview);
       // Execute the installed tidy -> close-finished-agents path with mutations,

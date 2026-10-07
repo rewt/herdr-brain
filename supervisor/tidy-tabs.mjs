@@ -59,25 +59,45 @@ export function waitingOnRecord(snapshot, run) {
     });
 }
 
-export function reportedAgentsFromRecords(agents, runs, items) {
-  const eligible = new Set(), ineligible = new Set();
+// Keep the refusal reason alongside eligibility so views identify the guard
+// that actually retained the worker, after checking its launch identity.
+export function reportEvidenceFromRecords(agents, runs, items) {
+  const eligible = new Set(), reportKeepReasons = new Map();
   for (const agent of agents) {
     const run = matchingRun(agent, runs);
-    (run?.report && !waitingOnRecord({ items }, run) ? eligible : ineligible).add(agent.name);
+    let why;
+    if (!run && runs.some((r) => r.meta?.agent === agent.name)) {
+      why = `recorded launch identity does not match ${agent.name}`;
+    } else if (!run?.report) {
+      why = `no recorded report for ${agent.name}`;
+    } else if (waitingOnRecord({ items }, run)) {
+      why = ['blocked', 'needs_human'].includes(run.report.outcome)
+        ? `waiting on recorded ${run.report.outcome} outcome for ${agent.name}`
+        : `waiting on recorded item or blockers for ${agent.name}`;
+    }
+    if (why) {
+      const previous = reportKeepReasons.get(agent.name);
+      reportKeepReasons.set(agent.name, previous && previous !== why ? `${previous}; ${why}` : why);
+    } else eligible.add(agent.name);
   }
   // Duplicate observations of a reused name must all match the record; one
   // valid occupant cannot authorize a mismatched second occupant.
-  return new Set([...eligible].filter((name) => !ineligible.has(name)));
+  return { reportedAgents: new Set([...eligible].filter((name) => !reportKeepReasons.has(name))), reportKeepReasons };
+}
+
+export function reportedAgentsFromRecords(agents, runs, items) {
+  return reportEvidenceFromRecords(agents, runs, items).reportedAgents;
 }
 
 // Pure: decide which tabs to close from one observation of Herdr, org and the ledger.
 // snapshot = { tabs: [{tab_id, label, workspace_id, lane}], panes: [{pane_id, tab_id, shellOnly}],
 //   agents: [{name, status, pane_id}], reportedAgents: Set<name>, reviewedAgents: Set<name>,
+//   reportKeepReasons: Map<name, reason>,
 //   sessionOrder: Map<name, sortKey>,
 //   selfTab, keepSessions }
 export function planTidy(snapshot) {
   const {
-    tabs, panes, agents, reportedAgents = new Set(), reviewedAgents = new Set(),
+    tabs, panes, agents, reportedAgents = new Set(), reviewedAgents = new Set(), reportKeepReasons = new Map(),
     sessionOrder = new Map(), selfTab = null, keepSessions = 1, workerEligibility = null,
   } = snapshot;
   const close = [];
@@ -128,7 +148,8 @@ export function planTidy(snapshot) {
     }
     if (tab.lane && tabAgents.length && tabAgents.every((a) => a.name.startsWith('lane-'))) {
       const unrecorded = tabAgents.filter((a) => !reportedAgents.has(a.name) && !reviewedAgents.has(a.name));
-      if (unrecorded.length) skip(`no recorded report for ${unrecorded.map((a) => a.name).join(', ')}`);
+      if (unrecorded.length) skip([...new Set(unrecorded.map((a) =>
+        reportKeepReasons.get(a.name) ?? `no recorded report for ${a.name}`))].join('; '));
       else {
         const reviews = tabAgents.filter((a) => reviewedAgents.has(a.name) && !reportedAgents.has(a.name));
         const record = reviews.length === tabAgents.length ? 'review verdict' : 'result';
@@ -293,13 +314,13 @@ function main() {
       }
     }
     const agents = array(herdr(['agent', 'list']).agents, 'agents').map((a) => ({ ...a, status: a.agent_status }));
-    let reportedAgents = new Set(), recordedNames = new Set();
+    let reportedAgents = new Set(), reportKeepReasons = new Map(), recordedNames = new Set();
     if (opt.org) {
       const data = JSON.parse(invoke(opt['org-cli'], [...opt['org-cli-arg'], 'status', '--json'], { ...process.env, ORG_DIR: opt.org }));
       if (data.error) throw new Error(JSON.stringify(data.error));
       const runs = array((data.result ?? data).runs, 'record runs');
       const items = array((data.result ?? data).items, 'record items');
-      reportedAgents = reportedAgentsFromRecords(agents, runs, items);
+      ({ reportedAgents, reportKeepReasons } = reportEvidenceFromRecords(agents, runs, items));
       // A review file cannot override a waiting/open run or a failed identity
       // match for a recorded worker with the same name.
       recordedNames = new Set(runs.map((run) => run.meta?.agent));
@@ -321,7 +342,7 @@ function main() {
         if (m) ledgers.push({ day: m[1], text: fs.readFileSync(path.join(ledgerDir, f), 'utf8') });
       }
     } catch { /* no ledger: sessions are ordered as unknown */ }
-    return { tabs, panes, agents, reportedAgents, reviewedAgents,
+    return { tabs, panes, agents, reportedAgents, reportKeepReasons, reviewedAgents,
       sessionOrder: sessionOrderFromLedgers(ledgers), selfTab: process.env.HERDR_TAB_ID ?? null,
       keepSessions: Number(opt['keep-sessions']) };
   }

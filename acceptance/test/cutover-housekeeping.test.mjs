@@ -89,8 +89,12 @@ console.log(JSON.stringify({result}));
   assert.match(tidy, /would close done/); assert.doesNotMatch(tidy, /would close (blocked|needs_human|open|working|legacy)/);
   for (const outcome of ['blocked', 'needs_human']) {
     assert.ok(tidy.split('\n').some(line => line.startsWith(`[dry-run] keep ${outcome} `) &&
-      line.endsWith(`: no recorded report for lane-worker-${outcome}`)), `${outcome} must reach the recorded-outcome guard`);
+      line.endsWith(`: waiting on recorded ${outcome} outcome for lane-worker-${outcome}`)), `${outcome} must reach the recorded-outcome guard`);
   }
+  assert.ok(tidy.split('\n').some(line => line.startsWith('[dry-run] keep legacy ') &&
+    line.endsWith(': recorded launch identity does not match lane-worker-legacy')));
+  assert.ok(tidy.split('\n').some(line => line.startsWith('[dry-run] keep open ') &&
+    line.endsWith(': no recorded report for lane-worker-open')));
   assert.equal(state.tabs.length, outcomes.length);
   // Pin the adoption instruction without starting any project loop.
   assert.match(edits.protocol, /project supervisor starts housekeeping from the canonical checkout/);

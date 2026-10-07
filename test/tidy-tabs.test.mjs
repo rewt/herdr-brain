@@ -1,10 +1,64 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import { isShellOnly, planTidy, reviewedAgentsFromRecords, reviewVerdict, sessionOrderFromLedgers } from '../supervisor/tidy-tabs.mjs';
+import { isShellOnly, planTidy, reportEvidenceFromRecords, reportedAgentsFromRecords, reviewedAgentsFromRecords, reviewVerdict, sessionOrderFromLedgers } from '../supervisor/tidy-tabs.mjs';
 
 const tab = (tab_id, label, lane = false) => ({ tab_id, label, workspace_id: lane ? 'wL' : 'wM', lane });
 const pane = (pane_id, tab_id, shellOnly = true) => ({ pane_id, tab_id, shellOnly });
 const ids = (list) => list.map((x) => x.tab_id).sort();
+
+function workerFixture() {
+  const agent = { name: 'lane-worker', status: 'idle', pane_id: 'p1', workspace_id: 'wL', cwd: process.cwd(), terminal_id: 'terminal' };
+  const run = { id: 'R-1', item: 'ENG-1', started: { seq: 1 }, workspace: agent.cwd,
+    meta: { agent: agent.name, pane: agent.pane_id, worker_workspace: agent.workspace_id, terminal_id: agent.terminal_id },
+    report: { outcome: 'done' } };
+  return { agents: [agent], runs: [run], items: [{ id: run.item, status: 'done' }],
+    tabs: [tab('t1', 'worker', true)], panes: [pane('p1', 't1')] };
+}
+
+for (const cause of ['no-run', 'no-report', 'newer-open-run', 'identity', 'tied-newest', 'blocked', 'needs_human', 'item', 'blocker', 'duplicate-name']) {
+  test(`lane keep reason identifies ${cause} without authorizing closure`, () => {
+    const snapshot = workerFixture(), run = snapshot.runs[0], agent = snapshot.agents[0];
+    let expected = 'no recorded report for lane-worker';
+    if (cause === 'no-run') snapshot.runs = [];
+    if (cause === 'no-report') run.report = null;
+    if (cause === 'newer-open-run') snapshot.runs.push({ ...run, id: 'R-2', started: { seq: 2 }, report: null });
+    if (['identity', 'tied-newest', 'duplicate-name'].includes(cause)) {
+      expected = 'recorded launch identity does not match lane-worker';
+      if (cause === 'identity') run.meta.terminal_id = 'old-terminal';
+      if (cause === 'tied-newest') snapshot.runs.push({ ...run, id: 'R-2' });
+      if (cause === 'duplicate-name') snapshot.agents.push({ ...agent, terminal_id: 'other-terminal' });
+    }
+    if (['blocked', 'needs_human'].includes(cause)) {
+      run.report.outcome = cause;
+      expected = `waiting on recorded ${cause} outcome for lane-worker`;
+    }
+    if (['item', 'blocker'].includes(cause)) {
+      expected = 'waiting on recorded item or blockers for lane-worker';
+      if (cause === 'item') snapshot.items[0].status = 'blocked';
+      else snapshot.items[0].blocked_by = ['HUM-1'];
+    }
+    const evidence = reportEvidenceFromRecords(snapshot.agents, snapshot.runs, snapshot.items);
+    const plan = planTidy({ ...snapshot, ...evidence });
+    assert.deepEqual(plan.close, []);
+    assert.equal(plan.keep[0].why, expected);
+    assert.deepEqual([...reportedAgentsFromRecords(snapshot.agents, snapshot.runs, snapshot.items)], []);
+    if (['blocked', 'needs_human', 'item', 'blocker'].includes(cause)) {
+      run.report.outcome = 'done'; snapshot.items[0] = { id: run.item, status: 'done' };
+      const resolved = reportEvidenceFromRecords(snapshot.agents, snapshot.runs, snapshot.items);
+      assert.deepEqual(ids(planTidy({ ...snapshot, ...resolved }).close), ['t1']);
+    }
+  });
+}
+
+test('a shared tab lists the distinct reasons for each ineligible worker', () => {
+  const snapshot = workerFixture(), waiting = snapshot.agents[0];
+  snapshot.runs[0].report.outcome = 'blocked';
+  snapshot.agents.push({ ...waiting, name: 'lane-missing', pane_id: 'p2' });
+  snapshot.panes.push(pane('p2', 't1'));
+  const plan = planTidy({ ...snapshot, ...reportEvidenceFromRecords(snapshot.agents, snapshot.runs, snapshot.items) });
+  assert.deepEqual(plan.close, []);
+  assert.equal(plan.keep[0].why, 'waiting on recorded blocked outcome for lane-worker; no recorded report for lane-missing');
+});
 
 test('closes exited watchers and old finished sessions, keeps the newest session', () => {
   const plan = planTidy({

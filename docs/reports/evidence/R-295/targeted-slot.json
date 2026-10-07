@@ -1,0 +1,17 @@
+{
+  "schema": "test-slot-wait/v1",
+  "state": "cancelled-before-acquisition",
+  "started_at": "2026-10-07T14:52:42.824Z",
+  "wait_seconds": 3600,
+  "waits": [
+    {
+      "lock_path": "/private/tmp/bch-cloak-test-slot.lock",
+      "label": "eng252-targeted",
+      "holder": "validate:all-safe (pid 29680, group 50131, /Users/rewt/.herdr/worktrees/bch-cloak/lane-pool-mvp-return-trip)",
+      "acquired_at": "2026-10-07T14:38:02.402Z",
+      "wait_seconds": 3600,
+      "at": "2026-10-07T14:52:42.857Z"
+    }
+  ],
+  "reason": "Ordinary offline files run directly; native comparisons retain host-slot serialization."
+}

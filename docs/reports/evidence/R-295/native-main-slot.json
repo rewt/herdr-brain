@@ -1,0 +1,18 @@
+{
+  "schema": "test-slot-wait/v1",
+  "state": "acquired",
+  "started_at": "2026-10-07T15:14:55.651Z",
+  "wait_seconds": 3600,
+  "waits": [
+    {
+      "lock_path": "/private/tmp/bch-cloak-test-slot.lock",
+      "label": "eng252-main-matched",
+      "holder": "promotion /Users/rewt/development/rewt/herdr-brain/.git/promote/batches/7c8602b8-c97b-480c-9a45-547fdb71b47b/scratch-0 (pid 60949, group 86091, /Users/rewt/development/rewt/herdr-brain/.git/promote/batches/7c8602b8-c97b-480c-9a45-547fdb71b47b/scratch-0)",
+      "acquired_at": "2026-10-07T15:13:57.508Z",
+      "wait_seconds": 3600,
+      "at": "2026-10-07T15:14:55.686Z"
+    }
+  ],
+  "finished_at": "2026-10-07T15:19:53.552Z",
+  "nested": false
+}

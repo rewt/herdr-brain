@@ -1,0 +1,18 @@
+{
+  "schema": "test-slot-wait/v1",
+  "state": "acquired",
+  "started_at": "2026-10-07T14:52:45.327Z",
+  "wait_seconds": 3600,
+  "waits": [
+    {
+      "lock_path": "/private/tmp/bch-cloak-test-slot.lock",
+      "label": "eng252-main",
+      "holder": "validate:all-safe (pid 29680, group 50131, /Users/rewt/.herdr/worktrees/bch-cloak/lane-pool-mvp-return-trip)",
+      "acquired_at": "2026-10-07T14:38:02.402Z",
+      "wait_seconds": 3600,
+      "at": "2026-10-07T14:52:45.364Z"
+    }
+  ],
+  "finished_at": "2026-10-07T15:13:38.874Z",
+  "nested": false
+}

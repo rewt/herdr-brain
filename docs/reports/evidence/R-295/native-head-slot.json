@@ -1,0 +1,26 @@
+{
+  "schema": "test-slot-wait/v1",
+  "state": "acquired",
+  "started_at": "2026-10-07T14:52:47.713Z",
+  "wait_seconds": 3600,
+  "waits": [
+    {
+      "lock_path": "/private/tmp/bch-cloak-test-slot.lock",
+      "label": "eng252-head",
+      "holder": "validate:all-safe (pid 29680, group 50131, /Users/rewt/.herdr/worktrees/bch-cloak/lane-pool-mvp-return-trip)",
+      "acquired_at": "2026-10-07T14:38:02.402Z",
+      "wait_seconds": 3600,
+      "at": "2026-10-07T14:52:47.757Z"
+    },
+    {
+      "lock_path": "/private/tmp/bch-cloak-test-slot.lock",
+      "label": "eng252-head",
+      "holder": "eng252-main (pid 77879, /private/tmp/eng252-main-3ws5knvr)",
+      "acquired_at": "2026-10-07T15:13:38.874Z",
+      "wait_seconds": 3600,
+      "at": "2026-10-07T15:13:38.934Z"
+    }
+  ],
+  "finished_at": "2026-10-07T15:13:48.936Z",
+  "nested": false
+}

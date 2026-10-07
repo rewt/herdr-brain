@@ -1,0 +1,53 @@
+TEST_SLOT_WAIT: promotion /Users/rewt/development/rewt/herdr-brain/.git/promote/batches/7c8602b8-c97b-480c-9a45-547fdb71b47b/scratch-0 (pid 60949, group 86091, /Users/rewt/development/rewt/herdr-brain/.git/promote/batches/7c8602b8-c97b-480c-9a45-547fdb71b47b/scratch-0); /private/tmp/bch-cloak-test-slot.lock; capped at 3600s
+TAP version 13
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+ok 1 - real live discovery setup confines a short fleet temp with no project configuration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.547583
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 2 - real live-worker arguments reach the installed adapter with its supported private temp grant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.043875
+  ...
+# Subtest: installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+ok 3 - installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+  ---
+  duration_ms: 8601.337834
+  ...
+# monitor entry: keeping lane/entry-1bab3ef14ae4 at /private/tmp/as-4BIBNb/lanes/lane-entry-1bab3ef14ae4: a run was started in this lane
+# monitor entry: keeping lane/entry-6904d45b4c4d at /private/tmp/as-4BIBNb/lanes/lane-entry-6904d45b4c4d: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 4 - validation composition keeps product denials and refuses foreign writes and unsupported profiles # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.553541
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 5 - validation write exceptions reject redirected directories and protected Git or shared-state targets # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.042708
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 6 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.049166
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+ok 7 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 3937.937917
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+ok 8 - native per-run validation temp is admitted only by its private identity and exact environment handoff # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055708
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 6
+# todo 0
+# duration_ms 8636.940083

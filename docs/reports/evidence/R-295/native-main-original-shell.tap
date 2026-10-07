@@ -1,0 +1,25 @@
+TEST_SLOT_WAIT: validate:all-safe (pid 29680, group 50131, /Users/rewt/.herdr/worktrees/bch-cloak/lane-pool-mvp-return-trip); /private/tmp/bch-cloak-test-slot.lock; capped at 3600s
+TAP version 13
+# Subtest: installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+ok 1 - installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+  ---
+  duration_ms: 9862.529875
+  type: 'test'
+  ...
+# monitor entry: keeping lane/entry-2fd8353520dc at /private/tmp/as-wz4gjW/lanes/lane-entry-2fd8353520dc: a run was started in this lane
+# monitor entry: keeping lane/entry-6f6b4c7390a9 at /private/tmp/as-wz4gjW/lanes/lane-entry-6f6b4c7390a9: a run was started in this lane
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+ok 2 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 4337.421083
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9904.807125

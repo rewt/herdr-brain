@@ -1,0 +1,8 @@
+{"at":"2026-10-07T14:37:38.511Z","action":"scan","close":1,"keep":6,"cleanup":true,"resume":true,"dryRun":true}
+{"at":"2026-10-07T14:37:38.511Z","action":"keep","tab_id":"blocked","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}
+{"at":"2026-10-07T14:37:38.511Z","action":"keep","tab_id":"needs_human","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}
+{"at":"2026-10-07T14:37:38.511Z","action":"keep","tab_id":"open","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}
+{"at":"2026-10-07T14:37:38.512Z","action":"keep","tab_id":"working","label":"worker","why":"an agent here is still active","dryRun":true}
+{"at":"2026-10-07T14:37:38.512Z","action":"keep","tab_id":"legacy","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}
+{"at":"2026-10-07T14:37:38.512Z","action":"keep","tab_id":"unmerged","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}
+{"at":"2026-10-07T14:37:38.512Z","action":"would-close","tab_id":"done","label":"worker","why":"R-1 recorded report; lane promoted or archived"}

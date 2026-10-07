@@ -325,7 +325,10 @@ function main() {
       sessionOrder: sessionOrderFromLedgers(ledgers), selfTab: process.env.HERDR_TAB_ID ?? null,
       keepSessions: Number(opt['keep-sessions']) };
   }
-  const { close } = planTidy(observe());
+  const { close, keep } = planTidy(observe());
+  if (opt['dry-run']) {
+    for (const k of keep) console.log(`[dry-run] keep ${k.tab_id} "${k.label}": ${k.why}`);
+  }
   let closed = 0;
   for (const c of close) {
     if (opt['dry-run']) { console.log(`[dry-run] would close ${c.tab_id} "${c.label}": ${c.why}`); continue; }

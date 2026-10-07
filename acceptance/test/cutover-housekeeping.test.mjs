@@ -87,6 +87,10 @@ console.log(JSON.stringify({result}));
   // Installed one-shot cleanup shares identity checks and preserves legacy/blocked/open occupants.
   const tidy = run('/bin/sh', [path.join(copy, '.lane/supervisor/close-finished-agents.sh'), '--dry-run']);
   assert.match(tidy, /would close done/); assert.doesNotMatch(tidy, /would close (blocked|needs_human|open|working|legacy)/);
+  for (const outcome of ['blocked', 'needs_human']) {
+    assert.ok(tidy.split('\n').some(line => line.startsWith(`[dry-run] keep ${outcome} `) &&
+      line.endsWith(`: no recorded report for lane-worker-${outcome}`)), `${outcome} must reach the recorded-outcome guard`);
+  }
   assert.equal(state.tabs.length, outcomes.length);
   // Pin the adoption instruction without starting any project loop.
   assert.match(edits.protocol, /project supervisor starts housekeeping from the canonical checkout/);

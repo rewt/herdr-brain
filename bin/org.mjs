@@ -730,6 +730,7 @@ function worker(argv) {
       if (keys.some(key => (run.meta[key] ?? null) !== (meta[key] ?? null))) throw new UserError('worker launch identity differs from recorded receipt');
       return { add: [] };
     } // Lost reply: exact identity only, never enrich a receipt later.
+    if (keys.some(key => run.meta[key] != null)) throw new UserError('cannot backfill a partial worker launch receipt');
     if (run.report || run.abandoned) throw new UserError('cannot backfill a settled worker launch');
     if ([...s.runs.values()].some(other => other.started.seq > run.started.seq && other.meta.agent === meta.agent)) throw new UserError('worker name belongs to a newer run');
     return { add: [{ type: 'run.updated', id, meta }] };

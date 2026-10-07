@@ -20,8 +20,8 @@ function fixture(t) {
     terminal_id: 'terminal', agent_session: { value: 'session' } };
   fs.writeFileSync(path.join(bin, 'herdr'), `#!${process.execPath}\nimport fs from 'node:fs';console.log(JSON.stringify({result:{agent:JSON.parse(fs.readFileSync(${JSON.stringify(file)}))}}));\n`, { mode: 0o755 });
   const save = a => fs.writeFileSync(file, JSON.stringify(a)); save(agent);
-  const launch = (id = run, extra = []) => spawnSync(process.execPath, [capture, id, '--agent', agent.name,
-    '--pane', agent.pane_id, '--cwd', root, ...extra], { env, encoding: 'utf8' });
+  const launch = (id = run, extra = [], cwd = root) => spawnSync(process.execPath, [capture, id, '--agent', agent.name,
+    '--pane', agent.pane_id, '--cwd', root, ...extra], { cwd, env, encoding: 'utf8' });
   const show = () => JSON.parse(rec(['show', run, '--json']).stdout).meta;
   return { root, agent, run, start, save, launch, show, rec, org };
 }
@@ -45,7 +45,10 @@ test('missing identities, settled runs and worker names owned by newer runs cann
   const f = fixture(t);
   f.save({ ...f.agent, terminal_id: null, agent_session: null }); assert.equal(f.launch().status, 1);
   f.save(f.agent);
-  assert.equal(f.rec(['abandon', f.run]).status, 0); assert.equal(f.launch().status, 1);
+  assert.equal(f.rec(['abandon', f.run]).status, 0);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  assert.equal(f.launch().status, 1);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
   const older = f.start(), newer = f.start();
   assert.equal(f.launch(newer).status, 0); assert.equal(f.launch(older).status, 1);
 });
@@ -53,5 +56,38 @@ test('one launch occupant identity suffices but a retry cannot enrich it later',
   const f = fixture(t);
   f.save({ ...f.agent, agent_session: null }); assert.equal(f.launch().status, 0);
   assert.equal(f.show().agent_session_id, undefined);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
   f.save(f.agent); assert.equal(f.launch().status, 1);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
+});
+test('legacy launcher fields and every partial receipt refuse live identity backfill without events', t => {
+  const f = fixture(t);
+  for (const fields of [['agent=worker', 'pane=pane'], ['agent=worker'], ['pane=pane'],
+    ['worker_workspace=workspace'], ['terminal_id=terminal'], ['agent_session_id=session']]) {
+    const run = fields.length === 2 ? f.run : f.start();
+    assert.equal(f.rec(['set', run, ...fields]).status, 0);
+    const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+    const result = f.launch(run);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /cannot backfill a partial worker launch receipt/);
+    assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
+  }
+});
+test('a complete launch receipt permits only an exact retry after settlement', t => {
+  const f = fixture(t);
+  assert.equal(f.launch().status, 0);
+  assert.equal(f.rec(['abandon', f.run]).status, 0);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  assert.equal(f.launch().status, 0);
+  f.save({ ...f.agent, terminal_id: 'replacement' });
+  assert.equal(f.launch().status, 1);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
+});
+test('relative and symlink cwd are resolved once before child commands', t => {
+  const f = fixture(t), parent = path.dirname(f.root);
+  assert.equal(f.launch(f.run, ['--cwd', path.basename(f.root)], parent).status, 0);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8');
+  const alias = path.join(f.root, 'alias'); fs.symlinkSync(f.root, alias);
+  assert.equal(f.launch(f.run, ['--cwd', 'alias']).status, 0);
+  assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), events);
 });

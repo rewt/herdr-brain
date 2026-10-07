@@ -34,6 +34,7 @@ import { loadAwareCommand } from './commands.mjs';
 import { createLoadMonitor, responseAllowance, waitUntil } from './load.mjs';
 import { startLegacyConsumer } from './legacy-consumer.mjs';
 import { copyExistingProject } from './existing-project.mjs';
+import { matchingRun } from '../supervisor/tidy-tabs.mjs';
 
 export function harnessEnvironment(input, root) {
   const env = { ...input };
@@ -960,7 +961,7 @@ try {
         const topic = `cutover-cleanup-${outcome.replace('_', '-')}`;
         const wt = path.join(scratchHome, '.herdr/worktrees/bch-cloak', `lane-${topic}`);
         const ws = h('worktree', 'create', '--cwd', copy, '--branch', `lane/${topic}`, '--base', 'main', '--path', wt, '--no-focus');
-        const agent = `cleanup-${outcome.replace('_', '-')}-${process.pid}`;
+        const agent = `lane-cleanup-${outcome.replace('_', '-')}-${process.pid}`;
         const item = rec(['add', `Cleanup ${outcome} fixture`, '--role', 'engineer']).match(/^(\S+)/)[1];
         const report = path.join(root, `cleanup-${outcome}.md`);
         const runId = rec(['start', item, '--harness', 'codex', '--model', 'scripted', '--effort', 'low', '--workspace', wt, '--report', report]).match(/^(R-\d+)/)[1];
@@ -971,13 +972,21 @@ try {
         rec(['check', report]); rec(['ingest', report, '--run', runId]);
         jobs.push({ run: runId, info: json(rec(['show', runId, '--json'])) });
       }
-      const before = jobs.map((job) => ({ run: job.run, outcome: json(rec(['show', job.run, '--json'])).report.outcome,
-        pane: h('agent', 'get', job.info.meta.agent).agent.pane_id,
-        tab: h('agent', 'get', job.info.meta.agent).agent.tab_id,
-        workspace: h('agent', 'get', job.info.meta.agent).agent.workspace_id,
-        status: h('agent', 'get', job.info.meta.agent).agent.agent_status }));
+      const before = jobs.map((job) => {
+        const run = json(rec(['show', job.run, '--json'])), agent = h('agent', 'get', job.info.meta.agent).agent;
+        assert.equal(matchingRun(agent, [run])?.id, job.run, 'cleanup fixture must match its recorded launch occupant');
+        return { run: job.run, outcome: run.report.outcome, pane: agent.pane_id,
+          tab: agent.tab_id, workspace: agent.workspace_id, status: agent.agent_status };
+      });
       assert.deepEqual(before.map((v) => v.outcome), ['done', 'blocked', 'needs_human']);
       assert.ok(before.every((v) => ['idle', 'done'].includes(v.status)), 'all report workers must be idle to exercise the outcome guard');
+      const preview = execute('.lane/supervisor/close-finished-agents.sh', ['--dry-run']).stdout;
+      for (const [index, job] of jobs.entries()) {
+        if (index === 0) continue;
+        assert.ok(preview.split('\n').some(line => line.startsWith(`[dry-run] keep ${before[index].tab} `) &&
+          line.endsWith(`: no recorded report for ${job.info.meta.agent}`)), 'waiting worker must reach the recorded-outcome guard');
+      }
+      write(path.join(evidence, 'cutover-cleanup-preview.txt'), preview);
       // Execute the installed tidy -> close-finished-agents path with mutations,
       // not the released housekeeping module or a dry run.
       const output = execute('.lane/supervisor/tidy-tabs.sh', ['--workspace', supervisor.workspace]).stdout;

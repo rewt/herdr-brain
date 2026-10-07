@@ -103,8 +103,10 @@ checked against the run's recorded `workspace`. No session registry is read.
 The record transaction refuses conflicting existing fields, a settled run
 lacking launch evidence, and a worker name assigned to a newer
 run. An exact retry writes no event; it cannot add another occupant identity to
-an already complete receipt. A failed step leaves the worker and run intact;
-inspect them before continuing, and do not arm watch after a recording failure.
+an already complete receipt. Partial receipts, including legacy `agent`/`pane`
+fields, refuse any completion from the live worker. A failed step leaves the
+worker and run intact; inspect them before continuing, and do not arm watch
+after a recording failure.
 This is a launch step, never a migration/backfill tool for old workers. Historical
 tabs without recorded launch evidence stay protected by housekeeping.
 

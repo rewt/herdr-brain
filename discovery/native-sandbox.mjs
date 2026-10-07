@@ -78,12 +78,21 @@ function resolvedPath(pathname) {
 // Claude Code 2.1.292's rTe() uses <CLAUDE_CODE_TMPDIR>/claude-<uid>
 // up to 44 bytes, then /tmp/claude-<uid>. TMPDIR in settings cannot override
 // the export in its sandboxed shell command. Keep macOS's /tmp alias canonical.
-function claudeSocketDirectories(temporary) {
+function claudeSocketDirectories(temporary, warn) {
   const suffix = `claude-${process.getuid?.() ?? 0}`;
   if (Buffer.byteLength(path.join(temporary, suffix)) <= 44) return [temporary];
-  const fallback = path.join(checkedDirectory('/tmp'), suffix);
-  if (fs.existsSync(fallback)) checkedDirectory(fallback);
-  return [temporary, fallback];
+  let fallback = path.join('/tmp', suffix);
+  try {
+    fallback = path.join(checkedDirectory('/tmp'), suffix);
+    checkedDirectory(fallback);
+    const entry = fs.lstatSync(fallback);
+    if (!entry.isDirectory() || entry.isSymbolicLink() || entry.uid !== (process.getuid?.() ?? 0) || (entry.mode & 0o022))
+      throw new Error('directory is not safely owned by the current user');
+    return [temporary, fallback];
+  } catch (error) {
+    warn(`monitor sandbox: WARNING: skipping shared Claude temp socket grant ${fallback}: ${error.message}`);
+    return [temporary];
+  }
 }
 
 export function nativeSandboxLaunch({ kind, binary, args, context, env = process.env, warn = console.error }) {
@@ -163,7 +172,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       sources.push({ source: inline ? 'CLI --settings JSON' : path.resolve(context.workspace, value), settings: supplied });
       settings = merge(settings, supplied);
     }
-    const socketDirectories = claudeSocketDirectories(temporary);
+    const socketDirectories = claudeSocketDirectories(temporary, warn);
     const warnings = [];
     const approved = [checkedDirectory(context.workspace), ...writable];
     for (const { source, settings: loaded } of sources) {

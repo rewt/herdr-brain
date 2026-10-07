@@ -10,7 +10,7 @@ import { command } from '../runtime.mjs';
 import { runTemporary, temporaryEnvironment } from '../temporary.mjs';
 import { nativeSandboxLaunch, nativeSession } from '../native-sandbox.mjs';
 
-function fixture(t) {
+function fixture(t, fallbackState = 'owned') {
   const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'a18-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const own = { checkout: path.join(root, 'a'), record: path.join(root, 'ar'), temp: path.join(root, 'at'), worktrees: path.join(root, 'aw') };
@@ -26,7 +26,31 @@ function fixture(t) {
     const before = process.env[key]; process.env[key] = value;
     t.after(() => { if (before === undefined) delete process.env[key]; else process.env[key] = before; });
   }
-  return { root, own, other, context, binary };
+  // Keep in-process fallback checks independent of the machine's shared Claude
+  // directory; use the real checkedDirectory traversal with a private stand-in.
+  const fallback = path.join(fs.realpathSync('/tmp'), `claude-${process.getuid?.() ?? 0}`);
+  const standIn = path.join(root, 'fallback'); fs.mkdirSync(standIn, { mode: 0o700 });
+  const lstat = fs.lstatSync, realpath = fs.realpathSync, open = fs.openSync;
+  let fallbackInspections = 0;
+  t.mock.method(fs, 'lstatSync', function (file, ...args) {
+    if (file !== fallback) return lstat.call(this, file, ...args);
+    fallbackInspections++;
+    if (fallbackState === 'missing') throw Object.assign(new Error(`ENOENT: no such directory, ${fallback}`), { code: 'ENOENT' });
+    const entry = lstat.call(this, standIn, ...args);
+    if (fallbackState === 'foreign') entry.uid = (process.getuid?.() ?? 0) + 1;
+    if (fallbackState === 'writable') entry.mode |= 0o002;
+    if (fallbackState === 'symlink') entry.isSymbolicLink = () => true;
+    return entry;
+  });
+  t.mock.method(fs, 'realpathSync', function (file, ...args) {
+    return file === fallback ? fallback : realpath.call(this, file, ...args);
+  });
+  t.mock.method(fs, 'openSync', function (file, ...args) {
+    if (file !== fallback) return open.call(this, file, ...args);
+    if (fallbackState === 'denied') throw Object.assign(new Error(`EPERM: operation not permitted, open '${fallback}'`), { code: 'EPERM' });
+    return open.call(this, standIn, ...args);
+  });
+  return { root, own, other, context, binary, fallback, fallbackInspections: () => fallbackInspections };
 }
 
 test('headless tasks and resumes get a sandbox even when prompt text names a utility', () => {
@@ -119,22 +143,50 @@ test('Claude socket grants stay within each run and its measured shell fallback'
 });
 
 test('a short Claude run temp needs no shared shell fallback grant', t => {
-  const f = fixture(t), short = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'c-'));
+  const f = fixture(t, 'denied'), short = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'c-'));
   t.after(() => fs.rmSync(short, { recursive: true, force: true }));
-  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...f.context, tempRoot: short } });
+  const warnings = [];
+  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...f.context, tempRoot: short }, warn: message => warnings.push(message) });
   t.after(launch.close);
   assert.ok(Buffer.byteLength(path.join(launch.env.TMPDIR, `claude-${process.getuid?.() ?? 0}`)) <= 44);
   const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
   assert.deepEqual(settings.sandbox.network.allowUnixSockets, [launch.env.TMPDIR]);
+  assert.equal(f.fallbackInspections(), 0);
+  assert.deepEqual(warnings, []);
 });
 
-test('a long Claude run temp grants only the canonical per-user fallback in addition', t => {
+test('a long Claude run temp keeps the safely owned canonical per-user fallback grant', t => {
   const f = fixture(t), tempRoot = path.join(f.root, 'socket-temp-long'); fs.mkdirSync(tempRoot);
-  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...f.context, tempRoot } }); t.after(launch.close);
+  const warnings = [];
+  const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: [], context: { ...f.context, tempRoot }, warn: message => warnings.push(message) }); t.after(launch.close);
   assert.ok(Buffer.byteLength(path.join(launch.env.TMPDIR, `claude-${process.getuid?.() ?? 0}`)) > 44);
   const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
-  assert.deepEqual(settings.sandbox.network.allowUnixSockets, [launch.env.TMPDIR, path.join(fs.realpathSync('/tmp'), `claude-${process.getuid?.() ?? 0}`)]);
+  assert.deepEqual(settings.sandbox.network.allowUnixSockets, [launch.env.TMPDIR, f.fallback]);
+  assert.deepEqual(warnings, []);
 });
+
+for (const [state, reason] of [['missing', /ENOENT/u], ['denied', /EPERM/u], ['foreign', /not safely owned/u], ['writable', /not safely owned/u], ['symlink', /redirected/u]]) {
+  test(`Claude launches without the ${state} shared fallback grant and warns once`, t => {
+    const f = fixture(t, state), tempRoot = path.join(f.root, 'socket-temp-long'); fs.mkdirSync(tempRoot);
+    const warnings = [];
+    const launch = nativeSandboxLaunch({ kind: 'claude', binary: f.binary, args: ['Task'], context: { ...f.context, tempRoot }, warn: message => warnings.push(message) });
+    t.after(launch.close);
+    assert.ok(Buffer.byteLength(path.join(launch.env.TMPDIR, `claude-${process.getuid?.() ?? 0}`)) > 44);
+    assert.equal(launch.binary, f.binary);
+    assert.ok(launch.args.includes('Task'));
+    const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+    assert.deepEqual(settings.sandbox.network.allowUnixSockets, [launch.env.TMPDIR]);
+    assert.deepEqual(settings.sandbox.filesystem.allowWrite, [f.own.record, launch.env.TMPDIR]);
+    assert.equal(settings.env.CLAUDE_CODE_TMPDIR, launch.env.TMPDIR);
+    assert.equal(settings.sandbox.enabled, true);
+    assert.equal(warnings.length, 1);
+    assert.ok(warnings[0].includes(f.fallback));
+    assert.match(warnings[0], /WARNING: skipping shared Claude temp socket grant/u);
+    assert.match(warnings[0], reason);
+    launch.close();
+    assert.ok(!fs.existsSync(launch.env.TMPDIR));
+  });
+}
 
 test('Claude merges supplied Unix sockets and leaves inherited grants in native scopes', t => {
   const f = fixture(t), user = path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json');

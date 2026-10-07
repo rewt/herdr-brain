@@ -246,7 +246,10 @@ system-temp fallback is used. Normal exit removes the run temp. Crash leftovers
 remain under the project's mapped temp for later lane cleanup (ENG-127).
 
 Claude receives `sandbox.network.allowUnixSockets` for the run temp and, when
-the 44-byte limit requires it, the canonical per-user fallback. On macOS the
+the 44-byte limit requires it, the canonical per-user fallback if it can be
+inspected, belongs to the current user and is not writable by group or others.
+A missing, unreadable, redirected or unsafe fallback produces one warning and
+launch continues with only the run-temp grant. On macOS the
 native runtime uses directory subpath rules for both bind and connect. Sibling
 run paths, other fleet projects and Herdr's control socket get no generated
 socket grant, including through symlinks. The fallback is shared by Claude

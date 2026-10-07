@@ -44,7 +44,8 @@ test('digest combines recorded reports, promotion outcomes and decisions without
   assert.equal(doc.promotions[1].reason, 'red check with "quotes"');
   assert.deepEqual(doc.reports.map(r => [r.run, r.item, r.outcome, r.headline, r.check, r.recorded]),
     [['R-1', 'ENG-1', 'done', 'The recorded headline', 'pass', true]]);
-  assert.deepEqual(doc.decisions.map(d => d.text).sort(), ['Keep the chat quiet', 'Use the durable journal']);
+  assert.deepEqual(doc.decisions.map(d => d.summary || d.text).sort(), ['Keep the chat quiet', 'Use the durable journal']);
+  assert.equal(doc.decisions.find(d => d.summary).text, 'Technical detail', 'JSON keeps the full decision behind its summary');
   assert.deepEqual(doc.blocked, []);
   assert.equal(f.read(['--since', NOW]).promotions.length, 0, 'delivery time is not a new promotion');
   assert.equal(f.read(['--since', '09:00']).reports.length, 0);
@@ -67,7 +68,10 @@ test('digest keeps old open questions and current blocked sessions, then drops r
   const doc = f.read(['--since', NOW]);
   assert.deepEqual(doc.questions.map(q => [q.id, q.recommend, q.why]), [['HUM-1', 'no', 'Needs review']]);
   assert.deepEqual(doc.blocked.map(b => [b.run, b.source, b.reason]),
-    [['R-5', 'record', 'Waiting for access'], ['R-1', 'inbox', 'Worker is blocked at a prompt']]);
+    [['R-5', 'record', 'Waiting for access'], ['R-1', 'inbox', `Watch reported a prompt block at ${OLD}`]]);
+  const text = f.ok(['digest', '--since', NOW], at(NOW));
+  assert.match(text, /Watch reported a prompt block at 08:00 UTC/);
+  assert.doesNotMatch(text, /Worker is blocked/);
   assert.equal(doc.reports.length, 0, 'old outstanding facts are distinct from new reports');
   f.ok(['answer', 'HUM-1', 'yes'], at(NOW));
   f.ok(['start', 'ENG-5'], at(NOW)); // replacement run hides R-5's unresolved report
@@ -96,6 +100,64 @@ test('digest reports awaiting ingestion and late checks explicitly, never invent
   assert.equal(noCheck.reports[0].check, 'unknown', 'a mismatched item cannot provide check evidence');
 });
 
+test('digest selects blocked sessions by current report outcome, independent of dependency status', t => {
+  const f = fixture(t);
+  f.ok(['add', 'Dependency', '--role', 'engineer'], at(OLD));
+  for (let n = 2; n <= 4; n++) {
+    f.ok(['add', `Task ${n}`, '--role', 'engineer', '--blocked-by', 'ENG-1'], at(OLD));
+    f.ok(['start', `ENG-${n}`], at(OLD));
+  }
+  f.finish('R-1', 'done');
+  f.ok(['reopen', 'ENG-2'], at(MORNING));
+  f.finish('R-2', 'needs_human');
+  f.finish('R-3', 'blocked');
+  assert.equal(f.json(['show', 'ENG-2', '--json']).status, 'blocked', 'the done run belongs to a link-blocked item');
+  assert.deepEqual(f.read().blocked.map(b => [b.run, b.status]), [['R-2', 'needs_human'], ['R-3', 'blocked']]);
+  f.ok(['close', 'ENG-1'], at(NOW));
+  assert.equal(f.json(['show', 'ENG-4', '--json']).status, 'ready', 'resolved links affect item status');
+  assert.deepEqual(f.read().blocked.map(b => [b.run, b.status]), [['R-2', 'needs_human'], ['R-3', 'blocked']],
+    'the reports remain recorded evidence until replaced or closed');
+});
+
+test('digest summarizes decisions and counts autopilot bookkeeping while JSON retains all evidence', t => {
+  const f = fixture(t);
+  f.ok(['add', 'Task', '--role', 'engineer'], at(OLD));
+  f.ok(['start', 'ENG-1'], at(OLD));
+  const hash = 'a'.repeat(40);
+  const settle = `Settle: escalate. The reviewer has unverified claims. Review round cap: 1 (project). Reviewed ${hash}; evidence /record/settle/R-1.json`;
+  const promotion = `Queue promotion of chat at ${hash}: notice-autopilot/v1: PASS promotes. Reviewed ${hash}.`;
+  for (let n = 0; n < 10; n++) f.ok(['note', 'R-1', settle, '--decision'],
+    { now: MORNING, env: { ORG_ACTOR: 'supervisor-autopilot' } });
+  f.ok(['note', 'R-1', promotion, '--decision', '--summary',
+    'Promotion authorized: notice-autopilot/v1: PASS promotes; project tooling authority is auto; settle and queue recheck readiness'],
+    { now: MORNING, env: { ORG_ACTOR: 'supervisor-autopilot' } });
+  f.ok(['note', 'ENG-1', `Use commit ${hash}. Additional evidence stays in JSON.`, '--decision'], at(MORNING));
+  f.ok(['note', 'ENG-1', 'Full reasoning. More details.', '--decision', '--summary',
+    'Keep the chat quiet. Additional summary detail.'], at(MORNING));
+  f.ok(['note', 'ENG-1', 'Operator judgment is required. Full reasons.', '--decision'],
+    { now: MORNING, env: { ORG_ACTOR: 'supervisor-autopilot' } });
+  f.ok(['note', 'R-1', settle, '--decision'], { now: MORNING, env: { ORG_ACTOR: 'supervisor' } });
+  f.finish('R-1', 'done', MORNING,
+    'decisions:\n  - text: Full report reasoning. More evidence.\n    summary: Use the durable journal. Keep other details in JSON.\n    category: design\n    why: Deterministic reads');
+  const doc = f.read();
+  assert.equal(doc.decisions.length, 16);
+  assert.equal(doc.decisions.filter(d => d.text === settle).length, 11);
+  assert.equal(doc.decisions.find(d => d.text === promotion).summary.startsWith('Promotion authorized:'), true);
+  assert.equal(doc.decisions.find(d => d.category === 'design').text, 'Full report reasoning. More evidence.');
+  assert.equal(doc.decisions.find(d => d.summary?.startsWith('Keep the chat')).text, 'Full reasoning. More details.');
+  const text = f.ok(['digest', '--width', '72'], at(NOW));
+  assert.match(text, /DECISIONS \(16\)/);
+  assert.match(text, /10 settle escalate/);
+  assert.match(text, /1 promotion authorized/);
+  assert.equal(text.match(/Settle: escalate\./g)?.length, 1, 'a supervisor decision is still individual');
+  for (const sentence of ['Keep the chat quiet.', 'Use the durable journal.', 'Operator judgment is required.', `Use commit ${hash.slice(0, 8)}.`]) assert.ok(text.includes(sentence));
+  assert.doesNotMatch(text, /Additional|More evidence|Full report|Review round cap|unverified claims|notice-autopilot|\/record\/settle|a{40}/);
+  const limited = f.ok(['digest', '--limit', '1', '--width', '40'], at(NOW));
+  assert.match(limited, /4 more; --json has all facts/);
+  assert.match(limited, /Autopilot bookkeeping/);
+  assert.ok(limited.split('\n').every(line => [...line].length <= 40));
+});
+
 test('chat cursor includes same-time and backdated appends, rejects another project and rotated sources, and writes nothing', t => {
   const f = fixture(t);
   f.ok(['add', 'Task', '--role', 'engineer'], at(OLD));
@@ -119,8 +181,10 @@ test('chat cursor includes same-time and backdated appends, rejects another proj
   const third = f.read(['--after', second.cursor]);
   assert.deepEqual(third.promotions, []);
   assert.deepEqual(third.decisions, []);
-  const other = fixture(t);
-  assert.match(other.fail(['digest', '--after', first.cursor]), /invalid digest cursor/);
+  const foreign = JSON.parse(Buffer.from(first.cursor, 'base64url').toString('utf8'));
+  foreign.org = path.join(f.root, 'another-project');
+  const foreignCursor = Buffer.from(JSON.stringify(foreign)).toString('base64url');
+  assert.match(f.fail(['digest', '--after', foreignCursor]), /invalid digest cursor/);
   const symlink = path.join(f.root, 'record-alias');
   fs.symlinkSync(f.dir, symlink);
   assert.equal(f.json(['digest', '--json', '--after', second.cursor], { now: NOW, env: { ORG_DIR: symlink } }).project.org,

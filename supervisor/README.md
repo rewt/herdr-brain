@@ -27,7 +27,13 @@ blocked sessions appear regardless of window, until record/watch evidence
 resolves or supersedes them. They are recorded evidence, not live session status.
 
 Text defaults to 72 columns and eight entries per section, with explicit omitted
-counts and bounded headlines. `--width` accepts 32–240 columns and `--limit`
+counts and bounded headlines. Decisions show their explicit summary or first
+sentence; routine autopilot settlement and promotion authorization notes are
+counted by action, leaving individual judgments visible. JSON retains full
+decision text and any explicit summary. Record-sourced blocked sessions require
+a current blocked or needs-human report, rather than dependency-only item status.
+Watch prompt blocks show the recorded notice time in UTC, not a live claim.
+`--width` accepts 32–240 columns and `--limit`
 changes the text section cap. JSON always includes all facts and the next cursor;
 read it before advancing past a truncated text view. The cursor is never written
 to the record and grants no authority to act.

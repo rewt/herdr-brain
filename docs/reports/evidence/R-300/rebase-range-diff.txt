@@ -1,0 +1,17 @@
+1:  fea7b42d ! 1:  786c9c84 Record external worker launch identity and wire existing-project cleanup
+    @@ bin/org.mjs: const COMMANDS = {
+        release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
+        releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
+        init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
+    --  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
+    -+  start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
+    +-  start, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
+    ++  start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today, digest, recap, priorities, console: consoleApp, desks: desksCommand, routes: routesCommand, housekeeping: housekeepingCommand,
+      };
+      
+      function main(argv) {
+2:  7d2d5498 = 2:  5df2c7ef Report existing-project launch identity and cleanup proof
+3:  fe4c7780 = 3:  dbfafa5c Add existing-cleanup independent review round 1
+4:  4c5c6862 = 4:  bc26eeb9 Refuse legacy launch backfill and witness managed cleanup guards
+5:  de717413 = 5:  0a3c0d63 Report cleanup corrections and controlled native acceptance reruns
+6:  40703146 = 6:  03b8c8b8 Add existing-cleanup independent review round 1

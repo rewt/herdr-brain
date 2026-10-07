@@ -1,0 +1,466 @@
+TAP version 13
+# Subtest: external launch records the Monitor identity, retries exactly and refuses occupant changes
+ok 1 - external launch records the Monitor identity, retries exactly and refuses occupant changes
+  ---
+  duration_ms: 975.86675
+  ...
+# Subtest: missing identities, settled runs and worker names owned by newer runs cannot be backfilled
+ok 2 - missing identities, settled runs and worker names owned by newer runs cannot be backfilled
+  ---
+  duration_ms: 720.523375
+  ...
+# Subtest: one launch occupant identity suffices but a retry cannot enrich it later
+ok 3 - one launch occupant identity suffices but a retry cannot enrich it later
+  ---
+  duration_ms: 479.91975
+  ...
+# Subtest: legacy launcher fields and every partial receipt refuse live identity backfill without events
+ok 4 - legacy launcher fields and every partial receipt refuse live identity backfill without events
+  ---
+  duration_ms: 1314.665625
+  ...
+# Subtest: a complete launch receipt permits only an exact retry after settlement
+ok 5 - a complete launch receipt permits only an exact retry after settlement
+  ---
+  duration_ms: 588.886958
+  ...
+# Subtest: relative and symlink cwd are resolved once before child commands
+ok 6 - relative and symlink cwd are resolved once before child commands
+  ---
+  duration_ms: 436.4695
+  ...
+# Subtest: switched external dispatch records launches and housekeeping previews only settled merged tabs
+ok 7 - switched external dispatch records launches and housekeeping previews only settled merged tabs
+  ---
+  duration_ms: 5594.911833
+  ...
+# {"at":"2026-10-07T15:49:54.788Z","action":"tidy-tabs","output":"[dry-run] keep blocked \\"worker\\": no recorded report for lane-worker-blocked\\n[dry-run] keep needs_human \\"worker\\": no recorded report for lane-worker-needs_human\\n[dry-run] keep open \\"worker\\": no recorded report for lane-worker-open\\n[dry-run] keep working \\"worker\\": an agent here is still active\\n[dry-run] keep legacy \\"worker\\": no recorded report for lane-worker-legacy\\n[dry-run] would close done \\"worker\\": worker finished and its result is recorded (lane-worker-done)\\n[dry-run] would close unmerged \\"worker\\": worker finished and its result is recorded (lane-worker-unmerged)","dryRun":true}\\n{"at":"2026-10-07T15:49:55.600Z","action":"scan","close":1,"keep":6,"cleanup":true,"resume":true,"dryRun":true}\\n{"at":"2026-10-07T15:49:55.600Z","action":"keep","tab_id":"blocked","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T15:49:55.601Z","action":"keep","tab_id":"needs_human","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T15:49:55.601Z","action":"keep","tab_id":"open","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T15:49:55.601Z","action":"keep","tab_id":"working","label":"worker","why":"an agent here is still active","dryRun":true}\\n{"at":"2026-10-07T15:49:55.601Z","action":"keep","tab_id":"legacy","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T15:49:55.601Z","action":"keep","tab_id":"unmerged","label":"worker","why":"no settled recorded worker authorization for every agent","dryRun":true}\\n{"at":"2026-10-07T15:49:55.601Z","action":"would-close","tab_id":"done","label":"worker","why":"R-1 recorded report; lane promoted or archived"}
+# Subtest: rollback restores every file byte and executable mode
+ok 8 - rollback restores every file byte and executable mode
+  ---
+  duration_ms: 8.652916
+  ...
+# Subtest: contrib cannot retire with an extra executable caller, and scans refuse symlinks
+ok 9 - contrib cannot retire with an extra executable caller, and scans refuse symlinks
+  ---
+  duration_ms: 6.865042
+  ...
+# Subtest: all current edits apply to relocated inventory scripts and refuse premise drift
+ok 10 - all current edits apply to relocated inventory scripts and refuse premise drift
+  ---
+  duration_ms: 19.485541
+  ...
+# Subtest: current snapshot covers every switch and active caller and relocates all fixed temp paths
+ok 11 - current snapshot covers every switch and active caller and relocates all fixed temp paths
+  ---
+  duration_ms: 23.944166
+  ...
+# Subtest: mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+ok 12 - mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+  ---
+  duration_ms: 21.476292
+  ...
+# Subtest: current legacy notify queues its report in scratch and needs an event-service delivery consumer
+ok 13 - current legacy notify queues its report in scratch and needs an event-service delivery consumer
+  ---
+  duration_ms: 388.425417
+  ...
+# Subtest: relocated dispatch keeps the lock and session cap in baseline and switched copies
+not ok 14 - relocated dispatch keeps the lock and session cap in baseline and switched copies
+  ---
+  duration_ms: 174.818667
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    sandbox-exec: sandbox_apply: Operation not permitted
+    
+    
+    71 !== 3
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 3
+  actual: 71
+  operator: 'strictEqual'
+  stack: |-
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-existing-cleanup/acceptance/test/cutover.test.mjs:172:37
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+ok 15 - cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+  ---
+  duration_ms: 12.905542
+  ...
+# Subtest: production notice contract accepts rewritten current documents and rejects missing obligations
+ok 16 - production notice contract accepts rewritten current documents and rejects missing obligations
+  ---
+  duration_ms: 18.080959
+  ...
+# Subtest: retirement scans nested Python, executable extensionless and notify entry callers
+ok 17 - retirement scans nested Python, executable extensionless and notify entry callers
+  ---
+  duration_ms: 4.566167
+  ...
+# Subtest: installed tidy recovers a bounded tail from each log including a late older run
+ok 18 - installed tidy recovers a bounded tail from each log including a late older run
+  ---
+  duration_ms: 229.506917
+  ...
+# Subtest: only unreferenced timestamped script backups qualify as historical material
+ok 19 - only unreferenced timestamped script backups qualify as historical material
+  ---
+  duration_ms: 4.987292
+  ...
+# Subtest: executable shell case arms cannot hide contrib callers or references to historical backups
+ok 20 - executable shell case arms cannot hide contrib callers or references to historical backups
+  ---
+  duration_ms: 8.087625
+  ...
+# Subtest: referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+ok 21 - referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+  ---
+  duration_ms: 5.714958
+  ...
+# Subtest: digest combines recorded reports, promotion outcomes and decisions without equating done with landed
+ok 22 - digest combines recorded reports, promotion outcomes and decisions without equating done with landed
+  ---
+  duration_ms: 484.669291
+  ...
+# Subtest: digest keeps old open questions and current blocked sessions, then drops resolved and superseded blocks
+ok 23 - digest keeps old open questions and current blocked sessions, then drops resolved and superseded blocks
+  ---
+  duration_ms: 958.817333
+  ...
+# Subtest: digest reports awaiting ingestion and late checks explicitly, never invents a check
+ok 24 - digest reports awaiting ingestion and late checks explicitly, never invents a check
+  ---
+  duration_ms: 367.356917
+  ...
+# Subtest: digest selects blocked sessions by current report outcome, independent of dependency status
+ok 25 - digest selects blocked sessions by current report outcome, independent of dependency status
+  ---
+  duration_ms: 821.656583
+  ...
+# Subtest: digest summarizes decisions and counts autopilot bookkeeping while JSON retains all evidence
+ok 26 - digest summarizes decisions and counts autopilot bookkeeping while JSON retains all evidence
+  ---
+  duration_ms: 975.292125
+  ...
+# Subtest: chat cursor includes same-time and backdated appends, rejects another project and rotated sources, and writes nothing
+ok 27 - chat cursor includes same-time and backdated appends, rejects another project and rotated sources, and writes nothing
+  ---
+  duration_ms: 585.0595
+  ...
+# Subtest: digest bounds and sanitizes narrow text while JSON preserves all facts and reports omissions
+ok 28 - digest bounds and sanitizes narrow text while JSON preserves all facts and reports omissions
+  ---
+  duration_ms: 141.278375
+  ...
+# Subtest: digest tolerates absent and incomplete journals, fails explicitly on malformed evidence and invalid options
+ok 29 - digest tolerates absent and incomplete journals, fails explicitly on malformed evidence and invalid options
+  ---
+  duration_ms: 439.948
+  ...
+# (node:15102) MaxListenersExceededWarning: Possible EventTarget memory leak detected. 11 abort listeners added to [AbortSignal]. MaxListeners is 10. Use events.setMaxListeners() to increase limit
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: in-order reports keep the newest reported outcome while an unreported run stays active
+ok 30 - in-order reports keep the newest reported outcome while an unreported run stays active
+  ---
+  duration_ms: 1.301792
+  ...
+# Subtest: all report ingestion orders select the newest started reported run and retain older late reports
+ok 31 - all report ingestion orders select the newest started reported run and retain older late reports
+  ---
+  duration_ms: 0.913583
+  ...
+# Subtest: abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+ok 32 - abandonment leaves the last reported outcome intact and historical abandoned reports still fold
+  ---
+  duration_ms: 0.280541
+  ...
+# Subtest: reopening still clears completion and unknown events are ignored by current and older folds
+ok 33 - reopening still clears completion and unknown events are ignored by current and older folds
+  ---
+  duration_ms: 0.444167
+  ...
+# Subtest: ingesting an older report after a correction records it as late without displacing the correction
+ok 34 - ingesting an older report after a correction records it as late without displacing the correction
+  ---
+  duration_ms: 401.791667
+  ...
+# Subtest: a blocked worker decomposes its own blocker and fresh runs pick up the thread
+ok 35 - a blocked worker decomposes its own blocker and fresh runs pick up the thread
+  ---
+  duration_ms: 647.241125
+  ...
+# Subtest: record start resolves a named route without copied harness metadata
+ok 36 - record start resolves a named route without copied harness metadata
+  ---
+  duration_ms: 253.213792
+  ...
+# Subtest: record start discovers canonical parent and repository routes from a linked worktree
+ok 37 - record start discovers canonical parent and repository routes from a linked worktree
+  ---
+  duration_ms: 288.751375
+  ...
+# Subtest: record start discovers the nearest route config from a non-Git record root
+ok 38 - record start discovers the nearest route config from a non-Git record root
+  ---
+  duration_ms: 176.433208
+  ...
+# Subtest: budgets are advisory: exceeding them is surfaced, never refused
+ok 39 - budgets are advisory: exceeding them is surfaced, never refused
+  ---
+  duration_ms: 262.966417
+  ...
+# Subtest: only record consistency is refused
+ok 40 - only record consistency is refused
+  ---
+  duration_ms: 515.719084
+  ...
+# Subtest: dropping a blocker unblocks the work it was blocking
+ok 41 - dropping a blocker unblocks the work it was blocking
+  ---
+  duration_ms: 298.4545
+  ...
+# Subtest: a brief shows sibling work and points at full reports
+ok 42 - a brief shows sibling work and points at full reports
+  ---
+  duration_ms: 211.850084
+  ...
+# Subtest: an abandoned run frees its item and a late report is not ingested
+ok 43 - an abandoned run frees its item and a late report is not ingested
+  ---
+  duration_ms: 433.743875
+  ...
+# Subtest: an interrupted write is ignored on read and repaired on the next write
+ok 44 - an interrupted write is ignored on read and repaired on the next write
+  ---
+  duration_ms: 171.203667
+  ...
+# Subtest: concurrent writers never collide
+ok 45 - concurrent writers never collide
+  ---
+  duration_ms: 197.768708
+  ...
+# Subtest: log filters by time and starting closed work reopens it
+ok 46 - log filters by time and starting closed work reopens it
+  ---
+  duration_ms: 308.195459
+  ...
+# Subtest: bin/org.mjs --help exits successfully before operational work
+ok 47 - bin/org.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 42.061084
+  ...
+# Subtest: brain/bin/brain.mjs --help exits successfully before operational work
+ok 48 - brain/bin/brain.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 44.318375
+  ...
+# Subtest: console/app.mjs --help exits successfully before operational work
+ok 49 - console/app.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 58.713541
+  ...
+# Subtest: console/dev.mjs --help exits successfully before operational work
+ok 50 - console/dev.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.82775
+  ...
+# Subtest: console/proto/main.mjs --help exits successfully before operational work
+ok 51 - console/proto/main.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.191667
+  ...
+# Subtest: contrib/settle-watch.mjs --help exits successfully before operational work
+ok 52 - contrib/settle-watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.73425
+  ...
+# Subtest: discovery/acceptance.mjs --help exits successfully before operational work
+ok 53 - discovery/acceptance.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.342375
+  ...
+# Subtest: discovery/adapters/codex.mjs --help exits successfully before operational work
+ok 54 - discovery/adapters/codex.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 45.19075
+  ...
+# Subtest: discovery/adapters/claude.mjs --help exits successfully before operational work
+ok 55 - discovery/adapters/claude.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 45.755083
+  ...
+# Subtest: discovery/install.mjs --help exits successfully before operational work
+ok 56 - discovery/install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.764042
+  ...
+# Subtest: discovery/native/build.mjs --help exits successfully before operational work
+ok 57 - discovery/native/build.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.407625
+  ...
+# Subtest: discovery/validate.mjs --help exits successfully before operational work
+ok 58 - discovery/validate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.624667
+  ...
+# Subtest: discovery/git-driver.mjs --help exits successfully before operational work
+ok 59 - discovery/git-driver.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.709
+  ...
+# Subtest: discovery/bounded.mjs --help exits successfully before operational work
+ok 60 - discovery/bounded.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.830833
+  ...
+# Subtest: discovery/bubblewrap.mjs --help exits successfully before operational work
+ok 61 - discovery/bubblewrap.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.747167
+  ...
+# Subtest: discovery/client.mjs --help exits successfully before operational work
+ok 62 - discovery/client.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.434708
+  ...
+# Subtest: dispatch/dispatch.mjs --help exits successfully before operational work
+ok 63 - dispatch/dispatch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.596417
+  ...
+# Subtest: docs/adoption/rehearse.mjs --help exits successfully before operational work
+ok 64 - docs/adoption/rehearse.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.29425
+  ...
+# Subtest: herdr/dependencies.mjs --help exits successfully before operational work
+ok 65 - herdr/dependencies.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.0085
+  ...
+# Subtest: herdr/entry-install.mjs --help exits successfully before operational work
+ok 66 - herdr/entry-install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.485334
+  ...
+# Subtest: herdr/native-entry.mjs --help exits successfully before operational work
+ok 67 - herdr/native-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 41.575125
+  ...
+# Subtest: herdr/prerequisites.mjs --help exits successfully before operational work
+ok 68 - herdr/prerequisites.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.498209
+  ...
+# Subtest: herdr/release-candidate.mjs --help exits successfully before operational work
+ok 69 - herdr/release-candidate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.4965
+  ...
+# Subtest: housekeeping/housekeeping.mjs --help exits successfully before operational work
+ok 70 - housekeeping/housekeeping.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 41.884417
+  ...
+# Subtest: lanes/lane.mjs --help exits successfully before operational work
+ok 71 - lanes/lane.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 39.255
+  ...
+# Subtest: promote/host-gate.mjs --help exits successfully before operational work
+ok 72 - promote/host-gate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.625125
+  ...
+# Subtest: promote/promote.mjs --help exits successfully before operational work
+ok 73 - promote/promote.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 42.865875
+  ...
+# Subtest: promote/metrics.mjs --help exits successfully before operational work
+ok 74 - promote/metrics.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.080584
+  ...
+# Subtest: release/release.mjs --help exits successfully before operational work
+ok 75 - release/release.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.153667
+  ...
+# Subtest: settle/settle.mjs --help exits successfully before operational work
+ok 76 - settle/settle.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.421208
+  ...
+# Subtest: supervisor/open-session.mjs --help exits successfully before operational work
+ok 77 - supervisor/open-session.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.332917
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+ok 78 - supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 44.729542
+  ...
+# Subtest: supervisor/session-start.mjs --help exits successfully before operational work
+ok 79 - supervisor/session-start.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.623458
+  ...
+# Subtest: supervisor/supervisor.mjs --help exits successfully before operational work
+ok 80 - supervisor/supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 42.595125
+  ...
+# Subtest: supervisor/tidy-tabs.mjs --help exits successfully before operational work
+ok 81 - supervisor/tidy-tabs.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.966334
+  ...
+# Subtest: test-slot/test-slot.mjs --help exits successfully before operational work
+ok 82 - test-slot/test-slot.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.044917
+  ...
+# Subtest: watch/watch.mjs --help exits successfully before operational work
+ok 83 - watch/watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 41.61925
+  ...
+# Subtest: acceptance/run.mjs --help exits successfully before operational work
+ok 84 - acceptance/run.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 41.942167
+  ...
+# Subtest: acceptance/plugin-entry.mjs --help exits successfully before operational work
+ok 85 - acceptance/plugin-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.742458
+  ...
+# Subtest: lanes/lane.mjs via release symlinks --help exits successfully before operational work
+ok 86 - lanes/lane.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 40.815708
+  ...
+# Subtest: brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+ok 87 - brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 41.233709
+  ...
+1..87
+# tests 87
+# suites 0
+# pass 86
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 21714.165083
+Fixture cleanup: process snapshot failed: failed or incomplete process source output (status 125): process source unavailable or incomplete: Operation not permitted; no signal sent

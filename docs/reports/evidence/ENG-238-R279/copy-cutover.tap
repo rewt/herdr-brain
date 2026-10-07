@@ -1,0 +1,145 @@
+TAP version 13
+# Subtest: inserting a case anywhere leaves every production dependency and outcome unchanged
+ok 1 - inserting a case anywhere leaves every production dependency and outcome unchanged
+  ---
+  duration_ms: 18.877208
+  ...
+# Subtest: optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+ok 2 - optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+  ---
+  duration_ms: 0.400916
+  ...
+# Subtest: a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+ok 3 - a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+  ---
+  duration_ms: 0.168125
+  ...
+# Subtest: independent product and explicit safety failures retain precedence over genuine canary limits
+ok 4 - independent product and explicit safety failures retain precedence over genuine canary limits
+  ---
+  duration_ms: 0.115542
+  ...
+# Subtest: case keys are required and unique even when display names differ
+ok 5 - case keys are required and unique even when display names differ
+  ---
+  duration_ms: 0.44975
+  ...
+# Subtest: no configured existing project skips all five compatibility bodies visibly and permits a green gate
+ok 6 - no configured existing project skips all five compatibility bodies visibly and permits a green gate
+  ---
+  duration_ms: 0.267292
+  ...
+# Subtest: optional compatibility never hides other failures or pending live cases
+ok 7 - optional compatibility never hides other failures or pending live cases
+  ---
+  duration_ms: 0.385209
+  ...
+# Subtest: configured compatibility retains strict failures and prerequisites
+ok 8 - configured compatibility retains strict failures and prerequisites
+  ---
+  duration_ms: 0.78725
+  ...
+# Subtest: rollback restores every file byte and executable mode
+ok 9 - rollback restores every file byte and executable mode
+  ---
+  duration_ms: 8.571542
+  ...
+# Subtest: contrib cannot retire with an extra executable caller, and scans refuse symlinks
+ok 10 - contrib cannot retire with an extra executable caller, and scans refuse symlinks
+  ---
+  duration_ms: 5.524458
+  ...
+# Subtest: all current edits apply to relocated inventory scripts and refuse premise drift
+ok 11 - all current edits apply to relocated inventory scripts and refuse premise drift
+  ---
+  duration_ms: 18.418042
+  ...
+# Subtest: current snapshot covers every switch and active caller and relocates all fixed temp paths
+ok 12 - current snapshot covers every switch and active caller and relocates all fixed temp paths
+  ---
+  duration_ms: 15.682083
+  ...
+# Subtest: mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+ok 13 - mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller
+  ---
+  duration_ms: 15.470959
+  ...
+# Subtest: current legacy notify queues its report in scratch and needs an event-service delivery consumer
+ok 14 - current legacy notify queues its report in scratch and needs an event-service delivery consumer
+  ---
+  duration_ms: 401.2295
+  ...
+# Subtest: relocated dispatch keeps the lock and session cap in baseline and switched copies
+ok 15 - relocated dispatch keeps the lock and session cap in baseline and switched copies
+  ---
+  duration_ms: 479.261542
+  ...
+# Subtest: cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+ok 16 - cutover rewrites queued-notification cleanup ownership and refuses changed notice premises
+  ---
+  duration_ms: 10.499166
+  ...
+# Subtest: production notice contract accepts rewritten current documents and rejects missing obligations
+ok 17 - production notice contract accepts rewritten current documents and rejects missing obligations
+  ---
+  duration_ms: 15.031959
+  ...
+# Subtest: retirement scans nested Python, executable extensionless and notify entry callers
+ok 18 - retirement scans nested Python, executable extensionless and notify entry callers
+  ---
+  duration_ms: 4.127416
+  ...
+# Subtest: installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+ok 19 - installed copied cleanup uses recorded outcomes, latest runs and whole-tab eligibility
+  ---
+  duration_ms: 425.896167
+  ...
+# Subtest: installed tidy recovers a bounded tail from each log including a late older run
+ok 20 - installed tidy recovers a bounded tail from each log including a late older run
+  ---
+  duration_ms: 368.920458
+  ...
+# Subtest: only unreferenced timestamped script backups qualify as historical material
+ok 21 - only unreferenced timestamped script backups qualify as historical material
+  ---
+  duration_ms: 5.391667
+  ...
+# Subtest: executable shell case arms cannot hide contrib callers or references to historical backups
+ok 22 - executable shell case arms cannot hide contrib callers or references to historical backups
+  ---
+  duration_ms: 3.786292
+  ...
+# Subtest: referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+ok 23 - referenced mode-0644 script backups are enumerated, retained transitively and prevent retirement
+  ---
+  duration_ms: 4.4415
+  ...
+# Subtest: existing-project copy follows new untracked supervisor scripts and required documents
+ok 24 - existing-project copy follows new untracked supervisor scripts and required documents
+  ---
+  duration_ms: 157.987
+  ...
+# Subtest: existing-project copy excludes logs, queues, runtime state and unreferenced backups
+ok 25 - existing-project copy excludes logs, queues, runtime state and unreferenced backups
+  ---
+  duration_ms: 25.379042
+  ...
+# Subtest: existing-project copy retains transitive referenced readable script backups for retirement
+ok 26 - existing-project copy retains transitive referenced readable script backups for retirement
+  ---
+  duration_ms: 24.502958
+  ...
+# Subtest: existing-project copy refuses support symlinks and missing required regular inputs
+ok 27 - existing-project copy refuses support symlinks and missing required regular inputs
+  ---
+  duration_ms: 21.208375
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1819.876125

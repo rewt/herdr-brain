@@ -1,0 +1,345 @@
+TAP version 13
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 1 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 555.607416
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 2 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 524.470416
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 3 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1181.347709
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 4 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 870.794209
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 5 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 210.946333
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 6 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 584.377625
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 7 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 2966.240709
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 8 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1015.972459
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 9 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 971.949292
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 10 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 821.230584
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 11 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 950.09975
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 12 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1618.349167
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 13 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1424.578959
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 14 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1450.272542
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 15 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1472.646292
+  ...
+# Subtest: provider selection refuses automatic Linux bubblewrap and retains explicit providers
+ok 16 - provider selection refuses automatic Linux bubblewrap and retains explicit providers
+  ---
+  duration_ms: 52.74325
+  ...
+# Subtest: alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+ok 17 - alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+  ---
+  duration_ms: 56.7435
+  ...
+# Subtest: Claude-only scratch installation does not require or install Codex
+ok 18 - Claude-only scratch installation does not require or install Codex
+  ---
+  duration_ms: 1255.000042
+  ...
+# Subtest: real alternative sandbox denies outside, symlink, metadata, record, rename and network writes
+ok 19 - real alternative sandbox denies outside, symlink, metadata, record, rename and network writes # SKIP set MONITOR_TEST_ALTERNATIVE to sandbox-exec or bwrap outside a nested sandbox
+  ---
+  duration_ms: 0.0775
+  ...
+# Subtest: real filters remain functional through allocation, commit, check and fast-forward promotion
+ok 20 - real filters remain functional through allocation, commit, check and fast-forward promotion # SKIP set MONITOR_TEST_ALTERNATIVE to exercise real bounded Git filters
+  ---
+  duration_ms: 0.11025
+  ...
+# Subtest: real main-mode alternative guard protects linked shared records and leaves the native runtime writable
+ok 21 - real main-mode alternative guard protects linked shared records and leaves the native runtime writable # SKIP set MONITOR_TEST_ALTERNATIVE for the main-mode guard regression
+  ---
+  duration_ms: 0.040209
+  ...
+# sandbox command exceeded 300 milliseconds
+# Subtest: bounded commands kill descendants before they can write after a deadline
+ok 22 - bounded commands kill descendants before they can write after a deadline
+  ---
+  duration_ms: 1546.45525
+  ...
+# Subtest: Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+ok 23 - Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+  ---
+  duration_ms: 43.841334
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry: keeping lane/entry-e030cf91ede4 at /private/tmp/mr-WPvO2x/lanes/lane-entry-e030cf91ede4: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-e030cf91ede4 at /private/tmp/mr-WPvO2x/lanes/lane-entry-e030cf91ede4: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-5da870cb84fc at /private/tmp/mr-WPvO2x/lanes/lane-entry-5da870cb84fc: commits beyond its creation base
+# monitor entry: keeping lane/entry-5da870cb84fc at /private/tmp/mr-WPvO2x/lanes/lane-entry-5da870cb84fc: commits beyond its creation base
+# monitor entry: keeping lane/entry-e030cf91ede4 at /private/tmp/mr-WPvO2x/lanes/lane-entry-e030cf91ede4: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-d9140b706f67 at /private/tmp/mr-WPvO2x/lanes/lane-entry-d9140b706f67: a run was started in this lane
+# Subtest: route adoption leaves planted predictable and destination symlinks untouched
+ok 24 - route adoption leaves planted predictable and destination symlinks untouched
+  ---
+  duration_ms: 744.288083
+  ...
+# Subtest: plain CLI finds nested records and keeps automatic runtime files out of git status
+ok 25 - plain CLI finds nested records and keeps automatic runtime files out of git status
+  ---
+  duration_ms: 611.388834
+  ...
+# Subtest: atomic writer pins its directory when an attacker replaces the directory path
+ok 26 - atomic writer pins its directory when an attacker replaces the directory path
+  ---
+  duration_ms: 59.350792
+  ...
+# Subtest: supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+ok 27 - supervisor/open-session.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 2313.966291
+  ...
+# Subtest: contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+ok 28 - contrib/settle-watch.mjs sends a bypass that preserves its interactive native session
+  ---
+  duration_ms: 1839.746583
+  ...
+# Subtest: global-only Git identity and unused globally installed LFS survive broker commits
+ok 29 - global-only Git identity and unused globally installed LFS survive broker commits
+  ---
+  duration_ms: 881.305708
+  ...
+# Subtest: only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+ok 30 - only fresh interactive shims adopt a lane; utilities, batch, resume and existing lanes pass through
+  ---
+  duration_ms: 3225.707334
+  ...
+# Subtest: interactive no-identity launches warn and preserve the native session
+ok 31 - interactive no-identity launches warn and preserve the native session
+  ---
+  duration_ms: 1870.925208
+  ...
+# Subtest: fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+ok 32 - fresh Herdr starts receive entry; explicitly assigned starts retain their bypass
+  ---
+  duration_ms: 4052.070583
+  ...
+# Subtest: canonical preparation and validation remain authoritative in both check and promote
+ok 33 - canonical preparation and validation remain authoritative in both check and promote
+  ---
+  duration_ms: 3187.060542
+  ...
+# Subtest: operator-selected record ancestors, record files and report links keep working
+ok 34 - operator-selected record ancestors, record files and report links keep working
+  ---
+  duration_ms: 920.222416
+  ...
+# Subtest: symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+ok 35 - symlinked LANE_CONFIG and canonical .lane.json retain operator route resolution
+  ---
+  duration_ms: 493.522458
+  ...
+# Subtest: findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+ok 36 - findOrgDir stops at the filesystem root outside GIT_WORK_TREE
+  ---
+  duration_ms: 88.924917
+  ...
+# Subtest: macOS /tmp remains a valid operator record path
+ok 37 - macOS /tmp remains a valid operator record path
+  ---
+  duration_ms: 73.820375
+  ...
+# Subtest: close removes only untouched entry lanes, including failed setup
+ok 38 - close removes only untouched entry lanes, including failed setup
+  ---
+  duration_ms: 2389.328083
+  ...
+# Subtest: entry lessons are active, area-matched, deterministic, bounded and read-only
+ok 39 - entry lessons are active, area-matched, deterministic, bounded and read-only
+  ---
+  duration_ms: 1499.130459
+  ...
+# Subtest: both installed adapters deliver shared lessons for nested entry to native arguments offline
+ok 40 - both installed adapters deliver shared lessons for nested entry to native arguments offline
+  ---
+  duration_ms: 3252.6815
+  ...
+# Subtest: installed adapters launch from literal bracket directories with an empty lesson record
+ok 41 - installed adapters launch from literal bracket directories with an empty lesson record
+  ---
+  duration_ms: 2867.16175
+  ...
+# Subtest: installed adapters launch from literal bracket directories with matching lessons
+ok 42 - installed adapters launch from literal bracket directories with matching lessons
+  ---
+  duration_ms: 3055.304709
+  ...
+# monitor entry: keeping lane/entry-16ea171ef3b1 at /private/tmp/ms-VDARJ0/lanes/lane-entry-16ea171ef3b1: a run was started in this lane
+# monitor entry: keeping lane/entry-ba65c3a6ff0c at /private/tmp/ms-mjHNeF/lanes/lane-entry-ba65c3a6ff0c: a run was started in this lane
+# monitor entry: keeping lane/entry-510c59a3b301 at /private/tmp/ms-yzV0GH/lanes/lane-entry-510c59a3b301: a run was started in this lane
+# monitor entry: keeping lane/entry-03ccaf60ac7d at /private/tmp/ms-8MhbWp/lanes/lane-entry-03ccaf60ac7d: modified, untracked or ignored files
+# Subtest: explicit installed adapters leave opted-out projects and native arguments untouched
+ok 43 - explicit installed adapters leave opted-out projects and native arguments untouched
+  ---
+  duration_ms: 774.715541
+  ...
+# Subtest: automatic interactive adapters pass opted-out sessions straight through
+ok 44 - automatic interactive adapters pass opted-out sessions straight through
+  ---
+  duration_ms: 1020.627709
+  ...
+# Subtest: both transports deliver project settings, integration branch and instruction precedence
+ok 45 - both transports deliver project settings, integration branch and instruction precedence
+  ---
+  duration_ms: 2666.31525
+  ...
+# Subtest: main-checkout mode reaches both native harnesses without becoming a supervisor
+ok 46 - main-checkout mode reaches both native harnesses without becoming a supervisor
+  ---
+  duration_ms: 2087.418167
+  ...
+# Subtest: automatic interactive entry honors the project main-checkout mode
+ok 47 - automatic interactive entry honors the project main-checkout mode
+  ---
+  duration_ms: 2301.07125
+  ...
+# Subtest: worker mode validates and promotes to the declared integration branch
+ok 48 - worker mode validates and promotes to the declared integration branch
+  ---
+  duration_ms: 2220.343958
+  ...
+# Subtest: main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+ok 49 - main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+  ---
+  duration_ms: 972.125584
+  ...
+# Subtest: main-mode done reports require clean committed work and successful sandboxed validation
+ok 50 - main-mode done reports require clean committed work and successful sandboxed validation
+  ---
+  duration_ms: 3555.346834
+  ...
+# Subtest: entry-only configuration preserves the portable route suggestion and pending operator question
+ok 51 - entry-only configuration preserves the portable route suggestion and pending operator question
+  ---
+  duration_ms: 731.245083
+  ...
+# Subtest: entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+ok 52 - entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+  ---
+  duration_ms: 2895.56475
+  ...
+# Subtest: undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+ok 53 - undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+  ---
+  duration_ms: 2207.220625
+  ...
+# Subtest: entry settings use canonical Git identity and do not inherit parent or worker config
+ok 54 - entry settings use canonical Git identity and do not inherit parent or worker config
+  ---
+  duration_ms: 1033.2015
+  ...
+# Subtest: invalid enabled settings and mismatched integration branches fail before runtime creation
+ok 55 - invalid enabled settings and mismatched integration branches fail before runtime creation
+  ---
+  duration_ms: 237.619333
+  ...
+# Subtest: Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+ok 56 - Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+  ---
+  duration_ms: 3.4945
+  ...
+# Subtest: bare bubblewrap and renamed symlink aliases require experimental selection
+ok 57 - bare bubblewrap and renamed symlink aliases require experimental selection
+  ---
+  duration_ms: 2.105958
+  ...
+# Subtest: explicit experimental selection survives repeated selection and builds the gated provider command
+ok 58 - explicit experimental selection survives repeated selection and builds the gated provider command
+  ---
+  duration_ms: 2.236917
+  ...
+# Subtest: direct bubblewrap launcher requires opt-in before launching a provider
+ok 59 - direct bubblewrap launcher requires opt-in before launching a provider
+  ---
+  duration_ms: 188.349208
+  ...
+# Subtest: Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+ok 60 - Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+  ---
+  duration_ms: 119.146542
+  ...
+# Subtest: installation requires and preserves experimental selection while Codex installs keep their native default
+ok 61 - installation requires and preserves experimental selection while Codex installs keep their native default
+  ---
+  duration_ms: 99.591833
+  ...
+# Subtest: macOS copies nonempty files and refuses a redirected temporary root after profile construction
+ok 62 - macOS copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.060625
+  ...
+# Subtest: Codex copies nonempty files and refuses a redirected temporary root after profile construction
+ok 63 - Codex copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.097334
+  ...
+1..63
+# tests 63
+# suites 0
+# pass 58
+# fail 0
+# cancelled 0
+# skipped 5
+# todo 0
+# duration_ms 48550.413125

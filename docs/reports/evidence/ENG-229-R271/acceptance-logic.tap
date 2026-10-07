@@ -1,0 +1,145 @@
+TAP version 13
+# Subtest: inserting a case anywhere leaves every production dependency and outcome unchanged
+ok 1 - inserting a case anywhere leaves every production dependency and outcome unchanged
+  ---
+  duration_ms: 21.611208
+  ...
+# Subtest: optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+ok 2 - optional console never gates cutover, omitted copy stays pending, and failed switches prevent retirement
+  ---
+  duration_ms: 0.795584
+  ...
+# Subtest: a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+ok 3 - a canary harness limit propagates through recovery, cleanup, aggregate and retirement without product failures
+  ---
+  duration_ms: 0.294083
+  ...
+# Subtest: independent product and explicit safety failures retain precedence over genuine canary limits
+ok 4 - independent product and explicit safety failures retain precedence over genuine canary limits
+  ---
+  duration_ms: 0.1765
+  ...
+# Subtest: case keys are required and unique even when display names differ
+ok 5 - case keys are required and unique even when display names differ
+  ---
+  duration_ms: 0.587875
+  ...
+# Subtest: no configured existing project skips all five compatibility bodies visibly and permits a green gate
+ok 6 - no configured existing project skips all five compatibility bodies visibly and permits a green gate
+  ---
+  duration_ms: 0.366958
+  ...
+# Subtest: optional compatibility never hides other failures or pending live cases
+ok 7 - optional compatibility never hides other failures or pending live cases
+  ---
+  duration_ms: 0.547417
+  ...
+# Subtest: configured compatibility retains strict failures and prerequisites
+ok 8 - configured compatibility retains strict failures and prerequisites
+  ---
+  duration_ms: 0.803291
+  ...
+# Subtest: acceptance admits the exact private lane environment handoff including literal shell metacharacters
+ok 9 - acceptance admits the exact private lane environment handoff including literal shell metacharacters
+  ---
+  duration_ms: 3.726375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: outside
+ok 10 - acceptance refuses altered lane environment handoff: outside
+  ---
+  duration_ms: 2.725375
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: suffix
+ok 11 - acceptance refuses altered lane environment handoff: suffix
+  ---
+  duration_ms: 1.720792
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: cleanup
+ok 12 - acceptance refuses altered lane environment handoff: cleanup
+  ---
+  duration_ms: 2.962083
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: mode
+ok 13 - acceptance refuses altered lane environment handoff: mode
+  ---
+  duration_ms: 2.317083
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: symlink
+ok 14 - acceptance refuses altered lane environment handoff: symlink
+  ---
+  duration_ms: 3.616334
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: script
+ok 15 - acceptance refuses altered lane environment handoff: script
+  ---
+  duration_ms: 2.112167
+  ...
+# Subtest: acceptance refuses altered lane environment handoff: verifier
+ok 16 - acceptance refuses altered lane environment handoff: verifier
+  ---
+  duration_ms: 1.763917
+  ...
+# Subtest: native creation envelopes retain their result once and exclude failed creates and reads
+ok 17 - native creation envelopes retain their result once and exclude failed creates and reads
+  ---
+  duration_ms: 1.422833
+  ...
+# Subtest: a leaking refusal fails even when the separate configured workspace is unchanged
+ok 18 - a leaking refusal fails even when the separate configured workspace is unchanged
+  ---
+  duration_ms: 1.488417
+  ...
+# Subtest: an exit-zero no-op retry fails the production busy-retry check
+ok 19 - an exit-zero no-op retry fails the production busy-retry check
+  ---
+  duration_ms: 0.309167
+  ...
+# Subtest: a refusal with no effects and one registered, prompted retry session qualify
+ok 20 - a refusal with no effects and one registered, prompted retry session qualify
+  ---
+  duration_ms: 1.346708
+  ...
+# Subtest: retry requires destination, native creation, live topology, registration and exact prompt attribution
+ok 21 - retry requires destination, native creation, live topology, registration and exact prompt attribution
+  ---
+  duration_ms: 0.679458
+  ...
+# Subtest: refusal also rejects topology or prompt changes without a creation receipt
+ok 22 - refusal also rejects topology or prompt changes without a creation receipt
+  ---
+  duration_ms: 0.284833
+  ...
+# Subtest: fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+ok 23 - fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+  ---
+  duration_ms: 64.920625
+  ...
+# Subtest: candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+ok 24 - candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+  ---
+  duration_ms: 0.397708
+  ...
+# Subtest: cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+ok 25 - cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+  ---
+  duration_ms: 1.099917
+  ...
+# Subtest: ordinary product entry and source-attribution gaps fail without a safety or harness marker
+ok 26 - ordinary product entry and source-attribution gaps fail without a safety or harness marker
+  ---
+  duration_ms: 0.246042
+  ...
+# Subtest: dependent cutover/default-cycle cases preserve prerequisite causes and origins
+ok 27 - dependent cutover/default-cycle cases preserve prerequisite causes and origins
+  ---
+  duration_ms: 0.323084
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 121.152709

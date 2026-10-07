@@ -1,0 +1,115 @@
+TAP version 13
+# Subtest: native receipts require actual lesson prompt arguments for each transport
+ok 1 - native receipts require actual lesson prompt arguments for each transport
+  ---
+  duration_ms: 2.397625
+  ...
+# Subtest: skipped fresh lessons sessions keep the release gate pending without launching anything
+ok 2 - skipped fresh lessons sessions keep the release gate pending without launching anything
+  ---
+  duration_ms: 0.790667
+  ...
+# Subtest: native interactive readiness requires more than a retained banner
+ok 3 - native interactive readiness requires more than a retained banner
+  ---
+  duration_ms: 0.314291
+  ...
+# Subtest: release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+ok 4 - release lesson case uses real installed automatic adapters and owned PTYs with offline native stand-ins
+  ---
+  duration_ms: 2592.020291
+  ...
+# Subtest: uncredentialed Claude banner then exit 0 passes only delivery and start
+ok 5 - uncredentialed Claude banner then exit 0 passes only delivery and start
+  ---
+  duration_ms: 2316.351333
+  ...
+# Subtest: uncredentialed Claude prompt then exit 0 passes only delivery and start
+ok 6 - uncredentialed Claude prompt then exit 0 passes only delivery and start
+  ---
+  duration_ms: 2742.539541
+  ...
+# Subtest: uncredentialed Claude banner then exit 1 passes only delivery and start
+ok 7 - uncredentialed Claude banner then exit 1 passes only delivery and start
+  ---
+  duration_ms: 2538.381708
+  ...
+# Subtest: uncredentialed Claude prompt then exit 1 passes only delivery and start
+ok 8 - uncredentialed Claude prompt then exit 1 passes only delivery and start
+  ---
+  duration_ms: 2594.648583
+  ...
+# Subtest: uncredentialed Claude still stops a running native child after delivery proof
+ok 9 - uncredentialed Claude still stops a running native child after delivery proof
+  ---
+  duration_ms: 2516.233416
+  ...
+# Subtest: uncredentialed Claude cannot pass without a native spawn receipt
+ok 10 - uncredentialed Claude cannot pass without a native spawn receipt
+  ---
+  duration_ms: 2296.689125
+  ...
+# Subtest: Codex banner then exit still fails without a Claude profile
+ok 11 - Codex banner then exit still fails without a Claude profile
+  ---
+  duration_ms: 1422.52275
+  ...
+# Subtest: Codex prompt then exit still fails without a Claude profile
+ok 12 - Codex prompt then exit still fails without a Claude profile
+  ---
+  duration_ms: 1393.92075
+  ...
+# Subtest: a proposed canary cannot pass entry delivery and its fresh session still stops
+ok 13 - a proposed canary cannot pass entry delivery and its fresh session still stops
+  ---
+  duration_ms: 1472.040958
+  ...
+# Subtest: codex banner then exit 0 fails the gate and closes its owned session
+ok 14 - codex banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 1454.160209
+  ...
+# Subtest: codex banner then exit 1 fails the gate and closes its owned session
+ok 15 - codex banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 1266.754042
+  ...
+# Subtest: claude banner then exit 0 fails the gate and closes its owned session
+ok 16 - claude banner then exit 0 fails the gate and closes its owned session
+  ---
+  duration_ms: 2513.383125
+  ...
+# Subtest: claude banner then exit 1 fails the gate and closes its owned session
+ok 17 - claude banner then exit 1 fails the gate and closes its owned session
+  ---
+  duration_ms: 2511.269375
+  ...
+# Subtest: codex prompt then exit 0 fails while adapter cleanup is blocked
+ok 18 - codex prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 1329.821834
+  ...
+# Subtest: codex prompt then exit 1 fails while adapter cleanup is blocked
+ok 19 - codex prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 1271.492959
+  ...
+# Subtest: claude prompt then exit 0 fails while adapter cleanup is blocked
+ok 20 - claude prompt then exit 0 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 2467.231292
+  ...
+# Subtest: claude prompt then exit 1 fails while adapter cleanup is blocked
+ok 21 - claude prompt then exit 1 fails while adapter cleanup is blocked
+  ---
+  duration_ms: 2493.766
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 37244.114292

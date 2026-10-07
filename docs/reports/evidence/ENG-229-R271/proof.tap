@@ -1,0 +1,315 @@
+TAP version 13
+# Subtest: bin/org.mjs --help exits successfully before operational work
+ok 1 - bin/org.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 48.819
+  ...
+# Subtest: brain/bin/brain.mjs --help exits successfully before operational work
+ok 2 - brain/bin/brain.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.080584
+  ...
+# Subtest: console/app.mjs --help exits successfully before operational work
+ok 3 - console/app.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 57.041167
+  ...
+# Subtest: console/dev.mjs --help exits successfully before operational work
+ok 4 - console/dev.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.536792
+  ...
+# Subtest: console/proto/main.mjs --help exits successfully before operational work
+ok 5 - console/proto/main.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.493375
+  ...
+# Subtest: contrib/settle-watch.mjs --help exits successfully before operational work
+ok 6 - contrib/settle-watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.202333
+  ...
+# Subtest: discovery/acceptance.mjs --help exits successfully before operational work
+ok 7 - discovery/acceptance.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.59825
+  ...
+# Subtest: discovery/adapters/codex.mjs --help exits successfully before operational work
+ok 8 - discovery/adapters/codex.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 46.25125
+  ...
+# Subtest: discovery/adapters/claude.mjs --help exits successfully before operational work
+ok 9 - discovery/adapters/claude.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 46.223875
+  ...
+# Subtest: discovery/install.mjs --help exits successfully before operational work
+ok 10 - discovery/install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.678542
+  ...
+# Subtest: discovery/native/build.mjs --help exits successfully before operational work
+ok 11 - discovery/native/build.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.973083
+  ...
+# Subtest: discovery/validate.mjs --help exits successfully before operational work
+ok 12 - discovery/validate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.177667
+  ...
+# Subtest: discovery/git-driver.mjs --help exits successfully before operational work
+ok 13 - discovery/git-driver.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.839667
+  ...
+# Subtest: discovery/bounded.mjs --help exits successfully before operational work
+ok 14 - discovery/bounded.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.808667
+  ...
+# Subtest: discovery/bubblewrap.mjs --help exits successfully before operational work
+ok 15 - discovery/bubblewrap.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.035209
+  ...
+# Subtest: discovery/client.mjs --help exits successfully before operational work
+ok 16 - discovery/client.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.948083
+  ...
+# Subtest: dispatch/dispatch.mjs --help exits successfully before operational work
+ok 17 - dispatch/dispatch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.637292
+  ...
+# Subtest: docs/adoption/rehearse.mjs --help exits successfully before operational work
+ok 18 - docs/adoption/rehearse.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.009584
+  ...
+# Subtest: herdr/dependencies.mjs --help exits successfully before operational work
+ok 19 - herdr/dependencies.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.245417
+  ...
+# Subtest: herdr/entry-install.mjs --help exits successfully before operational work
+ok 20 - herdr/entry-install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.069209
+  ...
+# Subtest: herdr/native-entry.mjs --help exits successfully before operational work
+ok 21 - herdr/native-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 41.804667
+  ...
+# Subtest: herdr/prerequisites.mjs --help exits successfully before operational work
+ok 22 - herdr/prerequisites.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.892
+  ...
+# Subtest: herdr/release-candidate.mjs --help exits successfully before operational work
+ok 23 - herdr/release-candidate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.11375
+  ...
+# Subtest: housekeeping/housekeeping.mjs --help exits successfully before operational work
+ok 24 - housekeeping/housekeeping.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 42.105458
+  ...
+# Subtest: lanes/lane.mjs --help exits successfully before operational work
+ok 25 - lanes/lane.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.793458
+  ...
+# Subtest: promote/host-gate.mjs --help exits successfully before operational work
+ok 26 - promote/host-gate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.929833
+  ...
+# Subtest: promote/promote.mjs --help exits successfully before operational work
+ok 27 - promote/promote.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.082417
+  ...
+# Subtest: promote/metrics.mjs --help exits successfully before operational work
+ok 28 - promote/metrics.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.056584
+  ...
+# Subtest: release/release.mjs --help exits successfully before operational work
+ok 29 - release/release.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.556959
+  ...
+# Subtest: settle/settle.mjs --help exits successfully before operational work
+ok 30 - settle/settle.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 32.083
+  ...
+# Subtest: supervisor/open-session.mjs --help exits successfully before operational work
+ok 31 - supervisor/open-session.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.967541
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+ok 32 - supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 39.324375
+  ...
+# Subtest: supervisor/session-start.mjs --help exits successfully before operational work
+ok 33 - supervisor/session-start.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.907208
+  ...
+# Subtest: supervisor/supervisor.mjs --help exits successfully before operational work
+ok 34 - supervisor/supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 41.766459
+  ...
+# Subtest: supervisor/tidy-tabs.mjs --help exits successfully before operational work
+ok 35 - supervisor/tidy-tabs.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.97575
+  ...
+# Subtest: test-slot/test-slot.mjs --help exits successfully before operational work
+ok 36 - test-slot/test-slot.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.338292
+  ...
+# Subtest: watch/watch.mjs --help exits successfully before operational work
+ok 37 - watch/watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 39.863875
+  ...
+# Subtest: acceptance/run.mjs --help exits successfully before operational work
+ok 38 - acceptance/run.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 38.828875
+  ...
+# Subtest: acceptance/plugin-entry.mjs --help exits successfully before operational work
+ok 39 - acceptance/plugin-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.011417
+  ...
+# Subtest: installed entry survives removal of an old versioned executable target without reinstall
+ok 40 - installed entry survives removal of an old versioned executable target without reinstall
+  ---
+  duration_ms: 3747.738875
+  ...
+# Subtest: installed entry survives removal of an old stable symlink target without reinstall
+ok 41 - installed entry survives removal of an old stable symlink target without reinstall
+  ---
+  duration_ms: 3656.303792
+  ...
+# Subtest: native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+ok 42 - native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+  ---
+  duration_ms: 204.960083
+  ...
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 43 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 2416.993084
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 44 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1347.258375
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 45 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 2404.586708
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 46 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 83.028625
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 47 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+  ---
+  duration_ms: 1393.744708
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 48 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 63.84275
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 49 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 162.628708
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 50 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 242.774625
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 51 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 339.840917
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 52 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 1826.772
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 53 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1304.165167
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 54 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1275.101583
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 55 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1115.971
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 56 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1325.79075
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 57 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 1567.649041
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 58 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 2349.744625
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 59 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.3135
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 60 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 1064.988666
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 61 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 1909.75275
+  ...
+1..61
+# tests 61
+# suites 0
+# pass 61
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 22250.415958

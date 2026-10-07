@@ -1,0 +1,104 @@
+TAP version 13
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+ok 1 - real live discovery setup confines a short fleet temp with no project configuration # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.591625
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 2 - real live-worker arguments reach the installed adapter with its supported private temp grant # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.047416
+  ...
+# Subtest: installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+not ok 3 - installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+  ---
+  duration_ms: 3357.364458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor sandbox: WARNING: default_permissions="acceptance" from CLI -c selects the operator's native policy instead of generated project confinement
+    node:assert:90
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: monitor: prepare source: lane /private/tmp/as-qG4wgB/entry-worktrees/lane-entry-e70542e3fef8/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/herdr-discovery-ajcMFh/project/.lane.json)): node --test
+    TAP version 13
+    # Subtest: french
+    ok 1 - french
+      ---
+      duration_ms: 0.592375
+      ...
+    # Subtest: English stays
+    ok 2 - English stays
+      ---
+      duration_ms: 0.500708
+      ...
+    1..2
+    # tests 2
+    # suites 0
+    # pass 2
+    # fail 0
+    # cancelled 0
+    # skipped 0
+    # todo 0
+    # duration_ms 33.56475
+    monitor validation: sandboxed validation exited 125
+    GATE 10814a021a5efae79bc470d97de0dab5f8111ae3 exit=1 (0.811s)
+    
+    
+    1 !== 0
+    
+        at cli (/private/tmp/as-qG4wgB/offline-worker.cjs:8:18)
+        at client (/private/tmp/as-qG4wgB/offline-worker.cjs:11:29)
+        at Object.<anonymous> (/private/tmp/as-qG4wgB/offline-worker.cjs:48:16)
+        at Module._compile (node:internal/modules/cjs/loader:1529:14)
+        at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+        at Module.load (node:internal/modules/cjs/loader:1275:32)
+        at Module._load (node:internal/modules/cjs/loader:1096:12)
+        at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+        at node:internal/main/run_main_module:28:49 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual'
+    }
+    
+    Node.js v20.19.4
+    monitor entry: keeping lane/entry-e70542e3fef8 at /private/tmp/as-qG4wgB/entry-worktrees/lane-entry-e70542e3fef8: a run was started in this lane
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    cli (/private/tmp/as-qG4wgB/offline-worker.cjs:8:18)
+    client (/private/tmp/as-qG4wgB/offline-worker.cjs:11:29)
+    Object.<anonymous> (/private/tmp/as-qG4wgB/offline-worker.cjs:48:16)
+    Module._compile (node:internal/modules/cjs/loader:1529:14)
+    Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    Module.load (node:internal/modules/cjs/loader:1275:32)
+    Module._load (node:internal/modules/cjs/loader:1096:12)
+    Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    node:internal/main/run_main_module:28:49 {
+    Object.finish (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/live-session.test.mjs:165:16)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Promise.allSettled (index 0)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-entry-pin/acceptance/test/live-session.test.mjs:198:23
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 3402.521709

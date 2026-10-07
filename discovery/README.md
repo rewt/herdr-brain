@@ -94,6 +94,48 @@ Join is idempotent, including from linked worktrees. The session limit defaults
 to 6 and is advisory; entry, the console and `show` surface it without refusing
 sessions. Entry and fleet commands alone write the file. Supervisors remain per project.
 
+An operator can open each joined project's supervisor conversation in one
+control workspace, without entering a worker session:
+
+```sh
+monitor chat herdr-brain
+monitor chat bch-cloak --to supervisor-opus
+monitor chat bch-cloak-aggregator --no-focus
+```
+
+The console's **C** key opens or focuses its selected project's chat. The first
+command reuses a uniquely named **Herdr Brain** workspace or creates it in the
+background. `--workspace ID` selects an existing control workspace on first use;
+`HERDR_MONITOR_CONTROL_WORKSPACE` supplies the same override. All subsequent
+projects use that single workspace. Reopening focuses the recorded tab, even
+after the operator renames its label. `--no-focus` creates or reuses it without
+moving focus. Refresh and project selection never open chats.
+Harness and recipient options apply to new chats; reopening retains the existing
+session and its recipient. Close its tab before selecting a different launch.
+
+Chats start the installed `monitor-codex` or `monitor-claude` with
+`--role supervisor --repo PROJECT` in the project's canonical checkout, and
+register a distinct `chat-` agent name derived from its Git common directory.
+Harness selection follows the plugin supervisor default; `--kind` or a project
+`--route NAME` overrides it. Project routing layers supply launch arguments and
+accounts; repeat `--arg` to supply native options. The launcher's receipt lives
+in the fleet home at `chats.json`; it does not edit another project's files.
+
+Notices go to **ops**, never the chat name. `--to OPS` wins over
+`MONITOR_SUPERVISOR_AGENT` in the project's route environment, then the existing
+`supervisor-herdr` default. An inherited recipient from another project is
+ignored. Projects with another ops name should pass it explicitly, as above,
+or declare it in their route environment. The adapter retains that recipient
+through native restore; dispatch and watch default to it. Chats read record
+context on demand; the since-last-time digest is separate work.
+
+Unknown, stale, excluded and entry-disabled projects are refused before opening
+a tab. Startup failures retain the tab for inspection, and reopening never
+launches again into an uncertain pane. If its agent exited, reopening focuses
+the retained tab and reports `available: false`; close that tab in Herdr before
+requesting a fresh chat. Moved panes and conflicting occupants require inspection.
+No chat is launched during `console --print`, even with `--keys C`.
+
 Exclusions persist as optional `excluded_roots` in version 1 of the fleet file.
 They apply to a root and every descendant, including through symlinks, even if
 the root does not exist yet or becomes a Git repository later. A canonical

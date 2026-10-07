@@ -34,6 +34,25 @@ function fixture(overrides = {}) {
 }
 const rendered = (s, cols = 100, rows = 32) => s.frame(cols, rows).lines.map(lineText).join('\n');
 
+test('C opens only the selected project supervisor chat, while refresh and composing do not', async () => {
+  const chats = [];
+  const {session} = fixture({herdrProjectChat: async p => {chats.push(p); return {ok: true, available: true};}});
+  try {
+    await session.refresh(); rendered(session); assert.equal(chats.length, 0);
+    await session.key('C'); assert.equal(chats.length, 1); assert.equal(chats[0].name, 'Alpha'); assert.equal(chats[0].repoKey, '/a/.git');
+    await session.activate('project:configured:Beta'); rendered(session);
+    await session.key('C'); assert.equal(chats[1].repoKey, '/b/.git');
+    await session.key('n'); await session.key('C'); assert.equal(chats.length, 2);
+    assert.match(session.ui.compose.text, /C/);
+  } finally {session.stop();}
+});
+
+test('project chat failures are visible and read-only dependencies can refuse C', async () => {
+  const {session} = fixture({herdrProjectChat: async () => ({ok: false, error: '--print does not open project chats'})});
+  try {await session.refresh(); await session.key('C'); assert.match(session.ui.message, /--print does not open project chats/);}
+  finally {session.stop();}
+});
+
 test('completed work category flags stay visible on overview and Needs you and open the source item', async () => {
   const flag = { id: 'ENG-2', kind: 'category', text: 'Category review: tooling is auto but R-2 decisions[0] mentions keys; check operator authority' };
   let items;

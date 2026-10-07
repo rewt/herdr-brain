@@ -490,6 +490,8 @@ export function reduce(state, input, key = {}, ctx = { rows: [] }) {
   switch (input) {
     case 'f':
       return goTo(state, row);
+    case 'C':
+      return done(state, [{ type: 'project-chat' }]);
     case 's':
       return row ? done(summary(state, row.key)) : done(say(state, 'Nothing selected.', 'warn'));
     case 'm':

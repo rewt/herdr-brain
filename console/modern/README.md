@@ -16,6 +16,14 @@ the default. `--profile full --modern` opens the full project console again;
 never written by the console. `--minimal` and `--profile minimal` also work
 without `--modern`, including with `--folder`.
 
+Press **C** in the full or minimal console to open or focus the selected fleet
+project's supervisor chat. Chats share one **Herdr Brain** control workspace,
+run supervisor entry in their own canonical checkout, and retain one tab per
+project. Their `chat-` agent names are separate from the project's ops notice
+recipient. Refresh and project selection never open a tab; `--print --keys C`
+refuses the action. See [monitor chat](../../discovery/README.md#fleet) for
+workspace, harness and ops-recipient overrides.
+
 The minimal screen has three bordered Ink panels. **Runs** is an in-house table
 with a header, column separators and aligned cells: run, work, stage, provider,
 start and elapsed time. Landed runs retain their final duration and are dimmed.
@@ -47,7 +55,8 @@ start exists; atomic receipt saves do not reset it. The current CI command prefe
 the gate receipt, then its `train.log` validating line. A missing check start stays `unknown`;
 finished checks use their recorded duration or finish time while delivery waits.
 Final promoted/refused receipts supersede old interrupted queue rows after resume.
-No promotion, validation, scheduling or model calls are issued by this view.
+Reading this view issues no promotion, validation, scheduling or model calls.
+The operator's C key explicitly launches or focuses the supervisor chat.
 
 At 90 columns and above, rows fit within a 116-cell reading width; wider panes
 do not stretch the spacing. Narrow panes use two lines per work/report entry.

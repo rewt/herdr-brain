@@ -178,6 +178,18 @@ export async function herdrStartChat({ workspace, cwd, kind, name, prompt }) {
   return { ok: true, pane, name };
 }
 
+// C opens the selected fleet project's supervisor conversation in the shared
+// control workspace. Bind the selection by Git identity, not a display label.
+export async function herdrProjectChat(project) {
+  const identity = project.repoKey ?? project.identity;
+  if (!identity || project.stale) return { ok: false, error: 'Refresh and select a joined Git project before opening its chat.' };
+  const r = await run(process.execPath, [fileURLToPath(new URL('../../discovery/client.mjs', import.meta.url)),
+    'chat', project.name, '--identity', identity], { timeout: 70000 });
+  if (!r.ok) return { ok: false, error: firstLine(r.stderr) || r.error?.message || 'Project chat did not open' };
+  try { return { ok: true, ...JSON.parse(r.stdout) }; }
+  catch { return { ok: false, error: 'Project chat returned an unreadable receipt; inspect before retrying.' }; }
+}
+
 // The operator's own name for a session: a display-only pane label. Agent
 // names are left alone, since org runs are linked to them.
 export async function herdrRename(pane, label) {

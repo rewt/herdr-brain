@@ -134,8 +134,8 @@ function Dashboard({ layout, noColor }) {
     h(Panel, { title: l.titles[1], width: l.width }, ...rows(l.visible[1])),
     h(Panel, { title: l.titles[2], width: l.width }, ...rows(l.visible[2])),
     ...l.messages.map((text, i) => h(Spans, { key: `error:${i}`, width: l.width, dim: true, spans: [span(text)] }))),
-    h(Spans, { width: l.width, dim: true, spans: [span(l.width >= 60 ? '\u2191\u2193 rows \u00b7 Tab panels \u00b7 Enter \u00b7 p pipeline \u00b7 q quit'
-      : l.width >= 32 ? 'Tab \u00b7 Enter \u00b7 p pipeline \u00b7 q quit' : 'p pipeline \u00b7 q quit')] }));
+    h(Spans, { width: l.width, dim: true, spans: [span(l.width >= 60 ? '\u2191\u2193 rows \u00b7 Tab panels \u00b7 Enter \u00b7 p pipeline \u00b7 C chat \u00b7 q quit'
+      : l.width >= 32 ? 'Tab \u00b7 Enter \u00b7 C chat \u00b7 q quit' : 'C chat \u00b7 q quit')] }));
 }
 
 export function SessionView({ state, cols, rows, noColor }) {

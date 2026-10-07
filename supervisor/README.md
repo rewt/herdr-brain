@@ -211,6 +211,15 @@ projects and populated records, without a model or a background supervisor.
 Workers receive only the existing worker policy. The native session hook performs
 the recovery described below; policy-only entry stays read-only.
 
+Operator project conversations use `monitor chat PROJECT` or the console's
+**C** key ([chat command](../discovery/README.md#fleet)). One tab per canonical
+fleet identity lives in the shared control workspace. The chat's registered
+`chat-` name is separate from `MONITOR_SUPERVISOR_AGENT`, which names ops for
+watch recovery, dispatch and cycle notices. Supply `--to OPS` for a project's
+non-default recipient. Chats never enroll as notice recipients or receive
+awaited landing messages. The launcher only reads project files and retains
+its machine receipts in the fleet home, separate from native entry receipts.
+
 Native `SessionStart` uses [session-start.mjs](session-start.mjs) for startup,
 resume (including Herdr restore), clear and compact. Both installed launch adapters
 bind an explicit supervisor role to the canonical checkout, Git common directory

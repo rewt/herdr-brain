@@ -26,7 +26,7 @@ async function gitSummary(cwd) {
 
 export function createModernSession({ config, configFile, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const d = { identity: createIdentityReader(), orgToday: cli.orgToday, orgStatus: cli.orgStatus, orgLog: cli.orgLog, herdrAgents: cli.herdrAgents, herdrList: cli.herdrList,
-    herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, herdrRename: cli.herdrRename, orgAnswer: cli.orgAnswer,
+    herdrRead: cli.herdrRead, herdrGo: cli.herdrGo, orgAdd: cli.orgAdd, herdrStartChat: cli.herdrStartChat, herdrProjectChat: cli.herdrProjectChat, herdrRename: cli.herdrRename, orgAnswer: cli.orgAnswer,
     orgDesks: cli.orgDesks, orgSettingsSet: cli.orgSettingsSet, orgHousekeeping: cli.orgHousekeeping, orgHousekeepingSet: cli.orgHousekeepingSet, orgRoutes: cli.orgRoutes, orgRouteSet: cli.orgRouteSet, orgPriorityChange: cli.orgPriorityChange,
     brainAct: args => brainAct(config.brain_bin, args), gitSummary, folderPath,
     observeTerminal: deps.herdrRead ? null : observeTerminal, controlTerminal: deps.herdrRead ? null : controlTerminal,
@@ -243,6 +243,15 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
       return;
     }
     const m = model();
+    if (id === 'project-chat') {
+      if (!project()) return;
+      const selected = { ...project() };
+      let result;
+      try { result = await d.herdrProjectChat(selected); }
+      catch (error) { result = { ok: false, error: error.message }; }
+      s.message = result.ok ? `Opened ${selected.name} supervisor chat.${result.available === false ? ' Its agent is no longer running; inspect the retained tab.' : ''}` : `Chat did not open: ${result.error}`;
+      changed(); return false;
+    }
     if (id === 'desks-edit' || id.startsWith('settings:')) {
       const [, kind, task, pool] = id.split(':').map(value => decodeURIComponent(value));
       const doc = id === 'desks-edit' ? m.desks : m.routes, source = id === 'desks-edit' ? 'desks' : 'routes';
@@ -648,6 +657,7 @@ export function createModernSession({ config, configFile, projectIndex = 0, deps
     if (s.compose) return composeKey(input, k);
     if (s.rename) return renameKey(input, k);
     if (s.act) return actKey(input, k);
+    if (input === 'C' && !k.ctrl && !k.meta) return activate('project-chat');
     if (s.view === 'need' && !k.ctrl && !k.meta) {
       const n = currentNeed(), choices = needChoices(n), actions = needActions(n, { canOpen: true });
       const byKey = [...choices, ...actions].find(c => c.key === input);

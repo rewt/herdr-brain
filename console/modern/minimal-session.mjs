@@ -1,7 +1,7 @@
 // Minimal reads project facts; explicit row activation controls one live pane.
 import fs from 'node:fs';
 import { supervisorStatus } from '../../supervisor/status.mjs';
-import { herdrAgents, herdrList, orgStatus } from '../lib/cli.mjs';
+import { herdrAgents, herdrList, herdrProjectChat, orgStatus } from '../lib/cli.mjs';
 import { createSessionReader } from '../lib/sources.mjs';
 import { catalog, createIdentityReader, workspaceIdentity } from './model.mjs';
 import { minimalRows } from './minimal.mjs';
@@ -13,7 +13,7 @@ import { loadMinimalRenderer } from './minimal-renderer.mjs';
 
 export function createMinimalSession({ config, projectIndex = 0, deps = {}, onChange = () => {}, env = process.env }) {
   const reader = createSessionReader(), feed = createFeedReader(), detail = createDetailReader();
-  const d = { herdrAgents, herdrList, orgStatus, controlTerminal, identity: createIdentityReader(), now: Date.now,
+  const d = { herdrAgents, herdrList, herdrProjectChat, orgStatus, controlTerminal, identity: createIdentityReader(), now: Date.now,
     journal: feed.journal, train: feed.train, document: detail.document,
     runs: (project, agents, now) => supervisorStatus({ cwd: project.root ?? project.cwd, org: project.org, agents, now: new Date(now).toISOString() }),
     details(agent, run, project) {
@@ -218,6 +218,15 @@ export function createMinimalSession({ config, projectIndex = 0, deps = {}, onCh
       }
       if (input === 'q' || (input === 'c' && key.ctrl)) return true;
       if (key.escape) { if (ui.view === 'detail') return back(); epoch++; return false; }
+      if (input === 'C' && !key.ctrl && !key.meta) {
+        if (!project) return false;
+        const selected = { ...project };
+        let result;
+        try { result = await d.herdrProjectChat(selected); }
+        catch (error) { result = { ok: false, error: error.message }; }
+        ui.message = result.ok ? `Opened ${selected.name} supervisor chat.${result.available === false ? ' Its agent is no longer running; inspect the retained tab.' : ''}` : `Chat did not open: ${result.error}`;
+        changed(); return false;
+      }
       if (ui.view === 'detail') {
         const l = lastDetail;
         if (!l) return false;

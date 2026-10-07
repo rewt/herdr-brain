@@ -37,6 +37,7 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
     loopStatus: config?.brain_bin ? () => loopStatus(config.brain_bin) : async () => null,
     setLoop: (on) => setLoop(config?.brain_bin, on),
     herdrGo: cli.herdrGo,
+    herdrProjectChat: cli.herdrProjectChat,
     herdrRead: cli.herdrRead,
     herdrPrompt: cli.herdrPrompt,
     dispatch: config?.brain_bin ? (project, row) => startWorkUp(config.brain_bin, project, row) : null,
@@ -419,6 +420,13 @@ export function createSession({ config, configFile = null, projectIndex = 0, dep
   async function perform(effect) {
     const p = project();
     switch (effect.type) {
+      case 'project-chat': {
+        let result;
+        try { result = await d.herdrProjectChat({ ...p }); }
+        catch (error) { result = { ok: false, error: error.message }; }
+        say(result.ok ? `Opened ${p.name} supervisor chat.` : `Chat did not open: ${result.error}`, result.ok ? 'ok' : 'error');
+        return;
+      }
       case 'reload':
         await refresh({ reorder: true });
         say('Reloaded.');

@@ -60,6 +60,7 @@ const promotion = [
   'settle/test/record-safety.test.mjs',
   'settle/test/train.test.mjs',
   'supervisor/test/autopilot.test.mjs',
+  'supervisor/test/chats.test.mjs',
   'test/approvals.test.mjs',
   'test/discernment.test.mjs',
   'test/digest.test.mjs',

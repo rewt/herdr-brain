@@ -18,7 +18,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
   serves: { type: 'string' }, awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },
-  to: { type: 'string', default: 'supervisor-herdr' }, base: { type: 'string' }, extra: { type: 'string' },
+  to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr' }, base: { type: 'string' }, extra: { type: 'string' },
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },

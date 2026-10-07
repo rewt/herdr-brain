@@ -8,6 +8,17 @@ import { parseArgs } from 'node:util';
 import { joinFleet, fleetView, setFleetExcluded } from '../lib/fleet.mjs';
 const [op, ...words] = process.argv.slice(2);
 try {
+  if (op === 'chat') {
+    const { values, positionals } = parseArgs({ args: words, allowPositionals: true, options: {
+      workspace: { type: 'string' }, identity: { type: 'string' }, kind: { type: 'string' }, route: { type: 'string' },
+      to: { type: 'string' }, arg: { type: 'string', multiple: true }, 'no-focus': { type: 'boolean' },
+    } });
+    if (positionals.length !== 1 || (values.route && values.kind)) throw new Error('usage: monitor chat PROJECT [--workspace ID] [--kind codex|claude | --route NAME] [--to OPS] [--arg ARG] [--no-focus]');
+    const { openProjectChat } = await import('../supervisor/chats.mjs');
+    console.log(JSON.stringify(openProjectChat({ project: positionals[0], identity: values.identity, workspace: values.workspace,
+      kind: values.kind, route: values.route, to: values.to, args: values.arg, focus: !values['no-focus'] }), null, 2));
+    process.exit(0);
+  }
   if (op === 'fleet') {
     const [action, ...args] = words;
     if (action === 'join') {
@@ -23,6 +34,7 @@ try {
   if (!op || ['--help', '-h', 'help'].includes(op)) {
     console.log('monitor <context|start TASK|resume ITEM|commit SUBJECT|check|promote|rebase|continue|abort|apply-routes|finish>');
     console.log('monitor fleet join [--replace NAME] [--session-limit N] | monitor fleet show | monitor fleet <exclude|include> PATH (available without entry)');
+    console.log('monitor chat PROJECT [--workspace ID] [--kind codex|claude | --route NAME] [--to OPS] [--no-focus] (operator project chat; available without entry)');
     console.log('continue: stage the files you resolved through the bounded Git adapter and continue your paused rebase. No direct git add is required.');
     console.log('finish: ingest the exact run report; done requires successful promotion. A second different report is refused by record.');
     process.exit(0);

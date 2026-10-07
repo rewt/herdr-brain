@@ -32,7 +32,7 @@ export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|status|entry|checkpoint|handle|promote|release [OPTIONS]", args: argv, allowPositionals: true, options: {
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
     json: { type: 'boolean' }, 'since-seq': { type: 'string' }, through: { type: 'string' },
-    notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string' }, brief: { type: 'string' },
+    notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || undefined }, brief: { type: 'string' },
     'review-route': { type: 'string' }, 'fix-route': { type: 'string' }, timeout: { type: 'string' },
     retry: { type: 'boolean' }, 'review-again': { type: 'boolean' },
     'review-round-cap': { type: 'string' }, 'fix-findings': { type: 'boolean' }, 'accept-findings': { type: 'boolean' },

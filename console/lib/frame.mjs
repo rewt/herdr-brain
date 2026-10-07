@@ -734,6 +734,7 @@ export function helpLines(version) {
     '! / w                        only what needs you / only working sessions',
     'o                            open the brief, memo or report',
     'p  R                         switch project, reload now',
+    'C                            open or focus this project\'s supervisor chat',
     'Esc                          close the innermost thing',
     'q                            quit (from the list or history)',
     '',

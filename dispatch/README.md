@@ -72,7 +72,9 @@ without a work prompt; the prompt is sent only after its record is complete and
 `watch/watch.mjs --detach` has acknowledged startup while holding the run lock.
 The watcher uses a log under `.org/dispatch/` and inherits no supervisor pane,
 tab or workspace ID. `--to` selects the supervisor; the default is
-`supervisor-herdr`. The core stays foreground and never calls a model.
+the adapter's `MONITOR_SUPERVISOR_AGENT`, then `supervisor-herdr`. Project chat
+launches bind that variable to ops separately from their `chat-` agent name.
+The core stays foreground and never calls a model.
 Correction and completion notices go through watch's
 [shared supervisor input gate](../supervisor/README.md), which journals notices
 and waits for two empty-composer reads while the supervisor is idle. Dispatch's

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createMinimalSession } from '../modern/minimal-session.mjs';
 import { lineText } from '../lib/frame.mjs';
 
-function fixture({ preview = false } = {}) {
+function fixture({ preview = false, deps = {} } = {}) {
   let live = [
     { name: 'one', pane: 'w:p1', tab: 't', workspace: 'w', cwd: '/repo/lane', tool: 'codex', status: 'working', session: 's1' },
     { name: 'two', pane: 'w:p2', tab: 't', workspace: 'w', cwd: '/repo/lane2', tool: 'claude', status: 'working', session: 's2' },
@@ -23,6 +23,7 @@ function fixture({ preview = false } = {}) {
         resize(cols, rows) { this.sizes.push([cols, rows]); }, stop() { this.stopped = true; } };
       controllers.push(c); return c;
     },
+    ...deps,
   } });
   return { session, controllers, calls, setLive(value) { live = value; }, get live() { return live; } };
 }
@@ -30,6 +31,19 @@ const screen = () => ({ width: 30, height: 2, cursor: { x: 2, y: 1, visible: tru
   { spans: [{ text: 'AGENT SCREEN'.padEnd(30), fg: 'terminalFg', bg: 'terminalBg' }] },
   { spans: [{ text: '> '.padEnd(30), fg: 'terminalFg', bg: 'terminalBg' }] },
 ] });
+
+test('minimal C opens the selected supervisor chat only from the console, and preview refuses it', async () => {
+  const chats = [];
+  const {session} = fixture({deps: {herdrProjectChat: async p => {chats.push(p); return {ok: true};}}});
+  try {
+    await session.refresh(); session.frame(80, 24); assert.equal(chats.length, 0);
+    await session.key('C'); assert.equal(chats[0].repoKey, '/repo/.git');
+    await session.key('', {return: true}); await session.key('C'); assert.equal(chats.length, 1);
+  } finally {session.stop();}
+  const {session: preview} = fixture({preview: true, deps: {herdrProjectChat: async () => ({ok: false, error: '--print does not open project chats'})}});
+  try {await preview.refresh(); await preview.key('C'); assert.match(preview.ui.message, /--print does not open project chats/);}
+  finally {preview.stop();}
+});
 
 test('Enter opens the selected row, Esc returns without pane input, and Back preserves selection', async () => {
   const { session, controllers } = fixture();

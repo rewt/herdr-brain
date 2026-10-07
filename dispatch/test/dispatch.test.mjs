@@ -54,7 +54,7 @@ if(type==='lane') {
   process.stdout.write(fs.existsSync(path.join(root,'screen'))?fs.readFileSync(path.join(root,'screen'),'utf8'):'› Ready for a task');
  }
  if(a[0]==='agent' && a[1]==='get') {
-  const agent=a[2]==='supervisor-herdr'?{name:a[2]}:workers[a[2]];
+  const agent=['supervisor-herdr','ops-project','ops-explicit'].includes(a[2])?{name:a[2]}:workers[a[2]];
   if(!agent) {console.error(JSON.stringify({error:{code:'agent_not_found'}}));process.exit(1);}
   result({result:{agent}});
  }
@@ -125,11 +125,12 @@ for (const source of ['fake watcher receipt', 'real watcher journal']) {
     receipts.cleanup(); assert.deepEqual(signals, [101]);
   });
 }
-function fixture(t, { realWatch = false, preload } = {}) {
+function fixture(t, { realWatch = false, preload, noticeRecipient = '' } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo);fs.mkdirSync(bin);
   const env = { ...process.env, ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
+    MONITOR_SUPERVISOR_AGENT: noticeRecipient, HERDR_AGENT_NAME: 'chat-operator',
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
   if (preload) env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --require=${preload}`;
@@ -168,6 +169,17 @@ function fixture(t, { realWatch = false, preload } = {}) {
   return {root,repo,org,brief,item,start,dispatch,concurrent,rec,show,calls,jobs,fail,git};
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
+
+test('dispatch defaults to project ops from a chat environment and explicit --to wins', t => {
+  const f = fixture(t, {noticeRecipient: 'ops-project'}); f.fail('prepare');
+  const first = f.start(); assert.equal(first.status, 1);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0])); assert.equal(job.to, 'ops-project');
+  assert.deepEqual(f.calls().find(c => c.type === 'herdr' && c.a[1] === 'get').a, ['agent', 'get', 'ops-project']);
+  const other = fixture(t, {noticeRecipient: 'ops-project'}); other.fail('prepare');
+  assert.equal(other.start(['--to', 'ops-explicit']).status, 1);
+  assert.equal(JSON.parse(fs.readFileSync(other.jobs()[0])).to, 'ops-explicit');
+  assert.equal(f.calls().some(c => c.a.includes('chat-operator')), false);
+});
 // Verbatim supervisor capture from stalled pane w2SW:p1 on 2026-10-05.
 const hooksTableScreen = fs.readFileSync(new URL('./fixtures/codex-0.160.0-hooks-screen.txt', import.meta.url), 'utf8');
 test('captured Codex hooks event table detects the warning count while quoted task text stays safe', () => {

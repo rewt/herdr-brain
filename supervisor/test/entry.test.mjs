@@ -157,6 +157,18 @@ test('adapter exports its known supervisor agent identity', t => {
   assert.equal(sessionEnvironment(context, root, { HERDR_AGENT_NAME: 'supervisor-project' }).MONITOR_SUPERVISOR_AGENT, 'supervisor-project');
   assert.equal(sessionEnvironment({ ...context, role: 'worker' }, root, { MONITOR_SUPERVISOR_AGENT: 'inherited' }).MONITOR_SUPERVISOR_AGENT, '');
 });
+
+test('project chat adapter and durable restore retain ops separately from the chat name', t => {
+  const f = fixture(t), context = {role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org};
+  const env = sessionEnvironment(context, root, {HERDR_PANE_ID: 'control:pChat', HERDR_AGENT_NAME: 'chat-project', MONITOR_SUPERVISOR_AGENT: 'ops-project'});
+  assert.equal(env.HERDR_AGENT_NAME, 'chat-project'); assert.equal(env.MONITOR_SUPERVISOR_AGENT, 'ops-project');
+  const receipt = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane/supervisor/panes', `${createHash('sha256').update('control:pChat').digest('hex')}.json`)));
+  assert.equal(receipt.to, 'ops-project');
+  fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
+  const restored = exec(process.execPath, [path.join(root, 'supervisor/session-start.mjs')], f.repo,
+    {HERDR_PANE_ID: 'control:pChat'}, JSON.stringify({cwd: f.repo, hook_event_name: 'SessionStart', source: 'resume'}));
+  good(restored); assert.match(restored.stdout, /Supervisor cold start/); assert.doesNotMatch(restored.stdout, /session may continue/);
+});
 function fakeCommands(f) {
   const calls = [];
   let watching = new Set();

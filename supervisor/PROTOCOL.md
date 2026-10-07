@@ -25,6 +25,11 @@ ranks are theirs alone; propose changes with `record priorities propose`.
 
 Use dispatch/dispatch.mjs for a selected item, lane, named route and ask, with
 `--to YOUR-SUPERVISOR`. It records the run and arms watch before sending work.
+Here YOUR-SUPERVISOR means the project's ops recipient in
+`MONITOR_SUPERVISOR_AGENT` (default `supervisor-herdr`), not the current chat's
+agent name. Operator project chats have `chat-` names and never enroll as notice
+recipients, including for awaited landings. Keep dispatch/watch/handle/promotion
+notices addressed to ops; pull record context when the operator asks in a chat.
 Skip work already running and honor record blockers and project authority.
 Unaligned work and exceeded advisory budgets remain visible and may proceed.
 When the next plan step depends on an item landing, add `--awaited` and optionally

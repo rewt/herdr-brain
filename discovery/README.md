@@ -222,15 +222,24 @@ covers shell commands; its file tools and hooks retain Claude's native permissio
 behavior. No live model is needed to test the launch settings.
 
 Joined-project launches also prevent native access setup prompts. Claude gets
-`--add-dir` for its project's fleet worktree root, selected record, request queue
-(when present), private run temp and configured extra directories, plus matching
-`sandbox.filesystem.allowRead` entries. A supervisor can read a lane report under
-the default `~/.herdr-monitor/p/<identity-hash>/worktrees` layout without the
-outside-working-directories dialog. Claude's native additional-directory semantics
-also permit edits there according to the selected permission mode and sandbox;
-these are project access roots, not a read-only capability. Existing peer and
-worker coordination write denies remain. The fleet home, other projects and the
-project's entire temp root are never added automatically.
+scoped `permissions.allow` Read rules for its project's fleet worktree root,
+selected record, request queue (when present), private run temp and configured
+extra directories, plus matching `sandbox.filesystem.allowRead` entries. A
+supervisor can read a lane report under the default
+`~/.herdr-monitor/p/<identity-hash>/worktrees` layout without the
+outside-working-directories dialog. Only the private run temp is added with
+`--add-dir`; the checkout remains the primary working directory. Record, request
+and explicitly configured writes use scoped Edit rules and sandbox write roots.
+The supervisor receives native Edit and shell-write denies for the shared lane
+root. A worker receives matching denies for sibling entries discovered at launch,
+including resolved paths and siblings in nested worktree layouts. A generated
+native PreToolUse hook also rejects cross-lane Edit/Write/NotebookEdit targets
+resolved at tool time, covering lanes created after launch and symlink aliases.
+It leaves reads and ordinary edit approvals to native policy. Configured write
+roots overlapping sibling entries are refused. Existing peer and worker
+coordination write denies remain. The fleet home, other projects and the project's
+entire temp root are never added automatically. Explicit native read blocks,
+ask/deny rules and managed policy still take precedence.
 
 Codex gets a per-launch `-c projects={...}` inline TOML table marking only the
 canonical checkout and current working checkout trusted. Linked-worktree folder

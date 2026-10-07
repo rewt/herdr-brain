@@ -1,6 +1,7 @@
 // Native settings only: no outer sandbox or grant protocol.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { projectFleet, readFleet, excludedFleetRoot } from '../lib/fleet.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -73,6 +74,28 @@ function merge(a, b) {
 function resolvedPath(pathname) {
   try { return fs.realpathSync(pathname); }
   catch (error) { if (error.code !== 'ENOENT') throw error; return path.join(resolvedPath(path.dirname(pathname)), path.basename(pathname)); }
+}
+
+// The supervisor reads the entire lane tree. A worker owns only its checkout;
+// sibling entries (including redirected spellings) are never write roots.
+function otherLanePaths(context) {
+  if (!context.worktrees) return [];
+  const root = checkedDirectory(context.worktrees), workspace = checkedDirectory(context.workspace);
+  if (!within(root, workspace)) return [root];
+  const denied = [];
+  let current = root;
+  // Also cover nested worktree layouts, rather than skipping a whole ancestor
+  // branch merely because it contains this checkout.
+  while (current !== workspace) {
+    let next;
+    for (const name of fs.readdirSync(current)) {
+      const directory = path.join(current, name);
+      if (within(directory, workspace)) next = directory;
+      else denied.push(directory, resolvedPath(directory));
+    }
+    current = next;
+  }
+  return denied;
 }
 
 // Claude Code 2.1.292's rTe() uses <CLAUDE_CODE_TMPDIR>/claude-<uid>
@@ -183,10 +206,14 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       settings = merge(settings, supplied);
     }
     const socketDirectories = claudeSocketDirectories(temporary, warn);
-    // The outside-read dialog checks working directories, not allowWrite or
-    // sandbox allowRead. Register only this project's roots and this run's temp;
-    // allowRead also reopens them beneath an inherited shell read restriction.
-    const workingDirectories = [...new Set([context.worktrees, ...writable].filter(Boolean).map(checkedDirectory))];
+    // --add-dir grants file edits as well as reads. Keep working directories
+    // to cwd and private run temp; scoped Read rules prevent the outside-read
+    // prompt without turning the shared lane root into an edit capability.
+    const workingDirectories = [temporary];
+    const readable = [...new Set([context.worktrees, ...writable].filter(Boolean).map(checkedDirectory))];
+    const otherLanes = [...new Set(otherLanePaths(context))];
+    if (writable.some(directory => otherLanes.some(root => within(root, directory) || within(directory, root))))
+      throw new Error('extra directories cannot grant writes to sibling lanes or the shared worktree root');
     const warnings = [];
     const approved = [checkedDirectory(context.workspace), ...writable];
     for (const { source, settings: loaded } of sources) {
@@ -212,12 +239,12 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     // denies also contain inherited user write paths. Socket paths use native
     // subpath rules for both bind and connect, independently of TCP binding.
     const denied = (context.projects ?? []).flatMap(p => [p.checkout, p.record, p.worktrees, p.temp])
-      .concat(protectedPaths);
+      .concat(protectedPaths, otherLanes);
     settings.sandbox = { ...settings.sandbox, enabled: configured('enabled') ?? true, failIfUnavailable: configured('failIfUnavailable') ?? true, allowUnsandboxedCommands: configured('allowUnsandboxedCommands') ?? false,
       // Leave inherited arrays in their native scopes: Claude merges them and
       // can exclude repository grants when the sandbox is admin-required.
       network: { ...settings.sandbox?.network, allowUnixSockets: [...new Set([...(settings.sandbox?.network?.allowUnixSockets ?? []), ...socketDirectories])] },
-      filesystem: { ...settings.sandbox?.filesystem, allowRead: [...new Set([...(settings.sandbox?.filesystem?.allowRead ?? []), ...workingDirectories])], allowWrite: [...new Set([...(settings.sandbox?.filesystem?.allowWrite ?? []), ...writable])], denyWrite: [...new Set([...(settings.sandbox?.filesystem?.denyWrite ?? []), ...denied])] } };
+      filesystem: { ...settings.sandbox?.filesystem, allowRead: [...new Set([...(settings.sandbox?.filesystem?.allowRead ?? []), ...readable])], allowWrite: [...new Set([...(settings.sandbox?.filesystem?.allowWrite ?? []), ...writable])], denyWrite: [...new Set([...(settings.sandbox?.filesystem?.denyWrite ?? []), ...denied])] } };
     const temporaryEnv = temporaryEnvironment(temporary, env);
     const pythonKeys = ['PYTHONPYCACHEPREFIX', 'PYTHONDONTWRITEBYTECODE'];
     if (sources.some(source => pythonKeys.some(key => source.settings.env?.[key]))) {
@@ -230,7 +257,18 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       }
     }
     settings.env = { ...settings.env, ...temporaryEnv, CLAUDE_CODE_TMPDIR: temporary };
-    settings.permissions = { ...settings.permissions, deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.map(directory => `Edit(/${directory}/**)`)])] };
+    // Native Write and NotebookEdit consult Edit(path), too. Absolute file-tool
+    // rules require //; sandbox paths use ordinary absolute paths.
+    settings.permissions = { ...settings.permissions,
+      allow: [...new Set([...(settings.permissions?.allow ?? []), ...readable.map(directory => `Read(/${directory}/**)`), ...writable.map(directory => `Edit(/${directory}/**)`)])],
+      deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.map(directory => `Edit(/${directory}/**)`)])] };
+    if (context.worktrees) {
+      const quote = value => `'${value.replace(/'/gu, `'"'"'`)}'`;
+      const command = [process.execPath, fileURLToPath(new URL('./lane-file-access.mjs', import.meta.url)),
+        checkedDirectory(context.workspace), checkedDirectory(context.worktrees)].map(quote).join(' ');
+      settings.hooks = { ...settings.hooks, PreToolUse: [...(settings.hooks?.PreToolUse ?? []),
+        {matcher:'Edit|Write|NotebookEdit',hooks:[{type:'command',command}]}] };
+    }
     const file = path.join(temporary, 'claude-settings.json');
     writeFileAtomic(file, JSON.stringify(settings, null, 2) + '\n', 0o600);
     environment.CLAUDE_CODE_TMPDIR = temporary;

@@ -23,23 +23,45 @@ The fleet's `bch-cloak-aggregator` mapping owns the canonical checkout
 
 ## Generated settings and native interpretation
 
-Claude receives separate `--add-dir` arguments for the selected project's
-worktree root and record, private run temp, request queue if present, and explicit
-canonical project extra directories. The variadic directory arguments terminate
-at `--settings`. The generated 0600 session file also grants those paths through
-`sandbox.filesystem.allowRead`, covering shell reads under an inherited read mask.
-The persistent outside-read block is neither cleared nor disabled globally.
-The session file lives in the private run temp and is removed on exit.
+Correction R-284: Claude's working directories stay the primary checkout and
+private run temp. The shared worktree root is **not** passed through `--add-dir`.
+The generated 0600 session settings file grants the selected project's worktree
+root through `permissions.allow: ["Read(//absolute/worktrees/**)"]` and
+`sandbox.filesystem.allowRead`. The record, request queue and configured extras
+receive scoped Read rules; their pre-existing write grants use Edit rules and
+sandbox allowWrite instead of additional working directories. No persistent
+settings file is rewritten; the session file is removed on exit.
 
-The 2.1.292 bundled `Zh` predicate checks whether all resolved file spellings lie
-under the session's working directories. The outside-read gate uses this
-predicate; the read-block check excludes repository-sourced additional-directory
-grants, so a tracked project setting alone is insufficient. The opt-in offline
-test imports the binary's own exported predicate through a Bun preload and exits
-before the CLI entry point. Without the generated roots, reads fail the
-working-directory predicate; with them, project lane reports, record files and
-private temp files pass. Peer checkout, record, temp and worktrees remain outside
-the predicate for both worker and supervisor contexts.
+The supervisor gets `Edit(//absolute/worktrees/**)` and sandbox denyWrite for the
+shared root. Workers get the same two deny mechanisms for sibling entries
+present at launch, including resolved spellings and siblings at each ancestor
+of a nested checkout. A configured write root overlapping those entries is
+refused. Only the current lane retains its implicit working-directory write
+access. A generated native PreToolUse command hook resolves Edit, Write and
+NotebookEdit targets at tool time, denying writes under the shared root outside
+the current checkout. This covers new lanes created during the session, relative
+paths, outside symlink aliases and symlinks from the owned lane. Missing files
+resolve through their existing ancestors; dangling or unresolvable paths fail
+closed. Reads and ordinary writes return no hook decision, preserving native
+permission flow and existing hooks. Native file tools consult **Edit** rules for Edit, Write and NotebookEdit;
+adding a `Write(path)` rule alone does not enforce this boundary.
+
+The opt-in 2.1.292 offline test imports the binary's actual `DE` (read) and `Iy`
+(edit) permission functions with Bun preload, then exits before CLI entry. It
+also extracts the installed `san` outside-read gate and evaluates that exact
+body with an interactive auto-mode context. The control lane read is `ask` with
+a `workingDir` reason and opens the gate; the generated Read rule returns
+`allow` with a `rule` reason and the gate stays closed. Thus this proof tests the
+prompt decision, rather than merely working-directory membership or headless
+`-p` behavior (which never shows that interactive prompt).
+
+For both roles, sibling Edit/Write/NotebookEdit checks deny existing and new
+files under an existing sibling lane in default, acceptEdits, auto and bypass
+modes, even with a conflicting broad Edit allow. A worker's symlink to the
+sibling is denied, while its own checkout stays editable. Peer reads get no
+Read allow. The shared root remains outside the working-directory predicate.
+An explicit `blockReadsOutsideWorkingDirectories: true` or Read deny still
+refuses the read; Monitor does not clear the operator's persistent read block.
 
 Codex's CLI override must be an **inline table value**:
 
@@ -81,14 +103,17 @@ default-fleet assigned/headless/resume adapters in real scratch Git worktrees.
 They verify unchanged persistent config bytes, peer exclusion, temporary-file
 cleanup and retained hooks/denies. Utilities and excluded projects retain their
 existing passthrough behavior. Optional tests explicitly skip when their native
-executables are not supplied; the Claude predicate check is pinned to 2.1.292.
+executables are not supplied; the Claude permission check is pinned to 2.1.292.
 
-`--add-dir` is native project access, including edits under appropriate Claude
-permission modes. This change does not claim that the project's sibling lanes
-are read-only. It adds no global outside-read permission, fleet-parent trust or
-whole-temp-root grant. Existing Codex runtime read access remains; peer paths
-are excluded from generated project trust and writable grants, not hidden from
-all host reads. Operator settings and managed policy retain native precedence;
-an explicit deny or managed restriction can still refuse a read. Unknown builds
-retain the existing unsupported-native-sandbox warning. No live TUI/model canary
-or release acceptance harness was run in this lane.
+The generated sibling Edit/shell deny list is a launch-time snapshot. The
+PreToolUse guard covers file tools for newly created sibling names as well.
+New lanes receive no generated shell write grant. The offline hook test invokes
+the exact generated command (including paths with spaces and quotes), proving
+structured deny replies for late siblings, relative paths and aliases while
+ordinary edits produce no approval or denial. The native hook contract is in
+[Claude PreToolUse decision control](https://code.claude.com/docs/en/hooks#pretooluse-decision-control).
+Inherited operator write/additional-directory overrides are still diagnosed,
+and managed policy retains native precedence. Existing host read access is not
+a cross-project read-isolation guarantee. Unknown builds retain the existing
+unsupported-native-sandbox warning. No live TUI/model canary or release acceptance
+harness was run in this lane.

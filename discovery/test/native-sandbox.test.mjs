@@ -190,7 +190,7 @@ test('Claude gets per-session native write settings and keeps existing hooks', t
   const settingsFile = launch.args[launch.args.indexOf('--settings') + 1];
   assert.equal(path.dirname(settingsFile), launch.env.TMPDIR);
   const settings = JSON.parse(fs.readFileSync(settingsFile));
-  assert.deepEqual(settings.hooks, hooks);
+  assert.deepEqual(settings.hooks.Stop, hooks.Stop);
   assert.equal(settings.sandbox.enabled, true); assert.equal(settings.sandbox.failIfUnavailable, true);
   assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
   assert.deepEqual(settings.sandbox.filesystem.allowWrite, [f.own.record, launch.env.TMPDIR]);
@@ -304,7 +304,12 @@ test('extra directories are supplied through native options in canonical project
   for (const kind of ['codex', 'claude']) {
     const launch = nativeSandboxLaunch({ kind, binary: f.binary, args: ['--add-dir', extra, '--model', 'literal', 'Task'], context: f.context }); t.after(launch.close);
     if (kind === 'codex') assert.ok(launch.args.find(a => a.startsWith('permissions.monitor-worker.filesystem=')).includes(extra));
-    else assert.ok(launch.args.includes(extra));
+    else {
+      assert.ok(!launch.args.includes(extra), 'extra writes do not widen working directories');
+      const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
+      assert.ok(settings.sandbox.filesystem.allowWrite.includes(extra));
+      assert.ok(settings.permissions.allow.includes(`Edit(/${extra}/**)`));
+    }
     assert.throws(() => nativeSandboxLaunch({ kind, binary: f.binary, args: ['--add-dir', f.other.checkout], context: f.context }), /project config/u);
   }
 });
@@ -350,7 +355,7 @@ test('Codex respects inherited and CLI sandbox choices with one source-naming wa
   assert.deepEqual(launch.args.slice(0, args.length), args); assert.equal(warnings.length, 1); assert.ok(warnings[0].includes(profile));
 });
 
-test('both roles receive scoped working directories and launch-only trust for fleet worktrees', t => {
+test('both roles receive read-only lane access and launch-only trust for fleet worktrees', t => {
   const f = fixture(t), workspace = path.join(f.own.worktrees, 'lane-worker'); fs.mkdirSync(workspace);
   const codexFile = path.join(process.env.CODEX_HOME, 'config.toml');
   const claudeFile = path.join(process.env.CLAUDE_CONFIG_DIR, 'settings.json');
@@ -363,10 +368,12 @@ test('both roles receive scoped working directories and launch-only trust for fl
     if (kind === 'claude') {
       const directories = launch.args.filter((_, i) => launch.args[i - 1] === '--add-dir');
       const expected = [f.own.worktrees, f.own.record, launch.env.TMPDIR];
-      assert.deepEqual(directories, expected);
+      assert.deepEqual(directories, [launch.env.TMPDIR]);
       assert.equal(launch.args[launch.args.lastIndexOf('--add-dir') + 2], '--settings', 'variadic directories end at a flag');
       const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
       assert.deepEqual(settings.sandbox.filesystem.allowRead, expected);
+      assert.ok(settings.permissions.allow.includes(`Read(/${f.own.worktrees}/**)`));
+      assert.ok(!settings.permissions.allow.includes(`Edit(/${f.own.worktrees}/**)`));
       assert.equal(settings.permissions.blockReadsOutsideWorkingDirectories, undefined, 'no global read-block override');
       assert.ok(!settings.sandbox.filesystem.allowWrite.includes(f.own.worktrees), 'no explicit worktree-root write grant');
       for (const directory of Object.values(f.other)) {
@@ -382,6 +389,64 @@ test('both roles receive scoped working directories and launch-only trust for fl
     assert.equal(fs.readFileSync(claudeFile, 'utf8'), claudeSettings);
     for (const directory of [f.root, f.own.temp, ...Object.values(f.other)]) assert.ok(!launch.args.includes(directory), directory);
     const temporary = launch.env.TMPDIR; launch.close(); assert.ok(!fs.existsSync(temporary));
+  }
+});
+
+test('Claude denies sibling lanes and rejects configured lane write grants', t => {
+  const f = fixture(t), parent = path.join(f.own.worktrees, 'group'), workspace = path.join(parent, 'own');
+  const siblings = [path.join(f.own.worktrees, 'lane-sibling'), path.join(parent, 'sibling')];
+  fs.mkdirSync(workspace, { recursive:true });
+  for (const directory of siblings) fs.mkdirSync(directory);
+  for (const role of ['worker','supervisor']) {
+    const launch = nativeSandboxLaunch({kind:'claude',binary:f.binary,args:[],context:{...f.context,role,workspace:role==='worker'?workspace:f.own.checkout}});
+    t.after(launch.close);
+    const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1]));
+    const denied = role==='worker'?siblings:[f.own.worktrees];
+    for (const directory of denied) {
+      assert.ok(settings.sandbox.filesystem.denyWrite.includes(directory));
+      assert.ok(settings.permissions.deny.includes(`Edit(/${directory}/**)`));
+    }
+    assert.ok(!settings.sandbox.filesystem.denyWrite.includes(workspace));
+    assert.deepEqual(launch.args.filter((_,i)=>launch.args[i-1]==='--add-dir'), [launch.env.TMPDIR]);
+  }
+  for (const extra of [siblings[0], parent, f.own.worktrees]) {
+    fs.writeFileSync(path.join(f.own.checkout,'.lane.json'), JSON.stringify({always_args:{claude:['--add-dir',extra]}}));
+    assert.throws(()=>nativeSandboxLaunch({kind:'claude',binary:f.binary,args:[],context:{...f.context,workspace}}), /sibling lanes/u);
+  }
+});
+
+test('Claude native file hook denies late siblings and aliases without approving ordinary edits', t => {
+  const f = fixture(t), workspace = path.join(f.own.worktrees, "own 'lane"), existing = path.join(f.own.worktrees, 'sibling');
+  fs.mkdirSync(workspace); fs.mkdirSync(existing);
+  const hooks = {PreToolUse:[{matcher:'Bash',hooks:[{type:'command',command:'existing-hook'}]}]};
+  for (const role of ['worker','supervisor']) {
+    const cwd = role==='worker'?workspace:f.own.checkout;
+    const launch = nativeSandboxLaunch({kind:'claude',binary:f.binary,args:['--settings',JSON.stringify({hooks})],context:{...f.context,role,workspace:cwd}});
+    t.after(launch.close);
+    const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1]));
+    assert.deepEqual(settings.hooks.PreToolUse[0], hooks.PreToolUse[0]);
+    const guard = settings.hooks.PreToolUse.at(-1);
+    assert.equal(guard.matcher, 'Edit|Write|NotebookEdit');
+    const late = path.join(f.own.worktrees, 'late-'+role); fs.mkdirSync(late);
+    const alias = path.join(cwd, 'alias-'+role); fs.symlinkSync(late, alias);
+    const dangling = path.join(cwd, 'dangling-'+role); fs.symlinkSync(path.join(f.own.worktrees,'missing-'+role),dangling);
+    const outsideAlias = path.join(f.root, 'alias-'+role); fs.symlinkSync(late, outsideAlias);
+    const invoke = (tool_name, file) => {
+      const event = {tool_name,cwd,tool_input:tool_name==='NotebookEdit'?{notebook_path:file}:{file_path:file}};
+      const result = spawnSync('/bin/sh',['-c',guard.hooks[0].command],{env:launch.env,input:JSON.stringify(event),encoding:'utf8',timeout:5000});
+      assert.equal(result.status,0,result.stderr);
+      return result.stdout?JSON.parse(result.stdout).hookSpecificOutput:null;
+    };
+    for (const tool of ['Edit','Write','NotebookEdit']) {
+      for (const file of [undefined,path.join(dangling,'new.md'),path.join(existing,'report.md'),path.join(late,'new.md'),path.join(alias,'new.md'),path.join(outsideAlias,'new.md'),path.relative(cwd,path.join(late,'new.md'))]) {
+        const decision = invoke(tool,file);
+        assert.equal(decision.hookEventName,'PreToolUse');
+        assert.equal(decision.permissionDecision,'deny', tool+':'+file);
+      }
+      for (const file of [path.join(cwd,'own.md'),path.join(launch.env.TMPDIR,'note.md'),path.join(f.own.record,'report.md')])
+        assert.equal(invoke(tool,file),null,'ordinary edits retain native permission flow');
+    }
+    assert.equal(invoke('Read',path.join(late,'report.md')),null,'no read interception');
   }
 });
 
@@ -439,46 +504,84 @@ test('native Codex config reader accepts dotted and quoted launch trust without 
   assert.equal(fs.readFileSync(configFile, 'utf8'), config);
 });
 
-test('Claude 2.1.292 native working-directory predicate covers generated read roots and excludes peers', {
-  skip: !process.env.MONITOR_TEST_CLAUDE_READ && 'set MONITOR_TEST_CLAUDE_READ for the offline native read predicate',
+test('Claude 2.1.292 native permissions prevent the supervisor read prompt and deny sibling file writes', {
+  skip: !process.env.MONITOR_TEST_CLAUDE_READ && 'set MONITOR_TEST_CLAUDE_READ for the offline native permission check',
 }, t => {
   const f = fixture(t), binary = process.env.MONITOR_TEST_CLAUDE_READ;
   const version = spawnSync(binary, ['--version'], { encoding: 'utf8', timeout: 5000 });
-  assert.match(version.stdout, /^2\.1\.292 /u, 'private native predicate proof is pinned to this version');
+  assert.match(version.stdout, /^2\.1\.292 /u, 'private native permission proof is pinned to this version');
   const source = fs.readFileSync(binary, 'utf8');
   const module = source.match(/import\{[^{}]*\bZh\b[^{}]*\}from"(\/\$bunfs\/root\/[^"\n]+)"/u)?.[1];
-  assert.ok(module, 'find the exported native working-directory predicate');
+  assert.ok(module, 'find the exported native permission functions');
+  // san is the interactive outside-read gate, not exported by the bundle.
+  // Evaluate its exact installed body with an interactive auto-mode context;
+  // the permission matchers below are imported directly from the binary.
+  const gate = source.match(/function san\(e,n,r,s\)\{.*?(?=function fzo\()/u)?.[0];
+  assert.ok(gate, 'find the native outside-read prompt gate');
   const preload = path.join(f.root, 'read-preload.mjs');
   fs.writeFileSync(preload, `
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 try {
   const input = JSON.parse(fs.readFileSync(process.env.MONITOR_READ_PROBE, 'utf8'));
-  const { Zh: insideWorkingDirectories } = await import(input.module);
-  for (const directory of input.allowed) {
-    const file = directory + '/report.md';
-    assert.equal(insideWorkingDirectories(file, {}, [file], new Set([input.workspace])), false, 'outside-read control');
-    assert.equal(insideWorkingDirectories(file, {}, [file], new Set([input.workspace, ...input.allowed])), true, directory);
+  const { Zh, DE: read, Iy: edit } = await import(input.module);
+  const permissions = {
+    mode: 'auto', additionalWorkingDirectories: new Map(input.directories.map(path => [path, {path, source:'cliArg'}])),
+    alwaysAllowRules: {cliArg: input.settings.permissions.allow},
+    alwaysDenyRules: {cliArg: input.settings.permissions.deny}, alwaysAskRules: {},
+  };
+  const gate = new Function('fwr','de','Ni','Lt','V0e','An','ce', input.gate + '; return san;')(
+    new Set(['Read','Grep','Glob']), ctx => ctx.permissions, mode => mode === 'auto',
+    () => false, () => false, () => true, () => ({hasSeenAutoModeOutsideReadPrompt:false}));
+  const context = {permissions, options:{isNonInteractiveSession:false}, session:{outsideReadPrompt:{
+    answered:false, isOpenElsewhere:()=>false,
+  }}};
+  const report = input.sibling + '/report.md';
+  const tool = {name:'Read', getPath:i=>i.file_path}, args = {file_path:report};
+  assert.equal(Zh(report, permissions), false, 'shared lanes are outside working directories');
+  const control = read(tool, args, {...permissions, alwaysAllowRules:{}});
+  assert.equal(control.behavior, 'ask', 'without scoped Read rules, a lane read needs permission');
+  assert.equal(gate(tool, args, control, context), true, 'interactive auto-mode control opens the actual outside-read prompt');
+  const allowed = read(tool, args, permissions);
+  assert.equal(allowed.behavior, 'allow');
+  assert.equal(allowed.decisionReason.type, 'rule', 'read grant must be an explicit native rule');
+  assert.equal(gate(tool, args, allowed, context), false, 'generated Read rule prevents the prompt');
+  for (const name of ['Edit','Write','NotebookEdit']) for (const mode of ['default','acceptEdits','auto','bypassPermissions']) {
+    for (const file of [report, input.sibling + '/new.md', input.workspace + '/sibling-link/report.md']) {
+      if (input.role === 'supervisor' && file.includes('/sibling-link/')) continue;
+      const denied = edit({name,getPath:i=>i.file_path}, {file_path:file}, {
+        ...permissions, mode, alwaysAllowRules:{cliArg:[...permissions.alwaysAllowRules.cliArg, 'Edit', 'Edit(/' + input.worktrees + '/**)']},
+      });
+      assert.equal(denied.behavior, 'deny', name + ':' + mode + ':' + file);
+      assert.equal(denied.decisionReason.type, 'rule');
+    }
   }
+  const own = input.workspace + '/own.md';
+  assert.equal(edit({name:'Edit',getPath:i=>i.file_path}, {file_path:own}, {...permissions,mode:'acceptEdits'}).behavior, 'allow');
   for (const directory of input.peers) {
-    const file = directory + '/report.md';
-    assert.equal(insideWorkingDirectories(file, {}, [file], new Set([input.workspace, ...input.allowed])), false, directory);
+    assert.equal(read(tool, {file_path:directory+'/report.md'}, permissions).behavior, 'ask', 'no peer Read grant');
   }
-  console.log('native working-directory predicate passed');
+  // Explicit user read blocks/denies retain native precedence.
+  assert.equal(read(tool, args, {...permissions,blockReadsOutsideWorkingDirectories:true}).behavior, 'deny');
+  assert.equal(read(tool, args, {...permissions,alwaysDenyRules:{cliArg:[...input.settings.permissions.deny,'Read(/'+input.worktrees+'/**)']}}).behavior, 'deny');
+  console.log('native read prompt and sibling Edit/Write/NotebookEdit denial passed');
   process.exit(0);
 } catch (error) { console.error(error); process.exit(1); }
 `);
-  const workspace = path.join(f.own.worktrees, 'lane-worker'); fs.mkdirSync(workspace);
+  const workspace = path.join(f.own.worktrees, 'lane-worker'), sibling = path.join(f.own.worktrees, 'lane-sibling');
+  fs.mkdirSync(workspace); fs.mkdirSync(sibling); fs.writeFileSync(path.join(sibling, 'report.md'), 'sibling report');
+  fs.symlinkSync(sibling, path.join(workspace, 'sibling-link'));
   for (const role of ['supervisor', 'worker']) {
     const context = { ...f.context, role, workspace: role === 'worker' ? workspace : f.own.checkout };
-    const launch = nativeSandboxLaunch({ kind: 'claude', binary, args: ['--setting-sources', ''], context, warn: () => {} }); t.after(launch.close);
+    const launch = nativeSandboxLaunch({ kind:'claude', binary, args:['--setting-sources',''], context, warn:()=>{} }); t.after(launch.close);
     const input = path.join(f.root, 'read-probe.json');
-    fs.writeFileSync(input, JSON.stringify({ module, workspace: context.workspace,
-      allowed: launch.args.filter((_, i) => launch.args[i - 1] === '--add-dir'), peers: Object.values(f.other) }));
-    const result = spawnSync(binary, ['--version'], { cwd: context.workspace,
-      env: { ...launch.env, HOME: f.root, MONITOR_READ_PROBE: input, BUN_OPTIONS: `--preload ${preload}` }, encoding: 'utf8', timeout: 10000 });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.match(result.stdout, /native working-directory predicate passed/u);
+    fs.writeFileSync(input, JSON.stringify({ module, gate, role, workspace:context.workspace, sibling,
+      worktrees:f.own.worktrees, settings:JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1])),
+      directories:launch.args.filter((_,i)=>launch.args[i-1]==='--add-dir'), peers:Object.values(f.other) }));
+    const result = spawnSync(binary, ['--version'], {cwd:context.workspace,
+      env:{...launch.env,HOME:f.root,MONITOR_READ_PROBE:input,BUN_OPTIONS:`--preload ${preload}`}, encoding:'utf8',timeout:10000});
+    assert.equal(result.status, 0, result.stdout+result.stderr);
+    assert.match(result.stdout, /native read prompt and sibling Edit\/Write\/NotebookEdit denial passed/u);
   }
 });
 
@@ -511,7 +614,7 @@ test('Claude preserves undeclared directories and sibling temp grants with one s
   const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
   assert.deepEqual(settings.permissions.additionalDirectories, [f.other.temp]);
   assert.ok(settings.sandbox.filesystem.allowWrite.includes(f.own.temp), 'the supplied sibling temp grant is preserved');
-  assert.deepEqual(settings.hooks, hooks);
+  assert.deepEqual(settings.hooks.Stop, hooks.Stop);
   assert.equal(warnings.length, 1);
   for (const setting of ['permissions.additionalDirectories', 'sandbox.filesystem.allowWrite', file, '--settings']) assert.ok(warnings[0].includes(setting), warnings[0]);
 });
@@ -599,7 +702,7 @@ fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,cwd:process.cwd
     } else {
       assert.equal(got.settings.sandbox.enabled, true);
       const expected = [fleet.project.worktrees, fleet.project.record, got.temp];
-      assert.deepEqual(got.args.filter((_, i) => got.args[i - 1] === '--add-dir'), expected);
+      assert.deepEqual(got.args.filter((_, i) => got.args[i - 1] === '--add-dir'), [got.temp]);
       assert.deepEqual(got.settings.sandbox.filesystem.allowRead, expected);
     }
     assert.equal(fs.readFileSync(nativeConfig, 'utf8'), 'sandbox_mode="workspace-write"\n');

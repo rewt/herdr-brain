@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // This project's build/gate declaration. Machine paths stay in the environment.
 import fs from 'node:fs';
-import { isMain } from '../lib/cli-help.mjs';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -128,6 +128,12 @@ export function main(argv = process.argv.slice(2)) {
   process.exitCode = result.status ?? 1;
 }
 
-if (isMain(import.meta.url)) {
+// Build-only partial candidates carry this driver without lib/ (ARCH-19).
+function isMain() {
+  try { return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+
+if (isMain()) {
   try { main(); } catch (error) { console.error(`release candidate: ${error.message}`); process.exitCode = 1; }
 }

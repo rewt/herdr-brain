@@ -1,0 +1,8 @@
+START helpers-head
+END helpers-head exit=0 {"tests":112,"pass":112,"fail":0,"cancelled":0,"skipped":0}
+START related-head
+END related-head exit=0 {"tests":592,"pass":585,"fail":0,"cancelled":0,"skipped":7}
+START acceptance-head
+END acceptance-head exit=1 {"tests":221,"pass":220,"fail":1,"cancelled":0,"skipped":0}
+START slot-head
+END slot-head exit=0 {"tests":75,"pass":75,"fail":0,"cancelled":0,"skipped":0}

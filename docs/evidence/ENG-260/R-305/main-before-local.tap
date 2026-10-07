@@ -1,0 +1,902 @@
+TAP version 13
+# Subtest: product scripts never compare a resolved argv launch path to a module path
+not ok 1 - product scripts never compare a resolved argv launch path to a module path
+  ---
+  duration_ms: 27.000834
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    use isMain from lib/cli-help.mjs
+    + actual - expected
+
+    + [
+    +   'acceptance/run.mjs',
+    +   'acceptance/settle.mjs',
+    +   'acceptance/supervisor.mjs',
+    +   'discovery/bounded.mjs',
+    +   'discovery/bubblewrap.mjs',
+    +   'discovery/lane-file-access.mjs',
+    +   'herdr/release-candidate.mjs',
+    +   'promote/metrics.mjs',
+    +   'promote/promote.mjs',
+    +   'release/release.mjs',
+    +   'supervisor/prompt-supervisor.mjs',
+    +   'supervisor/supervisor.mjs'
+    + ]
+    - []
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual:
+    0: 'acceptance/run.mjs'
+    1: 'acceptance/settle.mjs'
+    2: 'acceptance/supervisor.mjs'
+    3: 'discovery/bounded.mjs'
+    4: 'discovery/bubblewrap.mjs'
+    5: 'discovery/lane-file-access.mjs'
+    6: 'herdr/release-candidate.mjs'
+    7: 'promote/metrics.mjs'
+    8: 'promote/promote.mjs'
+    9: 'release/release.mjs'
+    10: 'supervisor/prompt-supervisor.mjs'
+    11: 'supervisor/supervisor.mjs'
+  operator: 'deepStrictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:18:10
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.start (node:internal/test_runner/test:1242:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: discovery/bounded.mjs executes through a directory symlink
+not ok 2 - discovery/bounded.mjs executes through a directory symlink
+  ---
+  duration_ms: 37.239333
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 125
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 125
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: discovery/bounded.mjs executes through a file symlink
+not ok 3 - discovery/bounded.mjs executes through a file symlink
+  ---
+  duration_ms: 39.1665
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 125
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 125
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: discovery/bubblewrap.mjs executes through a directory symlink
+not ok 4 - discovery/bubblewrap.mjs executes through a directory symlink
+  ---
+  duration_ms: 36.602833
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: discovery/bubblewrap.mjs executes through a file symlink
+not ok 5 - discovery/bubblewrap.mjs executes through a file symlink
+  ---
+  duration_ms: 36.347416
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: discovery/lane-file-access.mjs executes through a directory symlink
+not ok 6 - discovery/lane-file-access.mjs executes through a directory symlink
+  ---
+  duration_ms: 38.785958
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /"permissionDecision":"deny"/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:60:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: discovery/lane-file-access.mjs executes through a file symlink
+not ok 7 - discovery/lane-file-access.mjs executes through a file symlink
+  ---
+  duration_ms: 35.947292
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /"permissionDecision":"deny"/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:60:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: herdr/release-candidate.mjs executes through a directory symlink
+not ok 8 - herdr/release-candidate.mjs executes through a directory symlink
+  ---
+  duration_ms: 37.558083
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: herdr/release-candidate.mjs executes through a file symlink
+not ok 9 - herdr/release-candidate.mjs executes through a file symlink
+  ---
+  duration_ms: 41.937167
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: promote/metrics.mjs executes through a directory symlink
+not ok 10 - promote/metrics.mjs executes through a directory symlink
+  ---
+  duration_ms: 39.390334
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: promote/metrics.mjs executes through a file symlink
+not ok 11 - promote/metrics.mjs executes through a file symlink
+  ---
+  duration_ms: 38.931583
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: promote/promote.mjs executes through a directory symlink
+not ok 12 - promote/promote.mjs executes through a directory symlink
+  ---
+  duration_ms: 53.021208
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: promote/promote.mjs executes through a file symlink
+not ok 13 - promote/promote.mjs executes through a file symlink
+  ---
+  duration_ms: 48.427208
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: release/release.mjs executes through a directory symlink
+not ok 14 - release/release.mjs executes through a directory symlink
+  ---
+  duration_ms: 42.979833
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: release/release.mjs executes through a file symlink
+not ok 15 - release/release.mjs executes through a file symlink
+  ---
+  duration_ms: 48.250625
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a directory symlink
+not ok 16 - supervisor/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 56.465333
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: supervisor/supervisor.mjs executes through a file symlink
+not ok 17 - supervisor/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 51.623708
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a directory symlink
+not ok 18 - supervisor/prompt-supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 49.776916
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs executes through a file symlink
+not ok 19 - supervisor/prompt-supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 54.172542
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a directory symlink
+ok 20 - supervisor/tidy-tabs.mjs executes through a directory symlink
+  ---
+  duration_ms: 38.157917
+  type: 'test'
+  ...
+# Subtest: supervisor/tidy-tabs.mjs executes through a file symlink
+ok 21 - supervisor/tidy-tabs.mjs executes through a file symlink
+  ---
+  duration_ms: 35.351625
+  type: 'test'
+  ...
+# Subtest: acceptance/run.mjs executes through a directory symlink
+not ok 22 - acceptance/run.mjs executes through a directory symlink
+  ---
+  duration_ms: 46.254333
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: acceptance/run.mjs executes through a file symlink
+not ok 23 - acceptance/run.mjs executes through a file symlink
+  ---
+  duration_ms: 48.945166
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: acceptance/settle.mjs executes through a directory symlink
+not ok 24 - acceptance/settle.mjs executes through a directory symlink
+  ---
+  duration_ms: 38.784916
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: acceptance/settle.mjs executes through a file symlink
+not ok 25 - acceptance/settle.mjs executes through a file symlink
+  ---
+  duration_ms: 41.27575
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a directory symlink
+not ok 26 - acceptance/supervisor.mjs executes through a directory symlink
+  ---
+  duration_ms: 40.664708
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: acceptance/supervisor.mjs executes through a file symlink
+not ok 27 - acceptance/supervisor.mjs executes through a file symlink
+  ---
+  duration_ms: 40.47575
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a directory symlink
+ok 28 - housekeeping/housekeeping.mjs executes through a directory symlink
+  ---
+  duration_ms: 45.010125
+  type: 'test'
+  ...
+# Subtest: housekeeping/housekeeping.mjs executes through a file symlink
+ok 29 - housekeeping/housekeeping.mjs executes through a file symlink
+  ---
+  duration_ms: 44.854833
+  type: 'test'
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a directory symlink
+ok 30 - test-slot/test-slot.mjs executes through a directory symlink
+  ---
+  duration_ms: 39.726959
+  type: 'test'
+  ...
+# Subtest: test-slot/test-slot.mjs executes through a file symlink
+ok 31 - test-slot/test-slot.mjs executes through a file symlink
+  ---
+  duration_ms: 39.571625
+  type: 'test'
+  ...
+# Subtest: acceptance/focus.mjs executes through a directory symlink
+not ok 32 - acceptance/focus.mjs executes through a directory symlink
+  ---
+  duration_ms: 37.352291
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: acceptance/focus.mjs executes through a file symlink
+not ok 33 - acceptance/focus.mjs executes through a file symlink
+  ---
+  duration_ms: 37.999042
+  type: 'test'
+  location: '/private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 1
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    file:///private/tmp/eng260-r305-main/test/main-module.test.mjs:59:12
+    file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    TestContext.<anonymous> (file:///private/tmp/eng260-r305-main/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:226:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: isMain resolves both paths and returns false for missing, dangling or different launchers
+ok 34 - isMain resolves both paths and returns false for missing, dangling or different launchers
+  ---
+  duration_ms: 34.925209
+  type: 'test'
+  ...
+# Subtest: the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+ok 35 - the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+  ---
+  duration_ms: 875.600458
+  type: 'test'
+  ...
+# Subtest: missing input setup and missing build evidence fail before invoking acceptance
+ok 36 - missing input setup and missing build evidence fail before invoking acceptance
+  ---
+  duration_ms: 3.157375
+  type: 'test'
+  ...
+# Subtest: private cache copies only pinned dependency tarballs and refuses missing content
+ok 37 - private cache copies only pinned dependency tarballs and refuses missing content
+  ---
+  duration_ms: 6.808542
+  type: 'test'
+  ...
+# Subtest: unset compatibility input is optional through the declared build and gate
+ok 38 - unset compatibility input is optional through the declared build and gate
+  ---
+  duration_ms: 607.746875
+  type: 'test'
+  ...
+# Subtest: real project preflight leaves invalid inputs uncut and retries the same commit
+ok 39 - real project preflight leaves invalid inputs uncut and retries the same commit
+  ---
+  duration_ms: 2495.075833
+  type: 'test'
+  ...
+# Subtest: release safety checks stop the gate on failure and precede acceptance on success
+ok 40 - release safety checks stop the gate on failure and precede acceptance on success
+  ---
+  duration_ms: 1031.75825
+  type: 'test'
+  ...
+# Subtest: failed offline release coverage prevents build evidence and acceptance
+ok 41 - failed offline release coverage prevents build evidence and acceptance
+  ---
+  duration_ms: 531.257458
+  type: 'test'
+  ...
+1..41
+# tests 41
+# suites 0
+# pass 14
+# fail 27
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5602.089958

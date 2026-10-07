@@ -1,0 +1,56 @@
+Main comparison snapshot: dd3f52c0391d242a5d6102f1ffa6a876f48e1620.
+Lane starting head: 9e51ff6a (R-302 implementation/report + independent review).
+
+Main advanced during the host-slot wait; comparisons retain the pinned main
+from task start above, rather than mixing product revisions across cases.
+
+Snapshot setup (no mutation of canonical main):
+  mkdir -p /private/tmp/eng260-r305-main
+  git archive main | tar -x -C /private/tmp/eng260-r305-main
+  cp test/main-module.test.mjs /private/tmp/eng260-r305-main/test/main-module.test.mjs
+  git -C /private/tmp/eng260-r305-main init -q
+  git -C /private/tmp/eng260-r305-main add .
+To reproduce later, substitute dd3f52c0391d242a5d6102f1ffa6a876f48e1620
+for main in git archive.
+The original R-302 main-module test is copied unchanged because main does not
+contain it. Its repository guard needs the scratch Git index. No product file
+in this main snapshot is changed. The reverted candidate fixture is byte-identical
+to main's fixture. main-before-local.tap is the early sandbox run of the two
+unmodified tests against main; main-before.tap repeats them under the host slot.
+
+Native test PATH:
+  /Users/rewt/.local/bin:/Users/rewt/.nvm/versions/node/v20.19.4/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
+which codex resolves /Users/rewt/.local/bin/codex, the native executable symlink
+to /Users/rewt/.codex/packages/standalone/current/bin/codex. Monitor entry/bin
+is absent. Codex is used only for offline sandbox commands; no model calls.
+All host runs remove ORG_DIR and HERDR_AGENT_NAME and use TMPDIR, TMP and TEMP
+under /private/tmp. Bounded tests create offline Herdr/fleet and fixture slots.
+
+From the main snapshot, with the environment above:
+  MONITOR_TEST_SLOT_WAIT_SECONDS=3600 node test-slot/test-slot.mjs run eng260-r305-main-before -- node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 test/main-module.test.mjs release/test/candidate.test.mjs
+
+From this lane, with the same environment:
+  MONITOR_TEST_SLOT_WAIT_SECONDS=3600 node test-slot/test-slot.mjs run eng260-r305 -- node docs/evidence/ENG-260/R-305/host-checks.mjs
+host-checks.mjs records every exact command, working directory, exit and TAP
+count in outcomes.json. Its default mode runs the four focused native cases
+sequentially at main and head, holding the real host slot across all four.
+
+While waiting for that slot, run from this lane with the same native PATH,
+clean parent environment and /private/tmp temp settings:
+  node docs/evidence/ENG-260/R-305/host-checks.mjs --scripts-only
+This covers every converted script, the already shared test helpers, all
+offline acceptance files, and direct test-slot tests; counts and exact commands
+are in script-outcomes.json. These offline fixtures use scratch slots as in
+R-302, not the real host slot. Any native-case result in acceptance-head.tap
+is supplementary; the required comparisons are the four focused in-slot runs.
+The script was split into these two modes before the queued wrapper acquired
+the slot or started it. Neither mode breaks any existing slot lock.
+
+guard-development.tap:
+  node test/helpers/run.mjs test/main-module.test.mjs
+
+No npm test, test:promotion, test:lanes, full release tier, live acceptance
+harness, housekeeping loop, model invocation, promotion, merge or push.
+Final required lane check runs fast after the checked report commit.
+
+Committed TAP evidence has trailing whitespace normalized; results are unchanged.

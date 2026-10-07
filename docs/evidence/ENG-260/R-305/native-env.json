@@ -1,0 +1,6 @@
+{
+  "launcher": "/Users/rewt/.local/bin/codex",
+  "binary": "/Users/rewt/.codex/packages/standalone/releases/0.161.0-aarch64-apple-darwin/bin/codex",
+  "version": "codex-cli 0.161.0",
+  "PATH": "/Users/rewt/.local/bin:/Users/rewt/.nvm/versions/node/v20.19.4/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+}

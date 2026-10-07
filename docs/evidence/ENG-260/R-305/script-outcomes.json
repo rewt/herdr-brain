@@ -1,0 +1,142 @@
+[
+  {
+    "name": "helpers-head",
+    "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check",
+    "args": [
+      "test/helpers/run.mjs",
+      "--file-timeout=480000",
+      "--suite-timeout=540000",
+      "test/main-module.test.mjs",
+      "release/test/candidate.test.mjs",
+      "test/helper-main.test.mjs",
+      "test/tier-plan.test.mjs",
+      "test/cli-help.test.mjs",
+      "test/suite.test.mjs",
+      "test/release-suites.test.mjs",
+      "test/pty.test.mjs",
+      "test/pty-cache.test.mjs"
+    ],
+    "status": 0,
+    "signal": null,
+    "counts": {
+      "tests": 112,
+      "pass": 112,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  {
+    "name": "related-head",
+    "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check",
+    "args": [
+      "test/helpers/run.mjs",
+      "--file-timeout=480000",
+      "--suite-timeout=540000",
+      "discovery/test/alternatives.test.mjs",
+      "discovery/test/entry.test.mjs",
+      "discovery/test/owner.test.mjs",
+      "discovery/test/review-r3.test.mjs",
+      "discovery/test/review-r4.test.mjs",
+      "housekeeping/test/auto-tidy.test.mjs",
+      "promote/test/affected-tests.test.mjs",
+      "promote/test/metrics.test.mjs",
+      "promote/test/promote.test.mjs",
+      "promote/test/train.test.mjs",
+      "promote/test/workflow-train.test.mjs",
+      "release/test/release.test.mjs",
+      "supervisor/test/autopilot.test.mjs",
+      "supervisor/test/delivery.test.mjs",
+      "supervisor/test/entry.test.mjs",
+      "supervisor/test/status.test.mjs",
+      "supervisor/test/supervisor.test.mjs",
+      "test/deadline-boundaries.test.mjs",
+      "test/inbox.test.mjs",
+      "test/no-setuid-processes.test.mjs",
+      "test/plugin-install.test.mjs",
+      "test/startup-deadlines.test.mjs",
+      "test/test-hangs.test.mjs",
+      "test/tidy-tabs.test.mjs",
+      "test/zero-setup-install.test.mjs",
+      "housekeeping/test/housekeeping.test.mjs",
+      "lanes/test/validation.test.mjs",
+      "lanes/test/workspace-native.test.mjs",
+      "test/load-deadlines.test.mjs"
+    ],
+    "status": 0,
+    "signal": null,
+    "counts": {
+      "tests": 592,
+      "pass": 585,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 7
+    }
+  },
+  {
+    "name": "acceptance-head",
+    "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check",
+    "args": [
+      "test/helpers/run.mjs",
+      "--file-timeout=480000",
+      "--suite-timeout=540000",
+      "acceptance/test/boundary.test.mjs",
+      "acceptance/test/cases.test.mjs",
+      "acceptance/test/cleanup.test.mjs",
+      "acceptance/test/cutover.test.mjs",
+      "acceptance/test/deadlines.test.mjs",
+      "acceptance/test/default-cycle.test.mjs",
+      "acceptance/test/environment.test.mjs",
+      "acceptance/test/existing-project.test.mjs",
+      "acceptance/test/focus.test.mjs",
+      "acceptance/test/harness.test.mjs",
+      "acceptance/test/housekeeping.test.mjs",
+      "acceptance/test/launch.test.mjs",
+      "acceptance/test/legacy-consumer.test.mjs",
+      "acceptance/test/lessons.test.mjs",
+      "acceptance/test/live-session.test.mjs",
+      "acceptance/test/load-round2.test.mjs",
+      "acceptance/test/load.test.mjs",
+      "acceptance/test/native-transport.test.mjs",
+      "acceptance/test/probe.test.mjs",
+      "acceptance/test/product-homes.test.mjs",
+      "acceptance/test/recovery.test.mjs",
+      "acceptance/test/results.test.mjs",
+      "acceptance/test/security.test.mjs",
+      "acceptance/test/signal.test.mjs",
+      "acceptance/test/snapshot.test.mjs",
+      "acceptance/test/validation.test.mjs",
+      "acceptance/test/verification.test.mjs"
+    ],
+    "status": 1,
+    "signal": null,
+    "counts": {
+      "tests": 221,
+      "pass": 220,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  {
+    "name": "slot-head",
+    "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check",
+    "args": [
+      "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-main-check/docs/evidence/ENG-260/R-305/direct-tests.mjs",
+      "test-slot/test/conformance.test.mjs",
+      "test-slot/test/gate-profile.test.mjs",
+      "test-slot/test/no-setuid.test.mjs",
+      "test-slot/test/test-slot.test.mjs",
+      "test-slot/test/train-conformance.test.mjs"
+    ],
+    "status": 0,
+    "signal": null,
+    "counts": {
+      "tests": 75,
+      "pass": 75,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  }
+]

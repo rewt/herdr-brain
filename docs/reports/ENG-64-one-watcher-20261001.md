@@ -226,6 +226,28 @@ If rollback happens after the final compatibility cleanup, restore the exact
 
 ## Verification
 
+### Notice adoption update, 2026-10-06
+
+The current notice switch uses the activated release's reusable
+`supervisor/arm-watch.sh` with bch-cloak's explicit record, checkout and
+`--to supervisor-opus --idle-grace 900 --detach --log FILE`. It journals at
+`/Users/rewt/development/bastian/.org/supervisor/inbox.log`; the project's
+`notice-autopilot/v1` policy handles routine reports before input delivery.
+Handled notices need no further manual settle. Exceptions retain the original
+notice and wake the named supervisor with the policy reason.
+
+Before step 5 above, account for all legacy outbox messages and stop
+`com.rewt.bch-cloak.supervisor-events`. Keep the old plain-text inbox/outbox as
+evidence; never reuse the old inbox as the JSONL journal. The new report path
+starts no separate notice daemon. The earlier instruction about the LaunchAgent
+refers to Brain; bch-cloak's legacy supervisor-events consumer must stop before
+new watches are armed. On rollback, drain the new journal and stop its owned
+senders before restoring and re-arming the old consumer. bch-cloak owns these
+live actions after a release ships the change. `acceptance/cutover.mjs` now
+rehearses the shared arming helper and enforces this notice migration contract.
+
+The original verification below records the October 1 implementation.
+
 The required suite was run before the change and passed. After the final code change, `npm test`
 reported 285 passing, zero failing and one explicit Herdr-only skip. Focused tests exercise the
 separate watcher/launcher wiring, retained launcher brakes and actor attribution, Brain's distinct

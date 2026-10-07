@@ -25,20 +25,23 @@ export function copiedSandbox(root, toolRoots) {
 }
 
 export function relocate(text, { live, home, scratchHome, copy, candidate, root, launcher = false }) {
-  // Do this before inserting any scratch paths: root itself may be under
-  // /private/tmp. Cover locks, queues, mktemp and lane-close sweeps, including
-  // transitive scripts and the relocated rollback baseline.
-  text = text.replace(/(?<![\w$}])\/(?:private\/)?tmp\b/g, root);
+  // Replace source paths once: inserted scratch paths can themselves contain
+  // the live home or /private/tmp, and must never be relocated again.
+  const replacements = new Map([
+    [path.dirname(live), path.dirname(copy)],
+    [path.join(home, '.herdr/worktrees/bch-cloak'), path.join(scratchHome, '.herdr/worktrees/bch-cloak')],
+    ['${HOME}', scratchHome], ['$HOME', scratchHome],
+    ['homedir()', JSON.stringify(scratchHome)], [home, scratchHome], ['~/', `${scratchHome}/`],
+  ]);
   if (launcher) {
     const target = 'resolve(homedir(), ".local/share/herdr-monitor/current/contrib/settle-watch.mjs")';
     if (!text.includes(target)) throw new Error('required launcher relocation did not match; refuse copied code');
-    text = text.replaceAll(target, JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs')));
+    replacements.set(target, JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs')));
   }
-  return text.replaceAll(path.dirname(live), path.dirname(copy))
-    .replaceAll(path.join(home, '.herdr/worktrees/bch-cloak'), path.join(scratchHome, '.herdr/worktrees/bch-cloak'))
-    .replaceAll('${HOME}', scratchHome).replaceAll('$HOME', scratchHome)
-    .replaceAll('homedir()', JSON.stringify(scratchHome))
-    .replaceAll(home, scratchHome).replaceAll('~/', `${scratchHome}/`);
+  const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const literals = [...replacements.keys()].sort((a, b) => b.length - a.length).map(escape);
+  const pattern = new RegExp(`${literals.join('|')}|(?<![\\w$}])\\/(?:private\\/)?tmp\\b`, 'g');
+  return text.replace(pattern, value => replacements.get(value) ?? root);
 }
 
 // ENG-64's supervisor entry switch, exercised only on audited scratch copies.

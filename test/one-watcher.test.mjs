@@ -11,7 +11,8 @@ test('the supervisor arms the standalone watcher and launches settle separately'
   const compatibilityWatcher = read('../contrib/settle-watch.mjs');
 
   assert.match(arm, /watch\/watch\.mjs/);
-  assert.match(arm, /--to supervisor-herdr/);
+  assert.match(arm, /--to NAME/);
+  assert.doesNotMatch(arm, /\/Users\/rewt|--org "\$REWT/);
   assert.doesNotMatch(arm, /open-session|settle-watch/);
   assert.match(settle, /open-session\.mjs/);
   assert.doesNotMatch(settle, /exec node[^\n]*watch\/watch\.mjs/);

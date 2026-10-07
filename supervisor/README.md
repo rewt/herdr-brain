@@ -140,6 +140,32 @@ entries, but delivery no longer requires manual resolution after a lost reply.
 Do not reuse bch-cloak's existing plain-text inbox as this JSONL journal; select
 a new file when switching and retain the old inbox as evidence.
 
+For an existing project, use the activated release's
+`supervisor/arm-watch.sh RUN --org RECORD --cwd PROJECT --to SUPERVISOR --detach --log FILE`.
+The helper discovers from the caller's project when record/cwd are omitted;
+pass the named recipient explicitly in a project wrapper. For bch-cloak these
+bindings are `/Users/rewt/development/bastian/.org`,
+`/Users/rewt/development/bastian/bch-cloak` and `supervisor-opus`, with
+`--idle-grace 900`. The journal belongs to that record, and the action receipts
+use that project's canonical Git identity. Tooling must already be `auto` in
+that record's approvals for routine autopilot actions; otherwise exceptions
+wake the named supervisor with the policy reason.
+
+bch-cloak owns its switch after a release ships this path. At a quiet point,
+account for every pending `.lane/supervisor/outbox` message, retain the old
+plain-text inbox/outbox and launcher settings for rollback, then stop
+`com.rewt.bch-cloak.supervisor-events` before enabling the new dispatch wrapper.
+Retire every `notify-watch.sh` caller and stop using its outbox for reports.
+The watch and its durable inbox worker deliver without a separate notice daemon.
+Do not replay old notices automatically into the new journal: verify each run's
+recorded intake/settlement first. Verify a canary's record inbox, project binding,
+policy receipt and named exception delivery before retiring the backup.
+Rollback likewise requires draining the new journal and stopping its owned
+senders before restoring and re-arming the old consumer, so both paths never
+deliver together. [The scratch cutover](../acceptance/cutover.mjs) rehearses the
+wrapper and notice contract; the compatibility `contrib/settle-watch.mjs` stays
+until bch-cloak has completed its release-gated switch.
+
 Discovery's explicit supervisor entry injects [PROTOCOL.md](PROTOCOL.md) and a
 fresh cold start before the native harness launches. It works in unconfigured
 projects and populated records, without a model or a background supervisor.

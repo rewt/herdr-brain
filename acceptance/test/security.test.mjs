@@ -21,7 +21,9 @@ test('relocation requires the expected launcher and audits every transitive copi
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acceptance-relocation-')));
   try {
     const copy = path.join(root, 'copy'); fs.mkdirSync(copy);
-    const settings = { root, copy, live: '/Users/operator/project', home: '/Users/operator', scratchHome: path.join(root, 'home'), candidate: path.join(root, 'candidate') };
+    // Match the rehearsal's copy-home name: /home/ is deliberately rejected
+    // by the transitive copied-code audit as a possible operator home path.
+    const settings = { root, copy, live: '/Users/operator/project', home: '/Users/operator', scratchHome: path.join(root, 'copy-home'), candidate: path.join(root, 'candidate') };
     const source = 'const TARGET = resolve(homedir(), ".local/share/herdr-monitor/current/contrib/settle-watch.mjs");\nconst ROOT="/Users/operator/project";';
     fs.writeFileSync(path.join(copy, 'launch.mjs'), relocate(source, { ...settings, launcher: true }));
     auditCopies(copy, settings);

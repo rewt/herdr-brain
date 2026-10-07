@@ -15,6 +15,7 @@ import { parseArgs } from 'node:util';
 
 import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
+import { findOrgDir } from '../lib/store.mjs';
 import { inboxPath, promptSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
 import {
   blockedNotice,
@@ -32,7 +33,7 @@ const { values: opt, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     org: { type: 'string' },
-    to: { type: 'string', default: 'supervisor-herdr' },
+    to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr' },
     agent: { type: 'string' },
     report: { type: 'string' },
     'start-grace': { type: 'string', default: '60' },
@@ -54,8 +55,10 @@ const { values: opt, positionals } = parseArgs({
 });
 
 const runId = positionals[0];
+opt.cwd = path.resolve(opt.cwd);
+opt.org = opt.org ? path.resolve(opt.org) : findOrgDir({ cwd: opt.cwd });
 if (!/^R-\d+$/.test(runId ?? '') || !opt.org) {
-  process.stderr.write('usage: watch.mjs R-n --org DIR [--to AGENT] [--spawn] [--start-grace SECONDS] [--idle-grace SECONDS] [--long-after SECONDS] [--dry-run]\n');
+  process.stderr.write('usage: watch.mjs R-n [--org DIR] [--cwd PROJECT] [--to AGENT] [--spawn] [--start-grace SECONDS] [--idle-grace SECONDS] [--long-after SECONDS] [--dry-run]; a record must be supplied or discovered\n');
   process.exit(2);
 }
 
@@ -215,7 +218,7 @@ async function deliver(message, sound = 'request', id, { allowQueued = false } =
   log(message);
   if (dry) return true;
   const result = await promptSupervisor(opt.to, message, {
-    org: opt.org, inbox: opt.inbox, herdr: opt.herdr, attempts: deliveryAttempts,
+    org: opt.org, cwd: opt.cwd, inbox: opt.inbox, herdr: opt.herdr, attempts: deliveryAttempts,
     retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log,
   });
   if (result.delivered) return true;
@@ -236,7 +239,7 @@ function spawnWatcher() {
       && path.resolve(entry.worktree.checkout_path) === cwd)?.workspace_id;
   }
   if (!workspace) throw new Error(`--spawn found no Herdr workspace for ${path.resolve(opt.cwd)}; pass --workspace`);
-  const argv = process.argv.slice(2).filter((arg) => arg !== '--spawn').concat('--close-tab-on-exit');
+  const argv = watcherArgs('--spawn').concat('--close-tab-on-exit');
   const command = [process.execPath, SELF, ...argv].map(shellQuote).join(' ');
   if (dry) {
     log(`[dry-run] would create tab "watch ${runId}" in ${workspace} and run ${command}`);
@@ -252,6 +255,13 @@ function spawnWatcher() {
   log(`watching ${runId} in ${pane}`);
 }
 
+function watcherArgs(mode) {
+  // Freeze discovery and the named recipient before crossing a process or pane
+  // boundary, where cwd and adapter environment can differ.
+  return process.argv.slice(2).filter(arg => arg !== mode)
+    .concat('--org', opt.org, '--cwd', opt.cwd, '--to', opt.to);
+}
+
 // The parent returns only after the child has acquired the run lock and read
 // its worker/report configuration. No supervisor pane identity is inherited.
 async function detachWatcher() {
@@ -263,7 +273,7 @@ async function detachWatcher() {
   for (const key of ['HERDR_PANE_ID', 'HERDR_TAB_ID', 'HERDR_WORKSPACE_ID']) delete env[key];
   let child;
   try {
-    child = spawn(process.execPath, [SELF, ...process.argv.slice(2).filter((arg) => arg !== '--detach')], {
+    child = spawn(process.execPath, [SELF, ...watcherArgs('--detach')], {
       cwd: path.resolve(opt.cwd), env, detached: true, stdio: ['ignore', fd, fd, 'ipc'],
     });
   } finally { fs.closeSync(fd); }
@@ -443,7 +453,7 @@ async function watch() {
       if (!longNotice) {
         // One logical event per run. Adopt even legacy IDs and retain the
         // journaled elapsed-minute payload when a watcher is restarted.
-        const prior = readInbox(path.resolve(opt.inbox ?? inboxPath({ org: opt.org })))
+        const prior = readInbox(path.resolve(opt.inbox ?? inboxPath({ org: opt.org, cwd: opt.cwd })))
           .find((entry) => entry.message.startsWith(`[watch-long-running] run=${runId} `));
         longNoticeId = prior?.id ?? `watch:${runId}:long-running`;
         longNotice = prior?.message ?? longRunningNotice({
@@ -470,7 +480,7 @@ async function watch() {
 }
 
 try {
-  if (opt.detach) {
+  if (opt.detach && !dry) {
     await detachWatcher();
   } else if (opt.spawn) {
     spawnWatcher();

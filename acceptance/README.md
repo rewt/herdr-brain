@@ -464,6 +464,16 @@ older run cannot be hidden by a long newer log. Dependent cases retain prerequis
 causes: failed Herdr fixtures remain pending rather than becoming product failures;
 missing candidate modules still fail explicitly.
 
+The cutover arm wrapper uses the candidate's reusable `supervisor/arm-watch.sh`
+with the copied project's own record, checkout and named supervisor. Its notice
+contract requires the record JSONL inbox, `notice-autopilot/v1`, preservation of
+the old plain-text inbox, and stopping the legacy supervisor-events consumer
+before arming the new path. Rollback starts that consumer only after new senders
+and pending delivery have drained. The rehearsal never controls the live launchd
+daemon. `watch/test/existing-project.test.mjs` separately proves journal and
+autopilot binding plus named exception delivery with real Git/record state and
+scripted offline settle/Herdr transport.
+
 The copier archives timestamped script backups outside the executable caller tree
 only after proving they have no reference from any active source, including
 transitive references through other backups. Recognized timestamped sh/mjs/py

@@ -18,6 +18,36 @@ From a Herdr-managed supervisor pane, arm a visible watcher tab with:
 node watch/watch.mjs R-29 --org /path/to/.org --to supervisor-herdr --spawn
 ```
 
+The installed `supervisor/arm-watch.sh R-29` arms the same visible watcher
+using the caller's checkout and discovered record (including fleet mappings).
+`--org`, `--cwd` and `--to` explicitly bind another project. The recipient
+defaults to the adapter's `MONITOR_SUPERVISOR_AGENT`, then `supervisor-herdr`.
+Discovery and that recipient are frozen before launching the watcher child.
+`--cwd` also binds the notice's canonical Git identity even when the caller runs
+from a different checkout. Routine notices apply the project's autopilot policy
+before waiting for supervisor input.
+
+An existing project can use a small wrapper around the activated release:
+
+```sh
+RUN=${1:?run required}; shift
+exec sh "$HOME/.local/share/herdr-monitor/current/supervisor/arm-watch.sh" "$RUN" \
+  --org /Users/rewt/development/bastian/.org \
+  --cwd /Users/rewt/development/bastian/bch-cloak --to supervisor-opus \
+  --idle-grace 900 "$@" --detach \
+  --log "/Users/rewt/development/bastian/bch-cloak/.lane/supervisor/watch-logs/$RUN.log"
+```
+
+This journals at `bastian/.org/supervisor/inbox.log`; it needs no separately
+installed notice daemon. `--dry-run` with detached settings validates the run
+without starting a child or creating a log. The returned detached receipt can be
+retained as `watcher_pid`, `watcher_identity` and `watcher_log` through the record
+CLI for native supervisor entry recovery. Explicitly enter that supervisor with
+its project, record and `--to supervisor-opus` so recovery retains its recipient
+when a legacy run has no dispatch journal. New Monitor dispatches retain `to` in
+their dispatch journal. See [the adoption steps](../supervisor/README.md) for
+the quiet switch and pending-notice handling.
+
 The tab is labelled `watch R-29`, so the wait is visible in Herdr, and closes
 after a stopped worker's valid report is delivered. Without `--spawn`, the
 command blocks in the current terminal. A newly armed watcher gives the worker

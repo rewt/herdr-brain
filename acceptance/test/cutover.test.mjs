@@ -34,6 +34,9 @@ test('all current edits apply to relocated inventory scripts and refuse premise 
   const { copy, spec, edits } = inventory(t);
   assert.equal(Object.keys(edits).length, 13);
   assert.ok(edits.dispatch.includes('arm-watch.sh $RUN'));
+  assert.ok(edits.arm.includes(path.join(spec.candidate, 'supervisor/arm-watch.sh')));
+  assert.ok(edits.arm.includes(`--org '${path.join(path.dirname(copy), '.org')}'`));
+  assert.ok(edits.arm.includes(`--to '${spec.target}'`));
   assert.ok(!edits.dispatch.includes('notify-watch.sh'));
   for (const [key, file] of switches) fs.writeFileSync(path.join(copy, file), edits[key]);
   assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs'), []);
@@ -73,6 +76,11 @@ test('current snapshot covers every switch and active caller and relocates all f
     ...settings, root: '/private/tmp/scratch', copy: '/private/tmp/scratch/copy',
     candidate: spec.candidate, scratchHome: spec.home,
   }), 'L=/private/tmp/scratch/bch-cloak-dispatch.flock; T=$T/tmp/slot.lock');
+  const homeRoot = '/Users/rewt/.herdr-monitor/scratch';
+  assert.equal(relocate('resolve(homedir(), ".local/share/herdr-monitor/current/contrib/settle-watch.mjs"); L=/tmp/lock', {
+    ...settings, root: homeRoot, candidate: `${homeRoot}/candidate`,
+    copy: `${homeRoot}/copy`, scratchHome: `${homeRoot}/home`, launcher: true,
+  }), `"${homeRoot}/candidate/contrib/settle-watch.mjs"; L=${homeRoot}/lock`);
 });
 
 test('mixed se-test retires only legacy notify assertions and strict audit still rejects a new caller', (t) => {
@@ -216,6 +224,9 @@ test('production notice contract accepts rewritten current documents and rejects
   assert.doesNotMatch(grammar, /Janitor/);
   assertNoticeContract(protocol, grammar);
   for (const clause of [
+    'notice-autopilot/v1', 'supervisor/inbox.log',
+    'stop com.rewt.bch-cloak.supervisor-events before arming',
+    'never reuse the legacy inbox', 'No separate notice daemon',
     'One-shot cleanup owns finished-tab closure through close-finished-agents.sh',
     'requires a recorded done or abandoned latest run',
     'preserves blocked/needs_human, open, unknown and unrecorded workers',

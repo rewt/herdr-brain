@@ -27,7 +27,7 @@ export function switchedFiles({ copy, candidate, workspace, target, legacyTarget
   const contents = Object.fromEntries(switches.map(([key, file]) => [key, fs.readFileSync(path.join(copy, file), 'utf8')]));
   contents.launcher = replace(contents.launcher, JSON.stringify(path.join(candidate, 'contrib/settle-watch.mjs')), JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs')));
   contents.continue = '# open-session refuses busy sessions; retain the request and retry after the named session stops.\n' + contents.continue;
-  contents.arm = `#!/bin/sh\nset -eu\nRUN=\${1:?run required}; shift\n# This wrapper delivers reports only; routed fresh sessions use launch-supervisor.mjs separately.\nexec node ${q(path.join(candidate, 'watch/watch.mjs'))} "$RUN" --org ${q(path.join(path.dirname(copy), '.org'))} --cwd ${q(copy)} --to ${q(target)} --idle-grace 900 "$@" --detach --log ${q(path.join(copy, '.lane/supervisor/watch-logs'))}/"$RUN".log\n`;
+  contents.arm = `#!/bin/sh\nset -eu\nRUN=\${1:?run required}; shift\n# Herdr watch/watch.mjs delivers through the project's record inbox and autopilot.\nexec sh ${q(path.join(candidate, 'supervisor/arm-watch.sh'))} "$RUN" --org ${q(path.join(path.dirname(copy), '.org'))} --cwd ${q(copy)} --to ${q(target)} --idle-grace 900 "$@" --detach --log ${q(path.join(copy, '.lane/supervisor/watch-logs'))}/"$RUN".log\n`;
   contents.dispatch = replace(contents.dispatch, `env -u HERDR_PANE_ID nohup .lane/supervisor/notify-watch.sh $RUN --to ${legacyTarget} > .lane/supervisor/watch-logs/$RUN.log 2>&1 < /dev/null &!`, 'env -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID .lane/supervisor/arm-watch.sh $RUN');
   // Keep the cap and kernel lock; count the detached standalone watcher after
   // the switch. Its --org/--cwd arguments now precede --to.
@@ -103,9 +103,13 @@ done
   \`herdr agent rename <supervisor pane> ${legacyTarget}\`. Undelivered messages wait in \`.lane/supervisor/outbox/\`.`,
   '- Reports go to the stable supervisor agent name established by session-start.sh. Dispatch refuses before record start when that name is absent. No tab-label fallback is used.');
   contents.protocol += '\n## Scratch cutover protocol\narm-watch delivers only; launch-supervisor invokes open-session separately. Retain the original [org-report] notice on busy refusal, wait for the named session with herdr agent wait NAME --until idle --until done --until blocked, and retry the same settle.sh R-n or continue.sh request. An already recorded report ends the retry.\n';
+  const org = path.join(path.dirname(copy), '.org');
+  const noticeMigration = `\n## Record inbox and autopilot\nNotices are journaled at ${path.join(org, 'supervisor/inbox.log')} with the canonical project identity and recipient ${target}. The notice-autopilot/v1 policy handles routine done reports before input delivery; exceptions reach that named supervisor through the input gate. Automatic actions require tooling=auto in this record's approvals and respect STOP, pause and .supervisor.json. Do not manually settle a handled notice again.\nAt the release-gated quiet switch, account for every pending legacy outbox message, retain the old plain-text inbox and outbox as evidence, and stop com.rewt.bch-cloak.supervisor-events before arming the new watcher. The new JSONL journal must never reuse the legacy inbox. No separate notice daemon is started. On rollback, drain the new journal and stop its owned senders before restoring and re-arming the legacy consumer; never run both delivery paths together.\n`;
+  contents.protocol += noticeMigration;
+  contents.notices += noticeMigration;
   contents.notices += '\n## Standalone notices\n[watch-blocked] [watch-no-report] [watch-invalid-report] [watch-long-running] [watch-unavailable] preserve the worker. [org-report] requires run, outcome, headline, check and report; verdict is no longer read. Idle grace is 900 seconds after observed working. session-start establishes the stable supervisor name; missing targets refuse dispatch before record start. One-shot cleanup owns finished-tab closure through close-finished-agents.sh, which requires a recorded done or abandoned latest run and preserves blocked/needs_human, open, unknown and unrecorded workers.\n';
   contents.routes = replace(contents.routes, 'for (const script of [continueScript, watchScript])', 'for (const script of [continueScript])');
-  contents.routes += `\ntest('cutover entries select split release modules',()=>{const i=buildSupervisorInvocation(REPO,['--route','executive','--','--open']);assert.equal(i.args[0],${JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs'))});assert.match(readFileSync(resolve(REPO,'.lane/supervisor/arm-watch.sh'),'utf8'),/watch\\/watch.mjs/);assert.doesNotMatch(readFileSync(resolve(REPO,'scripts/lane/launch-supervisor.mjs'),'utf8'),/contrib\\/settle-watch/);});\n`;
+  contents.routes += `\ntest('cutover entries select split release modules',()=>{const i=buildSupervisorInvocation(REPO,['--route','executive','--','--open']);assert.equal(i.args[0],${JSON.stringify(path.join(candidate, 'supervisor/open-session.mjs'))});assert.ok(readFileSync(resolve(REPO,'.lane/supervisor/arm-watch.sh'),'utf8').includes(${JSON.stringify(path.join(candidate, 'supervisor/arm-watch.sh'))}));assert.doesNotMatch(readFileSync(resolve(REPO,'scripts/lane/launch-supervisor.mjs'),'utf8'),/contrib\\/settle-watch/);});\n`;
   // Retain the original outside the caller tree until canary and rollback pass.
   contents.retire = '#!/bin/sh\necho "notify-watch retired; use arm-watch" >&2\nexit 1\n';
   // se-test is mixed: retain supervisor-events and kernel-lock coverage, but
@@ -129,6 +133,13 @@ export function capture(copy) {
 }
 // Shared by the release harness and offline checks of the rewritten documents.
 export function assertNoticeContract(protocol, grammar) {
+  for (const text of [protocol, grammar]) {
+    assert.match(text, /notice-autopilot\/v1/);
+    assert.match(text, /supervisor\/inbox\.log/);
+    assert.match(text, /stop com\.rewt\.bch-cloak\.supervisor-events before arming/);
+    assert.match(text, /never reuse the legacy inbox/);
+    assert.match(text, /No separate notice daemon/);
+  }
   assert.match(protocol, /retain.*original.*org-report/i);
   assert.match(protocol, /retry.*settle.sh/);
   for (const prefix of ['watch-blocked', 'watch-no-report', 'watch-invalid-report', 'watch-long-running', 'watch-unavailable']) assert.ok(grammar.includes(`[${prefix}]`));

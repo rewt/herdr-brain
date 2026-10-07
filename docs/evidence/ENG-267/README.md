@@ -1,6 +1,6 @@
 # Bounded promotion extras
 
-Run R-306 on ENG-267, 2026-10-07.
+Run R-306 on ENG-267, 2026-10-07. Implementation commit: `ce73a12`.
 
 The planner considers changed existing test files and release tests with direct
 literal references to changed modules. Intermediate dependencies do not expand
@@ -35,7 +35,10 @@ required coverage, missing required files, full-file mixed-tier execution,
 canonical planner trust, batch receipts, refusal of omitted requirements,
 required-file union across lanes, and settle forwarding scoped evidence.
 The canonical-planner tests read Git HEAD, so the committed implementation is
-also checked separately after the implementation commit.
+also checked separately after the implementation commit: `committed-canonical.log`
+records two passing tests with the new planner and duration inventory materialized
+from commit `ce73a12`, including required evidence beyond the default budget
+and snapshot cleanup under a symlinked TMPDIR.
 
 No baseline, full promotion/release suite, lane suite or acceptance harness ran.
 Fixtures are offline and use scratch fleet and slot identities. No live panes,

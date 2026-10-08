@@ -222,7 +222,9 @@ approval class, so it has no automatic approvals. Credential-looking resolved
 targets are denied even through an ordinary-looking symlink. Search/glob tools
 are also denied: recursive traversal is not proof of resolved containment.
 Action keywords classify non-read tool inputs; reading a project release report
-or trust brief does not itself publish or expand permissions.
+or trust brief does not itself publish or expand permissions. Resolved credential
+files include `.ssh/` and `.aws/` contents, dot-env files, keychain databases,
+private-key files and `wallet.dat`; ordinary wallet source files are safe reads.
 
 The denied session receives: do not work around the denial, record the question
 under its work item with `record ask` and the action category, continue other
@@ -237,7 +239,14 @@ alerts consume durable per-request caps and per-launch debounce receipts before
 effects; channel failure cannot become an approval. Invalid audit/config/binding
 always returns a structured denial. Already-installed hooks deny if disabled;
 restart native sessions after changing launch policy.
-Concurrent audit writers wait up to two seconds for the lock before refusing.
+The hook has one unscaled eight-second decision deadline, enforced by a parent
+watchdog even if decision work blocks its event loop. Each Git call has a
+one-second timeout within that deadline. Concurrent audit writers wait up to two
+unscaled seconds for the lock; dead-owner recovery shares the same deadline.
+After writing the decision, the hook starts an argv-only detached alert child
+with ignored stdio and exits without waiting for delivery. Its cap/debounce
+receipt is already durable; alert failure cannot change or repeat the decision.
+Deadline exhaustion emits the emergency denial and exits 2 with the nudge.
 Missing or malformed launch bindings are audited denials. If checkout modules
 cannot load or the hook encounters an uncaught failure, its dependency-free
 emergency response emits denial JSON and exits 2 with the nudge on stderr.

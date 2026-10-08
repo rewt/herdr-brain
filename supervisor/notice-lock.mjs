@@ -4,10 +4,10 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
-function acquireLock(directory, { waitMs = 0 } = {}) {
+function acquireLock(directory, { waitMs = 0, deadline: hardDeadline } = {}) {
   fs.mkdirSync(path.dirname(directory), { recursive: true });
   const candidate = fs.mkdtempSync(`${directory}.new-`);
-  const deadline = Date.now() + loadTimeout(waitMs);
+  const deadline = Math.min(hardDeadline ?? Infinity, Date.now() + (hardDeadline === undefined ? loadTimeout(waitMs) : waitMs));
   try {
     const fd = fs.openSync(path.join(candidate, 'owner.json'), 'w', 0o600);
     try {
@@ -15,6 +15,7 @@ function acquireLock(directory, { waitMs = 0 } = {}) {
       fs.fsyncSync(fd);
     } finally { fs.closeSync(fd); }
     for (;;) {
+      if (hardDeadline !== undefined && Date.now() >= hardDeadline) throw new Error(`locked: ${directory}; decision deadline reached`);
       // Publish the directory WITH its owner metadata. A crash before this
       // rename leaves only a harmless candidate, never an ownerless lock.
       if (!fs.existsSync(directory)) {
@@ -46,20 +47,20 @@ function dead(pid) {
   try { process.kill(pid, 0); return false; }
   catch (error) { return error.code === 'ESRCH'; }
 }
-export function noticeLock(directory, { waitMs = 0 } = {}) {
+export function noticeLock(directory, { waitMs = 0, deadline } = {}) {
   try {
     if (dead(ownerPid(directory))) throw new Error(`locked: ${directory}; dead owner`);
-    return acquireLock(directory, { waitMs });
+    return acquireLock(directory, { waitMs, deadline });
   }
   catch (error) {
     if (!error.message.startsWith('locked:') || !dead(ownerPid(directory))) throw error;
     // Serialize stale-owner recovery, then re-read: another contender might
     // already have installed a live owner. Recovery guards use the same rule.
-    const release = noticeLock(`${directory}.recovery`, { waitMs: 5000 });
+    const release = noticeLock(`${directory}.recovery`, { waitMs: 5000, deadline });
     try {
       const pid = ownerPid(directory);
       if (dead(pid)) removeOwner(directory, pid);
-      return acquireLock(directory, { waitMs });
+      return acquireLock(directory, { waitMs, deadline });
     } finally { release(); }
   }
 }

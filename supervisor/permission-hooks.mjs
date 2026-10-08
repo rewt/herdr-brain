@@ -7,21 +7,23 @@ import { auditPermission } from '../brain/lib/permission-audit.mjs';
 import { stewardConfig, operatorAlert } from '../brain/lib/steward.mjs';
 import { HOME } from '../brain/lib/queue.mjs';
 
-export async function handlePermission(event, binding, { env = process.env, home = HOME, alert = operatorAlert } = {}) {
+export async function handlePermission(event, binding, { env = process.env, home = HOME, alert = operatorAlert, deadline, timeoutMs = 1000 } = {}) {
   let project, config;
   let decision;
   try {
     config = stewardConfig(home);
-    project = permissionProject(binding.workspace, env);
+    project = permissionProject(binding.workspace, env, { deadline, timeoutMs });
     if (project.identity !== binding.identity || project.checkout !== binding.canonical || project.record !== binding.org) throw Error('launch project binding changed');
-    decision = permissionDecision(event, { kind: binding.kind, project, runTemp: binding.runTemp });
+    decision = permissionDecision(event, { kind: binding.kind, project, runTemp: binding.runTemp, deadline, timeoutMs });
     if (!config.enabled) decision = { behavior: 'deny', reason: 'Steward disabled', category: 'security', alert: false, message: DENIAL_NUDGE };
   } catch (error) { decision = { behavior: 'deny', reason: 'Unverified launch binding or configuration', category: 'security', alert: false, message: DENIAL_NUDGE }; }
   try {
-    const audit = auditPermission(home, { ...binding, project: project?.name ?? 'unresolved' }, event ?? {}, decision, Date.now(), config);
+    const audit = auditPermission(home, { ...binding, project: project?.name ?? 'unresolved' }, event ?? {}, decision, Date.now(), config, { deadline });
     decision = audit.decision;
-    // Emit the native decision before bounded alert work.
-    return { output: permissionOutput(decision), notify: audit.notify ? () => alert({ project: project?.name ?? 'unresolved', session: binding.session, kind: decision.reason }, config).catch(error => process.stderr.write(`Steward alert failed: ${error.message}\n`)) : null };
+    if (deadline !== undefined && Date.now() >= deadline) throw Error('permission decision deadline reached');
+    const notification = audit.notify ? { payload: { project: project?.name ?? 'unresolved', session: binding?.session, kind: decision.reason }, config } : null;
+    // The command entry point hands this durable intent to a detached child.
+    return { output: permissionOutput(decision), notification, notify: notification ? () => alert(notification.payload, config).catch(error => process.stderr.write(`Steward alert failed: ${error.message}\n`)) : null };
   } catch (error) {
     process.stderr.write(`Steward permission audit refused: ${error.message}\n`);
     return { output: permissionOutput({ behavior: 'deny', message: `Permission audit unavailable. ${DENIAL_NUDGE}` }), notify: null };

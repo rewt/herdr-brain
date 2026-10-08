@@ -76,7 +76,8 @@ test('never-list requests decline with an operator nudge and alert, including cr
 
 test('project Read paths with action words allow without an alert, while credential targets deny', async t => {
   const f = fixture(t), alerts = [];
-  for (const name of ['release-report.md', 'push.md', 'deploy.md', 'publish.md', 'trust-brief.md', 'transfer.md', 'config.toml', 'hooks.json', 'wallet-guide.md']) {
+  for (const name of ['release-report.md', 'push.md', 'deploy.md', 'publish.md', 'trust-brief.md', 'transfer.md', 'config.toml', 'hooks.json', 'wallet-guide.md', 'credentials.ts', 'secrets.md', 'private-key-guide.md', 'keychain-guide.md', 'packages/app/src/wallet.tsx', 'tools/wallet.mjs']) {
+    fs.mkdirSync(path.dirname(path.join(f.own.checkout, name)), { recursive: true });
     const event = f.event(f.file(f.own.checkout, name));
     const decision = decide(f, event);
     assert.equal(decision.behavior, 'allow', name);
@@ -86,7 +87,8 @@ test('project Read paths with action words allow without an alert, while credent
     await result.notify?.();
   }
   assert.deepEqual(alerts, []);
-  for (const name of ['.env', 'credentials.json', 'private-key.pem', 'seed-phrase.txt', 'keychain.db']) {
+  for (const name of ['.env', '.env.local', 'id_ed25519', 'id_rsa.backup', 'private-key.pem', 'server.key', 'keychain.db', 'login.keychain-db', 'wallet.dat', '.ssh/config', '.aws/credentials']) {
+    fs.mkdirSync(path.dirname(path.join(f.own.checkout, name)), { recursive: true });
     const decision = decide(f, f.event(f.file(f.own.checkout, name)));
     assert.equal(decision.behavior, 'deny', name);
     assert.equal(decision.alert, true, name);
@@ -182,6 +184,99 @@ test('unloadable hook dependencies and uncaught failures emit a deny and exit 2 
   assert.equal(oversized.status, 2);
   assert.equal(JSON.parse(oversized.stdout).hookSpecificOutput.decision.behavior, 'deny');
   assert.ok(oversized.stderr.includes(DENIAL_NUDGE));
+});
+
+test('alerting command hook exits without waiting for a channel that never returns, after its durable receipt', async t => {
+  const f = fixture(t), marker = path.join(f.scratch, 'alert-started.json');
+  const channel = path.join(f.scratch, 'hanging-alert.mjs');
+  const auditFile = path.join(f.env.BRAIN_STATE, 'steward/permissions.json');
+  fs.writeFileSync(channel, `import fs from 'node:fs';
+const audit = JSON.parse(fs.readFileSync(${JSON.stringify(auditFile)}));
+fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ pid: process.pid, payload: JSON.parse(process.argv[2]), audit }));
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);`);
+  t.after(() => { if (fs.existsSync(marker)) { try { process.kill(JSON.parse(fs.readFileSync(marker)).pid, 'SIGKILL'); } catch {} } });
+  fs.writeFileSync(path.join(f.env.BRAIN_STATE, 'steward.json'), JSON.stringify({ alert_command: [process.execPath, channel] }));
+  // Shell metacharacters remain literal in the detached argv payload.
+  const binding = { ...f.binding, session: 'worker $(false) `false` "quoted"' };
+  const event = { ...f.event('ignored'), tool_name: 'Bash', tool_input: { command: 'git push' } };
+  const invoke = () => {
+    const started = Date.now();
+    const result = spawnSync(process.execPath, [path.join(root, 'supervisor/permission-hook.mjs')], {
+      env: { ...f.env, MONITOR_PERMISSION_BINDING: JSON.stringify(binding) }, input: JSON.stringify(event), encoding: 'utf8', timeout: 11000,
+    });
+    assert.ok(Date.now() - started < 10000, 'hook stays inside its internal budget plus scheduling margin');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim().split('\n').length, 1);
+    const decision = JSON.parse(result.stdout).hookSpecificOutput.decision;
+    assert.equal(decision.behavior, 'deny'); assert.match(decision.message, /record ask/);
+  };
+  invoke();
+  const until = Date.now() + 3000;
+  while (!fs.existsSync(marker) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 25));
+  assert.ok(fs.existsSync(marker), 'detached alert starts');
+  const started = JSON.parse(fs.readFileSync(marker));
+  assert.deepEqual(started.payload, { project: 'own', session: binding.session, kind: 'Publishing request' });
+  assert.equal(started.audit.events.length, 1);
+  assert.equal(started.audit.events[0].alert_intent, true);
+  assert.equal(Object.values(Object.values(started.audit.sessions)[0].alerts)[0], 1);
+  assert.ok(Object.values(started.audit.sessions)[0].lastAlert > 0);
+  invoke();
+  const audit = JSON.parse(fs.readFileSync(auditFile));
+  assert.equal(audit.events.length, 2);
+  assert.equal(audit.events[1].alert_intent, false, 'durable debounce prevents a second detached alert');
+});
+
+test('held audit and dead-owner recovery locks deny within the hook budget', t => {
+  const f = fixture(t), event = f.event(f.file(f.own.checkout));
+  const lock = path.join(f.env.BRAIN_STATE, 'steward/permissions.json.lock');
+  const load = path.join(f.scratch, 'high-load.mjs');
+  fs.writeFileSync(load, `import os from 'node:os'; import { syncBuiltinESMExports } from 'node:module';
+os.loadavg = () => [10000, 10000, 10000]; os.availableParallelism = () => 1; syncBuiltinESMExports();`);
+  for (const recovery of [false, true]) {
+    if (recovery) {
+      fs.mkdirSync(lock); fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: 2147483647 }));
+    }
+    const release = noticeLock(recovery ? `${lock}.recovery` : lock);
+    try {
+      const started = Date.now();
+      const result = spawnSync(process.execPath, [path.join(root, 'supervisor/permission-hook.mjs')], {
+        env: { ...f.env, NODE_OPTIONS: `--import=${new URL(`file://${load}`).href}`, MONITOR_PERMISSION_BINDING: JSON.stringify(f.binding) }, input: JSON.stringify(event), encoding: 'utf8', timeout: 11000,
+      });
+      assert.ok(Date.now() - started < (recovery ? 7000 : 4000), 'lock waits stay unscaled even under extreme load');
+      assert.equal(result.status, 0, result.stderr);
+      const decision = JSON.parse(result.stdout).hookSpecificOutput.decision;
+      assert.equal(decision.behavior, 'deny'); assert.match(decision.message, /record ask/);
+      assert.ok(fs.existsSync(recovery ? `${lock}.recovery` : lock), 'hook never removes a live holder');
+    } finally { release(); if (recovery) fs.rmSync(lock, { recursive: true }); }
+  }
+});
+
+test('absolute watchdog denies even when decision dependencies block their event loop', t => {
+  const f = fixture(t), directory = path.join(f.scratch, 'blocked-hook'); fs.mkdirSync(directory);
+  const hook = path.join(directory, 'permission-hook.mjs');
+  fs.copyFileSync(path.join(root, 'supervisor/permission-hook.mjs'), hook);
+  fs.writeFileSync(path.join(directory, 'permission-hooks.mjs'), 'export function handlePermission() { for (;;) {} }');
+  const started = Date.now();
+  const result = spawnSync(process.execPath, [hook], { env: f.env, input: '{}', encoding: 'utf8', timeout: 11000 });
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed >= 7900 && elapsed < 10000, `absolute deadline elapsed: ${elapsed}`);
+  assert.equal(result.status, 2, result.stderr);
+  assert.equal(result.stdout.trim().split('\n').length, 1);
+  assert.deepEqual(JSON.parse(result.stdout), { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message: DENIAL_NUDGE } } });
+  assert.match(result.stderr, /deadline reached/);
+});
+
+test('permission Git subprocesses time out and deny rather than consuming the hook deadline', t => {
+  const f = fixture(t), bin = path.join(f.scratch, 'bin'); fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}\nprocess.on('SIGTERM', () => {}); setInterval(() => {}, 1000);`, { mode: 0o755 });
+  const event = f.event(f.file(f.own.checkout)), started = Date.now();
+  const result = spawnSync(process.execPath, [path.join(root, 'supervisor/permission-hook.mjs')], {
+    env: { ...f.env, PATH: `${bin}:${process.env.PATH}`, MONITOR_PERMISSION_BINDING: JSON.stringify(f.binding) }, input: JSON.stringify(event), encoding: 'utf8', timeout: 11000,
+  });
+  assert.ok(Date.now() - started < 4000, 'Git has its own short timeout and SIGKILL');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).hookSpecificOutput.decision.behavior, 'deny');
 });
 
 test('launch hooks stay per-session, retain other hooks and never bypass Codex hook trust', async t => {

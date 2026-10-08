@@ -5,10 +5,10 @@ import { createHash } from 'node:crypto';
 import { noticeLock } from '../../supervisor/notice-lock.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
 export const fingerprint = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export function auditPermission(home, binding, event, decision, now = Date.now(), config = {}) {
+export function auditPermission(home, binding, event, decision, now = Date.now(), config = {}, { deadline } = {}) {
   const file = path.join(home, 'steward/permissions.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const release = noticeLock(`${file}.lock`, { waitMs: 2000 });
+  const release = noticeLock(`${file}.lock`, { waitMs: 2000, deadline });
   try {
     let data = { version: 1, sessions: {}, events: [] };
     if (fs.existsSync(file)) {

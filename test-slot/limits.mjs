@@ -69,7 +69,7 @@ export function resolveGateLimits({ common, tier = 'gate', command, historyKey, 
     idle_source: idleTimeoutSeconds !== undefined ? 'config' : measured ? 'history' : 'off',
   };
 }
-export function recordHealthyGate({ common, tier = 'gate', command, historyKey, duration_s, longest_silence_s, file = historyFile(common, tier, command, historyKey) }) {
+export function recordHealthyGate({ common, tier = 'gate', command, historyKey, duration_s, longest_silence_s, env = process.env, file = historyFile(common, tier, command, historyKey, env) }) {
   if (!file) return;
   const key = checkedKey(tier, command, historyKey);
   const directory = plainDirectory(path.dirname(file));
@@ -77,7 +77,8 @@ export function recordHealthyGate({ common, tier = 'gate', command, historyKey, 
   const release = acquireLock(path.join(directory, '.history.lock'), { waitMs: 1000 });
   try {
     writeFileAtomic(file, JSON.stringify({ schema: 'gate-watchdog/v1', tier, command_fingerprint: key.command_fingerprint,
-      runs: [...healthyHistory(common, tier, command, file, historyKey), { command, duration_s, longest_silence_s, finished_at: new Date().toISOString() }].slice(-RECENT_RUNS) }, null, 2) + '\n', 0o600);
+      runs: [...healthyHistory(common, tier, command, file, historyKey), { command, duration_s, longest_silence_s, finished_at: new Date().toISOString(),
+        ...(env.MONITOR_GATE_HISTORY_ORIGIN ? { origin: env.MONITOR_GATE_HISTORY_ORIGIN } : {}) }].slice(-RECENT_RUNS) }, null, 2) + '\n', 0o600);
     const files = fs.readdirSync(directory).filter(name => /^[0-9a-f]{64}\.json$/.test(name))
       .map(name => ({ name, stat: fs.lstatSync(path.join(directory, name)) })).filter(entry => entry.stat.isFile())
       .sort((a, b) => (b.name === path.basename(file)) - (a.name === path.basename(file)) || b.stat.mtimeMs - a.stat.mtimeMs || a.name.localeCompare(b.name));

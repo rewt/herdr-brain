@@ -145,10 +145,15 @@ Tests set `MONITOR_GATE_HISTORY_ROOT` to a disposable absolute directory in the
 process calling product code and in child environments. History then lives at
 `ROOT/SHA256(GIT_COMMON_DIR)/KEY.json`, preserving project isolation without
 writing shared Git metadata. The shared offline and slot fixture helpers create
-this override for direct test-file runs as well as bounded runs. Their exit guard
-fails the test process if the real repository history was created or changed;
-the watchdog regression also runs a fixture against the actual Git common
-directory and proves its sample landed only in scratch. A scratch slot lock alone
+this override for direct test-file runs as well as bounded runs. They also install
+an inherited `MONITOR_GATE_HISTORY_ORIGIN` token, which healthy samples retain
+as `origin`. Nested test helpers preserve the token. Their exit guard fails only
+if the real repository history contains a sample from that test process tree;
+other writers' samples produce a non-failing diagnostic. Locks and concurrent
+pruning do not count as leaks. The watchdog regression runs a fixture against
+the actual Git common directory and checks only its unique command fingerprint
+and scratch file. Concurrent-writer and deliberate-leak controls use independent
+disposable Git repositories. A scratch slot lock alone
 is insufficient: linked worktrees share their canonical Git common directory.
 
 Train plans use an explicit history key (`--history-key` JSON: tier and declared

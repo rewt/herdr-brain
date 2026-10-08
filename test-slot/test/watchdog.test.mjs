@@ -7,7 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveGateLimits, recordHealthyGate, healthyHistory, historyFile, gateHistoryKey, HISTORY_FILES, WALL_DEFAULT_SECONDS, projectCommon, sampleFloorSeconds, wallFloorSeconds } from '../limits.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
-import { historySnapshot } from '../../test/helpers/gate-history.mjs';
+import { gateHistories } from '../../test/helpers/gate-history.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { shouldRetryTimeout, acquireTestSlot, HOLDER_UNKNOWN_CODE } from '../test-slot.mjs';
 import { processStartRecord } from '../lock-support.mjs';
@@ -340,17 +340,70 @@ test('an unknown escaped identity cannot prevent killing the owned group', async
 test('fixture gates cannot create or modify the real repository history', t => {
   const s = scratch(t), common = projectCommon(path.dirname(cli));
   assert.ok(common, 'this regression exercises the actual shared Git common directory');
-  const real = path.join(common, 'gate-watchdog'), before = historySnapshot(real);
-  const command = [process.execPath, '-e', "console.log('scratch fixture')"];
+  const real = path.join(common, 'gate-watchdog');
+  const command = [process.execPath, '-e', `console.log(${JSON.stringify(s.root)})`];
   const result = spawnSync(process.execPath, [cli, 'run', 'release adapter', '--lock-path', s.lock,
     '--project-common', common, '--tier', 'release', '--', ...command], { cwd: path.dirname(cli), env: s.env, encoding: 'utf8', timeout: 15000 });
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(historySnapshot(real), before, 'the real history must remain byte-for-byte and metadata identical');
   const file = historyFile(common, 'release', command);
   assert.ok(file.startsWith(process.env.MONITOR_GATE_HISTORY_ROOT + path.sep));
+  assert.ok(fs.existsSync(file), 'this command key exists in scratch');
+  assert.equal(fs.existsSync(historyFile(common, 'release', command, undefined, {})), false, 'this command key is absent from real history');
+  assert.ok(gateHistories(real).every(history => history.command_fingerprint !== gateHistoryKey('release', command).command_fingerprint),
+    'no real-history file contains this fixture command fingerprint');
   assert.equal(healthyHistory(common, 'release', command).length, 1, 'the gate records only in scratch');
   assert.notEqual(file, historyFile(s.root, 'release', command), 'projects keep separate histories inside one scratch root');
   assert.throws(() => historyFile(common, 'release', command, undefined, { MONITOR_GATE_HISTORY_ROOT: 'relative' }));
+});
+
+// Exercise the guard's default Git identity in an independent repository, so
+// even the deliberate leak below cannot write the operator's history.
+for (const writer of ['unattributed', 'foreign', 'descendant-leak']) test(`history origin guard handles a concurrent ${writer} writer`, t => {
+  const s = scratch(t), repo = fileURLToPath(new URL('../../', import.meta.url));
+  for (const name of ['test/helpers/gate-history.mjs', 'test-slot/limits.mjs', 'lanes/promotion-lock.mjs', 'lib/deadline.mjs', 'lib/files.mjs']) {
+    const target = path.join(s.root, name);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(path.join(repo, name), target);
+  }
+  const git = spawnSync('git', ['init', '-q', s.root], { env: s.env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(git.status, 0, git.stderr);
+  const common = projectCommon(s.root), command = ['concurrent', writer];
+  const child = path.join(s.root, 'writer.mjs'), guarded = path.join(s.root, 'guarded.mjs');
+  fs.writeFileSync(child, `
+    import { isolateGateHistory } from './test/helpers/gate-history.mjs';
+    import { recordHealthyGate } from './test-slot/limits.mjs';
+    ${writer === 'descendant-leak' ? 'isolateGateHistory();' : ''}
+    delete process.env.MONITOR_GATE_HISTORY_ROOT;
+    ${writer === 'unattributed' ? 'delete process.env.MONITOR_GATE_HISTORY_ORIGIN;' : writer === 'foreign' ? "process.env.MONITOR_GATE_HISTORY_ORIGIN = 'other-process-tree';" : ''}
+    recordHealthyGate({ common: ${JSON.stringify(common)}, command: ${JSON.stringify(command)}, duration_s: 60, longest_silence_s: 1 });
+  `);
+  fs.writeFileSync(guarded, `
+    import assert from 'node:assert/strict';
+    import fs from 'node:fs';
+    import { spawnSync } from 'node:child_process';
+    import { isolateGateHistory } from './test/helpers/gate-history.mjs';
+    delete process.env.MONITOR_GATE_HISTORY_ORIGIN;
+    isolateGateHistory();
+    assert.ok(process.env.MONITOR_GATE_HISTORY_ORIGIN);
+    fs.writeFileSync(${JSON.stringify(path.join(s.root, 'origin'))}, process.env.MONITOR_GATE_HISTORY_ORIGIN);
+    const result = spawnSync(process.execPath, [${JSON.stringify(child)}], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(result.status, ${writer === 'descendant-leak' ? 1 : 0}, result.stderr);
+    // Unrelated transient locks must not affect the attribution check either.
+    fs.mkdirSync(${JSON.stringify(path.join(common, 'gate-watchdog/.history.lock'))});
+  `);
+  const result = spawnSync(process.execPath, [guarded], { cwd: s.root, env: s.env, encoding: 'utf8', timeout: 20000 });
+  const sample = healthyHistory(common, 'gate', command, historyFile(common, 'gate', command, undefined, {}))[0];
+  assert.ok(sample, 'the non-slot writer published under the guarded real Git identity');
+  if (writer === 'descendant-leak') {
+    assert.equal(sample.origin, fs.readFileSync(path.join(s.root, 'origin'), 'utf8'), 'nested helper preserves the process-tree origin');
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /TEST_GATE_HISTORY_LEAK/);
+  } else {
+    assert.equal(sample.origin, writer === 'foreign' ? 'other-process-tree' : undefined);
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stderr, /TEST_GATE_HISTORY_LEAK/);
+    assert.match(result.stderr, /TEST_GATE_HISTORY_DIAGNOSTIC/);
+  }
 });
 
 test('three sane samples are required for wall and idle derivation, including legacy fixture history', () => {

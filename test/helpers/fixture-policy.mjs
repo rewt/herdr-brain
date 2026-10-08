@@ -12,6 +12,7 @@ const detachedFixture = fileURLToPath(new URL('./detached-fixture.mjs', import.m
 function containedEnv(env = process.env, command, args) {
   const result = { ...env };
   result.MONITOR_GATE_HISTORY_ROOT ??= process.env.MONITOR_GATE_HISTORY_ROOT;
+  result.MONITOR_GATE_HISTORY_ORIGIN ??= process.env.MONITOR_GATE_HISTORY_ORIGIN;
   if (command === process.execPath && args?.[0] === detachedFixture) {
     // This fixed, bounded entrypoint puts a native alarm on every detached
     // descendant before exec. Those deadlines survive suite cancellation.

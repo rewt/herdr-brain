@@ -354,6 +354,7 @@ async function watch() {
   let longNextAt;
   let idleGraceUntil;
   let observedWorking = false;
+  let lastWorkingAt;
   let startupWaitingLogged = false;
   let noticeSequence = 0;
   let previousState;
@@ -402,15 +403,18 @@ async function watch() {
     // read and the state read. Once it is terminal, read again so delivery
     // reflects the file it actually stopped with.
     if (workerFinished) report = reportState(reportPath);
-    try {
-      observeProcessEnd({ current, state, now: () => observedAt,
-        eligible: observedWorking || report.kind === 'valid' || Date.parse(observedAt) >= armedAt + startGraceMs,
-        record: args => {
-          const result = org(args);
-          if (result.error || result.status !== 0) throw Error('process-end metadata write failed');
-        } });
-    } catch { log('run process-end metadata could not be saved; continuing to watch'); }
+    const saveProcessEnd = () => {
+      try {
+        observeProcessEnd({ current, state, now: () => observedAt,
+          eligible: true, lastWorkingAt,
+          record: args => {
+            const result = org(args);
+            if (result.error || result.status !== 0) throw Error('process-end metadata write failed');
+          } });
+      } catch { log('run process-end metadata could not be saved; continuing to watch'); }
+    };
     if (report.kind === 'valid' && workerFinished) {
+      saveProcessEnd();
       const headline = report.report.headline ?? report.report.summary;
       await deliver(reportNotice({
         run: runId, item, outcome: report.report.outcome, headline,
@@ -429,7 +433,7 @@ async function watch() {
     }
     lastUnavailableLog = undefined;
     if (state === 'working' || state === 'unknown') {
-      if (state === 'working') observedWorking = true;
+      if (state === 'working') { observedWorking = true; lastWorkingAt = observedAt; }
       idleGraceUntil = undefined;
       // A resumed worker starts a new attempt. Its next identical stop must be
       // reported again rather than deduped against the previous attempt.
@@ -461,6 +465,9 @@ async function watch() {
         continue;
       }
     }
+    // Startup and idle grace have resolved. A later observed resume supersedes
+    // this terminal attempt, while a lost record reply replays its journal time.
+    if (workerFinished) saveProcessEnd();
     if (report.kind === 'invalid' && !['working', 'unknown'].includes(state)) {
       await sendOnce(
         invalidReportNotice({ run: runId, item, agent, report: reportPath, error: report.error }),

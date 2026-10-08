@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { ownerAlive } from '../../lib/process-owner.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { hookReviewDialog, codexProfile } from '../hook-review.mjs';
+import { runMetrics } from '../metrics.mjs';
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
@@ -28,7 +29,10 @@ function save() { fs.writeFileSync(stateFile,JSON.stringify(workers)); }
 function result(r) { process.stdout.write(JSON.stringify(r)+'\\n'); }
 function git(args) { const r=spawnSync('git',args,{encoding:'utf8'}); if(r.status) throw new Error(r.stderr); return r.stdout.trim(); }
 const entry=()=>git(['worktree','list','--porcelain']).split('\\n\\n').find(x=>x.includes('branch refs/heads/lane/topic'))?.split('\\n')[0].slice(9);
-if(type==='lane') {
+if(type==='org') {
+ if(process.env.TEST_TIMING_FAILURE && a[0]==='set' && a[2]?.startsWith('dispatch_waits=')) { console.error('injected timing set failure');process.exit(1); }
+ const r=spawnSync(process.execPath,[${JSON.stringify(RECORD)},...a],{stdio:'inherit'});process.exit(r.status??1);
+} else if(type==='lane') {
  if(fail===a[0]) { console.error('injected '+fail); process.exit(1); }
  if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);
  if(a[0]==='prepare' && !entry()) process.exit(1);
@@ -125,12 +129,13 @@ for (const source of ['fake watcher receipt', 'real watcher journal']) {
     receipts.cleanup(); assert.deepEqual(signals, [101]);
   });
 }
-function fixture(t, { realWatch = false, preload, noticeRecipient = '' } = {}) {
+function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = path.join(root, 'repo'), org = path.join(root, 'org'), bin = path.join(root, 'bin');
   fs.mkdirSync(repo);fs.mkdirSync(bin);
   const env = { ...process.env, ORG_ACTOR: 'dispatch-test-agent', ORG_DIR: org, FAKE_ROOT:root, LANE_CONFIG:path.join(repo,'.lane.json'),
     MONITOR_SUPERVISOR_AGENT: noticeRecipient, HERDR_AGENT_NAME: 'chat-operator',
+    HERDR_MONITOR_FLEET: path.join(root, 'fleet.json'), TEST_TIMING_FAILURE: timingFailure ? '1' : '',
     PATH: `${bin}:${process.env.PATH}`, GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
     HERDR_PANE_ID:'supervisor:pane', HERDR_TAB_ID:'supervisor:tab', HERDR_WORKSPACE_ID:'supervisor:w' };
   if (preload) env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --require=${preload}`;
@@ -150,11 +155,11 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '' } = {}) {
   git(['init','-b','main']);git(['config','user.name','Dispatch Tests']);git(['config','user.email','dispatch@example.invalid']);
   fs.writeFileSync(path.join(repo,'seed'),'seed');git(['add','.']);git(['commit','-m','seed']);
   fs.writeFileSync(path.join(repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'model-a',effort:'high'}}}));
-  for(const name of ['herdr','lane','watch']) fs.writeFileSync(path.join(bin,name),fake,{mode:0o755});
+  for(const name of ['herdr','lane','watch','org']) fs.writeFileSync(path.join(bin,name),fake,{mode:0o755});
   const rec=(args,overrides={})=>{const r=exec(process.execPath,[RECORD,...args],repo,overrides);assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   rec(['init']);const item=rec(['add','Do the work','--role','engineer']).split('\n')[0].match(/ENG-\d+/)[0];
   const brief=path.join(root,'brief with spaces.md');fs.writeFileSync(brief,'# Do the work');
-  const common=['--org',org,'--repo',repo,'--lane-cli',path.join(bin,'lane'), ...(realWatch?[]:['--watch-cli',path.join(bin,'watch')])];
+  const common=['--org',org,'--repo',repo, ...(timingRecord?['--org-cli',path.join(bin,'org')]:[]),'--lane-cli',path.join(bin,'lane'), ...(realWatch?[]:['--watch-cli',path.join(bin,'watch')])];
   const dispatch=(args=[])=>exec(process.execPath,[DISPATCH,...common,...args]);
   const start=(extra=[])=>dispatch([item,'--lane','topic','--route','engineer','--brief',brief,...extra]);
   const calls=()=>fs.existsSync(path.join(root,'calls'))?fs.readFileSync(path.join(root,'calls'),'utf8').trim().split('\n').map(x=>JSON.parse(x)):[];
@@ -183,6 +188,61 @@ test('dispatch journals both memory gates and mirrors allowlisted events into ru
   for (const e of metadata) {
     assert.deepEqual(Object.keys(e), ['at', 'run', 'item', 'lane', 'kind', 'outcome']);
     assert.equal(e.item, f.item); assert.equal(e.lane, 'topic');
+  }
+});
+
+test('failed timing record sets leave lane open, launch and prompt delivery unchanged and clocks missing', t => {
+  const normal = fixture(t), failed = fixture(t, { timingFailure: true });
+  for (const f of [normal, failed]) {
+    const result = f.start(); assert.equal(result.status, 0, result.stderr);
+    assert.equal(promptCalls(f).length, 1);
+  }
+  const stages = f => f.calls().filter(c => c.type === 'lane').map(c => c.a[0]);
+  assert.deepEqual(stages(failed), stages(normal));
+  const job = JSON.parse(fs.readFileSync(failed.jobs()[0]));
+  assert.equal(job.stage, 'complete'); assert.equal(job.timing_missing, 3);
+  assert.equal(failed.show(job.run).meta.dispatch_waits, undefined);
+  const { summary } = runMetrics([failed.show(job.run)]);
+  assert.equal(summary.dispatch_wait_s.missing, 1);
+  assert.equal(summary.waits_s.memory_worker.missing, 1);
+});
+
+test('recovery skips timing record sets when metadata already equals the journal', t => {
+  const f = fixture(t, { timingRecord: true }); f.fail('watch');
+  assert.equal(f.start().status, 1);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
+  const sets = () => f.calls().filter(c => c.type === 'org' && c.a[0] === 'set' && c.a[2].startsWith('dispatch_waits=')).length;
+  const before = sets(); assert.equal(before, 3);
+  f.fail(''); const result = f.dispatch(['--retry', job.run]);
+  assert.equal(result.status, 0, result.stderr); assert.equal(sets(), before);
+});
+
+test('failed timing record sets preserve STOP during the worker wait and its stopped receipt', async t => {
+  for (const timingFailure of [false, true]) {
+    const f = fixture(t, { timingFailure }), memory = path.join(f.root, 'memory.json');
+    fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+    const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
+      { TEST_MEMORY_FILE: memory, TEST_MEMORY_WORKER_PRESSURE: '1' });
+    let stderr = '', stdout = '';
+    pending.child.stderr.on('data', data => { stderr += data; });
+    pending.child.stdout.on('data', data => { stdout += data; });
+    try {
+      const until = Date.now() + 10000;
+      while (!stderr.includes('waiting; memory pressure') && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20));
+      assert.match(stderr, /waiting; memory pressure/);
+      const stop = path.join(f.repo, '.lane/supervisor/STOP');
+      fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Operator stop');
+    } finally {
+      fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      await pending.done;
+    }
+    assert.equal(pending.child.exitCode, 0, stderr);
+    const receipt = JSON.parse(stdout);
+    assert.equal(receipt.result, 'stopped'); assert.equal(receipt.stage, 'worker');
+    assert.equal(receipt.reason, 'Supervisor STOP appeared before dispatch; no new worker launched');
+    assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
+    assert.equal(promptCalls(f).length, 0);
+    if (timingFailure) assert.equal(JSON.parse(fs.readFileSync(receipt.journal)).timing_missing, 3);
   }
 });
 

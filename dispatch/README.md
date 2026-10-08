@@ -100,13 +100,19 @@ into that run's `dispatch_waits` metadata with its assigned id through `record s
 Stopped/failed attempts retain their outcome; an unfinished entry is resumed
 without replacing its original timestamp. These fields never drive scheduling
 or derived status.
+Timing writes are best-effort: failures increment the request journal's
+`timing_missing` count and dispatch continues with the original wait result or
+error. Unavailable measurements count as missing in metrics. Recovery skips
+record writes when `dispatch_waits` already matches the journal.
 
 Watch records `process_end` through the same CLI and companion journal when it
-first observes idle, done or gone after startup grace, observed work, or a valid
-report. It records that observation before final notice delivery. Startup idle,
+decides idle, done or gone is terminal, after startup and idle report grace or
+with a valid report. It records that observation before notice delivery. Startup idle,
 blocked and unavailable states are excluded. This clock is separate from report
 time and is an observed terminal state, not an OS process exit timestamp. A
-watcher restart retains the first journaled timestamp if a record reply was lost.
+watcher restart retains the journaled timestamp if a record reply was lost.
+If watch observes resumed work, the next terminal decision supersedes the earlier
+attempt's process end, including in the companion journal.
 
 Read the run clocks alongside the [train metrics](../promote/README.md):
 

@@ -12,11 +12,12 @@ lifecycle changes and `fs.watch` for the report. A timer emits one distinct
 long-running notice; it is not a polling loop. It never writes `events.jsonl`
 or ingests a report.
 
-It saves the first terminal observation as run `process_end` metadata through
+It saves its terminal decision as run `process_end` metadata through
 `record set`, independently of report time. Initial idle/gone states wait for
 startup grace, observed work or a valid report; blocked and unavailable states
-are excluded. This happens before final notice delivery and before any optional
-idle report grace. Monitor dispatches also retain the event in their companion
+are excluded. This happens before notice delivery, after any optional idle report
+grace has resolved. A later observed resume to working lets the next terminal
+decision supersede the earlier timestamp. Monitor dispatches also retain the event in their companion
 dispatch journal. The [run timing view](../dispatch/README.md#run-timing) reports
 these clocks and dispatch waits with explicit missing counts.
 

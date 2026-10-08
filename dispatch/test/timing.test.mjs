@@ -82,6 +82,41 @@ test('unfinished memory entries survive restart and legacy runs are missing rath
   assert.match(renderRunMetrics(m), /memory_worker: median unavailable; total unavailable; 0 measured; 2 missing/);
 });
 
+test('timing persistence and journal failures preserve the wait result and original errors', t => {
+  const f = fixture(t);
+  for (const brokenJournal of [false, true]) {
+    const journal = brokenJournal ? path.join(f.root, 'missing', 'request.json') : f.journal;
+    let failures = 0, waits = 0;
+    const options = { ...identity, journal, kind: 'memory_worker',
+      persist: () => { throw Error('record set failed'); }, onError: () => failures++ };
+    assert.equal(timedMemoryWait({ ...options, wait: () => { waits++; return 'granted'; } }), 'granted');
+    for (const code of ['DISPATCH_STOPPED', 'WAIT_FAILED']) {
+      const error = Object.assign(Error('original wait failure'), { code });
+      assert.throws(() => timedMemoryWait({ ...options, wait: () => { waits++; throw error; } }), e => e === error);
+    }
+    assert.equal(waits, 3); assert.ok(failures >= 6);
+  }
+  fs.writeFileSync(timingJournal(f.journal), 'corrupt timing journal\n');
+  const error = Error('original error');
+  assert.throws(() => timedMemoryWait({ ...identity, journal: f.journal, kind: 'memory_open',
+    onError: () => { throw Error('diagnostic failed'); }, wait: () => { throw error; } }), e => e === error);
+});
+
+test('a resumed worker supersedes the previous terminal attempt and replays its latest lost reply', t => {
+  const f = fixture(t), current = { id: 'R-1', item: 'ENG-1', meta: { lane: 'timing', dispatch_journal: f.journal } };
+  const record = args => { current.meta.process_end = args[2].slice('process_end='.length); };
+  observeProcessEnd({ current, state: 'idle', eligible: true, now: () => at(10), record });
+  observeProcessEnd({ current, state: 'working', eligible: true, lastWorkingAt: at(20), record });
+  assert.throws(() => observeProcessEnd({ current, state: 'done', eligible: true, lastWorkingAt: at(20), now: () => at(30),
+    record: () => { throw Error('lost reply'); } }));
+  observeProcessEnd({ current, state: 'done', eligible: true, lastWorkingAt: at(20), now: () => at(40), record });
+  assert.equal(JSON.parse(current.meta.process_end).at, at(30));
+  assert.equal(JSON.parse(current.meta.process_end).outcome, 'done');
+  assert.deepEqual(readTiming(f.journal).map(e => e.outcome), ['idle', 'done']);
+  const m = runMetrics([{ ...current, started: { at: at(1) } }]);
+  assert.equal(m.runs[0].process_end_after_run_start_s, 29);
+});
+
 test('process end ignores startup idle, blocked and unavailable, and replays a lost record reply without changing the timestamp', t => {
   const f = fixture(t), current = { id: 'R-1', item: 'ENG-1', meta: { lane: 'timing', dispatch_journal: f.journal } };
   const calls = [], record = args => calls.push(args);
@@ -142,3 +177,38 @@ test('watch writes terminal observation through the record CLI and metrics reads
   assert.equal(view.status, 0, view.stderr); assert.equal(JSON.parse(view.stdout).summary.process_end_missing, 0);
   assert.equal(collectRunMetrics({ org: f.org, since: '2027-01-01' }).summary.runs, 0);
 });
+
+for (const idleGrace of ['0', '1']) {
+test(`watch idle → working → done records the final terminal attempt with idle grace ${idleGrace}`, t => {
+  const f = fixture(t);
+  f.record(['init']); f.record(['add', 'Timing fixture', '--role', 'engineer']);
+  f.record(['start', 'ENG-1', '--meta', 'lane=timing', '--meta', 'agent=worker', '--meta', `dispatch_journal=${f.journal}`]);
+  const current = JSON.parse(f.record(['show', 'R-1', '--json']));
+  const report = '---\nrun: R-1\noutcome: done\nsummary: Resumed worker done.\nheadline: Resumed worker done\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n';
+  const herdr = path.join(f.root, 'herdr');
+  fs.writeFileSync(herdr, `#!${process.execPath}
+import fs from 'node:fs';
+const a = process.argv.slice(2), counter = ${JSON.stringify(path.join(f.root, 'counter'))};
+if (a[0] === 'agent' && a[1] === 'get' && a[2] === 'worker') {
+  const n = (fs.existsSync(counter) ? Number(fs.readFileSync(counter, 'utf8')) : 0) + 1;
+  fs.writeFileSync(counter, String(n));
+  if (n === 3 && ${idleGrace === '1'} && fs.existsSync(${JSON.stringify(timingJournal(f.journal))})) throw Error('mid-run idle was recorded before grace resolved');
+  if (n >= 4) fs.writeFileSync(${JSON.stringify(current.report_path)}, ${JSON.stringify(report)});
+  console.log(JSON.stringify({ result: { agent: { agent_status: ['working', 'idle', 'working', 'done'][Math.min(n - 1, 3)] } } }));
+} else if (a[0] === 'agent' && a[1] === 'get') {
+  console.log(JSON.stringify({ result: { agent: { agent_status: 'idle', agent: 'claude', pane_id: 'fake:supervisor' } } }));
+} else if (a[0] === 'pane' && a[1] === 'read') {
+  console.log('────────────────────\\n❯ \\n────────────────────');
+} else console.log('{}');
+`, { mode: 0o755 });
+  const r = spawnSync(process.execPath, [WATCH, 'R-1', '--org', f.org, '--herdr', herdr, '--to', 'supervisor-fixture', '--idle-grace', idleGrace, '--delivery-attempts', '1'],
+    { env: { ...f.env, SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.01', SUPERVISOR_INPUT_POLL_SECONDS: '0.01', SUPERVISOR_INPUT_WAIT_SECONDS: '1' }, cwd: f.root, encoding: 'utf8', timeout: 10000 });
+  assert.equal(r.error, undefined, r.stderr); assert.equal(r.status, 0, r.stdout + r.stderr);
+  if (idleGrace === '1') assert.match(r.stdout, /report or resume/);
+  const end = JSON.parse(JSON.parse(f.record(['show', 'R-1', '--json'])).meta.process_end);
+  assert.equal(end.outcome, 'done');
+  const events = readTiming(f.journal);
+  assert.deepEqual(events.map(e => e.outcome), idleGrace === '1' ? ['done'] : ['idle', 'done']);
+  assert.deepEqual(events.at(-1), end);
+});
+}

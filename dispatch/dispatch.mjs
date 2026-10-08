@@ -56,12 +56,26 @@ const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const herdr = (args) => json(command(['herdr'], args));
 const note = (text) => record(['note', job.run, `Dispatch: ${text}`]);
+let dispatchWaits;
+function timingFailure(phase) {
+  // Missing telemetry is visible without persisting arbitrary errors or making
+  // the record CLI (or even this diagnostic write) a dispatch prerequisite.
+  job.timing_missing = (job.timing_missing ?? 0) + 1;
+  try { save(); } catch {}
+  try { process.stderr.write(`dispatch: run timing ${phase} failed; continuing with missing data\n`); } catch {}
+}
 function syncTiming() {
-  if (job.run) record(['set', job.run, `dispatch_waits=${timingMetadata(readTiming(journal).filter(e => e.kind !== 'process_end'), job.run)}`]);
+  if (!job.run) return;
+  try {
+    const value = timingMetadata(readTiming(journal).filter(e => e.kind !== 'process_end'), job.run);
+    if (value === dispatchWaits) return;
+    record(['set', job.run, `dispatch_waits=${value}`]);
+    dispatchWaits = value;
+  } catch { timingFailure('sync'); }
 }
 function memoryGate(kind, label, check) {
   return timedMemoryWait({ journal, run: job.run, item: job.item, lane: job.lane, kind,
-    wait: () => waitForMemory({ label, check }), persist: syncTiming });
+    wait: () => waitForMemory({ label, check }), persist: syncTiming, onError: timingFailure });
 }
 function locate(value) {
   if (!/^R-\d+$/.test(value)) return path.resolve(value);
@@ -251,6 +265,7 @@ async function main() {
   if (run.item !== job.item || run.meta?.dispatch_journal !== journal || fs.realpathSync(run.workspace) !== job.workspace) throw new Error('run no longer matches dispatch request');
   if (run.meta?.route !== job.route || Object.entries(job.declared).some(([key, value]) => (run.meta?.[key] ?? null) !== value)) throw new Error('run routing metadata changed; inspect before recovery');
   if (job.serves !== undefined && (run.meta?.serves ?? null) !== (job.serves || null)) throw new Error('run priority alignment changed; inspect before recovery');
+  dispatchWaits = run.meta?.dispatch_waits;
   syncTiming();
   // start may have committed the run before failing to materialize its brief.
   // The existing record command recreates a missing brief from durable context.

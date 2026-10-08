@@ -523,7 +523,7 @@ process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.sta
     assert.equal(/Supervisor cold start/.test(r.stdout), extra.MONITOR_SESSION_ROLE !== 'worker' && extra.MONITOR_ENTRY_BYPASS !== '1', JSON.stringify(extra));
   }
   for (const headless of [false, true]) {
-    const launch = headless ? [...adapter, ...(kind === 'claude' ? ['--print'] : ['exec'])] : adapter;
+    const launch = headless ? (kind === 'claude' ? [...adapter, '--print'] : [...adapter.slice(0, -args.length), 'exec', ...args]) : adapter;
     const r = exec(process.execPath, [...(headless ? ['--require', tty] : []), ...launch], f.repo,
       { ...f.binding, HERDR_PANE_ID: 'w:pSupervisor' });
     good(r); assert.doesNotMatch(r.stdout, /Supervisor cold start/);

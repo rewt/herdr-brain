@@ -11,11 +11,30 @@ import { sessionEnv } from '../security.mjs';
 import { runTemporary } from '../../discovery/temporary.mjs';
 import { createLiveSessionTemp } from '../temp.mjs';
 import { resolveNative } from '../../discovery/native-binary.mjs';
+import { acquireHostTestSlot } from '../../test-slot/test-slot.mjs';
+import { processStartRecord } from '../../test-slot/lock-support.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
 // A managed entry wrapper does not forward the owner's fd 3 readiness pipe.
 // The offline sandbox provider must be native even when entry shadows PATH.
 const nativeCodex = (() => { try { return resolveNative('codex'); } catch { return undefined; } })();
+
+function scratchSlotEnv(root, inherited = process.env) {
+  const env = { ...inherited, MONITOR_TEST_SLOT_PATH: path.join(root, 'test-slot.lock'),
+    MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'test-slot.lock') };
+  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_WAIT_SECONDS',
+    'BCH_CLOAK_TEST_SLOT_WAIT_SECONDS', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+  return env;
+}
+
+// live-worker rebuilds its environment with sessionEnv. Apply the offline slot
+// after that scrub, before entering the actual installed product adapter.
+function scratchEntry(root, spec) {
+  const entry = `${spec.entryBinary}-offline`;
+  const env = scratchSlotEnv(root, {});
+  fs.writeFileSync(entry, `#!/bin/sh\nexec /usr/bin/env -u MONITOR_TEST_SLOT_TOKEN -u BCH_CLOAK_TEST_SLOT_TOKEN \\\nMONITOR_TEST_SLOT_PATH='${env.MONITOR_TEST_SLOT_PATH}' MONITOR_TEST_SLOT_COMPAT_PATH='${env.MONITOR_TEST_SLOT_COMPAT_PATH}' '${spec.entryBinary}' "$@"\n`, { mode: 0o755 });
+  spec.entryBinary = entry;
+}
 
 // Execute discovery's real setup through installation, stopping at the first
 // Herdr call. Only the boundary probe/native model executable are stand-ins.
@@ -44,11 +63,11 @@ else {
   console.log(JSON.stringify({args,cwd:process.cwd(),env:process.env}));
 }
 `, { mode: 0o755 });
-  const gitBinary = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+  const gitBinary = spawnSync('which', ['git'], { env: scratchSlotEnv(root), encoding: 'utf8' }).stdout.trim();
   const run = (file, args, options = {}) => {
     if (file === 'which') return { status: 0, stdout: args[0] === 'codex' ? binary : gitBinary, stderr: '' };
     if (file === binary) { assert.equal(args[0], 'sandbox'); return { status: 0, stdout: '', stderr: '' }; }
-    const result = spawnSync(file, args, { cwd: options.cwd ?? root, env: options.isolatedEnv ?? process.env, encoding: 'utf8' });
+    const result = spawnSync(file, args, { cwd: options.cwd ?? root, env: scratchSlotEnv(root, options.isolatedEnv ?? process.env), encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr || result.error?.message);
     return result;
   };
@@ -65,14 +84,27 @@ else {
     read: file => fs.readFileSync(file, 'utf8'), h: () => { throw stopped; },
   }), error => error === stopped);
   const spec = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs/discovery-french.json'), 'utf8'));
+  if (process.env.MONITOR_LIVE_SESSION_DECOY_SLOT) {
+    // Redirect only the scratch installation's host fallback. If an inner
+    // session loses either explicit path, the foreign decoy must refuse it,
+    // without ever opening the machine's real compatibility slot.
+    const file = path.join(spec.installation, 'test-slot/test-slot.mjs');
+    const text = fs.readFileSync(file, 'utf8');
+    const fallback = /export const TEST_SLOT_PATH = .*;/u;
+    assert.equal(text.match(new RegExp(fallback.source, 'gu'))?.length, 1);
+    fs.writeFileSync(file, text.replace(fallback,
+      `export const TEST_SLOT_PATH = ${JSON.stringify(process.env.MONITOR_LIVE_SESSION_DECOY_SLOT)};`));
+  }
+  scratchEntry(root, spec);
+  fs.writeFileSync(path.join(root, 'live-jobs/discovery-french.json'), JSON.stringify(spec));
   return { root, evidence, spec, scratchRoots, discoveryRoots };
 }
 
 test('real live discovery setup confines a short fleet temp with no project configuration', async t => {
-  const { spec } = await fixture(t);
-  const entered = spawnSync(spec.entryBinary, ['--role', 'supervisor', '--policy-only'], { cwd: spec.repo, env: sessionEnv(process.env, spec), encoding: 'utf8' });
+  const { root, spec } = await fixture(t);
+  const entered = spawnSync(spec.entryBinary, ['--role', 'supervisor', '--policy-only'], { cwd: spec.repo, env: scratchSlotEnv(root, sessionEnv(process.env, spec)), encoding: 'utf8' });
   assert.equal(entered.status, 0, entered.stderr);
-  const lookup = spawnSync(process.execPath, ['--input-type=module', '-e', `import {fleetPath} from ${JSON.stringify(path.join(spec.installation, 'lib/fleet.mjs'))};console.log(fleetPath());`], { env: sessionEnv(process.env, spec), encoding: 'utf8' });
+  const lookup = spawnSync(process.execPath, ['--input-type=module', '-e', `import {fleetPath} from ${JSON.stringify(path.join(spec.installation, 'lib/fleet.mjs'))};console.log(fleetPath());`], { env: scratchSlotEnv(root, sessionEnv(process.env, spec)), encoding: 'utf8' });
   assert.equal(lookup.status, 0, lookup.stderr);
   const fleet = JSON.parse(fs.readFileSync(lookup.stdout.trim(), 'utf8'));
   const project = fleet.projects.project;
@@ -95,11 +127,14 @@ test('real live-worker arguments reach the installed adapter with its supported 
   // env execs in the same bounded suite group; the fake native still refuses
   // inference and the product transport retains every capability leak guard.
   const result = spawnSync('/usr/bin/env', ['-u', 'NODE_OPTIONS', process.execPath,
-    path.join(source, 'acceptance/live-worker.mjs'), root, spec.name], { encoding: 'utf8' });
+    path.join(source, 'acceptance/live-worker.mjs'), root, spec.name], { env: scratchSlotEnv(root), encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   const done = JSON.parse(fs.readFileSync(path.join(root, 'live-jobs', `${spec.name}.done`), 'utf8'));
   assert.equal(done.code, 0, fs.readFileSync(path.join(evidence, `${spec.name}.stderr`), 'utf8'));
   const receipt = JSON.parse(fs.readFileSync(path.join(evidence, `${spec.name}.jsonl`), 'utf8'));
+  assert.equal(receipt.env.MONITOR_TEST_SLOT_PATH, path.join(root, 'test-slot.lock'));
+  assert.equal(receipt.env.MONITOR_TEST_SLOT_COMPAT_PATH, receipt.env.MONITOR_TEST_SLOT_PATH);
+  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN']) assert.ok(!(key in receipt.env));
   assert.ok(!receipt.args.includes('--add-dir'));
   assert.ok(receipt.args.includes('exec'));
   assert.notEqual(receipt.cwd, spec.repo);
@@ -151,13 +186,14 @@ if(result.error) throw result.error;process.exit(result.status??1);
       const transport = path.join(root, `transport-${name}`), bin = path.join(spec.installation, `bin-${name}`);
       fs.writeFileSync(transport, `#!/bin/sh\nexec '${process.execPath}' '${path.join(root, 'transport/acceptance/native-transport.mjs')}' '${root}' '${name}' "$@"\n`, { mode: 0o755 });
       const installed = spawnSync(process.execPath, [path.join(spec.installation, 'discovery/install.mjs'), '--bin', bin, '--codex', transport],
-        { cwd: spec.repo, env: sessionEnv({}, spec), encoding: 'utf8' });
+        { cwd: spec.repo, env: scratchSlotEnv(root, sessionEnv({}, spec)), encoding: 'utf8' });
       assert.equal(installed.status, 0, installed.stderr);
       spec.entryBinary = path.join(bin, 'monitor-codex');
+      scratchEntry(root, spec);
       fs.copyFileSync(path.join(source, 'acceptance/test/helpers/discovery-worker.cjs'), path.join(spec.temp, 'offline-worker.cjs'));
       fs.writeFileSync(path.join(root, 'live-jobs', `${name}.json`), JSON.stringify(spec));
       const child = spawnScenarioChild(t, '/usr/bin/env', ['-u', 'NODE_OPTIONS', process.execPath,
-        path.join(source, 'acceptance/live-worker.mjs'), root, name], { stdio: ['ignore', 'pipe', 'pipe'] });
+        path.join(source, 'acceptance/live-worker.mjs'), root, name], { env: scratchSlotEnv(root), stdio: ['ignore', 'pipe', 'pipe'] });
       const finished = waitForExit(child);
       const finish = async () => {
         const result = await finished;
@@ -189,7 +225,7 @@ if(result.error) throw result.error;process.exit(result.status??1);
       }
       const record = (args, actor = 'offline-reader') => {
         const result = spawnSync(process.execPath, [path.join(seed.installation, 'bin/org.mjs'), ...args],
-          { cwd: seed.repo, env: { ...sessionEnv({}, a.spec), ORG_DIR: path.join(seed.repo, '.org'), ORG_ACTOR: actor }, encoding: 'utf8' });
+          { cwd: seed.repo, env: { ...scratchSlotEnv(root, sessionEnv({}, a.spec)), ORG_DIR: path.join(seed.repo, '.org'), ORG_ACTOR: actor }, encoding: 'utf8' });
         assert.equal(result.status, 0, result.stderr); return result.stdout;
       };
       const concurrent = JSON.parse(record(['status', '--json']));
@@ -213,7 +249,7 @@ if(result.error) throw result.error;process.exit(result.status??1);
       assert.equal(final.runs.length, 4);
       assert.deepEqual(final.runs.map(r => r.report.outcome), ['done', 'done', 'needs_human', 'done']);
       for (const language of ['french', 'german']) assert.ok(fs.existsSync(path.join(seed.repo, `${language}.mjs`)));
-      const git = args => spawnSync('git', ['-C', seed.repo, ...args], { encoding: 'utf8' });
+      const git = args => spawnSync('git', ['-C', seed.repo, ...args], { env: scratchSlotEnv(root), encoding: 'utf8' });
       assert.equal(git(['status', '--porcelain']).stdout, '');
       assert.equal(git(['rev-list', '--merges', 'main']).stdout, '');
     } finally {
@@ -224,5 +260,38 @@ if(result.error) throw result.error;process.exit(result.status??1);
         if (directory) fs.writeFileSync(path.join(directory, 'release'), 'go');
       }
       await Promise.allSettled(jobs.map(j => j.finished));
+    }
+  });
+
+test('the full offline live-session file passes while a foreign holder occupies the host-slot decoy',
+  { skip: !!process.env.MONITOR_LIVE_SESSION_DECOY_SLOT }, async t => {
+    const root = fs.realpathSync(fs.mkdtempSync('/tmp/al-slot-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const decoy = path.join(root, 'foreign.lock');
+    const holder = spawnScenarioChild(t, process.execPath, ['-e', 'setInterval(() => {}, 1000)'],
+      { env: scratchSlotEnv(root) });
+    const finished = waitForExit(holder);
+    try {
+      const identity = processStartRecord(holder.pid);
+      const bytes = JSON.stringify({ pid: holder.pid, processStart: identity.start, processBirth: identity.birth,
+        pgid: null, token: 'foreign-slot-token', label: 'foreign offline holder', cwd: root,
+        acquiredAt: new Date().toISOString() });
+      fs.writeFileSync(decoy, bytes);
+      const env = { ...scratchSlotEnv(root), MONITOR_TEST_SLOT_PATH: decoy, MONITOR_TEST_SLOT_COMPAT_PATH: decoy,
+        MONITOR_LIVE_SESSION_DECOY_SLOT: decoy };
+      await assert.rejects(acquireHostTestSlot('decoy guard probe', { env }), { code: 'TEST_SLOT_HELD' });
+      // Sentinels also prove that fixture launches never inherit a gate token.
+      env.MONITOR_TEST_SLOT_TOKEN = env.BCH_CLOAK_TEST_SLOT_TOKEN = 'foreign-slot-token';
+      const child = spawnScenarioChild(t, process.execPath,
+        [path.join(source, 'test/helpers/run.mjs'), path.join(source, 'acceptance/test/live-session.test.mjs')], { env });
+      const result = await waitForExit(child);
+      assert.equal(result.code, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, new RegExp(`# pass ${process.platform === 'darwin' && nativeCodex ? 3 : 2}\\b`, 'u'));
+      assert.equal(fs.readFileSync(decoy, 'utf8'), bytes, 'the foreign slot remains untouched');
+      await assert.rejects(acquireHostTestSlot('decoy still held', { env: { ...env,
+        MONITOR_TEST_SLOT_TOKEN: '', BCH_CLOAK_TEST_SLOT_TOKEN: '' } }), { code: 'TEST_SLOT_HELD' });
+    } finally {
+      holder.kill('SIGTERM');
+      await finished;
     }
   });

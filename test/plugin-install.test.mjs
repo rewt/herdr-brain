@@ -12,6 +12,7 @@ import { assertSupervisorEntry } from '../acceptance/entry.mjs';
 import { spawnChild, waitForExit, killChild } from './helpers/child.mjs';
 import { copyProduct } from '../lib/product-files.mjs';
 import { fixtureFleet } from './helpers/offline-herdr.mjs';
+import { fakeControlSocket } from './helpers/fake-control-socket.mjs';
 import { runTemporary } from '../discovery/temporary.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
@@ -60,7 +61,18 @@ function fixture(t) {
   const native = path.join(nativeBin, 'codex'), receipt = path.join(root, 'native.json');
   // Install before any lane open or entry launch, including direct node --test.
   fs.writeFileSync(path.join(nativeBin, 'herdr'), '#!/bin/sh\necho "plugin fixture: Herdr is offline" >&2\nexit 1\n', { mode: 0o755 });
-  fs.writeFileSync(native, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));\n`, { mode: 0o755 });
+  // Model supported native capability queries and execute the offline socket
+  // probe. Only the final session handover writes the installation receipt.
+  fs.writeFileSync(native, `#!${process.execPath}
+const args=process.argv.slice(2);
+if(args.includes('--help')){console.log('--sandbox --add-dir --settings --permission-profile');process.exit(0);}
+if(args.includes('--version')){console.log('2.1.284');process.exit(0);}
+if(args[0]==='sandbox'){
+  const split=args.indexOf('--'),child=require('child_process').spawnSync(args[split+1],args.slice(split+2),{stdio:'inherit'});
+  process.exit(child.status??1);
+}
+require('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,JSON.stringify({args,cwd:process.cwd()}));
+`, { mode: 0o755 });
   fs.symlinkSync(native, path.join(nativeBin, 'claude'));
   const env = releaseEnvironment(process.env, { HOME: home, ZDOTDIR: home, CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
     ORG_ACTOR: `eng80-r97-${createHash('sha256').update(t.name).digest('hex').slice(0, 12)}`, ORG_DIR: '',
@@ -68,7 +80,7 @@ function fixture(t) {
     HERDR_MONITOR_HOME: path.join(home, 'monitor'), HERDR_MONITOR_BIN: path.join(home, 'bin'), HERDR_MONITOR_ENTRY_BIN: path.join(home, 'monitor/entry/bin'),
     HERDR_MONITOR_REPO: repo, HERDR_MONITOR_CODEX: native, HERDR_MONITOR_CLAUDE: path.join(nativeBin, 'claude'), HERDR_MONITOR_PLIST: path.join(root, 'absent.plist'),
     RELEASE_NO_NPM: '1', RELEASE_NO_HERDR: '1', RELEASE_NO_LAUNCHD: '1', MONITOR_INSTALL_BUILD_ONLY: '', MONITOR_ENTRY_BYPASS: '', MONITOR_REQUEST_DIR: '',
-    HERDR_ENV: '', HERDR_SOCKET_PATH: path.join(root, 'absent.sock'), HERDR_WORKSPACE_ID: '', HERDR_TAB_ID: '', HERDR_INTEGRATION_ID: '', HERDR_PANE_ID: '', HERDR_PLUGIN_ROOT: '', HERDR_PLUGIN_CONTEXT_JSON: '', MONITOR_RUNTIME_DIR: path.join(root, 'queue'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'), ENTRY_TEST_RECEIPT: receipt,
+    HERDR_ENV: '', HERDR_SOCKET_PATH: fakeControlSocket(t, root), HERDR_WORKSPACE_ID: '', HERDR_TAB_ID: '', HERDR_INTEGRATION_ID: '', HERDR_PANE_ID: '', HERDR_PLUGIN_ROOT: '', HERDR_PLUGIN_CONTEXT_JSON: '', MONITOR_RUNTIME_DIR: path.join(root, 'queue'), MONITOR_WORKTREE_ROOT: path.join(root, 'lanes'), ENTRY_TEST_RECEIPT: receipt,
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   const run = (file, args, cwd = repo, extra = {}) => spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(20000) });
   const ok = (file, args, cwd, extra) => { const r = run(file, args, cwd, extra); assert.equal(r.status, 0, r.error?.message ?? r.stdout + r.stderr); return r.stdout; };
@@ -470,6 +482,18 @@ test('Herdr build checkout can move or disappear while installed entry and resto
   f.ok(process.execPath, [path.join(source, 'herdr/entry-install.mjs'), '--remove'], project);
   assert.equal(fs.readFileSync(path.join(f.home, '.zshrc'), 'utf8'), original);
   assert.equal(fs.existsSync(path.join(f.bin, 'codex')), false);
+});
+
+test('installed supervisor refuses an unsupported Codex build with the reason before handover', (t) => {
+  const f = fixture(t); f.ok('bash', [path.join(f.repo, 'herdr/install.sh')]);
+  fs.writeFileSync(f.native, `#!${process.execPath}
+if(process.argv.includes('--help')){console.log('old Codex build');process.exit(0);}
+require('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT,'unexpected handover');
+`, { mode: 0o755 });
+  const refused = f.run(path.join(f.bin, 'monitor-codex'), ['--role', 'supervisor'], f.repo);
+  assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+  assert.match(refused.stderr, /codex has no supported native sandbox options for a coordinating launch/u);
+  assert.equal(fs.existsSync(f.receipt), false, 'unsupported native must not receive the session');
 });
 
 test('supervisor resolves the selected workspace to canonical Git instead of its plugin cwd', { timeout: 30000 }, (t) => {

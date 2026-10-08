@@ -198,10 +198,9 @@ fleet project names fail closed.
 Monitor's joined-project native launches register their permission handler in
 its own [module](../supervisor/permission-hooks.mjs); `session-hooks.mjs` only
 exports its registration. Existing question and lifecycle hooks remain separate.
-Claude uses an authenticated loopback **PermissionRequest HTTP hook**, owned by
-the launcher and closed with the native child. If loopback is unavailable, the
-same structured protocol runs as a command hook. The launcher awaits readiness
-before spawning. Codex uses a **PermissionRequest command hook** subject to
+Claude uses a per-launch **PermissionRequest command hook**. Each request runs
+in its own process and can answer even if the launch adapter has exited.
+Codex uses a **PermissionRequest command hook** subject to
 native operator hook trust. Its command is stable across launches; the parent
 supplies project/run-temp binding through `MONITOR_PERMISSION_BINDING`. Neither
 adapter writes persistent settings or hook trust, nor bypasses a trust review.
@@ -222,6 +221,8 @@ that reaches the hook is declined. Codex currently exposes no native file-read
 approval class, so it has no automatic approvals. Credential-looking resolved
 targets are denied even through an ordinary-looking symlink. Search/glob tools
 are also denied: recursive traversal is not proof of resolved containment.
+Action keywords classify non-read tool inputs; reading a project release report
+or trust brief does not itself publish or expand permissions.
 
 The denied session receives: do not work around the denial, record the question
 under its work item with `record ask` and the action category, continue other
@@ -236,6 +237,11 @@ alerts consume durable per-request caps and per-launch debounce receipts before
 effects; channel failure cannot become an approval. Invalid audit/config/binding
 always returns a structured denial. Already-installed hooks deny if disabled;
 restart native sessions after changing launch policy.
+Concurrent audit writers wait up to two seconds for the lock before refusing.
+Missing or malformed launch bindings are audited denials. If checkout modules
+cannot load or the hook encounters an uncaught failure, its dependency-free
+emergency response emits denial JSON and exits 2 with the nudge on stderr.
+That path cannot write the normal audit when its audit module is unavailable.
 
 Terminal fallback (`key_fallback`, default true) is **denial only** and supports
 the captured four-option Claude outside-working-directories read request. It

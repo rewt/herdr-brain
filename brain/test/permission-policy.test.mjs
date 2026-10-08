@@ -2,10 +2,11 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { permissionProject, permissionDecision } from '../lib/permission-policy.mjs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { permissionProject, permissionDecision, DENIAL_NUDGE } from '../lib/permission-policy.mjs';
 import { auditPermission } from '../lib/permission-audit.mjs';
-import { handlePermission, permissionHookArguments, servePermissionHook } from '../../supervisor/permission-hooks.mjs';
+import { handlePermission, permissionHookArguments } from '../../supervisor/permission-hooks.mjs';
+import { noticeLock } from '../../supervisor/notice-lock.mjs';
 import { nativeSandboxLaunch } from '../../discovery/native-sandbox.mjs';
 import { fallbackRequest, declineObserved } from '../lib/permission-fallback.mjs';
 import { gitProject } from '../../lib/project.mjs';
@@ -73,6 +74,52 @@ test('never-list requests decline with an operator nudge and alert, including cr
   assert.equal(decide(f,{ ...f.event('ignored'),tool_name:'Bash',tool_input:{command:'cat report.md'} }).behavior,'deny');
 });
 
+test('project Read paths with action words allow without an alert, while credential targets deny', async t => {
+  const f = fixture(t), alerts = [];
+  for (const name of ['release-report.md', 'push.md', 'deploy.md', 'publish.md', 'trust-brief.md', 'transfer.md', 'config.toml', 'hooks.json', 'wallet-guide.md']) {
+    const event = f.event(f.file(f.own.checkout, name));
+    const decision = decide(f, event);
+    assert.equal(decision.behavior, 'allow', name);
+    assert.equal(decision.alert, false, name);
+    const result = await handlePermission(event, f.binding, { env: f.env, home: f.env.BRAIN_STATE, alert: async p => alerts.push(p) });
+    assert.equal(result.output.hookSpecificOutput.decision.behavior, 'allow', name);
+    await result.notify?.();
+  }
+  assert.deepEqual(alerts, []);
+  for (const name of ['.env', 'credentials.json', 'private-key.pem', 'seed-phrase.txt', 'keychain.db']) {
+    const decision = decide(f, f.event(f.file(f.own.checkout, name)));
+    assert.equal(decision.behavior, 'deny', name);
+    assert.equal(decision.alert, true, name);
+  }
+});
+
+test('concurrent permission audits wait for the live holder and preserve both approvals', async t => {
+  const f = fixture(t), event = f.event(f.file(f.own.checkout));
+  const file = path.join(f.env.BRAIN_STATE, 'steward/permissions.json');
+  const release = noticeLock(`${file}.lock`); t.after(release);
+  const script = `import { auditPermission } from ${JSON.stringify(new URL('../lib/permission-audit.mjs', import.meta.url).href)};
+process.stdout.write('ready\\n');
+auditPermission(...JSON.parse(process.argv[1]));`;
+  let ready = 0;
+  const workers = [0, 1].map(() => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, JSON.stringify([f.env.BRAIN_STATE, { ...f.binding, project: 'own' }, event, decide(f, event)])], { env: f.env });
+    t.after(() => child.kill());
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => {
+      const wasReady = stdout.includes('ready\n'); stdout += chunk;
+      if (!wasReady && stdout.includes('ready\n') && ++ready === 2) setTimeout(release, 100);
+    });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', code => { try { assert.equal(code, 0, stderr); resolve(); } catch (error) { reject(error); } });
+  }));
+  await Promise.all(workers);
+  const audit = JSON.parse(fs.readFileSync(file));
+  assert.equal(audit.events.length, 2);
+  assert.ok(audit.events.every(e => e.behavior === 'allow'));
+  assert.equal(Object.values(audit.sessions)[0].approvals, 2);
+});
+
 test('audit precedes native decisions, persists repeated-request and launch approval circuit breakers', async t => {
   const f = fixture(t), event = f.event(f.file(f.own.checkout));
   for (let i = 0; i < 4; i++) {
@@ -102,18 +149,39 @@ test('corrupt audit and disabled configuration deny rather than holding a dialog
   assert.equal((await handlePermission(event,f.binding,{env:f.env,home:f.env.BRAIN_STATE})).output.hookSpecificOutput.decision.behavior,'deny');
 });
 
-test('Claude HTTP returns the same structured decisions with authentication and bounded malformed inputs', async t => {
-  const f = fixture(t), alerts = [], server = servePermissionHook(f.binding,{env:f.env,home:f.env.BRAIN_STATE,alert:async p => alerts.push(p)}); t.after(server.close);
-  const hook = await server.ready;
-  const request = body => fetch(hook.url,{method:'POST',body:JSON.stringify(body)}).then(r=>r.json());
-  const allowed = await request(f.event(f.file(f.own.checkout)));
-  assert.deepEqual(allowed,{hookSpecificOutput:{hookEventName:'PermissionRequest',decision:{behavior:'allow'}}});
-  const denied = await request({ ...f.event('unused'),tool_name:'Bash',tool_input:{command:'npm publish'} });
-  assert.equal(denied.hookSpecificOutput.decision.behavior,'deny'); assert.match(denied.hookSpecificOutput.decision.message,/record ask/);
-  assert.equal(alerts.length,1);
-  assert.equal((await fetch(hook.url+'wrong',{method:'POST',body:'{}'})).status,403);
-  assert.equal((await fetch(hook.url,{method:'POST',body:'x'.repeat(65537)}).then(r=>r.json())).hookSpecificOutput.decision.behavior,'deny');
-  assert.equal((await fetch(hook.url,{method:'POST',body:'{'}).then(r=>r.json())).hookSpecificOutput.decision.behavior,'deny');
+test('command hooks audit absent, malformed and stale launch bindings and malformed requests', t => {
+  const f = fixture(t), hook = path.join(root, 'supervisor/permission-hook.mjs');
+  const safe = f.event(f.file(f.own.checkout));
+  for (const [binding, input] of [[undefined, JSON.stringify(safe)], ['{', JSON.stringify(safe)], ['null', JSON.stringify(safe)], [JSON.stringify({ ...f.binding, identity: f.peer.identity }), JSON.stringify(safe)], [JSON.stringify(f.binding), '{']]) {
+    const env = { ...f.env }; delete env.MONITOR_PERMISSION_BINDING;
+    if (binding !== undefined) env.MONITOR_PERMISSION_BINDING = binding;
+    const result = spawnSync(process.execPath, [hook], { env, input, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const decision = JSON.parse(result.stdout).hookSpecificOutput.decision;
+    assert.equal(decision.behavior, 'deny'); assert.match(decision.message, /record ask/);
+  }
+  const audit = JSON.parse(fs.readFileSync(path.join(f.env.BRAIN_STATE, 'steward/permissions.json')));
+  assert.equal(audit.events.length, 5);
+  assert.ok(audit.events.every(e => e.behavior === 'deny'));
+  assert.match(audit.events[0].reason, /Unverified launch binding/);
+  assert.match(audit.events.at(-1).reason, /Malformed permission/);
+});
+
+test('unloadable hook dependencies and uncaught failures emit a deny and exit 2 with the nudge', t => {
+  const f = fixture(t), directory = path.join(f.scratch, 'broken-hook'); fs.mkdirSync(directory);
+  const hook = path.join(directory, 'permission-hook.mjs'), dependency = path.join(directory, 'permission-hooks.mjs');
+  fs.copyFileSync(path.join(root, 'supervisor/permission-hook.mjs'), hook);
+  for (const code of [null, 'export {', "import './missing-dependency.mjs';", 'export function handlePermission() { throw Error("fixture failure"); }']) {
+    if (code !== null) fs.writeFileSync(dependency, code);
+    const result = spawnSync(process.execPath, [hook], { env: f.env, input: '{}', encoding: 'utf8' });
+    assert.equal(result.status, 2, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message: DENIAL_NUDGE } } });
+    assert.ok(result.stderr.includes(DENIAL_NUDGE));
+  }
+  const oversized = spawnSync(process.execPath, [path.join(root, 'supervisor/permission-hook.mjs')], { env: f.env, input: 'x'.repeat(65537), encoding: 'utf8' });
+  assert.equal(oversized.status, 2);
+  assert.equal(JSON.parse(oversized.stdout).hookSpecificOutput.decision.behavior, 'deny');
+  assert.ok(oversized.stderr.includes(DENIAL_NUDGE));
 });
 
 test('launch hooks stay per-session, retain other hooks and never bypass Codex hook trust', async t => {
@@ -122,10 +190,20 @@ test('launch hooks stay per-session, retain other hooks and never bypass Codex h
   const context = { ...f.binding,tempRoot:f.own.temp,worktrees:f.own.worktrees,projects:[f.peer] };
   const old = {hooks:{PermissionRequest:[{hooks:[{type:'command',command:'existing'}]}],PreToolUse:[{matcher:'AskUserQuestion',hooks:[{type:'command',command:'question-hook'}]}]}};
   const launch = nativeSandboxLaunch({kind:'claude',binary,args:['--settings',JSON.stringify(old)],context,env:f.env}); t.after(launch.close);
-  await launch.ready;
+  assert.equal(launch.ready, undefined, 'no listener readiness dependency');
   const settings = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1]));
   assert.deepEqual(settings.hooks.PermissionRequest[0],old.hooks.PermissionRequest[0]);
-  assert.equal(settings.hooks.PermissionRequest.at(-1).hooks[0].type,'http');
+  const hook = settings.hooks.PermissionRequest.at(-1).hooks[0];
+  assert.equal(hook.type,'command');
+  const input = JSON.stringify(f.event(f.file(f.own.checkout)));
+  const invoke = () => spawnSync('/bin/sh', ['-c', hook.command], { env: launch.env, input, encoding: 'utf8' });
+  const allowed = invoke();
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(JSON.parse(allowed.stdout).hookSpecificOutput.decision.behavior, 'allow');
+  launch.close();
+  const closed = invoke();
+  assert.equal(closed.status, 0, closed.stderr);
+  assert.equal(JSON.parse(closed.stdout).hookSpecificOutput.decision.behavior, 'deny', 'command still answers after launch cleanup');
   assert.deepEqual(settings.hooks.PreToolUse[0],old.hooks.PreToolUse[0]);
   const codex = permissionHookArguments('codex',context,root,f.runTemp,f.env);
   assert.match(codex.args[1],/hooks.PermissionRequest=/); assert.doesNotMatch(codex.args.join(' '),/bypass-hook-trust/);

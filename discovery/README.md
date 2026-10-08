@@ -782,9 +782,8 @@ only an available evidence summary.
 
 
 Joined-project launches also register the deterministic steward permission hook
-for both worker and supervisor roles. Claude's launch-owned loopback HTTP handler
-is ready before the native child starts, with the identical command hook as a
-fallback when listening is unavailable. Codex's command hook requires native
+for both worker and supervisor roles. Claude runs a per-request command hook
+that answers independently of the adapter process. Codex's command hook requires native
 operator trust; its definition stays stable while launch environment carries the
 private run-temp/project binding. Permission hooks share the settings merge with
 lifecycle and question hooks, and never write persistent native settings/trust.

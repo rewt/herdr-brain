@@ -8,7 +8,7 @@ export const fingerprint = value => createHash('sha256').update(JSON.stringify(v
 export function auditPermission(home, binding, event, decision, now = Date.now(), config = {}) {
   const file = path.join(home, 'steward/permissions.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const release = noticeLock(`${file}.lock`);
+  const release = noticeLock(`${file}.lock`, { waitMs: 2000 });
   try {
     let data = { version: 1, sessions: {}, events: [] };
     if (fs.existsSync(file)) {

@@ -25,14 +25,18 @@ function callerRefusal(label, error, options) {
   return { pid: 0, output, stdout: output[1], stderr: output[2], status: REFUSED_EXIT, signal: null };
 }
 
-export function runTestSlotSync(label, argv, { retryTimeout = true, waitSeconds, waitReceipt, executionReceipt, ...options } = {}) {
+export function runGateSync(label, argv, { acquireSlot = false, retryTimeout = true, waitSeconds, waitReceipt, executionReceipt, common, tier, timeoutSeconds, idleTimeoutSeconds, ...options } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-test-slot-result-'));
   const receipt = executionReceipt ?? path.join(directory, 'result.json');
   try {
     let caller;
     try { caller = { pid: process.pid, ...processStartRecord(process.pid) }; }
     catch (error) { return callerRefusal(label, error, options); }
-    const result = spawnSync(process.execPath, [CLI, 'run', label, '--result-path', receipt, '--caller', JSON.stringify(caller),
+    const result = spawnSync(process.execPath, [CLI, 'run', label, ...(acquireSlot ? [] : ['--no-slot']), '--result-path', receipt, '--caller', JSON.stringify(caller),
+      ...(common === undefined ? [] : ['--project-common', common]),
+      ...(tier === undefined ? [] : ['--tier', tier]),
+      ...(timeoutSeconds === undefined ? [] : ['--timeout-seconds', String(timeoutSeconds)]),
+      ...(idleTimeoutSeconds === undefined ? [] : ['--idle-timeout-seconds', String(idleTimeoutSeconds)]),
       ...(waitSeconds === undefined ? [] : ['--wait', String(waitSeconds)]),
       ...(waitReceipt === undefined ? [] : ['--wait-receipt-path', waitReceipt]),
       ...(retryTimeout ? ['--retry-timeout-under-load'] : []), '--', ...argv], options);
@@ -42,7 +46,13 @@ export function runTestSlotSync(label, argv, { retryTimeout = true, waitSeconds,
       const metadata = JSON.parse(fs.readFileSync(receipt, 'utf8'));
       if (metadata.signal) { result.signal = metadata.signal; result.status = null; }
       result.attempts = metadata.attempts;
+      result.execution = metadata;
+      result.gateTimeout = metadata.gate_timeout;
     }
     return result;
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+}
+
+export function runTestSlotSync(label, argv, options = {}) {
+  return runGateSync(label, argv, { ...options, acquireSlot: true });
 }

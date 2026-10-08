@@ -2337,7 +2337,7 @@ function check(args) {
   prepareWorktree(REPO);
   if (git(['rev-parse', 'HEAD']) !== head || git(['branch', '--show-current']) !== branch) fail('worktree branch or lane tip changed during preparation');
   let gate;
-  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
+  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, timeoutSeconds: settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: settings.tiers[tier].idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75); // validateTree already emitted its one coded line.
     fail(error.message);
@@ -2425,7 +2425,7 @@ function promoteLocked(topic, root, options) {
   process.stdout.write(`validating in ${path}: ${validate}\n`);
   const validatedHead = git(["rev-parse", branch]);
   let gate;
-  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
+  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75);
     fail(error.message);
@@ -2434,6 +2434,10 @@ function promoteLocked(topic, root, options) {
   // does not ignore .lane/. Its authoritative receipt already lives in Git.
   if (tryGit(['check-ignore', '--quiet', '.lane/gate.json'], { cwd: path, silent: true }) !== undefined) {
     writeAgentFileAtomic(join(path, '.lane', 'gate.json'), JSON.stringify(gate, null, 2) + '\n');
+  }
+  if (gate.outcome === 'timeout') {
+    process.stderr.write(`GATE_TIMEOUT: ${gate.gate_timeout?.kind ?? 'wall'} gate limit exceeded; lane retained for correction; nothing merged\n`);
+    process.exit(124);
   }
   if (gate.exit_code !== 0) fail(`validation failed (exit ${gate.exit_code}); nothing merged`);
   // Validation was gated before acquiring the promotion lock. Finish this

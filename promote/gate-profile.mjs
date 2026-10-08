@@ -8,6 +8,8 @@ import { validationEnvironment } from '../lanes/validation.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 
+import { limitSeconds } from '../test-slot/limits.mjs';
+
 export const HOST_ENV = 'MONITOR_PROMOTION_HOST_PROFILE';
 const HOST = fileURLToPath(new URL('./host-gate.mjs', import.meta.url));
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -18,8 +20,10 @@ export function resolveGateProfile(canonical, environment = process.env) {
   const gate = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).gate : undefined;
   if (gate === undefined) return null;
   if (!object(gate)) throw new Error('promote gate must be an object');
-  const fields = ['node_version_file', 'env', 'prepare', 'external_lock', 'refuse_processes', 'wait_seconds'];
+  const fields = ['node_version_file', 'env', 'prepare', 'external_lock', 'refuse_processes', 'wait_seconds', 'timeout_seconds', 'idle_timeout_seconds'];
   for (const key of Object.keys(gate)) if (!fields.includes(key)) throw new Error(`unknown promote gate field: ${key}`);
+  if (gate.timeout_seconds !== undefined) limitSeconds(gate.timeout_seconds, 'gate.timeout_seconds');
+  if (gate.idle_timeout_seconds !== undefined) limitSeconds(gate.idle_timeout_seconds, 'gate.idle_timeout_seconds', { idle: true });
   const waitSeconds = gate.wait_seconds ?? 7200;
   if (!Number.isSafeInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 9999999) throw new Error('gate.wait_seconds must be a bounded whole number of seconds');
   if (gate.env !== undefined && (!object(gate.env) || Object.entries(gate.env).some(([key, value]) =>
@@ -55,7 +59,7 @@ export function resolveGateProfile(canonical, environment = process.env) {
     env.PATH = [bin, ...(env.PATH ?? '').split(path.delimiter).filter(entry => entry !== bin)].join(path.delimiter);
     node = { pin, executable };
   }
-  return { env, node, prepare, externalLock: gate.external_lock, processes, waitSeconds,
+  return { env, node, prepare, externalLock: gate.external_lock, processes, waitSeconds, timeoutSeconds: gate.timeout_seconds, idleTimeoutSeconds: gate.idle_timeout_seconds,
     // Hash declarations and effective runtime without persisting environment
     // values. Preparation and this salt participate in tree-keyed evidence.
     fingerprint: hash({ gate, node }), file };

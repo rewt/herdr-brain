@@ -4,7 +4,7 @@ Herdr Monitor supplies a dependency-free foreground slot for heavy validation in
 any project. Promotion-tier lane validation takes it before executing tests;
 reused green evidence needs no slot. The release supervisor takes it before
 cutting or claiming a candidate and keeps it through preparation and the gate.
-Worker fast checks remain available. The installed entry runtime carries this
+Worker fast checks use the same watchdog without taking the slot. The installed entry runtime carries this
 module, and this project's `npm run test:promotion` also takes it directly.
 
 ```sh
@@ -72,7 +72,7 @@ Known-stale removals serialize through a `.takeover` guard and recheck the exact
 record. Unknown records and abandoned takeover guards stay in place. Nested
 commands inherit Monitor and bch-cloak tokens, or recognize a live holder through
 ancestry/group membership; they neither wait for themselves nor release the
-outer slot. A stale inherited token cannot authorize nesting.
+outer slot. Detached nested groups are registered in the holder record, so they still protect an orphaned slot; group-registration updates serialize through a guard that is never removed by age. A stale inherited token cannot authorize nesting.
 
 The lane promotion adapter holds the slot with timeout retry disabled, so it
 never replays a command chain, including when a leaf declines to retry. Leaf
@@ -101,3 +101,49 @@ work or relaxing any test deadline.
 run outside the fixture policy that disables detached processes. Other offline
 fixtures receive a temporary slot per test file and never take the machine's
 real slot. No model calls or live acceptance harness are involved.
+
+Every `run` also has a gate watchdog. Its monotonic wall clock starts when the
+command starts inside the acquired slot; slot waits consume none of it. On an
+overrun it prints `GATE_TIMEOUT: wall limit Ns exceeded; elapsed Ms`, sends TERM
+to its owned command group, waits one second, then sends KILL. A kernel snapshot
+before signalling walks the command's parent chain to include descendants that
+created separate groups; each such PID is confirmed against its kernel birth
+identity immediately before signalling. It waits for the group and those
+children to disappear before releasing the slot, and exits **124**. Unrelated
+processes receive no signal. Identity failures retain the lock.
+
+Set `validation.timeout_seconds` in canonical lane configuration or
+`.lane.validation.json` to a positive number of seconds, either for all tiers
+or as a map such as `{"promotion":4500,"release":7200}`. A promotion host profile
+may override it with `.promote.json`'s `gate.timeout_seconds`. CLI callers can
+pass `--timeout-seconds SECONDS`, `--project-common GIT_COMMON_DIR`, and
+`--tier TIER`; otherwise the CLI discovers the Git common directory and uses
+its label as the tier. Fast and other non-slot validation tiers use the same process-group watchdog through `runGateSync` and never acquire the host slot (`run --no-slot` on the CLI). Their healthy history is recorded under their own tier.
+
+Without an explicit limit, successful command durations in
+`GIT_COMMON_DIR/gate-watchdog/` supply twice the maximum of the last 20 healthy
+runs for that project and tier, with a **600-second floor**. That floor leaves
+headroom for cold builds and load variation in narrow gates. Without history,
+the **4500-second (75-minute) default** bounds unfamiliar full gates
+conservatively. The measured full gates of 31m05s, 31m40s, 30m55s, 30m53s,
+34m27s and 35m58s give **71m56s (about 72 minutes)**; their slot waits are never
+recorded as command time. Only successful executions add samples; reuse,
+refusals, overruns, and failures do not. Receipts and live slot records name the
+resolved limits. The promotion host lifecycle (preparation through bookkeeping)
+has a separate wall backstop of twice the inner gate allowance, at least ten
+minutes, so the inner watchdog can persist a correction outcome first.
+
+Output from both streams is observed and forwarded without buffering a suite
+log. Each healthy sample also records its longest silence, including the final
+stretch before exit. `validation.idle_timeout_seconds` or
+`gate.idle_timeout_seconds` enables a no-output limit (`0` disables it); the CLI
+accepts `--idle-timeout-seconds`. With healthy history it defaults to three times
+the longest recorded silence, with a **300-second floor**. With no history it is
+**off**: an unmeasured build may legitimately be silent for a long time.
+
+Wall and idle overruns, including a nested gate's timeout marker, never spend
+the timeout-under-load retry. Lane promotion exits 124 and keeps the lane for a
+fix round. The merge train records `timeout`, isolates all lanes in the timed-out
+candidate for correction without bisection or replay, and leaves main unchanged.
+The timeout receipt distinguishes this from ordinary test failures and a slot
+wait refusal. Tests use scratch slot paths and never take the real host slot.

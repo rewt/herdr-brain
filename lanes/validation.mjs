@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
 import { acquireLock } from './promotion-lock.mjs';
-import { runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
+import { runGateSync, runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
+
+import { limitSeconds } from '../test-slot/limits.mjs';
 
 export const VALIDATION_TIERS = ['fast', 'promotion', 'release'];
 export const VALIDATION_FILE = '.lane.validation.json';
@@ -16,6 +18,14 @@ const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding:
 export function validateValidation(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('validation must be an object');
   for (const [key, command] of Object.entries(value)) {
+    if (['timeout_seconds', 'idle_timeout_seconds'].includes(key)) {
+      const values = typeof command === 'object' && command !== null && !Array.isArray(command) ? Object.entries(command) : [[null, command]];
+      for (const [tier, seconds] of values) {
+        if (tier !== null && !VALIDATION_TIERS.includes(tier)) throw Error(`unknown watchdog tier: ${tier}`);
+        limitSeconds(seconds, `validation.${key}`, { idle: key === 'idle_timeout_seconds' });
+      }
+      continue;
+    }
     if (![...VALIDATION_TIERS, 'environment', 'promotion_tests'].includes(key)) throw new Error(`unknown validation field: ${key}`);
     if (typeof command !== 'string' || !command.trim()) throw new Error(`validation.${key} must be a nonempty string`);
   }
@@ -44,7 +54,8 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
     // Legacy overrides remain available to CLI/queue adapters for all tiers.
     const command = env.LANE_VALIDATE ?? declared[tier] ?? fallback;
     if (typeof command !== 'string' || !command.trim()) throw new Error(`validation.${tier} must be a nonempty string`);
-    tiers[tier] = { command, source: env.LANE_VALIDATE !== undefined ? 'env' : declarationSources[tier] ?? (config.validate !== undefined ? sources.validate ?? source : 'default') };
+    tiers[tier] = { command, timeoutSeconds: typeof declared.timeout_seconds === 'object' ? declared.timeout_seconds[tier] : declared.timeout_seconds,
+      idleTimeoutSeconds: typeof declared.idle_timeout_seconds === 'object' ? declared.idle_timeout_seconds[tier] : declared.idle_timeout_seconds, source: env.LANE_VALIDATE !== undefined ? 'env' : declarationSources[tier] ?? (config.validate !== undefined ? sources.validate ?? source : 'default') };
   }
   return { tiers, promotion_tests: declared.promotion_tests, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
 }
@@ -77,7 +88,7 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
-export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart }) {
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, timeoutSeconds, idleTimeoutSeconds }) {
   env = validationEnvironment(env);
   const before = captured(cwd, label);
   const fingerprint = environmentFingerprint({ env, prepare, environment });
@@ -118,16 +129,15 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     try {
       onStart?.({ command, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
-      run = tier === 'promotion'
-        ? runTestSlotSync(`promotion ${cwd}`, ['/bin/sh', '-c', command], { cwd, env, executionReceipt, retryTimeout: false, stdio: ['inherit', fd, fd] })
-        : spawnSync(command, { cwd, env, shell: '/bin/sh', stdio: ['inherit', fd, fd] });
+      const execute = tier === 'promotion' ? runTestSlotSync : runGateSync;
+      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: tier === 'promotion', cwd, env, common, tier, timeoutSeconds, idleTimeoutSeconds, executionReceipt, retryTimeout: false, stdio: ['inherit', fd, fd] });
     }
     finally { fs.closeSync(fd); }
     const output = readPlainFile(log);
     if (run.error) process.stderr.write(`${run.error.message}\n`);
     const signal = run.signal ?? null;
     const exitCode = run.status ?? (signal && os.constants.signals[signal] ? 128 + os.constants.signals[signal] : 1);
-    if (tier === 'promotion' && exitCode === REFUSED_EXIT && run.attempts === undefined) {
+    if (exitCode === REFUSED_EXIT && run.attempts === undefined) {
       // Slot contention is neither failed test evidence nor a reusable receipt.
       process.stderr.write(output);
       throw Object.assign(new Error(output.trim() || 'TEST_SLOT_HELD: validation slot refused'), { exitCode: REFUSED_EXIT });
@@ -136,7 +146,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, environment_fingerprint: fingerprint,
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
-      ...(tier === 'promotion' ? { execution_receipt: executionReceipt, executed: run.attempts !== undefined } : {}) };
+      execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits };
     // Failed, dirty or moving executions never become reusable green evidence.
     try { unchanged(cwd, before, label); }
     catch (error) { throw Object.assign(error, { gate }); }

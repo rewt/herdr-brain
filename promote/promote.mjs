@@ -129,7 +129,7 @@ export function enqueue(queue, topics, options) {
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
   return queue.transaction((data) => topics.map((topic) => {
-    const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && job.result?.outcome === 'refused'));
+    const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
     if (existing) {
       if (JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
       return { id: existing.id, topic, duplicate: true };
@@ -168,8 +168,8 @@ function perform(job, queue) {
     ...(job.run !== undefined ? ['--if-current-run', job.run, '--org', job.org] : [])];
   try { r = spawnSync(process.execPath, args, { cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
-  const reason = () => fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).findLast((line) => /^lane:/.test(line)) ?? r.error?.message ?? `lane promote exited ${r.status}`;
-  if (r.error || r.status !== 0) return { outcome: 'refused', reason: singleLine(reason()), log };
+  const reason = () => fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).findLast((line) => /^(?:lane:|GATE_TIMEOUT:)/.test(line)) ?? r.error?.message ?? `lane promote exited ${r.status}`;
+  if (r.error || r.status !== 0) return { outcome: r.status === 124 && /GATE_TIMEOUT:/.test(reason()) ? 'timeout' : 'refused', reason: singleLine(reason()), log };
   try {
     const tip = job.expectedHead ?? git(cwd, ['rev-parse', 'HEAD']);
     // Persist success before cleanup: a crash must not cause a second gate/FF.
@@ -205,6 +205,14 @@ function performBatch(batch, queue) {
   const hostFile = path.join(directory, 'host-gate.json');
   if (r.status !== 0 && fs.existsSync(hostFile)) {
     const host = JSON.parse(fs.readFileSync(hostFile, 'utf8'));
+    if (host.phase === 'timeout') {
+      const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+      train.results ??= {};
+      for (const job of batch.jobs) train.results[job.id] ??= { outcome: 'timeout', reason: host.reason, batch: batch.id, host_receipt: hostFile };
+      train.phase = 'complete'; train.groups = [];
+      writeFileAtomic(receipt, JSON.stringify(train, null, 2) + '\n');
+      return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt } }));
+    }
     if (!host.command_started && host.phase === 'refused') {
       // A capped transition/slot wait is a visible pre-execution refusal,
       // never red test evidence or an interrupted Git integration.

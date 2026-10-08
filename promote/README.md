@@ -148,6 +148,14 @@ including invocations from linked worktrees. Untracked files, uncommitted edits
 and lane copies cannot override it. Existing and interrupted batches retain their
 captured membership when resumed.
 
+Settings Git reads run outside `queue.lock` with a load-aware two-second
+allowance for the complete snapshot. Git failures, including timeouts, refuse
+with `PROMOTION_SETTINGS_GIT_FAILED`; invalid committed settings refuse with
+`PROMOTION_SETTINGS_INVALID`. The queue retains the code, reason and pending
+request IDs in `--status`, preserving their order for a later retry. A refusal
+after startup sends one queue notice through the first pending request's saved
+supervisor recipient and records its delivery receipt alongside the refusal.
+
 Declare the gate command in `.lane.validation.json`, for example
 `{"promotion":"pnpm validate:all-safe"}`. A canonical `.promote.json` can also
 declare a `gate` profile. This example matches bch-cloak's existing gate; the

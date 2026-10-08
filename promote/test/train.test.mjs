@@ -118,6 +118,14 @@ test('invalid committed max_batch values refuse enqueue and drain without consum
       assert.deepEqual(f.queue.load().pending, pending);
       assert.equal(f.queue.load().current, null); assert.equal(f.runs(), 0);
       assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
+      if (args[0] === '--drain') {
+        const refusal = f.queue.load().refusal;
+        assert.equal(refusal.code, 'PROMOTION_SETTINGS_INVALID');
+        assert.deepEqual(refusal.pending, pending.map(job => job.id));
+        const status = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--status']);
+        assert.equal(status.status, 0, status.stderr);
+        assert.deepEqual(JSON.parse(status.stdout).refusal, refusal);
+      }
     }
   }
 });
@@ -186,6 +194,90 @@ cp.spawnSync=function(cmd,args,options){
   const retried = f.drain(); assert.equal(retried.status, 0, retried.stderr);
   assert.deepEqual(f.queue.load().results.map(job => [job.topic, job.outcome]), [['first', 'promoted'], ['second', 'promoted']]);
   assert.equal(f.queue.load().refusal, undefined);
+});
+
+for (const mode of ['invalid', 'git-failed']) test(`a ${mode} settings refusal after startup sends one queue notice and preserves the pending tail`, async t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ max_batch: 1 }));
+  f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Batch cap']);
+  const workspace = f.lane('first');
+  if (mode === 'invalid') {
+    fs.writeFileSync(path.join(workspace, '.promote.json'), JSON.stringify({ max_batch: 0 }));
+    f.git(['add', '.promote.json'], workspace); f.git(['commit', '-qm', 'Invalid next batch cap'], workspace);
+  } else {
+    const preload = path.join(f.root, 'fail-second-settings.cjs');
+    fs.writeFileSync(preload, `const cp=require('node:child_process'),original=cp.spawnSync;let reads=0;
+cp.spawnSync=function(cmd,args,options){
+  if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && args[2]==='ls-tree' && ++reads===2)
+    return {status:128,stdout:'',stderr:'fatal: injected mid-drain settings failure'};
+  return original.apply(this,arguments);
+};\n`);
+    f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
+  }
+  f.add('first');
+  for (const topic of ['second', 'third']) { f.lane(topic); f.add(topic); }
+  const pending = f.queue.load().pending.slice(1);
+  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], {
+    cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  const done = waitForExit(worker), acknowledgements = [];
+  worker.on('message', value => acknowledgements.push(value));
+  const r = await done;
+  const code = mode === 'invalid' ? 'PROMOTION_SETTINGS_INVALID' : 'PROMOTION_SETTINGS_GIT_FAILED';
+  assert.equal(r.code, 1, r.stderr); assert.match(r.stderr, new RegExp(code));
+  assert.deepEqual(acknowledgements, [{ ready: true }]);
+  const saved = f.queue.load();
+  assert.equal(saved.refusal.code, code); assert.equal(saved.refusal.delivered, true);
+  assert.deepEqual(saved.refusal.pending, pending.map(job => job.id));
+  assert.deepEqual(saved.pending, pending); assert.equal(saved.current, null);
+  assert.deepEqual(saved.results.map(job => [job.topic, job.outcome]), [['first', 'promoted']]);
+  assert.equal(f.runs(), 1);
+  const messages = f.messages(); assert.equal(messages.length, 2);
+  const refusals = messages.filter(args => args[3].includes(`code=${code}`));
+  assert.equal(refusals.length, 1); assert.equal(refusals[0][2], 'test');
+  for (const job of pending) assert.ok(refusals[0][3].includes(job.id));
+  const notices = readInbox(path.join(f.repo, '.git/supervisor/inbox.log'));
+  assert.equal(notices.filter(entry => entry.message.includes(`code=${code}`)).length, 1);
+  assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
+});
+
+for (const command of ['rev-parse', 'ls-tree', 'show']) test(`a settings git ${command} timeout releases the queue for enqueuers and retains a coded refusal`, async t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ max_batch: 1 }));
+  f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Batch cap']);
+  for (const topic of ['first', 'second']) f.lane(topic);
+  f.add('first');
+  const marker = path.join(f.root, 'settings-wait'), preload = path.join(f.root, 'slow-settings.cjs');
+  fs.writeFileSync(preload, `const fs=require('node:fs'),cp=require('node:child_process'),original=cp.spawnSync;
+cp.spawnSync=function(cmd,args,options){
+  if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && args[2]===${JSON.stringify(command)}) {
+    fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({timeout:options.timeout,locked:fs.existsSync(${JSON.stringify(path.join(f.queue.directory, 'queue.lock'))})}));
+    return original.call(this,process.execPath,['-e','setTimeout(()=>{},60000)'],options);
+  }
+  return original.apply(this,arguments);
+};\n`);
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
+  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], {
+    cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  const done = waitForExit(worker), acknowledgements = [];
+  worker.on('message', value => acknowledgements.push(value));
+  await until(() => fs.existsSync(marker));
+  const waiting = JSON.parse(fs.readFileSync(marker, 'utf8'));
+  assert.equal(waiting.locked, false);
+  assert.ok(Number.isInteger(waiting.timeout) && waiting.timeout > 0 && waiting.timeout <= loadTimeout(2000));
+  f.add('second'); // Must succeed while the settings subprocess is still waiting.
+  assert.equal(worker.exitCode, null);
+  const pending = f.queue.load().pending;
+  const r = await done;
+  assert.equal(r.code, 1, r.stderr); assert.match(r.stderr, /PROMOTION_SETTINGS_GIT_FAILED.*ETIMEDOUT/);
+  const saved = f.queue.load();
+  assert.deepEqual(saved.pending, pending); assert.equal(saved.current, null);
+  assert.equal(saved.refusal.code, 'PROMOTION_SETTINGS_GIT_FAILED');
+  assert.deepEqual(saved.refusal.pending, pending.map(job => job.id));
+  assert.equal(acknowledgements.length, 1); assert.equal(acknowledgements[0].ready, false);
+  assert.deepEqual(acknowledgements[0].refusal, saved.refusal);
+  assert.equal(f.runs(), 0); assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
 });
 
 test('settings are read once for each new batch and not for an empty queue', t => {

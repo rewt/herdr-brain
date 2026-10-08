@@ -65,7 +65,11 @@ function settingsRefusal(code, reason) {
 function promotionSettings(project) {
   // Only the canonical committed declaration can change queue policy. Lane
   // copies and untracked/edited host files cannot override the batch limit.
-  const read = args => spawnSync('git', ['-C', project.canonical, ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  // Bound the whole snapshot below the worker's startup acknowledgement wait.
+  const deadline = Date.now() + loadTimeout(2000);
+  const read = args => spawnSync('git', ['-C', project.canonical, ...args], {
+    encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: Math.max(1, deadline - Date.now()),
+  });
   const checked = result => {
     if (result.error || result.status !== 0) throw settingsRefusal('PROMOTION_SETTINGS_GIT_FAILED',
       `cannot read committed promotion settings: ${result.stderr || result.stdout || result.error?.message || `exit ${result.status}`}`);
@@ -248,6 +252,7 @@ function finishBatchJob(job, result, queue) {
 }
 
 export function notice(job, result) {
+  if (result.pending) return `[promote-queue] id=${job.id} outcome=${result.outcome} code=${result.code} pending=${JSON.stringify(result.pending)} reason=${JSON.stringify(singleLine(result.reason))}`;
   return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}${result.receipt ? ` receipt=${result.receipt}` : ''}${result.host_receipt ? ` host-receipt=${result.host_receipt}` : ''}`;
 }
 async function deliver(job, result, queue) {
@@ -280,6 +285,14 @@ export async function drain(queue) {
   const attempted = new Set();
   try {
     for (;;) {
+      // Git can be slow. Read a committed snapshot without queue.lock so
+      // enqueuers remain free to append while this worker waits for settings.
+      const snapshot = queue.load();
+      let policy;
+      if (!snapshot.current && !(snapshot.interrupted ?? []).some(batch => !attempted.has(batch.id)) && snapshot.pending.length) {
+        try { policy = { maxBatch: promotionSettings(queue.project).max_batch ?? Infinity }; }
+        catch (error) { policy = { error }; }
+      }
       const entry = queue.transaction((data) => {
         if (data.current) {
           // Old workers leaked freshness into their promoted checkpoint. Never
@@ -301,14 +314,16 @@ export async function drain(queue) {
         }
         const next = data.pending[0];
         if (!next) { release(); release = null; return null; }
-        let maxBatch;
-        try { maxBatch = promotionSettings(queue.project).max_batch ?? Infinity; }
-        catch (error) {
+        // An enqueue after the empty snapshot needs a settings read on the
+        // next iteration; never read Git while holding this transaction.
+        if (!policy) return { retry: true };
+        if (policy.error) {
+          const error = policy.error;
           // Persist before acknowledging startup or exiting. Pending requests
           // retain their order and can be retried after the settings are fixed.
-          data.refusal = { outcome: 'refused', code: error.code, reason: error.message,
+          data.refusal = { id: randomUUID(), outcome: 'refused', code: error.code, reason: error.message,
             pending: data.pending.map(job => job.id), at: new Date().toISOString() };
-          return { refusal: data.refusal };
+          return { refusal: data.refusal, recipient: next };
         }
         delete data.refusal;
         data.pending.shift();
@@ -317,7 +332,7 @@ export async function drain(queue) {
           // Different command/config inputs retain their independent gates.
           const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, job.workflow ?? false]);
           const jobs = [next];
-          while (jobs.length < maxBatch && data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
+          while (jobs.length < policy.maxBatch && data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
           const job = { id: randomUUID(), phase: 'batching', jobs };
           data.current = job;
           return { job, newlyDequeued: true };
@@ -328,8 +343,13 @@ export async function drain(queue) {
         // Freshness belongs only to this dequeue, never to queue.json.
         return { job, newlyDequeued: true };
       });
+      if (entry?.retry) continue;
       if (entry?.refusal) {
         if (!acknowledged) process.send?.({ ready: false, refusal: entry.refusal });
+        else {
+          const delivery = await deliver({ ...entry.recipient, id: entry.refusal.id }, entry.refusal, queue);
+          queue.transaction(data => { data.refusal = { ...entry.refusal, ...delivery }; });
+        }
         throw Object.assign(new Error(entry.refusal.reason), { code: entry.refusal.code });
       }
       // Ready means the queue checkpoint exists, including batch membership.

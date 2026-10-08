@@ -231,3 +231,12 @@ test('digest tolerates absent and incomplete journals, fails explicitly on malfo
   assert.match(f.fail(['digest']), /not an initialized record/);
   assert.equal(fs.existsSync(f.dir), false, 'digest never auto-initializes a record');
 });
+
+test('digest includes timeout promotion notices regardless of delivery state', t => {
+  const f = fixture(t);
+  f.notice('timeout', '[promote-queue] id=timed lane=gate outcome=timeout reason="gate no-output limit exceeded"');
+  f.journal({ type: 'sent', id: 'timeout', at: NOW });
+  const promotions = f.read().promotions;
+  assert.equal(promotions.length, 1); assert.equal(promotions[0].outcome, 'timeout');
+  assert.equal(promotions[0].reason, 'gate no-output limit exceeded');
+});

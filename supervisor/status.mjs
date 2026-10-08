@@ -116,7 +116,7 @@ export function supervisorStatus({ cwd = process.cwd(), org, herdr = 'herdr', ag
     const agent = reviewing ? reviewers[0] : worker;
     const session = agent && sessionFor(agent, reviewing ? reviewRoute : null);
     const inProgress = saved && saved.stage !== 'complete' && !saved.result;
-    const blocked = ['refused', 'interrupted'].includes(job?.outcome) ||
+    const blocked = ['refused', 'interrupted', 'timeout'].includes(job?.outcome) ||
       ['escalate', 'stopped'].includes(saved?.result?.result) ||
       (run.report && run.report.outcome !== 'done') || agent?.agent_status === 'blocked';
     const landed = job?.outcome === 'promoted';

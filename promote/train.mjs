@@ -286,7 +286,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     if (attempt.phase === 'timeout') {
       plan.groups.shift();
       const reason = attempt.gate.gate_timeout?.kind === 'idle' ? 'gate no-output limit exceeded' : 'gate wall-clock limit exceeded';
-      for (const job of attempt.jobs) result(job, { outcome: 'timeout', reason: `${reason}; lane isolated for correction`, gate: attempt.gate, batch: plan.id });
+      for (const job of attempt.jobs) result(job, { outcome: 'timeout', reason: `${reason}; ${attempt.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`, gate: attempt.gate, batch: plan.id });
       save(); return false;
     }
     if (attempt.phase === 'red') {

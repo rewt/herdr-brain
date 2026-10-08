@@ -468,3 +468,15 @@ test('result recovery preserves an interrupted claim until the actual result is 
   assert.match(f.exec(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--prune', '--role', 'supervisor']).stderr, /STOP/);
   assert.equal(f.exec(process.execPath, [path.join(ROOT, 'release/release.mjs'), '--prune', '--dry-run']).status, 0, 'STOP permits read-only inspection');
 });
+
+test('release watchdog honors wall settings declared only in canonical lane configuration', t => {
+  const f = fixture(t, { gate: ['node', 'gate.cjs'] });
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ validation: { timeout_seconds: { release: .3 }, idle_timeout_seconds: 0 } }));
+  fs.writeFileSync(path.join(f.repo, 'gate.cjs'), 'setInterval(()=>{},1000);');
+  f.git(['add', '.']); f.git(['commit', '-qm', 'Bound release gate in lane config']);
+  const result = f.attempt();
+  assert.equal(result.result, 'gate-failed');
+  const candidate = f.record(['releases', '--json']).candidates[0];
+  assert.equal(candidate.gate.exit_code, 124);
+  assert.match(fs.readFileSync(candidate.gate.log, 'utf8'), /GATE_TIMEOUT: wall limit 0.3s/);
+});

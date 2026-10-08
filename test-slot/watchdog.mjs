@@ -15,7 +15,7 @@ export function descendants(rows, root) {
   }
   return found;
 }
-export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(), rootIdentity, lookup = lookupProcess, signal = process.kill.bind(process) } = {}) {
+export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(), rootIdentity, ownsGroup = true, firstSignal = 'SIGTERM', lookup = lookupProcess, signal = process.kill.bind(process) } = {}) {
   const snapshot = lookup(undefined, { identityOnly: true });
   if (!snapshot.ok) throw Error(`cannot snapshot gate descendants: ${snapshot.error}`);
   // A reused group-leader PID proves the original group has disappeared.
@@ -23,7 +23,7 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
   if (rootIdentity && snapshot.value.get(pgid)?.identity && snapshot.value.get(pgid).identity !== rootIdentity) return;
   for (const [pid, row] of descendants(snapshot.value, pgid)) tracked.set(pid, row);
   // Include same-group orphans while the owned PGID still exists.
-  for (const row of snapshot.value.values()) if (row.pgid === pgid) tracked.set(row.pid, row);
+  for (const row of snapshot.value.values()) if (ownsGroup && row.pgid === pgid) tracked.set(row.pid, row);
   const live = () => {
     const rows = [];
     for (const saved of tracked.values()) {
@@ -36,10 +36,10 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
   const send = kind => {
     const rows = live();
     // A matching group member proves this is still the owned group.
-    if (rows.some(row => row.pgid === pgid)) {
+    if (ownsGroup && rows.some(row => row.pgid === pgid)) {
       try { signal(-pgid, kind); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     }
-    for (const row of rows.filter(row => row.pgid !== pgid)) {
+    for (const row of rows.filter(row => !ownsGroup || row.pgid !== pgid)) {
       // Confirm immediately before each individual signal (PID reuse safe).
       const now = lookup(row.pid, { identityOnly: true });
       if (!now.ok) throw Error(now.error);
@@ -47,11 +47,11 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
       try { signal(row.pid, kind); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     }
   };
-  send('SIGTERM');
+  send(firstSignal);
   const deadline = Date.now() + graceMs;
-  while ((probe(-pgid) !== false || live().length) && Date.now() < deadline) await sleep(25);
+  while (((ownsGroup && probe(-pgid) !== false) || live().length) && Date.now() < deadline) await sleep(25);
   send('SIGKILL');
   // Keep the slot until the kernel confirms both the group and escaped children
   // have gone. Unknown identity/probe state cannot authorize slot release.
-  while (probe(-pgid) !== false || live().length) await sleep(25);
+  while ((ownsGroup && probe(-pgid) !== false) || live().length) await sleep(25);
 }

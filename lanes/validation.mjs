@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs';
@@ -58,6 +59,22 @@ export function resolveValidation({ root, config = {}, source = 'lane config', s
       idleTimeoutSeconds: typeof declared.idle_timeout_seconds === 'object' ? declared.idle_timeout_seconds[tier] : declared.idle_timeout_seconds, source: env.LANE_VALIDATE !== undefined ? 'env' : declarationSources[tier] ?? (config.validate !== undefined ? sources.validate ?? source : 'default') };
   }
   return { tiers, promotion_tests: declared.promotion_tests, environment: declared.environment ?? '', environment_source: declarationSources.environment ?? 'default', file: fs.existsSync(file) ? file : null };
+}
+
+// Ask the lane CLI for its canonical, layered configuration. This keeps host
+// envelopes aligned with train settings (including LANE_CONFIG/fleet layers).
+export function canonicalValidation(root, env = process.env) {
+  const cli = fileURLToPath(new URL('./lane.mjs', import.meta.url));
+  const output = execFileSync(process.execPath, [cli, 'config'], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const rows = new Map(output.trim().split('\n').map(line => {
+    const [key, value] = line.split('\t');
+    return [key, JSON.parse(value)];
+  }));
+  return { tiers: Object.fromEntries(VALIDATION_TIERS.map(tier => [tier, {
+    command: rows.get(`validation.${tier}`),
+    timeoutSeconds: rows.get(`validation.${tier}.timeout_seconds`) ?? undefined,
+    idleTimeoutSeconds: rows.get(`validation.${tier}.idle_timeout_seconds`) ?? undefined,
+  }])) };
 }
 
 // Do not persist environment values (which may contain credentials). Hash all

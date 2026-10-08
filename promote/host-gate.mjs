@@ -10,7 +10,7 @@ import { writeFileAtomic } from '../lib/files.mjs';
 import { runTestSlotSync } from '../test-slot/run.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { resolveValidation } from '../lanes/validation.mjs';
+import { canonicalValidation } from '../lanes/validation.mjs';
 import { resolveGateLimits } from '../test-slot/limits.mjs';
 import { cliHelp } from '../lib/cli-help.mjs';
 cliHelp(import.meta.url, "Usage: node promote/host-gate.mjs [--lock|--held|--execute] CANONICAL RECEIPT [COMMAND ARGS...]");
@@ -86,8 +86,8 @@ async function execute(profile) {
   checkCompetingProcesses(profile);
   update({ phase: 'waiting-test-slot' });
   const common = gitProject(canonical).identity;
-  const declared = resolveValidation({ root: canonical }).tiers.promotion;
-  const limits = resolveGateLimits({ common, tier: 'promotion', timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
+  const declared = canonicalValidation(canonical, profile.env).tiers.promotion;
+  const limits = resolveGateLimits({ common, tier: 'promotion', command: ['/bin/sh', '-c', declared.command], timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
     idleTimeoutSeconds: profile.idleTimeoutSeconds ?? declared.idleTimeoutSeconds });
   // The lifecycle envelope includes preparation and bookkeeping. Give the
   // inner gate time to return its exact timeout receipt before this backstop.
@@ -95,7 +95,7 @@ async function execute(profile) {
     { cwd: canonical, env: profile.env, common, tier: 'promotion-host', timeoutSeconds: Math.max(600, 2 * limits.wall_seconds), idleTimeoutSeconds: 0, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });
   const saved = read();
   if (result.gateTimeout) update({ phase: 'timeout', finished_at: new Date().toISOString(), exit_code: 124, gate_timeout: result.gateTimeout,
-    reason: 'gate wall-clock limit exceeded; lane isolated for correction' });
+    reason: result.gateTimeout.kind === 'idle' ? 'gate no-output limit exceeded; lane isolated for correction' : 'gate wall-clock limit exceeded; lane isolated for correction' });
   if (!saved.command_started) {
     const slotReason = fs.existsSync(slotFile) ? JSON.parse(fs.readFileSync(slotFile, 'utf8')).reason : null;
     update({ phase: 'refused', finished_at: new Date().toISOString(), reason: saved.reason ?? slotReason ?? `TEST_SLOT_REFUSED: inspect ${slotFile}` });

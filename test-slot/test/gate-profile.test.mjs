@@ -210,3 +210,22 @@ test('malformed profiles and missing exact Node pins fail closed; effective decl
   fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ gate: f.gate }));
   fs.writeFileSync(path.join(f.repo, '.nvmrc'), '0.0.0'); assert.throws(() => resolveGateProfile(f.repo, f.env));
 });
+
+test('host envelope honors canonical lane-only limits and reports an idle timeout accurately', t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ validation: { timeout_seconds: { promotion: 5000 }, idle_timeout_seconds: { promotion: .2 } } }));
+  f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Canonical watchdog settings']);
+  const before = f.git(['rev-parse', 'main']);
+  f.env.LANE_VALIDATE = 'node -e "setInterval(()=>{},1000)"';
+  const result = f.run();
+  assert.equal(result.status, 124, result.stderr + result.stdout);
+  const saved = f.saved();
+  assert.equal(saved.phase, 'timeout'); assert.equal(saved.gate_timeout.kind, 'idle');
+  assert.match(saved.reason, /gate no-output limit exceeded/);
+  assert.doesNotMatch(saved.reason, /wall-clock/);
+  const train = JSON.parse(fs.readFileSync(f.receipt));
+  assert.equal(train.attempts[0].gate.limits.wall_seconds, 5000);
+  assert.equal(train.results.job.outcome, 'timeout');
+  assert.equal(f.git(['rev-parse', 'main']), before);
+  assert.equal(fs.existsSync(f.slot), false);
+});

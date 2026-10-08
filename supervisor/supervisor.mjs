@@ -168,7 +168,7 @@ export function main(argv = process.argv.slice(2)) {
       const outcome = completedJob(loadQueue(), jobs[0].id);
       if (!outcome) throw new Error('retry requires a confirmed refused queue job; pending or uncertain attempts need inspection');
       if (outcome.outcome === 'promoted') { print(saved); return; }
-      if (outcome.outcome !== 'refused' || outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw new Error('retry requires a confirmed refused queue job with the same binding; inspect evidence');
+      if (!['refused', 'timeout'].includes(outcome.outcome) || outcome.topic !== saved.lane || outcome.run !== saved.run || outcome.expectedHead !== saved.head || outcome.org !== saved.org) throw new Error('retry requires a confirmed refused queue job with the same binding; inspect evidence');
       const { prior_attempts, ...attempt } = saved;
       prior = [...(prior_attempts ?? []), { ...attempt, result: outcome }];
     }

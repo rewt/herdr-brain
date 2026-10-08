@@ -506,3 +506,20 @@ test('a disappeared checkout retains its open record run through a dispatch iden
   assert.match(renderColdStart(doc), /checkout missing; inspect record/);
   assert.equal(f.calls().length, 0);
 });
+
+test('supervisor retries a confirmed timeout with the same reviewed binding', { timeout: 25000 }, t => {
+  const f = fixture(t, { actor: 'supervisor-timeout-retry-test' }), run = f.start(); f.commit('correct\n'); f.report(run);
+  assert.equal(result(invoke(f, ['handle', run, '--role', 'supervisor'])).result, 'promotable');
+  const h = promotionHarness(f, run), first = result(h.promote());
+  h.queue.transaction(q => {
+    const job = q.pending.shift();
+    q.results.push({ ...job, outcome: 'timeout', reason: 'gate wall-clock limit exceeded; lane isolated for correction' });
+  });
+  const head = h.queue.load().results[0].expectedHead;
+  h.queue.transaction(q => { q.results[0].expectedHead = '0'.repeat(40); });
+  assert.match(h.promote(['--retry']).stderr, /same binding/);
+  h.queue.transaction(q => { q.results[0].expectedHead = head; });
+  const retried = result(h.promote(['--retry']));
+  assert.notEqual(retried.queue.jobs[0].id, first.queue.jobs[0].id);
+  assert.equal(retried.prior_attempts[0].result.outcome, 'timeout');
+});

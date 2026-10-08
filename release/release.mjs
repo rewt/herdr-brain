@@ -11,7 +11,7 @@ import { findOrgDir, writeFileAtomic } from '../lib/store.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { releaseSettings, releaseArgv } from './config.mjs';
 import { runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
-import { resolveValidation } from '../lanes/validation.mjs';
+import { canonicalValidation } from '../lanes/validation.mjs';
 import { resolveGateLimits } from '../test-slot/limits.mjs';
 import { readMemory, memoryReason } from '../lib/memory.mjs';
 import { pruneSnapshots } from './retention.mjs';
@@ -55,8 +55,8 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
   // Own the slot before cutting or claiming a candidate. A busy host leaves no
   // once-only gate claim behind. The worker repeats all canonical-role checks.
   if (!slotHeld) {
-    const declared = resolveValidation({ root: project.canonical }).tiers.release;
-    const limits = resolveGateLimits({ common: project.identity, tier: 'release', ...declared });
+    const declared = canonicalValidation(project.canonical, env).tiers.release;
+    const limits = resolveGateLimits({ common: project.identity, tier: 'release', ...declared, command: ['/bin/sh', '-c', declared.command] });
     const result = runTestSlotSync(`release ${project.canonical}`, [process.execPath, SELF, '--held-once', JSON.stringify({ cwd: project.canonical, org: org ? path.resolve(org) : undefined, role, tag, measurement })],
       { cwd: project.canonical, env, common: project.identity, tier: 'release-host', timeoutSeconds: Math.max(600, 2 * limits.wall_seconds), idleTimeoutSeconds: 0, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, retryTimeout: false });
     if (result.status === REFUSED_EXIT && result.attempts === undefined) return { result: 'deferred', exit_code: REFUSED_EXIT, reason: result.stderr.trim() };
@@ -146,7 +146,7 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
         if (git(project.canonical, ['rev-parse', `refs/tags/${tag}^{commit}`]) !== commit) throw new Error('candidate tag moved before release command');
         const fd = fs.openSync(log, 'a');
         let r;
-        const watchdog = resolveValidation({ root: snapshot }).tiers.release;
+        const watchdog = canonicalValidation(project.canonical, recordEnv).tiers.release;
         try { r = runTestSlotSync(`release ${stage} ${candidate.id}`, command, { cwd: snapshot, common: project.identity, tier: stage === 'gate' ? 'release' : 'release-prepare', timeoutSeconds: watchdog.timeoutSeconds, idleTimeoutSeconds: watchdog.idleTimeoutSeconds, env: { ...recordEnv, ...extra }, stdio: ['ignore', fd, fd], retryTimeout: stage === 'gate' }); }
         finally { fs.closeSync(fd); }
         gate.exit_code = r.status; gate.signal = r.signal;

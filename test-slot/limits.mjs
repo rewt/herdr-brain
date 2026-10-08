@@ -21,19 +21,20 @@ export function projectCommon(cwd = process.cwd()) {
   try { return fs.realpathSync(execFileSync('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()); }
   catch { return null; }
 }
-export function historyFile(common, tier) {
-  return common && path.join(common, 'gate-watchdog', `${createHash('sha256').update(tier).digest('hex')}.json`);
+export const commandFingerprint = command => createHash('sha256').update(JSON.stringify(command ?? null)).digest('hex');
+export function historyFile(common, tier, command) {
+  return common && path.join(common, 'gate-watchdog', `${createHash('sha256').update(JSON.stringify([tier, commandFingerprint(command)])).digest('hex')}.json`);
 }
-export function healthyHistory(common, tier, file = historyFile(common, tier)) {
+export function healthyHistory(common, tier, command, file = historyFile(common, tier, command)) {
   try {
     const history = JSON.parse(readPlainFile(file));
-    if (history.schema !== 'gate-watchdog/v1' || history.tier !== tier || !Array.isArray(history.runs)) return [];
+    if (history.schema !== 'gate-watchdog/v1' || history.tier !== tier || history.command_fingerprint !== commandFingerprint(command) || !Array.isArray(history.runs)) return [];
     return history.runs.filter(run => Number.isFinite(run.duration_s) && run.duration_s >= 0 &&
       Number.isFinite(run.longest_silence_s) && run.longest_silence_s >= 0 && run.longest_silence_s <= run.duration_s &&
       Number.isFinite(Date.parse(run.finished_at))).slice(-RECENT_RUNS);
   } catch { return []; }
 }
-export function resolveGateLimits({ common, tier = 'gate', timeoutSeconds, idleTimeoutSeconds, history = healthyHistory(common, tier) } = {}) {
+export function resolveGateLimits({ common, tier = 'gate', command, timeoutSeconds, idleTimeoutSeconds, history = healthyHistory(common, tier, command) } = {}) {
   if (timeoutSeconds !== undefined) limitSeconds(timeoutSeconds, 'timeout_seconds');
   if (idleTimeoutSeconds !== undefined) limitSeconds(idleTimeoutSeconds, 'idle_timeout_seconds', { idle: true });
   return {
@@ -43,12 +44,12 @@ export function resolveGateLimits({ common, tier = 'gate', timeoutSeconds, idleT
     idle_source: idleTimeoutSeconds !== undefined ? 'config' : history.length ? 'history' : 'off',
   };
 }
-export function recordHealthyGate({ common, tier = 'gate', command, duration_s, longest_silence_s, file = historyFile(common, tier) }) {
+export function recordHealthyGate({ common, tier = 'gate', command, duration_s, longest_silence_s, file = historyFile(common, tier, command) }) {
   if (!file) return;
   plainDirectory(path.dirname(file));
   const release = acquireLock(`${file}.lock`, { waitMs: 1000 });
   try {
-    writeFileAtomic(file, JSON.stringify({ schema: 'gate-watchdog/v1', tier,
-      runs: [...healthyHistory(common, tier, file), { command, duration_s, longest_silence_s, finished_at: new Date().toISOString() }].slice(-RECENT_RUNS) }, null, 2) + '\n', 0o600);
+    writeFileAtomic(file, JSON.stringify({ schema: 'gate-watchdog/v1', tier, command_fingerprint: commandFingerprint(command),
+      runs: [...healthyHistory(common, tier, command, file), { command, duration_s, longest_silence_s, finished_at: new Date().toISOString() }].slice(-RECENT_RUNS) }, null, 2) + '\n', 0o600);
   } finally { release(); }
 }

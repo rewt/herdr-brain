@@ -67,12 +67,19 @@ Linux converts legacy timestamps from `/proc/stat` and non-setuid
 before a new slot creates its lock. A new holder
 executes the command in its own process group and forwards INT, TERM and HUP.
 After a killed wrapper, a live command group still blocks takeover. A command
-leaving background group members retains the lock and cannot report success.
+leaving background group members gets a one-second grace, then its remaining owned
+processes are stopped. The slot is released after confirmed cleanup and the wrapper
+exits **123** with `GATE_LEFTOVER_GROUP:`, a failure distinct from a gate timeout.
 Known-stale removals serialize through a `.takeover` guard and recheck the exact
 record. Unknown records and abandoned takeover guards stay in place. Nested
 commands inherit Monitor and bch-cloak tokens, or recognize a live holder through
 ancestry/group membership; they neither wait for themselves nor release the
-outer slot. Detached nested groups are registered in the holder record, so they still protect an orphaned slot; group-registration updates serialize through a guard that is never removed by age. A stale inherited token cannot authorize nesting.
+outer slot. Nested commands remain in the holder command group: legacy bch-cloak readers
+check only the holder PID and PGID, so separate nested groups would allow overlap
+after wrapper death. Nested watchdogs stop only identity-confirmed descendants
+via the parent walk, never signal the shared group. Group-registration guards
+record their owner PID and birth identity; only a confirmed dead owner permits
+recovery, with a coded diagnostic naming the guard path. Age never permits recovery. A stale inherited token cannot authorize nesting.
 
 The lane promotion adapter holds the slot with timeout retry disabled, so it
 never replays a command chain, including when a leaf declines to retry. Leaf
@@ -109,7 +116,9 @@ to its owned command group, waits one second, then sends KILL. A kernel snapshot
 before signalling walks the command's parent chain to include descendants that
 created separate groups; each such PID is confirmed against its kernel birth
 identity immediately before signalling. It waits for the group and those
-children to disappear before releasing the slot, and exits **124**. Unrelated
+children to disappear before releasing the slot, and exits **124**. Descendants
+double-forked to init before observation are outside the parent walk; ENG-275
+provides the reclaim backstop for that accepted boundary. Unrelated
 processes receive no signal. Identity failures retain the lock.
 
 Set `validation.timeout_seconds` in canonical lane configuration or
@@ -122,8 +131,8 @@ its label as the tier. Fast and other non-slot validation tiers use the same pro
 
 Without an explicit limit, successful command durations in
 `GIT_COMMON_DIR/gate-watchdog/` supply twice the maximum of the last 20 healthy
-runs for that project and tier, with a **600-second floor**. That floor leaves
-headroom for cold builds and load variation in narrow gates. Without history,
+runs for that project, tier and exact command fingerprint, with a **600-second floor**. That floor leaves
+headroom for cold builds and load variation in narrow gates. Without matching command history (including older tier-only records),
 the **4500-second (75-minute) default** bounds unfamiliar full gates
 conservatively. The measured full gates of 31m05s, 31m40s, 30m55s, 30m53s,
 34m27s and 35m58s give **71m56s (about 72 minutes)**; their slot waits are never
@@ -143,7 +152,9 @@ the longest recorded silence, with a **300-second floor**. With no history it is
 
 Wall and idle overruns, including a nested gate's timeout marker, never spend
 the timeout-under-load retry. Lane promotion exits 124 and keeps the lane for a
-fix round. The merge train records `timeout`, isolates all lanes in the timed-out
-candidate for correction without bisection or replay, and leaves main unchanged.
+fix round. The merge train records `timeout` and isolates singleton candidates
+for correction. Multi-lane timeouts report a batch timeout and permit plain
+re-enqueue individually, without blaming each lane. Nothing replays automatically
+and main stays unchanged.
 The timeout receipt distinguishes this from ordinary test failures and a slot
 wait refusal. Tests use scratch slot paths and never take the real host slot.

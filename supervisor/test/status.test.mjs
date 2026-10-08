@@ -197,3 +197,11 @@ test('a blocked report with no live session keeps its completed duration instead
   assert.equal(get(1).stage, 'blocked');
   assert.equal(get(1).running_seconds, get(57).running_seconds);
 });
+
+test('a timed-out queue job displays blocked correction work rather than the train', t => {
+  const f = fixture(t), run = f.start(), project = gitProject(f.repo);
+  const directory = path.join(project.identity, 'promote'); fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, 'queue.json'), JSON.stringify({ identity: project.identity, pending: [], current: null,
+    results: [{ id: 'timeout', run, org: f.org, outcome: 'timeout', reason: 'gate wall-clock limit exceeded; lane isolated for correction' }] }));
+  assert.equal(supervisorStatus({ cwd: f.repo, org: f.org, agents: [] }).lanes[0].stage, 'blocked');
+});

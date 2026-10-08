@@ -462,6 +462,10 @@ function config() {
     ["worktree_root", WORKTREE_ROOT, WORKTREE_ROOT_SOURCE],
     ...VALIDATION_TIERS.map(tier => [`validation.${tier}`, validation.tiers[tier].command, validation.tiers[tier].source]),
     ['validation.environment', validation.environment, validation.environment_source],
+    ...VALIDATION_TIERS.flatMap(tier => [
+      [`validation.${tier}.timeout_seconds`, validation.tiers[tier].timeoutSeconds ?? null, 'resolved'],
+      [`validation.${tier}.idle_timeout_seconds`, validation.tiers[tier].idleTimeoutSeconds ?? null, 'resolved'],
+    ]),
   ];
   for (const name of routeNames()) {
     rows.push([`routes.${name}`, configuredRoutes()[name], ROUTE_SOURCES.get(name)]);

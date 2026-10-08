@@ -2683,18 +2683,22 @@ switch (command) {
       if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
       const refuse = error => {
         if (!['PROMOTION_STOPPED', 'PROMOTION_MEMORY_PRESSURE'].includes(error.code)) throw error;
+        // A resumed train must reconcile its integration checkpoint and apply
+        // its own STOP guards. Never replace that receipt with a fresh refusal.
+        if (error.code === 'PROMOTION_STOPPED' && JSON.parse(readFileSync(resolve(topic), 'utf8')).attempts?.length) return false;
         refuseBeforeTrain({ file: resolve(topic), identity: REPO_IDENTITY, error });
         process.stderr.write(error.message + '\n');
+        return true;
       };
       // A profiled batch already owns the external lock and slot here. Its
       // untimed initial wait belongs to the host adapter, before either lock.
       if (!profile) {
         try { waitForPromotionMemory(root); }
-        catch (error) { refuse(error); break; }
+        catch (error) { if (refuse(error)) break; }
       }
       await withPromotionLock(() => {
         try { waitForPromotionMemory(root, { held: true }); }
-        catch (error) { refuse(error); return; }
+        catch (error) { if (refuse(error)) return; }
         return runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
           main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings(),
           workflow: rest.includes('--workflow') || process.env.PROMOTE_WORKFLOW_ENGINE === '1' });

@@ -38,6 +38,7 @@ export function permissionDecision(event, { kind, project, runTemp, deadline, ti
     // Classify the resolved destination too: a harmless-looking symlink must
     // never conceal a key/credential file inside the project.
     if (/(?:^|\/)(?:\.ssh|\.aws)\/|(?:^|\/)(?:\.env(?:\.[^/]*)?|id_(?:rsa|dsa|ecdsa|ed25519)[^/]*|[^/]+\.(?:pem|key|keychain|keychain-db)|keychain\.(?:db|sqlite|sqlite3)|wallet\.dat)$/i.test(file)) return deny('Credentials target', 'security', true);
+    if (/(?:^|[._ -])(?:credentials?|secrets?|seed[ _-]?phrases?)(?=[._ -]|$)/i.test(path.basename(file)) && /\.(?:json|yaml|yml|toml|txt|p12|pfx|jks|keystore)$/i.test(file)) return deny('Credentials target', 'security', true);
     for (const peer of project.peers ?? []) for (const root of [peer.checkout, peer.record, peer.worktrees, peer.temp]) {
       if (fs.existsSync(root) && within(fs.realpathSync(root), file)) return deny('Read target belongs to another fleet project');
     }

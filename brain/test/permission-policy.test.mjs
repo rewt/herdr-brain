@@ -76,7 +76,7 @@ test('never-list requests decline with an operator nudge and alert, including cr
 
 test('project Read paths with action words allow without an alert, while credential targets deny', async t => {
   const f = fixture(t), alerts = [];
-  for (const name of ['release-report.md', 'push.md', 'deploy.md', 'publish.md', 'trust-brief.md', 'transfer.md', 'config.toml', 'hooks.json', 'wallet-guide.md', 'credentials.ts', 'secrets.md', 'private-key-guide.md', 'keychain-guide.md', 'packages/app/src/wallet.tsx', 'tools/wallet.mjs']) {
+  for (const name of ['release-report.md', 'push.md', 'deploy.md', 'publish.md', 'trust-brief.md', 'transfer.md', 'config.toml', 'hooks.json', 'wallet-guide.md', 'credentials.ts', 'secrets.md', 'seed-phrase.md', 'private-key-guide.md', 'keychain-guide.md', 'packages/app/src/wallet.tsx', 'tools/wallet.mjs']) {
     fs.mkdirSync(path.dirname(path.join(f.own.checkout, name)), { recursive: true });
     const event = f.event(f.file(f.own.checkout, name));
     const decision = decide(f, event);
@@ -87,12 +87,15 @@ test('project Read paths with action words allow without an alert, while credent
     await result.notify?.();
   }
   assert.deepEqual(alerts, []);
-  for (const name of ['.env', '.env.local', 'id_ed25519', 'id_rsa.backup', 'private-key.pem', 'server.key', 'keychain.db', 'login.keychain-db', 'wallet.dat', '.ssh/config', '.aws/credentials']) {
+  for (const name of ['.env', '.env.local', 'id_ed25519', 'id_rsa.backup', 'private-key.pem', 'server.key', 'keychain.db', 'login.keychain-db', 'wallet.dat', '.ssh/config', '.aws/credentials', 'credentials.json', 'seed-phrase.txt', 'app.credentials.yaml', 'secret.yml', 'prod-secrets.toml', 'credential.p12', 'credentials.pfx', 'secret.jks', 'seed_phrase.keystore']) {
     fs.mkdirSync(path.dirname(path.join(f.own.checkout, name)), { recursive: true });
     const decision = decide(f, f.event(f.file(f.own.checkout, name)));
     assert.equal(decision.behavior, 'deny', name);
     assert.equal(decision.alert, true, name);
   }
+  const alias = path.join(f.own.checkout, 'ordinary.json');
+  fs.symlinkSync(path.join(f.own.checkout, 'credentials.json'), alias);
+  assert.equal(decide(f, f.event(alias)).alert, true, 'resolved credential data aliases alert');
 });
 
 test('concurrent permission audits wait for the live holder and preserve both approvals', async t => {
@@ -192,10 +195,13 @@ test('alerting command hook exits without waiting for a channel that never retur
   const auditFile = path.join(f.env.BRAIN_STATE, 'steward/permissions.json');
   fs.writeFileSync(channel, `import fs from 'node:fs';
 const audit = JSON.parse(fs.readFileSync(${JSON.stringify(auditFile)}));
-fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ pid: process.pid, payload: JSON.parse(process.argv[2]), audit }));
+fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ pid: process.pid, parent: process.ppid, payload: JSON.parse(process.argv[2]), audit }));
 process.on('SIGTERM', () => {});
 setInterval(() => {}, 1000);`);
-  t.after(() => { if (fs.existsSync(marker)) { try { process.kill(JSON.parse(fs.readFileSync(marker)).pid, 'SIGKILL'); } catch {} } });
+  let alertProcesses = [];
+  // The fixture's earlier teardown removes scratch before this callback runs.
+  // Retain the owned PIDs in memory so a hanging channel cannot survive it.
+  t.after(() => { for (const pid of alertProcesses) { try { process.kill(pid, 'SIGKILL'); } catch {} } });
   fs.writeFileSync(path.join(f.env.BRAIN_STATE, 'steward.json'), JSON.stringify({ alert_command: [process.execPath, channel] }));
   // Shell metacharacters remain literal in the detached argv payload.
   const binding = { ...f.binding, session: 'worker $(false) `false` "quoted"' };
@@ -216,6 +222,7 @@ setInterval(() => {}, 1000);`);
   while (!fs.existsSync(marker) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 25));
   assert.ok(fs.existsSync(marker), 'detached alert starts');
   const started = JSON.parse(fs.readFileSync(marker));
+  alertProcesses = [started.pid, started.parent];
   assert.deepEqual(started.payload, { project: 'own', session: binding.session, kind: 'Publishing request' });
   assert.equal(started.audit.events.length, 1);
   assert.equal(started.audit.events[0].alert_intent, true);
@@ -267,6 +274,41 @@ test('absolute watchdog denies even when decision dependencies block their event
   assert.match(result.stderr, /deadline reached/);
 });
 
+for (const alerting of [true, false]) test(`deadline after durable audit ${alerting ? 'keeps the detached alert' : 'never records an ungranted approval'}`, async t => {
+  const f = fixture(t), auditFile = path.join(f.env.BRAIN_STATE, 'steward/permissions.json');
+  const marker = path.join(f.scratch, 'alert.json'), channel = path.join(f.scratch, 'alert.mjs');
+  fs.writeFileSync(channel, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, fs.readFileSync(${JSON.stringify(auditFile)}));`);
+  fs.writeFileSync(path.join(f.env.BRAIN_STATE, 'steward.json'), JSON.stringify({ alert_command: [process.execPath, channel] }));
+  const blocker = path.join(f.scratch, 'after-audit.mjs');
+  fs.writeFileSync(blocker, `import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module';
+const rmdir = fs.rmdirSync;
+fs.rmdirSync = function(file, ...args) {
+  if (process.argv.includes('--decision') && file === ${JSON.stringify(`${auditFile}.lock`)})
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 12000);
+  return rmdir.call(this, file, ...args);
+}; syncBuiltinESMExports();`);
+  const event = alerting ? { ...f.event('ignored'), tool_name: 'Bash', tool_input: { command: 'git push' } } : f.event(f.file(f.own.checkout));
+  const result = spawnSync(process.execPath, [path.join(root, 'supervisor/permission-hook.mjs')], {
+    env: { ...f.env, NODE_OPTIONS: `--import=${new URL(`file://${blocker}`).href}`, MONITOR_PERMISSION_BINDING: JSON.stringify(f.binding) },
+    input: JSON.stringify(event), encoding: 'utf8', timeout: 11000,
+  });
+  assert.equal(result.status, 2, result.stderr);
+  assert.equal(JSON.parse(result.stdout).hookSpecificOutput.decision.behavior, 'deny');
+  const audit = JSON.parse(fs.readFileSync(auditFile));
+  assert.ok(audit.events.every(event => event.behavior !== 'allow'), 'a watchdog denial cannot leave an approval receipt');
+  assert.equal(audit.events[0].behavior, alerting ? 'deny' : 'pending');
+  assert.equal(Object.values(audit.sessions)[0].approvals, 0);
+  assert.equal(Object.values(audit.sessions)[0].reservations, alerting ? 0 : 1);
+  if (alerting) {
+    const until = Date.now() + 3000;
+    while (!fs.existsSync(marker) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 25));
+    assert.ok(fs.existsSync(marker), 'alert survives the killed decision worker');
+    const receipt = JSON.parse(fs.readFileSync(marker));
+    assert.equal(receipt.events[0].alert_intent, true);
+    assert.equal(Object.values(Object.values(receipt.sessions)[0].alerts)[0], 1);
+  } else assert.equal(fs.existsSync(marker), false);
+});
+
 test('permission Git subprocesses time out and deny rather than consuming the hook deadline', t => {
   const f = fixture(t), bin = path.join(f.scratch, 'bin'); fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}\nprocess.on('SIGTERM', () => {}); setInterval(() => {}, 1000);`, { mode: 0o755 });
@@ -295,6 +337,7 @@ test('launch hooks stay per-session, retain other hooks and never bypass Codex h
   const allowed = invoke();
   assert.equal(allowed.status, 0, allowed.stderr);
   assert.equal(JSON.parse(allowed.stdout).hookSpecificOutput.decision.behavior, 'allow');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.env.BRAIN_STATE, 'steward/permissions.json'))).events[0].behavior, 'allow', 'emitted allow is confirmed in the audit');
   launch.close();
   const closed = invoke();
   assert.equal(closed.status, 0, closed.stderr);

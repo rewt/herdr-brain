@@ -12,6 +12,7 @@ import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
 import { coordinatingRole, herdrControlSocket, socketProbeArguments } from './control-socket.mjs';
 import { resolveNative } from './native-binary.mjs';
+import { permissionHookArguments } from '../supervisor/permission-hooks.mjs';
 
 // Read-only preflight shared with default chat selection. Do this before a
 // launcher creates a tab or temporary run, and never rewrite native settings.
@@ -195,6 +196,11 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       return { binary, args, env: environment, close };
     }
     const writable = [...new Set([context.org, context.requests, temporary, ...(coordinating ? [context.worktrees] : []), ...extra].filter(Boolean).map(checkedDirectory))];
+    const permission = permissionHookArguments(kind, context, fileURLToPath(new URL('../', import.meta.url)), temporary, environment);
+    Object.assign(environment, permission.env);
+    // Claude folds this into the same settings object as the question and entry
+    // hooks below; Codex keeps distinct event keys in its native config.
+    args = [...args, ...permission.args];
     if (kind === 'codex') {
       if (args.some(arg => ['--remote', '--worktree'].includes(arg) || /^(--remote=|--worktree=)/u.test(arg))) throw new Error('native sandbox launch cannot use a remote server or different worktree');
       // Folder trust is independent of the tool sandbox. Linked worktrees use
@@ -209,7 +215,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
       args = [...args, ...trustArgs];
       if (choice && !coordinating) {
         warn(`monitor sandbox: WARNING: ${choice.setting}=${JSON.stringify(choice.value)} from ${choice.source} selects the operator's native policy instead of generated project confinement`);
-        return { binary, args: [...requestedArgs, ...trustArgs], env: environment, close };
+        return { binary, args: [...requestedArgs, ...permission.args, ...trustArgs], env: environment, close };
       }
       const provider = preflight?.provider ?? spawnSync(binary, ['sandbox', '--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
       if (provider.status === 0 && /--permission-profile\b/u.test(provider.stdout)) {

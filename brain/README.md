@@ -224,14 +224,20 @@ are also denied: recursive traversal is not proof of resolved containment.
 Action keywords classify non-read tool inputs; reading a project release report
 or trust brief does not itself publish or expand permissions. Resolved credential
 files include `.ssh/` and `.aws/` contents, dot-env files, keychain databases,
-private-key files and `wallet.dat`; ordinary wallet source files are safe reads.
+private-key files and `wallet.dat`. Credential-, secret- and seed-phrase-named
+files with json, yaml, yml, toml, txt, p12, pfx, jks or keystore extensions also
+deny with an alert. Source and documentation names, including wallet sources,
+remain safe reads.
 
 The denied session receives: do not work around the denial, record the question
 under its work item with `record ask` and the action category, continue other
 work, and wait for operator authorization before any later retry. **The session
 owns recording the question via the CLI.** Brain never appends `events.jsonl`.
 Local action audit is in `$BRAIN_STATE/steward/permissions.json`: fsynced before
-responding, at most 512 decision receipts and 128 launch circuit counters. It
+responding, at most 512 decision receipts and 128 launch circuit counters. An
+allow reserves circuit capacity with a pending receipt; only the watchdog's
+acknowledgement of emitted allow output confirms that receipt as an approval.
+An interrupted confirmation leaves a conservative pending reservation. The audit
 stores request fingerprints and policy reasons, without copying raw requests.
 Approvals stop after three identical requests or 32 approvals per launch.
 Denied requests still clear the dialog when the circuit is open. Never-list
@@ -243,9 +249,10 @@ The hook has one unscaled eight-second decision deadline, enforced by a parent
 watchdog even if decision work blocks its event loop. Each Git call has a
 one-second timeout within that deadline. Concurrent audit writers wait up to two
 unscaled seconds for the lock; dead-owner recovery shares the same deadline.
-After writing the decision, the hook starts an argv-only detached alert child
-with ignored stdio and exits without waiting for delivery. Its cap/debounce
-receipt is already durable; alert failure cannot change or repeat the decision.
+The decision worker starts an argv-only detached alert child with ignored stdio
+as soon as the denial's cap/debounce receipt is durable, before releasing the
+audit lock or returning the decision. Delivery proceeds if the watchdog later
+kills the worker; alert failure cannot change or repeat the denial.
 Deadline exhaustion emits the emergency denial and exits 2 with the nudge.
 Missing or malformed launch bindings are audited denials. If checkout modules
 cannot load or the hook encounters an uncaught failure, its dependency-free

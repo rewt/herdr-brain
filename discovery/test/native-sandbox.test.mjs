@@ -12,6 +12,7 @@ import { nativeSandboxLaunch, nativeSession } from '../native-sandbox.mjs';
 import { toml } from '../confinement.mjs';
 import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
 import { unattendedHookArguments } from '../../supervisor/unattended.mjs';
+import { sessionHookArguments } from '../../supervisor/session-hooks.mjs';
 import { fileURLToPath } from 'node:url';
 
 const projectTrust = directories => `projects=${toml(Object.fromEntries([...new Set(directories)].map(directory => [directory, { trust_level: 'trusted' }])))}`;
@@ -73,19 +74,50 @@ test('native question guard merges with supplied Claude hooks and lane guards an
     const launch = nativeSandboxLaunch({ kind, binary: f.binary, args: [...(kind === 'claude' ? ['--settings', file] : []), ...guard], context: f.context });
     t.after(launch.close);
     if (kind === 'claude') {
+      assert.equal(launch.args.filter(arg => arg === '--settings').length, 1);
       const merged = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1]));
       assert.deepEqual(merged.hooks.PreToolUse[0], settings.hooks.PreToolUse[0]);
       assert.deepEqual(merged.hooks.SessionStart, settings.hooks.SessionStart);
       assert.equal(merged.hooks.PreToolUse.filter(g => g.matcher.includes('AskUserQuestion')).length, 1);
       assert.ok(merged.hooks.PreToolUse.some(g => g.matcher.includes('NotebookEdit')));
       assert.match(merged.hooks.PreToolUse[1].hooks[0].command, /'conversation'/);
+      assert.match(merged.hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
     } else {
       assert.ok(launch.args.includes(guard[1]));
       assert.match(guard[1], /request_user_input/);
+      assert.ok(launch.args.some(arg => arg.startsWith('hooks.PermissionRequest=')));
     }
   }
   assert.deepEqual(JSON.parse(fs.readFileSync(file)), settings);
   for (const directory of ['.claude', '.codex']) assert.ok(!fs.existsSync(path.join(f.own.checkout, directory)), 'no persistent settings created');
+});
+
+for (const projectHook of [false, true]) test(`main launches compose question and permission hooks with ${projectHook ? 'project' : 'adapter'} entry hooks`, t => {
+  const f = fixture(t), root = fileURLToPath(new URL('../../', import.meta.url));
+  const context = { ...f.context, role: 'supervisor' };
+  for (const kind of ['claude', 'codex']) {
+    if (projectHook) {
+      const directory = path.join(f.own.checkout, kind === 'claude' ? '.claude' : '.codex');
+      fs.mkdirSync(directory);
+      fs.writeFileSync(path.join(directory, kind === 'claude' ? 'settings.json' : 'hooks.json'), JSON.stringify({ hooks: {
+        SessionStart: [{ hooks: [{ type: 'command', command: 'node supervisor/session-start.mjs' }] }],
+      } }));
+    }
+    const args = sessionHookArguments(kind, context, root, { MONITOR_SESSION_KIND: 'combined' });
+    const launch = nativeSandboxLaunch({ kind, binary: f.binary, args, context });
+    t.after(launch.close);
+    if (kind === 'claude') {
+      assert.equal(launch.args.filter(arg => arg === '--settings').length, 1);
+      const hooks = JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings') + 1])).hooks;
+      assert.match(hooks.PreToolUse[0].hooks[0].command, /unattended\.mjs/);
+      assert.match(hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
+      assert.equal(Boolean(hooks.SessionStart), !projectHook, 'project hook stays in its native settings scope');
+    } else {
+      assert.equal(launch.args.filter(arg => arg.startsWith('hooks.PreToolUse=')).length, 1);
+      assert.equal(launch.args.filter(arg => arg.startsWith('hooks.PermissionRequest=')).length, 1);
+      assert.equal(launch.args.some(arg => arg.startsWith('hooks.SessionStart=')), !projectHook);
+    }
+  }
 });
 
 test('headless tasks and resumes get a sandbox even when prompt text names a utility', () => {
@@ -95,7 +127,7 @@ test('headless tasks and resumes get a sandbox even when prompt text names a uti
   assert.equal(nativeSession('claude', ['--print', 'auth']), true);
 });
 
-for (const kind of ['claude', 'codex']) test(`${kind} interactive resume adds only the question guard with inherited supervisor role`, t => {
+for (const kind of ['claude', 'codex']) test(`${kind} interactive resume composes question and permission hooks with inherited supervisor role`, t => {
   const f = fixture(t); fixtureFleet(t, f.root);
   command('git', ['init', '-qb', 'main'], f.own.checkout);
   command('git', ['config', 'user.name', 'Resume test'], f.own.checkout);
@@ -122,7 +154,11 @@ settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexO
     : got.args.find(arg => arg.startsWith('hooks.PreToolUse='));
   assert.match(guard, /unattended\.mjs/); assert.match(guard, /'conversation'/);
   assert.doesNotMatch(got.args.join(' '), /session-start\.mjs|SessionStart/);
-  if (kind === 'claude') assert.equal(got.settings.hooks.SessionStart, undefined);
+  if (kind === 'claude') {
+    assert.equal(got.args.filter(arg => arg === '--settings').length, 1);
+    assert.equal(got.settings.hooks.SessionStart, undefined);
+    assert.match(got.settings.hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
+  } else assert.ok(got.args.some(arg => arg.startsWith('hooks.PermissionRequest=')));
 });
 
 test('each run gets short private fleet temp and all three temp variables', t => {
@@ -762,9 +798,14 @@ fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,cwd:process.cwd
     assert.equal(got.temp, got.tmp); assert.equal(got.tmp, got.temp2); assert.equal(got.socket, '/fake/herdr.sock');
     assert.ok(!fs.existsSync(got.temp), 'finished run temp is removed');
     if (kind === 'codex') {
+      assert.ok(got.args.some(arg => arg.startsWith('hooks.PreToolUse=')));
+      assert.ok(got.args.some(arg => arg.startsWith('hooks.PermissionRequest=')));
       assert.deepEqual(got.args.filter(arg => arg.startsWith('projects=')), [projectTrust([f.own.checkout, repo])]);
       assert.ok(!got.args.includes('default_permissions="monitor-worker"'));
     } else {
+      assert.equal(got.args.filter(arg => arg === '--settings').length, 1);
+      assert.match(got.settings.hooks.PreToolUse.find(group => group.matcher.includes('AskUserQuestion')).hooks[0].command, /unattended\.mjs/);
+      assert.match(got.settings.hooks.PermissionRequest[0].hooks[0].command, /permission-hook\.mjs/);
       assert.equal(got.settings.sandbox.enabled, true);
       const expected = [fleet.project.worktrees, fleet.project.record, got.temp];
       assert.deepEqual(got.args.filter((_, i) => got.args[i - 1] === '--add-dir'), [got.temp]);

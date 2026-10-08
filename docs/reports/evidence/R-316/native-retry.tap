@@ -1,0 +1,150 @@
+TAP version 13
+# Subtest: SIGINT drains an active workspace and recovers its lost reply
+ok 1 - SIGINT drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 673.659875
+  ...
+# Subtest: SIGINT drains an active create-cwd and recovers its lost reply
+ok 2 - SIGINT drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 644.168292
+  ...
+# Subtest: SIGINT drains an active open-cwd and recovers its lost reply
+ok 3 - SIGINT drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 676.508208
+  ...
+# Subtest: SIGINT drains an active create-workspace and recovers its lost reply
+ok 4 - SIGINT drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 622.670708
+  ...
+# Subtest: SIGINT drains an active open-workspace and recovers its lost reply
+ok 5 - SIGINT drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 622.870084
+  ...
+# Subtest: SIGTERM drains an active workspace and recovers its lost reply
+ok 6 - SIGTERM drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 584.210625
+  ...
+# Subtest: SIGTERM drains an active create-cwd and recovers its lost reply
+ok 7 - SIGTERM drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 653.904042
+  ...
+# Subtest: SIGTERM drains an active open-cwd and recovers its lost reply
+ok 8 - SIGTERM drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 648.671459
+  ...
+# Subtest: SIGTERM drains an active create-workspace and recovers its lost reply
+ok 9 - SIGTERM drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 622.520625
+  ...
+# Subtest: SIGTERM drains an active open-workspace and recovers its lost reply
+ok 10 - SIGTERM drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 632.185792
+  ...
+# Subtest: cleanup refuses snapshots until every registered producer acknowledges stop
+ok 11 - cleanup refuses snapshots until every registered producer acknowledges stop
+  ---
+  duration_ms: 113.00825
+  ...
+# Subtest: cleanup reconciles again when a lost-reply workspace appears after the first inventory
+ok 12 - cleanup reconciles again when a lost-reply workspace appears after the first inventory
+  ---
+  duration_ms: 13.814959
+  ...
+# Subtest: a matching caller label with a foreign native path never grants recovery authority
+ok 13 - a matching caller label with a foreign native path never grants recovery authority
+  ---
+  duration_ms: 9.317625
+  ...
+# Subtest: cleanup stops and awaits a supervisor executing dispatch before reading ownership
+ok 14 - cleanup stops and awaits a supervisor executing dispatch before reading ownership
+  ---
+  duration_ms: 767.90875
+  ...
+# Subtest: stopping an individual idle PTY worker leaves the run admission barrier open
+ok 15 - stopping an individual idle PTY worker leaves the run admission barrier open
+  ---
+  duration_ms: 77.397875
+  ...
+# monitor entry: keeping lane/entry-91c5a491cbd7 at /private/tmp/as-8E5y6r/lanes/lane-entry-91c5a491cbd7: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 16 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 72.757833
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 17 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 81.267458
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 18 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 52.746958
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+not ok 19 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 1534.946
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/as-8E5y6r/lanes/lane-entry-91c5a491cbd7/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/av-H3zHyP/project/.lane.json)): node --test
+    TAP version 13
+    # Subtest: gate and product boundaries
+    ok 1 - gate and product boundaries
+      ---
+      duration_ms: 3.843375
+      ...
+    # Subtest: green
+    ok 2 - green
+      ---
+      duration_ms: 0.447833
+      ...
+    1..2
+    # tests 2
+    # suites 0
+    # pass 2
+    # fail 0
+    # cancelled 0
+    # skipped 0
+    # todo 0
+    # duration_ms 33.300083
+    monitor validation: sandboxed validation exited 125
+    GATE 524f4eeef72bfb2ffc75c096e2e76daaebe28e41 exit=1 (0.586s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:26:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:225:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:305:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/validation.test.mjs:145:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+ok 20 - native per-run validation temp is admitted only by its private identity and exact environment handoff
+  ---
+  duration_ms: 51.960416
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 19
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7403.820208

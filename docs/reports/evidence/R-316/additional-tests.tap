@@ -1,0 +1,593 @@
+TAP version 13
+# Subtest: open-session tells org which session is acting (dry run, fake Herdr)
+ok 1 - open-session tells org which session is acting (dry run, fake Herdr)
+  ---
+  duration_ms: 586.817792
+  ...
+# Subtest: a codex route starts a codex session with its model, effort, route args and always_args (dry run)
+ok 2 - a codex route starts a codex session with its model, effort, route args and always_args (dry run)
+  ---
+  duration_ms: 646.738291
+  ...
+# Subtest: open-session refuses a concurrent supervisor session instead of waiting
+ok 3 - open-session refuses a concurrent supervisor session instead of waiting
+  ---
+  duration_ms: 177.32025
+  ...
+# Subtest: a run with a recorded report never opens a duplicate settle session
+ok 4 - a run with a recorded report never opens a duplicate settle session
+  ---
+  duration_ms: 152.785625
+  ...
+# Subtest: brain start tells org which session is acting (fake Herdr)
+ok 5 - brain start tells org which session is acting (fake Herdr)
+  ---
+  duration_ms: 3409.627667
+  ...
+# monitor entry: keeping lane/entry-00e35724c21c at /private/tmp/as-WzDYVJ/lanes/lane-entry-00e35724c21c: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 6 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 206.747583
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 7 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 308.369583
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 8 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 325.570791
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+not ok 9 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 2089.816958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/as-WzDYVJ/lanes/lane-entry-00e35724c21c/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/av-p71pbn/project/.lane.json)): node --test
+    TAP version 13
+    # Subtest: gate and product boundaries
+    ok 1 - gate and product boundaries
+      ---
+      duration_ms: 20.0895
+      ...
+    # Subtest: green
+    ok 2 - green
+      ---
+      duration_ms: 0.443709
+      ...
+    1..2
+    # tests 2
+    # suites 0
+    # pass 2
+    # fail 0
+    # cancelled 0
+    # skipped 0
+    # todo 0
+    # duration_ms 54.503292
+    monitor validation: sandboxed validation exited 125
+    GATE 47c991b96a891fe5f4317b2aa9d3ed0315683ec9 exit=1 (0.757s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:26:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:225:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:305:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/validation.test.mjs:145:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+ok 10 - native per-run validation temp is admitted only by its private identity and exact environment handoff
+  ---
+  duration_ms: 96.435083
+  ...
+# Subtest: fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+ok 11 - fake product entry passing a bypass flag is refused before launch and its case reports product FAIL
+  ---
+  duration_ms: 65.906125
+  ...
+# Subtest: candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+ok 12 - candidate capability leaks, foreign roots and unowned target refusals are FAIL, capability probes remain pending
+  ---
+  duration_ms: 0.423
+  ...
+# Subtest: cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+ok 13 - cleanup failure without keep reports every existing discovery root on the actual cleanup screen line
+  ---
+  duration_ms: 11.01125
+  ...
+# Subtest: ordinary product entry and source-attribution gaps fail without a safety or harness marker
+ok 14 - ordinary product entry and source-attribution gaps fail without a safety or harness marker
+  ---
+  duration_ms: 0.481375
+  ...
+# Subtest: dependent cutover/default-cycle cases preserve prerequisite causes and origins
+ok 15 - dependent cutover/default-cycle cases preserve prerequisite causes and origins
+  ---
+  duration_ms: 0.414791
+  ...
+# Subtest: workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+ok 16 - workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+  ---
+  duration_ms: 0.843417
+  ...
+# Subtest: relocation requires the expected launcher and audits every transitive copied file before use
+not ok 17 - relocation requires the expected launcher and audits every transitive copied file before use
+  ---
+  duration_ms: 1.455959
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'unrelocated live path in /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-vmTuzc/acceptance-relocation-OxyxsJ/copy/launch.mjs: /Users/'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    auditCopies (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/security.mjs:70:13)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/security.test.mjs:28:5
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: relocation gives the project parent precedence over a colliding live home without replacing scratch paths again
+ok 18 - relocation gives the project parent precedence over a colliding live home without replacing scratch paths again
+  ---
+  duration_ms: 0.43975
+  ...
+# Subtest: kernel boundary denies dynamically computed external code reads and record writes
+ok 19 - kernel boundary denies dynamically computed external code reads and record writes
+  ---
+  duration_ms: 29.784167
+  ...
+# Subtest: scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+ok 20 - scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+  ---
+  duration_ms: 4.617917
+  ...
+# Subtest: missing ripgrep is named pending before executing any candidate code
+not ok 21 - missing ripgrep is named pending before executing any candidate code
+  ---
+  duration_ms: 36.263084
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: "ENOENT: no such file or directory, open '/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-vmTuzc/acceptance-prerequisite-jbZxD9/herdr-acceptance-UifSFE/evidence/summary.json'"
+  code: 'ENOENT'
+  stack: |-
+    Object.openSync (node:fs:574:18)
+    Object.readFileSync (node:fs:453:35)
+    fs.readFileSync (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/memory-fixture.mjs:21:23)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/security.test.mjs:102:35
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: record shim rejects a changed pin and symlink escape before invoking the CLI
+ok 22 - record shim rejects a changed pin and symlink escape before invoking the CLI
+  ---
+  duration_ms: 47.647125
+  ...
+# Subtest: real session environment removes capability, identity and credential overrides
+ok 23 - real session environment removes capability, identity and credential overrides
+  ---
+  duration_ms: 0.896625
+  ...
+# Subtest: policy attribution refuses repository exposure and unwitnessed self-reports
+ok 24 - policy attribution refuses repository exposure and unwitnessed self-reports
+  ---
+  duration_ms: 9.732292
+  ...
+# Subtest: SIGINT drains an active workspace and recovers its lost reply
+ok 25 - SIGINT drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 618.254875
+  ...
+# Subtest: SIGINT drains an active create-cwd and recovers its lost reply
+ok 26 - SIGINT drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 746.643375
+  ...
+# Subtest: SIGINT drains an active open-cwd and recovers its lost reply
+ok 27 - SIGINT drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 699.311375
+  ...
+# Subtest: SIGINT drains an active create-workspace and recovers its lost reply
+ok 28 - SIGINT drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 653.110208
+  ...
+# Subtest: SIGINT drains an active open-workspace and recovers its lost reply
+ok 29 - SIGINT drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 668.589542
+  ...
+# Subtest: SIGTERM drains an active workspace and recovers its lost reply
+ok 30 - SIGTERM drains an active workspace and recovers its lost reply
+  ---
+  duration_ms: 631.049209
+  ...
+# Subtest: SIGTERM drains an active create-cwd and recovers its lost reply
+ok 31 - SIGTERM drains an active create-cwd and recovers its lost reply
+  ---
+  duration_ms: 697.791166
+  ...
+# Subtest: SIGTERM drains an active open-cwd and recovers its lost reply
+ok 32 - SIGTERM drains an active open-cwd and recovers its lost reply
+  ---
+  duration_ms: 754.876708
+  ...
+# Subtest: SIGTERM drains an active create-workspace and recovers its lost reply
+ok 33 - SIGTERM drains an active create-workspace and recovers its lost reply
+  ---
+  duration_ms: 654.77525
+  ...
+# Subtest: SIGTERM drains an active open-workspace and recovers its lost reply
+ok 34 - SIGTERM drains an active open-workspace and recovers its lost reply
+  ---
+  duration_ms: 662.6575
+  ...
+# Subtest: cleanup refuses snapshots until every registered producer acknowledges stop
+ok 35 - cleanup refuses snapshots until every registered producer acknowledges stop
+  ---
+  duration_ms: 158.216167
+  ...
+# Subtest: cleanup reconciles again when a lost-reply workspace appears after the first inventory
+ok 36 - cleanup reconciles again when a lost-reply workspace appears after the first inventory
+  ---
+  duration_ms: 33.22625
+  ...
+# Subtest: a matching caller label with a foreign native path never grants recovery authority
+ok 37 - a matching caller label with a foreign native path never grants recovery authority
+  ---
+  duration_ms: 26.737208
+  ...
+# Subtest: cleanup stops and awaits a supervisor executing dispatch before reading ownership
+not ok 38 - cleanup stops and awaits a supervisor executing dispatch before reading ownership
+  ---
+  duration_ms: 24118.092583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'fixture did not reach active creation'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    until (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/recovery.test.mjs:23:38)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/recovery.test.mjs:186:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: stopping an individual idle PTY worker leaves the run admission barrier open
+not ok 39 - stopping an individual idle PTY worker leaves the run admission barrier open
+  ---
+  duration_ms: 23637.595084
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'fixture did not reach active creation'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    until (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/recovery.test.mjs:23:38)
+    async file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/recovery.test.mjs:218:3
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.470792
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 30.8645
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.5005
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 31.341792
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.468708
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 29.520292
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.4905
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 31.714167
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.483584
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 31.260958
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.511042
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 31.613083
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.525375
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 38.166208
+# TAP version 13
+# \# Subtest: offline
+# ok 1 - offline
+#   ---
+#   duration_ms: 0.520625
+#   ...
+# 1..1
+# \# tests 1
+# \# suites 0
+# \# pass 1
+# \# fail 0
+# \# cancelled 0
+# \# skipped 0
+# \# todo 0
+# \# duration_ms 33.34025
+# Subtest: only scoped test deferrals become promotable through the planned gate
+ok 40 - only scoped test deferrals become promotable through the planned gate
+  ---
+  duration_ms: 8476.219125
+  ...
+# Subtest: test deferrals plus matching record-check proof use the bound path: - Report record-check validation not independently executed.
+ok 41 - test deferrals plus matching record-check proof use the bound path: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 12656.960208
+  ...
+# Subtest: test deferrals plus matching record-check proof use the bound path: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 42 - test deferrals plus matching record-check proof use the bound path: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 12423.462375
+  ...
+# Subtest: lane-modified planner and imports cannot shrink canonical coverage
+ok 43 - lane-modified planner and imports cannot shrink canonical coverage
+  ---
+  duration_ms: 4220.312542
+  ...
+# Subtest: lane-modified planner and imports cannot invent canonical coverage
+ok 44 - lane-modified planner and imports cannot invent canonical coverage
+  ---
+  duration_ms: 4111.3135
+  ...
+# Subtest: missing planner covers nothing, retains its error and allows recorded re-execution
+ok 45 - missing planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4871.248083
+  ...
+# Subtest: failed planner covers nothing, retains its error and allows recorded re-execution
+ok 46 - failed planner covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4896.522083
+  ...
+# Subtest: empty output covers nothing, retains its error and allows recorded re-execution
+ok 47 - empty output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4921.289833
+  ...
+# Subtest: whitespace output covers nothing, retains its error and allows recorded re-execution
+ok 48 - whitespace output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4853.95
+  ...
+# Subtest: invalid JSON covers nothing, retains its error and allows recorded re-execution
+ok 49 - invalid JSON covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4922.553083
+  ...
+# Subtest: invalid coverage covers nothing, retains its error and allows recorded re-execution
+ok 50 - invalid coverage covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 4822.704208
+  ...
+# Subtest: oversized output covers nothing, retains its error and allows recorded re-execution
+ok 51 - oversized output covers nothing, retains its error and allows recorded re-execution
+  ---
+  duration_ms: 5153.680791
+  ...
+# Subtest: hand-written receipt with matching filename and log hash must also match its derived key
+ok 52 - hand-written receipt with matching filename and log hash must also match its derived key
+  ---
+  duration_ms: 1.426042
+  ...
+# Subtest: recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+ok 53 - recorded re-execution permits supervisor-bound promotion; unrecorded or stale evidence refuses
+  ---
+  duration_ms: 6742.862
+  ...
+# Subtest: cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+ok 54 - cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+  ---
+  duration_ms: 1219.31475
+  ...
+# Subtest: cold start Lessons handles empty records and terminal controls in claims
+ok 55 - cold start Lessons handles empty records and terminal controls in claims
+  ---
+  duration_ms: 644.193
+  ...
+# Subtest: cold start surfaces host pressure and memory/CPU process evidence without changing record status
+ok 56 - cold start surfaces host pressure and memory/CPU process evidence without changing record status
+  ---
+  duration_ms: 169.871791
+  ...
+# Subtest: cold start and entry policy expose command basenames and resource figures without process argv
+ok 57 - cold start and entry policy expose command basenames and resource figures without process argv
+  ---
+  duration_ms: 229.339166
+  ...
+# Subtest: supervisor handle exposes review memory wait before pressure clears
+ok 58 - supervisor handle exposes review memory wait before pressure clears
+  ---
+  duration_ms: 9402.8375
+  ...
+# Subtest: supervisor handle exposes correction memory wait before pressure clears
+ok 59 - supervisor handle exposes correction memory wait before pressure clears
+  ---
+  duration_ms: 11210.158792
+  ...
+# Subtest: handle returns capped findings and promotion records explicit acceptance with exact heads
+ok 60 - handle returns capped findings and promotion records explicit acceptance with exact heads
+  ---
+  duration_ms: 7195.887208
+  ...
+# Subtest: handle explicitly sends capped findings back once and adopts its saved correction
+ok 61 - handle explicitly sends capped findings back once and adopts its saved correction
+  ---
+  duration_ms: 6969.621792
+  ...
+# Subtest: STOP arriving during review retains a resumable correction without launching another worker
+ok 62 - STOP arriving during review retains a resumable correction without launching another worker
+  ---
+  duration_ms: 6621.56875
+  ...
+# Subtest: supervisor binds head and run into the queue and retries confirmed refusals with history
+ok 63 - supervisor binds head and run into the queue and retries confirmed refusals with history
+  ---
+  duration_ms: 8921.645917
+  ...
+# Subtest: bound promotion rechecks queued runs and record changes during validation before integration
+ok 64 - bound promotion rechecks queued runs and record changes during validation before integration
+  ---
+  duration_ms: 19271.147
+  ...
+# Subtest: late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+ok 65 - late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+  ---
+  duration_ms: 11236.083958
+  ...
+# Subtest: late original and correction notices after lane removal preserve promotion guards and never replay settlement
+ok 66 - late original and correction notices after lane removal preserve promotion guards and never replay settlement
+  ---
+  duration_ms: 16681.7455
+  ...
+# Subtest: refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+ok 67 - refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+  ---
+  duration_ms: 6760.303166
+  ...
+# Subtest: supervisor entry and final notices carry the unconfigured cycle through actual promotion
+ok 68 - supervisor entry and final notices carry the unconfigured cycle through actual promotion
+  ---
+  duration_ms: 31275.20775
+  ...
+# Subtest: cold start includes routes, priorities, history across midnight and a durable explicit reading cursor
+ok 69 - cold start includes routes, priorities, history across midnight and a durable explicit reading cursor
+  ---
+  duration_ms: 1463.587166
+  ...
+# Subtest: ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+ok 70 - ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+  ---
+  duration_ms: 2020.057791
+  ...
+# Subtest: workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+ok 71 - workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+  ---
+  duration_ms: 1948.70625
+  ...
+# Subtest: non-done reports hand off substance without review; saved enqueue uncertainty never replays
+ok 72 - non-done reports hand off substance without review; saved enqueue uncertainty never replays
+  ---
+  duration_ms: 1588.349458
+  ...
+# Subtest: full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+ok 73 - full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+  ---
+  duration_ms: 1112.474375
+  ...
+# Subtest: conditional record completion preserves newer work, unresolved and declined blockers
+ok 74 - conditional record completion preserves newer work, unresolved and declined blockers
+  ---
+  duration_ms: 1000.320375
+  ...
+# Subtest: a disappeared checkout retains its open record run through a dispatch identity receipt
+ok 75 - a disappeared checkout retains its open record run through a dispatch identity receipt
+  ---
+  duration_ms: 301.149834
+  ...
+1..75
+# tests 75
+# suites 0
+# pass 70
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 293594.550958

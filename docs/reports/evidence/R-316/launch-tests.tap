@@ -1,0 +1,1998 @@
+TAP version 13
+# Subtest: repository does not track a Codex project hook that can interrupt unattended workers
+ok 1 - repository does not track a Codex project hook that can interrupt unattended workers
+  ---
+  duration_ms: 10.367209
+  ...
+# Subtest: durable supervisor pane binding survives native restore, clear and compact without adapter env
+ok 2 - durable supervisor pane binding survives native restore, clear and compact without adapter env
+  ---
+  duration_ms: 2941.909167
+  ...
+# Subtest: claude adapter reuses the project SessionStart entry exactly once
+ok 3 - claude adapter reuses the project SessionStart entry exactly once
+  ---
+  duration_ms: 1865.502
+  ...
+# Subtest: codex supervisor adapter injects SessionStart without a project hook
+ok 4 - codex supervisor adapter injects SessionStart without a project hook
+  ---
+  duration_ms: 1728.611666
+  ...
+# Subtest: re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+ok 5 - re-armed watcher uses its recorded dispatch recipient before the supervisor fallback
+  ---
+  duration_ms: 1697.932958
+  ...
+# Subtest: adapter exports its known supervisor agent identity
+ok 6 - adapter exports its known supervisor agent identity
+  ---
+  duration_ms: 254.854458
+  ...
+# Subtest: project chat adapter and durable restore retain ops separately from the chat name
+ok 7 - project chat adapter and durable restore retain ops separately from the chat name
+  ---
+  duration_ms: 613.560625
+  ...
+# Subtest: entry CLI is non-blocking and prints the cold start with paused housekeeping
+ok 8 - entry CLI is non-blocking and prints the cold start with paused housekeeping
+  ---
+  duration_ms: 493.36275
+  ...
+# Subtest: entry twice restarts stopped housekeeping and dead open watchers only once
+ok 9 - entry twice restarts stopped housekeeping and dead open watchers only once
+  ---
+  duration_ms: 1481.637166
+  ...
+# Subtest: entry respects {"enabled":false}
+ok 10 - entry respects {"enabled":false}
+  ---
+  duration_ms: 369.554042
+  ...
+# Subtest: entry respects {"resume":false}
+ok 11 - entry respects {"resume":false}
+  ---
+  duration_ms: 286.264959
+  ...
+# Subtest: cold-start brief flags a dead housekeeping process without changing its lock
+ok 12 - cold-start brief flags a dead housekeeping process without changing its lock
+  ---
+  duration_ms: 271.573708
+  ...
+# Subtest: entry reports dead promotion, release and settle owners but preserves all locks and live owners
+ok 13 - entry reports dead promotion, release and settle owners but preserves all locks and live owners
+  ---
+  duration_ms: 506.369625
+  ...
+# Subtest: failed cold start, housekeeping and watch print reasons and allow later recovery steps
+ok 14 - failed cold start, housekeeping and watch print reasons and allow later recovery steps
+  ---
+  duration_ms: 643.209083
+  ...
+# Subtest: Claude project hook delivers supervisor entry on startup
+ok 15 - Claude project hook delivers supervisor entry on startup
+  ---
+  duration_ms: 642.992375
+  ...
+# Subtest: Claude project hook delivers supervisor entry on resume
+ok 16 - Claude project hook delivers supervisor entry on resume
+  ---
+  duration_ms: 570.771542
+  ...
+# Subtest: Claude project hook delivers supervisor entry on clear
+ok 17 - Claude project hook delivers supervisor entry on clear
+  ---
+  duration_ms: 670.705625
+  ...
+# Subtest: Claude project hook delivers supervisor entry on compact
+ok 18 - Claude project hook delivers supervisor entry on compact
+  ---
+  duration_ms: 586.109833
+  ...
+# Subtest: hook skips or explains unmarked without blocking startup
+ok 19 - hook skips or explains unmarked without blocking startup
+  ---
+  duration_ms: 239.5035
+  ...
+# Subtest: hook skips or explains worker without blocking startup
+ok 20 - hook skips or explains worker without blocking startup
+  ---
+  duration_ms: 246.046875
+  ...
+# Subtest: hook skips or explains lane without blocking startup
+ok 21 - hook skips or explains lane without blocking startup
+  ---
+  duration_ms: 292.33875
+  ...
+# Subtest: hook skips or explains foreign without blocking startup
+ok 22 - hook skips or explains foreign without blocking startup
+  ---
+  duration_ms: 175.379542
+  ...
+# Subtest: hook skips or explains bad-input without blocking startup
+ok 23 - hook skips or explains bad-input without blocking startup
+  ---
+  duration_ms: 162.842334
+  ...
+# Subtest: hook skips or explains missing-record without blocking startup
+ok 24 - hook skips or explains missing-record without blocking startup
+  ---
+  duration_ms: 422.3795
+  ...
+# Subtest: hook skips or explains worker-bypass without blocking startup
+ok 25 - hook skips or explains worker-bypass without blocking startup
+  ---
+  duration_ms: 150.585833
+  ...
+# Subtest: housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+ok 26 - housekeeping resume recovers a confirmed dead matching owner and repeated entry adopts the new process
+  ---
+  duration_ms: 589.881166
+  ...
+# Subtest: adapters use short fleet temp and bind worker, supervisor and chat roles with native supervisor hooks
+ok 27 - adapters use short fleet temp and bind worker, supervisor and chat roles with native supervisor hooks
+  ---
+  duration_ms: 7351.278791
+  ...
+# Subtest: entry safely handles STOP
+ok 28 - entry safely handles STOP
+  ---
+  duration_ms: 435.418041
+  ...
+# Subtest: entry safely handles invalid-config
+ok 29 - entry safely handles invalid-config
+  ---
+  duration_ms: 615.643875
+  ...
+# Subtest: entry safely handles invalid-pid
+ok 30 - entry safely handles invalid-pid
+  ---
+  duration_ms: 461.329833
+  ...
+# Subtest: entry safely handles reported-during-entry
+ok 31 - entry safely handles reported-during-entry
+  ---
+  duration_ms: 583.2905
+  ...
+# Subtest: housekeeping resume preserves a live owner
+ok 32 - housekeeping resume preserves a live owner
+  ---
+  duration_ms: 412.530792
+  ...
+# Subtest: housekeeping resume preserves a invalid owner
+ok 33 - housekeeping resume preserves a invalid owner
+  ---
+  duration_ms: 360.312
+  ...
+# Subtest: housekeeping resume preserves a foreign owner
+ok 34 - housekeeping resume preserves a foreign owner
+  ---
+  duration_ms: 276.195917
+  ...
+# Subtest: housekeeping resume preserves a missing-runtime owner
+ok 35 - housekeeping resume preserves a missing-runtime owner
+  ---
+  duration_ms: 277.161834
+  ...
+# Subtest: housekeeping resume preserves a resume-disabled owner
+ok 36 - housekeeping resume preserves a resume-disabled owner
+  ---
+  duration_ms: 995.682084
+  ...
+# Subtest: watch recovery handles reused identity without blocking entry
+ok 37 - watch recovery handles reused identity without blocking entry
+  ---
+  duration_ms: 967.759084
+  ...
+# Subtest: watch recovery handles unreadable identity without blocking entry
+ok 38 - watch recovery handles unreadable identity without blocking entry
+  ---
+  duration_ms: 601.524875
+  ...
+# Subtest: watch recovery handles legacy-live identity without blocking entry
+ok 39 - watch recovery handles legacy-live identity without blocking entry
+  ---
+  duration_ms: 649.419541
+  ...
+# Subtest: watch recovery handles changed-during-entry identity without blocking entry
+ok 40 - watch recovery handles changed-during-entry identity without blocking entry
+  ---
+  duration_ms: 634.241209
+  ...
+# Subtest: empty supervisor environment and null dispatch recipient use the supervisor fallback
+ok 41 - empty supervisor environment and null dispatch recipient use the supervisor fallback
+  ---
+  duration_ms: 648.01725
+  ...
+# Subtest: housekeeping snapshot reports reused birth without changing the lock
+ok 42 - housekeeping snapshot reports reused birth without changing the lock
+  ---
+  duration_ms: 178.296125
+  ...
+# Subtest: housekeeping snapshot reports unreadable birth without changing the lock
+ok 43 - housekeeping snapshot reports unreadable birth without changing the lock
+  ---
+  duration_ms: 175.0345
+  ...
+# Subtest: housekeeping snapshot reports legacy-live birth without changing the lock
+ok 44 - housekeeping snapshot reports legacy-live birth without changing the lock
+  ---
+  duration_ms: 264.439667
+  ...
+# Subtest: housekeeping resume replaces a reused PID without signaling the replacement process
+ok 45 - housekeeping resume replaces a reused PID without signaling the replacement process
+  ---
+  duration_ms: 1229.075875
+  ...
+# Subtest: claude interactive --resume through automatic adapter preserves supervisor entry and worker guards
+ok 46 - claude interactive --resume through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1551.396958
+  ...
+# Subtest: claude interactive --continue through automatic adapter preserves supervisor entry and worker guards
+ok 47 - claude interactive --continue through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1373.544
+  ...
+# Subtest: codex interactive resume through automatic adapter preserves supervisor entry and worker guards
+ok 48 - codex interactive resume through automatic adapter preserves supervisor entry and worker guards
+  ---
+  duration_ms: 1397.172209
+  ...
+# Subtest: Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+ok 49 - Linux watcher recovery round-trips textual identities through record set and compares changed ticks
+  ---
+  duration_ms: 1281.0755
+  ...
+# Subtest: claude nested headless launch cannot inherit supervisor recognition
+ok 50 - claude nested headless launch cannot inherit supervisor recognition
+  ---
+  duration_ms: 708.875
+  ...
+# Subtest: codex nested headless launch cannot inherit supervisor recognition
+ok 51 - codex nested headless launch cannot inherit supervisor recognition
+  ---
+  duration_ms: 784.92525
+  ...
+# Subtest: default chat falls back to Claude with the inherited sandbox selector reason before creating a tab
+ok 52 - default chat falls back to Claude with the inherited sandbox selector reason before creating a tab
+  ---
+  duration_ms: 1432.9675
+  ...
+# Subtest: unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation
+ok 53 - unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation
+  ---
+  duration_ms: 3278.497917
+  ...
+# Subtest: one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+ok 54 - one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+  ---
+  duration_ms: 2359.437042
+  ...
+# Subtest: operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+ok 55 - operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+  ---
+  duration_ms: 1716.79775
+  ...
+# Subtest: failed or uncertain startup retains one tab and never launches again on reopen
+ok 56 - failed or uncertain startup retains one tab and never launches again on reopen
+  ---
+  duration_ms: 1772.402208
+  ...
+# Subtest: shell readiness fails before sending input and retains a recoverable tab
+ok 57 - shell readiness fails before sending input and retains a recoverable tab
+  ---
+  duration_ms: 1686.817375
+  ...
+# Subtest: a failed rename is recovered only in the receipt pane with the same harness and checkout
+ok 58 - a failed rename is recovered only in the receipt pane with the same harness and checkout
+  ---
+  duration_ms: 1565.086417
+  ...
+# Subtest: late detection after timeout recovers the unnamed chat without replaying launch
+ok 59 - late detection after timeout recovers the unnamed chat without replaying launch
+  ---
+  duration_ms: 1616.237833
+  ...
+# Subtest: an oh-my-zsh builtin update question never receives shell input
+ok 60 - an oh-my-zsh builtin update question never receives shell input
+  ---
+  duration_ms: 1560.135333
+  ...
+# Subtest: startup waits through an update question before proving prompt and command execution
+ok 61 - startup waits through an update question before proving prompt and command execution
+  ---
+  duration_ms: 1490.702542
+  ...
+# Subtest: echoed probe input is not execution proof and cannot launch an agent
+ok 62 - echoed probe input is not execution proof and cannot launch an agent
+  ---
+  duration_ms: 1017.368833
+  ...
+# Subtest: agent detection alone cannot accept an unverified launch command
+ok 63 - agent detection alone cannot accept an unverified launch command
+  ---
+  duration_ms: 1517.251292
+  ...
+# Subtest: the named prototype in chats is adopted unchanged and other projects join that workspace
+ok 64 - the named prototype in chats is adopted unchanged and other projects join that workspace
+  ---
+  duration_ms: 1453.855958
+  ...
+# Subtest: prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+ok 65 - prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+  ---
+  duration_ms: 957.945209
+  ...
+# Subtest: unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation
+ok 66 - unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation
+  ---
+  duration_ms: 668.952
+  ...
+# Subtest: chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+ok 67 - chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+  ---
+  duration_ms: 1683.450083
+  ...
+# Subtest: a closed chat tab can be recreated while the other project remains in the same workspace
+ok 68 - a closed chat tab can be recreated while the other project remains in the same workspace
+  ---
+  duration_ms: 2677.369292
+  ...
+# Subtest: an existing named control workspace is reused and ambient recipients never cross project boundaries
+ok 69 - an existing named control workspace is reused and ambient recipients never cross project boundaries
+  ---
+  duration_ms: 1042.903333
+  ...
+# Subtest: console --print refuses project chat keys for every profile without creating tabs or launching agents
+ok 70 - console --print refuses project chat keys for every profile without creating tabs or launching agents
+  ---
+  duration_ms: 708.644125
+  ...
+# Subtest: headless tasks and resumes get a sandbox even when prompt text names a utility
+ok 71 - headless tasks and resumes get a sandbox even when prompt text names a utility
+  ---
+  duration_ms: 0.921
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 72 - each run gets short private fleet temp and all three temp variables
+  ---
+  duration_ms: 61.989208
+  ...
+# Subtest: codex preserves the operator's Python bytecode environment
+ok 73 - codex preserves the operator's Python bytecode environment
+  ---
+  duration_ms: 317.745375
+  ...
+# Subtest: claude preserves the operator's Python bytecode environment
+ok 74 - claude preserves the operator's Python bytecode environment
+  ---
+  duration_ms: 338.563542
+  ...
+# Subtest: Claude respects Python bytecode values in user settings
+ok 75 - Claude respects Python bytecode values in user settings
+  ---
+  duration_ms: 396.99825
+  ...
+# Subtest: Claude respects Python bytecode values in project settings
+ok 76 - Claude respects Python bytecode values in project settings
+  ---
+  duration_ms: 414.995584
+  ...
+# Subtest: Claude respects Python bytecode values in local settings
+ok 77 - Claude respects Python bytecode values in local settings
+  ---
+  duration_ms: 328.994208
+  ...
+# Subtest: Claude respects Python bytecode values in cli-json settings
+ok 78 - Claude respects Python bytecode values in cli-json settings
+  ---
+  duration_ms: 323.023958
+  ...
+# Subtest: Claude respects Python bytecode values in cli-file settings
+ok 79 - Claude respects Python bytecode values in cli-file settings
+  ---
+  duration_ms: 338.622334
+  ...
+# Subtest: Claude respects Python bytecode values in managed settings
+ok 80 - Claude respects Python bytecode values in managed settings
+  ---
+  duration_ms: 394.20325
+  ...
+# Subtest: Claude respects Python bytecode values in managed-fragment settings
+ok 81 - Claude respects Python bytecode values in managed-fragment settings
+  ---
+  duration_ms: 429.85325
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 82 - long and redirected temp roots refuse before creating a run
+  ---
+  duration_ms: 54.95125
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 83 - Codex uses native workspace roots, excludes system temp and retains hook transport
+  ---
+  duration_ms: 302.071167
+  ...
+# Subtest: legacy Codex uses writable roots with system temp excluded
+ok 84 - legacy Codex uses writable roots with system temp excluded
+  ---
+  duration_ms: 201.998958
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 85 - Claude gets per-session native write settings and keeps existing hooks
+  ---
+  duration_ms: 231.147458
+  ...
+# Subtest: Claude socket grants stay within each run and its measured shell fallback
+ok 86 - Claude socket grants stay within each run and its measured shell fallback
+  ---
+  duration_ms: 241.058958
+  ...
+# Subtest: a short Claude run temp needs no shared shell fallback grant
+ok 87 - a short Claude run temp needs no shared shell fallback grant
+  ---
+  duration_ms: 142.447333
+  ...
+# Subtest: a long Claude run temp keeps the safely owned canonical per-user fallback grant
+ok 88 - a long Claude run temp keeps the safely owned canonical per-user fallback grant
+  ---
+  duration_ms: 199.574917
+  ...
+# Subtest: Claude launches without the missing shared fallback grant and warns once
+ok 89 - Claude launches without the missing shared fallback grant and warns once
+  ---
+  duration_ms: 129.213334
+  ...
+# Subtest: Claude launches without the denied shared fallback grant and warns once
+ok 90 - Claude launches without the denied shared fallback grant and warns once
+  ---
+  duration_ms: 138.85925
+  ...
+# Subtest: Claude launches without the foreign shared fallback grant and warns once
+ok 91 - Claude launches without the foreign shared fallback grant and warns once
+  ---
+  duration_ms: 133.849291
+  ...
+# Subtest: Claude launches without the writable shared fallback grant and warns once
+ok 92 - Claude launches without the writable shared fallback grant and warns once
+  ---
+  duration_ms: 138.651542
+  ...
+# Subtest: Claude launches without the symlink shared fallback grant and warns once
+ok 93 - Claude launches without the symlink shared fallback grant and warns once
+  ---
+  duration_ms: 131.732917
+  ...
+# Subtest: Claude merges supplied Unix sockets and leaves inherited grants in native scopes
+ok 94 - Claude merges supplied Unix sockets and leaves inherited grants in native scopes
+  ---
+  duration_ms: 151.91
+  ...
+# Subtest: Claude warns when native socket or TCP overrides widen generated confinement
+ok 95 - Claude warns when native socket or TCP overrides widen generated confinement
+  ---
+  duration_ms: 129.69925
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 96 - extra directories are supplied through native options in canonical project config
+  ---
+  duration_ms: 231.473417
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 97 - unsupported harness runs with a visible warning and its own temp
+  ---
+  duration_ms: 175.170417
+  ...
+# Subtest: Codex respects inherited and CLI sandbox choices with one source-naming warning
+ok 98 - Codex respects inherited and CLI sandbox choices with one source-naming warning
+  ---
+  duration_ms: 265.4325
+  ...
+# Subtest: roles receive scoped lane access and launch-only trust for fleet worktrees
+ok 99 - roles receive scoped lane access and launch-only trust for fleet worktrees
+  ---
+  duration_ms: 256.6665
+  ...
+# Subtest: Claude denies sibling lanes and rejects configured lane write grants
+ok 100 - Claude denies sibling lanes and rejects configured lane write grants
+  ---
+  duration_ms: 304.853708
+  ...
+# Subtest: Claude native file hook denies late siblings and aliases without approving ordinary edits
+ok 101 - Claude native file hook denies late siblings and aliases without approving ordinary edits
+  ---
+  duration_ms: 1030.056625
+  ...
+# Subtest: Codex generated and legacy sandbox branches both receive exact project trust
+ok 102 - Codex generated and legacy sandbox branches both receive exact project trust
+  ---
+  duration_ms: 156.7285
+  ...
+# Subtest: native Codex config reader accepts dotted and quoted launch trust without persisting it
+ok 103 - native Codex config reader accepts dotted and quoted launch trust without persisting it # SKIP set MONITOR_TEST_CODEX_CONFIG for the offline native config reader
+  ---
+  duration_ms: 0.070833
+  ...
+# Subtest: Claude 2.1.292 native permissions prevent read prompts and confine sibling file writes by role
+ok 104 - Claude 2.1.292 native permissions prevent read prompts and confine sibling file writes by role # SKIP set MONITOR_TEST_CLAUDE_READ for the offline native permission check
+  ---
+  duration_ms: 0.027
+  ...
+# Subtest: Claude preserves interpreter exclusions from loaded settings and names their source once
+ok 105 - Claude preserves interpreter exclusions from loaded settings and names their source once
+  ---
+  duration_ms: 164.938375
+  ...
+# Subtest: Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+ok 106 - Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+  ---
+  duration_ms: 139.95025
+  ...
+# Subtest: nested fleet roots refuse before launch in both Codex paths and Claude
+ok 107 - nested fleet roots refuse before launch in both Codex paths and Claude
+  ---
+  duration_ms: 136.333417
+  ...
+# Subtest: workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+ok 108 - workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+  ---
+  duration_ms: 239.192334
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 109 - assigned and headless adapters keep the checkout and run with native settings and temp
+  ---
+  duration_ms: 1630.883667
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (default)
+ok 110 - codex adapter Python import keeps bytecode out of the worktree (default)
+  ---
+  duration_ms: 706.234208
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (prefix)
+ok 111 - codex adapter Python import keeps bytecode out of the worktree (prefix)
+  ---
+  duration_ms: 914.398166
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (disabled)
+ok 112 - codex adapter Python import keeps bytecode out of the worktree (disabled)
+  ---
+  duration_ms: 626.453875
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-prefix)
+ok 113 - codex adapter Python import keeps bytecode out of the worktree (empty-prefix)
+  ---
+  duration_ms: 664.810583
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-disabled)
+ok 114 - codex adapter Python import keeps bytecode out of the worktree (empty-disabled)
+  ---
+  duration_ms: 645.274333
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-both)
+ok 115 - codex adapter Python import keeps bytecode out of the worktree (empty-both)
+  ---
+  duration_ms: 837.112334
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (default)
+ok 116 - claude adapter Python import keeps bytecode out of the worktree (default)
+  ---
+  duration_ms: 806.593792
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (prefix)
+ok 117 - claude adapter Python import keeps bytecode out of the worktree (prefix)
+  ---
+  duration_ms: 691.948542
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (disabled)
+ok 118 - claude adapter Python import keeps bytecode out of the worktree (disabled)
+  ---
+  duration_ms: 578.936542
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-prefix)
+ok 119 - claude adapter Python import keeps bytecode out of the worktree (empty-prefix)
+  ---
+  duration_ms: 605.409416
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-disabled)
+ok 120 - claude adapter Python import keeps bytecode out of the worktree (empty-disabled)
+  ---
+  duration_ms: 734.124083
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-both)
+ok 121 - claude adapter Python import keeps bytecode out of the worktree (empty-both)
+  ---
+  duration_ms: 576.271375
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (settings-prefix)
+ok 122 - claude adapter Python import keeps bytecode out of the worktree (settings-prefix)
+  ---
+  duration_ms: 630.875666
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (settings-disabled)
+ok 123 - claude adapter Python import keeps bytecode out of the worktree (settings-disabled)
+  ---
+  duration_ms: 514.133834
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 124 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+  ---
+  duration_ms: 524.049166
+  ...
+# Subtest: real Codex native roots deny peer writes and worker control-socket access including symlinks
+ok 125 - real Codex native roots deny peer writes and worker control-socket access including symlinks # SKIP set MONITOR_TEST_SANDBOX for the offline native boundary probe
+  ---
+  duration_ms: 0.051375
+  ...
+# monitor entry: keeping lane/entry-017200ca7d00 at /private/tmp/ms-67Wn3Z/lanes/lane-entry-017200ca7d00: a run was started in this lane
+# monitor entry: keeping lane/entry-1ff01b23740a at /private/tmp/ms-J52i8C/lanes/lane-entry-1ff01b23740a: a run was started in this lane
+# monitor entry: keeping lane/entry-6eee3ad965ec at /private/tmp/ms-ceMd7P/lanes/lane-entry-6eee3ad965ec: a run was started in this lane
+# monitor entry: keeping lane/entry-2f6f2397eb9b at /private/tmp/ms-WLWi1U/lanes/lane-entry-2f6f2397eb9b: modified, untracked or ignored files
+# Subtest: explicit installed adapters leave opted-out projects and native arguments untouched
+ok 126 - explicit installed adapters leave opted-out projects and native arguments untouched
+  ---
+  duration_ms: 1038.629375
+  ...
+# Subtest: automatic interactive adapters pass opted-out sessions straight through
+ok 127 - automatic interactive adapters pass opted-out sessions straight through
+  ---
+  duration_ms: 1123.557167
+  ...
+# Subtest: both transports deliver project settings, integration branch and instruction precedence
+ok 128 - both transports deliver project settings, integration branch and instruction precedence
+  ---
+  duration_ms: 2550.917292
+  ...
+# Subtest: main-checkout mode reaches both native harnesses without becoming a supervisor
+ok 129 - main-checkout mode reaches both native harnesses without becoming a supervisor
+  ---
+  duration_ms: 1892.575958
+  ...
+# Subtest: automatic interactive entry honors the project main-checkout mode
+ok 130 - automatic interactive entry honors the project main-checkout mode
+  ---
+  duration_ms: 2127.771417
+  ...
+# Subtest: worker mode validates and promotes to the declared integration branch
+ok 131 - worker mode validates and promotes to the declared integration branch
+  ---
+  duration_ms: 1856.557209
+  ...
+# Subtest: main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+ok 132 - main-mode worker records and commits locally, refuses promotion and verifies its assigned branch
+  ---
+  duration_ms: 828.988625
+  ...
+# Subtest: main-mode done reports require clean committed work and successful sandboxed validation
+ok 133 - main-mode done reports require clean committed work and successful sandboxed validation
+  ---
+  duration_ms: 3039.849583
+  ...
+# Subtest: entry-only configuration preserves the portable route suggestion and pending operator question
+ok 134 - entry-only configuration preserves the portable route suggestion and pending operator question
+  ---
+  duration_ms: 535.782708
+  ...
+# Subtest: entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+ok 135 - entry advertises tracked tiers and its sandbox runs only the requested worker or promotion check
+  ---
+  duration_ms: 2459.2685
+  ...
+# Subtest: undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+ok 136 - undeclared entry with package metadata and a Node test directory checks and promotes without an npm script
+  ---
+  duration_ms: 1760.790125
+  ...
+# Subtest: entry settings use canonical Git identity and do not inherit parent or worker config
+ok 137 - entry settings use canonical Git identity and do not inherit parent or worker config
+  ---
+  duration_ms: 778.825083
+  ...
+# Subtest: invalid enabled settings and mismatched integration branches fail before runtime creation
+ok 138 - invalid enabled settings and mismatched integration branches fail before runtime creation
+  ---
+  duration_ms: 192.494125
+  ...
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# monitor entry cleanup: spawnSync git ENOENT
+# Subtest: copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 139 - copied codex supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 496.010875
+  ...
+# Subtest: copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+ok 140 - copied claude supervisor entry in an untouched project satisfies the release cold-start and notice contract offline
+  ---
+  duration_ms: 510.233459
+  ...
+# Subtest: unrelated project has one canonical record, a real pending question and two separate lanes
+ok 141 - unrelated project has one canonical record, a real pending question and two separate lanes
+  ---
+  duration_ms: 1145.716208
+  ...
+# Subtest: capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+ok 142 - capability refuses arbitrary operations, fields, changed identity and missing validation sandbox
+  ---
+  duration_ms: 880.035916
+  ...
+# Subtest: concurrent automatic record bootstrap never truncates events or duplicates records
+ok 143 - concurrent automatic record bootstrap never truncates events or duplicates records
+  ---
+  duration_ms: 209.54825
+  ...
+# Subtest: initialization preserves a populated record, and a supervisor has no worker Git capability
+ok 144 - initialization preserves a populated record, and a supervisor has no worker Git capability
+  ---
+  duration_ms: 487.477958
+  ...
+# Subtest: machine installer retains native flags, reaches Claude too and restores only its own files
+ok 145 - machine installer retains native flags, reaches Claude too and restores only its own files
+  ---
+  duration_ms: 2692.173834
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 146 - explicit entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 765.063959
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (joined)
+ok 147 - explicit entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 772.297459
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 148 - explicit entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 776.539833
+  ...
+# Subtest: explicit entry passes non-Git and excluded directories through with one calm line (stale)
+ok 149 - explicit entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 852.106084
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+ok 150 - interactive automatic entry passes non-Git and excluded directories through with one calm line (unjoined)
+  ---
+  duration_ms: 1493.802125
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+ok 151 - interactive automatic entry passes non-Git and excluded directories through with one calm line (joined)
+  ---
+  duration_ms: 1334.078375
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+ok 152 - interactive automatic entry passes non-Git and excluded directories through with one calm line (compatibility)
+  ---
+  duration_ms: 1476.812791
+  ...
+# Subtest: interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+ok 153 - interactive automatic entry passes non-Git and excluded directories through with one calm line (stale)
+  ---
+  duration_ms: 1381.355334
+  ...
+# monitor entry: keeping lane/entry-51b190c93e63 at /private/tmp/ml-DXGDAj/lanes/lane-entry-51b190c93e63: modified, untracked or ignored files
+# Subtest: receipt publication hides a deliberately paused partial JSON write from the sweep reader
+ok 154 - receipt publication hides a deliberately paused partial JSON write from the sweep reader
+  ---
+  duration_ms: 867.222042
+  ...
+# Subtest: close preserves ignored .env and .lane files and explains retention
+ok 155 - close preserves ignored .env and .lane files and explains retention
+  ---
+  duration_ms: 823.824625
+  ...
+# Subtest: codex entry forwards terminal hangup and cleans its untouched lane
+ok 156 - codex entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 798.253
+  ...
+# Subtest: claude entry forwards terminal hangup and cleans its untouched lane
+ok 157 - claude entry forwards terminal hangup and cleans its untouched lane
+  ---
+  duration_ms: 733.773625
+  ...
+# monitor entry: keeping lane/entry-21eabbe32004 at /private/tmp/ml-r1wX9X/lanes/lane-entry-21eabbe32004: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-c54130d1f1c8 at /private/tmp/ml-XEWvQF/lanes/lane-entry-c54130d1f1c8: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-0b47ccb8d9ad at /private/tmp/ml-fFapIl/lanes/lane-entry-0b47ccb8d9ad: modified, untracked or ignored files
+# monitor entry: keeping lane/entry-9116e1448dff at /private/tmp/ml-dmjhbI/lanes/lane-entry-9116e1448dff: commits beyond its creation base
+# monitor entry: keeping lane/entry-7743d0529141 at /private/tmp/ml-OYfMz1/lanes/lane-entry-7743d0529141: commits beyond its creation base
+# monitor entry: keeping lane/entry-ff6f59e9633e at /private/tmp/ml-PmYTM7/lanes/lane-entry-ff6f59e9633e: a run was started in this lane
+# monitor entry: keeping entry-56a26c405f66.json: external Git filters/drivers used by README.md require a native validation sandbox
+# Subtest: next entry sweeps killed untouched owners and preserves every form of work
+ok 158 - next entry sweeps killed untouched owners and preserves every form of work
+  ---
+  duration_ms: 7305.617584
+  ...
+# Subtest: sweep never removes a lane owned by a live parent or native child
+ok 159 - sweep never removes a lane owned by a live parent or native child
+  ---
+  duration_ms: 1260.969125
+  ...
+# Subtest: a parent killed during ownership handoff cannot launch an unregistered native child
+ok 160 - a parent killed during ownership handoff cannot launch an unregistered native child
+  ---
+  duration_ms: 824.188917
+  ...
+# Subtest: symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+ok 161 - symlinked HOME and operator worktree-root prefixes resolve before no-follow creation
+  ---
+  duration_ms: 1105.007
+  ...
+# Subtest: provider selection refuses automatic Linux bubblewrap and retains explicit providers
+ok 162 - provider selection refuses automatic Linux bubblewrap and retains explicit providers
+  ---
+  duration_ms: 46.345625
+  ...
+# Subtest: alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+ok 163 - alternative profiles protect resolved Git and shared state, omit network and broad tmp grants
+  ---
+  duration_ms: 44.596208
+  ...
+# Subtest: Claude-only scratch installation does not require or install Codex
+ok 164 - Claude-only scratch installation does not require or install Codex
+  ---
+  duration_ms: 1191.190166
+  ...
+# Subtest: real alternative sandbox denies outside, symlink, metadata, record, rename and network writes
+ok 165 - real alternative sandbox denies outside, symlink, metadata, record, rename and network writes # SKIP set MONITOR_TEST_ALTERNATIVE to sandbox-exec or bwrap outside a nested sandbox
+  ---
+  duration_ms: 0.066
+  ...
+# Subtest: real filters remain functional through allocation, commit, check and fast-forward promotion
+ok 166 - real filters remain functional through allocation, commit, check and fast-forward promotion # SKIP set MONITOR_TEST_ALTERNATIVE to exercise real bounded Git filters
+  ---
+  duration_ms: 0.104041
+  ...
+# Subtest: real main-mode alternative guard protects linked shared records and leaves the native runtime writable
+ok 167 - real main-mode alternative guard protects linked shared records and leaves the native runtime writable # SKIP set MONITOR_TEST_ALTERNATIVE for the main-mode guard regression
+  ---
+  duration_ms: 0.04075
+  ...
+# sandbox command exceeded 300 milliseconds
+# Subtest: bounded commands kill descendants before they can write after a deadline
+ok 168 - bounded commands kill descendants before they can write after a deadline
+  ---
+  duration_ms: 1452.347125
+  ...
+# Subtest: Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+ok 169 - Linux network guard refuses unsupported ABIs and sends seccomp over an inherited descriptor
+  ---
+  duration_ms: 42.271583
+  ...
+# monitor entry: keeping lane/entry-921a53e77a3c at /private/tmp/mr2-QJx9lN/lanes/lane-entry-921a53e77a3c: a run was started in this lane
+# monitor entry: keeping lane/entry-3de405a2c395 at /private/tmp/mr2-l9a9gJ/lanes/lane-entry-3de405a2c395: a run was started in this lane
+# monitor entry: keeping lane/entry-832aeb401052 at /private/tmp/mr2-o3063p/lanes/lane-entry-832aeb401052: a run was started in this lane
+# monitor entry: keeping lane/entry-03a579f86bb7 at /private/tmp/mr2-tshyLT/lanes/lane-entry-03a579f86bb7: a run was started in this lane
+# monitor entry: keeping lane/entry-f9c8d5f72bee at /private/tmp/mr2-PVQnRm/lanes/lane-entry-f9c8d5f72bee: a run was started in this lane
+# monitor entry: keeping lane/entry-a051f61d2674 at /private/tmp/mr2-4iPx3t/lanes/lane-entry-a051f61d2674: a run was started in this lane
+# monitor entry: keeping lane/entry-7527ad9932d4 at /private/tmp/mr2-rvnPW7/lanes/lane-entry-7527ad9932d4: a run was started in this lane
+# monitor entry: keeping lane/entry-84c8d7882364 at /private/tmp/mr2-HoUeZU/lanes/lane-entry-84c8d7882364: a run was started in this lane
+# monitor entry: keeping lane/entry-e4cad6716e67 at /private/tmp/mr2-llG8nq/lanes/lane-entry-e4cad6716e67: a run was started in this lane
+# monitor entry: keeping lane/entry-9650be40d589 at /private/tmp/mr2-l1aKvU/lanes/lane-entry-9650be40d589: external Git driver configuration differs between lane and canonical checkout
+# Subtest: all providers reject temporary writable symlink components
+ok 170 - all providers reject temporary writable symlink components
+  ---
+  duration_ms: 46.266584
+  ...
+# Subtest: all providers reject ancestor writable symlink components
+ok 171 - all providers reject ancestor writable symlink components
+  ---
+  duration_ms: 41.294375
+  ...
+# Subtest: all providers reject dangling writable symlink components
+ok 172 - all providers reject dangling writable symlink components
+  ---
+  duration_ms: 41.9805
+  ...
+# Subtest: sandbox grants reject redirected workspaces, queues and external runtime paths
+ok 173 - sandbox grants reject redirected workspaces, queues and external runtime paths
+  ---
+  duration_ms: 45.316583
+  ...
+# Subtest: sandbox exceptions cannot override a protected record, Git tree or nested record target
+ok 174 - sandbox exceptions cannot override a protected record, Git tree or nested record target
+  ---
+  duration_ms: 43.314417
+  ...
+# Subtest: Git filter refuses a temporary symlink to record before execution
+ok 175 - Git filter refuses a temporary symlink to record before execution
+  ---
+  duration_ms: 67.640083
+  ...
+# Subtest: Git filter refuses a temporary symlink to git before execution
+ok 176 - Git filter refuses a temporary symlink to git before execution
+  ---
+  duration_ms: 68.558458
+  ...
+# Subtest: disabled clean filters preserve binary bytes across integration
+ok 177 - disabled clean filters preserve binary bytes across integration
+  ---
+  duration_ms: 1793.024125
+  ...
+# Subtest: disabled smudge filters preserve binary bytes across integration
+ok 178 - disabled smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 1833.822792
+  ...
+# Subtest: disabled process filters preserve binary bytes across integration
+ok 179 - disabled process filters preserve binary bytes across integration
+  ---
+  duration_ms: 1801.803458
+  ...
+# Subtest: disabled clean/smudge/process filters preserve binary bytes across integration
+ok 180 - disabled clean/smudge/process filters preserve binary bytes across integration
+  ---
+  duration_ms: 1851.12675
+  ...
+# Subtest: disabled process/clean/smudge filters preserve binary bytes across integration
+ok 181 - disabled process/clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 1843.504917
+  ...
+# Subtest: disabled clean/smudge filters preserve binary bytes across integration
+ok 182 - disabled clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 2630.607291
+  ...
+# Subtest: disabled clean/smudge filters preserve binary bytes across integration
+ok 183 - disabled clean/smudge filters preserve binary bytes across integration
+  ---
+  duration_ms: 2526.472083
+  ...
+# Subtest: clean-only required filters preserve the missing direction as identity
+ok 184 - clean-only required filters preserve the missing direction as identity
+  ---
+  duration_ms: 2922.084041
+  ...
+# Subtest: smudge-only required filters preserve the missing direction as identity
+ok 185 - smudge-only required filters preserve the missing direction as identity
+  ---
+  duration_ms: 2618.524958
+  ...
+# Subtest: required configured filters cannot fall back to identity after a command failure
+ok 186 - required configured filters cannot fall back to identity after a command failure
+  ---
+  duration_ms: 1183.58925
+  ...
+# Subtest: Claude live cases stay pending without authorized authentication and never launch the native binary
+ok 187 - Claude live cases stay pending without authorized authentication and never launch the native binary
+  ---
+  duration_ms: 918.518958
+  ...
+# Subtest: retained Claude discovery evidence marks unauthenticated cases pending on HUM-19
+ok 188 - retained Claude discovery evidence marks unauthenticated cases pending on HUM-19
+  ---
+  duration_ms: 0.383833
+  ...
+# Subtest: x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 189 - x64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 1.731375
+  ...
+# Subtest: arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+ok 190 - arm64 seccomp denies io_uring, unknown syscalls and socket creation by default
+  ---
+  duration_ms: 0.308458
+  ...
+# Subtest: detached double-fork descendants are gone after completion; unrelated same-group processes survive
+ok 191 - detached double-fork descendants are gone after completion; unrelated same-group processes survive
+  ---
+  duration_ms: 3381.902792
+  ...
+# Subtest: detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+ok 192 - detached double-fork descendants are gone after deadline; unrelated same-group processes survive
+  ---
+  duration_ms: 4686.405583
+  ...
+# Subtest: descendants are cleaned after the JavaScript wrapper is killed
+ok 193 - descendants are cleaned after the JavaScript wrapper is killed
+  ---
+  duration_ms: 3185.614875
+  ...
+# validation lifetime marker is absent
+# sandbox-exec: sandbox_apply: Operation not permitted
+# Subtest: macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+ok 194 - macOS cleanup retains the immutable kernel marker and refuses a missing provider boundary
+  ---
+  duration_ms: 594.108292
+  ...
+# Subtest: validation cannot signal an owner outside its inherited kernel boundary
+ok 195 - validation cannot signal an owner outside its inherited kernel boundary
+  ---
+  duration_ms: 179.444416
+  ...
+# Subtest: lifetime markers reject redirected scratch roots before provider construction
+ok 196 - lifetime markers reject redirected scratch roots before provider construction
+  ---
+  duration_ms: 5.652125
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (no-auth)
+ok 197 - pending Claude probe emits Linux evidence without a platform guard (no-auth)
+  ---
+  duration_ms: 1003.177625
+  ...
+# Subtest: pending Claude probe emits Linux evidence without a platform guard (skip-live)
+ok 198 - pending Claude probe emits Linux evidence without a platform guard (skip-live)
+  ---
+  duration_ms: 1040.655834
+  ...
+# Subtest: acceptance setup failure removes its installed snapshot and keeps only evidence
+ok 199 - acceptance setup failure removes its installed snapshot and keeps only evidence
+  ---
+  duration_ms: 104.389125
+  ...
+# Subtest: acceptance allocation failure removes the first temporary root
+ok 200 - acceptance allocation failure removes the first temporary root
+  ---
+  duration_ms: 26.369333
+  ...
+# Subtest: acceptance evidence directory failure still removes its installed snapshot
+ok 201 - acceptance evidence directory failure still removes its installed snapshot
+  ---
+  duration_ms: 31.409417
+  ...
+# Subtest: Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection
+ok 202 - Linux kernel denies asynchronous AF_UNIX socket creation and host socket connection # SKIP requires a Linux kernel with io_uring enabled
+  ---
+  duration_ms: 0.042333
+  ...
+# Subtest: Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+ok 203 - Linux auto refuses even with bubblewrap and Codex on PATH; explicit Codex remains available
+  ---
+  duration_ms: 3.402292
+  ...
+# Subtest: bare bubblewrap and renamed symlink aliases require experimental selection
+ok 204 - bare bubblewrap and renamed symlink aliases require experimental selection
+  ---
+  duration_ms: 1.451958
+  ...
+# Subtest: explicit experimental selection survives repeated selection and builds the gated provider command
+ok 205 - explicit experimental selection survives repeated selection and builds the gated provider command
+  ---
+  duration_ms: 1.615375
+  ...
+# Subtest: direct bubblewrap launcher requires opt-in before launching a provider
+ok 206 - direct bubblewrap launcher requires opt-in before launching a provider
+  ---
+  duration_ms: 208.990834
+  ...
+# Subtest: Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+ok 207 - Linux preparation, validation and Git filters refuse default bubblewrap before executing project code
+  ---
+  duration_ms: 121.911375
+  ...
+# Subtest: installation requires and preserves experimental selection while Codex installs keep their native default
+ok 208 - installation requires and preserves experimental selection while Codex installs keep their native default
+  ---
+  duration_ms: 101.295625
+  ...
+# Subtest: macOS copies nonempty files and refuses a redirected temporary root after profile construction
+ok 209 - macOS copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.06275
+  ...
+# Subtest: Codex copies nonempty files and refuses a redirected temporary root after profile construction
+ok 210 - Codex copies nonempty files and refuses a redirected temporary root after profile construction # SKIP set the actual macOS/native provider for host-only applicability proof
+  ---
+  duration_ms: 0.095458
+  ...
+# Subtest: copied codex probe product validates, guards and promotes worker and routing changes offline
+ok 211 - copied codex probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 9433.311333
+  ...
+# Subtest: copied claude probe product validates, guards and promotes worker and routing changes offline
+ok 212 - copied claude probe product validates, guards and promotes worker and routing changes offline
+  ---
+  duration_ms: 9736.024042
+  ...
+# Subtest: real live discovery setup confines a short fleet temp with no project configuration
+ok 213 - real live discovery setup confines a short fleet temp with no project configuration
+  ---
+  duration_ms: 813.530958
+  ...
+# Subtest: real live-worker arguments reach the installed adapter with its supported private temp grant
+ok 214 - real live-worker arguments reach the installed adapter with its supported private temp grant
+  ---
+  duration_ms: 1268.850791
+  ...
+# Subtest: installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+ok 215 - installed live discovery records concurrent workers and promotes answered routes through native sandbox requests offline
+  ---
+  duration_ms: 9170.696417
+  ...
+# Subtest: entry case environment bootstraps only the scratch fleet despite inherited operator homes
+ok 216 - entry case environment bootstraps only the scratch fleet despite inherited operator homes
+  ---
+  duration_ms: 469.293
+  ...
+# Subtest: case guard refuses real-home fleet resolution and symlink redirects before product execution
+ok 217 - case guard refuses real-home fleet resolution and symlink redirects before product execution
+  ---
+  duration_ms: 7.657959
+  ...
+# Subtest: delegated scratch cases restore product homes after their fixture scrubs machine variables
+ok 218 - delegated scratch cases restore product homes after their fixture scrubs machine variables
+  ---
+  duration_ms: 1.096542
+  ...
+# Subtest: in-process cases use the real fleetPath under scratch homes and restore the caller after failure
+ok 219 - in-process cases use the real fleetPath under scratch homes and restore the caller after failure
+  ---
+  duration_ms: 1.641583
+  ...
+# Subtest: first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+ok 220 - first entry maps an existing record in place; a neighbouring repository gets its own record and routes
+  ---
+  duration_ms: 839.575417
+  ...
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-ye03NR/existing/app' with monitor fleet join --record '/private/tmp/ft-ye03NR/existing/.org' --worktrees '/private/tmp/ft-ye03NR/existing/.worktrees/app' --layer '/private/tmp/ft-ye03NR/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-un0mlN/existing/moved app'\\''s checkout' with monitor fleet join --record '/private/tmp/ft-un0mlN/existing/.org' --worktrees '/private/tmp/ft-un0mlN/existing/worktrees/moved app'\\''s checkout' --layer '/private/tmp/ft-un0mlN/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-jd8bGr/existing/app' with monitor fleet join --record '/private/tmp/ft-jd8bGr/existing/app/.org' --worktrees '/private/tmp/ft-jd8bGr/existing/existing-worktrees/app' --layer '/private/tmp/ft-jd8bGr/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-nKNrri/existing/app' with monitor fleet join --record '/private/tmp/ft-nKNrri/existing/.org' --worktrees '/private/tmp/ft-nKNrri/existing/existing-worktrees/app' --layer '/private/tmp/ft-nKNrri/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-uAmkFN/existing/app' with monitor fleet join --record '/private/tmp/ft-uAmkFN/external-record' --worktrees '/private/tmp/ft-uAmkFN/existing/existing-worktrees/app' --layer '/private/tmp/ft-uAmkFN/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-8jq6IF/existing/app' with monitor fleet join --record '/private/tmp/ft-8jq6IF/records/external' --worktrees '/private/tmp/ft-8jq6IF/existing/existing-worktrees/app' --layer '/private/tmp/ft-8jq6IF/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-BuLAMA/existing/moved app'\\''s checkout' with monitor fleet join --record '/private/tmp/ft-BuLAMA/records/external' --worktrees '/private/tmp/ft-BuLAMA/existing/existing-worktrees/moved app'\\''s checkout' --layer '/private/tmp/ft-BuLAMA/existing/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-8cTwHz/legacy/app' with monitor fleet join --record '/private/tmp/ft-8cTwHz/legacy/.org' --worktrees '/private/tmp/ft-8cTwHz/legacy/.worktrees/app' --layer '/private/tmp/ft-8cTwHz/legacy/.lane.json'
+# monitor: preserving existing project discovery; join from '/private/tmp/ft-YZtCiK/unjoined' with monitor fleet join --record '/private/tmp/ft-YZtCiK/unjoined/.org' --worktrees '/Users/rewt/.herdr/worktrees/unjoined'
+# Subtest: concurrent first entries publish one complete fleet with both projects
+ok 221 - concurrent first entries publish one complete fleet with both projects
+  ---
+  duration_ms: 626.776291
+  ...
+# Subtest: join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+ok 222 - join is a byte and mtime no-op from a linked checkout; session limit changes only through join
+  ---
+  duration_ms: 1122.544875
+  ...
+# Subtest: moved checkout remains stale in fleet and console instead of being guessed by name
+ok 223 - moved checkout remains stale in fleet and console instead of being guessed by name
+  ---
+  duration_ms: 177.781708
+  ...
+# Subtest: a moved default-record checkout joins automatically without claiming the stale same-name entry
+ok 224 - a moved default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 731.432333
+  ...
+# Subtest: a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+ok 225 - a re-cloned default-record checkout joins automatically without claiming the stale same-name entry
+  ---
+  duration_ms: 759.194334
+  ...
+# Subtest: explicit replacement remaps the default checkout record by its relative path
+ok 226 - explicit replacement remaps the default checkout record by its relative path
+  ---
+  duration_ms: 348.920833
+  ...
+# Subtest: a re-clone in place can explicitly replace a missing native record
+ok 227 - a re-clone in place can explicitly replace a missing native record
+  ---
+  duration_ms: 499.161584
+  ...
+# Subtest: an unedited example console configuration is rejected with a fleet present
+ok 228 - an unedited example console configuration is rejected with a fleet present
+  ---
+  duration_ms: 179.003042
+  ...
+# Subtest: malformed fleet fails before entry or discovery touches any record
+ok 229 - malformed fleet fails before entry or discovery touches any record
+  ---
+  duration_ms: 536.749291
+  ...
+# Subtest: fleet advisory and stale checkout are visible in the project view
+ok 230 - fleet advisory and stale checkout are visible in the project view
+  ---
+  duration_ms: 153.082792
+  ...
+# Subtest: installed monitor command joins without a session and removal restores its bin
+ok 231 - installed monitor command joins without a session and removal restores its bin
+  ---
+  duration_ms: 311.29575
+  ...
+# Subtest: stable machine installation carries monitor and recovery can restore its launcher
+ok 232 - stable machine installation carries monitor and recovery can restore its launcher
+  ---
+  duration_ms: 1469.505375
+  ...
+# Subtest: an already-open console reads new joins and adjusted advisory limits on refresh
+ok 233 - an already-open console reads new joins and adjusted advisory limits on refresh
+  ---
+  duration_ms: 178.512375
+  ...
+# Subtest: explicit adoption maps paths and settings; record ownership cannot be duplicated
+ok 234 - explicit adoption maps paths and settings; record ownership cannot be duplicated
+  ---
+  duration_ms: 528.557041
+  ...
+# Subtest: without a fleet file legacy ancestor discovery and console configuration are unchanged
+ok 235 - without a fleet file legacy ancestor discovery and console configuration are unchanged
+  ---
+  duration_ms: 66.003625
+  ...
+# Subtest: a unmoved existing project keeps its layout when another project creates the fleet
+ok 236 - a unmoved existing project keeps its layout when another project creates the fleet
+  ---
+  duration_ms: 659.338917
+  ...
+# Subtest: a moved existing project keeps its layout when another project creates the fleet
+ok 237 - a moved existing project keeps its layout when another project creates the fleet
+  ---
+  duration_ms: 660.951208
+  ...
+# Subtest: fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility
+ok 238 - fleet exclusions persist before Git exists, cover descendants and aliases, and include restores entry eligibility
+  ---
+  duration_ms: 848.163333
+  ...
+# Subtest: excluding a joined external-record project preserves record writes, settings and worktrees in every checkout
+ok 239 - excluding a joined external-record project preserves record writes, settings and worktrees in every checkout
+  ---
+  duration_ms: 1358.248541
+  ...
+# Subtest: exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+    # Subtest: joined checkout record
+    ok 1 - joined checkout record
+      ---
+      duration_ms: 2438.717166
+      ...
+    # Subtest: joined external record
+    ok 2 - joined external record
+      ---
+      duration_ms: 2353.158625
+      ...
+    # Subtest: unjoined checkout compatibility
+    ok 3 - unjoined checkout compatibility
+      ---
+      duration_ms: 2635.040083
+      ...
+    # Subtest: unjoined ancestor compatibility
+    ok 4 - unjoined ancestor compatibility
+      ---
+      duration_ms: 2461.884958
+      ...
+    # Subtest: unjoined external ORG_DIR
+    ok 5 - unjoined external ORG_DIR
+      ---
+      duration_ms: 2146.349959
+      ...
+    # Subtest: stale mapping with the same Git identity
+    ok 6 - stale mapping with the same Git identity
+      ---
+      duration_ms: 1586.699375
+      ...
+    # Subtest: stale mapping with external ORG_DIR
+    ok 7 - stale mapping with external ORG_DIR
+      ---
+      duration_ms: 1390.926916
+      ...
+    1..7
+ok 240 - exclusion leaves record discovery, settings layers, worktree roots and resolved routes identical in every layout
+  ---
+  duration_ms: 15013.430125
+  ...
+# Subtest: explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+ok 241 - explicit external ORG_DIR preserves the unmoved unjoined layout until adoption
+  ---
+  duration_ms: 573.023542
+  ...
+# Subtest: explicit external ORG_DIR preserves the moved unjoined layout until adoption
+ok 242 - explicit external ORG_DIR preserves the moved unjoined layout until adoption
+  ---
+  duration_ms: 542.468584
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer
+ok 243 - a neighbor with its own record cannot inherit another project's mapped parent layer
+  ---
+  duration_ms: 773.237041
+  ...
+# Subtest: a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+ok 244 - a neighbor with its own record cannot inherit another project's mapped parent layer through an alias
+  ---
+  duration_ms: 1042.266375
+  ...
+# Subtest: legacy record discovery keeps its symlink path and does not depend on valid parent settings
+ok 245 - legacy record discovery keeps its symlink path and does not depend on valid parent settings
+  ---
+  duration_ms: 229.776959
+  ...
+# Subtest: fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+ok 246 - fleet-present unjoined discovery terminates outside GIT_WORK_TREE and ignores outside records
+  ---
+  duration_ms: 145.460667
+  ...
+# Subtest: entry worktree roots are session overrides and never freeze the fleet mapping
+ok 247 - entry worktree roots are session overrides and never freeze the fleet mapping
+  ---
+  duration_ms: 1021.879209
+  ...
+# Subtest: console merges unjoined configured projects with fleet entries across refresh and adoption
+ok 248 - console merges unjoined configured projects with fleet entries across refresh and adoption
+  ---
+  duration_ms: 418.676375
+  ...
+# Subtest: explicit ORG_DIR validates the fleet without launching Git on record commands
+ok 249 - explicit ORG_DIR validates the fleet without launching Git on record commands
+  ---
+  duration_ms: 155.369541
+  ...
+# Subtest: a moved checkout can explicitly replace its stale mapping while retaining its external record
+ok 250 - a moved checkout can explicitly replace its stale mapping while retaining its external record
+  ---
+  duration_ms: 655.597125
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a moved checkout
+ok 251 - fleet repair: automatic entry suggests the stale external record for a moved checkout
+  ---
+  duration_ms: 260.994333
+  ...
+# Subtest: fleet repair: automatic entry suggests the stale external record for a re-cloned checkout
+ok 252 - fleet repair: automatic entry suggests the stale external record for a re-cloned checkout
+  ---
+  duration_ms: 338.548333
+  ...
+# Subtest: fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+ok 253 - fleet repair: explicit replacement consolidates an earlier automatic hash entry without deleting its record
+  ---
+  duration_ms: 258.726833
+  ...
+# Subtest: fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+ok 254 - fleet repair: live same-name external mappings join separately; multiple stale matches only suggest
+  ---
+  duration_ms: 290.663667
+  ...
+# Subtest: fleet repair: unknown names, live records, and overlapping roots remain refused before writes
+ok 255 - fleet repair: unknown names, live records, and overlapping roots remain refused before writes
+  ---
+  duration_ms: 536.784375
+  ...
+# Subtest: installed entry survives removal of an old versioned executable target without reinstall
+ok 256 - installed entry survives removal of an old versioned executable target without reinstall
+  ---
+  duration_ms: 2923.492125
+  ...
+# Subtest: installed entry survives removal of an old stable symlink target without reinstall
+ok 257 - installed entry survives removal of an old stable symlink target without reinstall
+  ---
+  duration_ms: 3060.681541
+  ...
+# Subtest: installed entry survives removal of an old discovered versioned executable target without reinstall
+ok 258 - installed entry survives removal of an old discovered versioned executable target without reinstall
+  ---
+  duration_ms: 3484.302375
+  ...
+# Subtest: native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+ok 259 - native lookup skips other managed installs and wrapper aliases, retains off-PATH launchers and refuses missing executables
+  ---
+  duration_ms: 69.725792
+  ...
+# Subtest: explicit native selections beat competing PATH tools (machine environment)
+ok 260 - explicit native selections beat competing PATH tools (machine environment)
+  ---
+  duration_ms: 2129.923333
+  ...
+# Subtest: explicit native selections beat competing PATH tools (direct arguments)
+ok 261 - explicit native selections beat competing PATH tools (direct arguments)
+  ---
+  duration_ms: 1528.727584
+  ...
+# Subtest: discovered native follows PATH while its original receipt remains executable
+ok 262 - discovered native follows PATH while its original receipt remains executable
+  ---
+  duration_ms: 1217.83325
+  ...
+# Subtest: installed wrappers launch explicit natives without dirname on PATH
+ok 263 - installed wrappers launch explicit natives without dirname on PATH
+  ---
+  duration_ms: 1052.660084
+  ...
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 264 - codex install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1706.225375
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 265 - claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1614.010292
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 266 - codex and claude install, repeat and uninstall restore machine files
+  ---
+  duration_ms: 1937.825709
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 267 - missing harness refuses before shell or harness configuration changes
+  ---
+  duration_ms: 103.18025
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 268 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+  ---
+  duration_ms: 1495.193083
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 269 - missing npm names the prerequisite and changes no machine files
+  ---
+  duration_ms: 97.743333
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 270 - missing git names the prerequisite and changes no machine files
+  ---
+  duration_ms: 217.667625
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 271 - missing python3 names the prerequisite and changes no machine files
+  ---
+  duration_ms: 313.012667
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 272 - missing herdr names the prerequisite and changes no machine files
+  ---
+  duration_ms: 398.766625
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 273 - native hooks survive relocation, join an unconfigured project and open two panes once without focus
+  ---
+  duration_ms: 2026.79975
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 274 - codex native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1534.558167
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 275 - codex native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1357.287208
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 276 - claude native startup honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1532.049291
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 277 - claude native resume honors canonical project opt-out without state or panes
+  ---
+  duration_ms: 1493.091542
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 278 - uninstall preserves unrelated harness edits and refuses a changed managed hook
+  ---
+  duration_ms: 1900.834417
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+not ok 279 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+  ---
+  duration_ms: 2239.683792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    monitor entry: Herdr control socket /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-vmTuzc/monitor-zero-setup-WrlMyk/absent.sock is unavailable: ENOENT: no such file or directory, lstat '/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-vmTuzc/monitor-zero-setup-WrlMyk/absent.sock'
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    Object.ok (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/zero-setup-install.test.mjs:44:33)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/zero-setup-install.test.mjs:187:5
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 280 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+  ---
+  duration_ms: 0.266583
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 281 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 1498.099
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 282 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+  ---
+  duration_ms: 2276.070209
+  ...
+# Subtest: bin/org.mjs --help exits successfully before operational work
+ok 283 - bin/org.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.947292
+  ...
+# Subtest: brain/bin/brain.mjs --help exits successfully before operational work
+ok 284 - brain/bin/brain.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.146458
+  ...
+# Subtest: console/app.mjs --help exits successfully before operational work
+ok 285 - console/app.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 52.0005
+  ...
+# Subtest: console/dev.mjs --help exits successfully before operational work
+ok 286 - console/dev.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.933416
+  ...
+# Subtest: console/proto/main.mjs --help exits successfully before operational work
+ok 287 - console/proto/main.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.042042
+  ...
+# Subtest: contrib/settle-watch.mjs --help exits successfully before operational work
+ok 288 - contrib/settle-watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.02575
+  ...
+# Subtest: discovery/acceptance.mjs --help exits successfully before operational work
+ok 289 - discovery/acceptance.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.239083
+  ...
+# Subtest: discovery/adapters/codex.mjs --help exits successfully before operational work
+ok 290 - discovery/adapters/codex.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 44.424458
+  ...
+# Subtest: discovery/adapters/claude.mjs --help exits successfully before operational work
+ok 291 - discovery/adapters/claude.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 46.97375
+  ...
+# Subtest: discovery/install.mjs --help exits successfully before operational work
+ok 292 - discovery/install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 37.934416
+  ...
+# Subtest: discovery/native/build.mjs --help exits successfully before operational work
+ok 293 - discovery/native/build.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.966709
+  ...
+# Subtest: discovery/validate.mjs --help exits successfully before operational work
+ok 294 - discovery/validate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.055208
+  ...
+# Subtest: discovery/git-driver.mjs --help exits successfully before operational work
+ok 295 - discovery/git-driver.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.9305
+  ...
+# Subtest: discovery/bounded.mjs --help exits successfully before operational work
+ok 296 - discovery/bounded.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.39875
+  ...
+# Subtest: discovery/bubblewrap.mjs --help exits successfully before operational work
+ok 297 - discovery/bubblewrap.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.664625
+  ...
+# Subtest: discovery/client.mjs --help exits successfully before operational work
+ok 298 - discovery/client.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.960833
+  ...
+# Subtest: dispatch/dispatch.mjs --help exits successfully before operational work
+ok 299 - dispatch/dispatch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 27.497458
+  ...
+# Subtest: docs/adoption/rehearse.mjs --help exits successfully before operational work
+ok 300 - docs/adoption/rehearse.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.455959
+  ...
+# Subtest: herdr/dependencies.mjs --help exits successfully before operational work
+ok 301 - herdr/dependencies.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.610417
+  ...
+# Subtest: herdr/entry-install.mjs --help exits successfully before operational work
+ok 302 - herdr/entry-install.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.395417
+  ...
+# Subtest: herdr/native-entry.mjs --help exits successfully before operational work
+ok 303 - herdr/native-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 38.923
+  ...
+# Subtest: herdr/prerequisites.mjs --help exits successfully before operational work
+ok 304 - herdr/prerequisites.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.139041
+  ...
+# Subtest: herdr/release-candidate.mjs --help exits successfully before operational work
+ok 305 - herdr/release-candidate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 26.923542
+  ...
+# Subtest: housekeeping/housekeeping.mjs --help exits successfully before operational work
+ok 306 - housekeeping/housekeeping.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.7335
+  ...
+# Subtest: lanes/lane.mjs --help exits successfully before operational work
+ok 307 - lanes/lane.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 33.616958
+  ...
+# Subtest: promote/host-gate.mjs --help exits successfully before operational work
+ok 308 - promote/host-gate.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 28.558
+  ...
+# Subtest: promote/promote.mjs --help exits successfully before operational work
+ok 309 - promote/promote.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.413958
+  ...
+# Subtest: promote/metrics.mjs --help exits successfully before operational work
+ok 310 - promote/metrics.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 24.491083
+  ...
+# Subtest: release/release.mjs --help exits successfully before operational work
+ok 311 - release/release.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 30.7525
+  ...
+# Subtest: settle/settle.mjs --help exits successfully before operational work
+ok 312 - settle/settle.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 31.900708
+  ...
+# Subtest: supervisor/open-session.mjs --help exits successfully before operational work
+ok 313 - supervisor/open-session.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.479
+  ...
+# Subtest: supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+ok 314 - supervisor/prompt-supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.627042
+  ...
+# Subtest: supervisor/session-start.mjs --help exits successfully before operational work
+ok 315 - supervisor/session-start.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 29.129875
+  ...
+# Subtest: supervisor/supervisor.mjs --help exits successfully before operational work
+ok 316 - supervisor/supervisor.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 39.489916
+  ...
+# Subtest: supervisor/tidy-tabs.mjs --help exits successfully before operational work
+ok 317 - supervisor/tidy-tabs.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.432291
+  ...
+# Subtest: test-slot/test-slot.mjs --help exits successfully before operational work
+ok 318 - test-slot/test-slot.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 25.427333
+  ...
+# Subtest: watch/watch.mjs --help exits successfully before operational work
+ok 319 - watch/watch.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 35.399917
+  ...
+# Subtest: acceptance/run.mjs --help exits successfully before operational work
+ok 320 - acceptance/run.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 36.687208
+  ...
+# Subtest: acceptance/plugin-entry.mjs --help exits successfully before operational work
+ok 321 - acceptance/plugin-entry.mjs --help exits successfully before operational work
+  ---
+  duration_ms: 34.658417
+  ...
+# Subtest: lanes/lane.mjs via release symlinks --help exits successfully before operational work
+ok 322 - lanes/lane.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 36.616875
+  ...
+# Subtest: brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+ok 323 - brain/bin/brain.mjs via release symlinks --help exits successfully before operational work
+  ---
+  duration_ms: 41.64075
+  ...
+# Subtest: a blocked worker routes by canonical fleet identity through the durable inbox, never its project label
+ok 324 - a blocked worker routes by canonical fleet identity through the durable inbox, never its project label
+  ---
+  duration_ms: 369.485458
+  ...
+# Subtest: linked worktrees outside the checkout route to the same fleet identity
+ok 325 - linked worktrees outside the checkout route to the same fleet identity
+  ---
+  duration_ms: 244.501042
+  ...
+# Subtest: recorded blocked supervisors escalate to operator and steward without enqueuing to themselves
+ok 326 - recorded blocked supervisors escalate to operator and steward without enqueuing to themselves
+  ---
+  duration_ms: 234.482041
+  ...
+# Subtest: native explicit supervisor launch bindings discover the recipient without a name convention
+ok 327 - native explicit supervisor launch bindings discover the recipient without a name convention
+  ---
+  duration_ms: 400.868625
+  ...
+# Subtest: missing, ambiguous, stale and foreign recipients escalate instead of guessing
+ok 328 - missing, ambiguous, stale and foreign recipients escalate instead of guessing
+  ---
+  duration_ms: 554.849333
+  ...
+# Subtest: newer DONE observations, resolved blocks, changed panes and new occupants suppress historical queue entries
+ok 329 - newer DONE observations, resolved blocks, changed panes and new occupants suppress historical queue entries
+  ---
+  duration_ms: 510.83425
+  ...
+# Subtest: stalled native notices share the alert channel and cap; acknowledged notices stop escalating
+ok 330 - stalled native notices share the alert channel and cap; acknowledged notices stop escalating
+  ---
+  duration_ms: 984.479375
+  ...
+# Subtest: legacy parked outbox notices are observed by age without writing or replaying them
+ok 331 - legacy parked outbox notices are observed by age without writing or replaying them
+  ---
+  duration_ms: 174.774
+  ...
+# Subtest: alerts survive failures, lost acknowledgements and restart, with durable intent before the local command
+ok 332 - alerts survive failures, lost acknowledgements and restart, with durable intent before the local command
+  ---
+  duration_ms: 386.091167
+  ...
+# Subtest: enqueue lost acknowledgement retries the stable notice id and respects routing debounce
+ok 333 - enqueue lost acknowledgement retries the stable notice id and respects routing debounce
+  ---
+  duration_ms: 595.036875
+  ...
+# Subtest: dry run and disabled mode make no writes, start no owners, and send no alerts
+ok 334 - dry run and disabled mode make no writes, start no owners, and send no alerts
+  ---
+  duration_ms: 174.636625
+  ...
+# Subtest: corrupt configuration, fleet and journals refuse effects
+ok 335 - corrupt configuration, fleet and journals refuse effects
+  ---
+  duration_ms: 120.595334
+  ...
+# Subtest: bounded journal compaction preserves active alert caps while evicting old session history
+ok 336 - bounded journal compaction preserves active alert caps while evicting old session history
+  ---
+  duration_ms: 553.48425
+  ...
+# Subtest: offline inbox observation continues escalating with the same cap when Herdr is down
+ok 337 - offline inbox observation continues escalating with the same cap when Herdr is down
+  ---
+  duration_ms: 550.329667
+  ...
+# Subtest: the local alert command receives a single literal JSON argument without shell interpretation
+ok 338 - the local alert command receives a single literal JSON argument without shell interpretation
+  ---
+  duration_ms: 190.808958
+  ...
+# Subtest: the native inbox gate refuses a blocked recipient with a recorded dialog, without typing or keys
+ok 339 - the native inbox gate refuses a blocked recipient with a recorded dialog, without typing or keys
+  ---
+  duration_ms: 676.995833
+  ...
+# Subtest: service installation has no background digest flag and steward defaults need no model
+ok 340 - service installation has no background digest flag and steward defaults need no model
+  ---
+  duration_ms: 0.27375
+  ...
+# Subtest: retired session cap receipts survive unrelated journal compaction and later restoration
+ok 341 - retired session cap receipts survive unrelated journal compaction and later restoration
+  ---
+  duration_ms: 517.851917
+  ...
+# Subtest: journal saturation refuses an effect before the command and preserves the existing cap receipts
+ok 342 - journal saturation refuses an effect before the command and preserves the existing cap receipts
+  ---
+  duration_ms: 188.949958
+  ...
+# Subtest: the watcher captures first-seen and replacement-session blocks without a digest model
+ok 343 - the watcher captures first-seen and replacement-session blocks without a digest model
+  ---
+  duration_ms: 674.707292
+  ...
+# Subtest: release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+ok 344 - release defers swap and low-memory pressure without cutting a candidate, then proceeds when cleared
+  ---
+  duration_ms: 861.185625
+  ...
+# Subtest: unconfigured release uses npm test, initializes its record and never executes ship
+ok 345 - unconfigured release uses npm test, initializes its record and never executes ship
+  ---
+  duration_ms: 1193.3235
+  ...
+# Subtest: unset and missing preflight inputs remain retryable on the same commit
+ok 346 - unset and missing preflight inputs remain retryable on the same commit
+  ---
+  duration_ms: 1631.61
+  ...
+# Subtest: unset and missing preflight inputs remain retryable after main advances
+ok 347 - unset and missing preflight inputs remain retryable after main advances
+  ---
+  duration_ms: 1729.789042
+  ...
+# Subtest: a signaled preflight is retryable and malformed preflight declarations are rejected
+ok 348 - a signaled preflight is retryable and malformed preflight declarations are rejected
+  ---
+  duration_ms: 1224.644417
+  ...
+# Subtest: a preflight launch error creates no candidate and can be corrected on a later commit
+ok 349 - a preflight launch error creates no candidate and can be corrected on a later commit
+  ---
+  duration_ms: 1053.366
+  ...
+# Subtest: two real lane promotions become one tagged batch and one operator question
+ok 350 - two real lane promotions become one tagged batch and one operator question
+  ---
+  duration_ms: 1851.959167
+  ...
+# Subtest: publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+ok 351 - publish auto policy cannot approve a release and agents cannot forge, close or overrule its decision
+  ---
+  duration_ms: 1547.484333
+  ...
+# Subtest: release replies require normalized yes and leave later promotions eligible
+ok 352 - release replies require normalized yes and leave later promotions eligible
+  ---
+  duration_ms: 3051.942541
+  ...
+# Subtest: release replies require normalized no and leave later promotions eligible
+ok 353 - release replies require normalized no and leave later promotions eligible
+  ---
+  duration_ms: 3127.637
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered yes
+ok 354 - agents cannot start a run on an operator-reserved question answered yes
+  ---
+  duration_ms: 1957.475541
+  ...
+# Subtest: agents cannot start a run on an operator-reserved question answered no
+ok 355 - agents cannot start a run on an operator-reserved question answered no
+  ---
+  duration_ms: 1820.133333
+  ...
+# Subtest: low load, drained promotion queue, clean base and supervisor ownership are required
+ok 356 - low load, drained promotion queue, clean base and supervisor ownership are required
+  ---
+  duration_ms: 358.035459
+  ...
+# Subtest: red gate is durable, never repeated, and a later promotion may become a new candidate
+ok 357 - red gate is durable, never repeated, and a later promotion may become a new candidate
+  ---
+  duration_ms: 1816.277
+  ...
+# Subtest: interrupted start, duplicate record writes and older folds preserve once-only semantics
+ok 358 - interrupted start, duplicate record writes and older folds preserve once-only semantics
+  ---
+  duration_ms: 633.388875
+  ...
+# Subtest: tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+ok 359 - tracked declarations, preparation failure, fixed candidate tags and base overrides are explicit
+  ---
+  duration_ms: 1533.768708
+  ...
+# Subtest: snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+ok 360 - snapshot extraction gives tar an owned archive file instead of a padded stdin pipe
+  ---
+  duration_ms: 920.225125
+  ...
+# Subtest: supervisor, discovery and console recover gate evidence and the operator decision from the record
+ok 361 - supervisor, discovery and console recover gate evidence and the operator decision from the record
+  ---
+  duration_ms: 1464.550042
+  ...
+# Subtest: a running gate excludes a second release and a direct promotion with the shared lock
+ok 362 - a running gate excludes a second release and a direct promotion with the shared lock
+  ---
+  duration_ms: 1037.070667
+  ...
+# Subtest: gate result receipts are immutable and duplicate completion creates no extra operator question
+ok 363 - gate result receipts are immutable and duplicate completion creates no extra operator question
+  ---
+  duration_ms: 893.385916
+  ...
+# Subtest: preparation env is scoped and a signaled gate records interruption without a replay
+ok 364 - preparation env is scoped and a signaled gate records interruption without a replay
+  ---
+  duration_ms: 1187.048125
+  ...
+# Subtest: scratch preview runs preparation with inherited dependency-skip switches removed
+ok 365 - scratch preview runs preparation with inherited dependency-skip switches removed
+  ---
+  duration_ms: 987.284834
+  ...
+# Subtest: a moved candidate tag cannot reuse its green evidence
+ok 366 - a moved candidate tag cannot reuse its green evidence
+  ---
+  duration_ms: 1064.233
+  ...
+# Subtest: a held host slot defers release before cutting or claiming a candidate
+ok 367 - a held host slot defers release before cutting or claiming a candidate
+  ---
+  duration_ms: 936.361625
+  ...
+# Subtest: result recovery preserves an interrupted claim until the actual result is durable and never replays its gate
+ok 368 - result recovery preserves an interrupted claim until the actual result is durable and never replays its gate
+  ---
+  duration_ms: 1269.914583
+  ...
+# Subtest: the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+ok 369 - the tracked preflight checks inputs and preparation supplies configured acceptance inputs
+  ---
+  duration_ms: 599.042167
+  ...
+# Subtest: missing input setup and missing build evidence fail before invoking acceptance
+ok 370 - missing input setup and missing build evidence fail before invoking acceptance
+  ---
+  duration_ms: 4.0455
+  ...
+# Subtest: private cache copies only pinned dependency tarballs and refuses missing content
+ok 371 - private cache copies only pinned dependency tarballs and refuses missing content
+  ---
+  duration_ms: 6.075875
+  ...
+# Subtest: unset compatibility input is optional through the declared build and gate
+ok 372 - unset compatibility input is optional through the declared build and gate
+  ---
+  duration_ms: 593.185
+  ...
+# Subtest: real project preflight leaves invalid inputs uncut and retries the same commit
+ok 373 - real project preflight leaves invalid inputs uncut and retries the same commit
+  ---
+  duration_ms: 2065.0535
+  ...
+# Subtest: release safety checks stop the gate on failure and precede acceptance on success
+ok 374 - release safety checks stop the gate on failure and precede acceptance on success
+  ---
+  duration_ms: 982.112834
+  ...
+# Subtest: failed offline release coverage prevents build evidence and acceptance
+ok 375 - failed offline release coverage prevents build evidence and acceptance
+  ---
+  duration_ms: 477.651292
+  ...
+# Subtest: settle fixture isolates in-process entry and children without the bounded runner
+    # Subtest: unset fleet
+    ok 1 - unset fleet
+      ---
+      duration_ms: 4720.242916
+      ...
+    # Subtest: operator fleet override
+    ok 2 - operator fleet override
+      ---
+      duration_ms: 4840.578334
+      ...
+    1..2
+ok 376 - settle fixture isolates in-process entry and children without the bounded runner
+  ---
+  duration_ms: 9562.011583
+  ...
+1..376
+# tests 385
+# suites 0
+# pass 375
+# fail 1
+# cancelled 0
+# skipped 9
+# todo 0
+# duration_ms 345918.269375

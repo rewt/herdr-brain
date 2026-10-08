@@ -1,0 +1,260 @@
+TAP version 13
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 1 - offline fleet fixtures keep default run temp within the Unix socket budget
+  ---
+  duration_ms: 9.360875
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 2 - planning rejects bytes edits to shell without publishing a journal
+  ---
+  duration_ms: 487.929583
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 3 - planning rejects mode edits to shell without publishing a journal
+  ---
+  duration_ms: 536.793417
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 4 - planning rejects bytes edits to adapter without publishing a journal
+  ---
+  duration_ms: 2366.18325
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 5 - planning rejects mode edits to adapter without publishing a journal
+  ---
+  duration_ms: 1811.931666
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 6 - planning rejects bytes edits to receipt without publishing a journal
+  ---
+  duration_ms: 2585.750083
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 7 - planning rejects mode edits to receipt without publishing a journal
+  ---
+  duration_ms: 2137.940208
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 8 - planning rejects bytes edits to absent adapter without publishing a journal
+  ---
+  duration_ms: 2627.232667
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 9 - planning rejects bytes edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 2308.777708
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 10 - planning rejects mode edits to unchanged shell without publishing a journal
+  ---
+  duration_ms: 2074.107083
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 11 - release tests preserve a separate installation inherited through the parent environment
+  ---
+  duration_ms: 14662.616333
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 12 - overlapping installs serialize before planning and retain the first runtime and complete entry
+  ---
+  duration_ms: 2624.075833
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 13 - a complete stale plan refuses before a journal and cannot roll back another successful install
+  ---
+  duration_ms: 2136.066167
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 14 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 1441.529916
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 15 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1850.507166
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 16 - shell install, upgrade and restore preserve every original byte including malformed UTF-8
+  ---
+  duration_ms: 2476.210084
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 17 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 1691.659
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 18 - non-UTF-8 shell bytes survive terminated-install recovery
+  ---
+  duration_ms: 1527.899333
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 19 - mode-only reinstallation at staged survives failed-write rollback
+  ---
+  duration_ms: 2170.213875
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 20 - mode-only reinstallation at applied survives failed-write rollback
+  ---
+  duration_ms: 1733.451667
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 21 - mode-only reinstallation at operator chmod survives failed-write rollback
+  ---
+  duration_ms: 2417.061417
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 22 - mode-only reinstallation at staged survives terminated-install recovery
+  ---
+  duration_ms: 2122.030458
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 23 - mode-only reinstallation at applied survives terminated-install recovery
+  ---
+  duration_ms: 2034.68825
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 24 - mode-only reinstallation at operator chmod survives terminated-install recovery
+  ---
+  duration_ms: 1929.887708
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 25 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+  ---
+  duration_ms: 2002.284208
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 26 - relocated installed runtime executes lane review through its bundled template dependency
+  ---
+  duration_ms: 2584.410959
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 27 - release carries entry, pins final versions, rolls back and restores exact shell state
+  ---
+  duration_ms: 4728.856875
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 28 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+  ---
+  duration_ms: 636.698833
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 29 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+  ---
+  duration_ms: 2028.103
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 30 - plugin build discovers native CLIs and installs default machine paths without entry overrides
+  ---
+  duration_ms: 2123.617083
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 31 - Herdr build checkout can move or disappear while installed entry and restore still work
+  ---
+  duration_ms: 3006.825042
+  ...
+# Subtest: installed supervisor refuses an unsupported Codex build with the reason before handover
+ok 32 - installed supervisor refuses an unsupported Codex build with the reason before handover
+  ---
+  duration_ms: 2840.169542
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 33 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+  ---
+  duration_ms: 3097.125084
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 34 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+  ---
+  duration_ms: 4354.652333
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 35 - non-writable shell files refuse installation without adapters or partial snippets
+  ---
+  duration_ms: 403.1025
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 36 - recovery receipt precedes shell writes and rolls back a failure after the first snippet
+  ---
+  duration_ms: 3409.496625
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 37 - recovery receipt precedes shell writes and recovers a terminated install
+  ---
+  duration_ms: 3459.859916
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 38 - rollback preserves a namespaced tag with a same-basename distractor
+  ---
+  duration_ms: 2997.430167
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 39 - terminated install recovers a staged shell replacement as well as the first installed snippet
+  ---
+  duration_ms: 1844.222583
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 40 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+  ---
+  duration_ms: 1796.559
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 41 - rolling back to a release without discovery removes entry and can roll forward again
+  ---
+  duration_ms: 2321.96675
+  ...
+# Subtest: control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+ok 42 - control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+  ---
+  duration_ms: 162.390833
+  ...
+# Subtest: claude grants only coordinating roles the resolved control socket and lane root
+ok 43 - claude grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 231.878959
+  ...
+# Subtest: codex grants only coordinating roles the resolved control socket and lane root
+ok 44 - codex grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 241.300917
+  ...
+# Subtest: coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+ok 45 - coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+  ---
+  duration_ms: 253.912959
+  ...
+# Subtest: the local bridge warning names the removable file without rewriting it
+ok 46 - the local bridge warning names the removable file without rewriting it
+  ---
+  duration_ms: 156.606791
+  ...
+# Subtest: a coordinating Codex launch fails before handover when its native profile cannot connect
+ok 47 - a coordinating Codex launch fails before handover when its native profile cannot connect
+  ---
+  duration_ms: 190.251708
+  ...
+# Subtest: chat session bindings carry their role and omit supervisor lifecycle hooks
+ok 48 - chat session bindings carry their role and omit supervisor lifecycle hooks
+  ---
+  duration_ms: 30.901875
+  ...
+# Subtest: claude native sandbox connects to the fake control socket only for supervisor and chat
+ok 49 - claude native sandbox connects to the fake control socket only for supervisor and chat # SKIP set the offline native sandbox probe binary outside a nested sandbox
+  ---
+  duration_ms: 0.085584
+  ...
+# Subtest: codex native sandbox connects to the fake control socket only for supervisor and chat
+ok 50 - codex native sandbox connects to the fake control socket only for supervisor and chat # SKIP set the offline native sandbox probe binary outside a nested sandbox
+  ---
+  duration_ms: 0.181
+  ...
+1..50
+# tests 50
+# suites 0
+# pass 48
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 102749.574083

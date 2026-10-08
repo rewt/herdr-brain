@@ -1,0 +1,120 @@
+TAP version 13
+# monitor entry: keeping lane/entry-78cc581d9a11 at /private/tmp/as-YWeoGa/lanes/lane-entry-78cc581d9a11: a run was started in this lane
+# Subtest: validation composition keeps product denials and refuses foreign writes and unsupported profiles
+ok 1 - validation composition keeps product denials and refuses foreign writes and unsupported profiles
+  ---
+  duration_ms: 62.481333
+  ...
+# Subtest: validation write exceptions reject redirected directories and protected Git or shared-state targets
+ok 2 - validation write exceptions reject redirected directories and protected Git or shared-state targets
+  ---
+  duration_ms: 137.180417
+  ...
+# Subtest: only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+ok 3 - only immutable lifetime probes get a narrow read grant; aliases and missing denials refuse
+  ---
+  duration_ms: 185.712459
+  ...
+# Subtest: actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+not ok 4 - actual native transport validates and promotes work and approved routes offline, preserving owner fd and confinement
+  ---
+  duration_ms: 1925.679833
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: |-
+    prepare source: lane /private/tmp/as-YWeoGa/lanes/lane-entry-78cc581d9a11/.lane.json; commands: []
+    sandboxed command (canonical project validation (/private/tmp/av-vtWbDm/project/.lane.json)): node --test
+    TAP version 13
+    # Subtest: gate and product boundaries
+    ok 1 - gate and product boundaries
+      ---
+      duration_ms: 3.330459
+      ...
+    # Subtest: green
+    ok 2 - green
+      ---
+      duration_ms: 0.522208
+      ...
+    1..2
+    # tests 2
+    # suites 0
+    # pass 2
+    # fail 0
+    # cancelled 0
+    # skipped 0
+    # todo 0
+    # duration_ms 33.363292
+    monitor validation: sandboxed validation exited 125
+    GATE 871d9137b243c7d59d2e50f5683db4d08c380266 exit=1 (0.652s)
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    command (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:26:40)
+    lane (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:225:12)
+    Object.dispatch (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/discovery/runtime.mjs:305:32)
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/acceptance/test/validation.test.mjs:145:26
+    file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:42
+    AsyncLocalStorage.run (node:async_hooks:346:14)
+    TestContext.<anonymous> (file:///Users/rewt/development/rewt/.worktrees/herdr-brain/lane-herdr-socket-role/test/helpers/bounded-test.mjs:48:29)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+  ...
+# Subtest: native per-run validation temp is admitted only by its private identity and exact environment handoff
+ok 5 - native per-run validation temp is admitted only by its private identity and exact environment handoff
+  ---
+  duration_ms: 120.737584
+  ...
+# Subtest: workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+ok 6 - workspace cutover replaces only the pinned supervisor entry and refuses missing or duplicate targets
+  ---
+  duration_ms: 0.955834
+  ...
+# Subtest: relocation requires the expected launcher and audits every transitive copied file before use
+ok 7 - relocation requires the expected launcher and audits every transitive copied file before use
+  ---
+  duration_ms: 6.181917
+  ...
+# Subtest: relocation gives the project parent precedence over a colliding live home without replacing scratch paths again
+ok 8 - relocation gives the project parent precedence over a colliding live home without replacing scratch paths again
+  ---
+  duration_ms: 0.288791
+  ...
+# Subtest: kernel boundary denies dynamically computed external code reads and record writes
+ok 9 - kernel boundary denies dynamically computed external code reads and record writes
+  ---
+  duration_ms: 26.123917
+  ...
+# Subtest: scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+ok 10 - scratch Git grants permit direct writes, preserve installed-parent protections and reject escapes
+  ---
+  duration_ms: 5.815166
+  ...
+# Subtest: missing ripgrep is named pending before executing any candidate code
+ok 11 - missing ripgrep is named pending before executing any candidate code
+  ---
+  duration_ms: 322.592834
+  ...
+# Subtest: record shim rejects a changed pin and symlink escape before invoking the CLI
+ok 12 - record shim rejects a changed pin and symlink escape before invoking the CLI
+  ---
+  duration_ms: 54.701458
+  ...
+# Subtest: real session environment removes capability, identity and credential overrides
+ok 13 - real session environment removes capability, identity and credential overrides
+  ---
+  duration_ms: 0.939125
+  ...
+# Subtest: policy attribution refuses repository exposure and unwitnessed self-reports
+ok 14 - policy attribution refuses repository exposure and unwitnessed self-reports
+  ---
+  duration_ms: 20.766583
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 13
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2954.406625

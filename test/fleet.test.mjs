@@ -226,7 +226,7 @@ test('malformed fleet fails before entry or discovery touches any record', t => 
 
 test('fleet advisory and stale checkout are visible in the project view', t => {
   const f = fixture(t), cwd = f.repo('app'); f.join(cwd);
-  const config = loadModernConfig(f.consoleFile), m = { sessions: [], spaces: [], goals: [], categoryFlags: [], decided: [], asked: [], needs: [], tasks: [] };
+  const config = loadModernConfig(f.consoleFile), m = { sessions: [], spaces: [], goals: [], categoryFlags: [], decided: [], asked: [], needs: [], aged: [], tasks: [] };
   const rows = projectRows({ model: m, state: { fleet: config.fleet, errors: {} }, project: { ...config.projects[0], stale: true }, width: 100, height: 32 });
   const text = rows.flat().map(cell => cell.text).join('\n');
   assert.match(text, /Fleet session limit 6.*advisory/); assert.match(text, /Stale checkout/);

@@ -301,7 +301,7 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
     section(`Waiting on you · ${m.needs.length}`, 'amber');
     if (m.categoryFlags?.length) row(`Category flags · ${m.categoryFlags.length} · ! review ›`, { id: 'view:needs', fg: 'amber' });
     m.needs.slice(0, 3).forEach(needRow); if (!m.needs.length) paragraph(s.errors.today || s.errors.brain ? 'Waiting sources unavailable · r retry' : 'Nothing waiting on you.');
-    if (m.aged.length) row(`${m.aged.length} parked ${m.aged.length === 1 ? 'question' : 'questions'} (>7 days) · record today --parked`, { id: 'view:aged', fg: 'muted' });
+    if (m.aged?.length) row(`${m.aged.length} parked ${m.aged.length === 1 ? 'question' : 'questions'} (>7 days) · record today --parked`, { id: 'view:aged', fg: 'muted' });
     row('! Open waiting queue ›', { id: 'view:needs', fg: 'amber' }); row();
     section(`Decided · ${m.decided.length}`, 'teal'); decisionRows(2);
     row('d All decisions ›', { id: 'view:decided', fg: 'teal' }); row();
@@ -452,11 +452,14 @@ export function renderModern({ state: s, project: p, model: m, now }, cols, rows
         paragraph(flag.text, 'amber');
       }
     }
-    const fold = NEED_FOLDS.find(f => f.view === s.view), list = m[fold.list];
+    const fold = NEED_FOLDS.find(f => f.view === s.view), list = m[fold.list] ?? [];
     const reviewing = s.view === 'needs' && m.categoryFlags?.length;
     section(`${reviewing ? 'Questions' : fold.title} · ${list.length}`, 'amber'); if (fold.about) paragraph(fold.about);
     list.forEach(needRow); if (!list.length) paragraph(reviewing ? 'No unanswered questions.' : 'Nothing here.');
-    row(); for (const f of NEED_FOLDS) if (f.view === 'needs' || m[f.list].length) row(`${f.view === s.view ? '▸ ' : '  '}${f.label} ${m[f.list].length}${f.view === 'aged' ? ' · record today --parked' : ''}`, { id: `view:${f.view}`, fg: f.view === 'needs' ? 'amber' : 'muted' });
+    row(); for (const f of NEED_FOLDS) {
+      const count = m[f.list]?.length ?? 0;
+      if (f.view === 'needs' || count) row(`${f.view === s.view ? '▸ ' : '  '}${f.label} ${count}${f.view === 'aged' ? ' · record today --parked' : ''}`, { id: `view:${f.view}`, fg: f.view === 'needs' ? 'amber' : 'muted' });
+    }
   } else if (s.view === 'item') {
     const i = m.itemsById.get(s.detail);
     if (!i) paragraph('This item is no longer available in the current project.');

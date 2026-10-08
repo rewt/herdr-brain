@@ -10,6 +10,8 @@ import { loadModernConfig, normalizeConfig } from '../lib/config.mjs';
 import { parseMouse } from '../lib/mouse.mjs';
 import { cellWidth } from '../lib/text.mjs';
 import { lineText } from '../lib/frame.mjs';
+import { NEED_FOLDS, renderModern } from '../modern/frame.mjs';
+import { projectRows } from '../modern/project.mjs';
 
 const identity = cwd => cwd === '/b' ? { key: '/b/.git', root: '/b', name: 'same-name', git: true } : ['/a', '/a-lane'].includes(cwd) ? { key: '/a/.git', root: '/a', name: 'same-name', git: true } : null;
 const space = (id, root, linked = false) => ({ workspace_id: id, label: id, active_tab_id: `${id}:t1`, worktree: { repo_key: `${root}/.git`, repo_root: root, repo_name: 'same-name', checkout_path: linked ? `${root}-lane` : root, is_linked_worktree: linked } });
@@ -262,6 +264,33 @@ test('future-stage and deferred questions remain reachable without inflating Nee
   await session.refresh(); assert.equal(session.model.needs.length, 1); assert.equal(session.model.parked.length, 1);
   await session.activate('view:parked'); assert.match(rendered(session), /Later stage/);
   await session.activate(`need:${session.model.parked[0].key}`); assert.equal(session.ui.view, 'need'); assert.match(rendered(session), /Later stage/);
+});
+
+test('project and waiting views treat missing optional fold arrays as empty', async () => {
+  const { session } = fixture();
+  try {
+    await session.refresh();
+    const model = session.model;
+    for (const f of NEED_FOLDS) if (f.list !== 'needs') delete model[f.list];
+    for (const needs of [[], [{ key: 'q:HUM-1', kind: 'question', title: 'Recent question?' }]]) {
+      model.needs = needs;
+      const rows = projectRows({ model, state: session.ui, project: session.project, width: 100, height: 40 });
+      const home = rows.flat().map(cell => cell.text).join('\n');
+      assert.doesNotMatch(home, /parked question|folded/);
+      if (needs.length) assert.match(home, /Waiting on you · 1/);
+      assert.ok(!rows.flat().some(cell => cell.id === 'view:aged'));
+      for (const view of ['overview', 'control', ...NEED_FOLDS.map(f => f.view)]) {
+        const frame = renderModern({ state: { ...session.ui, view, scroll: 0 }, project: session.project, model, now: Date.now() }, 120, 50);
+        const text = frame.lines.map(lineText).join('\n');
+        if (view === 'control' || view === 'needs') assert.match(text, new RegExp(`Waiting on you · ${needs.length}`));
+        const fold = NEED_FOLDS.find(f => f.view === view && f.list !== 'needs');
+        if (fold) {
+          assert.ok(text.includes(`${fold.title} · 0`));
+          assert.match(text, /Nothing here/);
+        }
+      }
+    }
+  } finally { session.stop(); }
 });
 
 test('aged questions stay counted, reachable and separate from future stages in the modern console', async () => {

@@ -1,0 +1,521 @@
+TAP version 13
+# Subtest: release tolerates a contender rename between owner unlink and rmdir
+ok 1 - release tolerates a contender rename between owner unlink and rmdir
+  ---
+  duration_ms: 19.617875
+  ...
+# Subtest: release removes its own lock once and preserves a different owner
+ok 2 - release removes its own lock once and preserves a different owner
+  ---
+  duration_ms: 35.137541
+  ...
+# Subtest: release tolerates a directory already removed after owner unlink
+ok 3 - release tolerates a directory already removed after owner unlink
+  ---
+  duration_ms: 14.890834
+  ...
+# Subtest: dead-owner recovery preserves a contender renamed after owner unlink
+ok 4 - dead-owner recovery preserves a contender renamed after owner unlink
+  ---
+  duration_ms: 33.542
+  ...
+# Subtest: dead-owner recovery acquires and releases the recovered lock
+ok 5 - dead-owner recovery acquires and releases the recovered lock
+  ---
+  duration_ms: 33.7365
+  ...
+# Subtest: notice lock preserves a live owner
+ok 6 - notice lock preserves a live owner
+  ---
+  duration_ms: 23.590375
+  ...
+# Subtest: notice lock preserves a unidentified owner
+ok 7 - notice lock preserves a unidentified owner
+  ---
+  duration_ms: 15.467917
+  ...
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 8 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 3766.915625
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 9 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 4450.08025
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 10 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1633.347
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 11 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 7463.158792
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 12 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 3209.811959
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 13 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 3987.007709
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 14 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 3893.180208
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 15 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1484.784875
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 16 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 4059.646375
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 17 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 4115.089541
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 18 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 2296.821167
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 19 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 4503.164458
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 20 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 8562.856625
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 21 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 1864.802208
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 22 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2198.99625
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 23 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2403.710792
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 24 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4562.408708
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 25 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 4964.127625
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 26 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 6543.211125
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 27 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 6769.410292
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 28 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 5156.682916
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 29 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 6855.985625
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 30 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 1940.399958
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 31 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 5542.573292
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 32 - a paused check exposes its clock atomically while validation is still running
+  ---
+  duration_ms: 1337.030875
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 33 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+  ---
+  duration_ms: 4896.698916
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 34 - red validation finishes the published clock and retains its real exit
+  ---
+  duration_ms: 1096.781458
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 35 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+  ---
+  duration_ms: 5822.657583
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 36 - validation that throws closes its telemetry clock without inventing green evidence
+  ---
+  duration_ms: 1122.97025
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 37 - affected test supplements run once in the batch gate, are recorded and block a red landing
+  ---
+  duration_ms: 3136.485917
+  ...
+# Subtest: a lane-modified planner cannot shrink canonical bound test coverage
+ok 38 - a lane-modified planner cannot shrink canonical bound test coverage
+  ---
+  duration_ms: 1239.285875
+  ...
+# Subtest: a lane-modified planner cannot invent canonical bound test coverage
+ok 39 - a lane-modified planner cannot invent canonical bound test coverage
+  ---
+  duration_ms: 1088.587625
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 40 - a changed gate cannot omit a bound deferred test file
+  ---
+  duration_ms: 972.624792
+  ...
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 41 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6367.268708
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+not ok 42 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2267.382042
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+not ok 43 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1436.089208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 44 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 1857.972834
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+not ok 45 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1490.034208
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 46 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 480.543791
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 47 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 1800.008041
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+not ok 48 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 1881.065792
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+not ok 49 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2809.800542
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+not ok 50 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2126.152708
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+not ok 51 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2233.917458
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+not ok 52 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 3339.528
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 53 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1526.195083
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+not ok 54 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 3155.409583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+not ok 55 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 1472.548958
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 56 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 722.287875
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 57 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 281.032292
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 58 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 324.115292
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 59 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 693.380084
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+not ok 60 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4139.679167
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+not ok 61 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4095.863583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+not ok 62 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 342.752459
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+not ok 63 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 359.096583
+  location: '/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-notice-lock-release/test/helpers/bounded-test.mjs:47:10'
+  failureType: 'testCodeFailure'
+  error: 'EMFILE: too many open files, watch'
+  code: 'EMFILE'
+  stack: |-
+    FSWatcher._handle.onchange (node:internal/fs/watchers:207:21)
+    FSEvent.callbackTrampoline (node:internal/async_hooks:130:17)
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 64 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 422.031792
+  ...
+# Subtest: claude: captured ANSI empty, typed and placeholder composers
+ok 65 - claude: captured ANSI empty, typed and placeholder composers
+  ---
+  duration_ms: 1.364458
+  ...
+# Subtest: codex: captured ANSI empty, typed and placeholder composers
+ok 66 - codex: captured ANSI empty, typed and placeholder composers
+  ---
+  duration_ms: 0.4145
+  ...
+# Subtest: compound styles, wrapped typing, and normal text identical to a placeholder remain busy
+ok 67 - compound styles, wrapped typing, and normal text identical to a placeholder remain busy
+  ---
+  duration_ms: 0.178
+  ...
+# Subtest: Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome
+ok 68 - Codex includes prompt-like continuation rows and rejects truncated or ambiguous box chrome
+  ---
+  duration_ms: 0.298375
+  ...
+# Subtest: claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 69 - claude: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+  ---
+  duration_ms: 520.243125
+  ...
+# Subtest: codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+ok 70 - codex: a notice arriving during typing is durable, notifies without focus, and delivers intact after clearing
+  ---
+  duration_ms: 515.943333
+  ...
+# Subtest: two quiet reads use the default three-second separation
+ok 71 - two quiet reads use the default three-second separation
+  ---
+  duration_ms: 3494.662834
+  ...
+# Subtest: typing between quiet reads restarts the confirmation window
+ok 72 - typing between quiet reads restarts the confirmation window
+  ---
+  duration_ms: 788.48975
+  ...
+# Subtest: the immediate final read catches a draft introduced after the confirmation pair
+ok 73 - the immediate final read catches a draft introduced after the confirmation pair
+  ---
+  duration_ms: 739.119167
+  ...
+# Subtest: non-idle status, unknown layout and failed reads retain capped notices
+ok 74 - non-idle status, unknown layout and failed reads retain capped notices
+  ---
+  duration_ms: 2839.562708
+  ...
+# Subtest: cap retains FIFO; a later caller drains older notices once, with stable-id deduplication
+ok 75 - cap retains FIFO; a later caller drains older notices once, with stable-id deduplication
+  ---
+  duration_ms: 899.844084
+  ...
+# Subtest: concurrent callers serialize notices without interleaving or duplicate prompts
+ok 76 - concurrent callers serialize notices without interleaving or duplicate prompts
+  ---
+  duration_ms: 900.128125
+  ...
+# Subtest: a definite pre-input refusal retries through the empty-composer gate
+ok 77 - a definite pre-input refusal retries through the empty-composer gate
+  ---
+  duration_ms: 771.4105
+  ...
+# Subtest: lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate
+ok 78 - lost acknowledgement automatically replays the same visible notice ID and journals the possible duplicate
+  ---
+  duration_ms: 1103.13925
+  ...
+# Subtest: a lone capped notice delivers after its caller exits, without another enqueue or manual drain
+ok 79 - a lone capped notice delivers after its caller exits, without another enqueue or manual drain
+  ---
+  duration_ms: 634.729417
+  ...
+# Subtest: a dead sender before the prompt side effect replays pending intent with the same ID
+ok 80 - a dead sender before the prompt side effect replays pending intent with the same ID
+  ---
+  duration_ms: 1448.7645
+  ...
+# Subtest: a dead sender after the prompt side effect replays pending intent with the same ID
+ok 81 - a dead sender after the prompt side effect replays pending intent with the same ID
+  ---
+  duration_ms: 1422.96575
+  ...
+# Subtest: torn inbox tails fail closed and preserve their bytes
+ok 82 - torn inbox tails fail closed and preserve their bytes
+  ---
+  duration_ms: 8.410792
+  ...
+1..82
+# tests 82
+# suites 0
+# pass 68
+# fail 14
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 184996.057291

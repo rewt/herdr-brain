@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: queued promotion waits before validation under low-memory pressure and proceeds when cleared
+ok 1 - queued promotion waits before validation under low-memory pressure and proceeds when cleared
+  ---
+  duration_ms: 6417.468958
+  ...
+# Subtest: unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+ok 2 - unconfigured project: detached worker promotes two lanes in FIFO order using default npm gate
+  ---
+  duration_ms: 2398.332375
+  ...
+# Subtest: promotion notice queues during typing and delivers after clearing without repeating promotion
+ok 3 - promotion notice queues during typing and delivers after clearing without repeating promotion
+  ---
+  duration_ms: 1501.522
+  ...
+# Subtest: queue refuses a lane changed while pending behind another job before validation or integration
+ok 4 - queue refuses a lane changed while pending behind another job before validation or integration
+  ---
+  duration_ms: 1937.738959
+  ...
+# Subtest: expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+ok 5 - expected head survives CLI enqueue and succeeds exactly; a changed binding cannot reuse a pending job
+  ---
+  duration_ms: 1547.707709
+  ...
+# Subtest: expected head refuses an automatic rebase and post-preparation tip changes
+ok 6 - expected head refuses an automatic rebase and post-preparation tip changes
+  ---
+  duration_ms: 513.209792
+  ...
+# Subtest: a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+ok 7 - a completed refusal awaiting delivery permits a fresh attempt without replaying the refused job
+  ---
+  duration_ms: 1803.715709
+  ...
+# Subtest: dirty refusal is delivered; lane kept; next queued lane still promotes
+ok 8 - dirty refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2027.687958
+  ...
+# Subtest: red refusal is delivered; lane kept; next queued lane still promotes
+ok 9 - red refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2870.224375
+  ...
+# Subtest: conflict refusal is delivered; lane kept; next queued lane still promotes
+ok 10 - conflict refusal is delivered; lane kept; next queued lane still promotes
+  ---
+  duration_ms: 2191.357292
+  ...
+# Subtest: replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+ok 11 - replay conflict after clean merge-tree preflight names the file in the notice and preserves the lane
+  ---
+  duration_ms: 2430.801375
+  ...
+# Subtest: capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+ok 12 - capped promotion notices retain an owner and replay with visible IDs after lost acknowledgements
+  ---
+  duration_ms: 3771.941708
+  ...
+# Subtest: project override selects supervisor and duplicate pending lanes do not repeat
+ok 13 - project override selects supervisor and duplicate pending lanes do not repeat
+  ---
+  duration_ms: 1414.81225
+  ...
+# Subtest: two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+ok 14 - two concurrent enqueue commands share one drain; direct promote is excluded during its gate
+  ---
+  duration_ms: 4440.633792
+  ...
+# Subtest: enqueue during the empty-worker handoff always starts a new drain
+ok 15 - enqueue during the empty-worker handoff always starts a new drain
+  ---
+  duration_ms: 2914.013167
+  ...
+# Subtest: interrupted attempt emits a notice without retrying a gate or deleting its lane
+ok 16 - interrupted attempt emits a notice without retrying a gate or deleting its lane
+  ---
+  duration_ms: 717.8975
+  ...
+# Subtest: stale worker lock refuses startup while keeping the queued request
+ok 17 - stale worker lock refuses startup while keeping the queued request
+  ---
+  duration_ms: 317.760292
+  ...
+# Subtest: green gate that modifies its worktree is refused before fast-forward
+ok 18 - green gate that modifies its worktree is refused before fast-forward
+  ---
+  duration_ms: 328.366917
+  ...
+# Subtest: recorded completed outcome resumes delivery without repeating promotion
+ok 19 - recorded completed outcome resumes delivery without repeating promotion
+  ---
+  duration_ms: 713.424584
+  ...
+# Subtest: queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+ok 20 - queued cleanup closes the recorded finished tab and preserves operator and other lane tabs
+  ---
+  duration_ms: 4123.661666
+  ...
+# Subtest: recovery: a failed velocity note still closes the finished tab and promoted lane
+ok 21 - recovery: a failed velocity note still closes the finished tab and promoted lane
+  ---
+  duration_ms: 4041.416
+  ...
+# Subtest: crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+ok 22 - crash during batch cleanup resumes without repeating the gate or trusting saved freshness
+  ---
+  duration_ms: 1573.467542
+  ...
+# Subtest: direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+ok 23 - direct gate overlapping queued cleanup prevents queue and direct close from deleting its lane
+  ---
+  duration_ms: 1844.436167
+  ...
+# Subtest: conditional close rechecks the promoted tip and base before any removal
+ok 24 - conditional close rechecks the promoted tip and base before any removal
+  ---
+  duration_ms: 386.538292
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 52269.513709

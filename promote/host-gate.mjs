@@ -89,10 +89,14 @@ async function execute(profile) {
   const declared = canonicalValidation(canonical, profile.env).tiers.promotion;
   const limits = resolveGateLimits({ common, tier: 'promotion', historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', declared.command]), timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
     idleTimeoutSeconds: profile.idleTimeoutSeconds ?? declared.idleTimeoutSeconds });
-  // The lifecycle envelope includes preparation and bookkeeping. Give the
-  // inner gate time to return its exact timeout receipt before this backstop.
+  // A fully red binary bisection visits at most 2*n-1 groups, sequentially.
+  // Each group gets its full inner allowance (the train gate does not retry),
+  // ten minutes for preparation, and a final minute for bookkeeping/cleanup.
+  const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  const gates = Math.max(1, 2 * plan.jobs.length - 1);
+  const envelopeSeconds = gates * (limits.wall_seconds + 600) + 60;
   const result = runTestSlotSync(`train ${canonical}`, [process.execPath, process.argv[1], '--execute', canonical, receipt, ...argv],
-    { cwd: canonical, env: profile.env, common, tier: 'promotion-host', timeoutSeconds: Math.max(600, 2 * limits.wall_seconds), idleTimeoutSeconds: 0, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });
+    { cwd: canonical, env: profile.env, common, tier: 'promotion-host', timeoutSeconds: envelopeSeconds, idleTimeoutSeconds: 0, waitSeconds: profile.waitSeconds, waitReceipt: slotFile, retryTimeout: false, stdio: 'inherit' });
   const saved = read();
   if (result.gateTimeout) update({ phase: 'timeout', finished_at: new Date().toISOString(), exit_code: 124, gate_timeout: result.gateTimeout,
     reason: result.gateTimeout.kind === 'idle' ? 'gate no-output limit exceeded; lane isolated for correction' : 'gate wall-clock limit exceeded; lane isolated for correction' });

@@ -143,9 +143,14 @@ conservatively. The measured full gates of 31m05s, 31m40s, 30m55s, 30m53s,
 34m27s and 35m58s give **71m56s (about 72 minutes)**; their slot waits are never
 recorded as command time. Only successful executions add samples; reuse,
 refusals, overruns, and failures do not. Receipts and live slot records name the
-resolved limits. The promotion host lifecycle (preparation through bookkeeping)
-has a separate wall backstop of twice the inner gate allowance, at least ten
-minutes, so the inner watchdog can persist a correction outcome first.
+resolved limits. The promotion host lifecycle allows up to `2 * jobs - 1`
+sequential gates for batch bisection, each with its full inner wall allowance
+and ten minutes for preparation, plus a final minute for bookkeeping and cleanup.
+The release host allows the resolved prepare wall limit (when declared), twice
+the resolved gate wall limit for its permitted load retry, and ten minutes for
+snapshotting and bookkeeping. Both backstops let inner watchdogs persist their
+exact outcomes first. A failed descendant snapshot still stops an owned child
+group, but records a cleanup failure and retains the slot for inspection.
 
 Output from both streams is observed and forwarded without buffering a suite
 log. Each healthy sample also records its longest silence, including the final

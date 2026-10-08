@@ -30,7 +30,7 @@ export async function stopGateGroup(pgid, { graceMs = 1000, tracked = new Map(),
     identityError ??= Error(message);
   };
   const snapshot = lookup(undefined, { identityOnly: true });
-  if (!snapshot.ok && !owned) throw Error(`cannot snapshot gate descendants: ${snapshot.error}`);
+  if (!snapshot.ok) uncertain(`cannot snapshot gate descendants: ${snapshot.error}`);
   const snapshotRows = snapshot.ok ? snapshot.value : new Map();
   // A reused group-leader PID proves the original group has disappeared.
   // It cannot authorize signalling the replacement or its new descendants.

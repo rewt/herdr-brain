@@ -57,8 +57,13 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
   if (!slotHeld) {
     const declared = canonicalValidation(project.canonical, env).tiers.release;
     const limits = resolveGateLimits({ common: project.identity, tier: 'release', ...declared, historyKey: gateHistoryKey('release', declaration.config.gate) });
+    const prepareLimits = declaration.config.prepare && resolveGateLimits({ common: project.identity, tier: 'release-prepare', ...declared,
+      historyKey: gateHistoryKey('release-prepare', declaration.config.prepare) });
+    // Preparation has one attempt; the gate permits one load retry. Leave
+    // ten minutes for snapshotting, recording, retention and watchdog cleanup.
+    const envelopeSeconds = (prepareLimits?.wall_seconds ?? 0) + 2 * limits.wall_seconds + 600;
     const result = runTestSlotSync(`release ${project.canonical}`, [process.execPath, SELF, '--held-once', JSON.stringify({ cwd: project.canonical, org: org ? path.resolve(org) : undefined, role, tag, measurement })],
-      { cwd: project.canonical, env, common: project.identity, tier: 'release-host', timeoutSeconds: Math.max(600, 2 * limits.wall_seconds), idleTimeoutSeconds: 0, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, retryTimeout: false });
+      { cwd: project.canonical, env, common: project.identity, tier: 'release-host', timeoutSeconds: envelopeSeconds, idleTimeoutSeconds: 0, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, retryTimeout: false });
     if (result.status === REFUSED_EXIT && result.attempts === undefined) return { result: 'deferred', exit_code: REFUSED_EXIT, reason: result.stderr.trim() };
     if (result.error || result.status !== 0) throw new Error(result.error?.message || result.stderr || `release wrapper exited ${result.status}`);
     return JSON.parse(result.stdout);

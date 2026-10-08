@@ -248,7 +248,42 @@ test('promotion host envelope derives from the declared inner history key', t =>
   const inner = train.attempts[0].gate.limits;
   assert.equal(inner.wall_seconds, 12000); assert.equal(inner.wall_source, 'history');
   const args = JSON.parse(fs.readFileSync(evidence));
-  assert.ok(Number(args[args.indexOf('--timeout-seconds') + 1]) >= 2 * inner.wall_seconds);
+  assert.ok(Number(args[args.indexOf('--timeout-seconds') + 1]) > inner.wall_seconds);
+});
+
+test('three-lane red bisection fits the host envelope and promotes both healthy green lanes', t => {
+  const f = fixture(t), common = path.join(f.repo, '.git');
+  fs.writeFileSync(path.join(f.repo, 'gate.cjs'), `const fs=require('fs');fs.appendFileSync(process.env.PROFILE_EVIDENCE,'gate\\n');process.exit(fs.existsSync('red')?1:0);`);
+  f.git(['add', 'gate.cjs']); f.git(['commit', '-qm', 'Gate rejects only the red lane']);
+  const jobs = [];
+  for (const topic of ['red', 'green-one', 'green-two']) {
+    const lane = path.join(f.root, topic); f.git(['worktree', 'add', '-qb', `lane/${topic}`, lane]);
+    fs.writeFileSync(path.join(lane, topic), topic); f.git(['add', '.'], lane); f.git(['commit', '-qm', topic], lane);
+    jobs.push({ id: topic, topic, expectedHead: f.git(['rev-parse', 'HEAD'], lane) });
+  }
+  fs.writeFileSync(f.receipt, JSON.stringify({ schema: 'promotion-train/v1', id: 'profile', identity: common, jobs }));
+  const key = gateHistoryKey('promotion', ['/bin/sh', '-c', 'node gate.cjs']);
+  recordHealthyGate({ common, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 20 });
+  const preload = path.join(f.root, 'observe.mjs'), evidence = path.join(f.root, 'envelope.json');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host'))fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify(args));return run(cmd,args,opts);};syncBuiltinESMExports();`);
+  f.env.NODE_OPTIONS = `--import=${preload}`;
+  const r = f.run(); assert.equal(r.status, 0, r.stderr + r.stdout);
+  const train = JSON.parse(fs.readFileSync(f.receipt));
+  assert.equal(train.attempts.length, 5);
+  for (const attempt of train.attempts) {
+    assert.equal(attempt.gate.limits.wall_seconds, 12000);
+    assert.equal(attempt.gate.gate_timeout, null);
+  }
+  const args = JSON.parse(fs.readFileSync(evidence));
+  assert.equal(Number(args[args.indexOf('--timeout-seconds') + 1]), 5 * (12000 + 600) + 60);
+  assert.equal(train.results.red.outcome, 'refused');
+  for (const topic of ['green-one', 'green-two']) {
+    assert.equal(train.results[topic].outcome, 'promoted');
+    assert.equal(fs.readFileSync(path.join(f.repo, topic), 'utf8'), topic);
+  }
+  assert.equal(fs.existsSync(path.join(f.repo, 'red')), false);
+  assert.equal(f.saved().phase, 'finished'); assert.equal(f.saved().gate_timeout, undefined);
+  assert.equal(fs.existsSync(f.slot), false);
 });
 
 test('two-lane host envelope timeout returns batch re-enqueue wording', t => {

@@ -21,4 +21,4 @@ Context · supervisor Claude
 
 
 
-Tab · Enter · p pipeline · q quit
+Tab · Enter · C chat · q quit

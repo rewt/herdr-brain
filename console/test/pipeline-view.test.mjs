@@ -38,9 +38,21 @@ test('every batch link opens its evidence by Enter or click, with nested Back an
 });
 
 test('active run pipelines are available through p and a stage click, without taking over the live session', async t => {
+  const chats = [];
   const f = pipelineFixture(t), session = createMinimalSession({ config: f.config, deps: { ...f.deps,
+    herdrProjectChat: async project => { chats.push(project); return { ok: true }; },
     controlTerminal() { assert.fail('Opening the stage must not open an agent'); } }, env: { NO_COLOR: '1' } });
-  t.after(() => session.stop()); await session.refresh(); session.frame(100, 40);
+  t.after(() => session.stop()); await session.refresh();
+  for (const cols of [20, 31, 32, 40, 59, 60, 100, 140]) {
+    session.frame(cols, 40); assert.equal(session.ui.focus, 'run:R-1');
+    await session.key('C'); assert.equal(chats.at(-1).repoKey, f.project.repoKey);
+    assert.equal(session.ui.view, 'table');
+    const chatCount = chats.length;
+    await session.key('p'); assert.equal(session.ui.detail.run, 'R-1');
+    assert.equal(session.ui.view, 'detail'); assert.equal(chats.length, chatCount);
+    await session.activate('back');
+  }
+  assert.equal(chats.length, 8); session.frame(100, 40);
   assert.equal(session.ui.focus, 'run:R-1'); await session.key('p');
   assert.equal(session.ui.detail.run, 'R-1'); assert.match(output(session), /\u25cf Engineering/);
   session.frame(116, 40); await session.activate('run:R-1:engineering');

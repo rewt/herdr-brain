@@ -75,12 +75,15 @@ test('a replacement session cannot inherit a report or model tied to another ses
 
 inkTest('minimal frame is bounded, safe with Unicode, clear about overflow and quiet when unchanged', () => {
   const sessions = rows({ agents: Array.from({ length: 20 }, (_, i) => agent(`会話-${i}\x1b[2J`, { started: iso(i) })) });
-  for (const width of [40, 80, 100, 140]) {
+  for (const width of [20, 31, 32, 40, 59, 60, 80, 100, 140]) {
     const frame = minimalFrame({ project, sessions, now }, width, 12);
     assert.equal(frame.lines.length, 12);
     assert.ok(frame.lines.every(l => cellWidth(l.spans.map(s => s.text).join('')) === width));
     assert.doesNotMatch(text(frame), /\x1b/);
     assert.match(text(frame), /q quit/);
+    const footer = frame.lines.at(-1).spans.map(s => s.text).join('').trimEnd();
+    assert.equal(footer, width >= 60 ? '↑↓ rows · Tab panels · Enter · p pipeline · C chat · q quit'
+      : width >= 32 ? 'Tab · Enter · C chat · q quit' : 'C chat · q quit');
     assert.match(text(frame), /Runs/);
     assert.match(text(frame), /Reports/);
     assert.match(text(frame), /Train/);
@@ -158,6 +161,9 @@ console.log(JSON.stringify({ result }));
       assert.match(result.stdout, /done \/ pass/);
       assert.match(result.stdout, width === 40 ? /The headline comes from the recor/ : /The headline comes from the record/);
     }
+    const chat = spawnSync(process.execPath, ['--import', clock, 'console/app.mjs', '--minimal', '--config', config, '--project', 'Snapshot', '--print', '100x24', '--keys', 'C'], { env, encoding: 'utf8' });
+    assert.equal(chat.status, 0, chat.stderr);
+    assert.match(chat.stdout, /--print does not open project chats/);
     const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
     assert.ok(calls.every(args => (['agent', 'workspace', 'pane', 'tab'].includes(args[0]) && args[1] === 'list') || (args[0] === 'status' && args[1] === '--json')));
     assert.equal(JSON.parse(fs.readFileSync(config, 'utf8')).profile, 'minimal');

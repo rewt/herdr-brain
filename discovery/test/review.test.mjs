@@ -151,13 +151,45 @@ test('only fresh interactive shims adopt a lane; utilities, batch, resume and ex
   assert.ok(!fs.existsSync(fresh.cwd), 'immediate native exit removes its untouched entry lane');
   const assigned = createEntry(f.options); t.after(assigned.close);
   const lanesBefore = command('git', ['worktree', 'list', '--porcelain'], f.repo);
-  const runExisting = (kind, cwd) => {
-    interactive(path.join(installed.bin, kind), ['--model', 'literal'], cwd, installed.env);
+  const runExisting = (kind, args, cwd, tty = true) => {
+    if (tty) interactive(path.join(installed.bin, kind), args, cwd, installed.env);
+    else command(path.join(installed.bin, kind), args, cwd, installed.env);
     const receipt = JSON.parse(fs.readFileSync(installed.receipt));
-    assert.deepEqual(receipt.args, ['--model', 'literal']); assert.equal(receipt.cwd, cwd);
+    assert.deepEqual(receipt.args.slice(0, args.length), args); assert.equal(receipt.cwd, cwd);
+    const guard = receipt.args.slice(args.length);
+    assert.equal(guard.length, 2);
+    if (kind === 'codex') {
+      assert.equal(guard[0], '-c');
+      assert.match(guard[1], /^hooks\.PreToolUse=\[\{matcher="\^\(request_user_input\)\$"/u);
+      assert.match(guard[1], /unattended\.mjs' 'ops'/u);
+      assert.ok(guard[1].includes(path.join(product, 'supervisor/unattended.mjs')));
+      assert.ok(guard[1].includes(assigned.context().org));
+    } else {
+      assert.equal(guard[0], '--settings');
+      const groups = JSON.parse(guard[1]).hooks.PreToolUse;
+      assert.equal(groups.length, 1); assert.equal(groups[0].matcher, '^(AskUserQuestion)$');
+      assert.match(groups[0].hooks[0].command, /unattended\.mjs' 'ops'/u);
+      assert.ok(groups[0].hooks[0].command.includes(assigned.context().org));
+    }
     assert.equal(command('git', ['worktree', 'list', '--porcelain'], f.repo), lanesBefore);
   };
-  for (const kind of ['codex', 'claude']) runExisting(kind, assigned.context().workspace);
+  for (const kind of ['codex', 'claude']) {
+    const sessions = kind === 'codex' ? [['--model', 'literal'], ['resume'], ['fork', 'session'], ['exec', 'task'], ['review']]
+      : [['--model', 'literal'], ['--resume', 'session'], ['--continue'], ['-p', 'task']];
+    for (const args of sessions) runExisting(kind, args, assigned.context().workspace);
+    runExisting(kind, sessions[0], assigned.context().workspace, false);
+  }
+  // Utilities must stay literal even inside a fleet project or an assigned lane.
+  for (const kind of ['codex', 'claude']) {
+    const commands = kind === 'codex' ? ['help', 'login', 'logout', 'completion', 'sandbox', 'debug', 'doctor', 'features', 'mcp', 'plugin', 'update', 'app-server', 'exec-server', 'agents', 'archive', 'delete', 'queue', 'migrate-rollouts', 'unarchive', 'cloud']
+      : ['help', 'auth', 'update', 'install', 'doctor', 'mcp', 'plugin', 'agents', 'attach', 'logs', 'stop', 'kill', 'rm', 'respawn', 'setup-token'];
+    for (const cwd of [f.repo, assigned.context().workspace]) for (const args of [['--version'], ['--help'], ...commands.map(command => [command])]) {
+      interactive(path.join(installed.bin, kind), args, cwd, installed.env);
+      const receipt = JSON.parse(fs.readFileSync(installed.receipt));
+      assert.deepEqual(receipt.args, args, `${kind} ${args.join(' ')} in ${cwd}`); assert.equal(receipt.cwd, cwd);
+      assert.equal(command('git', ['worktree', 'list', '--porcelain'], f.repo), lanesBefore);
+    }
+  }
 });
 
 test('interactive no-identity launches warn and preserve the native session', { skip: PTY_SKIP_REASON }, (t) => {

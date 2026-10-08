@@ -70,6 +70,8 @@ for (const receipt of ['missing', 'partial']) {
     if (receipt === 'missing') fs.unlinkSync(f.metadata);
     else fs.writeFileSync(f.metadata, '{"pid":');
     const read = fs.readFileSync;
+    t.mock.method(os, 'loadavg', () => [24, 24, 24]);
+    t.mock.method(os, 'availableParallelism', () => 4);
     let elapsed = 0;
     const allowance = loadTimeout(1000);
     t.mock.method(Date, 'now', () => elapsed);

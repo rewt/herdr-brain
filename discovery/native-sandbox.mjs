@@ -13,6 +13,7 @@ import { claudeSettingsSources, codexPermissionChoice } from './native-settings.
 import { coordinatingRole, herdrControlSocket, socketProbeArguments } from './control-socket.mjs';
 import { resolveNative } from './native-binary.mjs';
 import { permissionHookArguments } from '../supervisor/permission-hooks.mjs';
+import { claudeUtility, codexUtility, nativeSubcommand } from './native-command.mjs';
 
 // Read-only preflight shared with default chat selection. Do this before a
 // launcher creates a tab or temporary run, and never rewrite native settings.
@@ -53,17 +54,10 @@ export function nativeSessionContext(cwd) {
 // Utilities never create a temp or change native permissions. Assigned workers,
 // print/exec and resume still get settings while bypassing workflow entry.
 export function nativeSession(kind, args) {
-  const utilities = kind === 'codex'
-    ? /^(help|login|logout|completion|sandbox|debug|doctor|features|mcp|plugin|update|app-server|exec-server|agents|archive|delete|queue|migrate-rollouts|unarchive|cloud)$/u
-    : /^(help|auth|update|install|doctor|mcp|plugin|agents|attach|logs|stop|kill|rm|respawn|setup-token)$/u;
+  const utilities = kind === 'codex' ? codexUtility : claudeUtility;
   if (args.some(arg => /^(--help|-h|--version|-V)(=|$)/u.test(arg))) return false;
   if (kind === 'claude' && args.some(arg => ['--print', '-p'].includes(arg))) return true;
-  const values = new Set(['-c', '--config', '-m', '--model', '-p', '--profile', '-C', '--cd', '--add-dir', '--effort', '--settings', '--permission-mode', '--setting-sources']);
-  for (let i = 0; i < args.length; i++) {
-    if (values.has(args[i])) { i++; continue; }
-    if (!args[i].startsWith('-')) return !utilities.test(args[i]);
-  }
-  return true;
+  return !utilities.test(nativeSubcommand(kind, args) ?? '');
 }
 
 function directories(context, kind) {

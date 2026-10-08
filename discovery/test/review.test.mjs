@@ -174,8 +174,8 @@ test('only fresh interactive shims adopt a lane; utilities, batch, resume and ex
     assert.equal(command('git', ['worktree', 'list', '--porcelain'], f.repo), lanesBefore);
   };
   for (const kind of ['codex', 'claude']) {
-    const sessions = kind === 'codex' ? [['--model', 'literal'], ['resume'], ['fork', 'session'], ['exec', 'task'], ['review']]
-      : [['--model', 'literal'], ['--resume', 'session'], ['--continue'], ['-p', 'task']];
+    const sessions = kind === 'codex' ? [['--model', 'literal'], ['resume'], ['resume', 'help'], ['fork', 'session'], ['exec', 'task'], ['review']]
+      : [['--model', 'literal'], ['--model', 'logs'], ['--resume', 'session'], ['--resume', 'rm'], ['--continue'], ['-p', 'task']];
     for (const args of sessions) runExisting(kind, args, assigned.context().workspace);
     runExisting(kind, sessions[0], assigned.context().workspace, false);
   }
@@ -183,12 +183,26 @@ test('only fresh interactive shims adopt a lane; utilities, batch, resume and ex
   for (const kind of ['codex', 'claude']) {
     const commands = kind === 'codex' ? ['help', 'login', 'logout', 'completion', 'sandbox', 'debug', 'doctor', 'features', 'mcp', 'plugin', 'update', 'app-server', 'exec-server', 'agents', 'archive', 'delete', 'queue', 'migrate-rollouts', 'unarchive', 'cloud']
       : ['help', 'auth', 'update', 'install', 'doctor', 'mcp', 'plugin', 'agents', 'attach', 'logs', 'stop', 'kill', 'rm', 'respawn', 'setup-token'];
-    for (const cwd of [f.repo, assigned.context().workspace]) for (const args of [['--version'], ['--help'], ...commands.map(command => [command])]) {
+    for (const cwd of [f.repo, assigned.context().workspace]) for (const args of [['--version'], ['--help'], ...commands.map(command => [command]), ['--model', 'literal', commands[1]], ['mcp', 'list']]) {
       interactive(path.join(installed.bin, kind), args, cwd, installed.env);
       const receipt = JSON.parse(fs.readFileSync(installed.receipt));
       assert.deepEqual(receipt.args, args, `${kind} ${args.join(' ')} in ${cwd}`); assert.equal(receipt.cwd, cwd);
       assert.equal(command('git', ['worktree', 'list', '--porcelain'], f.repo), lanesBefore);
     }
+  }
+});
+
+test('Claude option values and an explicit utility-word prompt still adopt a fresh lane', { skip: PTY_SKIP_REASON }, (t) => {
+  const f = fixture(t), installed = install(f), logs = path.join(f.repo, 'logs');
+  fs.mkdirSync(logs);
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ always_args: { claude: ['--add-dir', logs] } }));
+  for (const args of [['--add-dir', 'logs'], ['--model', 'logs'], ['--', 'stop']]) {
+    interactive(path.join(installed.bin, 'claude'), args, f.repo, installed.env);
+    const receipt = JSON.parse(fs.readFileSync(installed.receipt));
+    assert.notEqual(receipt.cwd, f.repo, args.join(' '));
+    assert.ok(receipt.args.includes('--append-system-prompt'), args.join(' '));
+    if (args[0] !== '--add-dir') assert.deepEqual(receipt.args.slice(0, args.length), args);
+    assert.ok(!fs.existsSync(receipt.cwd), 'immediate native exit removes its untouched entry lane');
   }
 });
 

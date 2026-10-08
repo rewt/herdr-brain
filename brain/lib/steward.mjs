@@ -15,6 +15,8 @@ import { HOME } from './queue.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
 import { permissionDecision } from './permission-policy.mjs';
 import { fallbackRequest, declineObserved } from './permission-fallback.mjs';
+import { alertPayload } from './steward-payload.mjs';
+import { questionAlerts } from './steward-questions.mjs';
 
 const run = promisify(execFile);
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -29,7 +31,7 @@ export function stewardConfig(home = HOME) {
   try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (!object(raw)) throw Error('steward config must be an object');
-  for (const key of Object.keys(raw)) if (!['enabled', 'projects', 'alert_command', 'stalled_seconds', 'debounce_seconds', 'alert_cap', 'imessage_command', 'imessage_recipient', 'key_fallback'].includes(key)) throw Error(`unknown steward setting: ${key}`);
+  for (const key of Object.keys(raw)) if (!['enabled', 'projects', 'alert_command', 'stalled_seconds', 'debounce_seconds', 'alert_cap', 'imessage_command', 'imessage_recipient', 'key_fallback', 'question_text'].includes(key)) throw Error(`unknown steward setting: ${key}`);
   if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean') throw Error('steward enabled must be boolean');
   const number = (key, fallback, min, max) => {
     const value = raw[key] ?? fallback;
@@ -39,8 +41,9 @@ export function stewardConfig(home = HOME) {
   const config = { enabled: raw.enabled ?? true, projects: raw.projects ?? {},
     stalled_seconds: number('stalled_seconds', 300, 1, 86400),
     debounce_seconds: number('debounce_seconds', 300, 1, 86400),
-    alert_cap: number('alert_cap', 3, 1, 10), alert_command: raw.alert_command ?? null, imessage_command: raw.imessage_command ?? null, imessage_recipient: raw.imessage_recipient ?? null, key_fallback: raw.key_fallback ?? true };
+    alert_cap: number('alert_cap', 3, 1, 10), alert_command: raw.alert_command ?? null, imessage_command: raw.imessage_command ?? null, imessage_recipient: raw.imessage_recipient ?? null, key_fallback: raw.key_fallback ?? true, question_text: raw.question_text ?? false };
   if (typeof config.key_fallback !== 'boolean') throw Error('steward key_fallback must be boolean');
+  if (typeof config.question_text !== 'boolean') throw Error('steward question_text must be boolean');
   if (!Number.isInteger(config.alert_cap)) throw Error('steward alert_cap must be an integer');
   if (!object(config.projects)) throw Error('steward projects must be an object');
   for (const [name, project] of Object.entries(config.projects)) {
@@ -55,22 +58,31 @@ export function stewardConfig(home = HOME) {
 }
 
 // Payload is one argument, never interpolated into a shell or AppleScript.
-export async function operatorAlert(payload, config) {
-  const publicPayload = { project: String(payload.project ?? 'unresolved'), session: String(payload.session ?? 'unresolved'), kind: String(payload.kind ?? 'steward') };
+export async function operatorAlert(payload, config, { delivered = [] } = {}) {
+  const publicPayload = alertPayload(payload, config);
   const channels = [];
-  if (config.alert_command) {
-    const [bin, ...args] = config.alert_command;
-    channels.push(run(bin, [...args, JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
-  } else if (process.platform === 'darwin') {
-    channels.push(run('/usr/bin/osascript', ['-e', 'on run argv\ndisplay notification (item 1 of argv) with title "Herdr steward"\nend run', JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
-  } else channels.push(Promise.reject(Error('configure alert_command on this platform')));
-  if (config.imessage_recipient) {
+  const names = [];
+  if (!delivered.includes('notification')) {
+    names.push('notification');
+    if (config.alert_command) {
+      const [bin, ...args] = config.alert_command;
+      channels.push(run(bin, [...args, JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
+    } else if (process.platform === 'darwin') {
+      channels.push(run('/usr/bin/osascript', ['-e', 'on run argv\ndisplay notification (item 1 of argv) with title "Herdr steward"\nend run', JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
+    } else channels.push(Promise.reject(Error('configure alert_command on this platform')));
+  }
+  if (config.imessage_recipient && !delivered.includes('imessage')) {
+    names.push('imessage');
     const [bin, ...args] = config.imessage_command ?? [process.execPath, fileURLToPath(new URL('../bin/steward-imessage.mjs', import.meta.url))];
     channels.push(run(bin, [...args, config.imessage_recipient, JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
   }
   const results = await Promise.allSettled(channels);
   const errors = results.filter(r => r.status === 'rejected');
-  if (errors.length) throw Error(errors.map(r => r.reason.message).join('; '));
+  if (errors.length) {
+    const error = Error(errors.map(r => r.reason.message).join('; '));
+    error.delivered = names.filter((_, i) => results[i].status === 'fulfilled');
+    throw error;
+  }
 }
 
 // Bounded event journal, atomically replaced and fsynced before effects. Keep
@@ -213,6 +225,7 @@ async function routingTick({ rows = [], agents = [], home = HOME, env = process.
     catch (error) { receipts.add({ type: 'alert-result', key, id, ok: false, error: cut(error.message) }); }
   };
   try {
+    const questions = await questionAlerts({ fleet, home, config, now, dryRun, alert, actions, routingProject });
     // Newest observation per session, including DONE, prevents stale blocks.
     const newest = new Map();
     for (const row of rows) if (!newest.has(row.session) || Date.parse(row.at) >= Date.parse(newest.get(row.session).at)) newest.set(row.session, row);
@@ -295,7 +308,7 @@ async function routingTick({ rows = [], agents = [], home = HOME, env = process.
         await escalate(notice.key, { ...notice, kind: `stalled-${notice.kind}`, message: `Supervisor notice undelivered: ${notice.message}` });
       }
     }
-    return { actions, journal: file };
+    return { actions, journal: file, questions };
   } finally { release?.(); }
 }
 

@@ -102,8 +102,8 @@ It asks the session to record the question with a safe default and continue.
 This is separate from the steward's detection and routing below. Existing
 dialogs and native permission/trust prompts still need their respective handling.
 
-`watch` runs the steward after captures and also checks stalled delivery when
-Herdr is unavailable. A foreground pass is available for inspection:
+`watch` runs the steward after captures and also checks stalled delivery and new
+operator record questions when Herdr is unavailable. A foreground pass is available for inspection:
 
 ```sh
 node brain/bin/brain.mjs steward --dry-run  # JSON plan; no journal, owner or alert writes
@@ -159,10 +159,12 @@ Add `"imessage_recipient": "operator address"` in the operator's local
 `brain/bin/steward-imessage.mjs` passes the recipient and JSON to a fixed
 Messages AppleScript using argv. An optional `imessage_command` argv array
 selects another transport; it receives the recipient and then the literal JSON.
-Every channel receives **project, session and kind only**, never screen text,
-question text, filesystem paths or the journal location. No shell interprets
-alert arguments. Each channel has a ten-second deadline; one failed channel
-cannot suppress the other. No model determines a message or channel.
+Session alerts carry **project, session and kind only**. Operator question alerts
+carry project, HUM id (`question`), `kind: "operator-question"`, action category,
+and the counts `blocked_items` and `blocked_runs`. Neither payload includes screen
+text, filesystem paths or the journal location. Question text is omitted by default.
+No shell interprets alert arguments. Each channel has a ten-second deadline; one
+failed channel cannot suppress the other. No model determines a message or channel.
 
 The operator runs exactly one setup test and grants Messages Automation:
 
@@ -172,6 +174,45 @@ node brain/bin/brain.mjs steward --test-alert
 
 Development/tests never send that live setup alert. Configuration is local to
 the operator and never becomes project configuration or a committed address.
+
+### New operator questions
+
+Every steward tick reads each fleet project's record and folds its events without
+writing to the record. Newly added, unresolved `role=human` items alert on the next
+tick (normally within five seconds), regardless of whether a terminal is active or
+a supervisor is running. Each question has its own retry cap and debounce; another
+question does not delay its first attempt. Answered, dropped and automatically
+answered questions are skipped. Reopening an already observed question does not
+make it new again.
+
+The first successful scan of each canonical project/record pair establishes a
+baseline without sending existing questions. The foreground JSON reports
+`questions.skipped`, and the watcher logs the skipped count. The count is also
+saved per record in `$BRAIN_STATE/steward/questions.json`. A newly joined or remapped
+record gets its own baseline. Unreadable records and stale fleet identities report
+a scan error and preserve their previous cursor for recovery.
+
+To include text, add **`"question_text": true` only in your operator-local
+`$BRAIN_STATE/steward.json`**. It adds `text` (the one-line question, at most 240
+characters) and `recommendation` (at most 80 characters) to both channels. Unicode
+control and format characters are removed, whitespace is collapsed, and text is
+truncated before transport. This setting is never read from project configuration;
+omit it or set it to false to keep the metadata-only payload.
+
+Question receipts are separate from the routing journal's retired-event history.
+The fsynced file commits each record cursor with its newly discovered questions
+before sending, then records channel results under the same steward lock. Confirmed
+channels do not repeat after restart or when another channel fails. Failed and
+interrupted attempts retry after `debounce_seconds`, up to `alert_cap`; exhausted
+receipts remain visible with their error and attempt count. An interruption after
+an external channel accepted a send but before its acknowledgement was saved can
+repeat that unconfirmed send: Messages and macOS notifications provide no
+transactional/idempotent delivery primitive. Retries consume durable attempts.
+Completed per-question receipts remain while the question is open; after it closes,
+the record cursor retains deduplication. The file is bounded to 512 record cursors,
+2,048 open question receipts and 4 MiB, and refuses effects on corruption or overflow
+through the existing `journal-refused` alert. Dry runs and disabled mode do not
+establish baselines or consume receipts.
 
 Routing alerts share a per-occupant debounce (five minutes by default), with
 three attempts **per episode**: a captured block or a particular undelivered

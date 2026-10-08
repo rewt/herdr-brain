@@ -89,6 +89,11 @@ async function watch() {
   let down = false;
 
   const line = (s) => process.stdout.write(`${new Date().toTimeString().slice(0, 8)}  ${s}\n`);
+  const stewardLines = result => {
+    for (const action of result.actions) line(`STEWARD ${action.type} ${cut(action.question ?? action.session ?? action.to ?? action.inbox, 60)}`);
+    if (result.questions?.skipped) line(`STEWARD skipped ${result.questions.skipped} pre-existing operator questions`);
+    for (const error of result.questions?.errors ?? []) line(`STEWARD question scan ${cut(error.project, 60)}: ${cut(error.error, 160)}`);
+  };
   line(`watching herdr every ${every / 1000}s · queue ${LOG}${wantDigest ? ` · digest via ${model}` : ' · no digest (--digest to turn on)'}`);
 
   for (;;) {
@@ -100,7 +105,7 @@ async function watch() {
       if (!down) { line(`herdr unavailable: ${err.message}`); down = true; }
       try {
         const routed = await stewardTick({ agents: null });
-        for (const action of routed.actions) line(`STEWARD ${action.type} ${cut(action.session ?? action.inbox, 60)}`);
+        stewardLines(routed);
       } catch (error) { line(`steward failed: ${cut(error.message, 160)}`); }
       await sleep(every);
       continue;
@@ -146,7 +151,7 @@ async function watch() {
     saveSeen(seen);
     try {
       const routed = await stewardTick({ rows: fold(), agents: list });
-      for (const action of routed.actions) line(`STEWARD ${action.type} ${cut(action.session ?? action.to ?? action.inbox, 60)}`);
+      stewardLines(routed);
     } catch (error) { line(`steward failed: ${cut(error.message, 160)}`); }
     await sleep(every);
   }

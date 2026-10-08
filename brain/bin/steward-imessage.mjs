@@ -2,10 +2,12 @@
 // Operator-invoked setup test uses this same argv-only transport.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { validateAlertPayload } from '../lib/steward-payload.mjs';
 const [recipient, encoded] = process.argv.slice(2);
 try {
   const payload = JSON.parse(encoded);
-  if (!recipient || /[\x00-\x1f]/.test(recipient) || Object.keys(payload).sort().join(',') !== 'kind,project,session' || Object.values(payload).some(v => typeof v !== 'string')) throw Error('recipient and project/session/kind JSON required');
+  if (!recipient || /[\x00-\x1f]/.test(recipient)) throw Error('operator recipient required');
+  validateAlertPayload(payload);
   await promisify(execFile)('/usr/bin/osascript', ['-e', `on run argv
   tell application "Messages"
     set targetService to first service whose service type is iMessage

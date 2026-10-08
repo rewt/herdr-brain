@@ -586,12 +586,22 @@ describe('legacy bridge during workspace migration', () => {
     const refused = await cli(['run', 'workspace', '--', process.execPath, '-e', ''], { env }).done;
     assert.equal(refused.code, 75); assert.match(refused.stderr, /^TEST_SLOT_HELD:.*bch-cloak/);
     assert.equal(fs.existsSync(workspace.lockPath), false);
-    const queued = cli(['run', 'workspace', '--wait', '10', '--', ...nodeCommand(marker)], { env });
+    const queued = cli(['run', 'workspace', '--wait', String(Math.ceil(loadTimeout(10000) / 1000)), '--', ...nodeCommand(marker)], { env });
     await sleep(200); assert.equal(fs.existsSync(marker), false);
     first.child.kill('SIGTERM'); await first.done;
-    await until(() => fs.existsSync(marker) && fs.existsSync(workspace.lockPath), 'configured run to acquire both locks');
+    // The command can publish its marker before setGroup has updated both
+    // records. Wait for registration, rather than observing between writes.
+    await until(() => {
+      if (!fs.existsSync(marker) || !fs.existsSync(legacy.lockPath) || !fs.existsSync(workspace.lockPath)) return false;
+      const pid = Number(fs.readFileSync(marker, 'utf8'));
+      return [legacy.lockPath, workspace.lockPath].every(file => {
+        const record = readLock(file);
+        return record.pgid === pid && typeof record.groupStart === 'string' && typeof record.groupBirth === 'string';
+      });
+    }, 'configured run to register its command in both locks');
     const old = readLock(legacy.lockPath), own = readLock(workspace.lockPath);
     assert.equal(old.token, own.token); assert.equal(old.pgid, own.pgid);
+    assert.equal(old.groupStart, own.groupStart); assert.equal(old.groupBirth, own.groupBirth);
     const other = await cli(['run', 'legacy-taker', '--lock-path', legacy.lockPath, '--', process.execPath, '-e', '']).done;
     assert.equal(other.code, 75, 'legacy taker cannot race a configured workspace holder');
     queued.child.kill('SIGTERM'); await queued.done;

@@ -1,0 +1,33 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+export const healthyMemory = { available: 8 * 1024 ** 3, swap_used: 0 };
+export const pressuredMemory = { ...healthyMemory, available: 128 * 1024 ** 2 };
+
+// Native measurements are faked, but promotion's real locks and slot remain in
+// use. A one-shot preload injects pressure exactly after the chosen acquisition.
+export function promotionMemoryFixture(f, stage) {
+  const file = path.join(f.root, 'memory.json'), ready = path.join(f.root, 'memory-injected');
+  const armed = path.join(f.root, 'memory-armed'), preload = path.join(f.root, 'inject-memory.mjs');
+  const set = value => fs.writeFileSync(file, JSON.stringify(value));
+  set(healthyMemory); fs.writeFileSync(armed, 'armed');
+  f.env.TEST_MEMORY_FILE = file;
+  fs.writeFileSync(preload, `import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+const inject = () => {
+  if (!fs.existsSync(${JSON.stringify(armed)})) return;
+  fs.unlinkSync(${JSON.stringify(armed)});
+  fs.writeFileSync(${JSON.stringify(file)}, ${JSON.stringify(JSON.stringify(pressuredMemory))});
+  fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
+};
+${stage === 'project-lock' ? `const original = fs.mkdirSync;
+fs.mkdirSync = function(directory, ...args) {
+  const result = original.call(this, directory, ...args);
+  if (String(directory) === ${JSON.stringify(path.join(f.repo, '.git/lane-promote.lock'))}) inject();
+  return result;
+};
+syncBuiltinESMExports();` : `if (process.argv[2] === ${JSON.stringify(stage)}) inject();`}
+`);
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(new URL('./memory-fixture.mjs', import.meta.url).href)} --import=${JSON.stringify(preload)}`;
+  return { file, ready, set };
+}

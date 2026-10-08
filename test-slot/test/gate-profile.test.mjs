@@ -13,6 +13,8 @@ import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { commandAllowance } from '../../test/helpers/command-allowance.mjs';
+import { promotionMemoryFixture, healthyMemory, pressuredMemory } from '../../test/helpers/promotion-memory-fixture.mjs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const host = path.join(source, 'promote/host-gate.mjs');
@@ -90,6 +92,106 @@ test('project profile runs the pinned Node, real host sockets/PTY, preparation a
   assert.equal(f.saved().external_lock, undefined); assert.equal(f.slotSaved().state, 'acquired');
   assert.equal(fs.existsSync(f.slot), false);
   assert.equal(fs.readFileSync(path.join(f.directory, 'host-gate.json'), 'utf8').includes('declared'), false, 'environment values stay out of receipts');
+});
+
+function probeExternal(f) {
+  return spawnSync('/bin/zsh', ['-f', '-c', 'zmodload zsh/system; zsystem flock -t 0 -f fd "$1"', 'probe', f.gate.external_lock], { env: f.env }).status;
+}
+
+for (const stop of [false, true]) test(`profile initial memory wait holds no locks and ${stop ? 'STOP refuses' : 'clearing proceeds'}`, kernelLockOptions, async t => {
+  const f = fixture(t, { externalLock: true });
+  const memory = promotionMemoryFixture(f, 'unused'); memory.set(pressuredMemory);
+  // The legacy lock file already exists; probing it must succeed throughout
+  // the initial wait, and neither slot nor project lock may be occupied.
+  fs.writeFileSync(f.gate.external_lock, 'keep');
+  const worker = f.asyncRun(), done = waitForExit(worker);
+  try {
+    await until(() => fs.existsSync(path.join(f.directory, 'host-gate.json')) && f.saved().phase === 'waiting-memory');
+    assert.equal(probeExternal(f), 0); assert.equal(fs.existsSync(f.slot), false);
+    assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false);
+    if (stop) {
+      const file = path.join(f.repo, '.lane/supervisor/STOP'); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'stop');
+    } else memory.set(healthyMemory);
+    const result = await done;
+    assert.equal(result.code, stop ? 75 : 0, result.stderr);
+    if (stop) {
+      assert.equal(f.saved().code, 'PROMOTION_STOPPED'); assert.equal(f.saved().command_started, undefined);
+      assert.equal(f.git(['rev-parse', 'main']), f.before);
+    } else assert.equal(f.git(['rev-parse', 'main']), f.head);
+    assert.equal(probeExternal(f), 0); assert.equal(fs.existsSync(f.slot), false);
+  } finally { memory.set(healthyMemory); await done; }
+});
+
+for (const stage of ['--held', '--execute', 'project-lock']) test(`profile pressure at ${stage} caps and releases every acquired lock without gate evidence`, kernelLockOptions, async t => {
+  const f = fixture(t, { externalLock: true }), memory = promotionMemoryFixture(f, stage);
+  fs.writeFileSync(f.gate.external_lock, 'keep');
+  const worker = f.asyncRun(), done = waitForExit(worker);
+  try {
+    await until(() => fs.existsSync(memory.ready));
+    assert.notEqual(probeExternal(f), 0);
+    if (stage !== '--held') assert.ok(fs.existsSync(f.slot), 'slot acquired before injected pressure');
+    if (stage === 'project-lock') assert.ok(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')));
+    const result = await done;
+    assert.equal(result.code, stage === 'project-lock' ? 0 : 75, result.stderr);
+    assert.match(result.stderr, /PROMOTION_MEMORY_PRESSURE/);
+    if (stage !== 'project-lock') {
+      assert.equal(f.saved().code, 'PROMOTION_MEMORY_PRESSURE'); assert.equal(f.saved().command_started, undefined);
+    } else {
+      const plan = JSON.parse(fs.readFileSync(f.receipt));
+      assert.equal(plan.results.job.code, 'PROMOTION_MEMORY_PRESSURE'); assert.equal(plan.phase, 'complete');
+    }
+    assert.equal(probeExternal(f), 0); assert.equal(fs.existsSync(f.slot), false);
+    assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false);
+    assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(f.git(['rev-parse', 'lane/profile']), f.head);
+    assert.equal(fs.existsSync(f.env.PROFILE_EVIDENCE), false);
+    assert.equal(JSON.parse(fs.readFileSync(f.receipt)).attempts?.length ?? 0, 0);
+    assert.equal(fs.readFileSync(f.gate.external_lock, 'utf8'), 'keep');
+  } finally { memory.set(healthyMemory); await done; }
+});
+
+test('pressure clearing after both host locks are acquired proceeds within the bound', kernelLockOptions, async t => {
+  const f = fixture(t, { externalLock: true }), memory = promotionMemoryFixture(f, '--execute');
+  fs.writeFileSync(f.gate.external_lock, '');
+  const worker = f.asyncRun(), done = waitForExit(worker);
+  try {
+    await until(() => fs.existsSync(memory.ready));
+    assert.notEqual(probeExternal(f), 0); assert.ok(fs.existsSync(f.slot));
+    memory.set(healthyMemory);
+    const result = await done; assert.equal(result.code, 0, result.stderr);
+    assert.equal(f.git(['rev-parse', 'main']), f.head); assert.equal(probeExternal(f), 0);
+    assert.equal(fs.existsSync(f.slot), false);
+  } finally { memory.set(healthyMemory); await done; }
+});
+
+test('queue delivers a coded memory refusal with no bisection and permits re-enqueue after pressure clears', kernelLockOptions, async t => {
+  const f = fixture(t, { externalLock: true }), memory = promotionMemoryFixture(f, '--execute');
+  fs.writeFileSync(f.gate.external_lock, '');
+  const herdr = path.join(f.root, 'herdr');
+  fs.writeFileSync(herdr, `#!${process.execPath}
+const a=process.argv.slice(2);
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
+else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
+else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
+`, { mode: 0o755 });
+  const queue = queueFor(f.repo), add = () => enqueue(queue, ['profile'], { laneCLI: path.join(source, 'lanes/lane.mjs'),
+    org: null, to: 'offline', attempts: 1, retry: 0, expectedHead: f.head, herdr });
+  add(); f.env.SUPERVISOR_INPUT_CONFIRM_SECONDS = '0.001'; f.env.SUPERVISOR_INPUT_POLL_SECONDS = '0.001';
+  const drain = () => spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  const first = drain(); assert.equal(first.status, 0, first.stderr);
+  const data = queue.load(), refused = data.results[0];
+  assert.equal(refused.outcome, 'refused'); assert.equal(refused.code, 'PROMOTION_MEMORY_PRESSURE');
+  assert.equal(refused.delivered, true);
+  assert.equal(data.interrupted?.length ?? 0, 0); assert.equal(data.current, null); assert.equal(refused.gate, undefined);
+  const plan = JSON.parse(fs.readFileSync(refused.receipt));
+  assert.equal(plan.phase, 'complete'); assert.deepEqual(plan.groups, []); assert.equal(plan.attempts?.length ?? 0, 0);
+  assert.equal(probeExternal(f), 0); assert.equal(fs.existsSync(f.slot), false);
+  assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(f.git(['rev-parse', 'lane/profile']), f.head);
+  const inbox = fs.readFileSync(path.join(f.repo, '.git/supervisor/inbox.log'), 'utf8');
+  assert.match(inbox, /outcome=refused code=PROMOTION_MEMORY_PRESSURE/);
+  memory.set(healthyMemory); const [retry] = add(); assert.notEqual(retry.id, refused.id);
+  const second = drain(); assert.equal(second.status, 0, second.stderr);
+  assert.equal(queue.load().results.at(-1).outcome, 'promoted'); assert.equal(f.git(['rev-parse', 'main']), f.head);
+  await waitForInboxIdle(path.join(f.repo, '.git/supervisor/inbox.log'));
 });
 
 test('busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file', kernelLockOptions, async t => {

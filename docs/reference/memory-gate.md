@@ -5,7 +5,7 @@ launching work while swap use is at least 5% of physical RAM and available memor
 is below 25% of RAM, or available memory is below the larger of 256 MiB and 5%
 of physical RAM. They print the reason to stderr,
 sample again every five seconds, and proceed automatically when it clears.
-There is no timeout, refusal budget, model call, or host test slot in this gate.
+The initial wait has no timeout, refusal budget, model call, or host test slot.
 An already running operation is not stopped by a later pressure sample.
 
 Linux reads `MemAvailable` and `SwapTotal - SwapFree` from `/proc/meminfo`.
@@ -47,6 +47,19 @@ again under the project promotion lock for release's one-shot deferral. Lane
 promotion waits before acquiring that lock and starting validation, then finishes
 the cheap fast-forward without a second memory wait. The existing fresh ref,
 cleanliness and record guards still run before integration.
+
+Queued batches wait for memory and check STOP before taking promotion resources.
+For a declared gate profile, the host adapter owns this initial wait before the
+external kernel lock and shared test slot; an unprofiled batch waits before the
+project promotion lock. Each subsequent check at a lock boundary has a five-second
+wait allowance, sampling every second (native probes retain their two-second
+response allowance). Persistent pressure returns `PROMOTION_MEMORY_PRESSURE`,
+releases the acquired locks and slot, and delivers the ordinary per-lane refusal
+notice. No gate runs, red evidence or bisection is recorded; main and lane tips
+are preserved, and the lanes can be enqueued again after pressure clears. STOP
+is checked throughout both waits, including the clearing sample. A resumed plan
+with an earlier attempt retains its recovery checkpoint rather than replacing
+possibly integrated work with a fresh pre-execution refusal.
 
 Supervisor `brief` and `brief --json` show the current memory measurement, reason,
 probe advisories, and the largest memory and CPU consumers. Process rows carry

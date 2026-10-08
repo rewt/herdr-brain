@@ -14,6 +14,7 @@ import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { promotionMemoryFixture, healthyMemory, pressuredMemory } from '../../test/helpers/promotion-memory-fixture.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const emptyComposer = fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url));
@@ -346,6 +347,53 @@ test('STOP during a batch memory wait refuses promotion and permits retry after 
     assert.equal(f.queue.load().results.at(-1).outcome, 'promoted');
     assert.equal(f.queue.load().results.at(-1).id, retry.id); assert.equal(f.runs(), 1);
   } finally { fs.writeFileSync(memory, JSON.stringify(healthy)); await done; }
+});
+
+test('unprofiled batch waits before its project lock and proceeds when memory clears', async t => {
+  const f = fixture(t); f.lane('memory'); f.add('memory');
+  const memory = promotionMemoryFixture(f, 'unused'); memory.set(pressuredMemory);
+  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+  const done = waitForExit(worker);
+  try {
+    await until(() => {
+      const batch = f.queue.load().current;
+      const log = batch && path.join(f.queue.directory, 'batches', batch.id, 'train.log');
+      return log && fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure');
+    });
+    assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false);
+    assert.equal(fs.existsSync(f.env.MONITOR_TEST_SLOT_PATH), false); assert.equal(f.runs(), 0);
+    memory.set(healthyMemory);
+    const r = await done; assert.equal(r.code, 0, r.stderr);
+    assert.equal(f.queue.load().results[0].outcome, 'promoted'); assert.equal(f.runs(), 1);
+  } finally { memory.set(healthyMemory); await done; }
+});
+
+for (const clear of [false, true]) test(`unprofiled memory re-check ${clear ? 'proceeds on clearing' : 'refuses with a code and releases the project lock'}`, async t => {
+  const f = fixture(t), workspace = f.lane('memory'); f.add('memory');
+  const before = f.git(['rev-parse', 'main']), head = f.git(['rev-parse', 'HEAD'], workspace);
+  const memory = promotionMemoryFixture(f, 'project-lock');
+  const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env });
+  const done = waitForExit(worker);
+  try {
+    await until(() => fs.existsSync(memory.ready));
+    assert.ok(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')));
+    if (clear) memory.set(healthyMemory);
+    const r = await done; assert.equal(r.code, 0, r.stderr);
+    assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false);
+    const saved = f.queue.load(), result = saved.results[0];
+    assert.equal(result.outcome, clear ? 'promoted' : 'refused'); assert.equal(saved.current, null);
+    assert.equal(saved.interrupted?.length ?? 0, 0);
+    if (clear) { assert.equal(f.runs(), 1); return; }
+    assert.equal(result.code, 'PROMOTION_MEMORY_PRESSURE'); assert.equal(result.gate, undefined);
+    assert.equal(f.runs(), 0); assert.equal(f.git(['rev-parse', 'main']), before);
+    assert.equal(f.git(['rev-parse', 'HEAD'], workspace), head);
+    const plan = JSON.parse(fs.readFileSync(result.receipt));
+    assert.equal(plan.attempts?.length ?? 0, 0); assert.deepEqual(plan.groups, []); assert.equal(plan.phase, 'complete');
+    assert.ok(f.messages().some(args => args[3].includes('outcome=refused code=PROMOTION_MEMORY_PRESSURE')));
+    memory.set(healthyMemory); const [retry] = f.add('memory'); assert.notEqual(retry.id, result.id);
+    const resumed = f.drain(); assert.equal(resumed.status, 0, resumed.stderr);
+    assert.equal(f.queue.load().results.at(-1).outcome, 'promoted'); assert.equal(f.runs(), 1);
+  } finally { memory.set(healthyMemory); await done; }
 });
 
 test('completed batch notices wait for empty input and deliver each lane once with one gate', async t => {

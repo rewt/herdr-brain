@@ -13,6 +13,7 @@ import { gitProject } from '../lib/project.mjs';
 import { canonicalValidation } from '../lanes/validation.mjs';
 import { resolveGateLimits, gateHistoryKey } from '../test-slot/limits.mjs';
 import { cliHelp } from '../lib/cli-help.mjs';
+import { waitForPromotionMemory } from './memory-gate.mjs';
 cliHelp(import.meta.url, "Usage: node promote/host-gate.mjs [--lock|--held|--execute] CANONICAL RECEIPT [COMMAND ARGS...]");
 
 const args = process.argv.slice(2);
@@ -44,6 +45,8 @@ try {
     save({ schema: 'promotion-host-gate/v1', profile_fingerprint: profile.fingerprint,
       started_at: new Date().toISOString(), phase: 'starting', slot_receipt: slotFile,
       ...(profile.node ? { node: profile.node } : {}) });
+    update({ phase: 'waiting-memory' });
+    waitForPromotionMemory(canonical);
     if (profile.externalLock) {
       const started = new Date().toISOString();
       update({ phase: 'waiting-external-lock', external_lock: { path: profile.externalLock, state: 'waiting', started_at: started, wait_seconds: profile.waitSeconds } });
@@ -69,6 +72,8 @@ try {
     update({ external_lock: { ...saved.external_lock, state: 'acquired', finished_at: new Date().toISOString() } });
     process.exitCode = await execute(profile);
   } else if (mode === '--execute') {
+    update({ phase: 'checking-memory' });
+    waitForPromotionMemory(canonical, { held: true });
     checkCompetingProcesses(profile); // a competing direct gate may start during the slot wait
     update({ phase: 'running', command_started: true, command_started_at: new Date().toISOString() });
     const result = spawnSync(process.execPath, argv, { env: { ...profile.env, [HOST_ENV]: profile.fingerprint,
@@ -77,11 +82,15 @@ try {
     process.exitCode = exitOf(result);
   } else throw new Error('unknown host gate phase');
 } catch (error) {
-  if (fs.existsSync(hostFile)) update({ phase: 'refused', reason: error.message, finished_at: new Date().toISOString() });
+  if (fs.existsSync(hostFile)) update({ phase: 'refused', reason: error.message, ...(error.code ? { code: error.code } : {}), finished_at: new Date().toISOString() });
   process.stderr.write(error.message + '\n'); process.exitCode = 75;
 }
 
 async function execute(profile) {
+  // --held owns the external lock; without it the initial check is still cheap
+  // and bounded. Never enter a slot wait while memory is already pressured.
+  update({ phase: 'checking-memory' });
+  waitForPromotionMemory(canonical, { held: true });
   await requireHost();
   checkCompetingProcesses(profile);
   update({ phase: 'waiting-test-slot' });

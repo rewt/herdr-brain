@@ -96,3 +96,19 @@ test('process diagnostics rank memory and CPU separately and retain PID, parent 
   assert.match(processUsage({ run: () => { throw Error('ps unavailable'); } }).warning, /ps unavailable/);
   assert.match(processUsage({ run: () => 'invalid output' }).warning, /no process rows/);
 });
+
+test('bounded memory waits use the remaining allowance, clear at the boundary, and retain STOP precedence', () => {
+  const pressure = { ...healthy, available: 1 };
+  let clock = 0, checks = 0;
+  const sleeps = [];
+  const options = { maxWaitMs: 2500, intervalMs: 2000, now: () => clock, notify: () => {},
+    sleep: ms => { sleeps.push(ms); clock += ms; }, check: () => { checks++; } };
+  assert.throws(() => waitForMemory({ ...options, read: () => pressure }), { code: 'MEMORY_PRESSURE_TIMEOUT' });
+  assert.deepEqual(sleeps, [2000, 500]); assert.equal(clock, 2500); assert.ok(checks >= 3);
+  clock = 0;
+  assert.equal(waitForMemory({ ...options, read: () => clock >= 2500 ? healthy : pressure }), healthy);
+  clock = 0;
+  assert.throws(() => waitForMemory({ ...options, read: () => pressure,
+    check: () => { if (clock >= 2500) throw Error('STOP'); } }), /STOP/);
+  assert.throws(() => waitForMemory({ ...options, maxWaitMs: -1 }), /invalid memory wait bound/);
+});

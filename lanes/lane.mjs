@@ -28,6 +28,8 @@ import { fileURLToPath } from "node:url";
 import { acquireLock } from "./promotion-lock.mjs";
 import { withPromotionGuard } from '../promote/guard.mjs';
 import { runTrain } from '../promote/train.mjs';
+import { resolveGateProfile, HOST_ENV } from '../promote/gate-profile.mjs';
+import { waitForPromotionMemory, refuseBeforeTrain } from '../promote/memory-gate.mjs';
 import { ROUTE_PRESET } from './preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
@@ -2677,19 +2679,26 @@ switch (command) {
     if (!topic || (rest.length && (rest.length !== 1 || rest[0] !== '--workflow'))) fail('usage: lane promote-batch RECEIPT [--workflow]');
     const root = repositoryRoot({ requiredBy: 'promote' });
     try {
-      try {
-        waitForMemory({ label: 'lane promote', check: () => {
-          if (existsSync(join(root, '.lane/supervisor/STOP'))) {
-            throw Object.assign(new Error('supervisor STOP exists; nothing merged'), { code: 'PROMOTION_STOPPED' });
-          }
-        } });
-      } catch (error) {
-        if (error.code !== 'PROMOTION_STOPPED') throw error;
-        // Let the train's existing guards persist each member's STOP refusal.
+      const profile = resolveGateProfile(root);
+      if (profile && process.env[HOST_ENV] !== profile.fingerprint) throw new Error('declared gate profile requires the promotion queue host adapter; enqueue with promote/promote.mjs');
+      const refuse = error => {
+        if (!['PROMOTION_STOPPED', 'PROMOTION_MEMORY_PRESSURE'].includes(error.code)) throw error;
+        refuseBeforeTrain({ file: resolve(topic), identity: REPO_IDENTITY, error });
+        process.stderr.write(error.message + '\n');
+      };
+      // A profiled batch already owns the external lock and slot here. Its
+      // untimed initial wait belongs to the host adapter, before either lock.
+      if (!profile) {
+        try { waitForPromotionMemory(root); }
+        catch (error) { refuse(error); break; }
       }
-      await withPromotionLock(() => runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
-        main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings(),
-        workflow: rest.includes('--workflow') || process.env.PROMOTE_WORKFLOW_ENGINE === '1' }));
+      await withPromotionLock(() => {
+        try { waitForPromotionMemory(root, { held: true }); }
+        catch (error) { refuse(error); return; }
+        return runTrain({ file: resolve(topic), canonical: root, identity: REPO_IDENTITY,
+          main: MAIN, prepare: CONFIG.prepare ?? [], validation: validationSettings(),
+          workflow: rest.includes('--workflow') || process.env.PROMOTE_WORKFLOW_ENGINE === '1' });
+      });
     } catch (error) { fail(error.message); }
     break;
   }

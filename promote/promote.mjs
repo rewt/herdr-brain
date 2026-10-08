@@ -228,7 +228,8 @@ function performBatch(batch, queue) {
       const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
       if (!train.attempts?.length) {
         train.results ??= {};
-        for (const job of batch.jobs) train.results[job.id] ??= { outcome: 'refused', reason: host.reason, batch: batch.id, host_receipt: hostFile };
+        for (const job of batch.jobs) train.results[job.id] ??= { outcome: 'refused', reason: host.reason,
+          ...(host.code ? { code: host.code } : {}), batch: batch.id, host_receipt: hostFile };
         train.phase = 'complete'; train.groups = [];
         writeFileAtomic(receipt, JSON.stringify(train, null, 2) + '\n');
         return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt } }));
@@ -270,7 +271,7 @@ function finishBatchJob(job, result, queue) {
 
 export function notice(job, result) {
   if (result.pending) return `[promote-queue] id=${job.id} outcome=${result.outcome} code=${result.code} pending=${JSON.stringify(result.pending)} reason=${JSON.stringify(singleLine(result.reason))}`;
-  return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}${result.receipt ? ` receipt=${result.receipt}` : ''}${result.host_receipt ? ` host-receipt=${result.host_receipt}` : ''}`;
+  return `[promote-queue] id=${job.id} lane=${job.topic} outcome=${result.outcome}${result.code ? ` code=${result.code}` : ''} reason=${JSON.stringify(singleLine(result.reason))} log=${result.log ?? ''}${result.receipt ? ` receipt=${result.receipt}` : ''}${result.host_receipt ? ` host-receipt=${result.host_receipt}` : ''}`;
 }
 async function deliver(job, result, queue) {
   const message = notice(job, result);

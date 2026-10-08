@@ -57,6 +57,57 @@ not ok 1 - broken
 # duration_ms 2000
 `;
 
+test('known batch clocks split queue, slot, external lock, prepare and command time per lane', t => {
+  const f = fixture(t), at = seconds => new Date(Date.parse('2026-10-05T12:00:00Z') + seconds * 1000).toISOString();
+  const jobs = [{ ...f.bad, queued: at(-30) }, { ...f.good, queued: at(-15) }];
+  const execution = path.join(f.root, 'execution.json');
+  fs.writeFileSync(execution, JSON.stringify({ command_started: true, started_at: at(26), finished_at: at(46) }));
+  const gate = f.gate('timed', 0, 25, { started_at: at(21), finished_at: at(46),
+    slot_receipt: path.join(f.root, 'slot.json'), execution_receipt: execution });
+  f.write('timed', [{ ...f.attempt(jobs, gate), prepare: { started_at: at(16), finished_at: at(25) } }],
+    { jobs, slot_granted_at: at(15), external_lock_required: true, external_lock_started_at: at(1), external_lock_granted_at: at(5) });
+  const m = f.metrics();
+  assert.equal(m.schema, 'train-metrics/v1');
+  assert.deepEqual(m.batches[0].timing, { queue_wait_s: 30, slot_wait_s: 15, external_lock_wait_s: 4, prepare_time_s: 9, gate_time_s: 20 });
+  assert.deepEqual(m.lanes.map(l => l.timing), [m.batches[0].timing, { ...m.batches[0].timing, queue_wait_s: 15 }]);
+  assert.equal(m.gates[0].command_time_s, 20);
+  assert.equal(m.summary.phase_time_s.slot_wait_s.total, 15);
+  assert.match(renderMetrics(m), /lane\/good: queue_wait=15.00s; slot_wait=15.00s; external_lock_wait=4.00s; prepare_time=9.00s; gate_time=20.00s/);
+});
+
+test('old receipts retain gate measurements while missing phase clocks are unknown, never zero', t => {
+  const f = fixture(t); f.write('old', [f.attempt([f.bad, f.good], f.gate('old', 0, 12))]);
+  const m = f.metrics();
+  assert.deepEqual(m.batches[0].timing, { queue_wait_s: null, slot_wait_s: null, external_lock_wait_s: null, prepare_time_s: null, gate_time_s: 12 });
+  assert.ok(m.lanes.every(l => l.timing.slot_wait_s === null && l.timing.prepare_time_s === null));
+  assert.deepEqual(m.summary.phase_time_s.slot_wait_s, { samples: 0, total: null, median: null, max: null, unknown: 1 });
+  assert.equal(m.batches[0].external_lock_required, null);
+  assert.match(renderMetrics(m), /slot_wait=unknown; external_lock_wait=unknown; prepare_time=unknown/);
+});
+
+test('bisection and resume phase totals follow attempt membership without charging reused proofs', t => {
+  const f = fixture(t), prep = { started_at: '2026-10-05T12:00:00Z', finished_at: '2026-10-05T12:00:03Z' };
+  f.write('split', [
+    { ...f.attempt([f.bad, f.good], f.gate('both-timing', 1, 10), 'red'), prepare: prep, prepare_history: [prep] },
+    { ...f.attempt([f.bad], f.gate('bad-timing', 1, 4), 'red'), prepare: prep },
+    { ...f.attempt([f.good], f.gate('good-timing', 0, 5)), prepare: prep },
+    { ...f.attempt([f.good], f.gate('cached-timing', 0, 100, { reused: true })), prepare: prep },
+  ], { external_lock_required: false });
+  const m = f.metrics();
+  assert.equal(m.batches[0].timing.prepare_time_s, 15); assert.equal(m.batches[0].timing.gate_time_s, 19);
+  assert.deepEqual(m.lanes.map(l => [l.lane, l.timing.prepare_time_s, l.timing.gate_time_s]), [['bad', 9, 14], ['good', 12, 15]]);
+  assert.equal(m.batches[0].external_lock_required, false); assert.equal(m.batches[0].timing.external_lock_wait_s, null);
+});
+
+test('unfinished and reversed phase intervals do not become zero or partial totals', t => {
+  const f = fixture(t), start = '2026-10-05T12:00:00Z';
+  f.write('partial', [{ ...f.attempt([f.bad], f.gate('partial', 0, 2)),
+    prepare: { started_at: start }, prepare_history: [{ started_at: start, finished_at: '2026-10-05T12:00:03Z' }] }],
+    { jobs: [{ ...f.bad, queued: 'invalid' }], slot_granted_at: '2026-10-05T11:59:59Z' });
+  const m = f.metrics(); assert.equal(m.batches[0].timing.queue_wait_s, null);
+  assert.equal(m.batches[0].timing.slot_wait_s, null); assert.equal(m.batches[0].timing.prepare_time_s, null);
+});
+
 test('bisected red batches count gate executions rather than per-lane outcomes and attribute changed files', t => {
   const f = fixture(t);
   f.write('bisected', [f.attempt([f.bad, f.good], f.gate('both', 1, 20, {}, redLog), 'red'),

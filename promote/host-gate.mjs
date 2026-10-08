@@ -25,6 +25,15 @@ const read = () => JSON.parse(fs.readFileSync(hostFile, 'utf8'));
 const save = data => writeFileAtomic(hostFile, JSON.stringify(data, null, 2) + '\n', 0o600);
 const update = changes => save({ ...read(), ...changes });
 const exitOf = r => r.status ?? 1;
+// These updates precede the train child; never replace its recovery checkpoints.
+const updateTrain = changes => {
+  const plan = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  // A capped wait can be retried later. Pair the first successful grant with
+  // that invocation's wait start, excluding the idle time between retries.
+  if (changes.external_lock_granted_at && !plan.external_lock_granted_at) plan.external_lock_started_at = changes.external_lock_started_at;
+  for (const [key, value] of Object.entries(changes)) plan[key] ??= value;
+  writeFileAtomic(receipt, JSON.stringify(plan, null, 2) + '\n', 0o600);
+};
 
 async function requireHost() {
   try {
@@ -45,6 +54,7 @@ try {
   const memoryOptions = { checkStop: !JSON.parse(fs.readFileSync(receipt, 'utf8')).attempts?.length };
   if (mode !== '--lock' && read().profile_fingerprint !== profile.fingerprint) throw new Error('promotion gate profile changed while waiting; enqueue again');
   if (mode === '--lock') {
+    updateTrain({ started_at: new Date().toISOString(), external_lock_required: Boolean(profile.externalLock) });
     save({ schema: 'promotion-host-gate/v1', profile_fingerprint: profile.fingerprint,
       started_at: new Date().toISOString(), phase: 'starting', slot_receipt: slotFile,
       ...(profile.node ? { node: profile.node } : {}) });
@@ -52,6 +62,7 @@ try {
     waitForPromotionMemory(canonical, memoryOptions);
     if (profile.externalLock) {
       const started = new Date().toISOString();
+      updateTrain({ external_lock_started_at: started });
       update({ phase: 'waiting-external-lock', external_lock: { path: profile.externalLock, state: 'waiting', started_at: started, wait_seconds: profile.waitSeconds } });
       process.stderr.write(`PROMOTE_LOCK_WAIT: ${profile.externalLock}; capped at ${profile.waitSeconds}s; receipt=${hostFile}\n`);
       // zsystem flock uses fcntl record locks, NOT flock(2). -e keeps the
@@ -72,9 +83,13 @@ try {
     }
   } else if (mode === '--held') {
     const saved = read();
-    update({ external_lock: { ...saved.external_lock, state: 'acquired', finished_at: new Date().toISOString() } });
+    const acquiredAt = new Date().toISOString();
+    update({ external_lock: { ...saved.external_lock, state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt } });
+    updateTrain({ external_lock_started_at: saved.external_lock.started_at, external_lock_granted_at: acquiredAt });
     process.exitCode = await execute(profile, memoryOptions);
   } else if (mode === '--execute') {
+    const slot = JSON.parse(fs.readFileSync(slotFile, 'utf8'));
+    updateTrain({ slot_granted_at: slot.acquired_at });
     update({ phase: 'checking-memory' });
     waitForPromotionMemory(canonical, { ...memoryOptions, held: true });
     checkCompetingProcesses(profile); // a competing direct gate may start during the slot wait

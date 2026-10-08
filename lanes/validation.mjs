@@ -140,14 +140,17 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     // The cache receipt can advance; every execution's log remains immutable.
     const log = path.join(directory, `${key}.${randomUUID()}.log`);
     const executionReceipt = `${log}.execution.json`;
+    const slotReceipt = `${log}.slot.json`;
     const fd = fs.openSync(log, 'wx', 0o600);
     const startedAt = new Date(), started = process.hrtime.bigint();
     let run;
     try {
-      onStart?.({ command, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt });
+      onStart?.({ command, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt,
+        ...(tier === 'promotion' ? { slot_receipt: slotReceipt } : {}) });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
       const execute = tier === 'promotion' ? runTestSlotSync : runGateSync;
-      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: tier === 'promotion', cwd, env, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt, retryTimeout: false, stdio: ['inherit', fd, fd] });
+      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: tier === 'promotion', cwd, env, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt,
+        ...(tier === 'promotion' ? { waitReceipt: slotReceipt } : {}), retryTimeout: false, stdio: ['inherit', fd, fd] });
     }
     finally { fs.closeSync(fd); }
     const output = readPlainFile(log);
@@ -160,10 +163,16 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       throw Object.assign(new Error(output.trim() || 'TEST_SLOT_HELD: validation slot refused'), { exitCode: REFUSED_EXIT });
     }
     process.stdout.write(output);
+    let execution = {};
+    if (tier === 'promotion') {
+      try { execution = JSON.parse(readPlainFile(executionReceipt)); } catch { /* A refusal has no command clocks. */ }
+    }
     const gate = { schema: 'lane-validation/v1', key, ...before, tier, command, environment_fingerprint: fingerprint,
       exit_code: exitCode, signal, started_at: startedAt.toISOString(), finished_at: new Date().toISOString(),
       duration_s: Number(process.hrtime.bigint() - started) / 1e9, log, log_hash: digest(output), reused: false,
-      execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits };
+      execution_receipt: executionReceipt, executed: run.attempts !== undefined, outcome: run.gateTimeout ? 'timeout' : exitCode === 0 ? 'green' : 'red', gate_timeout: run.gateTimeout ?? null, command_duration_s: run.execution?.duration_s, longest_silence_s: run.execution?.longest_silence_s, limits: run.execution?.limits,
+      ...(tier === 'promotion' ? { slot_receipt: slotReceipt,
+        ...(execution.command_started === true ? { command_started_at: execution.started_at, command_finished_at: execution.finished_at } : {}) } : {}) };
     // Failed, dirty or moving executions never become reusable green evidence.
     try { unchanged(cwd, before, label); }
     catch (error) { throw Object.assign(error, { gate }); }

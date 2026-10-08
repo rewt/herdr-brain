@@ -96,7 +96,12 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   // In particular, an in-flight gate still resumes from its prepared candidate.
   const phase = value => { plan.phase = value; save(); };
   plan.started_at ??= new Date().toISOString();
-  plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)]; save();
+  plan.external_lock_required ??= Boolean(profile?.externalLock);
+  plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)];
+  // A caller can die while its slot child is running. Recover the durable
+  // sidecar's original grant before replacing that attempt's gate on resume.
+  for (const attempt of plan.attempts) saveSlotGrant(attempt);
+  save();
   const canonicalReady = () => {
     try { canonicalCheck(); return true; }
     catch (error) {
@@ -241,6 +246,8 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   };
   const validateAttempt = attempt => {
     try {
+      if (attempt.prepare) (attempt.prepare_history ??= []).push(attempt.prepare);
+      attempt.prepare = { started_at: new Date().toISOString() };
       phase('preparing');
       for (const step of prepare) {
         if (step.unless !== undefined && fs.existsSync(path.join(attempt.scratch, step.unless))) continue;
@@ -257,6 +264,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       const covered = [...(attempt.test_plan?.files ?? []), ...(attempt.test_plan?.covered ?? [])];
       if (attempt.jobs.some(job => (job.requiredTests ?? []).some(file => !covered.includes(file)))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
       const command = plannedCommand(validation.tiers.promotion.command, attempt.test_plan);
+      attempt.prepare.finished_at = new Date().toISOString(); save();
       process.stdout.write(`validating in ${attempt.scratch}: ${validation.tiers.promotion.command}\n`);
       // Publish the clock before the synchronous gate blocks. No exit code is
       // present until validation returns, so this can never prove a green gate.
@@ -271,6 +279,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
         idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment, env, label: 'train scratch',
         onStart: gate => { attempt.gate = gate; save(); } });
     } catch (error) {
+      if (attempt.prepare && !attempt.prepare.finished_at) attempt.prepare.finished_at = new Date().toISOString();
       // A dirty execution is measurable, but never a completed green proof.
       if (error.gate) attempt.gate = { ...attempt.gate, finished_at: error.gate.finished_at,
         duration_s: error.gate.duration_s, execution: error.gate, error: error.message };
@@ -281,8 +290,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       }
       attempt.phase = 'invalid'; attempt.error = error.message; plan.groups.shift();
       for (const job of attempt.jobs) result(job, { outcome: 'refused', reason: error.message, batch: plan.id });
-      save(); return false;
+      saveSlotGrant(attempt); save(); return false;
     }
+    saveSlotGrant(attempt);
     attempt.phase = attempt.gate.outcome === 'timeout' ? 'timeout' : attempt.gate.exit_code === 0 ? 'validated' : 'red'; save();
     if (attempt.phase === 'timeout') {
       plan.groups.shift();
@@ -290,6 +300,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       for (const job of attempt.jobs) result(job, { outcome: 'timeout', reason: `${reason}; ${attempt.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`, gate: attempt.gate, batch: plan.id });
       save(); return false;
     }
+
     if (attempt.phase === 'red') {
       plan.groups.shift();
       if (attempt.jobs.length === 1) result(attempt.jobs[0], { outcome: 'refused', reason: `batch validation failed (exit ${attempt.gate.exit_code}); lane isolated for correction`, gate: attempt.gate, batch: plan.id });
@@ -301,6 +312,18 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
     }
     return true;
   };
+  // Unconfigured trains take the slot at validation; profiled trains already
+  // saved the outer grant before preparation. Keep the first grant on resume.
+  function saveSlotGrant(attempt) {
+    for (const gate of [...(attempt.gate_history ?? []), ...(attempt.gate ? [attempt.gate] : [])]) {
+      if (plan.slot_granted_at) return;
+      if (gate.reused) continue;
+      try {
+        const slot = JSON.parse(fs.readFileSync(gate.slot_receipt, 'utf8'));
+        if (slot.state === 'acquired' && Number.isFinite(Date.parse(slot.acquired_at))) plan.slot_granted_at = slot.acquired_at;
+      } catch { /* Refused or interrupted waits have no grant. */ }
+    }
+  }
   const integrateAttempt = attempt => {
     if (attempt.phase !== 'validated' || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) throw new Error('train integration requires exact-commit green evidence');
     if (!canonicalReady()) return false;

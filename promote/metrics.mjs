@@ -25,6 +25,34 @@ const rate = (green, completed, unknown = 0) => ({ green, completed, unknown, ra
 const status = gate => !gate.finished_at ? 'unfinished' : gate.signal ? 'interrupted' :
   gate.exit_code === 0 ? 'green' : Number.isInteger(gate.exit_code) && gate.exit_code > 0 ? 'red' : 'unknown';
 const gateObservations = attempt => [...(attempt.gate_history ?? []), ...(attempt.gate ? [attempt.gate] : [])];
+const interval = (start, end) => {
+  const a = typeof start === 'string' ? Date.parse(start) : NaN;
+  const b = typeof end === 'string' ? Date.parse(end) : NaN;
+  return Number.isFinite(a) && Number.isFinite(b) && b >= a ? (b - a) / 1000 : null;
+};
+// Partial totals are unknown, rather than a misleading lower bound or zero.
+const totalTime = values => values.length && values.every(finite) ? values.reduce((a, b) => a + b, 0) : null;
+function commandTime(gate) {
+  if (gate.command_started_at !== undefined) return interval(gate.command_started_at, gate.command_finished_at);
+  if (gate.slot_receipt) {
+    try {
+      const execution = JSON.parse(fs.readFileSync(gate.execution_receipt, 'utf8'));
+      return execution.command_started === true ? interval(execution.started_at, execution.finished_at) : null;
+    } catch { return null; }
+  }
+  return gate.finished_at && finite(gate.duration_s) ? gate.duration_s : interval(gate.started_at, gate.finished_at);
+}
+function phaseTiming(plan, attempts, gates, jobs) {
+  const queues = jobs.map(j => interval(j.queued, plan.started_at));
+  const preparation = attempts.flatMap(a => [...(a.prepare_history ?? []), ...(a.prepare ? [a.prepare] : [null])]);
+  return {
+    queue_wait_s: queues.length && queues.every(finite) ? Math.max(...queues) : null,
+    slot_wait_s: interval(plan.started_at, plan.slot_granted_at),
+    external_lock_wait_s: interval(plan.external_lock_started_at, plan.external_lock_granted_at),
+    prepare_time_s: totalTime(preparation.map(p => interval(p?.started_at, p?.finished_at))),
+    gate_time_s: totalTime(gates.filter(g => !g.reused && !g.duplicate).map(g => g.command_time_s)),
+  };
+}
 function executionEvidence(observation) {
   const gate = observation.execution ?? observation;
   if (!gate.execution_receipt || gate.finished_at && gate.exit_code !== undefined) return gate;
@@ -118,7 +146,7 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
   };
   const lower = bound(since, '--since'), upper = bound(until, '--until');
   if (lower !== null && upper !== null && lower >= upper) throw Error('--since must precede --until');
-  const directory = path.join(identity, 'promote/batches'), warnings = [], batches = [], gates = [], red = [];
+  const directory = path.join(identity, 'promote/batches'), warnings = [], batches = [], lanes = [], gates = [], red = [];
   const stepRows = [], fileRows = [], groupRows = [], seen = new Set(), parsed = new Set();
   const names = fs.existsSync(directory) ? fs.readdirSync(directory).sort() : [];
   for (const name of names) {
@@ -130,6 +158,7 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
       if (!plan.jobs.every(j => j && typeof j.id === 'string' && typeof j.topic === 'string') ||
           !(plan.attempts ?? []).every(a => a && Array.isArray(a.jobs ?? []) && (a.jobs ?? []).every(j => j && typeof j.topic === 'string') && (!a.gate || typeof a.gate === 'object') &&
             Array.isArray(a.gate_history ?? []) && (a.gate_history ?? []).every(g => g && typeof g === 'object')) ||
+          !(plan.attempts ?? []).every(a => Array.isArray(a.prepare_history ?? []) && (a.prepare_history ?? []).every(p => p && typeof p === 'object')) ||
           !Object.values(plan.results ?? {}).every(r => r && typeof r === 'object')) throw Error('malformed train receipt');
     } catch (error) { warnings.push(`${receipt}: ${error.message}`); continue; }
     const started = Date.parse(plan.started_at);
@@ -153,6 +182,7 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
           lanes: jobs.map(j => j.topic), lane_count: jobs.length, reused: g.reused === true, duplicate,
           started_at: g.started_at, finished_at: g.finished_at ?? null,
           duration_s: g.finished_at && finite(g.duration_s) ? g.duration_s : null,
+          command_time_s: commandTime(g),
           elapsed_s: !g.finished_at && Number.isFinite(Date.parse(g.started_at)) ? Math.max(0, (Date.parse(now) - Date.parse(g.started_at)) / 1000) : null,
           integrated: observation === attempt.gate && !observation.execution && ['integrated', 'complete'].includes(attempt.phase) && outcome === 'green' };
         gates.push(row);
@@ -173,6 +203,17 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
           isolated_lane: jobs.length === 1 ? jobs[0].topic : null,
           reason: attempt.error ?? null });
       }
+    }
+    const batchGates = gates.filter(g => g.batch === plan.id);
+    const batch = batches[batches.length - 1];
+    batch.timing = phaseTiming(plan, attempts, batchGates, plan.jobs);
+    batch.slot_granted_at = plan.slot_granted_at ?? null;
+    batch.external_lock_granted_at = plan.external_lock_granted_at ?? null;
+    batch.external_lock_required = plan.external_lock_required ?? null;
+    for (const job of plan.jobs) {
+      lanes.push({ batch: plan.id, id: job.id, lane: job.topic, queued_at: job.queued ?? null,
+        timing: phaseTiming(plan, attempts.filter(a => a.jobs?.some(j => j.id === job.id || j.topic === job.topic)),
+          batchGates.filter(g => g.lanes.includes(job.topic)), [job]) });
     }
   }
   const observed = gates.filter(g => !g.reused && !g.duplicate);
@@ -195,17 +236,25 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
       batches_without_gate: batches.filter(b => b.first_gate === 'no-gate').length,
       gate_time_s: stats(completed.map(g => g.duration_s)),
       executed_gate_time_s: stats(executed.map(g => g.duration_s)),
+      phase_time_s: Object.fromEntries(['queue_wait_s', 'slot_wait_s', 'external_lock_wait_s', 'prepare_time_s', 'gate_time_s'].map(key => {
+        const values = batches.map(b => b.timing[key]), measured = stats(values);
+        return [key, { ...measured, total: measured.samples ? measured.total : null, unknown: values.length - measured.samples }];
+      })),
       gate_profiles: [...new Set(executed.map(g => g.command))].map(command => ({ command,
         time_s: stats(completed.filter(g => g.command === command).map(g => g.duration_s)),
         executed_time_s: stats(executed.filter(g => g.command === command).map(g => g.duration_s)),
         gates: executed.filter(g => g.command === command).length })) },
     slowest_steps: ranked(stepRows), slowest_test_files: ranked(fileRows), slowest_test_groups: ranked(groupRows),
-    red_attribution: red, batches, gates, warnings,
+    red_attribution: red, batches, lanes, gates, warnings,
     limitations: [
       'Executed gates require an exit, signal or durable command-start receipt; old unfinished clocks remain observations with execution unknown.',
       'First-pass rate is the first retained gate per batch, including cached evidence; unfinished/unknown and batches without a gate are excluded.',
       'Resumed attempts retain gate history; executions overwritten by older versions cannot be reconstructed or counted.',
       'Step durations sum test-stream totals per gate, not wall time: builds, slot waits and unmarked work are excluded.',
+      'Phase timings are seconds; missing, invalid or incomplete clocks are null (unknown). An absent external lock is also null, with external_lock_required=false when known.',
+      'Batch queue wait is the oldest member wait; each lane uses its own queued clock. Slot wait is batch start to the first grant, so it includes external-lock wait and, for unconfigured trains, preparation before the slot.',
+      'Preparation includes each attempt and resumed preparation; lane preparation/gate times include shared attempts in full and must not be summed across lanes. Reused/duplicate proofs add no gate execution time.',
+      'New gate phase time uses command-start/completion evidence to exclude slot wait; legacy gate durations retain their original measurement, which may include slot wait.',
       'Multi-file TAP streams without file labels cannot supply individual file durations; these are shown as groups when the command names files.',
       'Only exact gate logs are attributed; combined train.log is not assigned to bisection attempts.',
     ] };
@@ -253,6 +302,12 @@ export function renderMetrics(data) {
     `First-pass green (first retained gate per batch): ${s.first_pass.green}/${s.first_pass.completed} = ${s.first_pass.rate === null ? 'unavailable' : (100 * s.first_pass.rate).toFixed(1) + '%'}; ${s.first_pass.unknown} unknown`,
     'Gate profiles:'];
   for (const p of s.gate_profiles) lines.push(`  ${p.command}: ${p.gates} executions, median ${seconds(p.time_s.median)}`);
+  const timing = row => ['queue_wait_s', 'slot_wait_s', 'external_lock_wait_s', 'prepare_time_s', 'gate_time_s']
+    .map(key => `${key.replace(/_s$/, '')}=${row?.[key] == null ? 'unknown' : seconds(row[key])}`).join('; ');
+  lines.push('Batch phase times:');
+  for (const batch of data.batches) lines.push(`  ${batch.id}: ${timing(batch.timing)}`);
+  lines.push('Lane phase times (shared costs counted in full):');
+  for (const lane of data.lanes ?? []) lines.push(`  ${lane.batch} lane/${lane.lane}: ${timing(lane.timing)}`);
   for (const [label, rows] of [['Slowest steps (test time)', data.slowest_steps], ['Slowest test files', data.slowest_test_files], ['Slowest multi-file test groups', data.slowest_test_groups]]) {
     lines.push(`${label}:`);
     if (!rows.length) lines.push('  unavailable in retained logs');

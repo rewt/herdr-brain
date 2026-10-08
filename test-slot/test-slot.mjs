@@ -341,7 +341,8 @@ async function run({ positional, options, child }) {
         saveWait({ waits: [...wait.waits, { ...entry, at: new Date().toISOString() }] });
         if (options.waitReceipt) process.stderr.write(`TEST_SLOT_WAIT: ${entry.holder}; ${entry.lock_path}; capped at ${wait.wait_seconds}s\n`);
       }, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) });
-    saveWait({ state: 'acquired', finished_at: new Date().toISOString(), nested: slot.nested });
+    const acquiredAt = new Date().toISOString();
+    saveWait({ state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested });
   } catch (error) {
     saveWait({ state: 'refused', finished_at: new Date().toISOString(), reason: error.message });
     if (error?.code === HELD_CODE || error?.code === HOLDER_UNKNOWN_CODE) {

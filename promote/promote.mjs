@@ -203,7 +203,7 @@ function performBatch(batch, queue) {
   fs.mkdirSync(directory, { recursive: true });
   const receipt = path.join(directory, 'train.json'), log = path.join(directory, 'train.log');
   if (!fs.existsSync(receipt)) writeFileAtomic(receipt, JSON.stringify({ schema: 'promotion-train/v1', id: batch.id,
-    identity: queue.project.identity, jobs: batch.jobs, phase: 'pending' }, null, 2) + '\n');
+    identity: queue.project.identity, jobs: batch.jobs, phase: 'pending', started_at: new Date().toISOString() }, null, 2) + '\n');
   const output = fs.openSync(log, 'a');
   let r;
   try { r = runProjectGateSync({ canonical: cwd, receipt,

@@ -235,8 +235,10 @@ explicit Monitor or legacy slot wait settings retain precedence.
 
 Each `promote/batches/ID/train.json` is replaced atomically. Its batch `phase`
 shows the current work: `preparing`, `rebasing`, `validating`,
-`fast-forwarding`, `closing`, then `complete`. `started_at` is the batch's
-first train invocation and stays fixed across resumes. The latest attempt's
+`fast-forwarding`, `closing`, then `complete`. `started_at` is saved when the
+queue creates the receipt, before external lock or slot waiting, and stays fixed
+across resumes. Direct batch callers save it when the host adapter or train
+starts. Older receipts retain their first train invocation clock. The latest attempt's
 `gate.command` and `gate.started_at` are saved before validation begins, so a
 reader can show the running check and elapsed time while the train blocks.
 An unfinished gate has no `exit_code`, `finished_at` or `duration_s`. When the
@@ -257,6 +259,39 @@ still running or interrupted, and retain completed gate time alongside
 slot refusals do not invent executions; reused proofs do not add executions.
 Each gate profile keeps completed durations in `time_s` and all measured
 execution durations in `executed_time_s`; `gates` counts executions.
+
+Train and metrics receipts retain their v1 schemas; the timing fields are
+additive. `train.json` saves the first `slot_granted_at` and, for a declared
+external lock, `external_lock_started_at` and `external_lock_granted_at`.
+`external_lock_required` distinguishes a known absent lock from old receipts.
+Host grant clocks are saved before the train child starts, including a slot
+grant followed by a competing-process refusal. Slot wait receipts now include
+`acquired_at` (their existing `finished_at` remains readable). Unconfigured
+trains retain the validation slot receipt via `gate.slot_receipt` and copy its
+grant into the train after validation returns. Each attempt saves `prepare`
+start/end clocks around preparation commands and test planning, including
+failed preparation; resumed intervals move to `prepare_history`.
+
+`node promote/metrics.mjs --project /project [--json]` exposes `batches[].timing`
+and `lanes[].timing`: `queue_wait_s`, `slot_wait_s`, `external_lock_wait_s`,
+`prepare_time_s` and `gate_time_s`. Queue wait uses each job's `queued` clock
+to batch start; the batch reports its oldest member's wait. Slot wait is batch
+start to first slot grant, as requested, and overlaps external-lock wait;
+unconfigured trains also prepare before taking the slot. External-lock wait
+uses its own wait start to grant. Preparation sums retained attempt intervals;
+gate time sums executed commands, excluding reused/duplicate evidence and
+using execution start/end to exclude slot waits in new receipts. Completed gate
+receipts embed `command_started_at` and `command_finished_at` after execution;
+running gates expose those clocks through their execution receipt. Existing gate
+summary durations keep their original meaning, including possible slot wait
+in legacy measurements. Lane costs include shared attempts in full, so summing
+lanes would count the same build or gate more than once.
+
+Missing, reversed or incomplete clocks yield `null` (`unknown` in text), never
+an invented zero or partial total. Known absent external locks also yield null
+with `external_lock_required: false`. `summary.phase_time_s` reports batch
+samples and unknown counts; its total is null when no sample exists. Old
+receipts remain readable without backfilling grant or preparation clocks.
 If the exact synchronous caller dies, its slot wrapper signals the command
 group. The direct child's caller watch checks its parent PID and signal-zero
 liveness without spawning a process or re-hashing identity helpers per poll.

@@ -90,6 +90,10 @@ test('project profile runs the pinned Node, real host sockets/PTY, preparation a
   assert.equal(train.host_receipt, path.join(f.directory, 'host-gate.json'));
   assert.equal(train.results.job.outcome, 'promoted'); assert.equal(train.attempts[0].gate.exit_code, 0);
   assert.equal(f.saved().external_lock, undefined); assert.equal(f.slotSaved().state, 'acquired');
+  assert.equal(train.slot_granted_at, f.slotSaved().acquired_at);
+  assert.equal(train.external_lock_required, false);
+  assert.ok(Date.parse(train.started_at) <= Date.parse(train.slot_granted_at));
+  assert.ok(Date.parse(train.slot_granted_at) <= Date.parse(train.attempts[0].prepare.started_at));
   assert.equal(fs.existsSync(f.slot), false);
   assert.equal(fs.readFileSync(path.join(f.directory, 'host-gate.json'), 'utf8').includes('declared'), false, 'environment values stay out of receipts');
 });
@@ -279,6 +283,9 @@ test('busy legacy fcntl lock waits visibly, caps, preserves main, and releases w
   assert.equal(fs.readFileSync(f.gate.external_lock, 'utf8'), 'keep');
   owner.stdin.end('release\n'); await done;
   const resumed = f.run(); assert.equal(resumed.status, 0, resumed.stderr);
+  const receipt = JSON.parse(fs.readFileSync(f.receipt));
+  assert.equal(receipt.external_lock_started_at, f.saved().external_lock.started_at, 'a grant uses the successful retry wait, excluding idle time after a cap');
+  assert.equal(receipt.external_lock_granted_at, f.saved().external_lock.acquired_at);
 });
 
 test('a released legacy lock admits the waiting train and stays held for the complete batch', kernelLockOptions, async t => {
@@ -290,6 +297,12 @@ test('a released legacy lock admits the waiting train and stays held for the com
   owner.stdin.end('release\n'); await waitForExit(owner);
   const result = await waitForExit(worker); assert.equal(result.code, 0, result.stderr);
   assert.equal(f.saved().external_lock.state, 'acquired'); assert.equal(f.git(['rev-parse', 'main']), f.head);
+  const receipt = JSON.parse(fs.readFileSync(f.receipt));
+  assert.equal(receipt.external_lock_required, true);
+  assert.equal(receipt.external_lock_started_at, f.saved().external_lock.started_at);
+  assert.equal(receipt.external_lock_granted_at, f.saved().external_lock.acquired_at);
+  assert.ok(Date.parse(receipt.started_at) <= Date.parse(receipt.external_lock_granted_at));
+  assert.ok(Date.parse(receipt.external_lock_granted_at) <= Date.parse(receipt.slot_granted_at));
 });
 
 test('a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome', async t => {
@@ -334,6 +347,8 @@ test('a capped resume preserves a lost fast-forward checkpoint and reconciles it
   assert.equal(JSON.parse(fs.readFileSync(f.receipt)).attempts[0].phase, 'validated'); assert.equal(f.git(['rev-parse', 'main']), f.head);
   const resumed = drain(); assert.equal(resumed.status, 0, resumed.stderr);
   assert.equal(queue.load().results.at(-1).outcome, 'promoted', fs.readFileSync(path.join(f.directory, 'train.log'), 'utf8'));
+  const recovered = JSON.parse(fs.readFileSync(f.receipt));
+  assert.equal(recovered.started_at, train.started_at); assert.equal(recovered.slot_granted_at, train.slot_granted_at);
   assert.equal(fs.readFileSync(f.env.PROFILE_EVIDENCE, 'utf8').trim().split('\n').length, 1);
 });
 
@@ -354,6 +369,8 @@ test('busy host slot caps without a red gate receipt or integration', async t =>
   assert.equal(f.slotSaved().state, 'refused'); assert.match(f.slotSaved().reason, /TEST_SLOT_HELD/);
   assert.equal(f.saved().command_started, undefined); assert.equal(f.git(['rev-parse', 'main']), f.before);
   assert.equal(JSON.parse(fs.readFileSync(f.receipt)).attempts, undefined);
+  assert.equal(f.slotSaved().acquired_at, undefined);
+  assert.equal(JSON.parse(fs.readFileSync(f.receipt)).slot_granted_at, undefined);
   await slot.release();
 });
 

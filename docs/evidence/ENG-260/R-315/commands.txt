@@ -1,0 +1,33 @@
+R-315 / ENG-260 landing round
+
+Starting lane head: 44c7505b (R-305 report commit)
+Rebase base: 071070fb1aaf8b0a4d5dd15cea8d89428b9d180c (local main)
+Command: git rebase main
+Result: success, five commits replayed, no conflicts.
+Rebased head: 0fd4762f7994b2747dc564f29a9ab47f2af77d40
+
+Command: git range-diff dd3f52c0391d242a5d6102f1ffa6a876f48e1620..44c7505b main..HEAD
+All five commit patches compare equal:
+  46c0837e = a22a1e15 (R-302 implementation)
+  426d8d30 = a064ac7c (R-302 report)
+  9e51ff6a = 2f67c4bd (independent review)
+  97383682 = 9e79ebdc (R-305 correction)
+  44c7505b = 0fd4762f (R-305 report)
+
+Focused validation from the lane:
+  mkdir -p /private/tmp/eng260-r315
+  env -u ORG_DIR -u HERDR_AGENT_NAME TMPDIR=/private/tmp/eng260-r315 TMP=/private/tmp/eng260-r315 TEMP=/private/tmp/eng260-r315 node test/helpers/run.mjs test/main-module.test.mjs release/test/candidate.test.mjs
+Exit 0; focused.tap: 42 tests, 42 pass, 0 fail, 0 skip.
+No conflict-resolution files needed additional tests.
+
+Record authority:
+  ORG_DIR=/Users/rewt/development/rewt/.org node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs show ENG-260
+Supervisor decision dated 2026-10-07 20:14 resolves R-305's blocker without
+main/head host comparisons. Native validation passes with native Codex on PATH
+(ENG-264 is environmental); the installed-discovery failure meets an unrelated
+held real slot (ENG-265 fixture isolation). Reviewed corrections remain approved.
+
+After evidence and report commits, the final command is:
+  env -u ORG_DIR -u HERDR_AGENT_NAME TMPDIR=/private/tmp/eng260-r315 TMP=/private/tmp/eng260-r315 TEMP=/private/tmp/eng260-r315 node lanes/lane.mjs check --cmd 'node test/helpers/run.mjs test/main-module.test.mjs release/test/candidate.test.mjs'
+Only these focused files run; no host slot, host comparisons, aggregate tier,
+live acceptance, promotion or push. The final GATE receipt records its result.

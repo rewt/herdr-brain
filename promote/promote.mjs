@@ -59,9 +59,18 @@ function invoke(command, args, options = {}) {
   return r.stdout.trim();
 }
 function git(cwd, args) { return invoke('git', ['-C', cwd, ...args]); }
+function promotionSettings(project) {
+  // Only the canonical committed declaration can change queue policy. Lane
+  // copies and untracked/edited host files cannot override the batch limit.
+  const tracked = git(project.canonical, ['ls-tree', '--name-only', 'HEAD', '--', '.promote.json']);
+  const config = tracked ? JSON.parse(git(project.canonical, ['show', 'HEAD:.promote.json'])) : {};
+  if (config.max_batch !== undefined && (!Number.isSafeInteger(config.max_batch) || config.max_batch < 1)) {
+    throw new Error('promote max_batch must be a positive integer');
+  }
+  return config;
+}
 function settings(project, opt) {
-  const configFile = path.join(project.canonical, '.promote.json');
-  const config = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf8')) : {};
+  const config = promotionSettings(project);
   const to = opt.to ?? config.to ?? 'supervisor-herdr';
   const attempts = Number(opt['delivery-attempts'] ?? config.delivery_attempts ?? 5);
   const retry = Number(opt['retry-seconds'] ?? config.retry_seconds ?? 10);
@@ -263,6 +272,7 @@ export async function drain(queue) {
           data.current = job;
           return { job, newlyDequeued: false };
         }
+        const maxBatch = promotionSettings(queue.project).max_batch ?? Infinity;
         const next = data.pending.shift();
         if (!next) { release(); release = null; return null; }
         if (next.laneCLI === LANE) {
@@ -270,7 +280,7 @@ export async function drain(queue) {
           // Different command/config inputs retain their independent gates.
           const key = job => JSON.stringify([job.laneCLI, job.validate ?? null, job.laneConfig ?? null, job.workflow ?? false]);
           const jobs = [next];
-          while (data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
+          while (jobs.length < maxBatch && data.pending.length && key(data.pending[0]) === key(next)) jobs.push(data.pending.shift());
           const job = { id: randomUUID(), phase: 'batching', jobs };
           data.current = job;
           return { job, newlyDequeued: true };

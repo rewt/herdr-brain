@@ -119,7 +119,7 @@ node promote/promote.mjs --repo /project --status
 ```
 
 Tracked `/project/.promote.json` may contain `to`, `delivery_attempts`,
-`retry_seconds`, `validate` and the `gate` profile below. Command flags `--to`, `--delivery-attempts`,
+`retry_seconds`, `validate`, `max_batch` and the `gate` profile below. Command flags `--to`, `--delivery-attempts`,
 `--retry-seconds`, `--validate` override them. `LANE_VALIDATE` takes precedence over
 the promotion config's validation override. `LANE_CONFIG` retains the lane CLI's
 explicit config selection. Request overrides are saved per entry, so a subsequent
@@ -129,6 +129,16 @@ override, lane configuration's promotion tier is resolved when promotion runs. `
 
 ### Existing project gate profile
 
+Set `max_batch` to a positive integer in the tracked canonical `.promote.json`
+to cap the number of lanes in each new train batch, for example
+`{"max_batch":3}`. Omit it for the default unbounded batch. Extra lanes remain
+queued in arrival order and form the next batch after the current one completes;
+command/config compatibility can still create smaller batches. The queue reads
+the committed canonical configuration at enqueue and before forming each batch,
+including invocations from linked worktrees. Untracked files, uncommitted edits
+and lane copies cannot override it. Existing and interrupted batches retain their
+captured membership when resumed.
+
 Declare the gate command in `.lane.validation.json`, for example
 `{"promotion":"pnpm validate:all-safe"}`. A canonical `.promote.json` can also
 declare a `gate` profile. This example matches bch-cloak's existing gate; the
@@ -136,6 +146,7 @@ train has no project names or package filters built into it:
 
 ```json
 {
+  "max_batch": 3,
   "gate": {
     "node_version_file": ".nvmrc",
     "env": { "BCH_CLOAK_TEST_SLOT_WAIT_SECONDS": "7200" },

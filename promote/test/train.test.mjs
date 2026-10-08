@@ -69,6 +69,73 @@ test('three ready lanes stack and fast-forward with one promotion-tier run', t =
   assert.equal(f.git(['rev-list', '--merges', 'main']), ''); assert.equal(f.git(['remote']), '');
 });
 
+for (const maxBatch of [undefined, 3]) {
+  test(`five pending lanes drain in arrival order with ${maxBatch === undefined ? 'the unbounded default' : 'max_batch 3'}`, async t => {
+    const f = fixture(t), topics = ['third', 'first', 'fifth', 'second', 'fourth'];
+    if (maxBatch !== undefined) {
+      fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ max_batch: maxBatch }));
+      f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Batch cap']);
+    }
+    for (const topic of topics) { f.lane(topic); f.add(topic); }
+    // Hold delivery after integration to inspect the still-pending tail before
+    // the worker can form its next batch.
+    f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '10';
+    fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, typedComposer);
+    const worker = spawnChild(t, process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: path.join(f.root, topics[0]), env: f.env });
+    const done = waitForExit(worker);
+    try {
+      const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
+      await until(() => fs.existsSync(inbox) && readInbox(inbox).length === 1);
+      const saved = f.queue.load(), firstSize = maxBatch ?? topics.length;
+      assert.deepEqual(saved.current.jobs.map(job => job.topic), topics.slice(0, firstSize));
+      assert.deepEqual(saved.pending.map(job => job.topic), topics.slice(firstSize));
+      assert.equal(f.runs(), 1);
+      for (const topic of topics.slice(firstSize)) assert.equal(fs.existsSync(path.join(f.repo, topic)), false);
+      fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer);
+      const r = await done; assert.equal(r.code, 0, r.stderr);
+      const results = f.queue.load().results;
+      assert.deepEqual(results.map(job => [job.topic, job.outcome]), topics.map(topic => [topic, 'promoted']));
+      const batches = [...new Set(results.map(job => job.batch))];
+      assert.deepEqual(batches.map(id => results.filter(job => job.batch === id).map(job => job.topic)),
+        maxBatch === undefined ? [topics] : [topics.slice(0, 3), topics.slice(3)]);
+      assert.equal(f.runs(), batches.length);
+      assert.equal(f.queue.load().pending.length, 0); assert.equal(f.queue.load().current, null);
+      assert.equal(f.git(['rev-list', '--merges', 'main']), '');
+    } finally { fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, emptyComposer); await done; }
+  });
+}
+
+test('invalid committed max_batch values refuse enqueue and drain without consuming pending lanes', t => {
+  const f = fixture(t), workspace = f.lane('first'); f.add('first');
+  const pending = f.queue.load().pending;
+  for (const value of [0, -1, 1.5, '3', null, false, [], {}, Number.MAX_SAFE_INTEGER + 1]) {
+    fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ max_batch: value }));
+    f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Invalid cap fixture']);
+    for (const args of [['second'], ['--drain']]) {
+      const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), ...args], workspace);
+      assert.equal(r.status, 1, `max_batch=${JSON.stringify(value)} ${r.stderr}`);
+      assert.match(r.stderr, /promote max_batch must be a positive integer/);
+      assert.deepEqual(f.queue.load().pending, pending);
+      assert.equal(f.queue.load().current, null); assert.equal(f.runs(), 0);
+      assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false);
+    }
+  }
+});
+
+test('batch policy ignores untracked canonical config, uncommitted edits and lane copies', t => {
+  const f = fixture(t), config = path.join(f.repo, '.promote.json');
+  fs.writeFileSync(config, JSON.stringify({ max_batch: 0 }));
+  assert.equal(f.drain().status, 0, 'an untracked file cannot set the cap');
+  fs.writeFileSync(config, JSON.stringify({ max_batch: 1 }));
+  f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Committed cap']);
+  const workspace = f.lane('first');
+  fs.writeFileSync(config, JSON.stringify({ max_batch: 0 }));
+  fs.writeFileSync(path.join(workspace, '.promote.json'), JSON.stringify({ max_batch: -1 }));
+  f.git(['add', '.promote.json'], workspace); f.git(['commit', '-qm', 'Lane cap override'], workspace);
+  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], workspace);
+  assert.equal(r.status, 0, r.stderr);
+});
+
 test('safe bisection lands two good lanes with the third red in exactly three runs', t => {
   const f = fixture(t); for (const topic of ['first', 'second', 'third']) { f.lane(topic, topic === 'third'); f.add(topic); }
   const r = f.drain(); assert.equal(r.status, 0, r.stderr);

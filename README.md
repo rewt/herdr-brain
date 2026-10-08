@@ -32,6 +32,22 @@ routes and budgets remain visible, and exceeding an advisory budget does not
 refuse work. Promotion requires clean trees, a clean rebase, green validation and
 a local fast-forward. Background pane creation preserves Herdr focus.
 
+`record today` ranks open operator questions by the work they block, then by
+age, oldest first. The count includes unique unresolved dependents (including
+transitive links), their open runs or current waiting reports, and recorded plan
+steps that name the question. A current blocked or needs-human report can also
+name a question in its blockers without a dependency link. Plans are the latest
+note per unresolved item or current run marked `Plan:` or `## Plan`, with numbered
+or bulleted steps; completed `[x]` steps do not count. Older plan notes and ordinary
+prose mentions do not count.
+
+Questions older than seven elapsed days collapse into one count in the text view
+and console. `record today --parked` lists them; add `--json` for structured output.
+The default `record today --json` keeps every open question in impact order and
+adds `blocked_count`, `blocked_work` (`items`, `runs`, `plan_steps`), and `parked`
+for consumers. Parking is a read-time presentation choice and changes no events
+or item status.
+
 ## Requirements and limits
 
 Node.js 20+, npm, Git 2.38+, Bash, Python 3 available as `python3`, a supported

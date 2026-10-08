@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { report, setupOrg } from './helpers.mjs';
 import { fold } from '../lib/state.mjs';
-import { todayJson } from '../lib/today.mjs';
+import { renderToday, todayJson } from '../lib/today.mjs';
 
 // America/Chicago is UTC-5 in September: the local day 2026-09-15 runs 05:00Z to 05:00Z.
 const YESTERDAY = '2026-09-15T04:30:00Z';
@@ -62,9 +62,9 @@ test('org today --json builds the console read model deterministically', () => {
   assert.equal(doc.project.open_stage, null, 'no goal carries stage_now, so no stage is open');
   assert.deepEqual(doc.project.top_goal, { id: 'G-1', title: 'Theft fix shipped' }, 'instructions to the project go on its top goal');
 
-  // Ranked by prioritized work unblocked (transitively), then priority.
+  // Ranked by all unresolved work unblocked (transitively), then age.
   assert.deepEqual(doc.waiting.map((w) => [w.id, w.unblocks_prioritized]), [
-    ['HUM-1', 2], ['HUM-3', 1], ['HUM-2', 0], ['HUM-4', 0],
+    ['HUM-1', 2], ['HUM-3', 1], ['HUM-4', 0], ['HUM-2', 0],
   ]);
   const first = doc.waiting[0];
   assert.deepEqual(first, {
@@ -73,6 +73,7 @@ test('org today --json builds the console read model deterministically', () => {
     created: { at: MORNING.replace('Z', '.000Z'), by: 'human' },
     blocks: [{ id: 'ENG-1', title: 'Implement the theft fix' }],
     unblocks_prioritized: 2,
+    blocked_work: { items: 3, runs: 0, plan_steps: 0 }, blocked_count: 3, parked: false,
   });
 
   assert.deepEqual(doc.decided.map((d) => [d.kind, d.id]), [['note', 'ENG-1'], ['question', 'HUM-6']]);
@@ -136,7 +137,7 @@ test('org today follows the local day of TZ', () => {
 test('org today prints plain text with codes only in parentheses', () => {
   const t = busyOrg();
   const text = t.ok(['today'], { now: NOW });
-  assert.match(text, /WAITING ON YOU \(4\)\n {2}Adopt the theft fix\? · design · recommend: yes · unblocks 2 \(HUM-1\)\n/);
+  assert.match(text, /WAITING ON YOU \(4\)\n {2}Adopt the theft fix\? · design · recommend: yes · unblocks 3 \(HUM-1\)\n/);
   assert.match(text, /DECIDED TODAY \(2\)\n {2}11:09 {2}Skip the proof run · by human \(ENG-1\)\n {2}10:00 {2}Publish the notes\? → no · by human \(HUM-6\)/);
   assert.match(text, /RUNNING \(1\)\n {2}Five-repository release map · architect · since 11:06 · lane-release-map \(R-1\)/);
   assert.match(text, /FINISHED TODAY \(2\)\n {2}12:00 {2}Dropped today · dropped \(RES-1\)\n {2}11:14 {2}The old task is finished \(R-2\)/);
@@ -189,4 +190,90 @@ test('org today says which stage is open and which stage each question belongs t
   assert.equal(String(stage['HUM-2']), '4');
   assert.equal(stage['HUM-3'], 'parked');
   assert.equal(stage['HUM-1'], null, 'a question with no stage says so');
+});
+
+function waitingDoc(events, now = NOW) {
+  return todayJson(fold(events.map((e, index) => ({ at: MORNING, by: 'test', seq: index + 1, ...e }))),
+    { now: new Date(now), orgDir: '/tmp/org', config: {} });
+}
+
+test('waiting ranks blocked work before age, ignoring question and dependent priorities', () => {
+  const doc = waitingDoc([
+    { type: 'item.added', id: 'HUM-1', role: 'human', title: 'Newer low-impact?', priority: 100, at: '2026-09-15T15:00:00Z' },
+    { type: 'item.added', id: 'HUM-2', role: 'human', title: 'Older low-impact?', at: MORNING },
+    { type: 'item.added', id: 'HUM-3', role: 'human', title: 'New high-impact?', at: '2026-09-15T16:00:00Z' },
+    { type: 'item.added', id: 'HUM-4', role: 'human', title: 'No impact?', priority: 1000, at: YESTERDAY },
+    ...['W-1', 'W-2', 'W-3', 'W-4'].map(id => ({ type: 'item.added', id, title: id })),
+    { type: 'link.added', blocker: 'HUM-1', blocked: 'W-1' },
+    { type: 'link.added', blocker: 'HUM-2', blocked: 'W-2' },
+    { type: 'link.added', blocker: 'HUM-3', blocked: 'W-3' },
+    { type: 'link.added', blocker: 'W-3', blocked: 'W-4' },
+  ]);
+  assert.deepEqual(doc.waiting.map(q => [q.id, q.blocked_count]), [['HUM-3', 2], ['HUM-2', 1], ['HUM-1', 1], ['HUM-4', 0]]);
+  assert.ok(doc.waiting.every(q => q.unblocks_prioritized === 0 && !q.parked));
+  assert.doesNotMatch(renderToday(doc), /parked|--parked/);
+});
+
+test('waiting impact deduplicates dependents and counts current waiting runs and named plan steps', () => {
+  const events = [
+    { type: 'item.added', id: 'HUM-1', role: 'human', title: 'Proceed?' },
+    { type: 'item.added', id: 'HUM-10', role: 'human', title: 'Unrelated?' },
+    ...['W-1', 'W-2', 'W-3', 'W-4', 'W-5'].map(id => ({ type: 'item.added', id })),
+    { type: 'item.added', id: 'G-1', kind: 'goal' },
+    ...['W-1', 'W-2', 'W-4'].map(blocked => ({ type: 'link.added', blocker: 'HUM-1', blocked })),
+    ...['W-1', 'W-2', 'W-4'].map(blocker => ({ type: 'link.added', blocker, blocked: 'W-3' })),
+    { type: 'item.closed', id: 'W-4', as: 'done' },
+    { type: 'run.started', id: 'R-1', item: 'W-1' },
+    { type: 'run.started', id: 'R-2', item: 'W-2' },
+    { type: 'report.ingested', run: 'R-2', report: { outcome: 'blocked', blockers: ['HUM-1'] }, file: 'R-2.md' },
+    { type: 'run.started', id: 'R-3', item: 'W-5' },
+    { type: 'report.ingested', run: 'R-3', report: { outcome: 'needs_human', blockers: ['Wait for HUM-1; HUM-1 is required.'] }, file: 'R-3.md' },
+    { type: 'note.added', id: 'G-1', text: 'Plan:\n1. Obsolete step naming HUM-1\n2. Another old step HUM-1' },
+    { type: 'note.added', id: 'G-1', text: '## Plan\n1. Await HUM-1\n- [ ] Ship after HUM-1\n- [x] Finished HUM-1\n- Unrelated HUM-10\n## Evidence\n- Read HUM-1' },
+    { type: 'note.added', id: 'R-1', text: 'Plan:\n1. Resume after HUM-1' },
+    { type: 'note.added', id: 'W-4', text: 'Plan:\n1. Closed work after HUM-1' },
+    { type: 'note.added', id: 'W-3', text: 'An ordinary historical mention of HUM-1.' },
+  ];
+  const doc = waitingDoc(events);
+  const q = doc.waiting.find(q => q.id === 'HUM-1');
+  assert.deepEqual(q.blocked_work, { items: 3, runs: 3, plan_steps: 3 });
+  assert.equal(q.blocked_count, 9);
+  // A newer report supersedes the old waiting report; no stored impact/status.
+  const after = waitingDoc([...events,
+    { type: 'run.started', id: 'R-4', item: 'W-5' },
+    { type: 'report.ingested', run: 'R-4', report: { outcome: 'done' }, file: 'R-4.md' },
+    { type: 'run.abandoned', id: 'R-1' },
+    { type: 'link.removed', blocker: 'HUM-1', blocked: 'W-2' },
+  ]).waiting.find(q => q.id === 'HUM-1');
+  assert.deepEqual(after.blocked_work, { items: 2, runs: 1, plan_steps: 2 });
+  const resumed = waitingDoc([...events,
+    { type: 'run.started', id: 'R-4', item: 'W-5' },
+    { type: 'run.started', id: 'R-5', item: 'W-2' },
+  ]).waiting.find(q => q.id === 'HUM-1');
+  assert.deepEqual(resumed.blocked_work, { items: 3, runs: 2, plan_steps: 3 },
+    'new active runs supersede historical waiting reports');
+});
+
+test('questions park only after seven elapsed days and remain available through the listing command', () => {
+  const t = setupOrg();
+  t.ok(['add', '--goal', 'Ship']);
+  const ask = (title, now) => t.ok(['ask', title, '--parent', 'G-1', '--category', 'design', '--recommend', 'yes', '--why', 'Work waits', '--wait'], { now });
+  ask('Old question?', '2026-09-08T20:59:59.999Z');
+  ask('Exactly seven days?', '2026-09-08T21:00:00.000Z');
+  ask('New question?', MORNING);
+  const before = t.events();
+  const doc = t.json(['today', '--json'], { now: NOW });
+  assert.deepEqual(doc.waiting.map(q => [q.id, q.parked]), [['HUM-1', true], ['HUM-2', false], ['HUM-3', false]]);
+  const text = t.ok(['today'], { now: NOW });
+  assert.match(text, /WAITING ON YOU \(2\)/);
+  assert.doesNotMatch(text, /Old question\?/);
+  assert.match(text, /1 question older than 7 days parked · record today --parked/);
+  assert.ok(text.indexOf('New question?') < text.indexOf('1 question older'));
+  const parked = t.ok(['today', '--parked'], { now: NOW });
+  assert.match(parked, /PARKED QUESTIONS \(1\)\n {2}Old question\?/);
+  assert.doesNotMatch(parked, /Exactly seven days\?|New question\?/);
+  assert.deepEqual(t.json(['today', '--parked', '--json'], { now: NOW }).waiting.map(q => q.id), ['HUM-1']);
+  const later = t.ok(['today'], { now: '2026-09-15T21:00:00.001Z' });
+  assert.match(later, /2 questions older than 7 days parked · record today --parked/);
+  assert.deepEqual(t.events(), before, 'ranking, aging, and listing are read-only');
 });

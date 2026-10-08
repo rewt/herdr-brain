@@ -94,7 +94,7 @@ Views (zero inference)
   record log [--since 2h|09:00|DATE] [--limit N] [--json]
   record digest [--since 2h|09:00|DATE | --after CURSOR] [--limit N] [--width N] [--json]
                                           chat catch-up; read-only, cursor belongs to the chat
-  record today [--json]                   what waits on the operator, was decided, runs and finished today
+  record today [--json] [--parked]        what waits on the operator; --parked lists questions older than 7 days
   record recap [--back N] [--json]        the latest work block top down: threads, what they spawned,
                                           asked and were told, what is pending (--back 1: the one before)
   record console [--project NAME] [--modern] the Herdr Monitor console (needs: npm --prefix console ci)
@@ -956,10 +956,11 @@ function show(argv) {
 }
 
 function today(argv) {
-  const { values } = args(argv, { json: { type: 'boolean' } }, { max: 0, usage: 'record today [--json]' });
+  const { values } = args(argv, { json: { type: 'boolean' }, parked: { type: 'boolean' } }, { max: 0, usage: 'record today [--json] [--parked]' });
   const ctx = openOrg();
   const doc = todayJson(ctx.state, { orgDir: ctx.dir, config: ctx.config, now: ctx.now });
-  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderToday(doc));
+  if (values.parked) doc.waiting = doc.waiting.filter(w => w.parked);
+  out(values.json ? JSON.stringify(doc, null, 2) + '\n' : renderToday(doc, { parked: values.parked }));
   return 0;
 }
 

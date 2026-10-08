@@ -106,6 +106,26 @@ test('each row carries only the verbs that apply to it', () => {
   assert.deepEqual(b.waiting.find((r) => r.question === 'ARCH-67').actions, ['approve', 'decline', 'dispatch']);
 });
 
+test('the console preserves question impact order and folds aged questions independently of stages', () => {
+  const ranked = { ...today, waiting: [
+    { ...today.waiting[3], id: 'HUM-40', blocked_count: 3, parked: false },
+    { ...today.waiting[3], id: 'HUM-41', blocked_count: 1, parked: false },
+    { ...today.waiting[1], id: 'HUM-42', blocked_count: 4, parked: true },
+    { ...today.waiting[3], id: 'HUM-43', parked: true },
+  ] };
+  const board = buildBoard({ today: ranked });
+  const shown = visibleBoard(board);
+  assert.deepEqual(shown.waiting.map(r => r.key), ['q:HUM-40', 'q:HUM-41', 'fold:aged']);
+  assert.equal(shown.waitingCount, 2);
+  assert.equal(shown.waiting[2].count, 2);
+  assert.equal(shown.waiting[2].headline, '2 questions older than 7 days parked · record today --parked');
+  assert.deepEqual(visibleBoard(board, {}, ['aged']).waiting.filter(r => r.foldedIn === 'aged').map(r => r.question), ['HUM-42', 'HUM-43']);
+  const noStage = buildBoard({ today: { ...ranked, project: { ...ranked.project, open_stage: null } } });
+  assert.equal(visibleBoard(noStage).waiting.at(-1).key, 'fold:aged');
+  const recent = buildBoard({ today: { ...ranked, waiting: ranked.waiting.slice(0, 2) } });
+  assert.ok(visibleBoard(recent).waiting.every(r => r.kind !== 'fold'));
+});
+
 // Keys, against the board as the console would show it.
 function keysOn(board, unfolded = []) {
   const rows = boardRows(visibleBoard(board, {}, unfolded), 'list');

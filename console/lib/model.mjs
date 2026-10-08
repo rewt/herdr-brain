@@ -189,6 +189,7 @@ function titled(row) {
 // A folded group inside Waiting on you: one line until it is opened.
 function foldHeadline(fold, count, open) {
   if (fold === 'later') return `${count} saved for later`;
+  if (fold === 'aged') return `${count} question${count === 1 ? '' : 's'} older than 7 days parked · record today --parked`;
   return `${count} older question${count === 1 ? ' is' : 's are'} parked or wait for a later stage (stage ${open} is open now)`;
 }
 
@@ -419,11 +420,13 @@ export function buildBoard({
   const open = today?.project?.open_stage ?? null;
   const questions = (today?.waiting ?? []).map((q) => titled({ ...questionRow(q, visible, explanations.get(q.id) ?? null), explaining: explaining === q.id }));
   const current = (q) => open === null || q.data.stage === null || q.data.stage === undefined || String(q.data.stage) === String(open);
-  const parked = questions.filter((q) => !current(q));
-  const waiting = [...now, ...questions.filter(current)];
+  const aged = questions.filter(q => q.data.parked);
+  const parked = questions.filter((q) => !q.data.parked && !current(q));
+  const waiting = [...now, ...questions.filter(q => !q.data.parked && current(q))];
   const folded = [];
   if (saved.length) folded.push(foldRow('later', saved.length), ...saved.map((r) => ({ ...r, foldedIn: 'later' })));
   if (parked.length) folded.push(foldRow('stages', parked.length, open), ...parked.map((r) => ({ ...r, foldedIn: 'stages' })));
+  if (aged.length) folded.push(foldRow('aged', aged.length), ...aged.map(r => ({ ...r, foldedIn: 'aged' })));
   return {
     // What sessions left behind comes first: a stranded reply or a stuck
     // session is costing time now, while an org question waits patiently.

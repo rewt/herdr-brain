@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { processStart, processState, processStartRecord, legacyStart } from '../lock-support.mjs';
 import { acquireTestSlot, holderState } from '../test-slot.mjs';
 
@@ -13,7 +14,7 @@ test('slot ownership records exact kernel births and refuses same-second PID reu
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eng122-slot-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const lockPath = path.join(scratch, 'slot');
-  const slot = await acquireTestSlot('test', { lockPath });
+  const slot = await acquireTestSlot('test', { lockPath, env: testSlotEnvironment() });
   t.after(() => slot.release());
   const before = fs.readFileSync(lockPath, 'utf8');
   const holder = JSON.parse(before);
@@ -58,7 +59,7 @@ const execute=cp.spawnSync,read=fs.readFileSync;
 cp.spawnSync=(file,...args)=>String(file).includes('process-source-')?{error:Object.assign(Error('source missing'),{code:'ENOENT'})}:execute(file,...args);
 fs.readFileSync=(file,...args)=>String(file).startsWith('/proc/')?(()=>{throw Object.assign(Error('source missing'),{code:'EACCES'});})():read(file,...args);syncBuiltinESMExports();`);
   const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
-  const result = spawnSync(process.execPath, ['--import', preload, cli, 'run', 'denied', '--lock-path', lock, '--', process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe')`], { encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync(process.execPath, ['--import', preload, cli, 'run', 'denied', '--lock-path', lock, '--', process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(marker)},'unsafe')`], { env: testSlotEnvironment(), encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 75, result.stderr);
   assert.match(result.stderr, /TEST_SLOT_HOLDER_UNKNOWN:.*process source identity/);
   assert.equal(fs.existsSync(lock), false);
@@ -73,11 +74,11 @@ test('slot exclusion and token-free nesting work inside seatbelt without setuid 
   const program = `import {spawnSync} from 'node:child_process';import {holderState} from ${JSON.stringify(new URL('../test-slot.mjs', import.meta.url).href)};import fs from 'node:fs';
 const holder=JSON.parse(fs.readFileSync(${JSON.stringify(lock)},'utf8'));if(holderState(holder).state!=='live')throw Error('lost live holder');
 const env={...process.env};delete env.MONITOR_TEST_SLOT_TOKEN;delete env.BCH_CLOAK_TEST_SLOT_TOKEN;
-const inner=spawnSync(process.execPath,[${JSON.stringify(cli)},'run','nested','--lock-path',${JSON.stringify(lock)},'--',process.execPath,'-e','console.log("SLOT_NESTED")'],{env,encoding:'utf8'});if(inner.status!==0)throw Error(inner.stderr);console.log(inner.stdout);`;
+const inner=spawnSync(process.execPath,[${JSON.stringify(cli)},'run','nested','--lock-path',${JSON.stringify(lock)},'--',process.execPath,'-e','console.log("SLOT_NESTED")'],{env,encoding:'utf8',timeout:5000});if(inner.status!==0)throw Error(inner.stderr);console.log(inner.stdout);`;
   const profile = '(version 1)(allow default)(deny network*)';
-  const result = spawnSync('/usr/bin/sandbox-exec', ['-p', profile, process.execPath, cli, 'run', 'outer', '--lock-path', lock, '--', process.execPath, '--input-type=module', '-e', program], { encoding: 'utf8', timeout: 12000 });
+  const result = spawnSync('/usr/bin/sandbox-exec', ['-p', profile, process.execPath, cli, 'run', 'outer', '--lock-path', lock, '--', process.execPath, '--input-type=module', '-e', program], { env: testSlotEnvironment(), encoding: 'utf8', timeout: 12000 });
   if (result.stderr?.includes('sandbox_apply: Operation not permitted')) { t.skip('seatbelt cannot nest; promotion host verifies this acceptance'); return; }
-  const legacy = spawnSync('/bin/ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' } });
+  const legacy = spawnSync('/bin/ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', timeout: 5000, env: { ...testSlotEnvironment(), LC_ALL: 'C', TZ: 'UTC' } });
   assert.equal(legacy.status, 0, legacy.stderr);
   assert.equal(processStart(process.pid), `ps-utc-c:${legacy.stdout.trim()}`);
   assert.equal(result.status, 0, result.stderr + result.stdout);

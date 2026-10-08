@@ -10,6 +10,7 @@ import { resolveGateProfile, runProjectGateSync } from '../../promote/gate-profi
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { enqueue, queueFor } from '../../promote/promote.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const host = path.join(source, 'promote/host-gate.mjs');
@@ -22,19 +23,19 @@ function fixture(t, { externalLock = false, ...changes } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-profile-'))), repo = path.join(root, 'repo');
   fixtureFleet(t, root);
   fs.mkdirSync(repo);
-  const env = { ...process.env, HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const env = { ...testSlotEnvironment(), HOME: path.join(root, 'home'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   for (const key of Object.keys(env)) if (/^(LANE_|ORG_|GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)|MONITOR_PROMOTION_|.*TEST_SLOT_TOKEN)/.test(key)) delete env[key];
   const slot = path.join(root, 'slot'); env.MONITOR_TEST_SLOT_PATH = env.MONITOR_TEST_SLOT_COMPAT_PATH = slot;
   env.PROFILE_EVIDENCE = path.join(root, 'evidence');
   const bin = path.join(env.HOME, '.nvm/versions/node', `v${process.versions.node}`, 'bin');
   fs.mkdirSync(bin, { recursive: true }); fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   const git = (args, cwd = repo) => {
-    const r = spawnSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
+    const r = spawnSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8', timeout: 15000 }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
   };
   git(['init', '-qb', 'main']); git(['config', 'user.name', 'Profile']); git(['config', 'user.email', 'profile@example.invalid']);
   fs.writeFileSync(path.join(repo, '.nvmrc'), process.versions.node);
   fs.writeFileSync(path.join(repo, '.gitignore'), 'dist/\n');
-  fs.writeFileSync(path.join(repo, 'prep.cjs'), `const fs=require('fs'),assert=require('assert/strict');assert(process.env.BCH_CLOAK_TEST_SLOT_TOKEN);assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token,process.env.BCH_CLOAK_TEST_SLOT_TOKEN);const lock=JSON.parse(fs.readFileSync('.promote.json')).gate.external_lock;if(lock){const r=require('child_process').spawnSync('/bin/zsh',['-f','-c','zmodload zsh/system; zsystem flock -t 0 -f fd "$1"','probe',lock]);assert.notEqual(r.status,0,'legacy kernel lock stays held during preparation');}fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/prepared','prepared');`);
+  fs.writeFileSync(path.join(repo, 'prep.cjs'), `const fs=require('fs'),assert=require('assert/strict');assert(process.env.BCH_CLOAK_TEST_SLOT_TOKEN);assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token,process.env.BCH_CLOAK_TEST_SLOT_TOKEN);const lock=JSON.parse(fs.readFileSync('.promote.json')).gate.external_lock;if(lock){const r=require('child_process').spawnSync('/bin/zsh',['-f','-c','zmodload zsh/system; zsystem flock -t 0 -f fd "$1"','probe',lock],{env:process.env,timeout:5000});assert.notEqual(r.status,null,'legacy kernel lock probe completes within its bound');assert.notEqual(r.status,0,'legacy kernel lock stays held during preparation');}fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/prepared','prepared');`);
   fs.writeFileSync(path.join(repo, 'gate.cjs'), `const fs=require('fs'),assert=require('assert/strict'),net=require('net');assert.equal(fs.readFileSync('dist/prepared','utf8'),'prepared');assert.equal(process.env.PROFILE_VALUE,'declared');assert.equal(process.env.BCH_CLOAK_TEST_SLOT_WAIT_SECONDS,'7200');assert.equal(JSON.parse(fs.readFileSync(${JSON.stringify(slot)})).token,process.env.BCH_CLOAK_TEST_SLOT_TOKEN);const fd=fs.openSync('/dev/ptmx','r+');fs.closeSync(fd);const s=net.createServer();s.listen(0,'127.0.0.1',()=>s.close(()=>fs.appendFileSync(process.env.PROFILE_EVIDENCE,JSON.stringify({node:process.execPath,version:process.version,token:process.env.BCH_CLOAK_TEST_SLOT_TOKEN})+'\\n')));`);
   const gate = { node_version_file: '.nvmrc', env: { PROFILE_VALUE: 'declared', BCH_CLOAK_TEST_SLOT_WAIT_SECONDS: '7200' },
     prepare: [{ run: 'node prep.cjs' }], wait_seconds: 1,
@@ -48,7 +49,7 @@ function fixture(t, { externalLock = false, ...changes } = {}) {
   const receipt = path.join(directory, 'train.json');
   fs.writeFileSync(receipt, JSON.stringify({ schema: 'promotion-train/v1', id: 'profile', identity: path.join(repo, '.git'), jobs: [{ id: 'job', topic: 'profile', expectedHead: head }] }));
   const argv = [path.join(source, 'lanes/lane.mjs'), 'promote-batch', receipt];
-  const run = () => runProjectGateSync({ canonical: repo, receipt, argv, cwd: repo, env, encoding: 'utf8' });
+  const run = () => runProjectGateSync({ canonical: repo, receipt, argv, cwd: repo, env, encoding: 'utf8', timeout: 15000 });
   const asyncRun = () => spawnChild(t, process.execPath, [host, repo, receipt, ...argv], { cwd: repo, env });
   const saved = () => JSON.parse(fs.readFileSync(path.join(directory, 'host-gate.json')));
   const slotSaved = () => JSON.parse(fs.readFileSync(path.join(directory, 'test-slot-wait.json')));
@@ -113,7 +114,7 @@ test('a queue slot cap emits a completed per-lane refusal and no interrupted or 
   enqueue(queue, ['profile'], { laneCLI, org: null, to: 'offline', attempts: 1, retry: 0,
     expectedHead: f.head, herdr: path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'herdr') });
   f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
-  const result = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
   await slot.release();
   assert.equal(result.status, 0, result.stderr);
   const data = queue.load(); assert.equal(data.results[0].outcome, 'refused');
@@ -135,7 +136,7 @@ test('a capped resume preserves a lost fast-forward checkpoint and reconciles it
   job.id = 'job';
   queue.transaction(data => { data.pending = []; data.current = { id: 'profile', phase: 'batching', jobs: [job] }; });
   f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
-  const drain = () => spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  const drain = () => spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
   const slot = await holdSlot(t, f), capped = drain();
   await slot.release(); assert.equal(capped.status, 0, capped.stderr);
   const cappedResult = queue.load().results.at(-1), hostReceipt = path.join(f.directory, 'host-gate.json');

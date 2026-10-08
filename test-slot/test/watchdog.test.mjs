@@ -7,6 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveGateLimits, recordHealthyGate, healthyHistory, historyFile, gateHistoryKey, HISTORY_FILES, WALL_DEFAULT_SECONDS } from '../limits.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { shouldRetryTimeout, acquireTestSlot, HOLDER_UNKNOWN_CODE } from '../test-slot.mjs';
 import { processStartRecord } from '../lock-support.mjs';
 import { canonicalValidation } from '../../lanes/validation.mjs';
@@ -23,8 +24,7 @@ function scratch(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-watchdog-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const lock = path.join(root, 'slot'), result = path.join(root, 'result.json');
-  const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
-  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const run = (args, command) => spawnSync(process.execPath, [cli, 'run', 'fake', '--project-common', root, '--tier', 'promotion', '--result-path', result, ...args, '--', ...command], { cwd: root, env, encoding: 'utf8', timeout: 15000 });
   return { root, lock, result, env, run };
 }
@@ -194,7 +194,8 @@ test('nested gates preserve the legacy holder pgid after both wrappers die', { t
 test('dead groups-lock owners recover and live or unknown owners fail with a coded path', async t => {
   const s = scratch(t), slot = await acquireTestSlot('guard', { lockPath: s.lock, env: s.env });
   t.after(() => slot.release());
-  const dead = spawnSync(process.execPath, ['-e', '']);
+  const dead = spawnSync(process.execPath, ['-e', ''], { env: s.env, timeout: 5000 });
+  assert.equal(dead.status, 0, dead.error?.message);
   const guard = s.lock + '.groups-lock';
   fs.writeFileSync(guard, JSON.stringify({ pid: dead.pid, ...processStartRecord(process.pid) }));
   slot.setGroup(null, null);
@@ -234,7 +235,7 @@ test('canonical validation includes layered lane-only wall and idle settings for
 
 test('nested watchdog stops its parent-walk children and preserves a sibling in the shared group', { timeout: 10000 }, t => {
   const s = scratch(t), witness = path.join(s.root, 'nested.json'), script = path.join(s.root, 'nested.cjs');
-  fs.writeFileSync(script, `const cp=require('child_process'),fs=require('fs');const sibling=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});const result=cp.spawnSync(process.execPath,${JSON.stringify([cli, 'run', 'inner', '--project-common', s.root, '--timeout-seconds', '.3', '--', process.execPath, '-e', 'setInterval(()=>{},1000)'])},{stdio:'inherit'});let alive=false;try{process.kill(sibling.pid,0);alive=true;}catch{}fs.writeFileSync(${JSON.stringify(witness)},JSON.stringify({status:result.status,alive}));sibling.kill('SIGTERM');sibling.once('close',()=>process.exit(result.status));`);
+  fs.writeFileSync(script, `const cp=require('child_process'),fs=require('fs');const sibling=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});const result=cp.spawnSync(process.execPath,${JSON.stringify([cli, 'run', 'inner', '--project-common', s.root, '--timeout-seconds', '.3', '--', process.execPath, '-e', 'setInterval(()=>{},1000)'])},{stdio:'inherit',env:process.env,timeout:2000});let alive=false;try{process.kill(sibling.pid,0);alive=true;}catch{}fs.writeFileSync(${JSON.stringify(witness)},JSON.stringify({status:result.status,alive}));sibling.kill('SIGTERM');sibling.once('close',()=>process.exit(result.status));`);
   const r = s.run(['--timeout-seconds', '5'], [process.execPath, script]);
   assert.equal(r.status, 124, r.stderr);
   assert.deepEqual(JSON.parse(fs.readFileSync(witness)), { status: 124, alive: true });

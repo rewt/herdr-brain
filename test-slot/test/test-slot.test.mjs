@@ -9,6 +9,7 @@ import path from "node:path";
 import { after, afterEach, describe, it as nodeIt } from "node:test";
 const it = (name, body) => nodeIt(name, { timeout: loadTimeout(30000) }, body);
 import { fileURLToPath } from "node:url";
+import { testSlotEnvironment } from "../../test/helpers/test-slot-env.mjs";
 
 import { lookupProcess } from "../../lib/processes.mjs";
 import { acquireTestSlot, holderState, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, HELD_CODE, HOLDER_UNKNOWN_CODE, REFUSED_EXIT, TEST_SLOT_PATH, TOKEN_ENV, WAIT_ENV, RETRIED_ENV } from "../test-slot.mjs";
@@ -16,7 +17,7 @@ import { acquireTestSlot, holderState, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_E
 const CLI = fileURLToPath(new URL("../test-slot.mjs", import.meta.url));
 const MODULE = new URL("../test-slot.mjs", import.meta.url).href;
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
-const ENV = Object.fromEntries(Object.entries(process.env).filter(([key]) => ![TOKEN_ENV, WAIT_ENV, PATH_ENV, COMPAT_PATH_ENV, LEGACY_TOKEN_ENV, LEGACY_WAIT_ENV, RETRIED_ENV].includes(key)));
+const ENV = testSlotEnvironment();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const dirs = [];
@@ -471,10 +472,21 @@ describe("signals and release", () => {
 });
 
 describe('workspace configuration and timeout retry', () => {
+  it('scrubs enclosing slot paths, tokens, wait allowances and retry state before fixture overrides', () => {
+    const inherited = { PATH: ENV.PATH, LANG: 'C',
+      [PATH_ENV]: '/outer/slot', [COMPAT_PATH_ENV]: '/outer/compat',
+      [TOKEN_ENV]: 'outer-token', [WAIT_ENV]: '7200', [RETRIED_ENV]: '1',
+      [LEGACY_TOKEN_ENV]: 'outer-token', [LEGACY_WAIT_ENV]: '7200',
+      BCH_CLOAK_TEST_SLOT_PATH: '/outer/legacy', MONITOR_TEST_SLOT_FUTURE: 'outer-state' };
+    const clean = testSlotEnvironment(inherited);
+    assert.deepEqual(clean, { PATH: ENV.PATH, LANG: 'C' });
+    assert.equal(inherited[WAIT_ENV], '7200', 'scrubbing leaves the enclosing gate environment intact');
+  });
+
   it('uses the workspace path and passes it to nested commands', async () => {
     const s = scratch();
     const inner = [process.execPath, CLI, 'run', 'nested', '--', process.execPath, '-e', ''];
-    const body = `const fs=require('fs');require('assert').equal(process.env.${PATH_ENV},${JSON.stringify(s.lockPath)});const r=require('child_process').spawnSync(${JSON.stringify(inner[0])},${JSON.stringify(inner.slice(1))},{env:process.env});process.exit(r.status);`;
+    const body = `const fs=require('fs');require('assert').equal(process.env.${PATH_ENV},${JSON.stringify(s.lockPath)});const r=require('child_process').spawnSync(${JSON.stringify(inner[0])},${JSON.stringify(inner.slice(1))},{env:process.env,timeout:5000});process.exit(r.status??1);`;
     const done = await cli(['run', 'workspace', '--', process.execPath, '-e', body], { env: { ...ENV, [PATH_ENV]: s.lockPath, [COMPAT_PATH_ENV]: s.lockPath } }).done;
     assert.equal(done.code, 0, done.stderr); assert.equal(fs.existsSync(s.lockPath), false);
   });
@@ -542,7 +554,7 @@ describe('workspace configuration and timeout retry', () => {
     const scripts = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts;
     fs.writeFileSync(s.file('npm'), `#!${process.execPath}
 const fs=require('fs'),file=${JSON.stringify(count)},name=process.argv[3];
-if(process.argv[2]==='test'){const r=require('child_process').spawnSync('/bin/sh',['-c',${JSON.stringify(scripts.test)}],{stdio:'inherit'});process.exit(r.status??1);}
+if(process.argv[2]==='test'){const r=require('child_process').spawnSync('/bin/sh',['-c',${JSON.stringify(scripts.test)}],{stdio:'inherit',env:process.env,timeout:10000});process.exit(r.status??1);}
 const previous=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
 fs.appendFileSync(file,name+'\\n');
 process.exit(name===${JSON.stringify(failedStep)}&&!previous.includes(${JSON.stringify(failedStep)})?124:0);

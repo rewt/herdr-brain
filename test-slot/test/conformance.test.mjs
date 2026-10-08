@@ -6,13 +6,13 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
 for (const nested of [false, true]) test(`cancel signals compound gate descendants in a ${nested ? 'nested' : 'top-level'} slot`, { timeout: loadTimeout(10000) }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-conformance-'));
   const ready = path.join(root, 'ready'), got = path.join(root, 'got'), wrapper = path.join(root, 'wrapper'), lock = path.join(root, 'lock');
-  const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
-  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const leaf = path.join(root, 'leaf.cjs');
   fs.writeFileSync(leaf, `const fs=require('fs');process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(got)},'SIGTERM');process.exit(0);});fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`);
   const shell = `${JSON.stringify(process.execPath)} ${JSON.stringify(leaf)}; :`;
@@ -45,8 +45,7 @@ for (const nested of [false, true]) test(`cancel signals compound gate descendan
 for (const nested of [false, true]) test(`spawnSync timeout signals compound gate descendants in a ${nested ? 'nested' : 'top-level'} slot`, { timeout: loadTimeout(15000) }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-timeout-'));
   const ready = path.join(root, 'ready'), got = path.join(root, 'got'), result = path.join(root, 'result'), lock = path.join(root, 'lock');
-  const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
-  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const leaf = path.join(root, 'leaf.cjs'), adapter = path.join(root, 'adapter.mjs');
   const timeout = loadTimeout(2000);
   fs.writeFileSync(leaf, `const fs=require('fs');process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(got)},'SIGTERM');process.exit(0);});fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`);
@@ -84,9 +83,8 @@ const count=kind=>{if(fs.existsSync(${JSON.stringify(started)}))fs.appendFileSyn
 cp.spawnSync=(...args)=>{count('spawn');return execute(...args);};crypto.createHash=(...args)=>{count('hash');return hash(...args);};syncBuiltinESMExports();`);
   // Readiness follows the recorded group identity, even on a loaded host.
   fs.writeFileSync(adapter, `import {runTestSlotSync} from ${JSON.stringify(new URL('../run.mjs', import.meta.url).href)};
-const r=runTestSlotSync('poll-proof',[process.execPath,'-e',${JSON.stringify(`const fs=require('fs');const timer=setInterval(()=>{if(JSON.parse(fs.readFileSync(${JSON.stringify(lock)},'utf8')).groupBirth){clearInterval(timer);fs.writeFileSync(${JSON.stringify(started)},'ready');setTimeout(()=>process.exit(0),1000);}},20);`)}],{retryTimeout:false,encoding:'utf8'});if(r.status!==0)throw Error(r.stderr);`);
-  const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, NODE_OPTIONS: `--import=${preload}` };
-  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+const r=runTestSlotSync('poll-proof',[process.execPath,'-e',${JSON.stringify(`const fs=require('fs');const timer=setInterval(()=>{if(JSON.parse(fs.readFileSync(${JSON.stringify(lock)},'utf8')).groupBirth){clearInterval(timer);fs.writeFileSync(${JSON.stringify(started)},'ready');setTimeout(()=>process.exit(0),1000);}},20);`)}],{retryTimeout:false,encoding:'utf8',timeout:4000});if(r.status!==0)throw Error(r.stderr);`);
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock, NODE_OPTIONS: `--import=${preload}` };
   const r = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(r.status, 0, r.stderr); assert.ok(fs.existsSync(started));
   assert.equal(fs.readFileSync(calls, 'utf8'), '', 'polling does not execute a source or hash its bundled helper');
@@ -95,12 +93,11 @@ const r=runTestSlotSync('poll-proof',[process.execPath,'-e',${JSON.stringify(`co
 for (const nested of [false, true]) test(`stopping the synchronous gate caller signals its ${nested ? 'nested' : 'top-level'} compound gate group`, { timeout: loadTimeout(10000) }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-parent-'));
   const ready = path.join(root, 'ready'), got = path.join(root, 'got'), caller = path.join(root, 'caller'), lock = path.join(root, 'lock');
-  const env = { ...process.env, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
-  for (const key of ['MONITOR_TEST_SLOT_TOKEN', 'BCH_CLOAK_TEST_SLOT_TOKEN', 'MONITOR_TEST_SLOT_TIMEOUT_RETRIED']) delete env[key];
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
   const leaf = path.join(root, 'leaf.cjs'), adapter = path.join(root, 'adapter.mjs');
   fs.writeFileSync(leaf, `const fs=require('fs');process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(got)},'SIGTERM');process.exit(0);});fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`);
   fs.writeFileSync(adapter, `import fs from 'node:fs';import {runTestSlotSync} from ${JSON.stringify(new URL('../run.mjs', import.meta.url).href)};
-fs.writeFileSync(${JSON.stringify(caller)},String(process.pid));runTestSlotSync('gate',['/bin/sh','-c',${JSON.stringify(`${JSON.stringify(process.execPath)} ${JSON.stringify(leaf)}; :`)}],{retryTimeout:false,stdio:'inherit'});`);
+fs.writeFileSync(${JSON.stringify(caller)},String(process.pid));runTestSlotSync('gate',['/bin/sh','-c',${JSON.stringify(`${JSON.stringify(process.execPath)} ${JSON.stringify(leaf)}; :`)}],{retryTimeout:false,stdio:'inherit',timeout:5000});`);
   const args = nested ? [cli, 'run', 'outer', '--', process.execPath, adapter] : [adapter];
   const child = spawn(process.execPath, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.resume(); child.stderr.resume(); const done = new Promise(resolve => child.once('close', resolve));

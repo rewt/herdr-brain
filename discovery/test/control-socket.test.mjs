@@ -126,7 +126,13 @@ test('chat session bindings carry their role and omit supervisor lifecycle hooks
   assert.equal(env.MONITOR_SUPERVISOR_AGENT, 'ops');
   assert.equal(env.MONITOR_SESSION_ROLE, 'chat'); assert.equal(env.MONITOR_ENTRY_BYPASS, '1');
   assert.equal(env.MONITOR_SUPERVISOR_ENTRY, ''); assert.equal(env.MONITOR_SUPERVISOR_IDENTITY, '');
-  for (const kind of ['claude', 'codex']) assert.deepEqual(sessionHookArguments(kind, context, f.root), []);
+  assert.equal(env.MONITOR_SESSION_KIND, 'chat');
+  for (const kind of ['claude', 'codex']) {
+    const hooks = sessionHookArguments(kind, context, f.root, env);
+    assert.match(hooks.join(' '), /unattended.mjs/);
+    assert.match(hooks.join(' '), /'conversation'/);
+    assert.doesNotMatch(hooks.join(' '), /SessionStart|session-start.mjs/);
+  }
 });
 
 for (const kind of ['claude', 'codex']) test(`${kind} native sandbox connects to the fake control socket only for supervisor and chat`, {

@@ -331,7 +331,6 @@ permission selectors and any inherited `sandbox_mode` refuse the launch with
 the setting and source to remove. Codex's legacy selectors take precedence over
 permission profiles, so a per-launch profile cannot override them. No native
 configuration file is rewritten. Claude keeps user, project,
-
 local and supplied settings, including command exclusions, additional directories
 and filesystem write grants; one warning names settings and sources that weaken
 the generated policy. Native settings and hooks keep their harness behavior.

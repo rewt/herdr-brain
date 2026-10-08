@@ -41,7 +41,6 @@ function passthrough() {
           args: [...native, ...unattendedHookArguments('claude', context, root, launch.env)], context,
           env: { ...launch.env, ORG_DIR: context.org } });
       }
-
       else console.error('monitor: not a fleet project; starting native Claude without a project sandbox');
     }
   } catch (error) { console.error(`monitor sandbox: ${error.message}`); process.exitCode = 1; return; }

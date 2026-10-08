@@ -381,12 +381,13 @@ test('adapters use short fleet temp and bind worker, supervisor and chat roles w
     const r = exec(process.execPath, [path.join(root, `discovery/adapters/${kind}.mjs`), '--repo', f.repo, '--role', role,
       '--binary', fake, '--validator', fake, '--runtime-dir', path.join(f.root, 'runtime'), '--worktree-root', path.join(f.root, 'worktrees'), '--', '--model', 'opaque-model'], f.repo,
       { ...f.binding, MONITOR_SESSION_ROLE: 'worker', MONITOR_ENTRY_BYPASS: '1', MONITOR_SESSION_KIND: 'chat', HERDR_PANE_ID: 'wTest:pSupervisor', HERDR_SOCKET_PATH: socket, CODEX_HOME: config, CLAUDE_CONFIG_DIR: config });
-
     good(r); const native = JSON.parse(fs.readFileSync(receipt)); assert.equal(native.role, role); assert.ok(native.args.includes('opaque-model'));
     assert.equal(path.dirname(native.temp), temporary);
     assert.ok(Buffer.byteLength(native.temp) <= 60);
     assert.equal(native.bypass, role === 'supervisor' ? '0' : '1');
-    assert.match(native.args.join(' '), new RegExp(role === 'supervisor' ? "'conversation'" : "'ops'"));
+    const guard = kind === 'claude' ? native.settings.hooks.PreToolUse.find(group => group.matcher.includes('AskUserQuestion')).hooks[0].command
+      : native.args.find(arg => arg.startsWith('hooks.PreToolUse='));
+    assert.match(guard, new RegExp(role === 'worker' ? "'ops'" : "'conversation'"));
     if (role === 'supervisor') {
       assert.equal(native.repo, f.repo); assert.equal(native.identity, f.project.identity); assert.equal(native.org, path.join(f.repo, '.org'));
       assert.equal(native.entry, path.join(root, 'supervisor/session-start.mjs'));
@@ -398,8 +399,7 @@ test('adapters use short fleet temp and bind worker, supervisor and chat roles w
     } else {
       assert.equal(native.repo, ''); assert.equal(native.identity, ''); assert.equal(native.entry, '');
       assert.ok(!native.args.some(a => a.includes('hooks.SessionStart='))); if (kind === 'claude') assert.equal(native.settings.hooks?.SessionStart, undefined);
-      assert.match(native.args.join(' '), /unattended.mjs/);
-
+      assert.match(guard, /unattended.mjs/);
     }
   }
 });

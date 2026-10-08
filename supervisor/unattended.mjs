@@ -13,7 +13,9 @@ const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const tools = { claude: ['AskUserQuestion'], codex: ['request_user_input'] };
 
 export function supervisorSessionKind(context, env = process.env) {
-  if (context.role !== 'supervisor' || env.MONITOR_ENTRY_BYPASS === '1' || env.MONITOR_SESSION_ROLE === 'worker') return 'ops';
+  if (env.MONITOR_SESSION_ROLE === 'worker') return 'ops';
+  if (context.role === 'chat') return 'chat';
+  if (context.role !== 'supervisor' || env.MONITOR_ENTRY_BYPASS === '1') return 'ops';
   if (env.MONITOR_SESSION_KIND) return ['chat', 'combined'].includes(env.MONITOR_SESSION_KIND) ? env.MONITOR_SESSION_KIND : 'ops';
   if (!context.identity && !context.canonical) return 'ops';
   try {
@@ -23,9 +25,11 @@ export function supervisorSessionKind(context, env = process.env) {
 }
 
 export function questionMode(context, env = process.env, binding = () => supervisorBinding(gitProject(context.canonical), env.HERDR_PANE_ID)) {
-  // Launch kind is separate from the supervisor workflow role. Until ENG-248
-  // records a project chat, an unmarked supervisor also hosts the conversation.
-  if (context.role === 'worker' || env.MONITOR_ENTRY_BYPASS === '1' || env.MONITOR_SESSION_ROLE === 'worker') return 'ops';
+  // Chat launches bypass supervisor entry while retaining conversation policy.
+  // Without a project chat receipt, an unmarked supervisor hosts it as well.
+  if (context.role === 'worker' || env.MONITOR_SESSION_ROLE === 'worker') return 'ops';
+  if (context.role === 'chat') return 'conversation';
+  if (env.MONITOR_ENTRY_BYPASS === '1') return 'ops';
   if (context.role === 'supervisor') return ['chat', 'combined'].includes(supervisorSessionKind(context, env)) ? 'conversation' : 'ops';
   // A restored interactive pane may have lost its environment. Only the
   // verified canonical launch receipt may recover its conversation kind.

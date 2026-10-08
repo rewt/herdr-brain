@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { operatorPresence, parsePresence } from '../operator-presence.mjs';
-import { questionDecision, questionMode, unattendedHookArguments } from '../unattended.mjs';
+import { questionDecision, questionMode, supervisorSessionKind, unattendedHookArguments } from '../unattended.mjs';
 import { sessionHookArguments } from '../session-hooks.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -61,6 +61,20 @@ test('explicit launch kind separates chats and combined conversations from ops a
   assert.equal(questionMode({}, { HERDR_PANE_ID: 'saved-pane', MONITOR_ENTRY_BYPASS: '1' }, read), 'ops');
   assert.equal(questionMode({ role: 'supervisor' }, { HERDR_PANE_ID: 'saved-pane' }, read), 'ops', 'new ops launch does not inherit the previous chat role');
   assert.equal(questionMode({}, { HERDR_PANE_ID: 'saved-pane' }, () => { throw Error('stale receipt'); }), 'ops');
+});
+
+test('chat role bypasses supervisor entry and asks while present through both native question channels', () => {
+  const context = { role: 'chat' };
+  const env = { MONITOR_SESSION_ROLE: 'chat', MONITOR_ENTRY_BYPASS: '1' };
+  assert.equal(supervisorSessionKind(context, env), 'chat');
+  const mode = questionMode(context, env);
+  assert.equal(mode, 'conversation');
+  for (const tool of ['AskUserQuestion', 'request_user_input']) {
+    assert.equal(questionDecision(input(tool), { mode, presence: () => ({ away: false }) }), null);
+    assert.equal(questionDecision(input(tool), { mode, presence: () => ({ away: true }) }).hookSpecificOutput.permissionDecision, 'deny');
+  }
+  assert.equal(supervisorSessionKind(context, { ...env, MONITOR_SESSION_ROLE: 'worker' }), 'ops');
+  assert.equal(questionMode(context, { ...env, MONITOR_SESSION_ROLE: 'worker' }), 'ops');
 });
 
 test('ops never consult presence; both question channels get record-and-default instructions', () => {

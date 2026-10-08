@@ -1,0 +1,8 @@
+{
+  "legacy_validator": "PASS",
+  "same_bounded_selection": true,
+  "hops": 1,
+  "selected": 10,
+  "deferred": 21,
+  "estimated_ms": 26210
+}

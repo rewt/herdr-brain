@@ -275,10 +275,17 @@ failed preparation; resumed intervals move to `prepare_history`.
 `node promote/metrics.mjs --project /project [--json]` exposes `batches[].timing`
 and `lanes[].timing`: `queue_wait_s`, `slot_wait_s`, `external_lock_wait_s`,
 `prepare_time_s` and `gate_time_s`. Queue wait uses each job's `queued` clock
-to batch start; the batch reports its oldest member's wait. Slot wait is batch
+to batch start; the batch reports its oldest member's wait. Queue wait is unknown
+for legacy receipts without `external_lock_required`, since their `started_at`
+may follow the external-lock and slot waits. Slot wait is batch
 start to first slot grant, as requested, and overlaps external-lock wait;
 unconfigured trains also prepare before taking the slot. External-lock wait
-uses its own wait start to grant. Preparation sums retained attempt intervals;
+uses its own wait start to grant. Preparation sums retained attempt intervals.
+In instrumented receipts, attempts that became stale, failed capture, or lost
+every lane during rebase before preparation contribute zero; `timing.prepare_skipped`
+records their attempt index and reason. A lane with no retained attempts also
+contributes zero with a reason. Attempts with preparation or gate evidence still
+require complete preparation clocks;
 gate time sums executed commands, excluding reused/duplicate evidence and
 using execution start/end to exclude slot waits in new receipts. Completed gate
 receipts embed `command_started_at` and `command_finished_at` after execution;

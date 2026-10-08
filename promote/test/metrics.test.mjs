@@ -85,6 +85,57 @@ test('old receipts retain gate measurements while missing phase clocks are unkno
   assert.match(renderMetrics(m), /slot_wait=unknown; external_lock_wait=unknown; prepare_time=unknown/);
 });
 
+test('legacy profiled batches cannot split queue wait from external-lock and slot waits', t => {
+  const f = fixture(t), jobs = [f.bad, f.good].map(j => ({ ...j, queued: '2026-10-05T11:00:00Z' }));
+  f.write('legacy-profile', [f.attempt(jobs, f.gate('legacy-profile', 0, 12))],
+    { jobs, host_receipt: path.join(f.root, 'host-gate.json') });
+  const m = f.metrics();
+  assert.equal(m.batches[0].timing.queue_wait_s, null);
+  assert.ok(m.lanes.every(l => l.timing.queue_wait_s === null));
+  assert.deepEqual(m.summary.phase_time_s.queue_wait_s, { samples: 0, total: null, median: null, max: null, unknown: 1 });
+  assert.match(renderMetrics(m), /Legacy receipts.*unknown queue wait/);
+});
+
+for (const [phase, reason] of [
+  ['stale', 'main moved; replan from the current integration branch'],
+  ['stale', 'main moved during preparation; replan'],
+  ['invalid', 'capture refused before preparation'],
+  ['complete', 'all lanes refused rebase replay before preparation'],
+]) test(`never-prepared ${phase} attempt contributes zero beside timed preparation: ${reason}`, t => {
+  const f = fixture(t), prep = { started_at: '2026-10-05T12:00:00Z', finished_at: '2026-10-05T12:00:09Z' };
+  // All-replay-refused attempts retain no jobs, unlike stale/capture refusals.
+  const skipped = f.attempt(phase === 'complete' ? [] : [f.bad, f.good], undefined, phase);
+  if (phase === 'stale') skipped.error = reason;
+  f.write('skip', [skipped, { ...f.attempt([f.good], f.gate('timed-skip')), prepare: prep }],
+    { external_lock_required: false });
+  const m = f.metrics(), batch = m.batches[0].timing;
+  assert.equal(batch.prepare_time_s, 9);
+  assert.deepEqual(batch.prepare_skipped, [{ attempt: 0, reason }]);
+  assert.ok(renderMetrics(m).includes(`Preparation skipped for attempt 0: ${reason}`));
+  assert.equal(m.lanes.find(l => l.lane === 'bad').timing.prepare_time_s, 0);
+  assert.equal(m.lanes.find(l => l.lane === 'good').timing.prepare_time_s, 9);
+  assert.equal(m.summary.phase_time_s.prepare_time_s.total, 9);
+  assert.equal(m.summary.phase_time_s.prepare_time_s.unknown, 0);
+  // The same shape without the new marker supplies no proof of skipped work.
+  f.write('skip', [skipped, { ...f.attempt([f.good], f.gate('timed-skip')), prepare: prep }]);
+  assert.equal(f.metrics().batches[0].timing.prepare_time_s, null);
+});
+
+test('terminal attempts with preparation or gate evidence cannot be mistaken for skipped work', t => {
+  const f = fixture(t), prep = { started_at: '2026-10-05T12:00:00Z', finished_at: '2026-10-05T12:00:03Z' };
+  f.write('evidence', [
+    { ...f.attempt([f.bad], undefined, 'stale'), prepare: prep },
+    { ...f.attempt([f.good], undefined, 'invalid'), prepare_history: [prep] },
+    f.attempt([f.good], f.gate('missing-prepare'), 'complete'),
+    { ...f.attempt([f.good], undefined, 'stale'), gate_history: [f.gate('historic-gate')] },
+  ], { external_lock_required: false });
+  const m = f.metrics();
+  assert.equal(m.lanes.find(l => l.lane === 'bad').timing.prepare_time_s, 3);
+  assert.equal(m.lanes.find(l => l.lane === 'good').timing.prepare_time_s, null);
+  assert.equal(m.batches[0].timing.prepare_time_s, null);
+  assert.equal(m.batches[0].timing.prepare_skipped, undefined);
+});
+
 test('bisection and resume phase totals follow attempt membership without charging reused proofs', t => {
   const f = fixture(t), prep = { started_at: '2026-10-05T12:00:00Z', finished_at: '2026-10-05T12:00:03Z' };
   f.write('split', [

@@ -1,6 +1,7 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { fixture } from './helpers/conformance.mjs';
 
 test('unconfigured train retains slot grants, prepare clocks and command evidence in its receipt', t => {
@@ -34,6 +35,23 @@ test('preparation refusal closes its measured interval without inventing slot or
   assert.equal(plan.attempts[0].gate, undefined); assert.equal(plan.slot_granted_at, undefined);
   const timing = f.metrics().batches[0].timing;
   assert.ok(timing.prepare_time_s >= 0); assert.equal(timing.slot_wait_s, null); assert.equal(timing.gate_time_s, null);
+});
+
+test('all lanes refused during rebase have known zero batch and lane preparation with reasons', t => {
+  const f = fixture(t); f.lane('conflict');
+  fs.writeFileSync(path.join(f.repo, 'work'), 'main moved');
+  f.git(['add', '.']); f.git(['commit', '-qm', 'conflicting main']);
+  const b = f.batch(['conflict']), r = b.run(); assert.equal(r.status, 0, r.stdout + r.stderr);
+  const plan = b.read(), attempt = plan.attempts[0];
+  assert.equal(attempt.phase, 'complete'); assert.deepEqual(attempt.jobs, []);
+  assert.equal(attempt.prepare, undefined); assert.equal(attempt.gate, undefined);
+  assert.match(plan.results.conflict.reason, /rebase replay refused/);
+  const m = f.metrics();
+  assert.equal(m.batches[0].timing.prepare_time_s, 0);
+  assert.deepEqual(m.batches[0].timing.prepare_skipped, [{ attempt: 0, reason: 'all lanes refused rebase replay before preparation' }]);
+  assert.equal(m.lanes[0].timing.prepare_time_s, 0);
+  assert.deepEqual(m.lanes[0].timing.prepare_skipped, [{ attempt: null, reason: 'no attempt entered preparation' }]);
+  assert.equal(m.summary.phase_time_s.prepare_time_s.unknown, 0);
 });
 
 test('resuming preparation keeps prior intervals and the first slot grant', t => {

@@ -43,13 +43,34 @@ function commandTime(gate) {
   return gate.finished_at && finite(gate.duration_s) ? gate.duration_s : interval(gate.started_at, gate.finished_at);
 }
 function phaseTiming(plan, attempts, gates, jobs) {
-  const queues = jobs.map(j => interval(j.queued, plan.started_at));
-  const preparation = attempts.flatMap(a => [...(a.prepare_history ?? []), ...(a.prepare ? [a.prepare] : [null])]);
+  // This marker was introduced with the pre-host-wait batch start semantics.
+  // Legacy started_at clocks can include resource waits, even with queued clocks.
+  const instrumented = typeof plan.external_lock_required === 'boolean';
+  const queues = jobs.map(j => instrumented ? interval(j.queued, plan.started_at) : null);
+  const skipped = [];
+  const preparation = attempts.flatMap(a => {
+    if (instrumented && ['stale', 'invalid', 'complete'].includes(a.phase) &&
+        !a.prepare && !(a.prepare_history ?? []).length && !gateObservations(a).length) {
+      const reason = a.error || (a.phase === 'stale' ? 'main moved before preparation' :
+        a.phase === 'invalid' ? 'capture refused before preparation' : 'all lanes refused rebase replay before preparation');
+      skipped.push({ attempt: plan.attempts.indexOf(a), reason });
+      return [0];
+    }
+    return [...(a.prepare_history ?? []), ...(a.prepare ? [a.prepare] : [null])]
+      .map(p => interval(p?.started_at, p?.finished_at));
+  });
+  // Replay refusal can leave an attempt with no retained jobs, so a lane may
+  // have no attempts at all. New receipts prove no preparation ran in that case.
+  if (instrumented && !attempts.length) {
+    preparation.push(0);
+    skipped.push({ attempt: null, reason: 'no attempt entered preparation' });
+  }
   return {
     queue_wait_s: queues.length && queues.every(finite) ? Math.max(...queues) : null,
     slot_wait_s: interval(plan.started_at, plan.slot_granted_at),
     external_lock_wait_s: interval(plan.external_lock_started_at, plan.external_lock_granted_at),
-    prepare_time_s: totalTime(preparation.map(p => interval(p?.started_at, p?.finished_at))),
+    prepare_time_s: totalTime(preparation),
+    ...(skipped.length ? { prepare_skipped: skipped } : {}),
     gate_time_s: totalTime(gates.filter(g => !g.reused && !g.duplicate).map(g => g.command_time_s)),
   };
 }
@@ -252,8 +273,9 @@ export function collectMetrics({ project = process.cwd(), org, since, until, now
       'Resumed attempts retain gate history; executions overwritten by older versions cannot be reconstructed or counted.',
       'Step durations sum test-stream totals per gate, not wall time: builds, slot waits and unmarked work are excluded.',
       'Phase timings are seconds; missing, invalid or incomplete clocks are null (unknown). An absent external lock is also null, with external_lock_required=false when known.',
+      'Legacy receipts without external_lock_required have unknown queue wait: their batch start may follow external-lock and slot waits.',
       'Batch queue wait is the oldest member wait; each lane uses its own queued clock. Slot wait is batch start to the first grant, so it includes external-lock wait and, for unconfigured trains, preparation before the slot.',
-      'Preparation includes each attempt and resumed preparation; lane preparation/gate times include shared attempts in full and must not be summed across lanes. Reused/duplicate proofs add no gate execution time.',
+      'Preparation includes each started attempt and resumed preparation; instrumented attempts that never prepared contribute zero with a prepare_skipped reason. Lane preparation/gate times include shared attempts in full and must not be summed across lanes. Reused/duplicate proofs add no gate execution time.',
       'New gate phase time uses command-start/completion evidence to exclude slot wait; legacy gate durations retain their original measurement, which may include slot wait.',
       'Multi-file TAP streams without file labels cannot supply individual file durations; these are shown as groups when the command names files.',
       'Only exact gate logs are attributed; combined train.log is not assigned to bisection attempts.',
@@ -304,10 +326,12 @@ export function renderMetrics(data) {
   for (const p of s.gate_profiles) lines.push(`  ${p.command}: ${p.gates} executions, median ${seconds(p.time_s.median)}`);
   const timing = row => ['queue_wait_s', 'slot_wait_s', 'external_lock_wait_s', 'prepare_time_s', 'gate_time_s']
     .map(key => `${key.replace(/_s$/, '')}=${row?.[key] == null ? 'unknown' : seconds(row[key])}`).join('; ');
+  const skipped = row => (row?.prepare_skipped ?? []).map(p =>
+    `    Preparation skipped${p.attempt === null ? '' : ` for attempt ${p.attempt}`}: ${p.reason}`);
   lines.push('Batch phase times:');
-  for (const batch of data.batches) lines.push(`  ${batch.id}: ${timing(batch.timing)}`);
+  for (const batch of data.batches) lines.push(`  ${batch.id}: ${timing(batch.timing)}`, ...skipped(batch.timing));
   lines.push('Lane phase times (shared costs counted in full):');
-  for (const lane of data.lanes ?? []) lines.push(`  ${lane.batch} lane/${lane.lane}: ${timing(lane.timing)}`);
+  for (const lane of data.lanes ?? []) lines.push(`  ${lane.batch} lane/${lane.lane}: ${timing(lane.timing)}`, ...skipped(lane.timing));
   for (const [label, rows] of [['Slowest steps (test time)', data.slowest_steps], ['Slowest test files', data.slowest_test_files], ['Slowest multi-file test groups', data.slowest_test_groups]]) {
     lines.push(`${label}:`);
     if (!rows.length) lines.push('  unavailable in retained logs');

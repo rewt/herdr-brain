@@ -9,8 +9,23 @@ import { loadTimeout } from '../../lib/deadline.mjs';
 // and freshly confirm every individual signal.
 export async function stopFixtureInbox(file, { script, tracker = createProcessTracker() }) {
   const lock = `${file}.owner.lock`;
-  if (!fs.existsSync(lock)) return;
-  const owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+  const handoffBy = Date.now() + loadTimeout(1000);
+  let owner;
+  for (;;) {
+    if (!fs.existsSync(lock)) return;
+    try {
+      owner = JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+      break;
+    } catch (error) {
+      if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+      // Removal can unlink owner.json before its directory disappears. A
+      // missing or incomplete receipt is a handoff, never signal authority.
+      if (!fs.existsSync(lock)) return;
+      if (Date.now() >= handoffBy)
+        throw Error(`Cannot confirm fixture inbox owner metadata after bounded handoff wait: ${file}`, { cause: error });
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
   const expected = [process.execPath, script, '--inbox', file, '--owner-worker'];
   if (!Number.isInteger(owner.pid) || owner.pid <= 1 || !Array.isArray(owner.argv) ||
       !owner.argv.every(arg => typeof arg === 'string') || expected.some((arg, index) => owner.argv[index] !== arg))

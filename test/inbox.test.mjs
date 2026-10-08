@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { createProcessTracker } from './helpers/processes.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 function fixture(t, { detached = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-inbox-identity-'));
@@ -32,6 +33,76 @@ function fixture(t, { detached = true } = {}) {
   return { owner, rows, row, hooks, signals, reports, metadata,
     stop: () => stopFixtureInbox(file, { script, tracker }) };
 }
+
+for (const receipt of ['missing', 'partial']) {
+  for (const handoff of ['removed lock', 'late owner', 'late invalid argv']) {
+    test(`inbox fixture teardown waits for ${receipt} metadata then handles ${handoff}`, async t => {
+      const f = fixture(t), metadata = fs.readFileSync(f.metadata, 'utf8');
+      if (receipt === 'missing') fs.unlinkSync(f.metadata);
+      else fs.writeFileSync(f.metadata, '{"pid":');
+      const read = fs.readFileSync, snapshot = f.hooks.snapshot;
+      let reads = 0, snapshots = 0;
+      f.hooks.snapshot = () => { snapshots++; return snapshot(); };
+      t.mock.method(fs, 'readFileSync', function (file, ...args) {
+        if (file === f.metadata && ++reads === 1) {
+          // Change the real fixture only after the helper encounters the
+          // handoff window and yields. No scheduling delay creates the race.
+          setImmediate(() => {
+            assert.equal(snapshots, 0);
+            assert.deepEqual(f.signals, []);
+            if (handoff === 'removed lock') fs.rmSync(path.dirname(f.metadata), { recursive: true });
+            else fs.writeFileSync(f.metadata, handoff === 'late owner' ? metadata : JSON.stringify({ pid: 202, argv: ['foreign'] }));
+          });
+        }
+        return read.call(this, file, ...args);
+      });
+      if (handoff === 'late invalid argv') await assert.rejects(f.stop(), /Cannot confirm fixture inbox owner argv/);
+      else await f.stop();
+      assert.ok(reads >= 1);
+      assert.deepEqual(f.signals, handoff === 'late owner'
+        ? [{ pid: 202, signal: 'SIGSTOP' }, { pid: 202, signal: 'SIGKILL' }] : []);
+      if (handoff !== 'late owner') assert.equal(snapshots, 0);
+    });
+  }
+
+  test(`inbox fixture teardown bounds a persistent ${receipt} receipt without signalling`, async t => {
+    const f = fixture(t);
+    if (receipt === 'missing') fs.unlinkSync(f.metadata);
+    else fs.writeFileSync(f.metadata, '{"pid":');
+    const read = fs.readFileSync;
+    let elapsed = 0;
+    const allowance = loadTimeout(1000);
+    t.mock.method(Date, 'now', () => elapsed);
+    t.mock.method(fs, 'readFileSync', function (file, ...args) {
+      if (file === f.metadata) elapsed = allowance;
+      return read.call(this, file, ...args);
+    });
+    f.hooks.snapshot = () => assert.fail('unreadable metadata must not reach process lookup');
+    await assert.rejects(f.stop(), /Cannot confirm fixture inbox owner metadata after bounded handoff wait/);
+    assert.deepEqual(f.signals, []);
+    assert.ok(fs.existsSync(path.dirname(f.metadata)), 'retain unidentified lock evidence');
+  });
+}
+
+test('inbox fixture teardown scales its metadata handoff allowance with load', async t => {
+  const f = fixture(t), metadata = fs.readFileSync(f.metadata, 'utf8');
+  fs.unlinkSync(f.metadata);
+  t.mock.method(os, 'loadavg', () => [24, 24, 24]);
+  t.mock.method(os, 'availableParallelism', () => 4);
+  let elapsed = 0;
+  t.mock.method(Date, 'now', () => elapsed);
+  const read = fs.readFileSync;
+  t.mock.method(fs, 'readFileSync', function (file, ...args) {
+    if (file === f.metadata && !fs.existsSync(file)) {
+      elapsed = 1001;
+      setImmediate(() => fs.writeFileSync(f.metadata, metadata));
+    }
+    return read.call(this, file, ...args);
+  });
+  await f.stop();
+  assert.equal(elapsed, 1001, 'handoff outlasted the unloaded one-second allowance');
+  assert.deepEqual(f.signals, [{ pid: 202, signal: 'SIGSTOP' }, { pid: 202, signal: 'SIGKILL' }]);
+});
 
 for (const detached of [true, false]) test(`teardown confirms the ${detached ? 'detached owner' : 'contained test'} group and stops its transport first`, async t => {
   const f = fixture(t, { detached });

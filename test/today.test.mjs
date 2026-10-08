@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { report, setupOrg } from './helpers.mjs';
-import { fold } from '../lib/state.mjs';
+import { fold, statusMap, waitingImpact, waitingImpactIndex } from '../lib/state.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 
 // America/Chicago is UTC-5 in September: the local day 2026-09-15 runs 05:00Z to 05:00Z.
@@ -252,6 +252,32 @@ test('waiting impact deduplicates dependents and counts current waiting runs and
   ]).waiting.find(q => q.id === 'HUM-1');
   assert.deepEqual(resumed.blocked_work, { items: 3, runs: 2, plan_steps: 3 },
     'new active runs supersede historical waiting reports');
+});
+
+test('one impact index serves multiple questions without rescanning target notes', () => {
+  const events = [
+    { type: 'item.added', id: 'HUM-1', role: 'human' },
+    { type: 'item.added', id: 'HUM-10', role: 'human' },
+    { type: 'item.added', id: 'W-1' },
+    { type: 'run.started', id: 'R-1', item: 'W-1' },
+    { type: 'report.ingested', run: 'R-1', report: { outcome: 'blocked', blockers: ['HUM-1 HUM-10 HUM-1'] } },
+    { type: 'note.added', id: 'W-1', text: 'Plan:\n- HUM-1 HUM-10 HUM-1\n- HUM-10\n- [x] HUM-1' },
+    { type: 'note.added', id: 'R-1', text: 'Plan:\n1. Await HUM-1 HUM-10' },
+    { type: 'note.added', id: 'HUM-1', text: 'Plan:\n- Self HUM-1\n- Other HUM-10' },
+  ].map((e, i) => ({ ...e, seq: i + 1, at: MORNING, by: 'test' }));
+  const s = fold(events), statuses = statusMap(s);
+  let reads = 0;
+  for (const target of [...s.items.values(), ...s.runs.values()]) {
+    const notes = target.notes;
+    Object.defineProperty(target, 'notes', { get() { reads++; return notes; } });
+  }
+  const index = waitingImpactIndex(s, statuses), indexedReads = reads;
+  assert.equal(indexedReads, s.items.size + s.runs.size, 'each eligible target is indexed once');
+  for (let i = 0; i < 5; i++) {
+    assert.deepEqual(waitingImpact(s, 'HUM-1', statuses, index), { items: 0, runs: 1, plan_steps: 2 });
+    assert.deepEqual(waitingImpact(s, 'HUM-10', statuses, index), { items: 0, runs: 1, plan_steps: 4 });
+  }
+  assert.equal(reads, indexedReads, 'question lookups never read notes');
 });
 
 test('questions park only after seven elapsed days and remain available through the listing command', () => {

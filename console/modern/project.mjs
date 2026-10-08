@@ -131,7 +131,7 @@ export function projectRows({ model: m, state: s, project: p, width, height, now
   if (block || p?.org) add('content', cell('', 0, width));
 
   // Needs you: each item with the answer recommended for it.
-  if (m.needs.length) {
+  if (m.needs.length || m.aged.length) {
     const folded = m.resolved.length + m.reports.length + m.ended.length;
     const right = `${folded ? `${folded} folded · ` : ''}open queue ›`;
     add('needs', cell(` Waiting on you · ${m.needs.length}`, 0, width - right.length - 3, { fg: 'amber', bg: 'attentionBg', bold: true }),
@@ -144,6 +144,7 @@ export function projectRows({ model: m, state: s, project: p, width, height, now
         ...(hw ? [cell('', width - hw - 2, 2, { bg: 'attentionBg' }), cell(pad(clip(hint, hw - 1), hw), width - hw, hw, { id: `need:${n.key}`, fg: 'goal', bg: 'attentionBg' })] : []));
     }
     if (m.needs.length > 3) add('needs', cell(`    ${m.needs.length - 3} more · open queue ›`, 0, width, { id: 'view:needs', fg: 'amber', bg: 'attentionBg' }));
+    if (m.aged.length) add('needs', cell(` ${m.aged.length} parked ${m.aged.length === 1 ? 'question' : 'questions'} (>7 days) · record today --parked`, 0, width, { id: 'view:aged', fg: 'muted' }));
     add('content', cell('', 0, width));
   }
 

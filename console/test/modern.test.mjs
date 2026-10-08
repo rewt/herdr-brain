@@ -38,7 +38,7 @@ test('C opens only the selected project supervisor chat, while refresh and compo
   const chats = [];
   const {session} = fixture({herdrProjectChat: async p => {chats.push(p); return {ok: true, available: true};}});
   try {
-    await session.refresh(); rendered(session); assert.equal(chats.length, 0);
+    await session.refresh(); assert.doesNotMatch(rendered(session), /--parked/); assert.equal(chats.length, 0);
     await session.key('C'); assert.equal(chats.length, 1); assert.equal(chats[0].name, 'Alpha'); assert.equal(chats[0].repoKey, '/a/.git');
     await session.activate('project:configured:Beta'); rendered(session);
     await session.key('C'); assert.equal(chats[1].repoKey, '/b/.git');
@@ -262,6 +262,56 @@ test('future-stage and deferred questions remain reachable without inflating Nee
   await session.refresh(); assert.equal(session.model.needs.length, 1); assert.equal(session.model.parked.length, 1);
   await session.activate('view:parked'); assert.match(rendered(session), /Later stage/);
   await session.activate(`need:${session.model.parked[0].key}`); assert.equal(session.ui.view, 'need'); assert.match(rendered(session), /Later stage/);
+});
+
+test('aged questions stay counted, reachable and separate from future stages in the modern console', async () => {
+  const { session } = fixture({ orgToday: async () => ({ project: { open_stage: 1 }, waiting: [
+    { id: 'HUM-1', title: 'Recent question?', parked: false, blocked_count: 2 },
+    { id: 'HUM-2', title: 'Old important question?', parked: true, blocked_count: 5 },
+    { id: 'HUM-3', title: 'Old other question?', parked: true, blocked_count: 1 },
+    { id: 'HUM-4', title: 'Future question?', stage: 2, parked: false },
+  ], running: [], agent_runs: [], decided: [], finished: [] }) });
+  try {
+    await session.refresh();
+    const m = session.model;
+    assert.deepEqual(m.needs.map(n => n.question), ['HUM-1']);
+    assert.deepEqual(m.aged.map(n => n.question), ['HUM-2', 'HUM-3']);
+    assert.deepEqual(m.parked.map(n => n.question), ['HUM-4']);
+    assert.equal(m.allNeeds.length, 4);
+    const home = rendered(session);
+    assert.match(home, /Waiting on you · 1/);
+    assert.match(home, /2 parked questions \(>7 days\) · record today --parked/);
+    assert.match(rendered(session, 80, 32), /2 parked questions \(>7 days\) · record today --parked/);
+    assert.doesNotMatch(home, /Old important question|Old other question/);
+    assert.ok(session.frame(100, 32).controls.some(c => c.id === 'view:aged'));
+    await session.activate('view:needs');
+    const needs = rendered(session);
+    assert.match(needs, /Waiting on you · 1/);
+    assert.match(needs, /Parked 2 · record today --parked/);
+    assert.match(needs, /Future stages 1/);
+    assert.equal(needs.split('\n').filter(line => line.includes('record today --parked')).length, 1);
+    await session.activate('view:aged');
+    const aged = rendered(session);
+    assert.match(aged, /Parked questions · 2/);
+    assert.match(aged, /Old important question/);
+    assert.match(aged, /Old other question/);
+    await session.activate(`need:${m.aged[0].key}`);
+    assert.equal(session.ui.view, 'need');
+    assert.match(rendered(session), /Old important question/);
+  } finally { session.stop(); }
+});
+
+test('the modern overview shows a singular parked line when only an aged question remains', async () => {
+  const { session } = fixture({ orgToday: async () => ({ project: {}, waiting: [
+    { id: 'HUM-1', title: 'Old question?', parked: true },
+  ], running: [], agent_runs: [], decided: [], finished: [] }) });
+  try {
+    await session.refresh();
+    assert.match(rendered(session), /Waiting on you · 0/);
+    assert.match(rendered(session), /1 parked question \(>7 days\) · record today --parked/);
+    await session.activate('view:needs');
+    assert.match(rendered(session), /Parked 1 · record today --parked/);
+  } finally { session.stop(); }
 });
 
 test('list shortcuts focus the first actionable item and Enter drills in', async () => {

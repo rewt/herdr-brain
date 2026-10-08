@@ -300,7 +300,6 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       for (const job of attempt.jobs) result(job, { outcome: 'timeout', reason: `${reason}; ${attempt.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`, gate: attempt.gate, batch: plan.id });
       save(); return false;
     }
-
     if (attempt.phase === 'red') {
       plan.groups.shift();
       if (attempt.jobs.length === 1) result(attempt.jobs[0], { outcome: 'refused', reason: `batch validation failed (exit ${attempt.gate.exit_code}); lane isolated for correction`, gate: attempt.gate, batch: plan.id });

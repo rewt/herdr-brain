@@ -635,21 +635,25 @@ describe('legacy bridge during workspace migration', () => {
     const queued = cli(['run', 'workspace', '--wait', String(Math.ceil(loadTimeout(10000) / 1000)), '--', ...nodeCommand(marker)], { env });
     await sleep(200); assert.equal(fs.existsSync(marker), false);
     first.child.kill('SIGTERM'); await first.done;
-    // The command can publish its marker before setGroup has updated both
-    // records. Wait for registration, rather than observing between writes.
-    await until(() => {
-      if (!fs.existsSync(marker) || !fs.existsSync(legacy.lockPath) || !fs.existsSync(workspace.lockPath)) return false;
-      const pid = Number(fs.readFileSync(marker, 'utf8'));
-      return [legacy.lockPath, workspace.lockPath].every(file => {
-        const record = readLock(file);
-        return record.pgid === pid && typeof record.groupStart === 'string' && typeof record.groupBirth === 'string';
-      });
-    }, 'configured run to register its command in both locks');
+    await until(() => fs.existsSync(marker) && fs.existsSync(workspace.lockPath), 'configured run to acquire both locks');
+    // The command can run before the two post-spawn group updates finish.
+    // Both locks already exclude contenders through the live wrapper's identity.
+    for (const lockPath of [legacy.lockPath, workspace.lockPath]) {
+      const record = readLock(lockPath);
+      assert.equal(record.pid, queued.child.pid);
+      assert.equal(holderState(record).state, 'live');
+      const other = await cli(['run', 'bridge-taker', '--lock-path', lockPath, '--', process.execPath, '-e', '']).done;
+      assert.equal(other.code, 75, 'each lock excludes a taker while group metadata is being recorded');
+      assert.match(other.stderr, /^TEST_SLOT_HELD:/);
+    }
+    const commandPid = Number(fs.readFileSync(marker, 'utf8'));
+    await until(() => [legacy.lockPath, workspace.lockPath].every(lockPath => {
+      const record = readLock(lockPath);
+      return record.pgid === commandPid && typeof record.groupStart === 'string' && typeof record.groupBirth === 'string';
+    }), 'both locks to record the command group');
     const old = readLock(legacy.lockPath), own = readLock(workspace.lockPath);
     assert.equal(old.token, own.token); assert.equal(old.pgid, own.pgid);
     assert.equal(old.groupStart, own.groupStart); assert.equal(old.groupBirth, own.groupBirth);
-    const other = await cli(['run', 'legacy-taker', '--lock-path', legacy.lockPath, '--', process.execPath, '-e', '']).done;
-    assert.equal(other.code, 75, 'legacy taker cannot race a configured workspace holder');
     queued.child.kill('SIGTERM'); await queued.done;
     assert.equal(fs.existsSync(legacy.lockPath), false); assert.equal(fs.existsSync(workspace.lockPath), false);
   });

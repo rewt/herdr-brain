@@ -28,6 +28,14 @@ the same file to converge on one lock. Never select separate paths per project.
 `--lock-path PATH` selects a single explicit lock for isolated checks and tests.
 The CLI propagates both selected paths to nested commands.
 
+Both locks name the live wrapper before it spawns the command. The wrapper then
+records the command's group in each lock with separate atomic updates, so group
+metadata can briefly differ after the command starts. The wrapper's PID and
+start identity keep both locks live during those updates; readers need not wait
+for matching group metadata to exclude another run. Group metadata consumers
+must wait for both records rather than treating command readiness as proof that
+the updates have finished.
+
 `MONITOR_TEST_SLOT_WAIT_SECONDS` (or `--wait SECONDS`) queues for a bounded number
 of whole seconds; the default is immediate refusal. The legacy
 `BCH_CLOAK_TEST_SLOT_WAIT_SECONDS` is accepted when the Monitor variable is unset.

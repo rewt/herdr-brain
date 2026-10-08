@@ -26,12 +26,20 @@ function acquireLock(directory, { waitMs = 0 } = {}) {
     }
   } finally { fs.rmSync(candidate, { recursive: true, force: true }); }
   let released = false;
-  return () => { if (!released) { fs.rmSync(directory, { recursive: true }); released = true; } };
+  return () => { if (!released) { removeOwner(directory, process.pid); released = true; } };
 }
 
 export function ownerPid(directory) {
   try { return JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'), 'utf8')).pid; }
   catch { return null; }
+}
+function removeOwner(directory, pid) {
+  if (ownerPid(directory) !== pid) return;
+  fs.unlinkSync(path.join(directory, 'owner.json'));
+  // A contender that already observed no lock can rename its candidate over
+  // this now-empty directory. Never recurse into that new owner's lock.
+  try { fs.rmdirSync(directory); }
+  catch (error) { if (!['ENOTEMPTY', 'ENOENT'].includes(error.code)) throw error; }
 }
 function dead(pid) {
   if (!Number.isInteger(pid) || pid < 1) return false;
@@ -49,7 +57,8 @@ export function noticeLock(directory, { waitMs = 0 } = {}) {
     // already have installed a live owner. Recovery guards use the same rule.
     const release = noticeLock(`${directory}.recovery`, { waitMs: 5000 });
     try {
-      if (dead(ownerPid(directory))) fs.rmSync(directory, { recursive: true });
+      const pid = ownerPid(directory);
+      if (dead(pid)) removeOwner(directory, pid);
       return acquireLock(directory, { waitMs });
     } finally { release(); }
   }

@@ -169,7 +169,14 @@ function perform(job, queue) {
   try { r = spawnSync(process.execPath, args, { cwd, env, stdio: ['ignore', output, output] }); }
   finally { fs.closeSync(output); }
   const reason = () => fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).findLast((line) => /^(?:lane:|GATE_TIMEOUT:)/.test(line)) ?? r.error?.message ?? `lane promote exited ${r.status}`;
-  if (r.error || r.status !== 0) return { outcome: r.status === 124 && /GATE_TIMEOUT:/.test(reason()) ? 'timeout' : 'refused', reason: singleLine(reason()), log };
+  if (r.error || r.status !== 0) {
+    const detail = reason();
+    if (r.status === 124 && /GATE_TIMEOUT:/.test(detail)) {
+      const limit = /GATE_TIMEOUT: idle/.test(detail) ? 'no-output' : 'wall-clock';
+      return { outcome: 'timeout', reason: `gate ${limit} limit exceeded; lane isolated for correction`, log };
+    }
+    return { outcome: 'refused', reason: singleLine(detail), log };
+  }
   try {
     const tip = job.expectedHead ?? git(cwd, ['rev-parse', 'HEAD']);
     // Persist success before cleanup: a crash must not cause a second gate/FF.
@@ -208,7 +215,9 @@ function performBatch(batch, queue) {
     if (host.phase === 'timeout') {
       const train = JSON.parse(fs.readFileSync(receipt, 'utf8'));
       train.results ??= {};
-      for (const job of batch.jobs) train.results[job.id] ??= { outcome: 'timeout', reason: host.reason, batch: batch.id, host_receipt: hostFile };
+      const limit = host.gate_timeout?.kind === 'idle' ? 'no-output' : 'wall-clock';
+      const reason = `gate ${limit} limit exceeded; ${batch.jobs.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`;
+      for (const job of batch.jobs) train.results[job.id] ??= { outcome: 'timeout', reason, batch: batch.id, host_receipt: hostFile };
       train.phase = 'complete'; train.groups = [];
       writeFileAtomic(receipt, JSON.stringify(train, null, 2) + '\n');
       return batch.jobs.map(job => ({ job, result: { ...train.results[job.id], log, receipt } }));

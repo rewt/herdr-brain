@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { processStart } from '../../test-slot/lock-support.mjs';
+import { recordHealthyGate, gateHistoryKey, healthyHistory, historyFile } from '../../test-slot/limits.mjs';
 import { releaseOnce, quietPoint } from '../release.mjs';
 import { releaseSettings, RELEASE_DEFAULTS } from '../config.mjs';
 import { gitProject, ignoreRuntime } from '../../lib/project.mjs';
@@ -479,4 +480,23 @@ test('release watchdog honors wall settings declared only in canonical lane conf
   const candidate = f.record(['releases', '--json']).candidates[0];
   assert.equal(candidate.gate.exit_code, 124);
   assert.match(fs.readFileSync(candidate.gate.log, 'utf8'), /GATE_TIMEOUT: wall limit 0.3s/);
+});
+
+test('release host and inner gate share declared argv history across candidate substitution', t => {
+  const command = ['node', 'gate.cjs', '{tag}'];
+  const f = fixture(t, { gate: command });
+  const key = gateHistoryKey('release', command);
+  recordHealthyGate({ common: f.project.identity, tier: 'release', historyKey: key, duration_s: 7000, longest_silence_s: 100 });
+  const evidence = path.join(f.root, 'limits.jsonl'), preload = path.join(f.root, 'observe.mjs');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{const r=run(cmd,args,opts);if(Array.isArray(args)&&args.includes('--tier')&&['release','release-host'].includes(args[args.indexOf('--tier')+1])){const p=args[args.indexOf('--result-path')+1];if(fs.existsSync(p))fs.appendFileSync(${JSON.stringify(evidence)},JSON.stringify({tier:args[args.indexOf('--tier')+1],...JSON.parse(fs.readFileSync(p))})+'\\n');}return r;};syncBuiltinESMExports();`);
+  f.env.NODE_OPTIONS = `--import=${preload}`;
+  const options = { cwd: f.repo, role: 'supervisor', tag: 'rc-history', measurement: { load: 0, cpus: 1, memory: { total: 16 * 1024 ** 3, available: 8 * 1024 ** 3, swap_used: 0 } } };
+  const program = `import {releaseOnce} from ${JSON.stringify(new URL('../release.mjs', import.meta.url).href)};console.log(JSON.stringify(releaseOnce(${JSON.stringify(options)})));`;
+  const r = JSON.parse(f.ok(process.execPath, ['--input-type=module', '-e', program])); assert.equal(r.result, 'awaiting-operator');
+  const rows = fs.readFileSync(evidence, 'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  const inner = rows.find(row=>row.tier==='release'), host = rows.find(row=>row.tier==='release-host');
+  assert.equal(inner.limits.wall_seconds, 14000); assert.equal(inner.limits.wall_source, 'history');
+  assert.deepEqual(inner.history_key, key);
+  assert.ok(host.limits.wall_seconds >= 2 * inner.limits.wall_seconds);
+  assert.equal(healthyHistory(f.project.identity, 'release', undefined, historyFile(f.project.identity, 'release', undefined, key), key).length, 2);
 });

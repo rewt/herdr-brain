@@ -131,7 +131,12 @@ its label as the tier. Fast and other non-slot validation tiers use the same pro
 
 Without an explicit limit, successful command durations in
 `GIT_COMMON_DIR/gate-watchdog/` supply twice the maximum of the last 20 healthy
-runs for that project, tier and exact command fingerprint, with a **600-second floor**. That floor leaves
+runs for that project, tier and command fingerprint, with a **600-second floor**.
+Train plans use an explicit history key (`--history-key` JSON: tier and declared
+base command fingerprint), so affected file lists share history. Release gates
+use their declared argv before candidate substitution. Both host envelopes
+resolve from the same key as their inner gate. Recording keeps at most 128
+command history files per project, pruning the least recently updated files. That floor leaves
 headroom for cold builds and load variation in narrow gates. Without matching command history (including older tier-only records),
 the **4500-second (75-minute) default** bounds unfamiliar full gates
 conservatively. The measured full gates of 31m05s, 31m40s, 30m55s, 30m53s,

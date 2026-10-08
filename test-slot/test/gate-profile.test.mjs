@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { recordHealthyGate, gateHistoryKey } from '../limits.mjs';
 import { resolveGateProfile, runProjectGateSync } from '../../promote/gate-profile.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { enqueue, queueFor } from '../../promote/promote.mjs';
@@ -211,21 +212,63 @@ test('malformed profiles and missing exact Node pins fail closed; effective decl
   fs.writeFileSync(path.join(f.repo, '.nvmrc'), '0.0.0'); assert.throws(() => resolveGateProfile(f.repo, f.env));
 });
 
-test('host envelope honors canonical lane-only limits and reports an idle timeout accurately', t => {
+test('inner idle timeout uses canonical lane-only limits without timing out the completed host envelope', t => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ validation: { timeout_seconds: { promotion: 5000 }, idle_timeout_seconds: { promotion: .2 } } }));
   f.git(['add', '.lane.json']); f.git(['commit', '-qm', 'Canonical watchdog settings']);
   const before = f.git(['rev-parse', 'main']);
   f.env.LANE_VALIDATE = 'node -e "setInterval(()=>{},1000)"';
   const result = f.run();
-  assert.equal(result.status, 124, result.stderr + result.stdout);
+  // The train completed and recorded a lane timeout; its zero exit and printed
+  // descendant marker cannot turn this completed host lifecycle into a timeout.
+  assert.equal(result.status, 0, result.stderr + result.stdout);
   const saved = f.saved();
-  assert.equal(saved.phase, 'timeout'); assert.equal(saved.gate_timeout.kind, 'idle');
-  assert.match(saved.reason, /gate no-output limit exceeded/);
-  assert.doesNotMatch(saved.reason, /wall-clock/);
+  assert.equal(saved.phase, 'finished'); assert.equal(saved.exit_code, 0);
+  assert.equal(saved.gate_timeout, undefined);
   const train = JSON.parse(fs.readFileSync(f.receipt));
   assert.equal(train.attempts[0].gate.limits.wall_seconds, 5000);
   assert.equal(train.results.job.outcome, 'timeout');
+  assert.equal(train.attempts[0].gate.gate_timeout.kind, 'idle');
+  assert.match(train.results.job.reason, /gate no-output limit exceeded; lane isolated for correction/);
+  assert.doesNotMatch(train.results.job.reason, /wall-clock/);
   assert.equal(f.git(['rev-parse', 'main']), before);
   assert.equal(fs.existsSync(f.slot), false);
+});
+
+test('promotion host envelope derives from the declared inner history key', t => {
+  const f = fixture(t), common = path.join(f.repo, '.git');
+  const key = gateHistoryKey('promotion', ['/bin/sh', '-c', 'node gate.cjs']);
+  recordHealthyGate({ common, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 20 });
+  const preload = path.join(f.root, 'observe.mjs'), evidence = path.join(f.root, 'envelope.json');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host'))fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify(args));return run(cmd,args,opts);};syncBuiltinESMExports();`);
+  f.env.NODE_OPTIONS = `--import=${preload}`;
+  const r = f.run(); assert.equal(r.status, 0, r.stderr + r.stdout);
+  const train = JSON.parse(fs.readFileSync(f.receipt));
+  assert.ok(train.attempts[0].gate, JSON.stringify(train) + r.stdout + r.stderr);
+  const inner = train.attempts[0].gate.limits;
+  assert.equal(inner.wall_seconds, 12000); assert.equal(inner.wall_source, 'history');
+  const args = JSON.parse(fs.readFileSync(evidence));
+  assert.ok(Number(args[args.indexOf('--timeout-seconds') + 1]) >= 2 * inner.wall_seconds);
+});
+
+test('two-lane host envelope timeout returns batch re-enqueue wording', t => {
+  const f = fixture(t, { prepare: [{ run: 'node -e "setInterval(()=>{},1000)"' }] });
+  const other = path.join(f.root, 'other'); f.git(['worktree', 'add', '-qb', 'lane/other', other]);
+  fs.writeFileSync(path.join(other, 'other'), 'other'); f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
+  const preload = path.join(f.root, 'short-host.mjs');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){args=[...args];args[args.indexOf('--timeout-seconds')+1]='.8';}return run(cmd,args,opts);};syncBuiltinESMExports();`);
+  f.env.NODE_OPTIONS = `--import=${preload}`;
+  const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const queue = queueFor(f.repo);
+  enqueue(queue, ['profile', 'other'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });
+  f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
+  const r = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const results = queue.load().results; assert.equal(results.length, 2);
+  for (const result of results) {
+    assert.equal(result.outcome, 'timeout');
+    assert.equal(result.reason, 'gate wall-clock limit exceeded; batch timed out; re-enqueue lanes individually');
+    const host = JSON.parse(fs.readFileSync(result.host_receipt)); assert.equal(host.phase, 'timeout'); assert.equal(host.gate_timeout.descendant ?? false, false);
+  }
+  assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(fs.existsSync(f.slot), false);
 });

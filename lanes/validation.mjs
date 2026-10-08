@@ -105,7 +105,7 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
-export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, timeoutSeconds, idleTimeoutSeconds }) {
+export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds }) {
   env = validationEnvironment(env);
   const before = captured(cwd, label);
   const fingerprint = environmentFingerprint({ env, prepare, environment });
@@ -147,7 +147,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       onStart?.({ command, started_at: startedAt.toISOString(), log, execution_receipt: executionReceipt });
       // Hold one slot for the chain; only its leaf steps may spend a retry.
       const execute = tier === 'promotion' ? runTestSlotSync : runGateSync;
-      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: tier === 'promotion', cwd, env, common, tier, timeoutSeconds, idleTimeoutSeconds, executionReceipt, retryTimeout: false, stdio: ['inherit', fd, fd] });
+      run = execute(`${tier} ${cwd}`, ['/bin/sh', '-c', command], { acquireSlot: tier === 'promotion', cwd, env, common, tier, historyKey, timeoutSeconds, idleTimeoutSeconds, executionReceipt, retryTimeout: false, stdio: ['inherit', fd, fd] });
     }
     finally { fs.closeSync(fd); }
     const output = readPlainFile(log);

@@ -12,7 +12,7 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { releaseSettings, releaseArgv } from './config.mjs';
 import { runTestSlotSync, REFUSED_EXIT } from '../test-slot/run.mjs';
 import { canonicalValidation } from '../lanes/validation.mjs';
-import { resolveGateLimits } from '../test-slot/limits.mjs';
+import { resolveGateLimits, gateHistoryKey } from '../test-slot/limits.mjs';
 import { readMemory, memoryReason } from '../lib/memory.mjs';
 import { pruneSnapshots } from './retention.mjs';
 
@@ -56,7 +56,7 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
   // once-only gate claim behind. The worker repeats all canonical-role checks.
   if (!slotHeld) {
     const declared = canonicalValidation(project.canonical, env).tiers.release;
-    const limits = resolveGateLimits({ common: project.identity, tier: 'release', ...declared, command: ['/bin/sh', '-c', declared.command] });
+    const limits = resolveGateLimits({ common: project.identity, tier: 'release', ...declared, historyKey: gateHistoryKey('release', declaration.config.gate) });
     const result = runTestSlotSync(`release ${project.canonical}`, [process.execPath, SELF, '--held-once', JSON.stringify({ cwd: project.canonical, org: org ? path.resolve(org) : undefined, role, tag, measurement })],
       { cwd: project.canonical, env, common: project.identity, tier: 'release-host', timeoutSeconds: Math.max(600, 2 * limits.wall_seconds), idleTimeoutSeconds: 0, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, retryTimeout: false });
     if (result.status === REFUSED_EXIT && result.attempts === undefined) return { result: 'deferred', exit_code: REFUSED_EXIT, reason: result.stderr.trim() };
@@ -147,7 +147,7 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
         const fd = fs.openSync(log, 'a');
         let r;
         const watchdog = canonicalValidation(project.canonical, recordEnv).tiers.release;
-        try { r = runTestSlotSync(`release ${stage} ${candidate.id}`, command, { cwd: snapshot, common: project.identity, tier: stage === 'gate' ? 'release' : 'release-prepare', timeoutSeconds: watchdog.timeoutSeconds, idleTimeoutSeconds: watchdog.idleTimeoutSeconds, env: { ...recordEnv, ...extra }, stdio: ['ignore', fd, fd], retryTimeout: stage === 'gate' }); }
+        try { r = runTestSlotSync(`release ${stage} ${candidate.id}`, command, { cwd: snapshot, common: project.identity, tier: stage === 'gate' ? 'release' : 'release-prepare', historyKey: gateHistoryKey(stage === 'gate' ? 'release' : 'release-prepare', stage === 'gate' ? declaration.config.gate : declaration.config.prepare), timeoutSeconds: watchdog.timeoutSeconds, idleTimeoutSeconds: watchdog.idleTimeoutSeconds, env: { ...recordEnv, ...extra }, stdio: ['ignore', fd, fd], retryTimeout: stage === 'gate' }); }
         finally { fs.closeSync(fd); }
         gate.exit_code = r.status; gate.signal = r.signal;
         if (r.signal) gate.result = 'interrupted';

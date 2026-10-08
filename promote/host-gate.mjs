@@ -11,7 +11,7 @@ import { runTestSlotSync } from '../test-slot/run.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { canonicalValidation } from '../lanes/validation.mjs';
-import { resolveGateLimits } from '../test-slot/limits.mjs';
+import { resolveGateLimits, gateHistoryKey } from '../test-slot/limits.mjs';
 import { cliHelp } from '../lib/cli-help.mjs';
 cliHelp(import.meta.url, "Usage: node promote/host-gate.mjs [--lock|--held|--execute] CANONICAL RECEIPT [COMMAND ARGS...]");
 
@@ -87,7 +87,7 @@ async function execute(profile) {
   update({ phase: 'waiting-test-slot' });
   const common = gitProject(canonical).identity;
   const declared = canonicalValidation(canonical, profile.env).tiers.promotion;
-  const limits = resolveGateLimits({ common, tier: 'promotion', command: ['/bin/sh', '-c', declared.command], timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
+  const limits = resolveGateLimits({ common, tier: 'promotion', historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', declared.command]), timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
     idleTimeoutSeconds: profile.idleTimeoutSeconds ?? declared.idleTimeoutSeconds });
   // The lifecycle envelope includes preparation and bookkeeping. Give the
   // inner gate time to return its exact timeout receipt before this backstop.

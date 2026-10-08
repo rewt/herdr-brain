@@ -25,7 +25,7 @@
 // This is an operational guard for one development host. It excludes only the
 // runs that take it; unrelated host workloads remain outside this guard.
 
-import { resolveGateLimits, projectCommon, recordHealthyGate, historyFile, TIMEOUT_EXIT } from "./limits.mjs";
+import { resolveGateLimits, projectCommon, recordHealthyGate, historyFile, gateHistoryKey, TIMEOUT_EXIT } from "./limits.mjs";
 import { stopGateGroup } from "./watchdog.mjs";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -300,6 +300,7 @@ function parse(argv) {
     else if (arg === "--timeout-seconds") options.timeoutSeconds = Number(value());
     else if (arg === "--idle-timeout-seconds") options.idleTimeoutSeconds = Number(value());
     else if (arg === "--project-common") options.common = value();
+    else if (arg === "--history-key") options.historyKey = JSON.parse(value());
     else if (arg === "--tier") options.tier = value();
     else if (arg === "--result-path") options.resultPath = value();
     else if (arg === '--caller') {
@@ -323,8 +324,9 @@ async function run({ positional, options, child }) {
   if (label === undefined || child.length === 0) throw new Error("usage: test-slot.mjs run <label> [--wait <seconds>] -- <command> [args...]");
   const common = options.common ?? projectCommon();
   const tier = options.tier ?? label;
-  const limits = resolveGateLimits({ ...options, common, tier, command: child });
-  const historyPath = historyFile(common, tier, child);
+  const historyKey = options.historyKey ?? gateHistoryKey(tier, child);
+  const limits = resolveGateLimits({ ...options, common, tier, historyKey, command: child });
+  const historyPath = historyFile(common, tier, child, historyKey);
   let slot;
   const wait = { schema: 'test-slot-wait/v1', state: 'waiting', started_at: new Date().toISOString(),
     wait_seconds: options.waitSeconds ?? waitSecondsOf(), waits: [] };
@@ -358,7 +360,7 @@ async function run({ positional, options, child }) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await executeCommand(child, slot, (signal) => { received ??= signal; }, options.lockPath, options.compatPath, attempt > 0, started, limits);
     if (options.resultPath) writeFileAtomic(options.resultPath, JSON.stringify({ ...execution, signal: received ?? result.signal,
-      exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() }) + '\n', 0o600);
+      history_key: historyKey, exit_code: result.status, attempts: attempt + 1, limits, gate_timeout: result.gateTimeout, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s, cleanup_error: result.cleanup_error, finished_at: new Date().toISOString() }) + '\n', 0o600);
     if (received !== null) { if (result.groupGone) slot.release(); return result.status === 0 ? exitOf(null, received) : result.status; }
     if (!result.groupGone) return result.status || 1;
     if (attempt === 0 && retryTimeout && shouldRetryTimeout(result)) {
@@ -367,7 +369,7 @@ async function run({ positional, options, child }) {
     }
     const released = slot.release();
     if (released !== false && result.status === 0 && received === null && !result.gateTimeout) {
-      try { recordHealthyGate({ common, tier, file: historyPath, command: child, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s }); }
+      try { recordHealthyGate({ common, tier, historyKey, file: historyPath, command: child, duration_s: result.duration_s, longest_silence_s: result.longest_silence_s }); }
       catch (error) { process.stderr.write(`GATE_HISTORY_WARNING: ${error.message}\n`); }
     }
     if (released === false) process.stderr.write('TEST_SLOT_GROUP_REMAINS: nested command group still exists; lock retained.\n');
@@ -386,7 +388,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
   let timeout = false;
   let childRetried = false;
   // Keep a bounded tail for markers split across chunks; never buffer a suite log.
-  let gateTimeout = null;
+  let gateTimeout = null, descendantTimeout = null;
   const clock = () => Number(process.hrtime.bigint()) / 1e9;
   const commandStart = clock();
   let lastOutput = commandStart, longestSilence = 0;
@@ -402,7 +404,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     lastOutput = now;
     const text = tail + String(data);
     const overrun = text.match(/(?:^|\n)GATE_TIMEOUT: (wall|idle) limit ([0-9.]+)s exceeded; elapsed ([0-9.]+)s/u);
-    if (overrun) gateTimeout ??= { kind: overrun[1], limit_seconds: Number(overrun[2]), elapsed_s: Number(overrun[3]), descendant: true };
+    if (overrun) descendantTimeout ??= { kind: overrun[1], limit_seconds: Number(overrun[2]), elapsed_s: Number(overrun[3]), descendant: true };
     timeout ||= /ETIMEDOUT|testTimeoutFailure|Test (?:file|suite) exceeded \d+ms|ERR_TEST_FAILURE[^\n]*timeout|failureType: ['"]testTimeoutFailure/u.test(text);
     // A nested wrapper already spent this command's single retry. Its timeout
     // evidence must not make a containing promotion/release adapter replay it.
@@ -413,9 +415,10 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     env: { ...process.env, [PATH_ENV]: lockPath, [COMPAT_PATH_ENV]: compatPath, ...(slot.token === null ? {} : { [TOKEN_ENV]: slot.token, [LEGACY_TOKEN_ENV]: slot.token }),
       ...(retried ? { [RETRIED_ENV]: "1" } : {}) } });
   const closed = new Promise(resolve => proc.once("close", resolve));
+  let leaderExited = false;
   const completion = new Promise((resolve) => {
     proc.once("error", (error) => { process.stderr.write(`test-slot: ${error.message}\n`); resolve({ status: 127, signal: null }); });
-    proc.once("exit", (code, signal) => resolve({ status: exitOf(code, signal), signal }));
+    proc.once("exit", (code, signal) => { leaderExited = true; resolve({ status: exitOf(code, signal), signal }); });
   });
   if (proc.pid !== undefined) started(proc);
   {
@@ -429,7 +432,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     if (!kind) return;
     gateTimeout = { kind, limit_seconds: kind === 'wall' ? limits.wall_seconds : limits.idle_seconds, elapsed_s: elapsed };
     process.stderr.write(`GATE_TIMEOUT: ${kind} limit ${gateTimeout.limit_seconds}s exceeded; elapsed ${elapsed.toFixed(3)}s\n`);
-    stopping = (rootIdentity ? stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup }) : Promise.reject(Error('gate start identity unavailable'))).catch(error => { stopError = error; failWatchdog(error); });
+    stopping = stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited }).catch(error => { stopError = error; failWatchdog(error); });
   }, 50);
   const forwarded = new Set();
   const forward = (signal) => {
@@ -437,7 +440,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     // Nested gates share the holder group; cancel only their descendants.
     if (forwarded.has(signal)) return;
     forwarded.add(signal);
-    stopping ??= stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, firstSignal: signal }).catch(error => { stopError = error; failWatchdog(error); });
+    stopping ??= stopGateGroup(proc.pid, { tracked, rootIdentity, ownsGroup, ownedChild: ownsGroup && !leaderExited, firstSignal: signal }).catch(error => { stopError = error; failWatchdog(error); });
   };
   for (const signal of SIGNALS) process.on(signal, forward);
   try {
@@ -449,7 +452,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
         const root = lookupProcess(proc.pid, { identityOnly: true });
         if (root.ok && root.value) rootIdentity = root.value.identity;
         startRecord = identity;
-      } catch { /* fail closed if start identity is unavailable */ }
+      } catch { /* The unreaped detached child still proves group ownership. */ }
       if (startRecord) slot.setGroup(proc.pid, startRecord.start, startRecord.birth);
     }
     const completed = await Promise.race([completion, failure]);
@@ -488,6 +491,7 @@ async function executeCommand(argv, slot, received, lockPath, compatPath, retrie
     proc.stdout.destroy(); proc.stderr.destroy();
     const ended = clock(), duration_s = ended - commandStart;
     longestSilence = Math.max(longestSilence, ended - lastOutput);
+    if (status === TIMEOUT_EXIT) gateTimeout ??= descendantTimeout;
     // Signals are never retryable, including commands that swallow a signal.
     return { status: gateTimeout ? TIMEOUT_EXIT : leftover ? LEFTOVER_EXIT : status, signal: gateTimeout ? null : signal, gateTimeout, duration_s, longest_silence_s: longestSilence, timeout: signal ? false : timeout, load, childRetried, groupGone };
   } catch (error) {

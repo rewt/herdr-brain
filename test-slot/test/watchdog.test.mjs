@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { resolveGateLimits, recordHealthyGate, healthyHistory, WALL_DEFAULT_SECONDS } from '../limits.mjs';
+import { resolveGateLimits, recordHealthyGate, healthyHistory, historyFile, gateHistoryKey, HISTORY_FILES, WALL_DEFAULT_SECONDS } from '../limits.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { shouldRetryTimeout, acquireTestSlot, HOLDER_UNKNOWN_CODE } from '../test-slot.mjs';
 import { processStartRecord } from '../lock-support.mjs';
@@ -239,4 +239,93 @@ test('nested watchdog stops its parent-walk children and preserves a sibling in 
   assert.equal(r.status, 124, r.stderr);
   assert.deepEqual(JSON.parse(fs.readFileSync(witness)), { status: 124, alive: true });
   assert.equal(fs.existsSync(s.lock), false);
+});
+
+for (const status of [0, 1, 124]) test(`printed descendant timeout marker follows command status ${status}`, t => {
+  const s = scratch(t);
+  const r = s.run(['--no-slot'], [process.execPath, '-e', `console.error('GATE_TIMEOUT: wall limit 1s exceeded; elapsed 1.001s');process.exit(${status})`]);
+  assert.equal(r.status, status, r.stderr);
+  const receipt = JSON.parse(fs.readFileSync(s.result));
+  assert.equal(receipt.gate_timeout?.descendant ?? false, status === 124);
+});
+
+test('failed start identity lookup still stops the owned hung group', t => {
+  const s = scratch(t), preload = path.join(s.root, 'deny.mjs');
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+const execute=cp.spawnSync,read=fs.readFileSync;
+cp.spawnSync=(file,...args)=>String(file).includes('process-source-')?{error:Error('injected source failure')}:execute(file,...args);
+fs.readFileSync=(file,...args)=>String(file).startsWith('/proc/')?(()=>{throw Error('injected source failure');})():read(file,...args);syncBuiltinESMExports();`);
+  s.env.NODE_OPTIONS = `--import=${preload}`;
+  const r = s.run(['--no-slot', '--timeout-seconds', '.3'], [process.execPath, '-e', "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"]);
+  assert.equal(r.status, 124, r.stderr);
+  assert.doesNotMatch(r.stderr, /CLEANUP_FAILED/);
+  const receipt = JSON.parse(fs.readFileSync(s.result));
+  assert.equal(receipt.gate_timeout.kind, 'wall');
+  assert.ok(receipt.duration_s < 5);
+  assert.throws(() => process.kill(-receipt.command_pid, 0), { code: 'ESRCH' });
+});
+
+test('planned train file lists record and resolve one declared command history', t => {
+  const f = fixture(t);
+  const base = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.validation.json'))).promotion;
+  fs.writeFileSync(path.join(f.repo, 'planner.mjs'), `const files=JSON.parse(process.argv[3]).filter(f=>f.endsWith('.test.mjs'));if(process.argv[2]==='--plan')console.log(JSON.stringify({files}));`);
+  fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion: base, promotion_tests: 'planner.mjs' }));
+  f.git(['add', '.']); f.git(['commit', '-qm', 'Declare planner']);
+  const key = gateHistoryKey('promotion', ['/bin/sh', '-c', base]);
+  recordHealthyGate({ common: f.identity, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 110 });
+  const commands = [];
+  for (const topic of ['first', 'second']) {
+    const lane = f.lane(topic);
+    fs.writeFileSync(path.join(lane, `${topic}.test.mjs`), ''); f.git(['add', '.'], lane); f.git(['commit', '-qm', 'Selected test'], lane);
+    const batch = f.batch([topic]); const r = batch.run(); assert.equal(r.status, 0, r.stderr + r.stdout);
+    const gate = batch.read().attempts[0].gate;
+    commands.push(gate.command);
+    assert.equal(gate.limits.wall_seconds, 12000); assert.equal(gate.limits.wall_source, 'history');
+  }
+  assert.notEqual(commands[0], commands[1]);
+  const file = historyFile(f.identity, 'promotion', undefined, key);
+  assert.equal(healthyHistory(f.identity, 'promotion', undefined, file, key).length, 3);
+  assert.equal(fs.readdirSync(path.join(f.identity, 'gate-watchdog')).filter(n=>n.endsWith('.json')).length, 1);
+});
+
+test('healthy history prunes old command files while preserving the current key', t => {
+  const s = scratch(t), directory = path.join(s.root, 'gate-watchdog'); fs.mkdirSync(directory);
+  for (let i = 0; i < HISTORY_FILES + 5; i++) {
+    const file = historyFile(s.root, 'promotion', ['old', i]); fs.writeFileSync(file, '{}'); fs.utimesSync(file, 1 + i, 1 + i);
+  }
+  fs.writeFileSync(path.join(directory, 'keep.txt'), 'unrelated');
+  recordHealthyGate({ common: s.root, tier: 'promotion', command: ['current'], duration_s: 1, longest_silence_s: 1 });
+  assert.equal(fs.readdirSync(directory).filter(n=>n.endsWith('.json')).length, HISTORY_FILES);
+  assert.equal(fs.existsSync(historyFile(s.root, 'promotion', ['old', 0])), false);
+  assert.equal(healthyHistory(s.root, 'promotion', ['current']).length, 1);
+  assert.equal(fs.readFileSync(path.join(directory, 'keep.txt'), 'utf8'), 'unrelated');
+});
+
+for (const kind of ['wall', 'idle']) test(`unbatched queue maps ${kind} timeout to correction wording`, t => {
+  const f = fixture(t); fixtureFleet(t, f.root); f.env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
+  f.lane('topic');
+  const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const laneCLI = path.join(f.root, 'lane.cjs');
+  fs.writeFileSync(laneCLI, `console.error('GATE_TIMEOUT: ${kind} gate limit exceeded; lane retained for correction; nothing merged');process.exit(124);`);
+  const queue = queueFor(f.repo);
+  enqueue(queue, ['topic'], { laneCLI, org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });
+  f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../../promote/promote.mjs', import.meta.url)), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(r.status, 0, r.stderr);
+  const result = queue.load().results[0]; assert.equal(result.outcome, 'timeout');
+  assert.equal(result.reason, `gate ${kind === 'idle' ? 'no-output' : 'wall-clock'} limit exceeded; lane isolated for correction`);
+  assert.equal(f.git(['rev-parse', 'main']), f.base);
+});
+
+test('an unknown escaped identity cannot prevent killing the owned group', async t => {
+  const s = scratch(t), ready = path.join(s.root, 'ready');
+  const child = spawn(process.execPath, ['-e', `process.on('SIGTERM',()=>{});require('fs').writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);`], { detached: true, env: s.env, stdio: 'ignore' });
+  const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+  t.after(async () => { if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, 'SIGKILL'); await exited; });
+  await until(() => fs.existsSync(ready));
+  const escaped = { pid: 99999999, ppid: child.pid, pgid: 99999999, identity: '1:1' };
+  await assert.rejects(stopGateGroup(child.pid, { ownedChild: true, graceMs: 50,
+    lookup: pid => pid ? { ok: false, error: 'injected escaped identity failure' } : { ok: true, value: new Map([[child.pid, { pid: child.pid, ppid: process.pid, pgid: child.pid, identity: '2:2' }], [escaped.pid, escaped]]) } }), /cannot confirm gate descendant/);
+  assert.throws(() => process.kill(-child.pid, 0), { code: 'ESRCH' });
+  const result = await exited; assert.equal(result.signal, 'SIGKILL');
 });

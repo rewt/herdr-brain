@@ -10,6 +10,7 @@ export const WALL_FLOOR_SECONDS = 600;
 export const WALL_DEFAULT_SECONDS = 4500;
 export const IDLE_FLOOR_SECONDS = 300;
 export const RECENT_RUNS = 20;
+export const HISTORY_FILES = 128;
 export const TIMEOUT_EXIT = 124;
 export const TIMEOUT_CODE = 'GATE_TIMEOUT';
 export function limitSeconds(value, name, { idle = false } = {}) {
@@ -22,19 +23,27 @@ export function projectCommon(cwd = process.cwd()) {
   catch { return null; }
 }
 export const commandFingerprint = command => createHash('sha256').update(JSON.stringify(command ?? null)).digest('hex');
-export function historyFile(common, tier, command) {
-  return common && path.join(common, 'gate-watchdog', `${createHash('sha256').update(JSON.stringify([tier, commandFingerprint(command)])).digest('hex')}.json`);
+export const gateHistoryKey = (tier, command) => ({ tier, command_fingerprint: commandFingerprint(command) });
+function checkedKey(tier, command, key = gateHistoryKey(tier, command)) {
+  if (!key || key.tier !== tier || !/^[0-9a-f]{64}$/.test(key.command_fingerprint ?? '')) throw Error('invalid gate history key');
+  return key;
 }
-export function healthyHistory(common, tier, command, file = historyFile(common, tier, command)) {
+export function historyFile(common, tier, command, historyKey) {
+  const key = checkedKey(tier, command, historyKey);
+  return common && path.join(common, 'gate-watchdog', `${createHash('sha256').update(JSON.stringify([key.tier, key.command_fingerprint])).digest('hex')}.json`);
+}
+export function healthyHistory(common, tier, command, file, historyKey) {
+  const key = checkedKey(tier, command, historyKey);
+  file ??= historyFile(common, tier, command, historyKey);
   try {
     const history = JSON.parse(readPlainFile(file));
-    if (history.schema !== 'gate-watchdog/v1' || history.tier !== tier || history.command_fingerprint !== commandFingerprint(command) || !Array.isArray(history.runs)) return [];
+    if (history.schema !== 'gate-watchdog/v1' || history.tier !== tier || history.command_fingerprint !== key.command_fingerprint || !Array.isArray(history.runs)) return [];
     return history.runs.filter(run => Number.isFinite(run.duration_s) && run.duration_s >= 0 &&
       Number.isFinite(run.longest_silence_s) && run.longest_silence_s >= 0 && run.longest_silence_s <= run.duration_s &&
       Number.isFinite(Date.parse(run.finished_at))).slice(-RECENT_RUNS);
   } catch { return []; }
 }
-export function resolveGateLimits({ common, tier = 'gate', command, timeoutSeconds, idleTimeoutSeconds, history = healthyHistory(common, tier, command) } = {}) {
+export function resolveGateLimits({ common, tier = 'gate', command, historyKey, timeoutSeconds, idleTimeoutSeconds, history = healthyHistory(common, tier, command, historyFile(common, tier, command, historyKey), historyKey) } = {}) {
   if (timeoutSeconds !== undefined) limitSeconds(timeoutSeconds, 'timeout_seconds');
   if (idleTimeoutSeconds !== undefined) limitSeconds(idleTimeoutSeconds, 'idle_timeout_seconds', { idle: true });
   return {
@@ -44,12 +53,18 @@ export function resolveGateLimits({ common, tier = 'gate', command, timeoutSecon
     idle_source: idleTimeoutSeconds !== undefined ? 'config' : history.length ? 'history' : 'off',
   };
 }
-export function recordHealthyGate({ common, tier = 'gate', command, duration_s, longest_silence_s, file = historyFile(common, tier, command) }) {
+export function recordHealthyGate({ common, tier = 'gate', command, historyKey, duration_s, longest_silence_s, file = historyFile(common, tier, command, historyKey) }) {
   if (!file) return;
-  plainDirectory(path.dirname(file));
-  const release = acquireLock(`${file}.lock`, { waitMs: 1000 });
+  const key = checkedKey(tier, command, historyKey);
+  const directory = plainDirectory(path.dirname(file));
+  // Serialize recording and pruning so concurrent gates cannot delete a writer's history.
+  const release = acquireLock(path.join(directory, '.history.lock'), { waitMs: 1000 });
   try {
-    writeFileAtomic(file, JSON.stringify({ schema: 'gate-watchdog/v1', tier, command_fingerprint: commandFingerprint(command),
-      runs: [...healthyHistory(common, tier, command, file), { command, duration_s, longest_silence_s, finished_at: new Date().toISOString() }].slice(-RECENT_RUNS) }, null, 2) + '\n', 0o600);
+    writeFileAtomic(file, JSON.stringify({ schema: 'gate-watchdog/v1', tier, command_fingerprint: key.command_fingerprint,
+      runs: [...healthyHistory(common, tier, command, file, historyKey), { command, duration_s, longest_silence_s, finished_at: new Date().toISOString() }].slice(-RECENT_RUNS) }, null, 2) + '\n', 0o600);
+    const files = fs.readdirSync(directory).filter(name => /^[0-9a-f]{64}\.json$/.test(name))
+      .map(name => ({ name, stat: fs.lstatSync(path.join(directory, name)) })).filter(entry => entry.stat.isFile())
+      .sort((a, b) => (b.name === path.basename(file)) - (a.name === path.basename(file)) || b.stat.mtimeMs - a.stat.mtimeMs || a.name.localeCompare(b.name));
+    for (const entry of files.slice(HISTORY_FILES)) fs.unlinkSync(path.join(directory, entry.name));
   } finally { release(); }
 }

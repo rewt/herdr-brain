@@ -12,6 +12,7 @@ import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
 
+import { gateHistoryKey } from '../test-slot/limits.mjs';
 import { changedPaths, plannedCommand } from './test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
 
@@ -265,7 +266,7 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
       if (attempt.gate) (attempt.gate_history ??= []).push(attempt.gate);
       attempt.gate = { command, started_at: new Date().toISOString() };
       phase('validating');
-      attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command,
+      attempt.gate = validateTree({ cwd: attempt.scratch, common: identity, tier: 'promotion', command, historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', validation.tiers.promotion.command]),
         prepare, timeoutSeconds: profile?.timeoutSeconds ?? validation.tiers.promotion.timeoutSeconds,
         idleTimeoutSeconds: profile?.idleTimeoutSeconds ?? validation.tiers.promotion.idleTimeoutSeconds, environment: validation.environment, env, label: 'train scratch',
         onStart: gate => { attempt.gate = gate; save(); } });

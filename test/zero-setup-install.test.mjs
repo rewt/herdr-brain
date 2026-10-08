@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { copyProduct } from '../lib/product-files.mjs';
 import { freshAccount } from '../docs/adoption/account.mjs';
 import { fixtureFleet } from './helpers/offline-herdr.mjs';
+import { fakeControlSocket } from './helpers/fake-control-socket.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 function fixture(t, kinds = ['codex', 'claude']) {
@@ -25,7 +26,18 @@ function fixture(t, kinds = ['codex', 'claude']) {
   const write = (file, data, mode = 0o600) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, data, { mode }); };
   for (const kind of kinds) {
     const file = path.join(tools, kind);
-    write(file, `#!${process.execPath}\nrequire('fs').writeFileSync(process.env.ENTRY_TEST_RECEIPT, JSON.stringify({kind:${JSON.stringify(kind)},args:process.argv.slice(2),cwd:process.cwd()}));\n`, 0o755);
+    write(file, `#!${process.execPath}
+const args=process.argv.slice(2);
+if(args.includes('--help')){console.log('--sandbox --add-dir --settings --permission-profile');process.exit(0);}
+if(args.includes('--version')){console.log('2.1.284');process.exit(0);}
+if(args[0]==='sandbox'){
+  const split=args.indexOf('--'),child=require('child_process').spawnSync(args[split+1],args.slice(split+2),{stdio:'inherit'});
+  process.exit(child.status??1);
+}
+const fs=require('fs');
+fs.writeFileSync(process.env.ENTRY_TEST_RECEIPT, JSON.stringify({kind:${JSON.stringify(kind)},args,cwd:process.cwd(),
+  settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexOf('--settings')+1])):null}));
+`, 0o755);
     env[`HERDR_MONITOR_${kind.toUpperCase()}`] = file;
   }
   const calls = path.join(root, 'herdr.jsonl'), panes = path.join(root, 'panes.json');
@@ -182,11 +194,20 @@ test('uninstall preserves unrelated harness edits and refuses a changed managed 
 
 test('Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry', t => {
   const f = fixture(t,['claude']); f.ok(f.driver());
+  // The coordinating preflight needs a reachable socket. Keep its path short
+  // even when this fixture inherits the worker's long per-run TMPDIR.
+  const sockets = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'zs-'));
+  t.after(() => fs.rmSync(sockets, { recursive: true, force: true }));
+  f.env.HERDR_SOCKET_PATH = fakeControlSocket(t, sockets);
   f.ok(f.run('git',['init','-qb','main'])); f.ok(f.run('git',['config','user.name','Install test'])); f.ok(f.run('git',['config','user.email','test@example.invalid']));
   f.ok(f.run('git',['add','.'])); f.ok(f.run('git',['commit','-qm','Initial']));
   f.ok(f.run(process.execPath,[path.join(source,'herdr/supervisor.mjs')]));
   const native=JSON.parse(fs.readFileSync(f.env.ENTRY_TEST_RECEIPT)); assert.equal(native.kind,'claude');
-  assert.ok(native.args.includes('--append-system-prompt')); assert.match(native.args.join(' '),/supervisor\/session-start.mjs/);
+  assert.ok(native.args.includes('--append-system-prompt'));
+  const runtime=JSON.parse(fs.readFileSync(path.join(f.bin,'.monitor-entry.json'))).product;
+  const hook=native.settings.hooks.SessionStart[0];
+  for(const source of ['startup','resume','clear','compact']) assert.ok(new RegExp(hook.matcher).test(source));
+  assert.ok(hook.hooks[0].command.includes(path.join(runtime,'supervisor/session-start.mjs')));
 });
 
 test('account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state', () => {

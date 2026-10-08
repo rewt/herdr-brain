@@ -195,17 +195,129 @@ test('unreadable and stale projects do not advance question cursors or block hea
   assert.match((await f.tick()).questions.errors[0].error, /stale fleet/);
 });
 
-test('disabled steward does not read or baseline questions; corrupt receipts refuse effects', async t => {
+test('disabled steward does not baseline questions; corrupt receipts isolate question effects', async t => {
   const f = fixture(t); f.config({ enabled: false }); f.ask('alpha');
   assert.equal((await f.tick()).disabled, true); assert.equal(fs.existsSync(f.file), false);
   f.config({}); await f.tick(); f.ask('alpha');
   for (const bytes of ['{', 'null', '{"version":1,"records":[]}']) {
     fs.writeFileSync(f.file, bytes);
-    await assert.rejects(f.tick(), /question receipts/);
+    assert.match((await f.tick()).questions.errors[0].error, /question receipts/);
     assert.equal(fs.readFileSync(f.file, 'utf8'), bytes);
   }
   assert.equal(f.alerts.length, 1);
   assert.equal(f.alerts[0].kind, 'journal-refused');
+});
+
+test('unchanged records skip reads and folds; append scans read only the tail and extend derived state', async t => {
+  const f = fixture(t);
+  const first = await f.tick();
+  assert.equal(first.questions.scans.full, 2);
+  const inodes = new Set(Object.values(f.fleet.projects).map(p => fs.statSync(path.join(p.record, 'events.jsonl')).ino));
+  const reads = [], read = fs.readSync;
+  t.mock.method(fs, 'readSync', (fd, buffer, offset, length, position) => {
+    if (inodes.has(fs.fstatSync(fd).ino)) reads.push({ length, position });
+    return read(fd, buffer, offset, length, position);
+  });
+  assert.deepEqual((await f.tick()).questions.scans, { skipped: 2, full: 0, tail: 0, bytes: 0 });
+  assert.deepEqual(reads, [], 'unchanged event logs perform no reads');
+  const file = path.join(f.fleet.projects.alpha.record, 'events.jsonl'), size = fs.statSync(file).size;
+  f.record('alpha', 'start', 'ENG-1');
+  const id = f.ask('alpha', 'Question?', ['--blocks', 'ENG-1']);
+  const next = await f.tick();
+  assert.deepEqual(next.questions.scans, { skipped: 1, full: 0, tail: 1, bytes: fs.statSync(file).size - size });
+  assert.deepEqual(reads, [{ length: fs.statSync(file).size - size, position: size }], 'only the appended bytes are read');
+  assert.equal(next.questions.discovered, 1);
+  assert.equal(f.alerts[0].blocked_items, 1);
+  assert.equal(f.alerts[0].blocked_runs, 1);
+  f.record('alpha', 'answer', id, 'no');
+  assert.equal((await f.tick()).questions.scans.tail, 1);
+  assert.equal(f.entries().length, 0, 'tail fold resolves and retires answered questions');
+  const fresh = JSON.parse(execFileSync(process.execPath, [BRAIN, 'steward'], { env: f.env, encoding: 'utf8' }));
+  assert.deepEqual(fresh.questions.scans, { skipped: 2, full: 0, tail: 0, bytes: 0 }, 'durable metadata skips even after restart');
+});
+
+test('an incomplete append preserves the cursor and rereads the tail after completion', async t => {
+  const f = fixture(t); await f.tick();
+  const file = path.join(f.fleet.projects.alpha.record, 'events.jsonl');
+  const before = f.receipts();
+  fs.appendFileSync(file, '{"seq":');
+  assert.match((await f.tick()).questions.errors[0].error, /incomplete event tail/);
+  assert.deepEqual(f.receipts(), before);
+  f.ask('alpha'); // The CLI repairs its interrupted tail before appending.
+  assert.equal((await f.tick()).questions.discovered, 1);
+  assert.equal(f.alerts.length, 1);
+});
+
+test('a complete event without its final newline remains readable when the CLI later appends', async t => {
+  const f = fixture(t), file = path.join(f.fleet.projects.alpha.record, 'events.jsonl');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').trimEnd());
+  assert.deepEqual((await f.tick()).questions.errors, []);
+  f.ask('alpha');
+  const result = await f.tick();
+  assert.deepEqual(result.questions.errors, []);
+  assert.equal(result.questions.discovered, 1);
+  assert.equal(f.alerts.length, 1);
+});
+
+test('question sends use a parallel batch capped at eight, with durable intents and later ticks draining the rest', async t => {
+  const f = fixture(t); await f.tick();
+  for (let i = 0; i < 10; i++) f.ask('alpha');
+  let release, started, calls = 0;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const ready = new Promise(resolve => { started = resolve; });
+  const pass = f.tick({ alert: async () => {
+    calls++;
+    assert.equal(f.entries().filter(r => r.attempts === 1).length, 8);
+    if (calls === 8) started();
+    await barrier;
+  } });
+  await ready;
+  assert.equal(calls, 8);
+  release();
+  assert.equal((await pass).questions.pending, 2);
+  assert.equal((await f.tick()).questions.pending, 0);
+  assert.equal(f.alerts.length, 2);
+});
+
+test('no iMessage recipient is quiet across ticks and restarts while the local notification delivers', async t => {
+  const f = fixture(t), output = path.join(f.root, 'local.jsonl'), script = path.join(f.root, 'local.mjs');
+  fs.writeFileSync(script, "import fs from 'node:fs'; fs.appendFileSync(process.argv[2], process.argv.at(-1) + '\\n');");
+  f.config({ alert_command: [process.execPath, script, output], imessage_command: ['/must-not-call-imessage'] });
+  await f.tick(); f.ask('alpha');
+  for (const offset of [0, 1000, 2000, 5000]) {
+    const result = await f.tick({ now: NOW + offset, alert: operatorAlert });
+    assert.equal(result.questions.pending, 0);
+    assert.deepEqual(result.questions.errors, []);
+  }
+  const fresh = JSON.parse(execFileSync(process.execPath, [BRAIN, 'steward'], { env: f.env, encoding: 'utf8' }));
+  assert.deepEqual(fresh.questions.errors, []);
+  const [receipt] = f.entries();
+  assert.equal(receipt.attempts, 1);
+  assert.equal(receipt.ok, true);
+  assert.deepEqual(receipt.delivered, ['notification']);
+  assert.equal(receipt.error, undefined);
+  assert.equal(fs.existsSync(path.join(f.home, 'steward/journal-failure.json')), false);
+  assert.equal(fs.readFileSync(output, 'utf8').trim().split('\n').length, 1);
+  const stdout = execFileSync(process.execPath, [BRAIN, 'steward', '--test-alert'], { env: f.env, encoding: 'utf8' });
+  assert.match(stdout, /Configured channels: local alert_command; iMessage not configured \(skipped\)/);
+  assert.match(stdout, /setup alert sent/);
+});
+
+test('removing the iMessage recipient retires its failed delivery without further attempts or errors', async t => {
+  const f = fixture(t); f.config({ imessage_recipient: 'fixture@example.test' });
+  await f.tick(); f.ask('alpha');
+  await f.tick({ alert: async () => { const error = Error('iMessage offline'); error.delivered = ['notification']; throw error; } });
+  assert.equal(f.entries()[0].ok, false);
+  f.config({});
+  for (const offset of [500, 1000, 2000]) {
+    const result = await f.tick({ now: NOW + offset });
+    assert.equal(result.questions.pending, 0);
+    assert.deepEqual(result.questions.errors, []);
+  }
+  assert.equal(f.entries()[0].ok, true);
+  assert.equal(f.entries()[0].error, undefined);
+  assert.equal(f.entries()[0].attempts, 1);
+  assert.equal(f.alerts.length, 0, 'the successful notification does not repeat');
 });
 
 test('Messages transport rejects extra private fields, invalid counts and unsanitized text offline', () => {

@@ -222,9 +222,9 @@ async function main() {
       if (has('--test-alert')) {
         if (has('--dry-run')) throw Error('--test-alert cannot be combined with --dry-run');
         const config = stewardConfig();
-        if (!config.imessage_recipient) throw Error('set imessage_recipient in the operator-local steward.json first');
+        console.log(`Configured channels: ${config.alert_command ? 'local alert_command' : process.platform === 'darwin' ? 'macOS notification' : 'local notification unavailable'}; iMessage ${config.imessage_recipient ? 'configured' : 'not configured (skipped)'}.`);
         await operatorAlert({ project: 'steward', session: 'operator-setup', kind: 'test-alert' }, config);
-        console.log('Steward setup alert sent through the configured local and iMessage channels.');
+        console.log('Steward setup alert sent through the configured channels.');
         break;
       }
       const result = await stewardTick({ rows: fold(), agents: await agents().catch(() => null), dryRun: has('--dry-run') });

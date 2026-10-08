@@ -351,6 +351,64 @@ test('unrecoverable journal refusal sends one bounded failure alert and refuses 
   assert.equal(fs.readFileSync(file,'utf8'),'{');
 });
 
+test('corrupt, oversized and overflowing question receipts preserve inbox escalation and worker routing', async t => {
+  const f = fixture(t);
+  const file = path.join(f.home, 'steward/questions.json');
+  await f.tick();
+  const inbox = path.join(f.alpha.record, 'supervisor/inbox.log');
+  for (const bytes of ['{', ' '.repeat(4 * 1024 * 1024 + 1), JSON.stringify({ version: 1, records: {
+    fixture: { cursor: 0, skipped: 0, pending: Object.fromEntries(Array.from({ length: 2049 }, (_, i) =>
+      [`HUM-${i}`, { attempts: 0, last_at: 0, ok: false, delivered: [] }])) },
+  } })]) {
+    fs.writeFileSync(file, bytes);
+    const result = await f.tick({ now: NOW + 301000 + f.alerts.length * 61000 });
+    assert.equal(result.questions.errors.length, 1);
+    assert.ok(result.actions.some(a => a.kind === 'stalled-inbox'));
+    assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  }
+  assert.equal(f.alerts.filter(a => a.kind === 'journal-refused').length, 1);
+  assert.equal(f.alerts.filter(a => a.kind === 'stalled-inbox').length, 3);
+  assert.equal(readInbox(inbox).length, 1);
+  assert.equal(f.resumes.length, 4);
+  const result = await f.tick({ rows: [f.row(f.worker, { id: 'new-block' })], now: NOW + 700000 });
+  assert.ok(result.actions.some(a => a.type === 'route'), 'a new blocked worker still routes despite corrupt questions');
+});
+
+test('unsaveable question receipts cannot abort routing or send questions without a durable intent', async t => {
+  const f = fixture(t), file = path.join(f.home, 'steward/questions.json');
+  const rename = fs.renameSync;
+  t.mock.method(fs, 'renameSync', (from, to) => {
+    if (to === file) throw Error('question receipt write refused');
+    return rename(from, to);
+  });
+  const result = await f.tick();
+  assert.ok(result.actions.some(a => a.type === 'route'));
+  assert.match(result.questions.errors[0].error, /write refused/);
+  assert.equal(readInbox(path.join(f.alpha.record, 'supervisor/inbox.log')).length, 1);
+  assert.equal(f.alerts[0].kind, 'journal-refused');
+});
+
+test('blocked-worker routing completes before a slow question channel starts', async t => {
+  const f = fixture(t); await f.tick({ rows: [] });
+  fs.appendFileSync(path.join(f.alpha.record, 'events.jsonl'), JSON.stringify({
+    seq: 1, at: new Date(NOW).toISOString(), by: 'fixture', type: 'item.added',
+    id: 'HUM-1', role: 'human', title: 'Question?', meta: { category: 'design' },
+  }) + '\n');
+  let release, started;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const ready = new Promise(resolve => { started = resolve; });
+  const pass = f.tick({ alert: async payload => {
+    assert.equal(payload.kind, 'operator-question');
+    assert.equal(readInbox(path.join(f.alpha.record, 'supervisor/inbox.log')).length, 1);
+    assert.equal(f.resumes.length, 1);
+    started();
+    await barrier;
+  } });
+  await ready;
+  release();
+  assert.equal((await pass).questions.pending, 0);
+});
+
 test('iMessage runs beside the local channel with only project/session/kind and literal recipient argv', async t => {
   const f = fixture(t), script=path.join(f.root,'alert.mjs'), output=path.join(f.root,'alerts.jsonl');
   fs.writeFileSync(script,`import fs from 'node:fs'; fs.appendFileSync(process.argv[2],JSON.stringify(process.argv.slice(3))+'\\n');`);
@@ -387,6 +445,7 @@ test('operator setup CLI exercises fake channels only, without querying or mutat
   f.config({alert_command:[process.execPath,script,output],imessage_command:[process.execPath,script,output],imessage_recipient:'operator@example.test'});
   const stdout=execFileSync(process.execPath,[new URL('../bin/brain.mjs',import.meta.url).pathname,'steward','--test-alert'],{env:{...f.env,BRAIN_STATE:f.home,HERDR_BIN:'/must-not-call-herdr'},encoding:'utf8'});
   assert.match(stdout,/setup alert sent/);
+  assert.match(stdout,/Configured channels: local alert_command; iMessage configured/);
   const rows=fs.readFileSync(output,'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(rows.length,2);
   assert.ok(rows.every(row=>row.kind==='test-alert'));

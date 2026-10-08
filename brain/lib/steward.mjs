@@ -53,7 +53,6 @@ export function stewardConfig(home = HOME) {
   }
   for (const key of ['alert_command', 'imessage_command']) if (config[key] !== null && (!Array.isArray(config[key]) || !config[key].length || config[key].some(v => typeof v !== 'string' || !v || v.includes('\0')))) throw Error(`steward ${key} must be a nonempty argv array`);
   if (config.imessage_recipient !== null && (typeof config.imessage_recipient !== 'string' || !config.imessage_recipient.trim() || /[\x00-\x1f]/.test(config.imessage_recipient))) throw Error('steward imessage_recipient must be a nonempty address');
-  if (config.imessage_command && !config.imessage_recipient) throw Error('imessage_command requires an operator-local imessage_recipient');
   return config;
 }
 
@@ -225,7 +224,6 @@ async function routingTick({ rows = [], agents = [], home = HOME, env = process.
     catch (error) { receipts.add({ type: 'alert-result', key, id, ok: false, error: cut(error.message) }); }
   };
   try {
-    const questions = await questionAlerts({ fleet, home, config, now, dryRun, alert, actions, routingProject });
     // Newest observation per session, including DONE, prevents stale blocks.
     const newest = new Map();
     for (const row of rows) if (!newest.has(row.session) || Date.parse(row.at) >= Date.parse(newest.get(row.session).at)) newest.set(row.session, row);
@@ -308,34 +306,44 @@ async function routingTick({ rows = [], agents = [], home = HOME, env = process.
         await escalate(notice.key, { ...notice, kind: `stalled-${notice.kind}`, message: `Supervisor notice undelivered: ${notice.message}` });
       }
     }
+    let questions;
+    try { questions = await questionAlerts({ fleet, home, config, now, dryRun, alert, actions, routingProject }); }
+    catch (error) {
+      questions = { skipped: 0, discovered: 0, pending: 0, errors: [{ project: 'steward', error: cut(error.message) }] };
+      await journalFailureAlert({ home, now, dryRun, alert });
+    }
     return { actions, journal: file, questions };
   } finally { release?.(); }
 }
 
-// A damaged/full routing journal cannot silence the failure that stopped it.
-// The separate, bounded receipt consumes the alert attempt before its effect.
+// A damaged/full journal cannot silence its failure alert. Question receipt
+// failures use this same once-per-day path while ordinary routing continues.
+async function journalFailureAlert(options) {
+  if (options.dryRun) return;
+  const home = options.home ?? HOME, now = options.now ?? Date.now();
+  const file = path.join(home, 'steward/journal-failure.json');
+  let release;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    release = noticeLock(`${file}.lock`);
+    const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    if (!previous || now - previous.at >= 86400000) {
+      writeFileAtomic(file, JSON.stringify({ at: now }) + '\n', 0o600);
+      const fd = fs.openSync(file, 'r'); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      await (options.alert ?? operatorAlert)({ project: 'steward', session: 'watcher', kind: 'journal-refused' }, stewardConfig(home));
+    }
+  } catch (failure) { process.stderr.write(`Steward journal failure alert refused: ${failure.message}\n`); }
+  finally { release?.(); }
+}
+
 export async function stewardTick(options = {}) {
   try { return await routingTick(options); }
   catch (error) {
-    const home = options.home ?? HOME, now = options.now ?? Date.now();
+    const home = options.home ?? HOME;
     const journalFile = path.join(home, 'steward/journal.json');
     let journalFailure = /steward journal/.test(error.message);
     if (!journalFailure) try { readStewardJournal(journalFile); } catch { journalFailure = true; }
-    if (journalFailure && !options.dryRun) {
-      const file = path.join(home, 'steward/journal-failure.json');
-      let release;
-      try {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        release = noticeLock(`${file}.lock`);
-        const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
-        if (!previous || now - previous.at >= 86400000) {
-          writeFileAtomic(file, JSON.stringify({ at: now }) + '\n', 0o600);
-          const fd = fs.openSync(file, 'r'); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-          await (options.alert ?? operatorAlert)({ project: 'steward', session: 'watcher', kind: 'journal-refused' }, stewardConfig(home));
-        }
-      } catch (failure) { process.stderr.write(`Steward journal failure alert refused: ${failure.message}\n`); }
-      finally { release?.(); }
-    }
+    if (journalFailure) await journalFailureAlert(options);
     throw error;
   }
 }

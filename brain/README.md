@@ -166,7 +166,10 @@ text, filesystem paths or the journal location. Question text is omitted by defa
 No shell interprets alert arguments. Each channel has a ten-second deadline; one
 failed channel cannot suppress the other. No model determines a message or channel.
 
-The operator runs exactly one setup test and grants Messages Automation:
+With no iMessage recipient, that channel is a quiet no-op: no sends, failure
+receipts, retries, alerts or setup prompts. The local notification still delivers.
+The setup test prints which channels are configured. If the operator chooses
+iMessage, its first send may require Messages Automation permission:
 
 ```sh
 node brain/bin/brain.mjs steward --test-alert
@@ -177,12 +180,18 @@ the operator and never becomes project configuration or a committed address.
 
 ### New operator questions
 
-Every steward tick reads each fleet project's record and folds its events without
-writing to the record. Newly added, unresolved `role=human` items alert on the next
+Every steward tick checks each fleet project's record without writing to it.
+Unchanged log size and modification time skip reads and folds, including after
+restart. Warm in-memory folds extend from only the appended tail; a changed log
+after restart or replacement gets a full scan. Scan counts and bytes are reported
+in `questions.scans`. Newly added, unresolved `role=human` items alert on the next
 tick (normally within five seconds), regardless of whether a terminal is active or
-a supervisor is running. Each question has its own retry cap and debounce; another
-question does not delay its first attempt. Answered, dropped and automatically
-answered questions are skipped. Reopening an already observed question does not
+a supervisor is running. Each question has its own retry cap and debounce. New
+questions are eligible immediately. At most eight question
+sends run in parallel per tick, after permission, inbox and stalled-notice routing;
+remaining questions wait for the next tick. Each channel retains its ten-second
+deadline, so one question batch cannot accumulate serial send deadlines. Answered,
+dropped and automatically answered questions are skipped. Reopening an already observed question does not
 make it new again.
 
 The first successful scan of each canonical project/record pair establishes a
@@ -201,8 +210,10 @@ omit it or set it to false to keep the metadata-only payload.
 
 Question receipts are separate from the routing journal's retired-event history.
 The fsynced file commits each record cursor with its newly discovered questions
-before sending, then records channel results under the same steward lock. Confirmed
-channels do not repeat after restart or when another channel fails. Failed and
+before sending, then records channel results under the same steward lock. Pending
+receipts retain the sanitized alert payload for retries without rereading logs;
+successful deliveries remove it. Current local privacy settings apply to retries.
+Confirmed channels do not repeat after restart or when another channel fails. Failed and
 interrupted attempts retry after `debounce_seconds`, up to `alert_cap`; exhausted
 receipts remain visible with their error and attempt count. An interruption after
 an external channel accepted a send but before its acknowledgement was saved can
@@ -211,8 +222,10 @@ transactional/idempotent delivery primitive. Retries consume durable attempts.
 Completed per-question receipts remain while the question is open; after it closes,
 the record cursor retains deduplication. The file is bounded to 512 record cursors,
 2,048 open question receipts and 4 MiB, and refuses effects on corruption or overflow
-through the existing `journal-refused` alert. Dry runs and disabled mode do not
-establish baselines or consume receipts.
+through the existing once-per-day `journal-refused` alert. Question receipt
+failures appear in `questions.errors` and never halt permission, inbox or
+stalled-notice routing. Dry runs and disabled mode do not establish baselines or
+consume receipts.
 
 Routing alerts share a per-occupant debounce (five minutes by default), with
 three attempts **per episode**: a captured block or a particular undelivered

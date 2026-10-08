@@ -122,6 +122,17 @@ test('claude adapter reuses the project SessionStart entry exactly once', t => {
   }
 });
 
+test('claude adapter composes SessionStart and question guard in a single settings flag', t => {
+  const f = fixture(t);
+  const context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
+  const launch = sessionHookArguments('claude', context, root, { MONITOR_SESSION_KIND: 'ops' });
+  assert.equal(launch.filter(arg => arg === '--settings').length, 1);
+  const hooks = JSON.parse(launch[1]).hooks;
+  assert.match(hooks.SessionStart[0].hooks[0].command, /supervisor\/session-start\.mjs/);
+  assert.match(hooks.PreToolUse[0].matcher, /AskUserQuestion/);
+  assert.match(hooks.PreToolUse[0].hooks[0].command, /supervisor\/unattended\.mjs/);
+});
+
 test('codex supervisor adapter injects SessionStart without a project hook', t => {
   const f = fixture(t);
   fs.writeFileSync(path.join(f.repo, '.housekeeping.json'), '{"enabled":false}');
@@ -162,6 +173,36 @@ test('adapter exports its known supervisor agent identity', t => {
   assert.equal(sessionEnvironment({ ...context, agent: 'supervisor-project' }, root, {}).MONITOR_SUPERVISOR_AGENT, 'supervisor-project');
   assert.equal(sessionEnvironment(context, root, { HERDR_AGENT_NAME: 'supervisor-project' }).MONITOR_SUPERVISOR_AGENT, 'supervisor-project');
   assert.equal(sessionEnvironment({ ...context, role: 'worker' }, root, { MONITOR_SUPERVISOR_AGENT: 'inherited' }).MONITOR_SUPERVISOR_AGENT, '');
+});
+
+test('unmarked supervisor launch kind follows canonical fleet chat receipts and survives restore', t => {
+  const f = fixture(t), context = { role: 'supervisor', canonical: f.repo, identity: f.project.identity, org: f.org };
+  const chats = path.join(process.env.HERDR_MONITOR_FLEET, 'chats.json');
+  fs.mkdirSync(path.dirname(chats), { recursive: true });
+  const receipt = { workspace: 'chats', tab: 'chat-tab', pane: 'chat-pane', checkout: f.repo, record: f.org, kind: 'codex', name: 'chat-project', to: 'ops-project' };
+  const save = projects => fs.writeFileSync(chats, JSON.stringify({ version: 1, workspace: 'chats', projects }));
+  for (const [projects, explicit, expected] of [
+    [null, undefined, 'combined'],
+    [{ [f.repo]: receipt }, undefined, 'combined'], // A label or checkout is not the Git common-directory identity.
+    [{ [f.project.identity]: receipt }, undefined, 'ops'],
+    [{}, 'ops', 'ops'],
+    [{ [f.project.identity]: receipt }, 'chat', 'chat'],
+  ]) {
+    if (projects === null) fs.rmSync(chats, { force: true }); else save(projects);
+    const inherited = { HERDR_PANE_ID: 'control:pSupervisor', MONITOR_SESSION_ROLE: 'worker', MONITOR_ENTRY_BYPASS: '1' };
+    if (explicit) inherited.MONITOR_SESSION_KIND = explicit;
+    const env = sessionEnvironment(context, root, inherited);
+    assert.equal(env.MONITOR_SESSION_KIND, expected);
+    const binding = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane/supervisor/panes', `${createHash('sha256').update(inherited.HERDR_PANE_ID).digest('hex')}.json`)));
+    assert.equal(binding.session_kind, expected);
+    const mode = expected === 'ops' ? 'ops' : 'conversation';
+    assert.equal(questionMode(context, env), mode);
+    save(expected === 'combined' ? { [f.project.identity]: receipt } : {});
+    assert.equal(questionMode({ canonical: f.repo }, { HERDR_PANE_ID: inherited.HERDR_PANE_ID }), mode, 'restore retains the launch decision');
+  }
+  fs.writeFileSync(chats, '{');
+  assert.equal(sessionEnvironment(context, root, {}).MONITOR_SESSION_KIND, 'ops', 'unreadable chat state defaults to ops');
+  assert.equal(sessionEnvironment(context, root, { MONITOR_SESSION_KIND: 'chat' }).MONITOR_SESSION_KIND, 'chat', 'explicit kind does not depend on receipt readability');
 });
 
 test('project chat adapter and durable restore retain ops separately from the chat name', t => {

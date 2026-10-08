@@ -95,6 +95,36 @@ test('headless tasks and resumes get a sandbox even when prompt text names a uti
   assert.equal(nativeSession('claude', ['--print', 'auth']), true);
 });
 
+for (const kind of ['claude', 'codex']) test(`${kind} interactive resume adds only the question guard with inherited supervisor role`, t => {
+  const f = fixture(t); fixtureFleet(t, f.root);
+  command('git', ['init', '-qb', 'main'], f.own.checkout);
+  command('git', ['config', 'user.name', 'Resume test'], f.own.checkout);
+  command('git', ['config', 'user.email', 'test@example.invalid'], f.own.checkout);
+  fs.writeFileSync(path.join(f.own.checkout, 'seed'), 'seed');
+  command('git', ['add', '.'], f.own.checkout); command('git', ['commit', '-qm', 'Seed'], f.own.checkout);
+  joinFleet({ cwd: f.own.checkout, temp: f.own.temp });
+  const receipt = path.join(f.root, 'resume.json'), tty = path.join(f.root, 'tty.cjs');
+  fs.writeFileSync(tty, 'process.stdin.isTTY=true;process.stdout.isTTY=true;');
+  fs.writeFileSync(f.binary, `#!${process.execPath}
+const fs=require('fs'),args=process.argv.slice(2);
+if(args.includes('--help')){console.log('--sandbox --add-dir --settings --permission-profile');process.exit(0);}
+if(args.includes('--version')){console.log('2.1.284');process.exit(0);}
+fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({args,
+settings:args.includes('--settings')?JSON.parse(fs.readFileSync(args[args.indexOf('--settings')+1])):null}));`, { mode: 0o755 });
+  const args = kind === 'claude' ? ['--resume', 'fixture-session'] : ['resume', 'fixture-session'];
+  const result = spawnSync(process.execPath, ['--require', tty, new URL(`../adapters/${kind}.mjs`, import.meta.url).pathname,
+    '--auto-entry', '--repo', f.own.checkout, '--binary', f.binary, '--', ...args], {
+    cwd: f.own.checkout, env: { ...process.env, MONITOR_SESSION_ROLE: 'supervisor', MONITOR_ENTRY_BYPASS: '0', MONITOR_SESSION_KIND: 'combined' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const got = JSON.parse(fs.readFileSync(receipt));
+  const guard = kind === 'claude' ? got.settings.hooks.PreToolUse.find(group => group.matcher.includes('AskUserQuestion')).hooks[0].command
+    : got.args.find(arg => arg.startsWith('hooks.PreToolUse='));
+  assert.match(guard, /unattended\.mjs/); assert.match(guard, /'conversation'/);
+  assert.doesNotMatch(got.args.join(' '), /session-start\.mjs|SessionStart/);
+  if (kind === 'claude') assert.equal(got.settings.hooks.SessionStart, undefined);
+});
+
 test('each run gets short private fleet temp and all three temp variables', t => {
   const f = fixture(t), a = runTemporary(f.own.temp), b = runTemporary(f.own.temp);
   assert.notEqual(a, b); assert.equal(path.dirname(a), f.own.temp);

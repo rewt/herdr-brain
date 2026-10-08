@@ -10,6 +10,7 @@ import { createEntry } from '../runtime.mjs';
 import { entryPolicy } from '../policy.mjs';
 import { freshInteractive, interactiveResume } from '../launch.mjs';
 import { sessionEnvironment, sessionHookArguments, passthroughEnvironment } from '../../supervisor/session-hooks.mjs';
+import { unattendedHookArguments } from '../../supervisor/unattended.mjs';
 import { spawnNative } from '../session.mjs';
 import { FleetError } from '../../lib/fleet.mjs';
 import { nativeSandboxLaunch, nativeSessionContext, nativeSession } from '../native-sandbox.mjs';
@@ -46,9 +47,10 @@ function passthrough() {
       if (context) {
         context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
         launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary,
-          args: [...native, ...sessionHookArguments('codex', context, root, launch.env)], context,
+          args: [...native, ...unattendedHookArguments('codex', context, root, launch.env)], context,
           env: { ...launch.env, ORG_DIR: context.org } });
       }
+
       else console.error('monitor: not a fleet project; starting native Codex without a project sandbox');
     }
   } catch (error) { console.error(`monitor sandbox: ${error.message}`); process.exitCode = 1; return; }

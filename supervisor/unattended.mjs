@@ -7,15 +7,26 @@ import { isMain } from '../lib/cli-help.mjs';
 import { operatorPresence } from './operator-presence.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { supervisorBinding } from './session-binding.mjs';
+import { hasProjectChat } from './chats.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const tools = { claude: ['AskUserQuestion'], codex: ['request_user_input'] };
 
+export function supervisorSessionKind(context, env = process.env) {
+  if (context.role !== 'supervisor' || env.MONITOR_ENTRY_BYPASS === '1' || env.MONITOR_SESSION_ROLE === 'worker') return 'ops';
+  if (env.MONITOR_SESSION_KIND) return ['chat', 'combined'].includes(env.MONITOR_SESSION_KIND) ? env.MONITOR_SESSION_KIND : 'ops';
+  if (!context.identity && !context.canonical) return 'ops';
+  try {
+    const identity = context.identity || gitProject(context.canonical).identity;
+    return hasProjectChat(identity, env) ? 'ops' : 'combined';
+  } catch { return 'ops'; }
+}
+
 export function questionMode(context, env = process.env, binding = () => supervisorBinding(gitProject(context.canonical), env.HERDR_PANE_ID)) {
-  // Launch kind is separate from the supervisor workflow role. ENG-248 chats
-  // use this explicit machine-owned environment, never display session metadata.
+  // Launch kind is separate from the supervisor workflow role. Until ENG-248
+  // records a project chat, an unmarked supervisor also hosts the conversation.
   if (context.role === 'worker' || env.MONITOR_ENTRY_BYPASS === '1' || env.MONITOR_SESSION_ROLE === 'worker') return 'ops';
-  if (context.role === 'supervisor') return ['chat', 'combined'].includes(env.MONITOR_SESSION_KIND) ? 'conversation' : 'ops';
+  if (context.role === 'supervisor') return ['chat', 'combined'].includes(supervisorSessionKind(context, env)) ? 'conversation' : 'ops';
   // A restored interactive pane may have lost its environment. Only the
   // verified canonical launch receipt may recover its conversation kind.
   if (!context.role && env.HERDR_PANE_ID) {

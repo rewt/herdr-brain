@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { stripVTControlCharacters } from 'node:util';
 import { spawnSync } from 'node:child_process';
-import { readFleet, staleProject, excludedFleetRoot } from '../lib/fleet.mjs';
+import { readFleet, fleetPath, staleProject, excludedFleetRoot } from '../lib/fleet.mjs';
 import { writeFileAtomic } from '../lib/files.mjs';
 import { withInstallationLock } from '../herdr/entry-lock.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
@@ -36,6 +36,19 @@ const paneText = (herdr, pane, source = 'visible') => {
   return stripVTControlCharacters(text).replaceAll('\r', '');
 };
 const markerCommand = marker => `printf '\\n%s%s\\n' ${quote(marker.slice(0, 24))} ${quote(marker.slice(24))}`;
+
+function readChatState(file) {
+  let state = { version: 1, workspace: null, projects: {} };
+  try { state = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (e) { if (e.code !== 'ENOENT') throw new Error(`invalid chat receipts ${file}: ${e.message}`); }
+  if (state?.version !== 1 || !state.projects || typeof state.projects !== 'object' || Array.isArray(state.projects)) throw new Error(`invalid chat receipts ${file}`);
+  return state;
+}
+
+export function hasProjectChat(identity, env = process.env) {
+  const state = readChatState(path.join(path.dirname(fleetPath(env)), 'chats.json'));
+  return Object.hasOwn(state.projects, identity);
+}
 
 function waitForShell(herdr, receipt, project, { now, sleep, startupMs }) {
   const deadline = now() + startupMs;
@@ -88,10 +101,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
 
   const home = path.dirname(fleet.file), file = path.join(home, 'chats.json');
   return withInstallationLock(path.join(home, 'chats.lock'), () => {
-    let state = { version: 1, workspace: null, projects: {} };
-    try { state = JSON.parse(fs.readFileSync(file, 'utf8')); }
-    catch (e) { if (e.code !== 'ENOENT') throw new Error(`invalid chat receipts ${file}: ${e.message}`); }
-    if (state?.version !== 1 || !state.projects || typeof state.projects !== 'object' || Array.isArray(state.projects)) throw new Error(`invalid chat receipts ${file}`);
+    const state = readChatState(file);
     const spaces = herdr(['workspace', 'list']).workspaces;
     if (!Array.isArray(spaces)) throw new Error('Herdr returned no workspace list');
     const requested = workspace || env.HERDR_MONITOR_CONTROL_WORKSPACE;

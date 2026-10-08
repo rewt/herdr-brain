@@ -26,7 +26,7 @@ import * as service from '../lib/service.mjs';
 import { loadProjects, withProject } from '../lib/projects.mjs';
 import { parseArgs, cliHelp } from '../../lib/cli-help.mjs';
 import { recordDigest, renderDigest } from '../lib/signals.mjs';
-import { stewardTick, stewardConfig, operatorAlert } from '../lib/steward.mjs';
+import { stewardTick, stewardTestAlert } from '../lib/steward.mjs';
 cliHelp(import.meta.url, "Usage: brain watch|steward|queue|show|send|key|later|never|answer|digest|explain|status|service|start [OPTIONS]");
 
 const argv = process.argv.slice(2);
@@ -216,10 +216,8 @@ async function main() {
     case 'steward': {
       if (has('--test-alert')) {
         if (has('--dry-run')) throw Error('--test-alert cannot be combined with --dry-run');
-        const config = stewardConfig();
-        if (!config.imessage_recipient) throw Error('set imessage_recipient in the operator-local steward.json first');
-        await operatorAlert({ project: 'steward', session: 'operator-setup', kind: 'test-alert' }, config);
-        console.log('Steward setup alert sent through the configured local and iMessage channels.');
+        await stewardTestAlert();
+        console.log('Steward setup alert sent through all configured channels.');
         break;
       }
       const result = await stewardTick({ rows: fold(), agents: await agents().catch(() => null), dryRun: has('--dry-run') });

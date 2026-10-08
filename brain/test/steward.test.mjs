@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import test from '../../test/helpers/bounded-test.mjs';
-import { stewardTick, readStewardJournal, operatorAlert, routingProject } from '../lib/steward.mjs';
+import { stewardTick, stewardConfig, readStewardJournal, operatorAlert, routingProject } from '../lib/steward.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { rememberSupervisor } from '../../supervisor/session-binding.mjs';
 import { drainInbox, readInbox, enqueueSupervisor } from '../../supervisor/prompt-supervisor.mjs';
@@ -390,4 +390,118 @@ test('operator setup CLI exercises fake channels only, without querying or mutat
   const rows=fs.readFileSync(output,'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(rows.length,2);
   assert.ok(rows.every(row=>row.kind==='test-alert'));
+});
+
+function fakeSignal(f, behavior = {}) {
+  const cli = path.join(f.root, 'signal-cli'), calls = path.join(f.root, 'signal-calls.jsonl');
+  const state = path.join(f.root, 'signal-state.json');
+  fs.writeFileSync(state, JSON.stringify({ version: 'signal-cli 0.14.8', ...behavior }));
+  fs.writeFileSync(cli, `#!${process.execPath}
+import fs from 'node:fs';
+const args = process.argv.slice(2), state = JSON.parse(fs.readFileSync(${JSON.stringify(state)}));
+fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');
+if (args.length === 1 && args[0] === '--version') {
+  console.log(state.version); process.exit(state.versionCode ?? 0);
+}
+if (args[0] !== '--trust-new-identities' || args[1] !== 'never' || args[4] !== 'send') throw Error('unexpected operation (receive/daemon/trust forbidden)');
+if (state.sendCode) { console.error('untrusted identity: PRIVATE TRANSPORT DIAGNOSTIC'); process.exit(state.sendCode); }
+console.log('sent');
+`, { mode: 0o755 });
+  return { config: { cli, account: '+15555550101', recipient: '+15555550102' },
+    calls: () => fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse), state };
+}
+
+function fakeAlertChannels(f) {
+  const script = path.join(f.root, 'channels.mjs'), output = path.join(f.root, 'channels.jsonl');
+  fs.writeFileSync(script, `import fs from 'node:fs'; fs.appendFileSync(process.argv[2], JSON.stringify(process.argv.slice(3))+'\\n');`);
+  return { alert_command: [process.execPath, script, output, 'local'],
+    imessage_command: [process.execPath, script, output], imessage_recipient: 'operator@example.test',
+    read: () => fs.readFileSync(output, 'utf8').trim().split('\n').map(JSON.parse) };
+}
+
+test('Signal sends the exact private-filtered payload by argv and probes version once per process', async t => {
+  const f = fixture(t), signal = fakeSignal(f), local = fakeAlertChannels(f);
+  f.config({ ...local, read: undefined, signal: signal.config });
+  const config = stewardConfig(f.home), payload = { project: 'alpha $(touch NO); `false`', session: 'sup', kind: 'blocked', message: 'PRIVATE', screen_excerpt: 'SECRET', journal: '/private/path' };
+  const expected = JSON.stringify({ project: payload.project, session: 'sup', kind: 'blocked' });
+  const first = await operatorAlert(payload, config);
+  await operatorAlert(payload, config);
+  assert.deepEqual(signal.calls(), [['--version'], ...Array(2).fill(['--trust-new-identities', 'never', '-a', signal.config.account, 'send', '-m', expected, signal.config.recipient])]);
+  assert.deepEqual(first, [{ channel: 'local', ok: true }, { channel: 'imessage', ok: true }, { channel: 'signal', ok: true, version: '0.14.8' }]);
+  assert.ok(local.read().every(args => args[1] === expected));
+  assert.equal(fs.existsSync(path.join(f.root, 'NO')), false);
+});
+
+test('Signal configuration refuses a shared account and malformed or option-shaped addresses before effects', t => {
+  const f = fixture(t), signal = fakeSignal(f);
+  f.config({ signal: { ...signal.config, recipient: signal.config.account } });
+  assert.throws(() => stewardConfig(f.home), /two accounts.*equals recipient/);
+  for (const value of ['--note-to-self', '+1 5555550102', '+15555550102\n', '']) {
+    f.config({ signal: { ...signal.config, recipient: value } });
+    assert.throws(() => stewardConfig(f.home), /international phone number/);
+  }
+  f.config({ signal: { ...signal.config, trust: 'always' } });
+  assert.throws(() => stewardConfig(f.home), /requires cli, account and recipient/);
+  assert.equal(fs.existsSync(path.join(f.root, 'signal-calls.jsonl')), false);
+});
+
+test('Signal version gating receipts unsupported, malformed, failing and missing executables while other channels send', async t => {
+  for (const behavior of [{ version: 'signal-cli 0.14.7' }, { version: 'signal-cli 0.14.8-SNAPSHOT' }, { versionCode: 1 }, { missing: true }]) {
+    const f = fixture(t), signal = fakeSignal(f, behavior), local = fakeAlertChannels(f);
+    if (behavior.missing) signal.config.cli = path.join(f.root, 'missing-cli');
+    for (let attempt = 0; attempt < 2; attempt++) await assert.rejects(operatorAlert({ project: 'alpha' }, { ...local, signal: signal.config }), error => {
+      const receipt = error.channels.find(r => r.channel === 'signal');
+      assert.equal(receipt.ok, false);
+      assert.equal(receipt.version, behavior.version === 'signal-cli 0.14.7' ? '0.14.7' : null);
+      assert.match(receipt.error, /unsupported|unrecognized|check failed|missing/);
+      return true;
+    });
+    if (!behavior.missing) assert.deepEqual(signal.calls(), [['--version']]);
+    assert.equal(local.read().length, 4);
+  }
+});
+
+test('Signal accepts newer stable versions and records the version in routing receipts', async t => {
+  const f = fixture(t), signal = fakeSignal(f, { version: 'signal-cli 0.14.9' }), local = fakeAlertChannels(f);
+  f.config({ ...local, read: undefined, signal: signal.config, projects: { alpha: { supervisor: f.supervisor.name } } });
+  const supervisor = { ...f.supervisor, agent_status: 'blocked' };
+  await f.tick({ alert: operatorAlert, agents: [supervisor], rows: [f.row(supervisor)] });
+  assert.deepEqual(f.journal().find(e => e.type === 'alert-result').channels.at(-1), { channel: 'signal', ok: true, version: '0.14.9' });
+});
+
+test('Signal send and identity-change failures are receipted without auto-trust and preserve other channels and caps', async t => {
+  for (const sendCode of [3, 4]) {
+    const f = fixture(t), signal = fakeSignal(f, { sendCode }), local = fakeAlertChannels(f);
+    f.config({ ...local, read: undefined, signal: signal.config, projects: { alpha: { supervisor: f.supervisor.name } }, debounce_seconds: 60, alert_cap: 1 });
+    const supervisor = { ...f.supervisor, agent_status: 'blocked' };
+    const options = { alert: operatorAlert, agents: [supervisor], rows: [f.row(supervisor)] };
+    await f.tick(options);
+    await f.tick({ ...options, now: NOW + 60000 });
+    const result = f.journal().find(e => e.type === 'alert-result');
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.channels.slice(0, 2), [{ channel: 'local', ok: true }, { channel: 'imessage', ok: true }]);
+    const receipt = result.channels[2];
+    assert.equal(receipt.version, '0.14.8'); assert.equal(receipt.code, sendCode);
+    assert.match(receipt.error, sendCode === 4 ? /identity.*untrusted or changed.*re-verify/ : /send failed/);
+    assert.equal(JSON.stringify(result).includes('PRIVATE TRANSPORT'), false);
+    assert.equal(local.read().length, 2);
+    assert.equal(signal.calls().length, 2);
+  }
+});
+
+test('operator setup includes Signal with or without iMessage and receipts success or identity failure', t => {
+  for (const imessage of [true, false]) for (const sendCode of [0, 4]) {
+    const f = fixture(t), signal = fakeSignal(f, { sendCode }), local = fakeAlertChannels(f);
+    f.config({ alert_command: local.alert_command, ...(imessage ? { imessage_command: local.imessage_command, imessage_recipient: local.imessage_recipient } : {}), signal: signal.config });
+    const invoke = () => execFileSync(process.execPath, [new URL('../bin/brain.mjs', import.meta.url).pathname, 'steward', '--test-alert'], { env: { ...f.env, BRAIN_STATE: f.home, HERDR_BIN: '/must-not-call-herdr' }, encoding: 'utf8', stdio: 'pipe' });
+    if (sendCode) assert.throws(invoke, /identity is untrusted or changed/);
+    else assert.match(invoke(), /setup alert sent/);
+    const call = signal.calls()[1];
+    assert.deepEqual(JSON.parse(call[6]), { project: 'steward', session: 'operator-setup', kind: 'test-alert' });
+    const receipt = f.journal().find(e => e.type === 'alert-result');
+    assert.equal(receipt.ok, !sendCode);
+    assert.equal(receipt.channels.at(-1).version, '0.14.8');
+    assert.equal(local.read().length, imessage ? 2 : 1);
+    assert.equal(fs.existsSync(path.join(f.alpha.record, 'supervisor')), false);
+  }
 });

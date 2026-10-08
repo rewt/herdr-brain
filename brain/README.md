@@ -173,6 +173,91 @@ node brain/bin/brain.mjs steward --test-alert
 Development/tests never send that live setup alert. Configuration is local to
 the operator and never becomes project configuration or a committed address.
 
+### Signal operator setup (outbound only)
+
+Signal is an optional third channel. Install a current
+[signal-cli release](https://github.com/AsamK/signal-cli/releases) and its Java
+runtime (the JVM distribution currently requires Java 25; see the
+[upstream requirements](https://github.com/AsamK/signal-cli/blob/v0.14.8/README.md)).
+The steward requires **0.14.8 or later**, with a stable numeric version. This is
+a compatibility floor, not a promise that old releases keep working against
+Signal's servers; keep the installation current. Each executable is probed with
+`--version` once per process, including failures; restart Brain after an upgrade.
+Channel receipts record the parsed version (null if unavailable), success or a
+failure reason, without addresses, command arguments or transport stderr.
+
+Use **two distinct accounts**, with international phone numbers. The operator's
+personal number belongs on their phone; register a separate bot number capable
+of receiving SMS or a verification call. Never link signal-cli to the operator's
+account: linked-device messages arrive as Note to Self without an operator push
+notification. Matching bot and recipient numbers are refused before any effects.
+
+The following are manual operator commands; Brain never registers accounts or
+changes trust. Set `BOT` and `OPERATOR` to the two numbers and use the installed
+executable for `signal-cli`. Protect the bot's key storage before registration:
+
+```sh
+umask 077
+mkdir -p "$HOME/.local/share/signal-cli"
+chmod 700 "$HOME/.local/share/signal-cli"
+signal-cli -a "$BOT" register --captcha "$CAPTCHA"
+signal-cli -a "$BOT" verify "$CODE"
+signal-cli -a "$BOT" setPin "$REGISTRATION_LOCK_PIN"
+```
+
+Obtain `CAPTCHA` by solving the
+[registration captcha](https://signalcaptchas.org/registration/generate.html)
+and copying the Open Signal link. For voice verification, attempt SMS first,
+wait 60 seconds, then use `register --voice --captcha "$CAPTCHA"`; complete
+`verify` with the spoken code. Keep the PIN private. See the upstream
+[registration and PIN commands](https://github.com/AsamK/signal-cli/blob/v0.14.8/man/signal-cli.1.adoc).
+If `XDG_DATA_HOME` is set, use its `signal-cli` directory instead. Keep all key
+files mode **0600**, containing directories **0700** (directories need traversal
+permission). These keys can impersonate the bot. Use the same OS user and data
+environment for setup and Brain; no keys or numbers belong in project config.
+
+Add only to `$BRAIN_STATE/steward.json`, using your real executable and numbers:
+
+```json
+{
+  "signal": {
+    "cli": "/absolute/path/to/signal-cli",
+    "account": "+15555550101",
+    "recipient": "+15555550102"
+  }
+}
+```
+
+Run `node brain/bin/brain.mjs steward --test-alert`. It sends through every
+configured channel, including Signal without requiring iMessage, and writes an
+intent and channel results to `steward/journal.json`. Signal receives exactly
+the same filtered JSON as the existing channels. It shares their caps and
+debounce during routing. Missing/unsupported CLI versions, timeouts and send
+failures are receipted while the other channels deliver independently.
+
+Every send forces `--trust-new-identities never`. An unknown or changed identity
+fails closed (signal-cli exit 4); the steward never invokes `trust`. The first
+refused send can discover the recipient key. Inspect it manually:
+
+```sh
+signal-cli -a "$BOT" listIdentities -n "$OPERATOR"
+```
+
+Compare the displayed safety number with the operator phone's Signal chat with
+the bot: open the chat, tap its name, then View Safety Number. Verify all digits
+via that trusted phone, then explicitly pin the verified number:
+
+```sh
+signal-cli -a "$BOT" trust -v "$VERIFIED_SAFETY_NUMBER" "$OPERATOR"
+node brain/bin/brain.mjs steward --test-alert
+```
+
+Repeat that comparison and `trust -v` after any identity change; never use
+`trust -a` or an `always` trust policy. See
+[upstream identity/trust commands](https://github.com/AsamK/signal-cli/blob/master/man/signal-cli.1.adoc#trust).
+This channel runs only version checks and sends: no receive loop, daemon or reply
+handling, and a reply cannot answer a record question.
+
 Routing alerts share a per-occupant debounce (five minutes by default), with
 three attempts **per episode**: a captured block or a particular undelivered
 notice. Failed commands and interrupted acknowledgements consume attempts.

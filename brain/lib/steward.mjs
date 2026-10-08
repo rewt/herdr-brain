@@ -15,6 +15,7 @@ import { HOME } from './queue.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
 import { permissionDecision } from './permission-policy.mjs';
 import { fallbackRequest, declineObserved } from './permission-fallback.mjs';
+import { signalAlert, validateSignal } from './steward-signal.mjs';
 
 const run = promisify(execFile);
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -29,7 +30,7 @@ export function stewardConfig(home = HOME) {
   try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (!object(raw)) throw Error('steward config must be an object');
-  for (const key of Object.keys(raw)) if (!['enabled', 'projects', 'alert_command', 'stalled_seconds', 'debounce_seconds', 'alert_cap', 'imessage_command', 'imessage_recipient', 'key_fallback'].includes(key)) throw Error(`unknown steward setting: ${key}`);
+  for (const key of Object.keys(raw)) if (!['enabled', 'projects', 'alert_command', 'stalled_seconds', 'debounce_seconds', 'alert_cap', 'imessage_command', 'imessage_recipient', 'key_fallback', 'signal'].includes(key)) throw Error(`unknown steward setting: ${key}`);
   if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean') throw Error('steward enabled must be boolean');
   const number = (key, fallback, min, max) => {
     const value = raw[key] ?? fallback;
@@ -39,7 +40,7 @@ export function stewardConfig(home = HOME) {
   const config = { enabled: raw.enabled ?? true, projects: raw.projects ?? {},
     stalled_seconds: number('stalled_seconds', 300, 1, 86400),
     debounce_seconds: number('debounce_seconds', 300, 1, 86400),
-    alert_cap: number('alert_cap', 3, 1, 10), alert_command: raw.alert_command ?? null, imessage_command: raw.imessage_command ?? null, imessage_recipient: raw.imessage_recipient ?? null, key_fallback: raw.key_fallback ?? true };
+    alert_cap: number('alert_cap', 3, 1, 10), alert_command: raw.alert_command ?? null, imessage_command: raw.imessage_command ?? null, imessage_recipient: raw.imessage_recipient ?? null, key_fallback: raw.key_fallback ?? true, signal: raw.signal ?? null };
   if (typeof config.key_fallback !== 'boolean') throw Error('steward key_fallback must be boolean');
   if (!Number.isInteger(config.alert_cap)) throw Error('steward alert_cap must be an integer');
   if (!object(config.projects)) throw Error('steward projects must be an object');
@@ -51,6 +52,7 @@ export function stewardConfig(home = HOME) {
   for (const key of ['alert_command', 'imessage_command']) if (config[key] !== null && (!Array.isArray(config[key]) || !config[key].length || config[key].some(v => typeof v !== 'string' || !v || v.includes('\0')))) throw Error(`steward ${key} must be a nonempty argv array`);
   if (config.imessage_recipient !== null && (typeof config.imessage_recipient !== 'string' || !config.imessage_recipient.trim() || /[\x00-\x1f]/.test(config.imessage_recipient))) throw Error('steward imessage_recipient must be a nonempty address');
   if (config.imessage_command && !config.imessage_recipient) throw Error('imessage_command requires an operator-local imessage_recipient');
+  if (config.signal !== null) validateSignal(config.signal);
   return config;
 }
 
@@ -58,6 +60,7 @@ export function stewardConfig(home = HOME) {
 export async function operatorAlert(payload, config) {
   const publicPayload = { project: String(payload.project ?? 'unresolved'), session: String(payload.session ?? 'unresolved'), kind: String(payload.kind ?? 'steward') };
   const channels = [];
+  const names = ['local'];
   if (config.alert_command) {
     const [bin, ...args] = config.alert_command;
     channels.push(run(bin, [...args, JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
@@ -65,12 +68,45 @@ export async function operatorAlert(payload, config) {
     channels.push(run('/usr/bin/osascript', ['-e', 'on run argv\ndisplay notification (item 1 of argv) with title "Herdr steward"\nend run', JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
   } else channels.push(Promise.reject(Error('configure alert_command on this platform')));
   if (config.imessage_recipient) {
+    names.push('imessage');
     const [bin, ...args] = config.imessage_command ?? [process.execPath, fileURLToPath(new URL('../bin/steward-imessage.mjs', import.meta.url))];
     channels.push(run(bin, [...args, config.imessage_recipient, JSON.stringify(publicPayload)], { timeout: 10000, maxBuffer: 65536 }));
   }
+  if (config.signal) {
+    names.push('signal');
+    channels.push(signalAlert(JSON.stringify(publicPayload), config.signal));
+  }
   const results = await Promise.allSettled(channels);
-  const errors = results.filter(r => r.status === 'rejected');
-  if (errors.length) throw Error(errors.map(r => r.reason.message).join('; '));
+  const receipts = results.map((r, i) => r.status === 'rejected'
+    ? { channel: names[i], ok: false, error: cut(r.reason.message) }
+    : names[i] === 'signal' ? r.value : { channel: names[i], ok: true });
+  const errors = receipts.filter(r => !r.ok);
+  if (errors.length) {
+    const error = Error(errors.map(r => `${r.channel}: ${r.error}`).join('; '));
+    error.channels = receipts;
+    throw error;
+  }
+  return receipts;
+}
+
+// The operator setup uses the same transport and durable channel receipts.
+export async function stewardTestAlert(home = HOME) {
+  const config = stewardConfig(home);
+  if (!config.imessage_recipient && !config.signal) throw Error('set imessage_recipient or signal in the operator-local steward.json first');
+  const file = path.join(home, 'steward/journal.json'), key = 'operator-setup';
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const release = noticeLock(`${file}.lock`);
+  try {
+    const receipts = stewardJournal(file, new Set([key]), Date.now()), id = `${key}:${Date.now()}`;
+    receipts.add({ type: 'alert-intent', key, id, project: 'steward', session: key, kind: 'test-alert' });
+    try {
+      const channels = await operatorAlert({ project: 'steward', session: key, kind: 'test-alert' }, config);
+      receipts.add({ type: 'alert-result', key, id, ok: true, channels });
+    } catch (error) {
+      receipts.add({ type: 'alert-result', key, id, ok: false, error: cut(error.message), channels: error.channels });
+      throw error;
+    }
+  } finally { release(); }
 }
 
 // Bounded event journal, atomically replaced and fsynced before effects. Keep
@@ -209,8 +245,8 @@ async function routingTick({ rows = [], agents = [], home = HOME, env = process.
     if (dryRun) { receipts.add({ ...payload, type: 'alert-intent', key, episode }); return; }
     const id = `${key}:${episode}:${attempts.length + 1}`;
     receipts.add({ ...payload, type: 'alert-intent', key, id, episode });
-    try { await alert(action, config); receipts.add({ type: 'alert-result', key, id, ok: true }); }
-    catch (error) { receipts.add({ type: 'alert-result', key, id, ok: false, error: cut(error.message) }); }
+    try { const channels = await alert(action, config); receipts.add({ type: 'alert-result', key, id, ok: true, channels }); }
+    catch (error) { receipts.add({ type: 'alert-result', key, id, ok: false, error: cut(error.message), channels: error.channels }); }
   };
   try {
     // Newest observation per session, including DONE, prevents stale blocks.
@@ -318,7 +354,13 @@ export async function stewardTick(options = {}) {
         if (!previous || now - previous.at >= 86400000) {
           writeFileAtomic(file, JSON.stringify({ at: now }) + '\n', 0o600);
           const fd = fs.openSync(file, 'r'); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-          await (options.alert ?? operatorAlert)({ project: 'steward', session: 'watcher', kind: 'journal-refused' }, stewardConfig(home));
+          try {
+            const channels = await (options.alert ?? operatorAlert)({ project: 'steward', session: 'watcher', kind: 'journal-refused' }, stewardConfig(home));
+            writeFileAtomic(file, JSON.stringify({ at: now, ok: true, channels }) + '\n', 0o600);
+          } catch (failure) {
+            writeFileAtomic(file, JSON.stringify({ at: now, ok: false, error: cut(failure.message), channels: failure.channels }) + '\n', 0o600);
+            throw failure;
+          }
         }
       } catch (failure) { process.stderr.write(`Steward journal failure alert refused: ${failure.message}\n`); }
       finally { release?.(); }

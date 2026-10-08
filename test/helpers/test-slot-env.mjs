@@ -1,3 +1,6 @@
+import { isolateGateHistory } from './gate-history.mjs';
+isolateGateHistory();
+
 // Fixture holders must start outside any enclosing gate's slot, wait and retry
 // context. Each caller adds its own scratch paths and deliberate nested values.
 export function testSlotEnvironment(env = process.env) {

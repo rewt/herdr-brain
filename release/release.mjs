@@ -56,8 +56,8 @@ export function releaseOnce({ cwd = process.cwd(), org, role, tag, env = process
   // once-only gate claim behind. The worker repeats all canonical-role checks.
   if (!slotHeld) {
     const declared = canonicalValidation(project.canonical, env).tiers.release;
-    const limits = resolveGateLimits({ common: project.identity, tier: 'release', ...declared, historyKey: gateHistoryKey('release', declaration.config.gate) });
-    const prepareLimits = declaration.config.prepare && resolveGateLimits({ common: project.identity, tier: 'release-prepare', ...declared,
+    const limits = resolveGateLimits({ common: project.identity, env, tier: 'release', ...declared, historyKey: gateHistoryKey('release', declaration.config.gate) });
+    const prepareLimits = declaration.config.prepare && resolveGateLimits({ common: project.identity, env, tier: 'release-prepare', ...declared,
       historyKey: gateHistoryKey('release-prepare', declaration.config.prepare) });
     // Preparation has one attempt; the gate permits one load retry. Leave
     // ten minutes for snapshotting, recording, retention and watchdog cleanup.

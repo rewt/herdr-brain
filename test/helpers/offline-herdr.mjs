@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isolateGateHistory } from './gate-history.mjs';
 
 // Disposable projects must not inherit stale mappings from earlier fixtures.
 export function fixtureFleet(t, scratch) {
@@ -20,6 +21,7 @@ export function fixtureFleet(t, scratch) {
 // Shared by the bounded runner and direct test-file execution. Fixtures may
 // put their own fake before this refusal adapter, but never inherit live IDs.
 export function offlineHerdr() {
+  isolateGateHistory();
   if (process.env.HERDR_TEST_OFFLINE_ROOT) {
     // Each test file gets its own machine registry; product children inherit it.
     process.env.HERDR_MONITOR_FLEET = path.join(process.env.HERDR_TEST_OFFLINE_ROOT, `f${process.pid}`);

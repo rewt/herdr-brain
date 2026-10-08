@@ -9,6 +9,13 @@ import { plainDirectory, readPlainFile, writeFileAtomic } from '../lib/files.mjs
 export const WALL_FLOOR_SECONDS = 600;
 export const WALL_DEFAULT_SECONDS = 4500;
 export const IDLE_FLOOR_SECONDS = 300;
+export const MIN_HEALTHY_SAMPLES = 3;
+// Full promotion/release gates must keep room for the observed 10/30-minute
+// healthy runs even when their declared command selects a narrow test set.
+export const wallFloorSeconds = tier => tier === 'promotion' ? 1200 : tier === 'release' ? 3600 : WALL_FLOOR_SECONDS;
+// Subsecond fixture clocks cannot teach a full gate's watchdog. Short genuine
+// commands keep the conservative default (or their explicit project limit).
+export const sampleFloorSeconds = tier => tier === 'promotion' ? 180 : tier === 'release' ? 300 : 30;
 export const RECENT_RUNS = 20;
 export const HISTORY_FILES = 128;
 export const TIMEOUT_EXIT = 124;
@@ -28,9 +35,14 @@ function checkedKey(tier, command, key = gateHistoryKey(tier, command)) {
   if (!key || key.tier !== tier || !/^[0-9a-f]{64}$/.test(key.command_fingerprint ?? '')) throw Error('invalid gate history key');
   return key;
 }
-export function historyFile(common, tier, command, historyKey) {
+export function historyFile(common, tier, command, historyKey, env = process.env) {
   const key = checkedKey(tier, command, historyKey);
-  return common && path.join(common, 'gate-watchdog', `${createHash('sha256').update(JSON.stringify([key.tier, key.command_fingerprint])).digest('hex')}.json`);
+  const override = env.MONITOR_GATE_HISTORY_ROOT;
+  if (override !== undefined && (typeof override !== 'string' || !path.isAbsolute(override) || override.includes('\0') || override === '/'))
+    throw Error('MONITOR_GATE_HISTORY_ROOT must be an absolute directory path');
+  // Scratch roots still separate projects sharing the same tier/command.
+  const directory = override && common ? path.join(override, createHash('sha256').update(common).digest('hex')) : common && path.join(common, 'gate-watchdog');
+  return directory && path.join(directory, `${createHash('sha256').update(JSON.stringify([key.tier, key.command_fingerprint])).digest('hex')}.json`);
 }
 export function healthyHistory(common, tier, command, file, historyKey) {
   const key = checkedKey(tier, command, historyKey);
@@ -43,14 +55,18 @@ export function healthyHistory(common, tier, command, file, historyKey) {
       Number.isFinite(Date.parse(run.finished_at))).slice(-RECENT_RUNS);
   } catch { return []; }
 }
-export function resolveGateLimits({ common, tier = 'gate', command, historyKey, timeoutSeconds, idleTimeoutSeconds, history = healthyHistory(common, tier, command, historyFile(common, tier, command, historyKey), historyKey) } = {}) {
+export function resolveGateLimits({ common, tier = 'gate', command, historyKey, timeoutSeconds, idleTimeoutSeconds, env = process.env, history } = {}) {
+  history ??= healthyHistory(common, tier, command, historyFile(common, tier, command, historyKey, env), historyKey);
+  const samples = history.filter(run => Number.isFinite(run.duration_s) && run.duration_s >= sampleFloorSeconds(tier) &&
+    Number.isFinite(run.longest_silence_s) && run.longest_silence_s >= 0 && run.longest_silence_s <= run.duration_s);
+  const measured = samples.length >= MIN_HEALTHY_SAMPLES;
   if (timeoutSeconds !== undefined) limitSeconds(timeoutSeconds, 'timeout_seconds');
   if (idleTimeoutSeconds !== undefined) limitSeconds(idleTimeoutSeconds, 'idle_timeout_seconds', { idle: true });
   return {
-    wall_seconds: timeoutSeconds ?? (history.length ? Math.max(WALL_FLOOR_SECONDS, Math.ceil(2 * Math.max(...history.map(r => r.duration_s)))) : WALL_DEFAULT_SECONDS),
-    wall_source: timeoutSeconds !== undefined ? 'config' : history.length ? 'history' : 'default',
-    idle_seconds: idleTimeoutSeconds ?? (history.length ? Math.max(IDLE_FLOOR_SECONDS, Math.ceil(3 * Math.max(...history.map(r => r.longest_silence_s)))) : 0),
-    idle_source: idleTimeoutSeconds !== undefined ? 'config' : history.length ? 'history' : 'off',
+    wall_seconds: timeoutSeconds ?? (measured ? Math.max(wallFloorSeconds(tier), Math.ceil(2 * Math.max(...samples.map(r => r.duration_s)))) : WALL_DEFAULT_SECONDS),
+    wall_source: timeoutSeconds !== undefined ? 'config' : measured ? 'history' : 'default',
+    idle_seconds: idleTimeoutSeconds ?? (measured ? Math.max(IDLE_FLOOR_SECONDS, Math.ceil(3 * Math.max(...samples.map(r => r.longest_silence_s)))) : 0),
+    idle_source: idleTimeoutSeconds !== undefined ? 'config' : measured ? 'history' : 'off',
   };
 }
 export function recordHealthyGate({ common, tier = 'gate', command, historyKey, duration_s, longest_silence_s, file = historyFile(common, tier, command, historyKey) }) {

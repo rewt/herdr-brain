@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { recordHealthyGate, gateHistoryKey } from '../limits.mjs';
+import { recordHealthyGate, gateHistoryKey, historyFile } from '../limits.mjs';
 import { resolveGateProfile, runProjectGateSync } from '../../promote/gate-profile.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { enqueue, queueFor } from '../../promote/promote.mjs';
@@ -238,8 +238,9 @@ test('inner idle timeout uses canonical lane-only limits without timing out the 
 
 test('promotion host envelope derives from the declared inner history key', t => {
   const f = fixture(t), common = path.join(f.repo, '.git');
+  f.env.MONITOR_GATE_HISTORY_ROOT = path.join(f.root, 'history');
   const key = gateHistoryKey('promotion', ['/bin/sh', '-c', 'node gate.cjs']);
-  recordHealthyGate({ common, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 20 });
+  for (let i = 0; i < 3; i++) recordHealthyGate({ common, tier: 'promotion', historyKey: key, file: historyFile(common, 'promotion', undefined, key, f.env), duration_s: 6000, longest_silence_s: 20 });
   const preload = path.join(f.root, 'observe.mjs'), evidence = path.join(f.root, 'envelope.json');
   fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host'))fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify(args));return run(cmd,args,opts);};syncBuiltinESMExports();`);
   f.env.NODE_OPTIONS = `--import=${preload}`;
@@ -264,7 +265,7 @@ test('three-lane red bisection fits the host envelope and promotes both healthy 
   }
   fs.writeFileSync(f.receipt, JSON.stringify({ schema: 'promotion-train/v1', id: 'profile', identity: common, jobs }));
   const key = gateHistoryKey('promotion', ['/bin/sh', '-c', 'node gate.cjs']);
-  recordHealthyGate({ common, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 20 });
+  for (let i = 0; i < 3; i++) recordHealthyGate({ common, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 20 });
   const preload = path.join(f.root, 'observe.mjs'), evidence = path.join(f.root, 'envelope.json');
   fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host'))fs.writeFileSync(${JSON.stringify(evidence)},JSON.stringify(args));return run(cmd,args,opts);};syncBuiltinESMExports();`);
   f.env.NODE_OPTIONS = `--import=${preload}`;

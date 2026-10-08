@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { resolveGateLimits, recordHealthyGate, healthyHistory, historyFile, gateHistoryKey, HISTORY_FILES, WALL_DEFAULT_SECONDS } from '../limits.mjs';
+import { resolveGateLimits, recordHealthyGate, healthyHistory, historyFile, gateHistoryKey, HISTORY_FILES, WALL_DEFAULT_SECONDS, projectCommon, sampleFloorSeconds, wallFloorSeconds } from '../limits.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { historySnapshot } from '../../test/helpers/gate-history.mjs';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { shouldRetryTimeout, acquireTestSlot, HOLDER_UNKNOWN_CODE } from '../test-slot.mjs';
 import { processStartRecord } from '../lock-support.mjs';
@@ -39,11 +40,11 @@ test('config, recent healthy clocks and conservative default resolve independent
   assert.equal(derived.idle_seconds, 360);
   const configured = resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full', timeoutSeconds: 5000, idleTimeoutSeconds: 0 });
   assert.equal(configured.wall_seconds, 5000); assert.equal(configured.idle_seconds, 0);
-  assert.equal(resolveGateLimits({ history: [{ duration_s: 10, longest_silence_s: 1 }] }).wall_seconds, 600);
-  for (let i = 0; i < 20; i++) recordHealthyGate({ common: s.root, tier: 'promotion', command: 'narrow', duration_s: 10, longest_silence_s: 1 });
+  assert.equal(resolveGateLimits({ history: [{ duration_s: 10, longest_silence_s: 1 }] }).wall_seconds, WALL_DEFAULT_SECONDS);
+  for (let i = 0; i < 20; i++) recordHealthyGate({ common: s.root, tier: 'promotion', command: 'narrow', duration_s: 180, longest_silence_s: 1 });
   assert.equal(healthyHistory(s.root, 'promotion', 'narrow').length, 20);
   assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full' }).wall_seconds, 4316);
-  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'narrow' }).wall_seconds, 600);
+  assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'narrow' }).wall_seconds, 1200);
   const unknown = resolveGateLimits({ common: s.root, tier: 'promotion', command: 'new full' });
   assert.equal(unknown.wall_seconds, 4500); assert.equal(unknown.idle_seconds, 0);
   assert.equal(resolveGateLimits({ common: s.root, tier: 'promotion', command: 'full' }).idle_seconds, 360);
@@ -278,7 +279,7 @@ test('planned train file lists record and resolve one declared command history',
   fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ promotion: base, promotion_tests: 'planner.mjs' }));
   f.git(['add', '.']); f.git(['commit', '-qm', 'Declare planner']);
   const key = gateHistoryKey('promotion', ['/bin/sh', '-c', base]);
-  recordHealthyGate({ common: f.identity, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 110 });
+  for (let i = 0; i < 3; i++) recordHealthyGate({ common: f.identity, tier: 'promotion', historyKey: key, duration_s: 6000, longest_silence_s: 110 });
   const commands = [];
   for (const topic of ['first', 'second']) {
     const lane = f.lane(topic);
@@ -290,12 +291,12 @@ test('planned train file lists record and resolve one declared command history',
   }
   assert.notEqual(commands[0], commands[1]);
   const file = historyFile(f.identity, 'promotion', undefined, key);
-  assert.equal(healthyHistory(f.identity, 'promotion', undefined, file, key).length, 3);
-  assert.equal(fs.readdirSync(path.join(f.identity, 'gate-watchdog')).filter(n=>n.endsWith('.json')).length, 1);
+  assert.equal(healthyHistory(f.identity, 'promotion', undefined, file, key).length, 5);
+  assert.equal(fs.readdirSync(path.dirname(file)).filter(n=>n.endsWith('.json')).length, 1);
 });
 
 test('healthy history prunes old command files while preserving the current key', t => {
-  const s = scratch(t), directory = path.join(s.root, 'gate-watchdog'); fs.mkdirSync(directory);
+  const s = scratch(t), directory = path.dirname(historyFile(s.root, 'promotion', ['current'])); fs.mkdirSync(directory, { recursive: true });
   for (let i = 0; i < HISTORY_FILES + 5; i++) {
     const file = historyFile(s.root, 'promotion', ['old', i]); fs.writeFileSync(file, '{}'); fs.utimesSync(file, 1 + i, 1 + i);
   }
@@ -334,4 +335,48 @@ test('an unknown escaped identity cannot prevent killing the owned group', async
     lookup: pid => pid ? { ok: false, error: 'injected escaped identity failure' } : { ok: true, value: new Map([[child.pid, { pid: child.pid, ppid: process.pid, pgid: child.pid, identity: '2:2' }], [escaped.pid, escaped]]) } }), /cannot confirm gate descendant/);
   assert.throws(() => process.kill(-child.pid, 0), { code: 'ESRCH' });
   const result = await exited; assert.equal(result.signal, 'SIGKILL');
+});
+
+test('fixture gates cannot create or modify the real repository history', t => {
+  const s = scratch(t), common = projectCommon(path.dirname(cli));
+  assert.ok(common, 'this regression exercises the actual shared Git common directory');
+  const real = path.join(common, 'gate-watchdog'), before = historySnapshot(real);
+  const command = [process.execPath, '-e', "console.log('scratch fixture')"];
+  const result = spawnSync(process.execPath, [cli, 'run', 'release adapter', '--lock-path', s.lock,
+    '--project-common', common, '--tier', 'release', '--', ...command], { cwd: path.dirname(cli), env: s.env, encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(historySnapshot(real), before, 'the real history must remain byte-for-byte and metadata identical');
+  const file = historyFile(common, 'release', command);
+  assert.ok(file.startsWith(process.env.MONITOR_GATE_HISTORY_ROOT + path.sep));
+  assert.equal(healthyHistory(common, 'release', command).length, 1, 'the gate records only in scratch');
+  assert.notEqual(file, historyFile(s.root, 'release', command), 'projects keep separate histories inside one scratch root');
+  assert.throws(() => historyFile(common, 'release', command, undefined, { MONITOR_GATE_HISTORY_ROOT: 'relative' }));
+});
+
+test('three sane samples are required for wall and idle derivation, including legacy fixture history', () => {
+  for (const tier of ['promotion', 'release', 'release-prepare', 'test:acceptance']) {
+    const floor = sampleFloorSeconds(tier), sane = { duration_s: floor, longest_silence_s: 1 };
+    for (const history of [[], [sane], [sane, sane], Array(20).fill({ duration_s: floor - .01, longest_silence_s: 1 }),
+      [sane, sane, ...Array(18).fill({ duration_s: .5, longest_silence_s: .02 })]]) {
+      const limits = resolveGateLimits({ tier, history });
+      assert.equal(limits.wall_source, 'default'); assert.equal(limits.wall_seconds, 4500);
+      assert.equal(limits.idle_seconds, 0); assert.equal(limits.idle_source, 'off');
+    }
+    const derived = resolveGateLimits({ tier, history: [sane, sane, sane, { duration_s: .5, longest_silence_s: .02 }] });
+    assert.equal(derived.wall_source, 'history'); assert.equal(derived.wall_seconds, wallFloorSeconds(tier));
+    assert.equal(derived.idle_source, 'history'); assert.equal(derived.idle_seconds, 300);
+    const config = resolveGateLimits({ tier, history: [], timeoutSeconds: .25, idleTimeoutSeconds: .1 });
+    assert.equal(config.wall_seconds, .25); assert.equal(config.idle_seconds, .1);
+  }
+});
+
+test('observed healthy full gates fit clean-history defaults and trained limits', () => {
+  for (const [tier, durations, expected] of [['promotion', [420, 510, 600], 1200],
+    ['release', [1200, 1500, 1800], 3600], ['pnpm validate:all-safe', [1865, 2158, 2340], 4680]]) {
+    const history = durations.map(duration_s => ({ duration_s, longest_silence_s: 100 }));
+    assert.equal(resolveGateLimits({ tier, history: [] }).wall_seconds, 4500);
+    assert.equal(resolveGateLimits({ tier, history }).wall_seconds, expected);
+    assert.ok(expected >= 2 * Math.max(...durations));
+    assert.ok(4500 > Math.max(...durations));
+  }
 });

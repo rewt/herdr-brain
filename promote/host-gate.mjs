@@ -87,7 +87,7 @@ async function execute(profile) {
   update({ phase: 'waiting-test-slot' });
   const common = gitProject(canonical).identity;
   const declared = canonicalValidation(canonical, profile.env).tiers.promotion;
-  const limits = resolveGateLimits({ common, tier: 'promotion', historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', declared.command]), timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
+  const limits = resolveGateLimits({ common, env: profile.env, tier: 'promotion', historyKey: gateHistoryKey('promotion', ['/bin/sh', '-c', declared.command]), timeoutSeconds: profile.timeoutSeconds ?? declared.timeoutSeconds,
     idleTimeoutSeconds: profile.idleTimeoutSeconds ?? declared.idleTimeoutSeconds });
   // A fully red binary bisection visits at most 2*n-1 groups, sequentially.
   // Each group gets its full inner allowance (the train gate does not retry),

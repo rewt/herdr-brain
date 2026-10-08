@@ -131,16 +131,39 @@ its label as the tier. Fast and other non-slot validation tiers use the same pro
 
 Without an explicit limit, successful command durations in
 `GIT_COMMON_DIR/gate-watchdog/` supply twice the maximum of the last 20 healthy
-runs for that project, tier and command fingerprint, with a **600-second floor**.
+runs for that project, tier and command fingerprint, **only after three usable
+samples**. Samples below 180 seconds for `promotion`, 300 seconds for `release`,
+and 30 seconds for other tiers do not influence either wall or idle limits.
+This sanity filter also excludes legacy subsecond fixture samples; short genuine
+commands retain the conservative default or use an explicit project override.
+The wall floor is **1200 seconds for promotion**, **3600 seconds for release**,
+and **600 seconds for other tiers**. Full promotion and release commands can
+select bounded extras, so these floors preserve twice the observed healthy
+10-minute promotion and 30-minute release durations even after narrower runs.
+
+Tests set `MONITOR_GATE_HISTORY_ROOT` to a disposable absolute directory in the
+process calling product code and in child environments. History then lives at
+`ROOT/SHA256(GIT_COMMON_DIR)/KEY.json`, preserving project isolation without
+writing shared Git metadata. The shared offline and slot fixture helpers create
+this override for direct test-file runs as well as bounded runs. Their exit guard
+fails the test process if the real repository history was created or changed;
+the watchdog regression also runs a fixture against the actual Git common
+directory and proves its sample landed only in scratch. A scratch slot lock alone
+is insufficient: linked worktrees share their canonical Git common directory.
+
 Train plans use an explicit history key (`--history-key` JSON: tier and declared
 base command fingerprint), so affected file lists share history. Release gates
 use their declared argv before candidate substitution. Both host envelopes
 resolve from the same key as their inner gate. Recording keeps at most 128
-command history files per project, pruning the least recently updated files. That floor leaves
-headroom for cold builds and load variation in narrow gates. Without matching command history (including older tier-only records),
+command history files per project, pruning the least recently updated files. With fewer
+than three usable matching samples (including older tier-only records),
 the **4500-second (75-minute) default** bounds unfamiliar full gates
-conservatively. The measured full gates of 31m05s, 31m40s, 30m55s, 30m53s,
-34m27s and 35m58s give **71m56s (about 72 minutes)**; their slot waits are never
+conservatively. Healthy promotion runs of 7–10 minutes train a **20-minute**
+limit; release adapter runs of 20–30 minutes train a **60-minute** limit;
+bch-cloak full runs up to 39 minutes train a **78-minute** limit. The 75-minute
+warm-up default leaves 65, 45 and 36 minutes respectively above those maxima;
+trained limits leave at least 2× room. Earlier bch-cloak clocks of 31m05s,
+31m40s, 30m55s, 30m53s, 34m27s and 35m58s trained **71m56s**; their slot waits are never
 recorded as command time. Only successful executions add samples; reuse,
 refusals, overruns, and failures do not. Receipts and live slot records name the
 resolved limits. The promotion host lifecycle allows up to `2 * jobs - 1`
@@ -156,8 +179,8 @@ Output from both streams is observed and forwarded without buffering a suite
 log. Each healthy sample also records its longest silence, including the final
 stretch before exit. `validation.idle_timeout_seconds` or
 `gate.idle_timeout_seconds` enables a no-output limit (`0` disables it); the CLI
-accepts `--idle-timeout-seconds`. With healthy history it defaults to three times
-the longest recorded silence, with a **300-second floor**. With no history it is
+accepts `--idle-timeout-seconds`. With three usable samples it defaults to three times
+the longest recorded silence, with a **300-second floor**. With fewer than three usable samples it is
 **off**: an unmeasured build may legitimately be silent for a long time.
 
 Wall and idle overruns, including a nested gate's timeout marker, never spend

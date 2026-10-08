@@ -74,7 +74,10 @@ export function main(argv = process.argv.slice(2)) {
       required: required.filter(file => !promotion.includes(file)),
       budgetMs: Number(process.env.MONITOR_PROMOTION_EXTRA_BUDGET_MS ?? DEFAULT_BUDGET_MS),
       maxFiles: Number(process.env.MONITOR_PROMOTION_EXTRA_MAX_FILES ?? DEFAULT_MAX_FILES) });
-    console.log(JSON.stringify({ covered: promotion.filter(file => files.includes(file)), ...bound,
+    // The validator already on main accepts only the legacy fields. Callers
+    // opt into the detailed receipt by supplying the required-files argument.
+    console.log(JSON.stringify({ covered: promotion.filter(file => files.includes(file)),
+      ...(requiredJson !== undefined ? bound : { files: bound.files }),
       graph: { paths: files.length, max_paths: 10000, max_bytes: 32 * 1024 * 1024, max_suite_files: 4, hops: 1 } }));
   } else throw Error('expected --plan or --run');
 }

@@ -8,6 +8,14 @@ import { affectedTests, boundAffectedTests, DEFAULT_BUDGET_MS, DEFAULT_MAX_FILES
 import { releasePhases } from '../../test/helpers/release-suites.mjs';
 import { plannedCommand, promotionTestPlan } from '../test-plan.mjs';
 const root = fs.realpathSync(new URL('../../', import.meta.url));
+test('the three-argument planner output keeps the field set accepted by the main validator', () => {
+  const result = spawnSync(process.execPath, ['test/helpers/affected-tests.mjs', '--plan',
+    JSON.stringify(['lib/deadline.mjs']), JSON.stringify('npm run test:promotion')],
+  { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(Object.keys(JSON.parse(result.stdout)).sort(), ['covered', 'files', 'graph']);
+});
+
 test('one-hop selection includes changed tests and direct literals without following re-exports or cycles', t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-tests-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));

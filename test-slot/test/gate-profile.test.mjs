@@ -79,6 +79,13 @@ async function holdSlot(t, f) {
   return { release: async () => { owner.kill('SIGTERM'); await waitForExit(owner); } };
 }
 
+async function waitForSlotWait(worker) {
+  let stderr = '';
+  worker.stderr.on('data', data => { stderr += String(data); });
+  await until(() => stderr.includes('TEST_SLOT_WAIT:') || worker.exitCode !== null);
+  assert.match(stderr, /TEST_SLOT_WAIT:/, 'the host adapter reaches the slot wait');
+}
+
 test('project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration', t => {
   const f = fixture(t, { prepare: [{ run: 'exit 9', unless: '.nvmrc' }, { run: 'node prep.cjs' }] });
   f.env.PROFILE_VALUE = 'caller';
@@ -318,7 +325,9 @@ test('a queue slot cap emits a completed per-lane refusal and no interrupted or 
   const data = queue.load(); assert.equal(data.results[0].outcome, 'refused');
   assert.equal(data.results[0].gate, undefined); assert.equal(data.interrupted?.length ?? 0, 0);
   const hostReceipt = JSON.parse(fs.readFileSync(data.results[0].host_receipt));
-  assert.equal(hostReceipt.phase, 'refused'); assert.match(data.results[0].reason, /TEST_SLOT_HELD/);
+  assert.equal(hostReceipt.phase, 'refused'); assert.match(data.results[0].reason, /TEST_SLOT_REFUSED/);
+  assert.match(fs.readFileSync(path.join(path.dirname(data.results[0].host_receipt), 'train.log'), 'utf8'), /TEST_SLOT_HELD/);
+  assert.equal(fs.existsSync(hostReceipt.slot_receipt), false);
   assert.equal(f.git(['rev-parse', 'main']), f.before);
 });
 
@@ -352,24 +361,25 @@ test('a capped resume preserves a lost fast-forward checkpoint and reconciles it
   assert.equal(fs.readFileSync(f.env.PROFILE_EVIDENCE, 'utf8').trim().split('\n').length, 1);
 });
 
-test('busy host slot has a live bounded receipt and the train inherits it after release', async t => {
+test('busy host slot writes its grant receipt only after release and the train inherits it', async t => {
   const f = fixture(t, { wait_seconds: 3 });
   const slot = await holdSlot(t, f);
   const worker = f.asyncRun();
-  await until(() => fs.existsSync(path.join(f.directory, 'test-slot-wait.json')) && f.slotSaved().waits.length);
-  assert.equal(f.slotSaved().state, 'waiting'); assert.match(f.slotSaved().waits[0].holder, /fixture owner/);
+  await waitForSlotWait(worker);
+  assert.equal(fs.existsSync(path.join(f.directory, 'test-slot-wait.json')), false);
   await slot.release();
   const result = await waitForExit(worker); assert.equal(result.code, 0, result.stderr);
-  assert.equal(f.slotSaved().state, 'acquired'); assert.equal(f.git(['rev-parse', 'main']), f.head);
+  assert.equal(f.slotSaved().state, 'acquired'); assert.match(f.slotSaved().waits[0].holder, /fixture owner/);
+  assert.equal(f.git(['rev-parse', 'main']), f.head);
 });
 
 test('busy host slot caps without a red gate receipt or integration', async t => {
   const f = fixture(t), slot = await holdSlot(t, f);
   const result = f.run(); assert.equal(result.status, 75, result.stderr);
-  assert.equal(f.slotSaved().state, 'refused'); assert.match(f.slotSaved().reason, /TEST_SLOT_HELD/);
+  assert.equal(fs.existsSync(path.join(f.directory, 'test-slot-wait.json')), false);
+  assert.match(result.stderr, /TEST_SLOT_HELD/);
   assert.equal(f.saved().command_started, undefined); assert.equal(f.git(['rev-parse', 'main']), f.before);
   assert.equal(JSON.parse(fs.readFileSync(f.receipt)).attempts, undefined);
-  assert.equal(f.slotSaved().acquired_at, undefined);
   assert.equal(JSON.parse(fs.readFileSync(f.receipt)).slot_granted_at, undefined);
   await slot.release();
 });
@@ -385,10 +395,12 @@ test('a declared competing process refuses before taking the slot or building', 
 test('a competing process started during a slot wait refuses before preparation', async t => {
   const f = fixture(t, { wait_seconds: 3, refuse_processes: ['gate-profile-competitor'] });
   const slot = await holdSlot(t, f), worker = f.asyncRun();
-  await until(() => fs.existsSync(path.join(f.directory, 'test-slot-wait.json')) && f.slotSaved().waits.length);
+  await waitForSlotWait(worker);
+  assert.equal(fs.existsSync(path.join(f.directory, 'test-slot-wait.json')), false);
   const competitor = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)', 'gate-profile-competitor'], { env: f.env });
   await slot.release();
   const result = await waitForExit(worker); assert.equal(result.code, 75, result.stderr);
+  assert.equal(f.slotSaved().state, 'acquired', 'a grant remains evidence even if the command then refuses');
   assert.match(f.saved().reason, /PROMOTE_PROCESS_RUNNING/); assert.equal(f.saved().command_started, undefined);
   assert.equal(fs.existsSync(f.slot), false); assert.equal(f.git(['rev-parse', 'main']), f.before);
   competitor.kill('SIGTERM'); await waitForExit(competitor);

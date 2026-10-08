@@ -129,7 +129,7 @@ async function execute(profile, memoryOptions) {
     reason: result.gateTimeout.kind === 'idle' ? 'gate no-output limit exceeded; lane isolated for correction' : 'gate wall-clock limit exceeded; lane isolated for correction' });
   if (!saved.command_started) {
     const slotReason = fs.existsSync(slotFile) ? JSON.parse(fs.readFileSync(slotFile, 'utf8')).reason : null;
-    update({ phase: 'refused', finished_at: new Date().toISOString(), reason: saved.reason ?? slotReason ?? `TEST_SLOT_REFUSED: inspect ${slotFile}` });
+    update({ phase: 'refused', finished_at: new Date().toISOString(), reason: saved.reason ?? slotReason ?? `TEST_SLOT_REFUSED: exit ${exitOf(result)}; inspect the gate log` });
   }
   return exitOf(result);
 }

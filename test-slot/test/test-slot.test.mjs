@@ -314,6 +314,52 @@ describe("a waiter does not deadlock on itself", () => {
   });
 });
 
+describe('slot grant receipts', () => {
+  const receipts = s => fs.readdirSync(s.dir).filter(name => name.endsWith('.json'));
+
+  it('writes exactly one acquired receipt after waiting for a grant', async () => {
+    const s = scratch();
+    const first = await holder(s);
+    const receipt = s.file('grant.json');
+    const marker = s.file('granted.ran');
+    const waiter = cli(['run', 'granted', '--lock-path', s.lockPath, '--wait', '30', '--poll-ms', '100',
+      '--wait-receipt-path', receipt, '--', ...nodeCommand(marker, '')]);
+    let waiting = false;
+    waiter.child.stderr.on('data', data => { waiting ||= String(data).includes('TEST_SLOT_WAIT:'); });
+    await until(() => waiting || waiter.child.exitCode !== null, 'the waiter to start');
+    assert.equal(waiting, true, 'the runner is waiting for the held slot');
+    assert.deepEqual(receipts(s), [], 'waiting is not a grant');
+    first.child.kill('SIGTERM');
+    await first.done;
+    const done = await waiter.done;
+    assert.equal(done.code, 0, done.stderr);
+    assert.deepEqual(receipts(s), ['grant.json']);
+    const grant = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+    assert.equal(grant.schema, 'test-slot-wait/v1');
+    assert.equal(grant.state, 'acquired');
+    assert.equal(grant.nested, false);
+    assert.ok(Date.parse(grant.acquired_at) >= Date.parse(grant.started_at));
+    assert.equal(grant.finished_at, grant.acquired_at);
+    assert.ok(grant.waits.length > 0, 'the grant retains its wait evidence');
+    assert.equal(fs.existsSync(marker), true);
+  });
+
+  for (const state of ['held', 'unknown']) {
+    it(`writes no receipt when a ${state} slot refuses the run`, async () => {
+      const s = scratch();
+      if (state === 'held') await holder(s);
+      else fs.writeFileSync(s.lockPath, 'unreadable holder');
+      const marker = s.file('refused.ran');
+      const done = await cli(['run', 'refused', '--lock-path', s.lockPath, '--wait', state === 'held' ? '1' : '0',
+        '--poll-ms', '100', '--wait-receipt-path', s.file('grant.json'), '--', ...nodeCommand(marker, '')]).done;
+      assert.equal(done.code, REFUSED_EXIT, done.stderr);
+      assert.match(done.stderr, new RegExp(`${state === 'held' ? HELD_CODE : HOLDER_UNKNOWN_CODE}:`));
+      assert.deepEqual(receipts(s), []);
+      assert.equal(fs.existsSync(marker), false);
+    });
+  }
+});
+
 describe("waiting", () => {
   it("queues behind a live holder and takes the slot when it is released", async () => {
     const s = scratch();

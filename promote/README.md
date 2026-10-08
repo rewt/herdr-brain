@@ -220,9 +220,10 @@ process evidence refuses. Matching processes are reported and left running.
 The wait cap defaults to 7200 seconds and applies separately to the external
 lock and host slot. Unknown holders still refuse immediately. The host receipt
 `promote/batches/ID/host-gate.json` shows the current phase, Node pin, profile
-fingerprint, lock wait and refusal reason; `test-slot-wait.json` shows the slot
-holder, cap and waiting/acquired/refused state. Logs include both receipt paths
-and wait reasons. A capped pre-execution wait produces a per-lane refusal,
+fingerprint, lock wait and refusal reason; after a slot grant,
+`test-slot-wait.json` records the encountered holders, cap and acquisition time.
+Waiting and slot refusal create no grant receipt; logs retain wait and refusal
+reasons. A capped pre-execution wait produces a per-lane refusal,
 preserves main and the lanes, and creates no red gate evidence or bisection.
 Explicitly enqueue again after the holder clears. Resuming an interrupted
 execution reacquires the guards before using the existing train checkpoints;

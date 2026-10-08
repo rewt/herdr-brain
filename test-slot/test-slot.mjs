@@ -330,21 +330,17 @@ async function run({ positional, options, child }) {
   let slot;
   const wait = { schema: 'test-slot-wait/v1', state: 'waiting', started_at: new Date().toISOString(),
     wait_seconds: options.waitSeconds ?? waitSecondsOf(), waits: [] };
-  const saveWait = changes => {
-    Object.assign(wait, changes);
-    if (options.waitReceipt) writeFileAtomic(options.waitReceipt, JSON.stringify(wait, null, 2) + '\n', 0o600);
-  };
-  saveWait({});
   try {
     slot = options.noSlot ? { nested: false, token: null, setGroup: () => {}, release: () => {} } : await acquireHostTestSlot(label, { lockPath: options.lockPath, compatPath: options.compatPath, pollMs: options.pollMs,
       onWait: entry => {
-        saveWait({ waits: [...wait.waits, { ...entry, at: new Date().toISOString() }] });
+        wait.waits.push({ ...entry, at: new Date().toISOString() });
         if (options.waitReceipt) process.stderr.write(`TEST_SLOT_WAIT: ${entry.holder}; ${entry.lock_path}; capped at ${wait.wait_seconds}s\n`);
       }, ...(options.waitSeconds === undefined ? {} : { waitSeconds: options.waitSeconds }) });
     const acquiredAt = new Date().toISOString();
-    saveWait({ state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested });
+    Object.assign(wait, { state: 'acquired', acquired_at: acquiredAt, finished_at: acquiredAt, nested: slot.nested });
+    // This sidecar proves a grant. Queue/log evidence records refusals instead.
+    if (options.waitReceipt) writeFileAtomic(options.waitReceipt, JSON.stringify(wait, null, 2) + '\n', 0o600);
   } catch (error) {
-    saveWait({ state: 'refused', finished_at: new Date().toISOString(), reason: error.message });
     if (error?.code === HELD_CODE || error?.code === HOLDER_UNKNOWN_CODE) {
       process.stderr.write(`${error.message}\n`);
       return REFUSED_EXIT;

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
+import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 import { processStart } from '../../test-slot/lock-support.mjs';
 import { recordHealthyGate, gateHistoryKey, healthyHistory, historyFile } from '../../test-slot/limits.mjs';
 import { releaseOnce, quietPoint } from '../release.mjs';
@@ -24,7 +25,8 @@ function fixture(t, config) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'herdr-release-test-'));
   const repo = path.join(root, 'project'); fs.mkdirSync(repo);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const env = { ...process.env, ORG_DIR: '', ORG_ACTOR: 'release-fixture', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', LANE_VALIDATE: undefined, LANE_CONFIG: undefined };
+  const env = { ...testSlotEnvironment(), ORG_DIR: '', ORG_ACTOR: 'release-fixture', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', LANE_VALIDATE: undefined, LANE_CONFIG: undefined,
+    MONITOR_TEST_SLOT_PATH: path.join(root, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(root, 'slot') };
   const exec = (cmd, args, cwd = repo, extra = {}) => spawnSync(cmd, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: loadTimeout(12000) });
   const ok = (cmd, args, cwd = repo, extra) => { const r = exec(cmd, args, cwd, extra); assert.equal(r.status, 0, `${r.stderr}\n${r.stdout}`); return r.stdout.trim(); };
   const git = (args, cwd = repo) => ok('git', args, cwd);

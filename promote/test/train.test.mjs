@@ -136,6 +136,78 @@ test('batch policy ignores untracked canonical config, uncommitted edits and lan
   assert.equal(r.status, 0, r.stderr);
 });
 
+test('an unborn canonical branch uses default settings even with an untracked config', async t => {
+  const f = fixture(t);
+  f.git(['checkout', '--orphan', 'unborn']); f.git(['rm', '-rf', '.']);
+  fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ max_batch: 0 }));
+  const laneCLI = path.join(f.root, 'fake-lane.cjs');
+  fs.writeFileSync(laneCLI, "console.error('lane: fixture refusal'); process.exit(1);\n");
+  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), 'missing-lane',
+    '--lane-cli', laneCLI, '--herdr', path.join(f.root, 'herdr'), '--delivery-attempts', '1', '--retry-seconds', '0']);
+  assert.equal(r.status, 0, r.stderr); assert.equal(JSON.parse(r.stdout).worker.ready, true);
+  await until(() => f.queue.load().results.length === 1);
+  const result = f.queue.load().results[0];
+  assert.equal(result.to, 'supervisor-herdr'); assert.equal(result.outcome, 'refused');
+  assert.match(result.reason, /fixture refusal/);
+  assert.equal(f.queue.load().refusal, undefined);
+});
+
+for (const command of ['rev-parse', 'ls-tree', 'show']) test(`a failed settings git ${command} retains a coded queue refusal and permits retry`, async t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ max_batch: 1 }));
+  f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Batch cap']);
+  const workspace = f.lane('first'); f.add('first'); f.lane('second'); f.add('second');
+  const pending = f.queue.load().pending, before = f.git(['rev-parse', 'main']);
+  const preload = path.join(f.root, 'fail-settings.cjs');
+  fs.writeFileSync(preload, `const cp=require('node:child_process'),original=cp.spawnSync;
+cp.spawnSync=function(cmd,args,options){
+  if(process.argv.includes('--drain') && cmd==='git' && args[2]===${JSON.stringify(command)})
+    return {status:128,stdout:'',stderr:'fatal: injected settings read failure'};
+  return original.apply(this,arguments);
+};\n`);
+  const options = f.env.NODE_OPTIONS;
+  f.env.NODE_OPTIONS = `${options ?? ''} --require=${JSON.stringify(preload)}`;
+  const r = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), 'first',
+    '--expected-head', pending[0].expectedHead]);
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stderr, /PROMOTION_SETTINGS_GIT_FAILED: cannot read committed promotion settings: fatal: injected settings read failure/);
+  assert.match(r.stderr, /queued requests retained/);
+  await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
+  const saved = f.queue.load();
+  assert.deepEqual(saved.pending, pending); assert.equal(saved.current, null);
+  assert.equal(saved.refusal.outcome, 'refused'); assert.equal(saved.refusal.code, 'PROMOTION_SETTINGS_GIT_FAILED');
+  assert.deepEqual(saved.refusal.pending, pending.map(job => job.id));
+  assert.equal(f.runs(), 0); assert.equal(f.git(['rev-parse', 'main']), before);
+  assert.ok(fs.existsSync(workspace));
+  const status = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--status']);
+  assert.equal(status.status, 0, status.stderr);
+  assert.deepEqual(JSON.parse(status.stdout).refusal, saved.refusal);
+  if (options === undefined) delete f.env.NODE_OPTIONS; else f.env.NODE_OPTIONS = options;
+  const retried = f.drain(); assert.equal(retried.status, 0, retried.stderr);
+  assert.deepEqual(f.queue.load().results.map(job => [job.topic, job.outcome]), [['first', 'promoted'], ['second', 'promoted']]);
+  assert.equal(f.queue.load().refusal, undefined);
+});
+
+test('settings are read once for each new batch and not for an empty queue', t => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.repo, '.promote.json'), JSON.stringify({ max_batch: 1 }));
+  f.git(['add', '.promote.json']); f.git(['commit', '-qm', 'Batch cap']);
+  for (const topic of ['first', 'second']) { f.lane(topic); f.add(topic); }
+  const trace = path.join(f.root, 'settings-reads'), preload = path.join(f.root, 'trace-settings.cjs');
+  fs.writeFileSync(preload, `const fs=require('node:fs'),cp=require('node:child_process'),original=cp.spawnSync;
+cp.spawnSync=function(cmd,args,options){
+  if(process.argv[1]===${JSON.stringify(path.join(source, 'promote/promote.mjs'))} && cmd==='git' && ['ls-tree','show'].includes(args[2]))
+    fs.appendFileSync(${JSON.stringify(trace)},args[2]+'\\n');
+  return original.apply(this,arguments);
+};\n`);
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}`;
+  const r = f.drain(); assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(fs.readFileSync(trace, 'utf8').trim().split('\n'), ['ls-tree', 'show', 'ls-tree', 'show']);
+  assert.equal(f.runs(), 2);
+  const empty = f.drain(); assert.equal(empty.status, 0, empty.stderr);
+  assert.deepEqual(fs.readFileSync(trace, 'utf8').trim().split('\n'), ['ls-tree', 'show', 'ls-tree', 'show']);
+});
+
 test('safe bisection lands two good lanes with the third red in exactly three runs', t => {
   const f = fixture(t); for (const topic of ['first', 'second', 'third']) { f.lane(topic, topic === 'third'); f.add(topic); }
   const r = f.drain(); assert.equal(r.status, 0, r.stderr);

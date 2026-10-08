@@ -59,13 +59,40 @@ function invoke(command, args, options = {}) {
   return r.stdout.trim();
 }
 function git(cwd, args) { return invoke('git', ['-C', cwd, ...args]); }
+function settingsRefusal(code, reason) {
+  return Object.assign(new Error(`${code}: ${singleLine(reason)}`), { code });
+}
 function promotionSettings(project) {
   // Only the canonical committed declaration can change queue policy. Lane
   // copies and untracked/edited host files cannot override the batch limit.
-  const tracked = git(project.canonical, ['ls-tree', '--name-only', 'HEAD', '--', '.promote.json']);
-  const config = tracked ? JSON.parse(git(project.canonical, ['show', 'HEAD:.promote.json'])) : {};
+  const read = args => spawnSync('git', ['-C', project.canonical, ...args], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  const checked = result => {
+    if (result.error || result.status !== 0) throw settingsRefusal('PROMOTION_SETTINGS_GIT_FAILED',
+      `cannot read committed promotion settings: ${result.stderr || result.stdout || result.error?.message || `exit ${result.status}`}`);
+    return result.stdout.trim();
+  };
+  const head = read(['rev-parse', '--verify', '--quiet', 'HEAD']);
+  if (!head.error && head.status === 1 && !head.stderr && !head.stdout) {
+    // An unborn branch has no committed configuration. Confirm the branch ref
+    // is absent so other Git failures cannot silently turn policy into defaults.
+    const branch = checked(read(['symbolic-ref', '--quiet', 'HEAD']));
+    const ref = read(['show-ref', '--verify', '--quiet', branch]);
+    if (!ref.error && ref.status === 1 && !ref.stderr && !ref.stdout) return {};
+    checked(ref);
+  }
+  const commit = checked(head);
+  const tracked = checked(read(['ls-tree', '--name-only', commit, '--', '.promote.json']));
+  let config;
+  try { config = tracked ? JSON.parse(checked(read(['show', `${commit}:.promote.json`]))) : {}; }
+  catch (error) {
+    if (error.code === 'PROMOTION_SETTINGS_GIT_FAILED') throw error;
+    throw settingsRefusal('PROMOTION_SETTINGS_INVALID', `invalid committed .promote.json: ${error.message}`);
+  }
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw settingsRefusal('PROMOTION_SETTINGS_INVALID', 'committed .promote.json must be an object');
+  }
   if (config.max_batch !== undefined && (!Number.isSafeInteger(config.max_batch) || config.max_batch < 1)) {
-    throw new Error('promote max_batch must be a positive integer');
+    throw settingsRefusal('PROMOTION_SETTINGS_INVALID', 'promote max_batch must be a positive integer');
   }
   return config;
 }
@@ -249,7 +276,7 @@ export async function drain(queue) {
     }
   });
   if (!release) { process.send?.({ ready: true, already_running: true }); return; }
-  process.send?.({ ready: true });
+  let acknowledged = false;
   const attempted = new Set();
   try {
     for (;;) {
@@ -272,9 +299,19 @@ export async function drain(queue) {
           data.current = job;
           return { job, newlyDequeued: false };
         }
-        const maxBatch = promotionSettings(queue.project).max_batch ?? Infinity;
-        const next = data.pending.shift();
+        const next = data.pending[0];
         if (!next) { release(); release = null; return null; }
+        let maxBatch;
+        try { maxBatch = promotionSettings(queue.project).max_batch ?? Infinity; }
+        catch (error) {
+          // Persist before acknowledging startup or exiting. Pending requests
+          // retain their order and can be retried after the settings are fixed.
+          data.refusal = { outcome: 'refused', code: error.code, reason: error.message,
+            pending: data.pending.map(job => job.id), at: new Date().toISOString() };
+          return { refusal: data.refusal };
+        }
+        delete data.refusal;
+        data.pending.shift();
         if (next.laneCLI === LANE) {
           // Snapshot whatever is available now. No accumulation timer/window.
           // Different command/config inputs retain their independent gates.
@@ -291,6 +328,13 @@ export async function drain(queue) {
         // Freshness belongs only to this dequeue, never to queue.json.
         return { job, newlyDequeued: true };
       });
+      if (entry?.refusal) {
+        if (!acknowledged) process.send?.({ ready: false, refusal: entry.refusal });
+        throw Object.assign(new Error(entry.refusal.reason), { code: entry.refusal.code });
+      }
+      // Ready means the queue checkpoint exists, including batch membership.
+      // Git settings reads must not leave a successful startup ahead of it.
+      if (!acknowledged) { process.send?.({ ready: true }); acknowledged = true; }
       if (!entry) break;
       const { job, newlyDequeued } = entry;
       if (job.jobs) {
@@ -370,7 +414,9 @@ async function start(queue) {
       if (error) reject(error); else resolve(value);
     };
     const timer = setTimeout(() => finish(new Error('worker startup unconfirmed; inspect worker.log and locks; queued requests retained')), loadTimeout(5000));
-    child.once('message', (value) => finish(null, { pid: child.pid, ...value }));
+    child.once('message', (value) => value.refusal
+      ? finish(new Error(`${value.refusal.reason}; queued requests retained; inspect --status`))
+      : finish(null, { pid: child.pid, ...value }));
     child.once('error', (error) => finish(error));
     child.once('exit', (code) => finish(new Error(`worker exited ${code} before startup; inspect worker.log; queue retained`)));
   });

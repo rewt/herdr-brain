@@ -13,7 +13,8 @@ or model call is needed:
 node /path/to/herdr-monitor/promote/promote.mjs first-lane second-lane
 ```
 
-The command durably enqueues the topics, acknowledges a detached worker and exits.
+The command durably enqueues the topics, acknowledges a detached worker after
+its first queue checkpoint and exits.
 Promoted commits accumulate on the integration branch. At a quiet point the
 canonical supervisor uses the [release module](../release/README.md) to tag and
 gate a batch once, then request the operator's ship or activation decision.
@@ -22,6 +23,14 @@ pending topic reuse its request. Independent enqueues serialize their writes;
 exactly one worker owns the drain. A project is its canonical Git common directory,
 including calls from linked worktrees. Nothing depends on a project name, remote,
 workspace label or session registry.
+
+Queue settings are read once when forming each new batch. A canonical branch
+without a commit, or a commit without `.promote.json`, uses defaults. A Git read
+failure stops the drain with `PROMOTION_SETTINGS_GIT_FAILED`; invalid committed
+settings use `PROMOTION_SETTINGS_INVALID`. `--status` retains the coded `refusal`
+and the affected pending request IDs. Requests stay pending in arrival order;
+after fixing the cause, retry the drain. A successful settings read clears the
+refusal. Captured and interrupted batches keep their original membership.
 
 Compatible requests (same validation override and lane configuration) form a
 batch. `lane promote-batch` holds the existing Git promotion lock, checks clean

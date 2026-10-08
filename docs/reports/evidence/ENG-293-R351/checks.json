@@ -1,0 +1,37 @@
+{
+  "run": "R-351",
+  "base": "ef21d58ed7441cf6c7a0c90f66cd2abb5e08ddca",
+  "implementation": "e21e2b16",
+  "checks": [
+    {
+      "log": "focused-final.tap.gz",
+      "command": "NODE_OPTIONS=--import=$PWD/test/helpers/memory-fixture.mjs node --test test-slot/test/gate-profile.test.mjs test/memory.test.mjs",
+      "exit_code": 0,
+      "pass": 30,
+      "fail": 0
+    },
+    {
+      "log": "promote-final.tap.gz",
+      "command": "node test/helpers/run.mjs --file-timeout=180000 --suite-timeout=540000 promote/test/*.test.mjs",
+      "exit_code": 1,
+      "pass": 127,
+      "fail": 1,
+      "note": "Only failure: inherited ORG_DIR caused stale-worker fixture teardown to inspect the real inbox path; owner argv guard refused before signaling. Same test file passes in isolated rerun."
+    },
+    {
+      "log": "promote-isolated.tap.gz",
+      "command": "env -u ORG_DIR -u HERDR_AGENT_NAME node test/helpers/run.mjs --file-timeout=180000 --suite-timeout=360000 promote/test/promote.test.mjs",
+      "exit_code": 0,
+      "pass": 24,
+      "fail": 0
+    },
+    {
+      "log": "stop-recovery.tap.gz",
+      "command": "node test/helpers/run.mjs --file-timeout=180000 --suite-timeout=360000 --test-name-pattern='memory|STOP during|resuming prepared capture refuses stop' promote/test/train.test.mjs promote/test/memory-gate.test.mjs",
+      "exit_code": 0,
+      "pass": 8,
+      "fail": 0,
+      "skipped": 46
+    }
+  ]
+}

@@ -170,6 +170,22 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '' } = {}) {
 }
 const promptCalls=(f)=>f.calls().filter(x=>x.type==='herdr'&&x.a[0]==='agent'&&x.a[1]==='prompt');
 
+test('dispatch journals both memory gates and mirrors allowlisted events into run metadata', t => {
+  const f = fixture(t);
+  const result = f.start(); assert.equal(result.status, 0, result.stderr);
+  const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
+  const events = fs.readFileSync(`${f.jobs()[0]}.events.jsonl`, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(events.map(e => [e.kind, e.outcome]), [
+    ['memory_open', 'entry'], ['memory_open', 'granted'], ['memory_worker', 'entry'], ['memory_worker', 'granted'],
+  ]);
+  const metadata = JSON.parse(f.show(job.run).meta.dispatch_waits);
+  assert.deepEqual(metadata, events.map(e => ({ ...e, run: job.run })));
+  for (const e of metadata) {
+    assert.deepEqual(Object.keys(e), ['at', 'run', 'item', 'lane', 'kind', 'outcome']);
+    assert.equal(e.item, f.item); assert.equal(e.lane, 'topic');
+  }
+});
+
 test('dispatch defaults to project ops from a chat environment and explicit --to wins', t => {
   const f = fixture(t, {noticeRecipient: 'ops-project'}); f.fail('prepare');
   const first = f.start(); assert.equal(first.status, 1);

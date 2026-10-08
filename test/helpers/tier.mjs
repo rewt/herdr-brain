@@ -44,6 +44,7 @@ const promotion = [
   'discovery/test/confinement.test.mjs',
   'discovery/test/entry.test.mjs',
   'discovery/test/review-r4.test.mjs',
+  'dispatch/test/timing.test.mjs',
   'lanes/test/herdr-client.test.mjs',
   'lanes/test/no-focus.test.mjs',
   'lanes/test/routes.test.mjs',

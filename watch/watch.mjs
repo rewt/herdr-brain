@@ -16,6 +16,7 @@ import { parseArgs } from '../lib/cli-help.mjs';
 import { acquireWatcherLock } from './lock.mjs';
 import { readReport } from '../lib/report.mjs';
 import { findOrgDir } from '../lib/store.mjs';
+import { observeProcessEnd } from '../lib/run-timing.mjs';
 import { inboxPath, promptSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
 import {
   blockedNotice,
@@ -389,6 +390,7 @@ async function watch() {
     const beforeStamp = fileStamp(reportPath);
     let report = reportState(reportPath);
     const status = agentStatus(agent);
+    const observedAt = new Date().toISOString();
     const state = status.state;
     if (status.sequence !== undefined) noticeSequence = status.sequence;
     else if (state === 'working' && previousState !== 'working') noticeSequence++;
@@ -400,6 +402,14 @@ async function watch() {
     // read and the state read. Once it is terminal, read again so delivery
     // reflects the file it actually stopped with.
     if (workerFinished) report = reportState(reportPath);
+    try {
+      observeProcessEnd({ current, state, now: () => observedAt,
+        eligible: observedWorking || report.kind === 'valid' || Date.parse(observedAt) >= armedAt + startGraceMs,
+        record: args => {
+          const result = org(args);
+          if (result.error || result.status !== 0) throw Error('process-end metadata write failed');
+        } });
+    } catch { log('run process-end metadata could not be saved; continuing to watch'); }
     if (report.kind === 'valid' && workerFinished) {
       const headline = report.report.headline ?? report.report.summary;
       await deliver(reportNotice({

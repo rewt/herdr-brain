@@ -81,6 +81,51 @@ and waits for two empty-composer reads while the supervisor is idle. Dispatch's
 work prompt still targets its own worker; it does not type notices into the
 supervisor directly.
 
+## Run timing
+
+Dispatch records entry and grant for its two memory gates (`memory_open` before
+lane preparation and `memory_worker` before worker launch), including immediate
+grants. There is currently no run-cap, concurrency queue or fleet session limit
+in dispatch. Its recovery lock refuses a second coordinator for the same request;
+that refusal is not a queue wait. Lane dispatch skips the redundant memory gate
+through `--memory-checked` while still checking canonical STOP.
+
+Timing events live in the dispatch journal's companion `<request>.json.events.jsonl`.
+Watch and dispatch append separate small lines so watch cannot overwrite the
+request's live recovery stage. Only timestamp, run id, item id, lane topic, kind
+and outcome are serialized; prompts, filesystem paths, screens, errors, memory
+probe contents and environment values are excluded. Before a run exists its
+journal events have a null run id; after `record start`, dispatch mirrors them
+into that run's `dispatch_waits` metadata with its assigned id through `record set`.
+Stopped/failed attempts retain their outcome; an unfinished entry is resumed
+without replacing its original timestamp. These fields never drive scheduling
+or derived status.
+
+Watch records `process_end` through the same CLI and companion journal when it
+first observes idle, done or gone after startup grace, observed work, or a valid
+report. It records that observation before final notice delivery. Startup idle,
+blocked and unavailable states are excluded. This clock is separate from report
+time and is an observed terminal state, not an OS process exit timestamp. A
+watcher restart retains the first journaled timestamp if a record reply was lost.
+
+Read the run clocks alongside the [train metrics](../promote/README.md):
+
+```sh
+node dispatch/metrics.mjs --org /path/to/.org --since 2026-10-08 --json
+node promote/metrics.mjs --project /path/to/project --since 2026-10-08 --json
+```
+
+Add `--org /path/to/.org` to the train command for both views in one report
+(`run_timing` in JSON). Each view keeps its own window basis: batch start for
+train receipts, run start for record runs.
+
+The run view counts every record run in its run-start window, including legacy
+and manual runs. Per-gate and total waits carry sample and missing counts; missing
+or incomplete evidence is null, never zero. Measured zero requires an actual
+entry/grant pair at the same timestamp. Resolved stopped/failed attempts count
+toward total gate time after a later grant. Process end since run start includes
+worker setup and the worker gate, so it is not a worker execution duration.
+
 ## External dispatchers
 
 Immediately after starting a worker, before arming watch, an external launcher

@@ -10,6 +10,7 @@ import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { findOrgDir } from '../lib/store.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
+import { readTiming, timedMemoryWait, timingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 
@@ -55,6 +56,13 @@ const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const herdr = (args) => json(command(['herdr'], args));
 const note = (text) => record(['note', job.run, `Dispatch: ${text}`]);
+function syncTiming() {
+  if (job.run) record(['set', job.run, `dispatch_waits=${timingMetadata(readTiming(journal).filter(e => e.kind !== 'process_end'), job.run)}`]);
+}
+function memoryGate(kind, label, check) {
+  return timedMemoryWait({ journal, run: job.run, item: job.item, lane: job.lane, kind,
+    wait: () => waitForMemory({ label, check }), persist: syncTiming });
+}
 function locate(value) {
   if (!/^R-\d+$/.test(value)) return path.resolve(value);
   const run = json(record(['show', value, '--json']));
@@ -200,7 +208,7 @@ async function main() {
     job.run = run.id; job.stage = 'worker'; save();
   }
   if (job.stage === 'open') {
-    waitForMemory({ label: 'dispatch', check: checkStop });
+    memoryGate('memory_open', 'dispatch', checkStop);
     if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : []), '--git-only']);
     job.workspace = fs.realpathSync(worktree());
     // prepare validates that the registered lane is owned by this repository.
@@ -243,6 +251,7 @@ async function main() {
   if (run.item !== job.item || run.meta?.dispatch_journal !== journal || fs.realpathSync(run.workspace) !== job.workspace) throw new Error('run no longer matches dispatch request');
   if (run.meta?.route !== job.route || Object.entries(job.declared).some(([key, value]) => (run.meta?.[key] ?? null) !== value)) throw new Error('run routing metadata changed; inspect before recovery');
   if (job.serves !== undefined && (run.meta?.serves ?? null) !== (job.serves || null)) throw new Error('run priority alignment changed; inspect before recovery');
+  syncTiming();
   // start may have committed the run before failing to materialize its brief.
   // The existing record command recreates a missing brief from durable context.
   if (!fs.existsSync(run.brief_path)) record(['brief', job.run]);
@@ -257,7 +266,7 @@ async function main() {
     }
   }
   if (job.stage === 'worker') {
-    waitForMemory({ label: 'dispatch worker', check: checkStop });
+    memoryGate('memory_worker', 'dispatch worker', checkStop);
     if (job.reuse) {
       const prior = json(record(['show', job.reuse, '--json']));
       if (!prior.report && !prior.abandoned) throw new Error('reuse run must be reported or abandoned; finish the previous run first');

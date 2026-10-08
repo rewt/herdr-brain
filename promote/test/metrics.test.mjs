@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { collectMetrics, parseLog, importBaseline, renderMetrics, stats } from '../metrics.mjs';
 
 const cli = fileURLToPath(new URL('../metrics.mjs', import.meta.url));
+const recordCLI = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'train-metrics-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -222,4 +223,25 @@ most frequent failing files:
   assert.equal(JSON.parse(r.stdout).baseline.runs, 54); assert.equal(fs.readFileSync(evidenceFile, 'utf8'), source);
   assert.match(f.cli(['--baseline', report]).stdout, /archive selection/);
   fs.writeFileSync(evidenceFile, 'broken'); assert.throws(() => importBaseline(report), /unsupported/);
+});
+
+test('train metrics can include run waits and legacy missing counts without changing either window basis', t => {
+  const f = fixture(t), org = path.join(f.root, 'org');
+  const env = { ...process.env, ORG_DIR: org, ORG_ACTOR: 'metrics-fixture', HERDR_MONITOR_FLEET: path.join(f.root, 'fleet.json'), ORG_NOW: '2026-10-05T12:00:00Z' };
+  const record = args => {
+    const r = spawnSync(process.execPath, [recordCLI, ...args], { env, cwd: f.repo, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+  };
+  record(['init']); record(['add', 'Legacy dispatch', '--role', 'engineer']); record(['start', 'ENG-1', '--meta', 'lane=legacy']);
+  f.write('batch', [f.attempt([f.good], f.gate('gate'))]);
+  const m = f.metrics({ org });
+  assert.equal(m.summary.gates_completed, 1);
+  assert.equal(m.run_timing.summary.runs, 1);
+  assert.equal(m.run_timing.summary.dispatch_wait_s.missing, 1);
+  assert.equal(m.run_timing.summary.process_end_missing, 1);
+  assert.match(renderMetrics(m), /Run timing: 1 runs/);
+  assert.match(m.window.basis, /batch started_at/); assert.match(m.run_timing.window.basis, /run started.at/);
+  const r = f.cli(['--org', org, '--since', '2026-10-05', '--until', '2026-10-06', '--json']);
+  assert.equal(r.status, 0, r.stderr); assert.equal(JSON.parse(r.stdout).run_timing.summary.runs, 1);
+  assert.equal(f.metrics({ org, since: '2026-10-06' }).run_timing.summary.runs, 0);
 });

@@ -5,6 +5,7 @@ import { isMain } from '../lib/cli-help.mjs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { collectRunMetrics, renderRunMetrics } from '../dispatch/metrics.mjs';
 
 const git = (project, args) => {
   const r = spawnSync('git', ['-C', project, ...args], {
@@ -108,7 +109,7 @@ function attribution(project, attempt, files) {
     unavailable: changes.filter(c => c.files === null).map(c => c.lane),
     basis: 'changed-file overlap; a hint, not proof of causation' }));
 }
-export function collectMetrics({ project = process.cwd(), since, until, now = new Date().toISOString() } = {}) {
+export function collectMetrics({ project = process.cwd(), org, since, until, now = new Date().toISOString() } = {}) {
   const identity = fs.realpathSync(git(project, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
   const bound = (value, name) => {
     if (value === undefined) return null;
@@ -180,6 +181,7 @@ export function collectMetrics({ project = process.cwd(), since, until, now = ne
   const firstCompleted = batches.filter(b => ['green', 'red'].includes(b.first_gate));
   const landed = executed.filter(g => g.integrated);
   return { schema: 'train-metrics/v1', identity, window: { since: since ?? null, until: until ?? null, basis: 'batch started_at; lower inclusive, upper exclusive' },
+    ...(org ? { run_timing: collectRunMetrics({ org, since, until }) } : {}),
     summary: { batches: batches.length, complete_batches: batches.filter(b => b.phase === 'complete').length,
       bisected_batches: batches.filter(b => b.bisected).length, gates_observed: observed.length, gates_executed: executed.length,
       gates_completed: completed.length, green: completed.filter(g => g.status === 'green').length,
@@ -271,6 +273,7 @@ export function renderMetrics(data) {
     }
     lines.push(...b.limitations.map(l => `  ${l}`));
   }
+  if (data.run_timing) lines.push('', renderRunMetrics(data.run_timing).trimEnd());
   lines.push(...data.limitations.map(l => `Note: ${l}`));
   if (data.warnings.length) {
     lines.push(`Warnings: ${data.warnings.length}`, ...data.warnings.slice(0, 5).map(w => `  ${w}`));
@@ -283,10 +286,10 @@ export function main(args = process.argv.slice(2)) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--help') {
-      process.stdout.write('Usage: node promote/metrics.mjs [--project PATH] [--since ISO] [--until ISO] [--baseline ARCHIVED_REPORT.md] [--json]\nReads canonical Git common-directory receipts. Window selects batch starts. Baseline uses the report and sibling -evidence/backfill-report.txt, read-only.\n'); return;
+      process.stdout.write('Usage: node promote/metrics.mjs [--project PATH] [--org DIR] [--since ISO] [--until ISO] [--baseline ARCHIVED_REPORT.md] [--json]\nReads canonical Git common-directory receipts. Window selects batch starts; --org adds run timing selected by run starts. Baseline uses the report and sibling -evidence/backfill-report.txt, read-only.\n'); return;
     }
     if (arg === '--json') { json = true; continue; }
-    if (!['--project', '--since', '--until', '--baseline'].includes(arg) || !args[i + 1] || args[i + 1].startsWith('--')) throw Error(`unknown option or missing value: ${arg}`);
+    if (!['--project', '--org', '--since', '--until', '--baseline'].includes(arg) || !args[i + 1] || args[i + 1].startsWith('--')) throw Error(`unknown option or missing value: ${arg}`);
     const value = args[++i];
     if (arg === '--baseline') baseline = value; else options[arg.slice(2)] = value;
   }

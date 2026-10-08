@@ -125,6 +125,12 @@ Harness selection follows the plugin supervisor default; `--kind` or a project
 `--route NAME` overrides it. Project routing layers supply launch arguments and
 accounts; repeat `--arg` to supply native options. The launcher's receipt lives
 in the fleet home at `chats.json`; it does not edit another project's files.
+Before creating a new tab, a Codex chat checks native permission selectors and
+permission-profile support using the same preflight as coordinating adapters.
+If the default Codex choice refuses (including an inherited `sandbox_mode`),
+the chat uses the installed Claude adapter and shows the reason in a warning
+and its receipt's `fallback` field. No user configuration change is needed.
+An explicit `--kind codex` or Codex route refuses with the reason instead.
 
 Notices go to **ops**, never the chat name. `--to OPS` wins over
 `MONITOR_SUPERVISOR_AGENT` in the project's route environment, then the existing

@@ -12,6 +12,7 @@ import { withInstallationLock } from '../herdr/entry-lock.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { projectEntrySettings } from '../discovery/settings.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { codexCoordinatingPreflight } from '../discovery/native-sandbox.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -76,7 +77,7 @@ export function herdrCommand(env = process.env) {
 }
 
 export function openProjectChat({ project: name, identity, workspace, kind, route, to, args = [], focus = true,
-  env = process.env, herdr = herdrCommand(env), now = Date.now, sleep = pause, startupMs = 30000 } = {}) {
+  env = process.env, herdr = herdrCommand(env), warn = console.error, now = Date.now, sleep = pause, startupMs = 30000 } = {}) {
   const fleet = readFleet(env);
   const project = fleet && Object.hasOwn(fleet.projects, name ?? '') ? fleet.projects[name] : null;
   if (!project) throw new Error(`unknown fleet project: ${name ?? '(choose a project)'}`);
@@ -133,14 +134,15 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     const { config } = loadDiscoveredRoutes({ cwd: project.checkout, env: { ...env, LANE_CONFIG: undefined } });
     const bin = env.HERDR_MONITOR_ENTRY_BIN || path.join(env.HERDR_MONITOR_HOME || path.join(os.homedir(), '.local/share/herdr-monitor'), 'entry/bin');
     const harness = kind || env.HERDR_MONITOR_SUPERVISOR_HARNESS || (fs.existsSync(path.join(bin, 'monitor-codex')) ? 'codex' : 'claude');
-    const launch = resolveLaunchRoute(config, { ...(route ? { route } : { kind: harness }), args });
+    let launch = resolveLaunchRoute(config, { ...(route ? { route } : { kind: harness }), args });
     if (!['codex', 'claude'].includes(launch.kind)) throw new Error('project chats require codex or claude');
     const chat = agentName(project.identity);
     if (agents(herdr).some(a => a.name === chat)) throw new Error('project chat exists outside its recorded tab; inspect before opening another');
-    const pairs = new Map(launch.env.map(pair => {
+    const environmentPairs = launch => new Map(launch.env.map(pair => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*=/u.test(pair) || pair.includes('\0')) throw new Error('invalid chat launch environment');
       const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
     }));
+    let pairs = environmentPairs(launch);
     const ops = to || pairs.get('MONITOR_SUPERVISOR_AGENT') || 'supervisor-herdr';
     if (!/^[a-z][a-z0-9_-]{0,31}$/u.test(ops) || ops.startsWith('chat-')) throw new Error('notice recipient must be an ops agent, never a project chat');
     // Adopt the operator's prototype without restarting it or changing its
@@ -160,6 +162,19 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       if (focus) herdr(['tab', 'focus', receipt.tab]);
       return { ...receipt, project: name, reused: true, available: true };
     }
+    let fallback;
+    if (launch.kind === 'codex') {
+      try {
+        codexCoordinatingPreflight({ entryBin: bin, args: launch.args,
+          context: { workspace: project.checkout }, env: { ...env, ...Object.fromEntries(pairs) } });
+      } catch (error) {
+        if (kind || route) throw error;
+        fallback = `default Codex chat preflight refused: ${error.message}; using Claude`;
+        launch = resolveLaunchRoute(config, { kind: 'claude', args });
+        pairs = environmentPairs(launch);
+        warn(`monitor chat: ${fallback}`);
+      }
+    }
     const adapter = path.join(bin, `monitor-${launch.kind}`);
     fs.accessSync(adapter, fs.constants.X_OK);
     for (const [key, value] of Object.entries({ ORG_DIR: project.record, ORG_ACTOR: chat, HERDR_AGENT_NAME: chat,
@@ -175,7 +190,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       herdr(['tab', 'rename', id(created.tab?.tab_id, 'tab id'), name]);
     } else created = herdr(['tab', 'create', '--workspace', control.workspace_id, '--cwd', project.checkout, '--label', name, '--no-focus', ...environment]);
     const receipt = { workspace: control.workspace_id, tab: id(created.tab?.tab_id, 'tab id'), pane: id(created.root_pane?.pane_id, 'pane id'),
-      name: chat, checkout: project.checkout, record: project.record, kind: launch.kind, to: ops };
+      name: chat, checkout: project.checkout, record: project.record, kind: launch.kind, to: ops, ...(fallback ? { fallback } : {}) };
     state.workspace = receipt.workspace;
     state.projects[project.identity] = receipt;
     // Retain the tab even if startup fails or its reply is lost. Reopening

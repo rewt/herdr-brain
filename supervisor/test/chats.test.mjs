@@ -70,8 +70,13 @@ function fixture(t) {
   const stateFile = path.join(root, 'state.json');
   fs.writeFileSync(stateFile, JSON.stringify({counter: 0, calls: [], spaces: [], tabs: [], panes: [], agents: [], env: {}, launches: [], focus: 'operator-work'}));
   fs.writeFileSync(path.join(bin, 'herdr'), fake, { mode: 0o755 });
+  const codexHome = path.join(root, 'codex-home'); fs.mkdirSync(codexHome);
+  const native = path.join(root, 'native-codex');
+  fs.writeFileSync(native, '#!/bin/sh\nif [ "$1" = --help ]; then echo "--sandbox --add-dir"; elif [ "$1" = sandbox ] && [ "$2" = --help ] && [ "$CHAT_FAKE_CODEX_PROFILES" != 0 ]; then echo "--permission-profile"; fi\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, '.monitor-entry.json'), JSON.stringify({ native, nativeExplicit: true }));
   for (const kind of ['codex', 'claude']) fs.writeFileSync(path.join(bin, `monitor-${kind}`), `#!${process.execPath}\nconsole.log(JSON.stringify({kind: '${kind}', args: process.argv.slice(2), env: Object.fromEntries(['ORG_DIR','ORG_ACTOR','MONITOR_SUPERVISOR_AGENT','MONITOR_SESSION_KIND','MONITOR_REQUEST_DIR','LANE_CONFIG'].map(k => [k, process.env[k]]))}));\n`, { mode: 0o755 });
   const env = { ...process.env, HERDR_BIN_PATH: path.join(bin, 'herdr'), HERDR_MONITOR_ENTRY_BIN: bin,
+    CODEX_HOME: codexHome, CHAT_FAKE_CODEX_PROFILES: '1',
     ORG_DIR: '', HERDR_ORG_CONSOLE_CONFIG: path.join(root, 'absent-console.json'),
     HERDR_MONITOR_SUPERVISOR_HARNESS: 'codex', CHAT_FAKE_STATE: stateFile,
     MONITOR_SUPERVISOR_AGENT: 'foreign-ops', MONITOR_REQUEST_DIR: '/foreign/requests', LANE_CONFIG: '/foreign/config',
@@ -102,6 +107,45 @@ function fixture(t) {
   };
   return {root, env, projects, state, change, open, snapshot};
 }
+
+test('default chat falls back to Claude with the inherited sandbox selector reason before creating a tab', t => {
+  const f = fixture(t), warnings = [], file = path.join(f.env.CODEX_HOME, 'config.toml');
+  const settings = 'sandbox_mode = "workspace-write"\n'; fs.writeFileSync(file, settings);
+  delete f.env.HERDR_MONITOR_SUPERVISOR_HARNESS; // Installed monitor-codex is the default.
+  const receipt = f.open(undefined, { warn: message => {
+    assert.equal(f.state().tabs.length, 0);
+    warnings.push(message);
+  } });
+  assert.equal(receipt.kind, 'claude'); assert.equal(receipt.available, true);
+  assert.match(receipt.fallback, /sandbox_mode="workspace-write"/);
+  assert.ok(receipt.fallback.includes(file)); assert.match(receipt.fallback, /using Claude/);
+  assert.ok(warnings[0].includes(receipt.fallback));
+  assert.equal(f.state().launches[0].kind, 'claude');
+  assert.deepEqual(f.state().launches[0].args, ['--repo', f.projects[0].checkout, '--role', 'chat', '--']);
+  assert.equal(f.state().env[receipt.pane].MONITOR_SESSION_ROLE, 'chat');
+  assert.equal(f.state().launches[0].env.MONITOR_SUPERVISOR_AGENT, 'ops-0');
+  assert.equal(fs.readFileSync(file, 'utf8'), settings);
+  assert.equal(f.open().fallback, receipt.fallback);
+  assert.equal(f.state().launches.length, 1);
+});
+
+test('unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation', t => {
+  for (const failure of ['selector', 'profiles']) {
+    const f = fixture(t), warnings = [];
+    const config = JSON.parse(fs.readFileSync(f.projects[0].layers[0]));
+    config.routes.codexChat = { kind: 'codex' };
+    fs.writeFileSync(f.projects[0].layers[0], JSON.stringify(config));
+    if (failure === 'selector') fs.writeFileSync(path.join(f.env.CODEX_HOME, 'config.toml'), 'sandbox_mode="workspace-write"\n');
+    else f.env.CHAT_FAKE_CODEX_PROFILES = '0';
+    const reason = failure === 'selector' ? /legacy sandbox selectors/ : /require native permission-profile support/;
+    for (const selection of [{ kind: 'codex' }, { route: 'codexChat' }]) assert.throws(() => f.open(undefined, selection), reason);
+    assert.equal(f.state().tabs.length, 0); assert.equal(f.state().spaces.length, 0);
+    assert.equal(f.state().launches.length, 0);
+    const receipt = f.open(undefined, { warn: message => warnings.push(message) });
+    assert.equal(receipt.kind, 'claude'); assert.match(receipt.fallback, reason);
+    assert.equal(warnings.length, 1);
+  }
+});
 
 test('one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files', t => {
   const f = fixture(t), before = f.projects.map(p => f.snapshot(p.checkout));

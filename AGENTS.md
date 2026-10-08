@@ -8,6 +8,10 @@
 - `mcp/` is an optional foreground stdio adapter with its own dependencies. It calls the record CLI
   with argument arrays for every record operation and never appends to `events.jsonl` itself.
   Run `npm --prefix mcp ci` and `npm --prefix mcp test` when changing it; tests stay offline.
+  Generated Codex worker/review permission profiles disable network for sandboxed commands.
+  Run dependency installs such as `npm --prefix mcp ci` outside that sandbox (through the
+  harness's approved command escalation) or on a Claude route; do not enable network or
+  grant Herdr's control socket to a worker to install dependencies.
 - `brain/` may call a model and run as a background service; it has no dependencies, keeps its own state,
   and never writes `events.jsonl`. `supervisor/` supplies the read-only cold start and generic protocol,
   foreground notice/queue glue, and legacy settle launchers. Workers never invoke its cycle mutations.

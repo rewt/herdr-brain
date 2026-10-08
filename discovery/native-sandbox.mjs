@@ -11,6 +11,30 @@ import { runTemporary, temporaryEnvironment } from './temporary.mjs';
 import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
 import { coordinatingRole, herdrControlSocket, socketProbeArguments } from './control-socket.mjs';
+import { resolveNative } from './native-binary.mjs';
+
+// Read-only preflight shared with default chat selection. Do this before a
+// launcher creates a tab or temporary run, and never rewrite native settings.
+export function codexCoordinatingPreflight({ binary, entryBin, args, context, env = process.env }) {
+  const choice = codexPermissionChoice(context, args, env);
+  const explicit = codexPermissionChoice(context, args, env, { cliOnly: true });
+  const conflict = explicit ?? (choice?.setting === 'sandbox_mode' ? choice : null);
+  if (conflict) throw new Error(`coordinating codex launch requires the generated permission profile; remove ${conflict.setting}=${JSON.stringify(conflict.value)} from ${conflict.source} (legacy sandbox selectors take precedence over native permission profiles)`);
+  if (!binary) {
+    let receipt = {};
+    try { receipt = JSON.parse(fs.readFileSync(path.join(entryBin, '.monitor-entry.json'), 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    binary = resolveNative('codex', { entryBin, fallback: receipt.native, explicit: receipt.nativeExplicit, env });
+  }
+  const options = { cwd: context.workspace, env, encoding: 'utf8', timeout: 5000 };
+  const help = spawnSync(binary, ['--help'], options);
+  if (help.status !== 0 || !/--sandbox\b/u.test(help.stdout) || !/--add-dir\b/u.test(help.stdout))
+    throw new Error('codex has no supported native sandbox options for a coordinating launch');
+  const provider = spawnSync(binary, ['sandbox', '--help'], options);
+  if (provider.status !== 0 || !/--permission-profile\b/u.test(provider.stdout))
+    throw new Error('coordinating Codex launches require native permission-profile support for scoped Unix sockets');
+  return { choice, help, provider };
+}
 
 export function nativeSessionContext(cwd) {
   const registry = readFleet();
@@ -137,11 +161,8 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
   const protectedPaths = coordinating ? [] : [...new Set([coordination, path.join(coordination, 'discovery')].flatMap(directory => [directory, resolvedPath(directory)]))];
   if (context.requests && protectedPaths.some(root => within(root, resolvedPath(context.requests)))) throw new Error('request queue must be outside canonical coordination state');
   if (extra.some(directory => protectedPaths.some(root => within(root, directory)))) throw new Error('extra directories cannot grant worker writes inside canonical coordination state');
-  const choice = kind === 'codex' ? codexPermissionChoice(context, args, env) : null;
-  const explicitChoice = kind === 'codex' && coordinating ? codexPermissionChoice(context, args, env, { cliOnly: true }) : null;
-  const conflict = explicitChoice ?? (choice?.setting === 'sandbox_mode' ? choice : null);
-  if (coordinating && conflict)
-    throw new Error(`coordinating ${kind} launch requires the generated permission profile; remove ${conflict.setting}=${JSON.stringify(conflict.value)} from ${conflict.source} (legacy sandbox selectors take precedence over native permission profiles)`);
+  const preflight = kind === 'codex' && coordinating ? codexCoordinatingPreflight({ binary, args, context, env }) : null;
+  const choice = preflight?.choice ?? (kind === 'codex' ? codexPermissionChoice(context, args, env) : null);
   const controlSocket = coordinating ? herdrControlSocket(env) : null;
   const requestedArgs = args;
   const selectedArgs = [];
@@ -161,7 +182,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
   try {
     const environment = { ...env, ...temporaryEnvironment(temporary, env) };
     if (controlSocket) environment.HERDR_SOCKET_PATH = controlSocket;
-    const help = spawnSync(binary, ['--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
+    const help = preflight?.help ?? spawnSync(binary, ['--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
     const version = kind === 'claude' ? spawnSync(binary, ['--version'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 }) : null;
     const claudeVersion = version?.stdout?.match(/\b(\d+)\.(\d+)\.(\d+)\b/u)?.slice(1).map(Number);
     // The settings schema below is verified on 2.1.284. Older/unknown builds
@@ -190,7 +211,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
         warn(`monitor sandbox: WARNING: ${choice.setting}=${JSON.stringify(choice.value)} from ${choice.source} selects the operator's native policy instead of generated project confinement`);
         return { binary, args: [...requestedArgs, ...trustArgs], env: environment, close };
       }
-      const provider = spawnSync(binary, ['sandbox', '--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
+      const provider = preflight?.provider ?? spawnSync(binary, ['sandbox', '--help'], { cwd: context.workspace, env: environment, encoding: 'utf8', timeout: 5000 });
       if (provider.status === 0 && /--permission-profile\b/u.test(provider.stdout)) {
         if (choice) warn(`monitor sandbox: WARNING: coordinating role uses its generated permission profile instead of ${choice.setting}=${JSON.stringify(choice.value)} from ${choice.source}`);
         // Native configuration layers merge tables. A fresh name prevents a

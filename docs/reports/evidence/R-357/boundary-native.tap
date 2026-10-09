@@ -1,0 +1,78 @@
+TAP version 13
+# Subtest: control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+ok 1 - control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+  ---
+  duration_ms: 222.7135
+  ...
+# Subtest: claude grants only coordinating roles the resolved control socket and lane root
+ok 2 - claude grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 481.149833
+  ...
+# Subtest: codex grants only coordinating roles the resolved control socket and lane root
+ok 3 - codex grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 425.07675
+  ...
+# Subtest: coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+ok 4 - coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+  ---
+  duration_ms: 269.494334
+  ...
+# Subtest: the local bridge warning names the removable file without rewriting it
+ok 5 - the local bridge warning names the removable file without rewriting it
+  ---
+  duration_ms: 274.537125
+  ...
+# Subtest: a coordinating Codex launch fails before handover when its native profile cannot connect
+ok 6 - a coordinating Codex launch fails before handover when its native profile cannot connect
+  ---
+  duration_ms: 249.255917
+  ...
+# Subtest: chat session bindings carry their role and omit supervisor lifecycle hooks
+ok 7 - chat session bindings carry their role and omit supervisor lifecycle hooks
+  ---
+  duration_ms: 53.164542
+  ...
+# Subtest: claude native sandbox connects to the fake control socket only for supervisor and chat
+ok 8 - claude native sandbox connects to the fake control socket only for supervisor and chat # SKIP set the offline native sandbox probe binary outside a nested sandbox
+  ---
+  duration_ms: 0.121542
+  ...
+# Subtest: codex native sandbox connects to the fake control socket only for supervisor and chat
+ok 9 - codex native sandbox connects to the fake control socket only for supervisor and chat # SKIP set the offline native sandbox probe binary outside a nested sandbox
+  ---
+  duration_ms: 0.214958
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 22 command files from other origins
+# Subtest: read wrapper accepts a strict read-only grammar and refuses mutations and injection
+ok 10 - read wrapper accepts a strict read-only grammar and refuses mutations and injection
+  ---
+  duration_ms: 1438.540291
+  ...
+# Subtest: canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+ok 11 - canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+  ---
+  duration_ms: 662.48825
+  ...
+# Subtest: native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied
+ok 12 - native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied
+  ---
+  duration_ms: 1891.372666
+  ...
+# 2.1.295 (Claude Code): read wrappers reached fake socket; direct socket EPERM; mutations confined
+# Subtest: installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+ok 13 - installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+  ---
+  duration_ms: 1642.695625
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 22 command files from other origins
+1..13
+# tests 13
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 5731.397375

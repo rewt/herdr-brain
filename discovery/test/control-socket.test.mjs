@@ -15,6 +15,10 @@ function fixture(t) {
   const context = { role: 'worker', workspace: path.join(root, 'repo'), canonical: path.join(root, 'repo'),
     org: path.join(root, 'record'), worktrees: path.join(root, 'lanes'), tempRoot: path.join(root, 'temp'), projects: [] };
   for (const directory of Object.values(context).filter(value => typeof value === 'string' && path.isAbsolute(value))) fs.mkdirSync(directory, { recursive: true });
+  for (const args of [['init','-q','-b','main'],['-c','user.name=Socket tests','-c','user.email=test@example.invalid','commit','--allow-empty','-qm','Seed']]) {
+    const result=spawnSync('git',['-C',context.canonical,...args],{encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr);
+  }
   const config = path.join(root, 'config'); fs.mkdirSync(config);
   const socket = fakeControlSocket(t, root);
   const alias = path.join(root, 'control-alias'); fs.symlinkSync(socket, alias);

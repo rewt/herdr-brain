@@ -142,7 +142,11 @@ parent routing layer, native settings file or environment variable):
 ```
 
 `full` is the default and retains the coordinating control socket grant from
-ENG-259. Supervisors retain full access and workers/reviewers retain their
+ENG-259. Mode selection reads only the canonical committed HEAD blob through
+`git show HEAD:.lane.json`. Working-tree-only or uncommitted changes never
+choose the mode. If committed mode is `read` and the working tree's mode differs
+(including a deleted config), launch refuses with a restore/commit diagnostic.
+Invalid top-level settings also refuse explicitly. Supervisors retain full access and workers/reviewers retain their
 existing confinement regardless of this chat setting. `read` grants no control
 socket. It uses Claude's CLI-scope `sandbox.excludedCommands` for exactly the
 installed entry bin's absolute `herdr-read` path, plus a matching Bash permission
@@ -158,7 +162,10 @@ binary permits full-mode installation but refuses read-mode launches. Runtime
 PATH and `HERDR_BIN_PATH` cannot choose another executable through the wrapper.
 The generated sandbox and Edit denies protect the entry bin, wrapper code, real
 Herdr binary and Node interpreter against chat writes. Interpreter preload
-variables are cleared by the launcher.
+variables are cleared by the launcher. Read chats also receive shell write and
+native Edit/Write denies for canonical `.lane.json`, `.git` and resolved Git
+metadata/config paths. File targets use exact Edit rules; directories use `/**`.
+Switching to full requires an operator commit outside the read chat.
 
 Use the **absolute executable path without quotes**; Claude 2.1.295 does not
 match a quoted executable to this exclusion. Paths with spaces or shell/pattern
@@ -205,7 +212,8 @@ MONITOR_TEST_CLAUDE_READ=/absolute/path/to/native/claude.exe \
 
 Run the native probe outside a nested sandbox; it verifies CLI-scope exclusion,
 read access, wrapper refusal, compound-command confinement, direct socket EPERM
-and protected wrapper code. Its bundled symbols are discovered from the binary;
+and writes to protected executables, config and Git metadata, including a denied
+Git commit attempt. Its bundled symbols are discovered from the binary;
 the probe deliberately refuses unverified versions.
 
 Notices go to **ops**, never the chat name. `--to OPS` wins over

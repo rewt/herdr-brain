@@ -60,11 +60,18 @@ if (process.env.MONITOR_HERDR_READ_PROBE) {
     assert.equal(denied.status,0,denied.stdout+denied.stderr);assert.match(denied.stdout,/direct socket EPERM/);
     // The excluded executable and its interpreter/code cannot be rewritten via
     // the sandbox, even when they lie inside an otherwise writable checkout.
-    const target=settings.sandbox.filesystem.denyWrite.find(p=>p.endsWith('/herdr-read.mjs'));
-    const edit=`const fs=require('node:fs'),assert=require('node:assert/strict');assert.throws(()=>fs.writeFileSync(${JSON.stringify(target)},fs.readFileSync(${JSON.stringify(target)})),e=>['EPERM','EACCES'].includes(e.code));`;
-    const protectedEdit=run([input.node,'-e',edit].map(quote).join(' '),true);
-    assert.equal(protectedEdit.status,0,protectedEdit.stdout+protectedEdit.stderr);
-    console.log(input.version+': read wrappers reached fake socket; direct socket EPERM; mutations confined');
+    for(const target of settings.sandbox.filesystem.denyWrite) {
+      const directory=fs.statSync(target).isDirectory();
+      const edit=`const fs=require('node:fs'),assert=require('node:assert/strict');assert.throws(()=>fs.writeFileSync(${JSON.stringify(directory ? path.join(target,'read-chat-write-probe') : target)},${directory ? "'denied'" : `fs.readFileSync(${JSON.stringify(target)})`}),e=>['EPERM','EACCES'].includes(e.code));`;
+      const protectedEdit=run([input.node,'-e',edit].map(quote).join(' '),true);
+      assert.equal(protectedEdit.status,0,protectedEdit.stdout+protectedEdit.stderr);
+    }
+    const head=spawnSync('git',['rev-parse','HEAD'],{cwd:input.workspace,encoding:'utf8'}).stdout.trim();
+    const commit=run('git -c core.hooksPath=/dev/null commit --allow-empty -m read-chat-commit-probe',true);
+    assert.notEqual(commit.status,0,commit.stdout+commit.stderr);
+    assert.match(commit.stderr,/index\.lock.*(?:Operation not permitted|Permission denied)/);
+    assert.equal(spawnSync('git',['rev-parse','HEAD'],{cwd:input.workspace,encoding:'utf8'}).stdout.trim(),head);
+    console.log(input.version+': read wrappers reached fake socket; direct socket EPERM; mutations confined; config and Git writes denied; commit denied');
     process.exit(0);
   } catch(error) { console.error(error); process.exit(1); }
 }

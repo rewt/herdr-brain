@@ -1,16 +1,30 @@
 // Canonical project setting: a lane or environment variable cannot widen it.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 export function chatHerdrMode(context) {
   const file = path.join(context.canonical, '.lane.json');
-  let config = {};
-  try { config = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  const parseMode = source => {
+    const config = JSON.parse(source);
+    if (!config || typeof config !== 'object' || Array.isArray(config) ||
+        (config.chat !== undefined && (!config.chat || typeof config.chat !== 'object' || Array.isArray(config.chat))))
+      throw new Error(`invalid chat settings in ${file}: expected an object`);
+    const mode = config.chat?.herdr_mode === undefined ? 'full' : config.chat.herdr_mode;
+    if (!['full', 'read'].includes(mode)) throw new Error(`invalid chat.herdr_mode in ${file}: expected full or read`);
+    return mode;
+  };
+  const git = args => execFileSync('git', ['-C', context.canonical, ...args],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 });
+  // ls-tree distinguishes an absent committed config (the full default) from
+  // an unavailable HEAD. Git failures must never fall back to wider access.
+  const tracked = git(['ls-tree', '--name-only', 'HEAD', '--', '.lane.json']).trim();
+  const mode = parseMode(tracked ? git(['show', 'HEAD:.lane.json']) : '{}');
+  let working = 'full';
+  try { working = parseMode(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  if (config.chat !== undefined && (!config.chat || typeof config.chat !== 'object' || Array.isArray(config.chat)))
-    throw new Error(`invalid chat settings in ${file}: expected an object`);
-  const mode = config.chat?.herdr_mode === undefined ? 'full' : config.chat.herdr_mode;
-  if (!['full', 'read'].includes(mode)) throw new Error(`invalid chat.herdr_mode in ${file}: expected full or read`);
+  if (mode === 'read' && working !== mode)
+    throw new Error(`read-mode chat refuses launch: chat.herdr_mode in ${file} differs from committed HEAD; restore the working tree or have the operator commit the mode change outside the chat`);
   return mode;
 }
 

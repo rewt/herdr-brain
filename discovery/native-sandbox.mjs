@@ -97,6 +97,15 @@ function resolvedPath(pathname) {
   catch (error) { if (error.code !== 'ENOENT') throw error; return path.join(resolvedPath(path.dirname(pathname)), path.basename(pathname)); }
 }
 
+function editDenyRules(pathname) {
+  try { return [`Edit(/${pathname}${fs.statSync(pathname).isDirectory() ? '/**' : ''})`]; }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    // A missing protected target may later be either a file or a directory.
+    return [`Edit(/${pathname})`, `Edit(/${pathname}/**)`];
+  }
+}
+
 // The supervisor reads the entire lane tree. A worker owns only its checkout;
 // sibling entries (including redirected spellings) are never write roots.
 function otherLanePaths(context) {
@@ -157,7 +166,10 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
     if (roots.some(root => within(root, peerRoot) || within(peerRoot, root))) throw new Error(`overlapping fleet project paths: ${directory}; use separate checkout, record, worktrees and temp areas`);
   }
   const coordination = path.join(checkedDirectory(context.canonical), '.lane');
-  const protectedPaths = coordinating ? [] : [...new Set([coordination, path.join(coordination, 'discovery')].flatMap(directory => [directory, resolvedPath(directory)]))];
+  const protectedPaths = [...new Set((readChat
+    ? [path.join(context.canonical, '.lane.json'), path.join(context.canonical, '.git'), gitProject(context.canonical).identity]
+    : coordinating ? [] : [coordination, path.join(coordination, 'discovery')])
+    .flatMap(target => [target, resolvedPath(target)]))];
   if (context.requests && protectedPaths.some(root => within(root, resolvedPath(context.requests)))) throw new Error('request queue must be outside canonical coordination state');
   if (extra.some(directory => protectedPaths.some(root => within(root, directory)))) throw new Error('extra directories cannot grant worker writes inside canonical coordination state');
   const preflight = kind === 'codex' && coordinating ? codexCoordinatingPreflight({ binary, args, context, env }) : null;
@@ -305,7 +317,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
     // denies also contain inherited user write paths. Socket paths use native
     // subpath rules for both bind and connect, independently of TCP binding.
     const denied = (context.projects ?? []).flatMap(p => [p.checkout, p.record, p.worktrees, p.temp])
-      .concat(protectedPaths, otherLanes, reader?.protectedPaths ?? []);
+      .concat(protectedPaths, otherLanes, (reader?.protectedPaths ?? []).flatMap(target => [target, resolvedPath(target)]));
     settings.sandbox = { ...settings.sandbox, enabled: configured('enabled') ?? true, failIfUnavailable: configured('failIfUnavailable') ?? true, allowUnsandboxedCommands: configured('allowUnsandboxedCommands') ?? false,
       // Leave inherited arrays in their native scopes: Claude merges them and
       // can exclude repository grants when the sandbox is admin-required.
@@ -328,7 +340,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
     // rules require //; sandbox paths use ordinary absolute paths.
     settings.permissions = { ...settings.permissions,
       allow: [...new Set([...(settings.permissions?.allow ?? []), ...(reader ? [`Bash(${reader.wrapper}:*)`] : []), ...readable.map(directory => `Read(/${directory}/**)`), ...writable.map(directory => `Edit(/${directory}/**)`)])],
-      deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.map(directory => `Edit(/${directory}/**)`)])] };
+      deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.flatMap(editDenyRules)])] };
     if (context.worktrees && !coordinating) {
       const quote = value => `'${value.replace(/'/gu, `'"'"'`)}'`;
       const command = [process.execPath, fileURLToPath(new URL('./lane-file-access.mjs', import.meta.url)),

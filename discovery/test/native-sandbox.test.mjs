@@ -492,6 +492,8 @@ test('roles receive scoped lane access and launch-only trust for fleet worktrees
 
 test('Claude denies sibling lanes and rejects configured lane write grants', t => {
   const f = fixture(t), parent = path.join(f.own.worktrees, 'group'), workspace = path.join(parent, 'own');
+  command('git', ['init', '-qb', 'main'], f.own.checkout);
+  command('git', ['-c','user.name=Sandbox tests','-c','user.email=test@example.invalid','commit','--allow-empty','-qm','Seed'], f.own.checkout);
   const siblings = [path.join(f.own.worktrees, 'lane-sibling'), path.join(parent, 'sibling')];
   fs.mkdirSync(workspace, { recursive:true });
   for (const directory of siblings) fs.mkdirSync(directory);

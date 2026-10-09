@@ -1,0 +1,458 @@
+TAP version 13
+# Subtest: control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+ok 1 - control socket resolves the environment and default path and refuses unsafe or unreachable endpoints
+  ---
+  duration_ms: 169.458792
+  ...
+# Subtest: claude grants only coordinating roles the resolved control socket and lane root
+ok 2 - claude grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 429.666125
+  ...
+# Subtest: codex grants only coordinating roles the resolved control socket and lane root
+ok 3 - codex grants only coordinating roles the resolved control socket and lane root
+  ---
+  duration_ms: 405.304042
+  ...
+# Subtest: coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+ok 4 - coordinating Codex profiles replace inherited profile selections but reject legacy selectors and old builds
+  ---
+  duration_ms: 302.551625
+  ...
+# Subtest: the local bridge warning names the removable file without rewriting it
+ok 5 - the local bridge warning names the removable file without rewriting it
+  ---
+  duration_ms: 200.758083
+  ...
+# Subtest: a coordinating Codex launch fails before handover when its native profile cannot connect
+ok 6 - a coordinating Codex launch fails before handover when its native profile cannot connect
+  ---
+  duration_ms: 235.960834
+  ...
+# Subtest: chat session bindings carry their role and omit supervisor lifecycle hooks
+ok 7 - chat session bindings carry their role and omit supervisor lifecycle hooks
+  ---
+  duration_ms: 57.585333
+  ...
+# Subtest: claude native sandbox connects to the fake control socket only for supervisor and chat
+ok 8 - claude native sandbox connects to the fake control socket only for supervisor and chat # SKIP set the offline native sandbox probe binary outside a nested sandbox
+  ---
+  duration_ms: 0.079916
+  ...
+# Subtest: codex native sandbox connects to the fake control socket only for supervisor and chat
+ok 9 - codex native sandbox connects to the fake control socket only for supervisor and chat # SKIP set the offline native sandbox probe binary outside a nested sandbox
+  ---
+  duration_ms: 0.088542
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+# Subtest: native question guard merges with supplied Claude hooks and lane guards and keeps Codex settings per launch
+ok 10 - native question guard merges with supplied Claude hooks and lane guards and keeps Codex settings per launch
+  ---
+  duration_ms: 193.562875
+  ...
+# Subtest: main launches compose question and permission hooks with adapter entry hooks
+ok 11 - main launches compose question and permission hooks with adapter entry hooks
+  ---
+  duration_ms: 278.6645
+  ...
+# Subtest: main launches compose question and permission hooks with project entry hooks
+ok 12 - main launches compose question and permission hooks with project entry hooks
+  ---
+  duration_ms: 218.442417
+  ...
+# Subtest: headless tasks and resumes get a sandbox even when prompt text names a utility
+ok 13 - headless tasks and resumes get a sandbox even when prompt text names a utility
+  ---
+  duration_ms: 0.398917
+  ...
+# Subtest: claude interactive resume composes question and permission hooks with inherited supervisor role
+ok 14 - claude interactive resume composes question and permission hooks with inherited supervisor role
+  ---
+  duration_ms: 483.942916
+  ...
+# Subtest: codex interactive resume composes question and permission hooks with inherited supervisor role
+ok 15 - codex interactive resume composes question and permission hooks with inherited supervisor role
+  ---
+  duration_ms: 522.062375
+  ...
+# Subtest: each run gets short private fleet temp and all three temp variables
+ok 16 - each run gets short private fleet temp and all three temp variables
+  ---
+  duration_ms: 26.791125
+  ...
+# Subtest: codex preserves the operator's Python bytecode environment
+ok 17 - codex preserves the operator's Python bytecode environment
+  ---
+  duration_ms: 304.140459
+  ...
+# Subtest: claude preserves the operator's Python bytecode environment
+ok 18 - claude preserves the operator's Python bytecode environment
+  ---
+  duration_ms: 325.459583
+  ...
+# Subtest: Claude respects Python bytecode values in user settings
+ok 19 - Claude respects Python bytecode values in user settings
+  ---
+  duration_ms: 422.246167
+  ...
+# Subtest: Claude respects Python bytecode values in project settings
+ok 20 - Claude respects Python bytecode values in project settings
+  ---
+  duration_ms: 420.360042
+  ...
+# Subtest: Claude respects Python bytecode values in local settings
+ok 21 - Claude respects Python bytecode values in local settings
+  ---
+  duration_ms: 523.356834
+  ...
+# Subtest: Claude respects Python bytecode values in cli-json settings
+ok 22 - Claude respects Python bytecode values in cli-json settings
+  ---
+  duration_ms: 382.9955
+  ...
+# Subtest: Claude respects Python bytecode values in cli-file settings
+ok 23 - Claude respects Python bytecode values in cli-file settings
+  ---
+  duration_ms: 428.600375
+  ...
+# Subtest: Claude respects Python bytecode values in managed settings
+ok 24 - Claude respects Python bytecode values in managed settings
+  ---
+  duration_ms: 414.751708
+  ...
+# Subtest: Claude respects Python bytecode values in managed-fragment settings
+ok 25 - Claude respects Python bytecode values in managed-fragment settings
+  ---
+  duration_ms: 382.357542
+  ...
+# Subtest: long and redirected temp roots refuse before creating a run
+ok 26 - long and redirected temp roots refuse before creating a run
+  ---
+  duration_ms: 29.897583
+  ...
+# Subtest: Codex uses native workspace roots, excludes system temp and retains hook transport
+ok 27 - Codex uses native workspace roots, excludes system temp and retains hook transport
+  ---
+  duration_ms: 133.4675
+  ...
+# Subtest: legacy Codex uses writable roots with system temp excluded
+ok 28 - legacy Codex uses writable roots with system temp excluded
+  ---
+  duration_ms: 139.168083
+  ...
+# Subtest: Claude gets per-session native write settings and keeps existing hooks
+ok 29 - Claude gets per-session native write settings and keeps existing hooks
+  ---
+  duration_ms: 156.960417
+  ...
+# Subtest: Claude socket grants stay within each run and its measured shell fallback
+ok 30 - Claude socket grants stay within each run and its measured shell fallback
+  ---
+  duration_ms: 153.07125
+  ...
+# Subtest: a short Claude run temp needs no shared shell fallback grant
+ok 31 - a short Claude run temp needs no shared shell fallback grant
+  ---
+  duration_ms: 137.75275
+  ...
+# Subtest: a long Claude run temp keeps the safely owned canonical per-user fallback grant
+ok 32 - a long Claude run temp keeps the safely owned canonical per-user fallback grant
+  ---
+  duration_ms: 138.738542
+  ...
+# Subtest: Claude launches without the missing shared fallback grant and warns once
+ok 33 - Claude launches without the missing shared fallback grant and warns once
+  ---
+  duration_ms: 224.934083
+  ...
+# Subtest: Claude launches without the denied shared fallback grant and warns once
+ok 34 - Claude launches without the denied shared fallback grant and warns once
+  ---
+  duration_ms: 142.202
+  ...
+# Subtest: Claude launches without the foreign shared fallback grant and warns once
+ok 35 - Claude launches without the foreign shared fallback grant and warns once
+  ---
+  duration_ms: 143.009875
+  ...
+# Subtest: Claude launches without the writable shared fallback grant and warns once
+ok 36 - Claude launches without the writable shared fallback grant and warns once
+  ---
+  duration_ms: 131.026875
+  ...
+# Subtest: Claude launches without the symlink shared fallback grant and warns once
+ok 37 - Claude launches without the symlink shared fallback grant and warns once
+  ---
+  duration_ms: 178.45
+  ...
+# Subtest: Claude merges supplied Unix sockets and leaves inherited grants in native scopes
+ok 38 - Claude merges supplied Unix sockets and leaves inherited grants in native scopes
+  ---
+  duration_ms: 166.171041
+  ...
+# Subtest: Claude warns when native socket or TCP overrides widen generated confinement
+ok 39 - Claude warns when native socket or TCP overrides widen generated confinement
+  ---
+  duration_ms: 139.522542
+  ...
+# Subtest: extra directories are supplied through native options in canonical project config
+ok 40 - extra directories are supplied through native options in canonical project config
+  ---
+  duration_ms: 249.421583
+  ...
+# Subtest: unsupported harness runs with a visible warning and its own temp
+ok 41 - unsupported harness runs with a visible warning and its own temp
+  ---
+  duration_ms: 182.80775
+  ...
+# Subtest: Codex respects inherited and CLI sandbox choices with one source-naming warning
+ok 42 - Codex respects inherited and CLI sandbox choices with one source-naming warning
+  ---
+  duration_ms: 244.215042
+  ...
+# Subtest: roles receive scoped lane access and launch-only trust for fleet worktrees
+ok 43 - roles receive scoped lane access and launch-only trust for fleet worktrees
+  ---
+  duration_ms: 244.412417
+  ...
+# Subtest: Claude denies sibling lanes and rejects configured lane write grants
+ok 44 - Claude denies sibling lanes and rejects configured lane write grants
+  ---
+  duration_ms: 430.145459
+  ...
+# Subtest: Claude native file hook denies late siblings and aliases without approving ordinary edits
+ok 45 - Claude native file hook denies late siblings and aliases without approving ordinary edits
+  ---
+  duration_ms: 978.980208
+  ...
+# Subtest: Codex generated and legacy sandbox branches both receive exact project trust
+ok 46 - Codex generated and legacy sandbox branches both receive exact project trust
+  ---
+  duration_ms: 162.395709
+  ...
+# Subtest: native Codex config reader accepts dotted and quoted launch trust without persisting it
+ok 47 - native Codex config reader accepts dotted and quoted launch trust without persisting it # SKIP set MONITOR_TEST_CODEX_CONFIG for the offline native config reader
+  ---
+  duration_ms: 0.07825
+  ...
+# Subtest: Claude 2.1.292 native permissions prevent read prompts and confine sibling file writes by role
+ok 48 - Claude 2.1.292 native permissions prevent read prompts and confine sibling file writes by role # SKIP set MONITOR_TEST_CLAUDE_READ for the offline native permission check
+  ---
+  duration_ms: 0.026625
+  ...
+# Subtest: Claude preserves interpreter exclusions from loaded settings and names their source once
+ok 49 - Claude preserves interpreter exclusions from loaded settings and names their source once
+  ---
+  duration_ms: 157.283833
+  ...
+# Subtest: Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+ok 50 - Claude preserves undeclared directories and sibling temp grants with one source-naming warning
+  ---
+  duration_ms: 137.588542
+  ...
+# Subtest: nested fleet roots refuse before launch in both Codex paths and Claude
+ok 51 - nested fleet roots refuse before launch in both Codex paths and Claude
+  ---
+  duration_ms: 95.55975
+  ...
+# Subtest: workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+ok 52 - workers protect canonical receipts with native filesystem and Edit rules and keep the queue outside
+  ---
+  duration_ms: 219.560708
+  ...
+# Subtest: assigned and headless adapters keep the checkout and run with native settings and temp
+ok 53 - assigned and headless adapters keep the checkout and run with native settings and temp
+  ---
+  duration_ms: 1396.389416
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (default)
+ok 54 - codex adapter Python import keeps bytecode out of the worktree (default)
+  ---
+  duration_ms: 505.063208
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (prefix)
+ok 55 - codex adapter Python import keeps bytecode out of the worktree (prefix)
+  ---
+  duration_ms: 507.122833
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (disabled)
+ok 56 - codex adapter Python import keeps bytecode out of the worktree (disabled)
+  ---
+  duration_ms: 485.416167
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-prefix)
+ok 57 - codex adapter Python import keeps bytecode out of the worktree (empty-prefix)
+  ---
+  duration_ms: 542.010292
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-disabled)
+ok 58 - codex adapter Python import keeps bytecode out of the worktree (empty-disabled)
+  ---
+  duration_ms: 533.961917
+  ...
+# Subtest: codex adapter Python import keeps bytecode out of the worktree (empty-both)
+ok 59 - codex adapter Python import keeps bytecode out of the worktree (empty-both)
+  ---
+  duration_ms: 564.6885
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (default)
+ok 60 - claude adapter Python import keeps bytecode out of the worktree (default)
+  ---
+  duration_ms: 541.300667
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (prefix)
+ok 61 - claude adapter Python import keeps bytecode out of the worktree (prefix)
+  ---
+  duration_ms: 525.198625
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (disabled)
+ok 62 - claude adapter Python import keeps bytecode out of the worktree (disabled)
+  ---
+  duration_ms: 456.18625
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-prefix)
+ok 63 - claude adapter Python import keeps bytecode out of the worktree (empty-prefix)
+  ---
+  duration_ms: 561.723958
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-disabled)
+ok 64 - claude adapter Python import keeps bytecode out of the worktree (empty-disabled)
+  ---
+  duration_ms: 506.291917
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (empty-both)
+ok 65 - claude adapter Python import keeps bytecode out of the worktree (empty-both)
+  ---
+  duration_ms: 506.386583
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (settings-prefix)
+ok 66 - claude adapter Python import keeps bytecode out of the worktree (settings-prefix)
+  ---
+  duration_ms: 515.678417
+  ...
+# Subtest: claude adapter Python import keeps bytecode out of the worktree (settings-disabled)
+ok 67 - claude adapter Python import keeps bytecode out of the worktree (settings-disabled)
+  ---
+  duration_ms: 538.749375
+  ...
+# Subtest: validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+ok 68 - validation gets isolated fleet temp, denies peer writes and cleans scratch on failure
+  ---
+  duration_ms: 508.266917
+  ...
+# Subtest: real Codex native roots deny peer writes and worker control-socket access including symlinks
+ok 69 - real Codex native roots deny peer writes and worker control-socket access including symlinks # SKIP set MONITOR_TEST_SANDBOX for the offline native boundary probe
+  ---
+  duration_ms: 0.050792
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+# Subtest: default chat falls back to Claude with the inherited sandbox selector reason before creating a tab
+ok 70 - default chat falls back to Claude with the inherited sandbox selector reason before creating a tab
+  ---
+  duration_ms: 1328.975792
+  ...
+# Subtest: unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation
+ok 71 - unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation
+  ---
+  duration_ms: 2844.472209
+  ...
+# Subtest: one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+ok 72 - one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+  ---
+  duration_ms: 1790.173333
+  ...
+# Subtest: operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+ok 73 - operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+  ---
+  duration_ms: 1146.363541
+  ...
+# Subtest: failed or uncertain startup retains one tab and never launches again on reopen
+ok 74 - failed or uncertain startup retains one tab and never launches again on reopen
+  ---
+  duration_ms: 1456.115041
+  ...
+# Subtest: shell readiness fails before sending input and retains a recoverable tab
+ok 75 - shell readiness fails before sending input and retains a recoverable tab
+  ---
+  duration_ms: 1556.275333
+  ...
+# Subtest: a failed rename is recovered only in the receipt pane with the same harness and checkout
+ok 76 - a failed rename is recovered only in the receipt pane with the same harness and checkout
+  ---
+  duration_ms: 1364.739166
+  ...
+# Subtest: late detection after timeout recovers the unnamed chat without replaying launch
+ok 77 - late detection after timeout recovers the unnamed chat without replaying launch
+  ---
+  duration_ms: 1450.714167
+  ...
+# Subtest: an oh-my-zsh builtin update question never receives shell input
+ok 78 - an oh-my-zsh builtin update question never receives shell input
+  ---
+  duration_ms: 1454.621792
+  ...
+# Subtest: startup waits through an update question before proving prompt and command execution
+ok 79 - startup waits through an update question before proving prompt and command execution
+  ---
+  duration_ms: 1520.899458
+  ...
+# Subtest: echoed probe input is not execution proof and cannot launch an agent
+ok 80 - echoed probe input is not execution proof and cannot launch an agent
+  ---
+  duration_ms: 1026.512417
+  ...
+# Subtest: agent detection alone cannot accept an unverified launch command
+ok 81 - agent detection alone cannot accept an unverified launch command
+  ---
+  duration_ms: 1604.37075
+  ...
+# Subtest: the named prototype in chats is adopted unchanged and other projects join that workspace
+ok 82 - the named prototype in chats is adopted unchanged and other projects join that workspace
+  ---
+  duration_ms: 1376.631833
+  ...
+# Subtest: prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+ok 83 - prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+  ---
+  duration_ms: 702.154458
+  ...
+# Subtest: unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation
+ok 84 - unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation
+  ---
+  duration_ms: 283.7295
+  ...
+# Subtest: chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+ok 85 - chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+  ---
+  duration_ms: 1453.812458
+  ...
+# Subtest: a closed chat tab can be recreated while the other project remains in the same workspace
+ok 86 - a closed chat tab can be recreated while the other project remains in the same workspace
+  ---
+  duration_ms: 2253.688291
+  ...
+# Subtest: an existing named control workspace is reused and ambient recipients never cross project boundaries
+ok 87 - an existing named control workspace is reused and ambient recipients never cross project boundaries
+  ---
+  duration_ms: 1201.748416
+  ...
+# Subtest: console --print refuses project chat keys for every profile without creating tabs or launching agents
+ok 88 - console --print refuses project chat keys for every profile without creating tabs or launching agents
+  ---
+  duration_ms: 505.329042
+  ...
+# Subtest: read-mode chats select Claude before tab creation and refuse explicit Codex, stale full chats and prototypes
+ok 89 - read-mode chats select Claude before tab creation and refuse explicit Codex, stale full chats and prototypes
+  ---
+  duration_ms: 1728.744584
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+1..89
+# tests 89
+# suites 0
+# pass 84
+# fail 0
+# cancelled 0
+# skipped 5
+# todo 0
+# duration_ms 28115.181959

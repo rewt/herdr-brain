@@ -360,6 +360,7 @@ test('read-mode chats select Claude before tab creation and refuse explicit Code
     files:{'herdr-read':fs.readFileSync(wrapper,'utf8')}});
   fs.writeFileSync(path.join(bin,'.monitor-entry.json'),JSON.stringify(receipt));
   fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'read'}}));
+  p.git(['add','.lane.json']);p.git(['commit','-qm','Read chats']);
   assert.throws(()=>f.open(undefined,{kind:'codex'}),/read-mode chats require Claude/);
   assert.equal(f.state().tabs.length,0);
   const warnings=[],opened=f.open(undefined,{warn:s=>warnings.push(s)});
@@ -367,10 +368,14 @@ test('read-mode chats select Claude before tab creation and refuse explicit Code
   assert.match(warnings[0],/read-mode chats require Claude/);
   assert.equal(f.open().reused,true);
   fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'full'}}));
+  assert.throws(()=>f.open(),/differs from committed HEAD/);
+  assert.equal(f.state().launches.length,1);
+  p.git(['add','.lane.json']);p.git(['commit','-qm','Operator enables full chats']);
   assert.throws(()=>f.open(),/chat Herdr mode changed/);
   assert.equal(f.state().launches.length,1);
   // An old receipt with no mode represents the historical full launch.
   fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'read'}}));
+  p.git(['add','.lane.json']);p.git(['commit','-qm','Operator enables read chats']);
   const file=path.join(f.env.HERDR_MONITOR_FLEET,'chats.json'),state=JSON.parse(fs.readFileSync(file));
   delete state.projects[p.identity].herdr_mode;fs.writeFileSync(file,JSON.stringify(state));
   assert.throws(()=>f.open(),/chat Herdr mode changed/);

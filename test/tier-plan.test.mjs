@@ -21,6 +21,7 @@ test('tier selection covers every current test once in promotion or release and 
   assert.ok(release.includes('test/pty-cache.test.mjs'));
   for (const file of ['test/file-wait.test.mjs', 'test/git-seed.test.mjs', 'test/tier-plan.test.mjs', 'discovery/test/entry.test.mjs', 'promote/test/workflow-train.test.mjs', 'supervisor/test/autopilot.test.mjs', 'console/test/session-input.test.mjs']) assert.ok(promotion.includes(file));
   assert.ok(!tierFiles('fast', root).includes('lanes/test/validation.test.mjs'));
+  assert.ok(promotion.includes('discovery/test/host-suites.test.mjs'));
   assert.ok(tierFiles('fast', root).every(file => promotion.includes(file)));
   assert.throws(() => tierFiles('unknown', root), /unknown test tier/);
 });

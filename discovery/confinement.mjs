@@ -102,7 +102,12 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], t
         const temp = checkedDirectory(temporaryPaths[0]);
         host += `(allow system-socket (socket-domain AF_UNIX))\n(allow network-bind (local unix-socket ${match(temp)}))\n(allow network-outbound (remote unix-socket ${match(temp)}))\n`;
       }
-      if (hostSuite.pty) host += '(allow pseudo-tty)\n(allow file-ioctl file-read* file-write* (literal "/dev/ptmx") (regex #"^/dev/ttys"))\n';
+      // The kernel issues this extension for a newly allocated slave. A path
+      // prefix alone would grant access to the operator's and other runs' PTYs.
+      const ownPTY = '(require-all (regex #"^/dev/ttys") (extension "com.apple.sandbox.pty"))';
+      host += '(deny file-read* file-ioctl (literal "/dev/tty") (literal "/dev/console"))\n';
+      host += '(deny file-read* file-ioctl (require-all (regex #"^/dev/ttys") (require-not (extension "com.apple.sandbox.pty"))))\n';
+      if (hostSuite.pty) host += `(allow pseudo-tty)\n(allow file-ioctl file-read* file-write* (literal "/dev/ptmx") ${ownPTY})\n`;
     }
     return { binary, args: ['-p', profile + host + (lifetime ? `(deny file-read* (literal ${JSON.stringify(lifetime.denied)}))\n` : '')] };
   }

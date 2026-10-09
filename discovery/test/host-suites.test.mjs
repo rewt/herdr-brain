@@ -60,6 +60,9 @@ test('host profile protects writes and scopes sockets, PTYs and signals; unsuppo
   const profile = sandboxCommand('/usr/bin/sandbox-exec', f.lane, { sharedPaths: [path.join(f.repo, '.git'), path.join(f.repo, '.lane')], temporaryPaths: [path.join(f.scratch, 'temp')], hostSuite: suite }).args[1];
   assert.match(profile, /remote ip "localhost:\*"/); assert.doesNotMatch(profile, /remote ip "\*:\*"/);
   assert.match(profile, /network-bind \(local unix-socket \(subpath/); assert.match(profile, /allow pseudo-tty/);
+  assert.match(profile, /require-all \(regex #"\^\/dev\/ttys"\) \(extension "com.apple.sandbox.pty"\)/);
+  assert.doesNotMatch(profile, /\(literal "\/dev\/ptmx"\) \(regex/);
+  assert.match(profile, /deny file-read\* file-ioctl \(literal "\/dev\/tty"\) \(literal "\/dev\/console"\)/);
   assert.match(profile, /deny signal mach-priv-task-port/); assert.match(profile, /target same-sandbox/);
   assert.throws(() => sandboxCommand('codex', f.lane, { sharedPaths: [f.repo], temporaryPaths: [path.join(f.scratch, 'temp')], hostSuite: suite }), /HOST_PROFILE_UNAVAILABLE/);
   assert.throws(() => sandboxCommand('/usr/bin/sandbox-exec', f.lane, { sharedPaths: [f.repo], temporaryPaths: [path.join(f.scratch, 'temp')], hostSuite: { ...suite, external_network: ['example.com:443'] } }), /cannot enforce/);
@@ -76,9 +79,103 @@ test('session request carries only a suite name and rejects execution inputs', t
 });
 
 const cli = new URL('../../lanes/lane.mjs', import.meta.url).pathname;
-const hostEnabled = process.platform === 'darwin' && process.env.MONITOR_HOST_PROFILE_TESTS === '1';
+test('session lane check refuses non-suite options before writing a request and documents its restriction', t => {
+  const f = fixture(t), requests = path.join(f.scratch, 'requests'); fs.mkdirSync(requests);
+  for (const args of [['--tier', 'promotion'], ['--cmd', 'true'], ['--suite', 'sockets', '--tier', 'fast'],
+    ['--suite'], ['--suite', '../escape'], ['--suite=sockets'], ['extra']]) {
+    const result = spawnSync(process.execPath, [cli, 'check', ...args], { cwd: f.lane, env: { ...f.env, MONITOR_REQUEST_DIR: requests }, encoding: 'utf8' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /inside a session, lane check accepts no options or --suite NAME only/);
+    assert.deepEqual(fs.readdirSync(requests), []);
+  }
+  const help = spawnSync(process.execPath, [cli], { cwd: f.lane, env: f.env, encoding: 'utf8' });
+  assert.match(help.stdout, /inside a session: no options or --suite NAME only/);
+});
+
+// Promotion/release run these automatically on capable macOS hosts. The probe
+// also detects a nested worker sandbox: spawning sandbox-exec must be possible.
+function hostProbe() {
+  if (process.platform !== 'darwin') return 'macOS Seatbelt host profile required';
+  const result = spawnSync(process.execPath, ['-e', `
+    const fs=require('fs'),net=require('net'),cp=require('child_process');
+    try {const fd=fs.openSync('/dev/ptmx','r+');fs.closeSync(fd);
+      const native=cp.spawnSync('/usr/bin/sandbox-exec',['-p','(version 1)(allow default)','/usr/bin/true'],{encoding:'utf8'});
+      if(native.status!==0)throw Error(native.error?.message||native.stderr||'sandbox-exec exit '+native.status);
+      const server=net.createServer();server.once('error',e=>{console.error(e.message);process.exitCode=1});
+      server.listen(0,'127.0.0.1',()=>server.close());
+    } catch(e) {console.error(e.message);process.exitCode=1}
+  `], { encoding: 'utf8', timeout: 5000 });
+  return result.status === 0 ? false : `host probe cannot run: ${result.error?.message || result.stderr.trim() || 'exit ' + result.status}`;
+}
+const hostSkip = hostProbe();
+
+test('native PTY extension permits own slaves and denies pre-existing terminal writes and state ioctls', {
+  skip: hostSkip, timeout: 20000,
+}, t => {
+  const f = fixture(t), temporary = path.join(f.scratch, 'temp'); fs.mkdirSync(temporary);
+  const suite = hostSuitePlan(f.lane, ['sockets'])[0];
+  const sandbox = sandboxCommand('/usr/bin/sandbox-exec', f.lane, { sharedPaths: [path.join(f.repo, '.git')], temporaryPaths: [temporary], hostSuite: suite });
+  const child = `import os,pty,tty,fcntl,termios,array,errno,sys
+m,s=pty.openpty();tty.setraw(s)
+os.write(m,b'hello');assert os.read(s,5)==b'hello'
+os.write(s,b'world');assert os.read(m,5)==b'world'
+fcntl.ioctl(s,termios.FIONREAD,array.array('i',[0]),True)
+# Reopening an own slave and using it in a descendant keeps the extension.
+fd=os.open(os.ttyname(s),os.O_RDWR);os.close(fd)
+pid=os.fork()
+if pid==0:
+ fd=os.open(os.ttyname(s),os.O_RDWR);tty.setraw(fd);os.close(fd);os._exit(0)
+assert os.waitpid(pid,0)[1]==0
+for target in [sys.argv[1],sys.argv[3]]:
+ for flags in [os.O_RDONLY,os.O_WRONLY,os.O_RDWR]:
+  try: os.open(target,flags);raise AssertionError('foreign terminal opened')
+  except OSError as e: assert e.errno in [errno.EPERM,errno.EACCES],e
+# A read-only inherited fixture fd tests state ioctls independently of the open
+# denial. No foreign writable terminal descriptor reaches the suite.
+foreign=int(sys.argv[2])
+for operation in [lambda:termios.tcsetattr(foreign,termios.TCSANOW,termios.tcgetattr(foreign)),lambda:fcntl.ioctl(foreign,termios.TIOCSTI,b'x')]:
+ try: operation();raise AssertionError('foreign terminal state ioctl allowed')
+ except (OSError,termios.error) as e: assert e.args[0] in [errno.EPERM,errno.EACCES],e
+os.close(m);os.close(s)
+print('OWN_PTY_PASS FOREIGN_OPEN_AND_STATE_IOCTL_DENIED')
+`;
+  const recycle = `import os,pty,sys,errno
+m,s=pty.openpty();print(os.ttyname(s),flush=True);os.close(m);os.close(s);print('CLOSED',flush=True)
+foreign=input()
+try: os.open(foreign,os.O_RDWR);raise AssertionError('stale extension opened foreign slave')
+except OSError as e: assert e.errno in [errno.EPERM,errno.EACCES],e
+print('RECYCLED_FOREIGN_OPEN_DENIED',flush=True)
+`;
+  const parent = `import os,pty,subprocess,sys
+m,s=pty.openpty();foreign=os.ttyname(s);readonly=os.open(foreign,os.O_RDONLY)
+alias=os.path.join(sys.argv[1],'foreign-tty');os.symlink(foreign,alias)
+try:
+ result=subprocess.run(['/usr/bin/sandbox-exec','-p',sys.argv[2],'/usr/bin/python3','-c',sys.argv[3],foreign,str(readonly),alias],pass_fds=[readonly],stdin=subprocess.DEVNULL,timeout=10)
+ if result.returncode==0:
+  child=subprocess.Popen(['/usr/bin/sandbox-exec','-p',sys.argv[2],'/usr/bin/python3','-c',sys.argv[4]],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+  try:
+   old=child.stdout.readline().strip();assert child.stdout.readline().strip()=='CLOSED'
+   newmaster,newslave=pty.openpty()
+   try:
+    new=os.ttyname(newslave);output,_=child.communicate(new+'\\n',timeout=5)
+    assert child.returncode==0 and 'RECYCLED_FOREIGN_OPEN_DENIED' in output
+    print('PTY_REUSE old='+old+' foreign='+new+' '+output.strip())
+   finally: os.close(newmaster);os.close(newslave)
+  finally:
+   if child.poll() is None: child.kill();child.wait()
+finally:
+ os.close(readonly);os.close(m);os.close(s);os.unlink(alias)
+raise SystemExit(result.returncode)
+`;
+  const result = spawnSync('/usr/bin/python3', ['-c', parent, f.lane, sandbox.args[1], child, recycle], { encoding: 'utf8', timeout: 15000 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /OWN_PTY_PASS FOREIGN_OPEN_AND_STATE_IOCTL_DENIED/);
+  assert.match(result.stdout, /RECYCLED_FOREIGN_OPEN_DENIED/);
+  console.log(result.stdout.trim());
+});
+
 test('sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, receipts and boundaries are exercised offline', {
-  skip: !hostEnabled && 'set MONITOR_HOST_PROFILE_TESTS=1 from a host shell; uses only a private fixture slot', timeout: 60000,
+  skip: hostSkip, timeout: 60000,
 }, async t => {
   const f = fixture(t), outsider = path.join(f.scratch, 'outside'), sibling = path.join(f.scratch, 'outside.sock');
   const helper = `import os,pty,tty,fcntl,termios,array,time\ns=time.monotonic()\nfor i in range(100):\n m,n=pty.openpty();tty.setraw(n);os.write(m,b'hello');a=array.array('i',[0]);fcntl.ioctl(n,termios.FIONREAD,a,True);os.close(m);os.close(n)\nprint('PTY100_MS='+str((time.monotonic()-s)*1000))\n`;
@@ -88,6 +185,7 @@ test('sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, recei
   const probe = `const fs=require('fs'),net=require('net'),path=require('path'),assert=require('assert'),cp=require('child_process');
 const denied=e=>['EPERM','EACCES'].includes(e.code);
 assert.equal(require('os').tmpdir(),process.env.TMPDIR);
+assert.equal(fs.fstatSync(0).rdev,fs.statSync('/dev/null').rdev);
 for(const target of [${JSON.stringify(outsider)},'/private/tmp/herdr-host-forbidden-'+process.pid,'.git',${JSON.stringify(path.join(f.repo, '.git/config'))},${JSON.stringify(path.join(f.repo, '.lane/injected'))},${JSON.stringify(path.join(f.repo, '.org/events.jsonl'))}])assert.throws(()=>fs.writeFileSync(target,'bad'),denied,target);
 fs.writeFileSync('ordinary','ok');fs.unlinkSync('ordinary');fs.writeFileSync(path.join(process.env.TMPDIR,'ok'),'ok');
 
@@ -130,6 +228,8 @@ async function listener(address){const server=net.createServer();await new Promi
   assert.match(output,/HOST_BOUNDARIES_PASS/);assert.match(output,/PTY100_MS=/);
   const gate=JSON.parse(fs.readFileSync(path.join(entry.context().workspace,'.lane/gate.json'),'utf8'));
   assert.equal(gate.exit_code,0);assert.equal(gate.host_suites[0].name,'sockets');assert.equal(gate.host_suites[0].external_network.length,0);assert.match(gate.host_suites[0].tcp_listener_limit,/Wildcard binds can accept non-loopback inbound/);
+  assert.match(gate.host_suites[0].pty_limit,/slaves allocated in the suite sandbox via com.apple.sandbox.pty/);
+  assert.match(fs.readFileSync(gate.log,'utf8'),/opening other existing terminal slaves/);
   assert.equal(gate.head,command('git',['rev-parse','HEAD'],entry.context().workspace));
   assert.match(fs.readFileSync(gate.log,'utf8'),/HOST_BOUNDARIES_PASS/);
   assert.deepEqual(fs.readFileSync(path.join(f.repo,'.org/events.jsonl')),recordBefore);
@@ -145,7 +245,7 @@ async function listener(address){const server=net.createServer();await new Promi
 
 
 test('host watchdog binds a timeout receipt and removes private temp after killing the suite', {
-  skip: !hostEnabled && 'set MONITOR_HOST_PROFILE_TESTS=1 from a host shell; uses only a private fixture slot', timeout: 20000,
+  skip: hostSkip, timeout: 20000,
 }, t => {
   const f = fixture(t);
   f.declared.timeout_seconds = { fast: 2 };

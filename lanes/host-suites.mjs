@@ -11,6 +11,7 @@ const namePattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u;
 export const suiteName = name => typeof name === 'string' && namePattern.test(name);
 const capabilities = ['localhost', 'unix_sockets', 'pty', 'temp'];
 export const HOST_TCP_LIMIT = 'Wildcard binds can accept non-loopback inbound connections for the suite duration; suites must bind 127.0.0.1. External outbound traffic is denied.';
+export const HOST_PTY_LIMIT = 'PTY access is limited to /dev/ptmx allocation and slaves allocated in the suite sandbox via com.apple.sandbox.pty; opening other existing terminal slaves and changing their terminal state are denied. Standard input is /dev/null; output goes to the validation log.';
 export function validateHostDeclarations(value) {
   const suites = value.host_suites ?? {}, tiers = value.tier_suites ?? {};
   for (const [key, object] of [['host_suites', suites], ['tier_suites', tiers]])
@@ -37,6 +38,13 @@ export function validateHostDeclarations(value) {
 }
 const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 function committed(root) {
+  try { git(root, ['rev-parse', '--verify', '--quiet', 'HEAD']); }
+  catch (error) {
+    // An unborn repository has no committed declarations. Other Git failures
+    // still propagate (including non-repositories handled by legacy callers).
+    if (error.status === 1 && !String(error.stderr).trim()) return {};
+    throw error;
+  }
   if (!git(root, ['ls-tree', 'HEAD', '--', file])) return {};
   return JSON.parse(git(root, ['show', `HEAD:${file}`]));
 }
@@ -60,7 +68,7 @@ export function hostSuitePlan(cwd, names) {
   return names.map(name => {
     if (!suiteName(name) || !Object.hasOwn(declaration.host_suites, name)) throw Error(`undeclared host suite: ${name}`);
     const suite = { command: declaration.host_suites[name].command, ...Object.fromEntries(capabilities.map(key => [key, declaration.host_suites[name][key] ?? false])), external_network: declaration.host_suites[name].external_network ?? [] };
-    return { name, ...suite, profile: 'host-validation/v1', tcp_listener_limit: HOST_TCP_LIMIT, declaration_hash: createHash('sha256').update(JSON.stringify(suite)).digest('hex') };
+    return { name, ...suite, profile: 'host-validation/v1', tcp_listener_limit: HOST_TCP_LIMIT, ...(suite.pty ? { pty_limit: HOST_PTY_LIMIT } : {}), declaration_hash: createHash('sha256').update(JSON.stringify(suite)).digest('hex') };
   });
 }
 export function assertHostSuiteSupport(plan) {

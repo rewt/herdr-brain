@@ -928,9 +928,24 @@ available; signals and task ports stay within the suite's inherited sandbox and
 children. There is one native containment boundary for a suite, with the existing
 foreground owner cleaning up descendants; no per-syscall JavaScript mediation.
 
+PTY authority covers `/dev/ptmx` allocation and only slaves allocated within
+that suite sandbox, using Seatbelt's kernel-issued `com.apple.sandbox.pty`
+extension (also used by Apple's installed application sandbox profile).
+The device path prefix is always combined with the extension predicate;
+existing operator panes and other sessions' slaves receive no write or ioctl
+grant, and read opens and terminal state changes are explicitly denied without
+the extension. `/dev/tty` and `/dev/console` read/ioctl aliases are denied too.
+Descendants can reopen the suite's own slaves. A native probe
+checks own-slave read/write, raw mode and ioctl, and denied opens and state
+ioctls on a pre-existing fixture slave and a symlink to it. A system that cannot
+enforce the profile cannot run the suite; it must be run by the supervisor.
+No inherited writable terminal descriptor is passed into the suite: standard
+input is `/dev/null`, and standard output/error use the validation log. This is
+necessary because Seatbelt does not revoke writes on already open descriptors.
+
 Writes are limited to the assigned checkout and private run temp (plus the
-usual `/dev/null` and declared PTY devices). Git metadata, canonical `.lane` and
-the record, including their resolved aliases, remain protected. `TMPDIR`, `TMP`,
+usual `/dev/null` and the suite's own allocated PTY devices). Git metadata,
+canonical `.lane` and the record, including their resolved aliases, remain protected. `TMPDIR`, `TMP`,
 `TEMP` and `os.tmpdir()` point to that temp. A project needing
 `POOL_WALLET_HOST_SCRATCH` can declare `POOL_WALLET_HOST_SCRATCH="$TMPDIR"`
 in its suite command. General
@@ -945,7 +960,11 @@ All host suites acquire the existing host test slot, including named fast checks
 and inherit the tier's ENG-274 wall and idle limits. They produce the ordinary
 `lane-validation/v1` receipts and immutable logs with the exact committed tree,
 command, environment fingerprint, suite names, capabilities and declaration
-hashes. Every host-suite receipt also records the TCP listener limitation below.
+hashes. Every host-suite receipt also records the TCP listener limitation below;
+PTY receipts include `pty_limit` describing their own-slave boundary and stdio.
+The host-profile tests run automatically on macOS when a native host probe can
+open `/dev/ptmx`, apply Seatbelt and listen on `127.0.0.1`; otherwise they skip
+with the probe's failure reason. Tests use only private fixture slots.
 Changing policy invalidates reuse; the same tree after an empty commit
 or rebase can reuse its evidence. A failing suite cannot authorize integration.
 
@@ -968,7 +987,7 @@ supervisor-run under its separate per-run approval policy.
 Offline host applicability (private fixture slot, no live project operations):
 
 ```sh
-MONITOR_HOST_PROFILE_TESTS=1 node --test discovery/test/host-suites.test.mjs
+node --test discovery/test/host-suites.test.mjs
 ```
 
 The fixture requests a named check from an actual sandboxed lane CLI and measures

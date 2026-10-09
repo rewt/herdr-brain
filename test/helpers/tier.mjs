@@ -42,6 +42,7 @@ const promotion = [
   'console/test/terminal.test.mjs',
   'console/test/waiting.test.mjs',
   'discovery/test/confinement.test.mjs',
+  'discovery/test/host-suites.test.mjs',
   'discovery/test/entry.test.mjs',
   'discovery/test/review-r4.test.mjs',
   'dispatch/test/timing.test.mjs',

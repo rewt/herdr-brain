@@ -37,9 +37,12 @@ export function runHostSuite([cwd, name, hash, tree, sharedJSON = '[]', tempRoot
     const sandbox = sandboxCommand('/usr/bin/sandbox-exec', cwd, { sharedPaths, temporaryPaths: [temporary], lifetime: scope, hostSuite: suite });
     console.log(`host suite ${name}: declaration=${hash} head=${head} temp=${temporary}`);
     console.log(suite.tcp_listener_limit);
+    if (suite.pty_limit) console.log(suite.pty_limit);
     const result = spawnSync(process.execPath, [new URL('./bounded.mjs', import.meta.url).pathname, '--timeout-ms', String(HOST_OPERATION_TIMEOUT), '--host-validation',
       ...boundedArgs(scope, sandbox.binary, sandbox.args, ['/bin/sh', '-c', suite.command])], {
-      cwd, stdio: 'inherit', timeout: HOST_OPERATION_TIMEOUT + VALIDATION_WRAPPER_GRACE, killSignal: 'SIGKILL',
+      // Seatbelt cannot revoke an already inherited writable terminal fd.
+      // The parent supplies log fds for stdout/stderr; never pass its tty stdin.
+      cwd, stdio: ['ignore', 'inherit', 'inherit'], timeout: HOST_OPERATION_TIMEOUT + VALIDATION_WRAPPER_GRACE, killSignal: 'SIGKILL',
       env: { ...process.env, ...temporaryEnvironment(temporary), MONITOR_REQUEST_DIR: '', LANE_CONFIG: '', LANE_VALIDATE: '', ORG_DIR: '',
         MONITOR_HOST_SHARED_PATHS: '', MONITOR_HOST_TEMP: '', MONITOR_PROJECT_CONFIG: '', MONITOR_PROJECT_TEMP: '',
         MONITOR_HOST_RUN_TEMPS: '', MONITOR_HOST_VALIDATED_HEAD: '' },

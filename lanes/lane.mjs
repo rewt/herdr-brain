@@ -2322,6 +2322,8 @@ function prepareWorktree(path, { quiet = false } = {}) {
 
 function check(args) {
   if (process.env.MONITOR_REQUEST_DIR) {
+    if (args.length && (args.length !== 2 || args[0] !== '--suite' || !suiteName(args[1])))
+      fail('inside a session, lane check accepts no options or --suite NAME only');
     const result = spawnSync(process.execPath, [fileURLToPath(new URL('../discovery/client.mjs', import.meta.url)), 'check', ...args], { stdio: 'inherit' });
     process.exit(result.status ?? 1);
   }
@@ -2769,6 +2771,7 @@ switch (command) {
         "  check [--cmd <validate command>] [--tier fast|promotion] | check --suite NAME\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
         "                   --tier fast (worker default) or promotion (integration CI); reuse exact trees\n" +
+        "                   inside a session: no options or --suite NAME only\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

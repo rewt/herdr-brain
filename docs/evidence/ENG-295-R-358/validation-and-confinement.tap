@@ -1,0 +1,135 @@
+TAP version 13
+# Subtest: shared-state sandbox paths must come from the parent as absolute exclusions
+ok 1 - shared-state sandbox paths must come from the parent as absolute exclusions
+  ---
+  duration_ms: 1.236333
+  ...
+# Subtest: native validation denies record and coordination writes (default record)
+ok 2 - native validation denies record and coordination writes (default record)
+  ---
+  duration_ms: 1866.722125
+  ...
+# Subtest: native validation denies record and coordination writes (linked record and event log)
+ok 3 - native validation denies record and coordination writes (linked record and event log)
+  ---
+  duration_ms: 1576.774458
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+# Subtest: entry reserves bounded owner, wrapper, preparation and reply time for promotion
+ok 4 - entry reserves bounded owner, wrapper, preparation and reply time for promotion
+  ---
+  duration_ms: 1.010458
+  ...
+# monitor entry: keeping lane/entry-6cc0ee88d1b5 at /private/tmp/md-hNxmU8/lanes/lane-entry-6cc0ee88d1b5: a run was started in this lane
+# Subtest: declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+ok 5 - declared promotion outlives fast owner, wrapper and client bounds with real descendant cleanup
+  ---
+  duration_ms: 12291.506375
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+# Subtest: defaults, legacy commands, partial tracked overrides and invalid declarations
+ok 6 - defaults, legacy commands, partial tracked overrides and invalid declarations
+  ---
+  duration_ms: 299.044875
+  ...
+# Subtest: an unborn canonical repository has no host declarations and refuses uncommitted host authority
+ok 7 - an unborn canonical repository has no host declarations and refuses uncommitted host authority
+  ---
+  duration_ms: 35.431208
+  ...
+# Subtest: a worker check, promotion check and promotion reuse their exact commands; release never runs
+ok 8 - a worker check, promotion check and promotion reuse their exact commands; release never runs
+  ---
+  duration_ms: 1296.405041
+  ...
+# Subtest: pane identities are absent from preparation, validation and fingerprints
+ok 9 - pane identities are absent from preparation, validation and fingerprints
+  ---
+  duration_ms: 877.134333
+  ...
+# Subtest: same tree after empty commits and a clean rebase reuses validation across tiers
+ok 10 - same tree after empty commits and a clean rebase reuses validation across tiers
+  ---
+  duration_ms: 677.182833
+  ...
+# Subtest: tree, command, environment, preparation and declared environment changes invalidate reuse
+ok 11 - tree, command, environment, preparation and declared environment changes invalidate reuse
+  ---
+  duration_ms: 1517.802333
+  ...
+# Subtest: red, signal, dirty and moved-head executions never supply reusable green evidence
+ok 12 - red, signal, dirty and moved-head executions never supply reusable green evidence
+  ---
+  duration_ms: 1420.649167
+  ...
+# Subtest: commands that start and exit 75 record failed receipts in both validation tiers
+ok 13 - commands that start and exit 75 record failed receipts in both validation tiers
+  ---
+  duration_ms: 968.154292
+  ...
+# Subtest: worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+ok 14 - worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+  ---
+  duration_ms: 1020.473416
+  ...
+# Subtest: a started command exiting 75 is a failure in check and promote, never a slot refusal
+ok 15 - a started command exiting 75 is a failure in check and promote, never a slot refusal
+  ---
+  duration_ms: 1248.552583
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retries
+ok 16 - promotion holds the slot without replaying the chain when leaf retries
+  ---
+  duration_ms: 407.4835
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retry exhausted
+ok 17 - promotion holds the slot without replaying the chain when leaf retry exhausted
+  ---
+  duration_ms: 413.158375
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf declines
+ok 18 - promotion holds the slot without replaying the chain when leaf declines
+  ---
+  duration_ms: 358.40225
+  ...
+# Subtest: promotion holds the slot without replaying the chain when earlier timeout text
+ok 19 - promotion holds the slot without replaying the chain when earlier timeout text
+  ---
+  duration_ms: 375.783042
+  ...
+# Subtest: a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+ok 20 - a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+  ---
+  duration_ms: 639.346875
+  ...
+# Subtest: overlapping checks serialize evidence without running the same command twice
+ok 21 - overlapping checks serialize evidence without running the same command twice
+  ---
+  duration_ms: 679.381375
+  ...
+# Subtest: promotion checks in different projects serialize and a nested command uses the held slot
+ok 22 - promotion checks in different projects serialize and a nested command uses the held slot
+  ---
+  duration_ms: 930.024417
+  ...
+# Subtest: bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+ok 23 - bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+  ---
+  duration_ms: 760.646666
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+# Subtest: tier selection covers every current test once in promotion or release and excludes support modules
+ok 24 - tier selection covers every current test once in promotion or release and excludes support modules
+  ---
+  duration_ms: 4.238042
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 13980.8855

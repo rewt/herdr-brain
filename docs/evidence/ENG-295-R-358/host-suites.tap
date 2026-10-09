@@ -1,0 +1,65 @@
+TAP version 13
+# monitor entry: keeping lane/entry-bbe3ecd79453 at /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-lF1EpG/hs-Khfu4U/worktrees/lane-entry-bbe3ecd79453: a run was started in this lane
+# OWN_PTY_PASS FOREIGN_OPEN_AND_STATE_IOCTL_DENIED
+# PTY_REUSE old=/dev/ttys066 foreign=/dev/ttys066 RECYCLED_FOREIGN_OPEN_DENIED
+# UNSANDBOXED_PTY100_MS=24.359583999999998
+# Successfully rebased and updated refs/heads/lane/test.
+# Subtest: host authority requires committed canonical declarations and matching lane policy
+ok 1 - host authority requires committed canonical declarations and matching lane policy
+  ---
+  duration_ms: 277.745417
+  ...
+# Subtest: capability declarations and external endpoint allowlists reject broad grants
+ok 2 - capability declarations and external endpoint allowlists reject broad grants
+  ---
+  duration_ms: 0.308583
+  ...
+# Subtest: host profile protects writes and scopes sockets, PTYs and signals; unsupported policy refuses
+ok 3 - host profile protects writes and scopes sockets, PTYs and signals; unsupported policy refuses
+  ---
+  duration_ms: 133.627458
+  ...
+# Subtest: session request carries only a suite name and rejects execution inputs
+ok 4 - session request carries only a suite name and rejects execution inputs
+  ---
+  duration_ms: 746.286958
+  ...
+# Subtest: session lane check refuses non-suite options before writing a request and documents its restriction
+ok 5 - session lane check refuses non-suite options before writing a request and documents its restriction
+  ---
+  duration_ms: 663.110916
+  ...
+# Subtest: native PTY extension permits own slaves and denies pre-existing terminal writes and state ioctls
+ok 6 - native PTY extension permits own slaves and denies pre-existing terminal writes and state ioctls
+  ---
+  duration_ms: 268.003709
+  ...
+# PTY100_MS=22.842792
+# monitor entry: keeping lane/entry-b432b0ff9e0a at /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-lF1EpG/hs-2b2lp7/worktrees/lane-entry-b432b0ff9e0a: a run was started in this lane
+# Successfully rebased and updated refs/heads/lane/test.
+# Successfully rebased and updated refs/heads/lane/test.
+# Subtest: sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, receipts and boundaries are exercised offline
+ok 7 - sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, receipts and boundaries are exercised offline
+  ---
+  duration_ms: 3058.512667
+  ...
+# Subtest: host watchdog binds a timeout receipt and removes private temp after killing the suite
+ok 8 - host watchdog binds a timeout receipt and removes private temp after killing the suite
+  ---
+  duration_ms: 2713.124083
+  ...
+# Subtest: unenforceable external allowlist refuses before the slot, command and receipt
+ok 9 - unenforceable external allowlist refuses before the slot, command and receipt
+  ---
+  duration_ms: 403.833917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 23 command files from other origins
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8349.550041

@@ -55,6 +55,21 @@ test('defaults, legacy commands, partial tracked overrides and invalid declarati
   assert.match(f.lane(['check', '--tier', 'release']).stderr, /release gates are run by the release module/);
 });
 
+test('an unborn canonical repository has no host declarations and refuses uncommitted host authority', t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'validation-unborn-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const init = spawnSync('git', ['init', '-qb', 'main', root], { encoding: 'utf8' });
+  assert.equal(init.status, 0, init.stderr);
+  const settings = resolveValidation({ root, env: {} });
+  assert.deepEqual(settings.host_suites, {});
+  assert.ok(Object.values(settings.tiers).every(tier => tier.command === 'npm test' && !tier.hostSuites.length));
+  // Ordinary local validation settings retain their pre-existing behavior.
+  fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ fast: 'true' }));
+  assert.equal(resolveValidation({ root, env: {} }).tiers.fast.command, 'true');
+  fs.writeFileSync(path.join(root, '.lane.validation.json'), JSON.stringify({ host_suites: { local: { command: 'true', pty: true } } }));
+  assert.throws(() => resolveValidation({ root, env: {} }), /host declarations must match committed canonical content/);
+});
+
 test('a worker check, promotion check and promotion reuse their exact commands; release never runs', { timeout: 20000 }, t => {
   const f = fixture(t, { fast: 'node check.cjs fast', promotion: 'node check.cjs promotion', release: 'node check.cjs release' });
   f.good(f.lane(['check'])); f.good(f.lane(['check']));

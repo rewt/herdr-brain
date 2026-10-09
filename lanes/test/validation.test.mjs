@@ -10,6 +10,7 @@ import { waitForFile } from '../../test/helpers/file-wait.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { processStart } from '../../test-slot/lock-support.mjs';
 import { environmentFingerprint, resolveValidation, validateValidation, validationEnvironment } from '../validation.mjs';
+import { resolveGateLimits } from '../../test-slot/limits.mjs';
 
 const cli = fileURLToPath(new URL('../lane.mjs', import.meta.url));
 function fixture(t, declaration = {}) {
@@ -53,6 +54,22 @@ test('defaults, legacy commands, partial tracked overrides and invalid declarati
   const explained = f.good(f.lane(['config']));
   for (const tier of ['fast', 'promotion', 'release']) assert.match(explained, new RegExp(`validation\\.${tier}\\t`));
   assert.match(f.lane(['check', '--tier', 'release']).stderr, /release gates are run by the release module/);
+});
+
+test('project gate limits override healthy history for promotion and release', t => {
+  const declaration = JSON.parse(fs.readFileSync(new URL('../../.lane.validation.json', import.meta.url), 'utf8'));
+  const f = fixture(t, declaration);
+  const settings = resolveValidation({ root: f.repo, env: {} });
+  const history = Array.from({ length: 3 }, () => ({ duration_s: 1001, longest_silence_s: 100 }));
+  for (const [tier, wallSeconds] of [['promotion', 3600], ['release', 7200]]) {
+    const limits = resolveGateLimits({ tier, ...settings.tiers[tier], history });
+    assert.equal(limits.wall_seconds, wallSeconds);
+    assert.equal(limits.wall_source, 'config');
+    assert.equal(limits.idle_seconds, tier === 'promotion' ? 900 : 300);
+    assert.equal(limits.idle_source, tier === 'promotion' ? 'config' : 'history');
+  }
+  assert.equal(settings.tiers.fast.timeoutSeconds, undefined);
+  assert.equal(settings.tiers.fast.idleTimeoutSeconds, undefined);
 });
 
 test('an unborn canonical repository has no host declarations and refuses uncommitted host authority', t => {

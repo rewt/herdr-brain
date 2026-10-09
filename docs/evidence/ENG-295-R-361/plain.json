@@ -1,0 +1,12 @@
+{
+  "command": "node --test --test-concurrency=1 discovery/test/host-suites.test.mjs lanes/test/validation.test.mjs test-slot/test/watchdog.test.mjs test-slot/test/gate-profile.test.mjs",
+  "exit_code": 0,
+  "totals": [
+    "# tests 83",
+    "# pass 83",
+    "# fail 0",
+    "# cancelled 0",
+    "# skipped 0",
+    "# duration_ms 111544.802291"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "files": [
+    "discovery/test/host-suites.test.mjs",
+    "lanes/test/validation.test.mjs",
+    "test-slot/test/watchdog.test.mjs",
+    "test-slot/test/gate-profile.test.mjs"
+  ],
+  "argv": [
+    "test-slot/test-slot.mjs",
+    "run",
+    "R-361 focused checks",
+    "--project-common",
+    "/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-6EayHU/R361-checks-EPStPJ/common",
+    "--tier",
+    "promotion-host",
+    "--timeout-seconds",
+    "1800",
+    "--idle-timeout-seconds",
+    "0",
+    "--wait-receipt-path",
+    "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-host-suites/docs/evidence/ENG-295-R-361/outer-wait.json",
+    "--result-path",
+    "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-host-suites/docs/evidence/ENG-295-R-361/outer-execution.json",
+    "--",
+    "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
+    "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-host-suites/docs/evidence/ENG-295-R-361/nested.mjs",
+    "inside"
+  ],
+  "exit_code": 0,
+  "signal": null,
+  "duration_s": 145.333,
+  "scratch_slots_released": true,
+  "totals": [
+    "# tests 83",
+    "# pass 83",
+    "# fail 0",
+    "# cancelled 0",
+    "# skipped 0",
+    "# duration_ms 145241.7765"
+  ]
+}

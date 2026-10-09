@@ -1,0 +1,33 @@
+{
+  "main": "2dfdaa76ef77598f53db6d66890f89d74c69d7b2",
+  "matches": [
+    {
+      "file": "promote/host-gate.mjs",
+      "matches_main": true
+    },
+    {
+      "file": "promote/memory-gate.mjs",
+      "matches_main": true
+    },
+    {
+      "file": "promote/gate-profile.mjs",
+      "matches_main": true
+    },
+    {
+      "file": "test-slot/run.mjs",
+      "matches_main": true
+    },
+    {
+      "file": "test-slot/test-slot.mjs",
+      "matches_main": true
+    },
+    {
+      "file": "test-slot/limits.mjs",
+      "matches_main": true
+    }
+  ],
+  "train_changes": [
+    "+        hostSuites: validation.tiers.promotion.hostSuites ?? [],"
+  ],
+  "main_is_ancestor": true
+}

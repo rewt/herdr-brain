@@ -230,6 +230,12 @@ async function listener(address){const server=net.createServer();await new Promi
   assert.equal(gate.exit_code,0);assert.equal(gate.host_suites[0].name,'sockets');assert.equal(gate.host_suites[0].external_network.length,0);assert.match(gate.host_suites[0].tcp_listener_limit,/Wildcard binds can accept non-loopback inbound/);
   assert.match(gate.host_suites[0].pty_limit,/slaves allocated in the suite sandbox via com.apple.sandbox.pty/);
   assert.match(fs.readFileSync(gate.log,'utf8'),/opening other existing terminal slaves/);
+  const grant = JSON.parse(fs.readFileSync(gate.slot_receipt, 'utf8'));
+  assert.equal(grant.schema, 'test-slot-wait/v1'); assert.equal(grant.state, 'acquired');
+  assert.equal(path.basename(path.dirname(gate.slot_receipt)), 'slot-waits');
+  assert.ok(Number.isFinite(Date.parse(gate.command_started_at)));
+  assert.ok(Date.parse(gate.command_finished_at) >= Date.parse(gate.command_started_at));
+  assert.ok(gate.limits.wall_seconds > 0); assert.equal(gate.outcome, 'green');
   assert.equal(gate.head,command('git',['rev-parse','HEAD'],entry.context().workspace));
   assert.match(fs.readFileSync(gate.log,'utf8'),/HOST_BOUNDARIES_PASS/);
   assert.deepEqual(fs.readFileSync(path.join(f.repo,'.org/events.jsonl')),recordBefore);
@@ -256,6 +262,10 @@ test('host watchdog binds a timeout receipt and removes private temp after killi
   assert.equal(result.status, 124, result.stdout + result.stderr);
   const gate = JSON.parse(fs.readFileSync(path.join(f.lane, '.lane/gate.json'), 'utf8'));
   assert.equal(gate.outcome, 'timeout'); assert.equal(gate.gate_timeout.kind, 'wall');
+  assert.equal(gate.limits.wall_seconds, 2);
+  assert.equal(JSON.parse(fs.readFileSync(gate.slot_receipt, 'utf8')).state, 'acquired');
+  assert.ok(Number.isFinite(Date.parse(gate.command_started_at)));
+  assert.ok(Date.parse(gate.command_finished_at) >= Date.parse(gate.command_started_at));
   assert.match(fs.readFileSync(gate.log, 'utf8'), /HOST_STARTED/);
   assert.deepEqual(fs.readdirSync(f.env.MONITOR_HOST_TEMP), []);
   assert.equal(fs.existsSync(f.env.MONITOR_TEST_SLOT_PATH), false);

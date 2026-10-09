@@ -1,0 +1,439 @@
+TAP version 13
+# monitor entry: keeping lane/entry-b3bdadd08dee at /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-6EayHU/hs-rBmhNf/worktrees/lane-entry-b3bdadd08dee: a run was started in this lane
+# OWN_PTY_PASS FOREIGN_OPEN_AND_STATE_IOCTL_DENIED
+# PTY_REUSE old=/dev/ttys084 foreign=/dev/ttys084 RECYCLED_FOREIGN_OPEN_DENIED
+# UNSANDBOXED_PTY100_MS=19.796875000000004
+# Successfully rebased and updated refs/heads/lane/test.
+# Subtest: host authority requires committed canonical declarations and matching lane policy
+ok 1 - host authority requires committed canonical declarations and matching lane policy
+  ---
+  duration_ms: 662.401875
+  ...
+# Subtest: capability declarations and external endpoint allowlists reject broad grants
+ok 2 - capability declarations and external endpoint allowlists reject broad grants
+  ---
+  duration_ms: 0.402667
+  ...
+# Subtest: host profile protects writes and scopes sockets, PTYs and signals; unsupported policy refuses
+ok 3 - host profile protects writes and scopes sockets, PTYs and signals; unsupported policy refuses
+  ---
+  duration_ms: 248.403125
+  ...
+# Subtest: session request carries only a suite name and rejects execution inputs
+ok 4 - session request carries only a suite name and rejects execution inputs
+  ---
+  duration_ms: 1122.63725
+  ...
+# Subtest: session lane check refuses non-suite options before writing a request and documents its restriction
+ok 5 - session lane check refuses non-suite options before writing a request and documents its restriction
+  ---
+  duration_ms: 757.105292
+  ...
+# Subtest: native PTY extension permits own slaves and denies pre-existing terminal writes and state ioctls
+ok 6 - native PTY extension permits own slaves and denies pre-existing terminal writes and state ioctls
+  ---
+  duration_ms: 354.521333
+  ...
+# PTY100_MS=23.380125
+# monitor entry: keeping lane/entry-9bc1c6931ec1 at /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-6EayHU/hs-hos34o/worktrees/lane-entry-9bc1c6931ec1: a run was started in this lane
+# Successfully rebased and updated refs/heads/lane/test.
+# Successfully rebased and updated refs/heads/lane/test.
+# Subtest: sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, receipts and boundaries are exercised offline
+ok 7 - sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, receipts and boundaries are exercised offline
+  ---
+  duration_ms: 3062.966708
+  ...
+# Subtest: host watchdog binds a timeout receipt and removes private temp after killing the suite
+ok 8 - host watchdog binds a timeout receipt and removes private temp after killing the suite
+  ---
+  duration_ms: 2707.140334
+  ...
+# Subtest: unenforceable external allowlist refuses before the slot, command and receipt
+ok 9 - unenforceable external allowlist refuses before the slot, command and receipt
+  ---
+  duration_ms: 415.378
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 79 command files from other origins
+# Subtest: defaults, legacy commands, partial tracked overrides and invalid declarations
+ok 10 - defaults, legacy commands, partial tracked overrides and invalid declarations
+  ---
+  duration_ms: 299.537208
+  ...
+# Subtest: an unborn canonical repository has no host declarations and refuses uncommitted host authority
+ok 11 - an unborn canonical repository has no host declarations and refuses uncommitted host authority
+  ---
+  duration_ms: 29.0245
+  ...
+# Subtest: a worker check, promotion check and promotion reuse their exact commands; release never runs
+ok 12 - a worker check, promotion check and promotion reuse their exact commands; release never runs
+  ---
+  duration_ms: 1237.189417
+  ...
+# Subtest: pane identities are absent from preparation, validation and fingerprints
+ok 13 - pane identities are absent from preparation, validation and fingerprints
+  ---
+  duration_ms: 811.663
+  ...
+# Subtest: same tree after empty commits and a clean rebase reuses validation across tiers
+ok 14 - same tree after empty commits and a clean rebase reuses validation across tiers
+  ---
+  duration_ms: 668.108709
+  ...
+# Subtest: tree, command, environment, preparation and declared environment changes invalidate reuse
+ok 15 - tree, command, environment, preparation and declared environment changes invalidate reuse
+  ---
+  duration_ms: 1423.40725
+  ...
+# Subtest: red, signal, dirty and moved-head executions never supply reusable green evidence
+ok 16 - red, signal, dirty and moved-head executions never supply reusable green evidence
+  ---
+  duration_ms: 1395.632333
+  ...
+# Subtest: commands that start and exit 75 record failed receipts in both validation tiers
+ok 17 - commands that start and exit 75 record failed receipts in both validation tiers
+  ---
+  duration_ms: 942.052542
+  ...
+# Subtest: worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+ok 18 - worker gate files, corrupt receipts and modified evidence logs cannot authorize reuse
+  ---
+  duration_ms: 982.128916
+  ...
+# Subtest: a started command exiting 75 is a failure in check and promote, never a slot refusal
+ok 19 - a started command exiting 75 is a failure in check and promote, never a slot refusal
+  ---
+  duration_ms: 1385.390292
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retries
+ok 20 - promotion holds the slot without replaying the chain when leaf retries
+  ---
+  duration_ms: 480.259125
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf retry exhausted
+ok 21 - promotion holds the slot without replaying the chain when leaf retry exhausted
+  ---
+  duration_ms: 417.370917
+  ...
+# Subtest: promotion holds the slot without replaying the chain when leaf declines
+ok 22 - promotion holds the slot without replaying the chain when leaf declines
+  ---
+  duration_ms: 407.591542
+  ...
+# Subtest: promotion holds the slot without replaying the chain when earlier timeout text
+ok 23 - promotion holds the slot without replaying the chain when earlier timeout text
+  ---
+  duration_ms: 441.947292
+  ...
+# Subtest: a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+ok 24 - a worker declaration cannot weaken canonical checks and a changed rebase tree needs a fresh check
+  ---
+  duration_ms: 735.943125
+  ...
+# Subtest: overlapping checks serialize evidence without running the same command twice
+ok 25 - overlapping checks serialize evidence without running the same command twice
+  ---
+  duration_ms: 638.632791
+  ...
+# Subtest: promotion checks in different projects serialize and a nested command uses the held slot
+ok 26 - promotion checks in different projects serialize and a nested command uses the held slot
+  ---
+  duration_ms: 887.375917
+  ...
+# Subtest: bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+ok 27 - bch-cloak-compatible holder refuses promotion with 75 and supplies no failed receipt
+  ---
+  duration_ms: 714.024333
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 79 command files from other origins
+# Subtest: project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+ok 28 - project profile runs the pinned Node, real host sockets/PTY, preparation and inherited slot before exact integration
+  ---
+  duration_ms: 833.432125
+  ...
+# Subtest: fresh profiled STOP refuses before acquiring any promotion resource
+ok 29 - fresh profiled STOP refuses before acquiring any promotion resource
+  ---
+  duration_ms: 152.732042
+  ...
+# Subtest: profiled STOP resumes its validated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+ok 30 - profiled STOP resumes its validated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+  ---
+  duration_ms: 7473.694959
+  ...
+# Subtest: profiled STOP resumes its integrated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+ok 31 - profiled STOP resumes its integrated checkpoint, reconciles main and refuses unfinished members after waiting for memory
+  ---
+  duration_ms: 7440.419625
+  ...
+# Subtest: profile initial memory wait holds no locks and clearing proceeds
+ok 32 - profile initial memory wait holds no locks and clearing proceeds
+  ---
+  duration_ms: 5856.686834
+  ...
+# Subtest: profile initial memory wait holds no locks and STOP refuses
+ok 33 - profile initial memory wait holds no locks and STOP refuses
+  ---
+  duration_ms: 5153.376125
+  ...
+# Subtest: profile pressure at --held caps and releases every acquired lock without gate evidence
+ok 34 - profile pressure at --held caps and releases every acquired lock without gate evidence
+  ---
+  duration_ms: 5196.430416
+  ...
+# Subtest: profile pressure at --execute caps and releases every acquired lock without gate evidence
+ok 35 - profile pressure at --execute caps and releases every acquired lock without gate evidence
+  ---
+  duration_ms: 5346.427
+  ...
+# Subtest: profile pressure at project-lock caps and releases every acquired lock without gate evidence
+ok 36 - profile pressure at project-lock caps and releases every acquired lock without gate evidence
+  ---
+  duration_ms: 5419.213292
+  ...
+# Subtest: pressure clearing after both host locks are acquired proceeds within the bound
+ok 37 - pressure clearing after both host locks are acquired proceeds within the bound
+  ---
+  duration_ms: 1010.887709
+  ...
+# Subtest: queue delivers a coded memory refusal with no bisection and permits re-enqueue after pressure clears
+ok 38 - queue delivers a coded memory refusal with no bisection and permits re-enqueue after pressure clears
+  ---
+  duration_ms: 7378.582416
+  ...
+# Subtest: busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+ok 39 - busy legacy fcntl lock waits visibly, caps, preserves main, and releases without deleting the lock file
+  ---
+  duration_ms: 1974.703042
+  ...
+# Subtest: a released legacy lock admits the waiting train and stays held for the complete batch
+ok 40 - a released legacy lock admits the waiting train and stays held for the complete batch
+  ---
+  duration_ms: 1039.225833
+  ...
+# Subtest: a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+ok 41 - a queue slot cap emits a completed per-lane refusal and no interrupted or red gate outcome
+  ---
+  duration_ms: 1840.61025
+  ...
+# Subtest: a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+ok 42 - a capped resume preserves a lost fast-forward checkpoint and reconciles it without another gate
+  ---
+  duration_ms: 3042.237333
+  ...
+# Subtest: busy host slot writes its grant receipt only after release and the train inherits it
+ok 43 - busy host slot writes its grant receipt only after release and the train inherits it
+  ---
+  duration_ms: 1021.042583
+  ...
+# Subtest: busy host slot caps without a red gate receipt or integration
+ok 44 - busy host slot caps without a red gate receipt or integration
+  ---
+  duration_ms: 1412.423
+  ...
+# Subtest: a declared competing process refuses before taking the slot or building
+ok 45 - a declared competing process refuses before taking the slot or building
+  ---
+  duration_ms: 192.781666
+  ...
+# Subtest: a competing process started during a slot wait refuses before preparation
+ok 46 - a competing process started during a slot wait refuses before preparation
+  ---
+  duration_ms: 591.010375
+  ...
+# Subtest: unavailable host capabilities refuse with a host launch instruction before builds
+ok 47 - unavailable host capabilities refuse with a host launch instruction before builds
+  ---
+  duration_ms: 165.080375
+  ...
+# Subtest: malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence
+ok 48 - malformed profiles and missing exact Node pins fail closed; effective declarations salt evidence
+  ---
+  duration_ms: 101.985417
+  ...
+# Subtest: inner idle timeout uses canonical lane-only limits without timing out the completed host envelope
+ok 49 - inner idle timeout uses canonical lane-only limits without timing out the completed host envelope
+  ---
+  duration_ms: 1080.591625
+  ...
+# Subtest: promotion host envelope derives from the declared inner history key
+ok 50 - promotion host envelope derives from the declared inner history key
+  ---
+  duration_ms: 866.419542
+  ...
+# Subtest: three-lane red bisection fits the host envelope and promotes both healthy green lanes
+ok 51 - three-lane red bisection fits the host envelope and promotes both healthy green lanes
+  ---
+  duration_ms: 2989.549417
+  ...
+# Subtest: two-lane host envelope timeout returns batch re-enqueue wording
+ok 52 - two-lane host envelope timeout returns batch re-enqueue wording
+  ---
+  duration_ms: 1755.075917
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 79 command files from other origins
+# Subtest: config, recent healthy clocks and conservative default resolve independently of slot waiting
+ok 53 - config, recent healthy clocks and conservative default resolve independently of slot waiting
+  ---
+  duration_ms: 33.739584
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild, releases slot and never retries under load
+ok 54 - wall timeout stops a forever-blocked grandchild, releases slot and never retries under load
+  ---
+  duration_ms: 1685.37625
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load
+ok 55 - wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load
+  ---
+  duration_ms: 1687.561209
+  ...
+# Subtest: enabled idle limit stops silence, output refreshes it and healthy clocks record final silence
+ok 56 - enabled idle limit stops silence, output refreshes it and healthy clocks record final silence
+  ---
+  duration_ms: 862.779875
+  ...
+# Subtest: wall overrun and a descendant marker cannot spend a load retry
+ok 57 - wall overrun and a descendant marker cannot spend a load retry
+  ---
+  duration_ms: 50.46775
+  ...
+# Subtest: parent walk excludes unrelated processes and escaped-child signalling confirms birth
+ok 58 - parent walk excludes unrelated processes and escaped-child signalling confirms birth
+  ---
+  duration_ms: 0.627417
+  ...
+# Subtest: lane records timeout, isolates correction and leaves main unchanged
+ok 59 - lane records timeout, isolates correction and leaves main unchanged
+  ---
+  duration_ms: 784.861791
+  ...
+# Subtest: queue records timeout, isolates correction and leaves main unchanged
+ok 60 - queue records timeout, isolates correction and leaves main unchanged
+  ---
+  duration_ms: 1631.926
+  ...
+# Subtest: fast records timeout, isolates correction and leaves main unchanged
+ok 61 - fast records timeout, isolates correction and leaves main unchanged
+  ---
+  duration_ms: 1009.34675
+  ...
+# Subtest: slot waiting consumes none of a short command deadline
+ok 62 - slot waiting consumes none of a short command deadline
+  ---
+  duration_ms: 1164.860792
+  ...
+# TEST_SLOT_GUARD_RECOVERED: dead owner guard /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-6EayHU/gate-watchdog-W1AHjt/slot.groups-lock removed.
+# Subtest: nested gates preserve the legacy holder pgid after both wrappers die
+ok 63 - nested gates preserve the legacy holder pgid after both wrappers die
+  ---
+  duration_ms: 215.366084
+  ...
+# Subtest: dead groups-lock owners recover and live or unknown owners fail with a coded path
+ok 64 - dead groups-lock owners recover and live or unknown owners fail with a coded path
+  ---
+  duration_ms: 2046.3655
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=true)
+ok 65 - leftover group fails distinctly after bounded grace (inherited pipes=true)
+  ---
+  duration_ms: 1401.079459
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=false)
+ok 66 - leftover group fails distinctly after bounded grace (inherited pipes=false)
+  ---
+  duration_ms: 1374.204958
+  ...
+# Subtest: canonical validation includes layered lane-only wall and idle settings for both envelopes
+ok 67 - canonical validation includes layered lane-only wall and idle settings for both envelopes
+  ---
+  duration_ms: 132.386333
+  ...
+# Subtest: nested watchdog stops its parent-walk children and preserves a sibling in the shared group
+ok 68 - nested watchdog stops its parent-walk children and preserves a sibling in the shared group
+  ---
+  duration_ms: 453.888583
+  ...
+# Subtest: printed descendant timeout marker follows command status 0
+ok 69 - printed descendant timeout marker follows command status 0
+  ---
+  duration_ms: 44.82425
+  ...
+# Subtest: printed descendant timeout marker follows command status 1
+ok 70 - printed descendant timeout marker follows command status 1
+  ---
+  duration_ms: 44.338708
+  ...
+# Subtest: printed descendant timeout marker follows command status 124
+ok 71 - printed descendant timeout marker follows command status 124
+  ---
+  duration_ms: 43.19975
+  ...
+# Subtest: failed descendant identity source stops the owned hung group and retains the slot
+ok 72 - failed descendant identity source stops the owned hung group and retains the slot
+  ---
+  duration_ms: 1368.758334
+  ...
+# Subtest: planned train file lists record and resolve one declared command history
+ok 73 - planned train file lists record and resolve one declared command history
+  ---
+  duration_ms: 1263.603083
+  ...
+# Subtest: healthy history prunes old command files while preserving the current key
+ok 74 - healthy history prunes old command files while preserving the current key
+  ---
+  duration_ms: 11.112083
+  ...
+# Subtest: unbatched queue maps wall timeout to correction wording
+ok 75 - unbatched queue maps wall timeout to correction wording
+  ---
+  duration_ms: 506.490916
+  ...
+# Subtest: unbatched queue maps idle timeout to correction wording
+ok 76 - unbatched queue maps idle timeout to correction wording
+  ---
+  duration_ms: 501.571792
+  ...
+# Subtest: an unknown escaped identity cannot prevent killing the owned group
+ok 77 - an unknown escaped identity cannot prevent killing the owned group
+  ---
+  duration_ms: 98.116917
+  ...
+# Subtest: fixture gates cannot create or modify the real repository history
+ok 78 - fixture gates cannot create or modify the real repository history
+  ---
+  duration_ms: 58.58575
+  ...
+# Subtest: history origin guard handles a concurrent unattributed writer
+ok 79 - history origin guard handles a concurrent unattributed writer
+  ---
+  duration_ms: 69.988584
+  ...
+# Subtest: history origin guard handles a concurrent foreign writer
+ok 80 - history origin guard handles a concurrent foreign writer
+  ---
+  duration_ms: 71.447375
+  ...
+# Subtest: history origin guard handles a concurrent descendant-leak writer
+ok 81 - history origin guard handles a concurrent descendant-leak writer
+  ---
+  duration_ms: 79.8935
+  ...
+# Subtest: three sane samples are required for wall and idle derivation, including legacy fixture history
+ok 82 - three sane samples are required for wall and idle derivation, including legacy fixture history
+  ---
+  duration_ms: 0.322209
+  ...
+# Subtest: observed healthy full gates fit clean-history defaults and trained limits
+ok 83 - observed healthy full gates fit clean-history defaults and trained limits
+  ---
+  duration_ms: 0.069083
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 79 command files from other origins
+1..83
+# tests 83
+# suites 0
+# pass 83
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 111544.802291

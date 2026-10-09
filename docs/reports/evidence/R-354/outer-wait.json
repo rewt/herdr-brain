@@ -1,0 +1,10 @@
+{
+  "schema": "test-slot-wait/v1",
+  "state": "acquired",
+  "started_at": "2026-10-09T00:28:57.575Z",
+  "wait_seconds": 0,
+  "waits": [],
+  "acquired_at": "2026-10-09T00:28:57.585Z",
+  "finished_at": "2026-10-09T00:28:57.585Z",
+  "nested": false
+}

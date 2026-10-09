@@ -146,7 +146,8 @@ ENG-259. Mode selection reads only the canonical committed HEAD blob through
 `git show HEAD:.lane.json`. Working-tree-only or uncommitted changes never
 choose the mode. If committed mode is `read` and the working tree's mode differs
 (including a deleted config), launch refuses with a restore/commit diagnostic.
-Invalid top-level settings also refuse explicitly. Supervisors retain full access and workers/reviewers retain their
+An unborn symbolic HEAD has no committed config and defaults to full; other Git
+failures refuse with a diagnostic. Invalid top-level settings also refuse explicitly. Supervisors retain full access and workers/reviewers retain their
 existing confinement regardless of this chat setting. `read` grants no control
 socket. It uses Claude's CLI-scope `sandbox.excludedCommands` for exactly the
 installed entry bin's absolute `herdr-read` path, plus a matching Bash permission
@@ -160,12 +161,20 @@ its receipt and launcher, and updates/removes it transactionally with the entry
 adapters. Have Herdr on PATH (or set `HERDR_BIN_PATH` when installing). A missing
 binary permits full-mode installation but refuses read-mode launches. Runtime
 PATH and `HERDR_BIN_PATH` cannot choose another executable through the wrapper.
-The generated sandbox and Edit denies protect the entry bin, wrapper code, real
-Herdr binary and Node interpreter against chat writes. Interpreter preload
+At launch, the installed product root is resolved through realpath. Read mode
+refuses if it lies inside any chat write root (checkout, worktrees, record,
+requests, temp or additional native write directories). Install from a release
+outside the project or deliberately use full mode for a local development install.
+The generated sandbox and Edit/Write denies protect the whole product root
+(including its configured and resolved paths), entry bin, real Herdr binary and
+Node interpreter against chat writes. Interpreter preload
 variables are cleared by the launcher. Read chats also receive shell write and
 native Edit/Write denies for canonical `.lane.json`, `.git` and resolved Git
 metadata/config paths. File targets use exact Edit rules; directories use `/**`.
 Switching to full requires an operator commit outside the read chat.
+Read chats read Herdr through `herdr-read` and durable context through the record.
+Dispatch, prompting, Git commits and lane mutations are unavailable and belong
+to the ops supervisor or operator; the read policy omits the dispatch command.
 
 Use the **absolute executable path without quotes**; Claude 2.1.295 does not
 match a quoted executable to this exclusion. Paths with spaces or shell/pattern
@@ -212,7 +221,7 @@ MONITOR_TEST_CLAUDE_READ=/absolute/path/to/native/claude.exe \
 
 Run the native probe outside a nested sandbox; it verifies CLI-scope exclusion,
 read access, wrapper refusal, compound-command confinement, direct socket EPERM
-and writes to protected executables, config and Git metadata, including a denied
+and writes to the protected product launcher, executables, config and Git metadata, including a denied
 Git commit attempt. Its bundled symbols are discovered from the binary;
 the probe deliberately refuses unverified versions.
 

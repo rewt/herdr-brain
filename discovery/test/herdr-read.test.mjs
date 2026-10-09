@@ -105,7 +105,11 @@ test('canonical read-mode settings exclude only the installed wrapper and never 
     assert.ok(settings.permissions.deny.includes(`Edit(/${target}${directory ? '/**' : ''})`));
     assert.ok(!settings.permissions.deny.includes(`Edit(/${target}${directory ? '' : '/**'})`));
   }
-  assert.match(entryPolicy({...f.context,entryBin:f.entryBin},new URL('../../',import.meta.url).pathname),/Herdr mode: read/);
+  const policy=entryPolicy({...f.context,entryBin:f.entryBin},new URL('../../',import.meta.url).pathname);
+  assert.match(policy,/Herdr mode: read/);
+  assert.match(policy,/Read Herdr through .*herdr-read.*record/);
+  assert.match(policy,/Dispatch, prompting, Git commits and lane mutations are unavailable/);
+  assert.doesNotMatch(policy,/Dispatch:|dispatch\/dispatch\.mjs|Coordinate through the record, dispatch/);
   for (const role of ['worker','review','supervisor']) {
     const other=nativeSandboxLaunch({...f,kind:'claude',binary:f.binary,args:[],context:{...f.context,role},warn:()=>{}});t.after(other.close);
     const selected=JSON.parse(fs.readFileSync(other.args[other.args.indexOf('--settings')+1]));
@@ -124,6 +128,47 @@ test('canonical read-mode settings exclude only the installed wrapper and never 
   const fullSettings=JSON.parse(fs.readFileSync(full.args[full.args.indexOf('--settings')+1]));
   assert.ok(fullSettings.sandbox.network.allowUnixSockets.includes(f.socket));
   assert.equal(fullSettings.sandbox.excludedCommands,undefined);
+  assert.match(entryPolicy({...f.context,entryBin:f.entryBin},new URL('../../',import.meta.url).pathname),/Dispatch: .*dispatch\/dispatch\.mjs/);
+});
+
+test('read launch refuses products within every writable root including resolved aliases; full mode is unchanged', t => {
+  const f=fixture(t), receiptFile=path.join(f.entryBin,'.monitor-entry.json');
+  const receipt=JSON.parse(fs.readFileSync(receiptFile));
+  f.context.requests=path.join(f.root,'requests');fs.mkdirSync(f.context.requests);
+  const extra=path.join(f.root,'extra');fs.mkdirSync(extra);
+  commitConfig(f,{chat:{herdr_mode:'read'},always_args:{claude:['--add-dir',extra]}});
+  for (const root of [f.context.canonical,f.context.worktrees,f.context.org,f.context.requests,f.context.tempRoot,extra]) {
+    const product=path.join(root,'product');fs.mkdirSync(product);
+    const alias=path.join(f.root,'product-alias');fs.symlinkSync(product,alias);
+    for (const selected of [product,alias]) {
+      fs.writeFileSync(receiptFile,JSON.stringify({...receipt,product:selected}));
+      assert.throws(()=>nativeSandboxLaunch({...f,kind:'claude',args:[],warn:()=>{}}),/installed product .* lies inside writable root .*install from a release outside the project or use full mode deliberately/);
+    }
+    fs.unlinkSync(alias);
+  }
+  commitConfig(f,{chat:{herdr_mode:'full'}});
+  const launch=nativeSandboxLaunch({...f,kind:'claude',args:[],warn:()=>{}});t.after(launch.close);
+  const settings=JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1]));
+  assert.ok(settings.sandbox.network.allowUnixSockets.includes(f.socket));
+  assert.equal(settings.sandbox.excludedCommands,undefined);
+});
+
+test('release product outside project roots is protected, and inherited write roots cannot contain it', t => {
+  const f=fixture(t), receiptFile=path.join(f.entryBin,'.monitor-entry.json');
+  const receipt=JSON.parse(fs.readFileSync(receiptFile));
+  const product=path.join(f.root,'release');fs.mkdirSync(product);
+  const alias=path.join(f.root,'release-alias');fs.symlinkSync(product,alias);
+  fs.writeFileSync(receiptFile,JSON.stringify({...receipt,product:alias}));
+  const launch=nativeSandboxLaunch({...f,kind:'claude',args:[],warn:()=>{}});t.after(launch.close);
+  const settings=JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1]));
+  for (const root of [product,alias]) {
+    assert.ok(settings.sandbox.filesystem.denyWrite.includes(root));
+    assert.ok(settings.permissions.deny.includes(`Edit(/${root}/**)`));
+  }
+  for (const loaded of [{permissions:{additionalDirectories:[f.root]}},{sandbox:{filesystem:{allowWrite:[f.root]}}}]) {
+    fs.writeFileSync(path.join(f.config,'settings.json'),JSON.stringify(loaded));
+    assert.throws(()=>nativeSandboxLaunch({...f,kind:'claude',args:[],warn:()=>{}}),/installed product .* lies inside writable root/);
+  }
 });
 
 test('only an operator committed mode change affects the next launch', t => {
@@ -147,7 +192,19 @@ test('only an operator committed mode change affects the next launch', t => {
   fs.writeFileSync(file,JSON.stringify({chat:{herdr_mode:'read'}}));
   assert.equal(chatHerdrMode(f.context),'full','working-tree-only settings do not choose the mode');
   git(f,['update-ref','-d','HEAD']);
-  assert.throws(()=>chatHerdrMode(f.context),/HEAD/,'unavailable HEAD fails closed');
+  assert.equal(chatHerdrMode(f.context),'full','unborn HEAD has no committed config');
+  fs.writeFileSync(path.join(f.context.canonical,'.git/HEAD'),'0123456789012345678901234567890123456789\n');
+  assert.throws(()=>chatHerdrMode(f.context),/cannot read committed chat settings from HEAD/,'unavailable detached HEAD fails closed');
+});
+
+test('a fresh repository opens a full-mode chat without committed config', t => {
+  const f=fixture(t);
+  git(f,['update-ref','-d','HEAD']);fs.unlinkSync(path.join(f.context.canonical,'.lane.json'));
+  assert.equal(chatHerdrMode(f.context),'full');
+  assert.match(entryPolicy({...f.context,entryBin:f.entryBin},new URL('../../',import.meta.url).pathname),/Herdr mode: full/);
+  const launch=nativeSandboxLaunch({...f,kind:'claude',args:[],warn:()=>{}});t.after(launch.close);
+  const settings=JSON.parse(fs.readFileSync(launch.args[launch.args.indexOf('--settings')+1]));
+  assert.ok(settings.sandbox.network.allowUnixSockets.includes(f.socket));
 });
 
 test('malformed committed and working-tree chat config reports invalid settings', t => {

@@ -16,7 +16,8 @@ export function nativeReadProbe({ binary, launch, context, entryBin, socket, roo
   const input = path.join(root, 'native-read-probe.json');
   fs.writeFileSync(input, JSON.stringify({ flags:moduleFor('qPo'), sandbox:moduleFor('Ve'), decision:moduleFor('by'),
     runtime:moduleFor('Wmr'), settings:launch.args[launch.args.indexOf('--settings')+1], workspace:context.workspace,
-    wrapper:path.join(entryBin,'herdr-read'), node:process.execPath, socket, version:version.stdout.trim() }));
+    wrapper:path.join(entryBin,'herdr-read'), product:fs.realpathSync(JSON.parse(fs.readFileSync(path.join(entryBin,'.monitor-entry.json'))).product),
+    node:process.execPath, socket, version:version.stdout.trim() }));
   return spawnSync(binary, ['--version'], { cwd:context.workspace, env:{...launch.env, HOME:root,
     MONITOR_HERDR_READ_PROBE:input, BUN_OPTIONS:`--preload ${fileURLToPath(import.meta.url)}`}, encoding:'utf8', timeout:20000 });
 }
@@ -58,9 +59,9 @@ if (process.env.MONITOR_HERDR_READ_PROBE) {
     const script=`const net=require('node:net'),assert=require('node:assert/strict');const c=net.connect(${JSON.stringify(input.socket)});c.once('error',e=>{assert.equal(e.code,'EPERM');console.log('direct socket EPERM')});c.once('connect',()=>{c.destroy();process.exit(1)});`;
     const denied=run([input.node,'-e',script].map(quote).join(' '),true);
     assert.equal(denied.status,0,denied.stdout+denied.stderr);assert.match(denied.stdout,/direct socket EPERM/);
-    // The excluded executable and its interpreter/code cannot be rewritten via
-    // the sandbox, even when they lie inside an otherwise writable checkout.
-    for(const target of settings.sandbox.filesystem.denyWrite) {
+    // Protect the entire installed product, including the next launch's code.
+    for(const target of [...settings.sandbox.filesystem.denyWrite,
+      ...['discovery/native-sandbox.mjs','discovery/chat-herdr.mjs','discovery/adapters/claude.mjs'].map(file=>path.join(input.product,file))]) {
       const directory=fs.statSync(target).isDirectory();
       const edit=`const fs=require('node:fs'),assert=require('node:assert/strict');assert.throws(()=>fs.writeFileSync(${JSON.stringify(directory ? path.join(target,'read-chat-write-probe') : target)},${directory ? "'denied'" : `fs.readFileSync(${JSON.stringify(target)})`}),e=>['EPERM','EACCES'].includes(e.code));`;
       const protectedEdit=run([input.node,'-e',edit].map(quote).join(' '),true);
@@ -71,7 +72,7 @@ if (process.env.MONITOR_HERDR_READ_PROBE) {
     assert.notEqual(commit.status,0,commit.stdout+commit.stderr);
     assert.match(commit.stderr,/index\.lock.*(?:Operation not permitted|Permission denied)/);
     assert.equal(spawnSync('git',['rev-parse','HEAD'],{cwd:input.workspace,encoding:'utf8'}).stdout.trim(),head);
-    console.log(input.version+': read wrappers reached fake socket; direct socket EPERM; mutations confined; config and Git writes denied; commit denied');
+    console.log(input.version+': read wrappers reached fake socket; direct socket EPERM; mutations confined; product launcher, config and Git writes denied; commit denied');
     process.exit(0);
   } catch(error) { console.error(error); process.exit(1); }
 }

@@ -1,0 +1,62 @@
+TAP version 13
+# Subtest: read wrapper accepts a strict read-only grammar and refuses mutations and injection
+ok 1 - read wrapper accepts a strict read-only grammar and refuses mutations and injection
+  ---
+  duration_ms: 1815.135458
+  ...
+# Subtest: canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+ok 2 - canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+  ---
+  duration_ms: 1484.8095
+  ...
+# Subtest: read launch refuses products within every writable root including resolved aliases; full mode is unchanged
+ok 3 - read launch refuses products within every writable root including resolved aliases; full mode is unchanged
+  ---
+  duration_ms: 898.962333
+  ...
+# Subtest: release product outside project roots is protected, and inherited write roots cannot contain it
+ok 4 - release product outside project roots is protected, and inherited write roots cannot contain it
+  ---
+  duration_ms: 579.720458
+  ...
+# Subtest: only an operator committed mode change affects the next launch
+ok 5 - only an operator committed mode change affects the next launch
+  ---
+  duration_ms: 721.096584
+  ...
+# Subtest: a fresh repository opens a full-mode chat without committed config
+ok 6 - a fresh repository opens a full-mode chat without committed config
+  ---
+  duration_ms: 511.545291
+  ...
+# Subtest: malformed committed and working-tree chat config reports invalid settings
+ok 7 - malformed committed and working-tree chat config reports invalid settings
+  ---
+  duration_ms: 1184.866458
+  ...
+# Subtest: read chat protects resolved config and separate Git metadata paths
+ok 8 - read chat protects resolved config and separate Git metadata paths
+  ---
+  duration_ms: 450.207417
+  ...
+# Subtest: native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied
+ok 9 - native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied
+  ---
+  duration_ms: 2852.666167
+  ...
+# 2.1.295 (Claude Code): read wrappers reached fake socket; direct socket EPERM; mutations confined; product launcher, config and Git writes denied; commit denied
+# Subtest: installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+ok 10 - installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+  ---
+  duration_ms: 1275.944042
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 24 command files from other origins
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11862.14825

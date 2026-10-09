@@ -10,7 +10,7 @@ import { checkedDirectory, within } from './paths.mjs';
 import { runTemporary, temporaryEnvironment } from './temporary.mjs';
 import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
-import { chatHerdrMode, installedHerdrRead } from './chat-herdr.mjs';
+import { chatHerdrMode, installedHerdrRead, protectReadProduct } from './chat-herdr.mjs';
 import { coordinatingRole, herdrControlSocket, socketProbeArguments } from './control-socket.mjs';
 import { resolveNative } from './native-binary.mjs';
 import { permissionHookArguments } from '../supervisor/permission-hooks.mjs';
@@ -159,6 +159,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
   // operator config remains the place to extend the session's write roots.
   const extra = directories(context, kind);
   const roots = [context.workspace, context.canonical, context.org, context.tempRoot, context.worktrees, ...extra].filter(Boolean).map(pathname => checkedDirectory(pathname));
+  if (reader) protectReadProduct(reader, [...roots, ...(context.requests ? [checkedDirectory(context.requests)] : [])]);
   for (const peer of context.projects ?? []) for (const directory of [peer.checkout, peer.record, peer.worktrees, peer.temp]) {
     // Fleet stores canonical paths. Resolve existing ancestors for stale or
     // not-yet-created areas too, so an alias cannot hide a nested peer.
@@ -280,11 +281,13 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
       throw new Error('extra directories cannot grant writes to sibling lanes or the shared worktree root');
     const warnings = [];
     const approved = [checkedDirectory(context.workspace), ...writable];
+    if (reader) protectReadProduct(reader, approved);
     for (const { source, settings: loaded } of sources) {
       if (source === path.join(context.canonical, '.claude/settings.local.json') && loaded.sandbox?.network?.allowUnixSockets?.length)
         warn(`monitor sandbox: WARNING: bridge socket grant in ${source}; coordinating roles now receive a per-launch grant; remove the bridge with grant-herdr-socket.mjs --remove`);
       if (loaded.sandbox?.excludedCommands?.length) warnings.push(`sandbox.excludedCommands from ${source}`);
       for (const [key, grants] of [['permissions.additionalDirectories', loaded.permissions?.additionalDirectories], ['sandbox.filesystem.allowWrite', loaded.sandbox?.filesystem?.allowWrite]]) {
+        if (reader && grants) protectReadProduct(reader, grants.map(directory => resolvedPath(path.resolve(context.workspace, directory.replace(/^~(?=\/)/u, environment.HOME || process.env.HOME)))));
         if (grants?.some(directory => !approved.some(root => within(root, resolvedPath(path.resolve(context.workspace, directory.replace(/^~(?=\/)/u, environment.HOME || process.env.HOME))))))) warnings.push(`${key} from ${source}`);
       }
       if (loaded.sandbox?.filesystem?.disabled === true) warnings.push(`sandbox.filesystem.disabled from ${source}`);

@@ -143,8 +143,9 @@ parent routing layer, native settings file or environment variable):
 
 `full` is the default and retains the coordinating control socket grant from
 ENG-259. Mode selection reads only the canonical committed HEAD blob through
-`git show HEAD:.lane.json`. Working-tree-only or uncommitted changes never
-choose the mode. If committed mode is `read` and the working tree's mode differs
+`git show HEAD:.lane.json`, using a fixed Git executable and a clean environment
+that ignores caller-selected Git repositories, objects and injected config. Working-tree-only or uncommitted changes never
+choose the mode. If committed mode is `read` or `scoped` and the working tree's mode differs
 (including a deleted config), launch refuses with a restore/commit diagnostic.
 An unborn symbolic HEAD has no committed config and defaults to full; other Git
 failures refuse with a diagnostic. Invalid top-level settings also refuse explicitly. Supervisors retain full access and workers/reviewers retain their
@@ -175,6 +176,97 @@ Switching to full requires an operator commit outside the read chat.
 Read chats read Herdr through `herdr-read` and durable context through the record.
 Dispatch, prompting, Git commits and lane mutations are unavailable and belong
 to the ops supervisor or operator; the read policy omits the dispatch command.
+
+`chat.herdr_mode: "scoped"` uses the same committed-mode selection, native
+sandbox and launcher protections as `read`, with only the absolute installed
+`herdr-scoped` wrapper excluded. Default Codex selection falls back to Claude;
+explicit Codex and unverified prototype adoption refuse. Reads retain the
+`herdr-read` grammar and can address any workspace. The control socket remains
+denied to sandboxed chat commands.
+
+Declare presets in the committed canonical config, with a fixed command and
+absolute cwd. The wrapper accepts a name and destination only:
+
+```json
+{
+  "chat": {
+    "herdr_mode": "scoped",
+    "presets": {
+      "wallet": {
+        "command": "/opt/project-tools/wallet-host --project example",
+        "cwd": "/absolute/project"
+      }
+    }
+  }
+}
+```
+
+The scoped grammar adds these operations (substitute the installed bin path):
+
+```sh
+/absolute/entry/bin/herdr-scoped pane new
+/absolute/entry/bin/herdr-scoped pane split chats:p2 --direction down
+/absolute/entry/bin/herdr-scoped pane rename chats:p2 Wallet
+/absolute/entry/bin/herdr-scoped pane resize chats:p2 --direction left
+/absolute/entry/bin/herdr-scoped pane focus chats:p2 --direction right
+/absolute/entry/bin/herdr-scoped pane stop chats:p2
+/absolute/entry/bin/herdr-scoped pane close chats:p2
+/absolute/entry/bin/herdr-scoped preset start wallet --pane new
+/absolute/entry/bin/herdr-scoped preset start wallet --pane chats:p2
+```
+
+Split accepts `right|down`; focus/resize accept `left|right|up|down`. Resize has a
+fixed 0.05 amount. New panes use the canonical cwd and preserve focus. Herdr has
+only a split primitive, so `pane new` uses the chat pane as a creation anchor;
+it creates a sibling without sending input to the chat. Explicit split, close,
+stop, rename, resize and preset destinations cannot target the chat pane. Focus
+also checks its current neighbor and refuses a neighbor that is the chat pane.
+There are no caller-supplied cwd, env, ratio, command, key, text, binding or
+socket options. Arbitrary `run`, `send-keys`, `send-text`, agent operations,
+tab/workspace mutations and undeclared presets refuse. Stop sends exactly one
+`ctrl+c`, waits 1000 ms, rechecks membership and closes; it never types an answer
+or retries the interrupt. Preset start requires the foreground shell alone and
+two identical prompt observations, then repeats the idle and membership checks
+before sending only the committed command (with its quoted fixed cwd). A new
+pane waits at most 3 seconds for readiness, apart from bounded CLI calls.
+
+The tab launcher writes private mode-0600 receipts under the installed entry
+bin's `.herdr-scoped/` directory, recording exact tab/workspace/pane, canonical
+project, pinned control socket, and kernel shell PID/start identity. The native
+chat adapter must descend from that recorded live shell before it can claim the
+receipt with its own PID/start identity. It releases that owner when the chat
+exits. The wrapper finds authority through its actual process ancestry and the
+fixed launcher directory, never caller environment, argv or run-temp state.
+Both the shell and adapter birth identities must match. The entry directory
+and installed product/process source are denied to native shell and file writes.
+A lost owner or unavailable process lookup fails closed. Display-only session
+metadata never grants authority.
+
+Every mutation resolves the chat and destination from Herdr and verifies both
+tab and workspace immediately before the CLI mutation. Creation verifies the
+returned new pane as well. Stop rechecks after waiting; presets recheck after
+readiness. Herdr's CLI/API does not supply an atomic expected-tab/expected-
+workspace precondition, so an external move after the final read and before the
+mutation can still race; focus also has a neighbor-selection race. No successful
+postcheck would undo input already sent. Full arbitrary shell/input control
+remains deferred to ARCH-30. Declared presets are operator-trusted execution
+capabilities in ordinary unconfined terminals: their binaries and dependencies
+must be chosen with that authority in mind, including any chat-writable files
+they load. A fixed command/cwd declaration does not confine that program.
+
+The installer manages `herdr-scoped` transactionally alongside `herdr-read`.
+Offline fake-Herdr tests cover foreign workspace/other-chat refusal, own-pane
+protection, forged bindings, birth identity reuse, bounded stop and committed
+presets. `discovery/herdr-scoped-probe.mjs` is an opt-in model-free probe for
+Claude 2.1.295/296: it loads the installed build's actual settings loader,
+exclusion decision and sandbox wrapper via Bun preload, then exits before the
+CLI main. It uses only private fake sockets, never a model, live pane or host
+slot. On macOS outside a nested sandbox, run:
+
+```sh
+MONITOR_TEST_CLAUDE_SCOPED=/absolute/native/claude \
+  node --test --test-name-pattern='native Claude honours scoped' discovery/test/herdr-scoped.test.mjs
+```
 
 Use the **absolute executable path without quotes**; Claude 2.1.295 does not
 match a quoted executable to this exclusion. Paths with spaces or shell/pattern

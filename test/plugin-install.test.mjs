@@ -247,9 +247,9 @@ test('rollback leaves an unstarted file alone even when another writer supplied 
   assert.equal(fs.existsSync(path.join(f.home, '.zshenv')), false);
 });
 
-for (const operation of ['install', 'upgrade', 'remove']) {
-  for (const crash of [false, true]) test(`herdr-read ${operation} restores the whole transaction after ${crash ? 'termination' : 'a write failure'}`, { timeout: 30000 }, (t) => {
-    const f = fixture(t), wrapper = path.join(f.bin, 'herdr-read'), journal = path.join(f.bin, '.monitor-recovery.json');
+for (const wrapperName of ['herdr-read', 'herdr-scoped']) for (const operation of ['install', 'upgrade', 'remove']) {
+  for (const crash of [false, true]) test(`${wrapperName} ${operation} restores the whole transaction after ${crash ? 'termination' : 'a write failure'}`, { timeout: 30000 }, (t) => {
+    const f = fixture(t), wrapper = path.join(f.bin, wrapperName), journal = path.join(f.bin, '.monitor-recovery.json');
     const runtimes = path.join(f.env.HERDR_MONITOR_HOME, 'entry/runtimes'), evidence = path.join(f.root, 'wrapper-journal.json');
     const destinations = [...['.zshenv', '.zshrc', '.bashrc', '.bash_profile'].map(name => path.join(f.home, name)),
       path.join(f.env.CODEX_HOME, 'hooks.json'), path.join(f.env.CLAUDE_CONFIG_DIR, 'settings.json')];
@@ -262,10 +262,10 @@ for (const operation of ['install', 'upgrade', 'remove']) {
     const before = new Map(destinations.map(file => [file, read(file)]));
     const beforeBin = new Map((fs.existsSync(f.bin) ? fs.readdirSync(f.bin) : []).map(name => [name, read(path.join(f.bin, name))]));
     const beforeRuntimes = fs.existsSync(runtimes) ? fs.readdirSync(runtimes) : [];
-    if (operation === 'upgrade') fs.appendFileSync(path.join(f.repo, 'discovery/herdr-read.mjs'), '\n// next runtime\n');
+    if (operation === 'upgrade') fs.appendFileSync(path.join(f.repo, `discovery/${wrapperName}.mjs`), '\n// next runtime\n');
     const preload = path.join(f.root, 'wrapper-fault.cjs');
     fs.writeFileSync(preload, `const fs=require('fs'),method=${JSON.stringify(operation === 'remove' ? 'unlinkSync' : 'renameSync')},original=fs[method];let done=false;
-fs[method]=function(...args){const result=original.apply(this,args);if(!done&&args[${operation === 'remove' ? 0 : 1}]===${JSON.stringify(wrapper)}){done=true;fs.writeFileSync(${JSON.stringify(evidence)},fs.readFileSync(${JSON.stringify(journal)}));${crash ? 'process.exit(73);' : "throw Error('injected herdr-read failure');"}}return result;};\n`);
+fs[method]=function(...args){const result=original.apply(this,args);if(!done&&args[${operation === 'remove' ? 0 : 1}]===${JSON.stringify(wrapper)}){done=true;fs.writeFileSync(${JSON.stringify(evidence)},fs.readFileSync(${JSON.stringify(journal)}));${crash ? 'process.exit(73);' : "throw Error('injected wrapper failure');"}}return result;};\n`);
     const failed = f.run(process.execPath, ['--require', preload, path.join(source, 'herdr/entry-install.mjs'), '--product', f.repo,
       operation === 'remove' ? '--remove' : '--snapshot']);
     const plan = JSON.parse(fs.readFileSync(evidence)), change = plan.changes.find(change => change.file === wrapper);
@@ -276,7 +276,7 @@ fs[method]=function(...args){const result=original.apply(this,args);if(!done&&ar
       assert.deepEqual(read(wrapper)?.content ?? null, change.after && Buffer.from(change.after.content, 'base64'));
       const recovered = f.driver('--recover'); assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
     } else {
-      assert.equal(failed.status, 1); assert.match(failed.stderr, /injected herdr-read failure/u);
+      assert.equal(failed.status, 1); assert.match(failed.stderr, /injected wrapper failure/u);
       assert.doesNotMatch(failed.stderr, /invalid or older entry recovery receipt/u);
     }
     for (const [file, original] of before) assert.deepEqual(read(file), original, file);

@@ -218,7 +218,7 @@ test('malformed committed and working-tree chat config reports invalid settings'
   }
   for(const mode of ['bad',null]) {
     commitConfig(f,{chat:{herdr_mode:mode}});
-    assert.throws(()=>chatHerdrMode(f.context),/expected full or read/);
+    assert.throws(()=>chatHerdrMode(f.context),/expected full, read or scoped/);
   }
 });
 

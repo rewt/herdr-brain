@@ -17,8 +17,8 @@ export function entryPolicy(context, root) {
   let chatPolicy;
   if (context.role === 'chat') {
     const mode = chatHerdrMode(context);
-    chatPolicy = `You are the operator's project chat. Herdr mode: ${mode}.${mode === 'read'
-      ? ` Read Herdr through ${installedHerdrRead(context.entryBin).wrapper} (absolute executable path, unquoted) for pane read, pane list, tab list and pane wait-output, and read durable context through the record. Direct Herdr socket access is denied; input routing and pane mutations are unavailable. Dispatch, prompting, Git commits and lane mutations are unavailable; the ops supervisor or operator handles them.`
+    chatPolicy = `You are the operator's project chat. Herdr mode: ${mode}.${mode !== 'full'
+      ? ` Read Herdr through ${installedHerdrRead(context.entryBin, mode).wrapper} (absolute executable path, unquoted) for pane read, pane list, tab list and pane wait-output, and read durable context through the record. Direct Herdr socket access is denied.${mode === 'scoped' ? ' This wrapper also permits pane new, pane split ID --direction right|down, pane close ID, pane rename ID LABEL, pane resize/focus ID --direction left|right|up|down, pane stop ID (one interrupt then close), and preset start NAME --pane ID|new. Mutations stay in your launcher-recorded tab; your own pane is protected. Arbitrary run, send-text and send-keys are refused. Presets come only from committed canonical chat.presets.' : ' Input routing and pane mutations are unavailable.'} Dispatch, prompting, Git commits and lane mutations are unavailable; the ops supervisor or operator handles them.`
       : ` Full Herdr control socket access is available for dispatch. Coordinate through the record, dispatch, watch and lanes.
 Dispatch: ${quote(process.execPath)} ${quote(`${root}/dispatch/dispatch.mjs`)} ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE (discovers this record, arms watch before prompting).`}
 Route routine notices to the project's ops supervisor. Only the project supervisor starts project housekeeping and runs supervisor entry; a chat never starts those services.`;

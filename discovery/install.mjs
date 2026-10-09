@@ -36,7 +36,7 @@ try {
   if (exists(marker) && !fs.lstatSync(marker).isFile()) throw new Error(`install receipt is not a plain file: ${marker}`);
   const prior = fs.existsSync(marker) ? JSON.parse(fs.readFileSync(marker, 'utf8')) : null;
   // Receipts are machine-owned, but never let corrupted names escape the bin.
-  if (prior && Object.keys(prior.files ?? {}).some((name) => !['codex', 'monitor-codex', 'claude', 'monitor-claude', 'monitor', 'herdr-read'].includes(name))) throw new Error('invalid managed entry receipt');
+  if (prior && Object.keys(prior.files ?? {}).some((name) => !['codex', 'monitor-codex', 'claude', 'monitor-claude', 'monitor', 'herdr-read', 'herdr-scoped'].includes(name))) throw new Error('invalid managed entry receipt');
   if (values.remove) {
     if (!prior) throw new Error('no managed entry install at this destination');
     for (const [name, content] of Object.entries(prior.files)) {
@@ -74,6 +74,9 @@ try {
       fallback: process.env.HERDR_BIN_PATH || prior?.herdrNative, explicit: !!process.env.HERDR_BIN_PATH })); }
     catch { /* Full-mode installations can work without a local Herdr binary. */ }
     files['herdr-read'] = `#!/bin/sh\nunset NODE_OPTIONS NODE_PATH LD_PRELOAD DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH\nexec ${quote(process.execPath)} ${quote(`${product}/discovery/herdr-read.mjs`)} ${quote(herdrNative ?? '')} "$@"\n`;
+    files['herdr-scoped'] = `${prefix}unset NODE_OPTIONS NODE_PATH LD_PRELOAD DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH
+exec ${quote(process.execPath)} ${quote(`${product}/discovery/herdr-scoped.mjs`)} ${quote(herdrNative ?? '')} "$entry_bin/.herdr-scoped" "$@"
+`;
     let claudeNative;
     if (values.claude) {
       if (!path.isAbsolute(values.claude)) throw new Error('--claude must name the native executable by absolute path');

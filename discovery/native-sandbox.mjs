@@ -11,6 +11,7 @@ import { runTemporary, temporaryEnvironment } from './temporary.mjs';
 import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
 import { chatHerdrMode, installedHerdrRead, protectReadProduct } from './chat-herdr.mjs';
+import { claimScopedBinding, releaseScopedBinding } from './herdr-scoped.mjs';
 import { coordinatingRole, herdrControlSocket, socketProbeArguments } from './control-socket.mjs';
 import { resolveNative } from './native-binary.mjs';
 import { permissionHookArguments } from '../supervisor/permission-hooks.mjs';
@@ -149,9 +150,10 @@ function claudeSocketDirectories(temporary, warn) {
 }
 
 export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env = process.env, warn = console.error }) {
-  const readChat = context.role === 'chat' && chatHerdrMode(context) === 'read';
-  if (readChat && kind !== 'claude') throw new Error('read-mode chats require Claude command-level sandbox exclusions; select --kind claude');
-  const reader = readChat ? installedHerdrRead(entryBin) : null;
+  const chatMode = context.role === 'chat' ? chatHerdrMode(context) : 'full';
+  const readChat = chatMode !== 'full';
+  if (readChat && kind !== 'claude') throw new Error(`${chatMode}-mode chats require Claude command-level sandbox exclusions; select --kind claude`);
+  const reader = readChat ? installedHerdrRead(entryBin, chatMode) : null;
   const coordinating = coordinatingRole(context.role);
   if (coordinating && checkedDirectory(context.workspace) !== checkedDirectory(context.canonical))
     throw new Error('coordinating launches require the canonical checkout');
@@ -190,7 +192,11 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
   }
   args = selectedArgs;
   const temporary = runTemporary(context.tempRoot);
-  const close = () => removePlainDirectory(temporary);
+  let scopedClaim;
+  const close = () => {
+    if (scopedClaim) { releaseScopedBinding(scopedClaim); scopedClaim = null; }
+    removePlainDirectory(temporary);
+  };
   try {
     const environment = { ...env, ...temporaryEnvironment(temporary, env) };
     if (controlSocket) environment.HERDR_SOCKET_PATH = controlSocket;
@@ -308,7 +314,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
             sandbox.filesystem?.disabled === true || network.allowAllUnixSockets === true ||
             network.allowUnixSockets?.some(socket => !socketDirectories.includes(resolvedPath(path.resolve(context.workspace, socket.replace(/^~(?=\/)/u, environment.HOME || process.env.HOME))))) ||
             sandbox.excludedCommands?.some(command => command !== `${reader.wrapper}:*`))
-          throw new Error(`read-mode chat conflicts with sandbox escape grants in ${source}; remove those grants before restarting the chat`);
+          throw new Error(`${chatMode}-mode chat conflicts with sandbox escape grants in ${source}; remove those grants before restarting the chat`);
       }
     }
     if (warnings.length) warn(`monitor sandbox: WARNING: ${warnings.join('; ')} weakens generated project confinement; respecting the operator's native settings`);
@@ -354,6 +360,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env
     const file = path.join(temporary, 'claude-settings.json');
     writeFileAtomic(file, JSON.stringify(settings, null, 2) + '\n', 0o600);
     environment.CLAUDE_CODE_TMPDIR = temporary;
+    if (chatMode === 'scoped') scopedClaim = claimScopedBinding(reader.scopeRoot, context.canonical);
     // Put variadic --add-dir before a terminating option so it cannot consume
     // the user's positional prompt as another directory.
     return { binary, args: [...nativeArgs, ...workingDirectories.flatMap(directory => ['--add-dir', directory]), '--settings', file], env: environment, close };

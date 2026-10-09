@@ -6,6 +6,8 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { joinFleet } from '../../lib/fleet.mjs';
+import { ownerProcess } from '../../lib/process-owner.mjs';
+import { fakeControlSocket } from '../../test/helpers/fake-control-socket.mjs';
 import { openProjectChat } from '../chats.mjs';
 
 const client = new URL('../../discovery/client.mjs', import.meta.url).pathname;
@@ -36,7 +38,7 @@ else if (a[0] === 'tab' && a[1] === 'list') result({tabs: state.tabs.filter(t =>
 else if (a[0] === 'tab' && a[1] === 'rename') { state.tabs.find(t => t.tab_id === a[2]).label = a[3]; result({}); }
 else if (a[0] === 'tab' && a[1] === 'focus') { state.focus = a[2]; result({}); }
 else if (a[0] === 'pane' && a[1] === 'get') result({pane: state.panes.find(p => p.pane_id === a[2])});
-else if (a[0] === 'pane' && a[1] === 'process-info') result({process_info: {shell_pid: 12, foreground_processes: [{pid: state.busy ? 13 : 12, name: 'zsh'}]}});
+else if (a[0] === 'pane' && a[1] === 'process-info') result({process_info: {shell_pid: state.shellPid || 12, foreground_processes: [{pid: state.busy ? 13 : (state.shellPid || 12), name: 'zsh'}]}});
 else if (a[0] === 'pane' && a[1] === 'read') {
   let screen = state.screen || 'checkout % ';
   if (state.updateReads > 0) { state.updateReads--; screen = 'Would you like to update? [Y/n]'; }
@@ -382,4 +384,29 @@ test('read-mode chats select Claude before tab creation and refuse explicit Code
   delete state.projects[p.identity];fs.writeFileSync(file,JSON.stringify(state));
   f.change(s=>{s.agents[0].name=`chat-${p.name}`});
   assert.throws(()=>f.open(),/cannot adopt an unverified prototype/);
+});
+
+
+test('scoped chat launcher records kernel shell identity and exact tab outside chat write roots', t => {
+  const f=fixture(t), p=f.projects[0], bin=f.env.HERDR_MONITOR_ENTRY_BIN;
+  f.env.HERDR_SOCKET_PATH=fakeControlSocket(t,f.root);
+  f.change(s=>{s.shellPid=process.pid;});
+  const wrapper=path.join(bin,'herdr-scoped');fs.writeFileSync(wrapper,'#!/bin/sh\nexit 1\n',{mode:0o755});
+  const installed=JSON.parse(fs.readFileSync(path.join(bin,'.monitor-entry.json')));
+  Object.assign(installed,{product:new URL('../../',import.meta.url).pathname,herdrNative:f.env.HERDR_BIN_PATH,
+    files:{'herdr-scoped':fs.readFileSync(wrapper,'utf8')}});
+  fs.writeFileSync(path.join(bin,'.monitor-entry.json'),JSON.stringify(installed));
+  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'scoped',presets:{wallet:{command:'fixed-command',cwd:p.checkout}}}}));
+  p.git(['add','.lane.json']);p.git(['commit','-qm','Scoped chat']);
+  assert.throws(()=>f.open(undefined,{kind:'codex'}),/scoped-mode chats require Claude/);
+  assert.equal(f.state().tabs.length,0);
+  const opened=f.open(undefined,{warn:()=>{}});
+  assert.equal(opened.herdr_mode,'scoped');assert.equal(opened.kind,'claude');
+  const scopeRoot=path.join(bin,'.herdr-scoped'),files=fs.readdirSync(scopeRoot);
+  assert.equal(files.length,1);
+  const binding=JSON.parse(fs.readFileSync(path.join(scopeRoot,files[0])));
+  assert.equal(binding.shell.pid,process.pid);assert.equal(binding.shell.identity,ownerProcess(process.pid).identity);
+  assert.equal(binding.pane,opened.pane);assert.equal(binding.tab,opened.tab);assert.equal(binding.workspace,opened.workspace);
+  assert.equal(binding.socket,f.env.HERDR_SOCKET_PATH);assert.equal(binding.owner,undefined);
+  assert.equal(f.open().reused,true);assert.equal(f.state().launches.length,1);
 });

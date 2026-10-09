@@ -12,7 +12,10 @@ import { withInstallationLock } from '../herdr/entry-lock.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { projectEntrySettings } from '../discovery/settings.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { chatHerdrMode, installedHerdrRead } from '../discovery/chat-herdr.mjs';
+import { chatHerdrMode, installedHerdrRead, chatHerdrPresets } from '../discovery/chat-herdr.mjs';
+import { createScopedBinding } from '../discovery/herdr-scoped.mjs';
+import { ownerProcess } from '../lib/process-owner.mjs';
+import { herdrControlSocket } from '../discovery/control-socket.mjs';
 import { codexCoordinatingPreflight } from '../discovery/native-sandbox.mjs';
 
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -162,7 +165,7 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     // account, entry bypass or conversation. Labels alone never bind a chat.
     const prototypes = agents(herdr).filter(a => a.name === `chat-${name}`);
     if (prototypes.length) {
-      if (herdrMode === 'read') throw new Error('read-mode chats cannot adopt an unverified prototype; close it and open a fresh chat');
+      if (herdrMode !== 'full') throw new Error(`${herdrMode}-mode chats cannot adopt an unverified prototype; close it and open a fresh chat`);
       const prototype = prototypes[0];
       if (prototypes.length !== 1 || !control || !['claude', 'codex'].includes(prototype.agent) || !inCheckout(prototype.cwd, project)) throw new Error('prototype chat binding differs; inspect before adopting');
       const pane = herdr(['pane', 'get', prototype.pane_id]).pane;
@@ -177,10 +180,12 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
       return { ...receipt, project: name, reused: true, available: true };
     }
     let fallback;
-    if (herdrMode === 'read') installedHerdrRead(bin);
+    const reader = herdrMode !== 'full' ? installedHerdrRead(bin, herdrMode) : null;
+    const scopedSocket = herdrMode === 'scoped' ? herdrControlSocket(env) : null;
+    if (herdrMode === 'scoped') chatHerdrPresets({ canonical: project.checkout });
     if (launch.kind === 'codex') {
       try {
-        if (herdrMode === 'read') throw new Error('read-mode chats require Claude command-level sandbox exclusions; select --kind claude');
+        if (herdrMode !== 'full') throw new Error(`${herdrMode}-mode chats require Claude command-level sandbox exclusions; select --kind claude`);
         codexCoordinatingPreflight({ entryBin: bin, args: launch.args,
           context: { workspace: project.checkout }, env: { ...env, ...Object.fromEntries(pairs) } });
       } catch (error) {
@@ -213,6 +218,12 @@ export function openProjectChat({ project: name, identity, workspace, kind, rout
     // never types a second launch into an uncertain pane or creates a duplicate.
     writeFileAtomic(file, JSON.stringify(state, null, 2) + '\n', 0o600);
     waitForShell(herdr, receipt, project, { now, sleep, startupMs });
+    if (herdrMode === 'scoped') {
+      const info = herdr(['pane', 'process-info', '--pane', receipt.pane]).process_info;
+      const shell = ownerProcess(info?.shell_pid);
+      if (!shell) throw Error('scoped chat shell identity unavailable; retained tab, nothing launched');
+      createScopedBinding({ root: reader.scopeRoot, receipt, canonical: project.checkout, shell, socket: scopedSocket });
+    }
     const native = [...launch.args];
     if (launch.model) native.push('--model', launch.model);
     if (launch.effort) native.push(...(launch.kind === 'codex' ? ['-c', `model_reasoning_effort=${launch.effort}`] : ['--effort', launch.effort]));

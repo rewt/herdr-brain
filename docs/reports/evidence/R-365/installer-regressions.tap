@@ -1,0 +1,342 @@
+TAP version 13
+# Subtest: offline fleet fixtures keep default run temp within the Unix socket budget
+ok 1 - offline fleet fixtures keep default run temp within the Unix socket budget # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.649875
+  ...
+# Subtest: planning rejects bytes edits to shell without publishing a journal
+ok 2 - planning rejects bytes edits to shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066417
+  ...
+# Subtest: planning rejects mode edits to shell without publishing a journal
+ok 3 - planning rejects mode edits to shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.050625
+  ...
+# Subtest: planning rejects bytes edits to adapter without publishing a journal
+ok 4 - planning rejects bytes edits to adapter without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035333
+  ...
+# Subtest: planning rejects mode edits to adapter without publishing a journal
+ok 5 - planning rejects mode edits to adapter without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.190291
+  ...
+# Subtest: planning rejects bytes edits to receipt without publishing a journal
+ok 6 - planning rejects bytes edits to receipt without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.066667
+  ...
+# Subtest: planning rejects mode edits to receipt without publishing a journal
+ok 7 - planning rejects mode edits to receipt without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.057958
+  ...
+# Subtest: planning rejects bytes edits to absent adapter without publishing a journal
+ok 8 - planning rejects bytes edits to absent adapter without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.055
+  ...
+# Subtest: planning rejects bytes edits to unchanged shell without publishing a journal
+ok 9 - planning rejects bytes edits to unchanged shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.202458
+  ...
+# Subtest: planning rejects mode edits to unchanged shell without publishing a journal
+ok 10 - planning rejects mode edits to unchanged shell without publishing a journal # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.133459
+  ...
+# Subtest: release tests preserve a separate installation inherited through the parent environment
+ok 11 - release tests preserve a separate installation inherited through the parent environment # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.054
+  ...
+# Subtest: overlapping installs serialize before planning and retain the first runtime and complete entry
+ok 12 - overlapping installs serialize before planning and retain the first runtime and complete entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.088042
+  ...
+# Subtest: a complete stale plan refuses before a journal and cannot roll back another successful install
+ok 13 - a complete stale plan refuses before a journal and cannot roll back another successful install # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.040459
+  ...
+# Subtest: runtime rollback removes only its own staging directory and preserves a foreign final runtime
+ok 14 - runtime rollback removes only its own staging directory and preserves a foreign final runtime
+  ---
+  duration_ms: 2969.435084
+  ...
+# Subtest: rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+ok 15 - rollback leaves an unstarted file alone even when another writer supplied its planned after-bytes
+  ---
+  duration_ms: 1852.226833
+  ...
+# Subtest: herdr-read install restores the whole transaction after a write failure
+ok 16 - herdr-read install restores the whole transaction after a write failure
+  ---
+  duration_ms: 2686.992625
+  ...
+# Subtest: herdr-read install restores the whole transaction after termination
+ok 17 - herdr-read install restores the whole transaction after termination
+  ---
+  duration_ms: 2036.576125
+  ...
+# Subtest: herdr-read upgrade restores the whole transaction after a write failure
+ok 18 - herdr-read upgrade restores the whole transaction after a write failure
+  ---
+  duration_ms: 4139.647583
+  ...
+# Subtest: herdr-read upgrade restores the whole transaction after termination
+ok 19 - herdr-read upgrade restores the whole transaction after termination
+  ---
+  duration_ms: 3971.158292
+  ...
+# Subtest: herdr-read remove restores the whole transaction after a write failure
+ok 20 - herdr-read remove restores the whole transaction after a write failure
+  ---
+  duration_ms: 2590.367333
+  ...
+# Subtest: herdr-read remove restores the whole transaction after termination
+ok 21 - herdr-read remove restores the whole transaction after termination
+  ---
+  duration_ms: 3106.084
+  ...
+# Subtest: shell install, upgrade and restore preserve every original byte including malformed UTF-8
+ok 22 - shell install, upgrade and restore preserve every original byte including malformed UTF-8 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.1355
+  ...
+# Subtest: non-UTF-8 shell bytes survive failed-write rollback
+ok 23 - non-UTF-8 shell bytes survive failed-write rollback
+  ---
+  duration_ms: 2395.845458
+  ...
+# Subtest: non-UTF-8 shell bytes survive terminated-install recovery
+ok 24 - non-UTF-8 shell bytes survive terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.083792
+  ...
+# Subtest: mode-only reinstallation at staged survives failed-write rollback
+ok 25 - mode-only reinstallation at staged survives failed-write rollback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0325
+  ...
+# Subtest: mode-only reinstallation at applied survives failed-write rollback
+ok 26 - mode-only reinstallation at applied survives failed-write rollback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032333
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives failed-write rollback
+ok 27 - mode-only reinstallation at operator chmod survives failed-write rollback # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022584
+  ...
+# Subtest: mode-only reinstallation at staged survives terminated-install recovery
+ok 28 - mode-only reinstallation at staged survives terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024917
+  ...
+# Subtest: mode-only reinstallation at applied survives terminated-install recovery
+ok 29 - mode-only reinstallation at applied survives terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.021583
+  ...
+# Subtest: mode-only reinstallation at operator chmod survives terminated-install recovery
+ok 30 - mode-only reinstallation at operator chmod survives terminated-install recovery # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020333
+  ...
+# Subtest: legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet
+ok 31 - legacy shell receipts preserve new non-UTF-8 edits outside the managed snippet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019417
+  ...
+# Subtest: relocated installed runtime executes lane review through its bundled template dependency
+ok 32 - relocated installed runtime executes lane review through its bundled template dependency # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.114333
+  ...
+# Subtest: release carries entry, pins final versions, rolls back and restores exact shell state
+ok 33 - release carries entry, pins final versions, rolls back and restores exact shell state # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.08575
+  ...
+# Subtest: build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM
+ok 34 - build installs pinned console and MCP dependencies with offline preference and honors RELEASE_NO_NPM # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028875
+  ...
+# Subtest: manifest build installs entry even when npm is skipped; restores preserve surrounding user edits
+ok 35 - manifest build installs entry even when npm is skipped; restores preserve surrounding user edits # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0225
+  ...
+# Subtest: plugin build discovers native CLIs and installs default machine paths without entry overrides
+ok 36 - plugin build discovers native CLIs and installs default machine paths without entry overrides # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.029666
+  ...
+# Subtest: Herdr build checkout can move or disappear while installed entry and restore still work
+ok 37 - Herdr build checkout can move or disappear while installed entry and restore still work # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020833
+  ...
+# Subtest: installed supervisor refuses an unsupported Codex build with the reason before handover
+ok 38 - installed supervisor refuses an unsupported Codex build with the reason before handover # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.020334
+  ...
+# Subtest: supervisor resolves the selected workspace to canonical Git instead of its plugin cwd
+ok 39 - supervisor resolves the selected workspace to canonical Git instead of its plugin cwd # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037334
+  ...
+# Subtest: real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore
+ok 40 - real v0.1.3 and v0.1.4 scratch copies activate, rollback, roll forward and restore # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028625
+  ...
+# Subtest: non-writable shell files refuse installation without adapters or partial snippets
+ok 41 - non-writable shell files refuse installation without adapters or partial snippets # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018125
+  ...
+# Subtest: recovery receipt precedes shell writes and rolls back a failure after the first snippet
+ok 42 - recovery receipt precedes shell writes and rolls back a failure after the first snippet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045375
+  ...
+# Subtest: recovery receipt precedes shell writes and recovers a terminated install
+ok 43 - recovery receipt precedes shell writes and recovers a terminated install # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018709
+  ...
+# Subtest: rollback preserves a namespaced tag with a same-basename distractor
+ok 44 - rollback preserves a namespaced tag with a same-basename distractor # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0225
+  ...
+# Subtest: terminated install recovers a staged shell replacement as well as the first installed snippet
+ok 45 - terminated install recovers a staged shell replacement as well as the first installed snippet # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018042
+  ...
+# Subtest: edited adapters/snippets and planted symlinks refuse before activation or removal mutates state
+ok 46 - edited adapters/snippets and planted symlinks refuse before activation or removal mutates state # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.019209
+  ...
+# Subtest: rolling back to a release without discovery removes entry and can roll forward again
+ok 47 - rolling back to a release without discovery removes entry and can roll forward again # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.018667
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 93 command files from other origins
+# Subtest: codex install, repeat and uninstall restore machine files
+ok 48 - codex install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.663792
+  ...
+# Subtest: claude install, repeat and uninstall restore machine files
+ok 49 - claude install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056416
+  ...
+# Subtest: codex and claude install, repeat and uninstall restore machine files
+ok 50 - codex and claude install, repeat and uninstall restore machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035875
+  ...
+# Subtest: missing harness refuses before shell or harness configuration changes
+ok 51 - missing harness refuses before shell or harness configuration changes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.037375
+  ...
+# Subtest: release activation keeps native hook commands stable through upgrade and rollback without writing profile trust
+ok 52 - release activation keeps native hook commands stable through upgrade and rollback without writing profile trust # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.087584
+  ...
+# Subtest: missing npm names the prerequisite and changes no machine files
+ok 53 - missing npm names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.031125
+  ...
+# Subtest: missing git names the prerequisite and changes no machine files
+ok 54 - missing git names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02925
+  ...
+# Subtest: missing python3 names the prerequisite and changes no machine files
+ok 55 - missing python3 names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.044666
+  ...
+# Subtest: missing herdr names the prerequisite and changes no machine files
+ok 56 - missing herdr names the prerequisite and changes no machine files # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.12575
+  ...
+# Subtest: native hooks survive relocation, join an unconfigured project and open two panes once without focus
+ok 57 - native hooks survive relocation, join an unconfigured project and open two panes once without focus # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.097333
+  ...
+# Subtest: codex native startup honors canonical project opt-out without state or panes
+ok 58 - codex native startup honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.04325
+  ...
+# Subtest: codex native resume honors canonical project opt-out without state or panes
+ok 59 - codex native resume honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.079625
+  ...
+# Subtest: claude native startup honors canonical project opt-out without state or panes
+ok 60 - claude native startup honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.032542
+  ...
+# Subtest: claude native resume honors canonical project opt-out without state or panes
+ok 61 - claude native resume honors canonical project opt-out without state or panes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.06525
+  ...
+# Subtest: uninstall preserves unrelated harness edits and refuses a changed managed hook
+ok 62 - uninstall preserves unrelated harness edits and refuses a changed managed hook # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.034292
+  ...
+# Subtest: Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry
+ok 63 - Claude-only plugin supervisor selects installed Claude and keeps supervisor hook entry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.07325
+  ...
+# Subtest: account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state
+ok 64 - account rehearsal requires a real fresh macOS login and refuses scratch HOME or existing state # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.036708
+  ...
+# Subtest: native configuration writes roll back with the rest of an interrupted installation
+ok 65 - native configuration writes roll back with the rest of an interrupted installation
+  ---
+  duration_ms: 2030.132875
+  ...
+# Subtest: the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm
+ok 66 - the plugin build works without import.meta.dirname, checks before dependency writes and repeats without npm # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.172209
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 93 command files from other origins
+1..66
+# tests 66
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 56
+# todo 0
+# duration_ms 25827.232708

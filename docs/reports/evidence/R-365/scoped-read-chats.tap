@@ -1,0 +1,229 @@
+TAP version 13
+# Subtest: read wrapper accepts a strict read-only grammar and refuses mutations and injection
+ok 1 - read wrapper accepts a strict read-only grammar and refuses mutations and injection
+  ---
+  duration_ms: 1718.185042
+  ...
+# Subtest: canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+ok 2 - canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+  ---
+  duration_ms: 1608.710583
+  ...
+# Subtest: read launch refuses products within every writable root including resolved aliases; full mode is unchanged
+ok 3 - read launch refuses products within every writable root including resolved aliases; full mode is unchanged
+  ---
+  duration_ms: 755.738625
+  ...
+# Subtest: release product outside project roots is protected, and inherited write roots cannot contain it
+ok 4 - release product outside project roots is protected, and inherited write roots cannot contain it
+  ---
+  duration_ms: 630.183292
+  ...
+# Subtest: only an operator committed mode change affects the next launch
+ok 5 - only an operator committed mode change affects the next launch
+  ---
+  duration_ms: 795.29725
+  ...
+# Subtest: a fresh repository opens a full-mode chat without committed config
+ok 6 - a fresh repository opens a full-mode chat without committed config
+  ---
+  duration_ms: 477.419709
+  ...
+# Subtest: malformed committed and working-tree chat config reports invalid settings
+ok 7 - malformed committed and working-tree chat config reports invalid settings
+  ---
+  duration_ms: 1015.667875
+  ...
+# Subtest: read chat protects resolved config and separate Git metadata paths
+ok 8 - read chat protects resolved config and separate Git metadata paths
+  ---
+  duration_ms: 381.602917
+  ...
+# Subtest: native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied
+ok 9 - native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied # SKIP set MONITOR_TEST_CLAUDE_READ to the installed native binary outside a nested sandbox
+  ---
+  duration_ms: 0.148541
+  ...
+# Subtest: installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+ok 10 - installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+  ---
+  duration_ms: 1166.1725
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 93 command files from other origins
+# Subtest: installed scoped wrapper permits only in-tab layout, bounded stop and committed presets
+ok 11 - installed scoped wrapper permits only in-tab layout, bounded stop and committed presets
+  ---
+  duration_ms: 6993.510042
+  ...
+# Subtest: another workspace and another chat tab refuse close, stop, split and preset start without input
+ok 12 - another workspace and another chat tab refuse close, stop, split and preset start without input
+  ---
+  duration_ms: 5183.779584
+  ...
+# Subtest: arbitrary input, commands, binding args and undeclared presets refuse even with forged environment
+ok 13 - arbitrary input, commands, binding args and undeclared presets refuse even with forged environment
+  ---
+  duration_ms: 1583.65225
+  ...
+# Subtest: binding rejects forged run-temp state, foreign ancestry, PID reuse and unreadable process identity
+ok 14 - binding rejects forged run-temp state, foreign ancestry, PID reuse and unreadable process identity
+  ---
+  duration_ms: 437.512875
+  ...
+# Subtest: scope is rechecked after stop wait and immediately before preset input; busy and changed panes refuse
+ok 15 - scope is rechecked after stop wait and immediately before preset input; busy and changed panes refuse
+  ---
+  duration_ms: 0.833334
+  ...
+# Subtest: scoped launch uses committed config, protects launcher and binding state and excludes only its wrapper
+ok 16 - scoped launch uses committed config, protects launcher and binding state and excludes only its wrapper
+  ---
+  duration_ms: 1070.021417
+  ...
+# Subtest: scoped grammar retains read-mode reads anywhere and denies targetless/default-focus mutation
+ok 17 - scoped grammar retains read-mode reads anywhere and denies targetless/default-focus mutation
+  ---
+  duration_ms: 1334.400291
+  ...
+# Subtest: native Claude honours scoped exclusion and protects the binding while raw sockets stay denied
+ok 18 - native Claude honours scoped exclusion and protects the binding while raw sockets stay denied
+  ---
+  duration_ms: 6984.224958
+  ...
+# 2.1.296 (Claude Code): scoped wrapper reached fake socket; own and foreign mutations refused; direct socket EPERM; binding writes denied; product launcher, config and Git writes denied; commit denied
+# Subtest: installed scoped chat adapter claims only launcher ancestry and releases its owner on exit
+ok 19 - installed scoped chat adapter claims only launcher ancestry and releases its owner on exit
+  ---
+  duration_ms: 1863.280875
+  ...
+# Subtest: invalid committed presets and corrupt refs fail closed while uncommitted presets never widen the wrapper
+ok 20 - invalid committed presets and corrupt refs fail closed while uncommitted presets never widen the wrapper
+  ---
+  duration_ms: 875.136458
+  ...
+# Subtest: pure scoped grammar refuses arbitrary input and all caller-selected control paths
+ok 21 - pure scoped grammar refuses arbitrary input and all caller-selected control paths
+  ---
+  duration_ms: 0.296083
+  ...
+# Subtest: forged Git environment cannot redirect committed preset lookup to an attacker repository
+ok 22 - forged Git environment cannot redirect committed preset lookup to an attacker repository
+  ---
+  duration_ms: 1806.920417
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 93 command files from other origins
+# Subtest: default chat falls back to Claude with the inherited sandbox selector reason before creating a tab
+ok 23 - default chat falls back to Claude with the inherited sandbox selector reason before creating a tab
+  ---
+  duration_ms: 1650.579209
+  ...
+# Subtest: unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation
+ok 24 - unsupported Codex profiles fall back only for default chats and explicit Codex choices refuse before tab creation
+  ---
+  duration_ms: 3291.747208
+  ...
+# Subtest: one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+ok 25 - one quiet chat per canonical fleet identity shares a control workspace, reopens by receipt, and preserves project files
+  ---
+  duration_ms: 2134.091542
+  ...
+# Subtest: operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+ok 26 - operator CLI works without entry, selects an existing control workspace, and uses project routes and explicit ops
+  ---
+  duration_ms: 1386.954542
+  ...
+# Subtest: failed or uncertain startup retains one tab and never launches again on reopen
+ok 27 - failed or uncertain startup retains one tab and never launches again on reopen
+  ---
+  duration_ms: 1663.871834
+  ...
+# Subtest: shell readiness fails before sending input and retains a recoverable tab
+ok 28 - shell readiness fails before sending input and retains a recoverable tab
+  ---
+  duration_ms: 1894.932959
+  ...
+# Subtest: a failed rename is recovered only in the receipt pane with the same harness and checkout
+ok 29 - a failed rename is recovered only in the receipt pane with the same harness and checkout
+  ---
+  duration_ms: 1794.799833
+  ...
+# Subtest: late detection after timeout recovers the unnamed chat without replaying launch
+ok 30 - late detection after timeout recovers the unnamed chat without replaying launch
+  ---
+  duration_ms: 1911.492833
+  ...
+# Subtest: an oh-my-zsh builtin update question never receives shell input
+ok 31 - an oh-my-zsh builtin update question never receives shell input
+  ---
+  duration_ms: 1958.526041
+  ...
+# Subtest: startup waits through an update question before proving prompt and command execution
+ok 32 - startup waits through an update question before proving prompt and command execution
+  ---
+  duration_ms: 1738.018333
+  ...
+# Subtest: echoed probe input is not execution proof and cannot launch an agent
+ok 33 - echoed probe input is not execution proof and cannot launch an agent
+  ---
+  duration_ms: 1309.691209
+  ...
+# Subtest: agent detection alone cannot accept an unverified launch command
+ok 34 - agent detection alone cannot accept an unverified launch command
+  ---
+  duration_ms: 1798.737958
+  ...
+# Subtest: the named prototype in chats is adopted unchanged and other projects join that workspace
+ok 35 - the named prototype in chats is adopted unchanged and other projects join that workspace
+  ---
+  duration_ms: 1708.716333
+  ...
+# Subtest: prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+ok 36 - prototype adoption refuses a foreign checkout or a pane outside the chats workspace
+  ---
+  duration_ms: 885.06925
+  ...
+# Subtest: unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation
+ok 37 - unknown, stale, excluded and opted-out fleet projects fail before any Herdr mutation
+  ---
+  duration_ms: 395.986958
+  ...
+# Subtest: chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+ok 38 - chat recipients are rejected, failed topology reads stay errors, and foreign or moved occupants are never adopted
+  ---
+  duration_ms: 1902.248709
+  ...
+# Subtest: a closed chat tab can be recreated while the other project remains in the same workspace
+ok 39 - a closed chat tab can be recreated while the other project remains in the same workspace
+  ---
+  duration_ms: 2759.990459
+  ...
+# Subtest: an existing named control workspace is reused and ambient recipients never cross project boundaries
+ok 40 - an existing named control workspace is reused and ambient recipients never cross project boundaries
+  ---
+  duration_ms: 1231.156791
+  ...
+# Subtest: console --print refuses project chat keys for every profile without creating tabs or launching agents
+ok 41 - console --print refuses project chat keys for every profile without creating tabs or launching agents
+  ---
+  duration_ms: 612.26625
+  ...
+# Subtest: read-mode chats select Claude before tab creation and refuse explicit Codex, stale full chats and prototypes
+ok 42 - read-mode chats select Claude before tab creation and refuse explicit Codex, stale full chats and prototypes
+  ---
+  duration_ms: 2097.4565
+  ...
+# Subtest: scoped chat launcher records kernel shell identity and exact tab outside chat write roots
+ok 43 - scoped chat launcher records kernel shell identity and exact tab outside chat write roots
+  ---
+  duration_ms: 1831.348708
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 93 command files from other origins
+1..43
+# tests 43
+# suites 0
+# pass 42
+# fail 0
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 36041.01675

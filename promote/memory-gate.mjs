@@ -6,11 +6,11 @@ import { writeFileAtomic } from '../lib/files.mjs';
 // An initial wait owns no promotion resources. Every re-check by a lock owner
 // has a fixed allowance, independent of the (potentially hours-long) slot wait.
 export const MEMORY_RECHECK_MS = 5000;
-export function waitForPromotionMemory(canonical, { held = false } = {}) {
+export function waitForPromotionMemory(canonical, { held = false, checkStop = true } = {}) {
   try {
     return waitForMemory({ label: 'lane promote', ...(held ? { maxWaitMs: MEMORY_RECHECK_MS, intervalMs: 1000 } : {}),
       check: () => {
-        if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) {
+        if (checkStop && fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) {
           throw Object.assign(new Error('PROMOTION_STOPPED: supervisor STOP exists; nothing merged'), { code: 'PROMOTION_STOPPED' });
         }
       } });

@@ -40,13 +40,16 @@ async function requireHost() {
 try {
   const profile = resolveGateProfile(canonical);
   if (!profile) throw new Error('promotion host adapter requires a declared gate profile');
+  // Saved attempts may have integrated before losing their response. Keep all
+  // memory waits, but leave resumed STOP reconciliation/refusals to runTrain.
+  const memoryOptions = { checkStop: !JSON.parse(fs.readFileSync(receipt, 'utf8')).attempts?.length };
   if (mode !== '--lock' && read().profile_fingerprint !== profile.fingerprint) throw new Error('promotion gate profile changed while waiting; enqueue again');
   if (mode === '--lock') {
     save({ schema: 'promotion-host-gate/v1', profile_fingerprint: profile.fingerprint,
       started_at: new Date().toISOString(), phase: 'starting', slot_receipt: slotFile,
       ...(profile.node ? { node: profile.node } : {}) });
     update({ phase: 'waiting-memory' });
-    waitForPromotionMemory(canonical);
+    waitForPromotionMemory(canonical, memoryOptions);
     if (profile.externalLock) {
       const started = new Date().toISOString();
       update({ phase: 'waiting-external-lock', external_lock: { path: profile.externalLock, state: 'waiting', started_at: started, wait_seconds: profile.waitSeconds } });
@@ -65,15 +68,15 @@ try {
       }
       process.exitCode = exitOf(result);
     } else {
-      process.exitCode = await execute(profile);
+      process.exitCode = await execute(profile, memoryOptions);
     }
   } else if (mode === '--held') {
     const saved = read();
     update({ external_lock: { ...saved.external_lock, state: 'acquired', finished_at: new Date().toISOString() } });
-    process.exitCode = await execute(profile);
+    process.exitCode = await execute(profile, memoryOptions);
   } else if (mode === '--execute') {
     update({ phase: 'checking-memory' });
-    waitForPromotionMemory(canonical, { held: true });
+    waitForPromotionMemory(canonical, { ...memoryOptions, held: true });
     checkCompetingProcesses(profile); // a competing direct gate may start during the slot wait
     update({ phase: 'running', command_started: true, command_started_at: new Date().toISOString() });
     const result = spawnSync(process.execPath, argv, { env: { ...profile.env, [HOST_ENV]: profile.fingerprint,
@@ -86,11 +89,11 @@ try {
   process.stderr.write(error.message + '\n'); process.exitCode = 75;
 }
 
-async function execute(profile) {
+async function execute(profile, memoryOptions) {
   // --held owns the external lock; without it the initial check is still cheap
   // and bounded. Never enter a slot wait while memory is already pressured.
   update({ phase: 'checking-memory' });
-  waitForPromotionMemory(canonical, { held: true });
+  waitForPromotionMemory(canonical, { ...memoryOptions, held: true });
   await requireHost();
   checkCompetingProcesses(profile);
   update({ phase: 'waiting-test-slot' });

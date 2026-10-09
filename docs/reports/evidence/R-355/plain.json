@@ -1,0 +1,48 @@
+{
+  "mode": "plain",
+  "argv": [
+    "--test",
+    "test-slot/test/watchdog.test.mjs",
+    "test-slot/test/test-slot.test.mjs",
+    "test-slot/test/gate-profile.test.mjs",
+    "test/memory.test.mjs",
+    "promote/test/affected-tests.test.mjs",
+    "promote/test/conformance.test.mjs",
+    "promote/test/memory-gate.test.mjs",
+    "promote/test/metrics-profile.test.mjs",
+    "promote/test/metrics.test.mjs",
+    "promote/test/promote.test.mjs",
+    "promote/test/train.test.mjs",
+    "promote/test/wait-timing.test.mjs",
+    "promote/test/workflow-engine.test.mjs",
+    "promote/test/workflow-train.test.mjs"
+  ],
+  "files": [
+    "test-slot/test/watchdog.test.mjs",
+    "test-slot/test/test-slot.test.mjs",
+    "test-slot/test/gate-profile.test.mjs",
+    "test/memory.test.mjs",
+    "promote/test/affected-tests.test.mjs",
+    "promote/test/conformance.test.mjs",
+    "promote/test/memory-gate.test.mjs",
+    "promote/test/metrics-profile.test.mjs",
+    "promote/test/metrics.test.mjs",
+    "promote/test/promote.test.mjs",
+    "promote/test/train.test.mjs",
+    "promote/test/wait-timing.test.mjs",
+    "promote/test/workflow-engine.test.mjs",
+    "promote/test/workflow-train.test.mjs"
+  ],
+  "exit_code": 0,
+  "signal": null,
+  "duration_s": 236.57,
+  "scratch_slots_released": true,
+  "totals": [
+    "# tests 263",
+    "# pass 263",
+    "# fail 0",
+    "# cancelled 0",
+    "# skipped 0",
+    "# duration_ms 235967.618333"
+  ]
+}

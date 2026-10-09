@@ -1,0 +1,6 @@
+{
+  "base": "1cc09185a440f9988a7530d2eb8cea39f45566d9",
+  "train_timeout_branch_matches_main": true,
+  "host_limits_and_envelope_match_main": true,
+  "memory_gate_matches_main": true
+}

@@ -1,0 +1,52 @@
+{
+  "mode": "nested",
+  "argv": [
+    "test-slot/test-slot.mjs",
+    "run",
+    "R-355 focused checks",
+    "--project-common",
+    "/Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-VQnVVr/R355-checks-qamCWp/common",
+    "--tier",
+    "promotion-host",
+    "--timeout-seconds",
+    "1800",
+    "--idle-timeout-seconds",
+    "0",
+    "--wait-receipt-path",
+    "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-waits/docs/reports/evidence/R-355/outer-wait.json",
+    "--result-path",
+    "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-waits/docs/reports/evidence/R-355/outer-execution.json",
+    "--",
+    "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
+    "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-train-waits/docs/reports/evidence/R-355/checks.mjs",
+    "inside"
+  ],
+  "files": [
+    "test-slot/test/watchdog.test.mjs",
+    "test-slot/test/test-slot.test.mjs",
+    "test-slot/test/gate-profile.test.mjs",
+    "test/memory.test.mjs",
+    "promote/test/affected-tests.test.mjs",
+    "promote/test/conformance.test.mjs",
+    "promote/test/memory-gate.test.mjs",
+    "promote/test/metrics-profile.test.mjs",
+    "promote/test/metrics.test.mjs",
+    "promote/test/promote.test.mjs",
+    "promote/test/train.test.mjs",
+    "promote/test/wait-timing.test.mjs",
+    "promote/test/workflow-engine.test.mjs",
+    "promote/test/workflow-train.test.mjs"
+  ],
+  "exit_code": 0,
+  "signal": null,
+  "duration_s": 228.175,
+  "scratch_slots_released": true,
+  "totals": [
+    "# tests 263",
+    "# pass 263",
+    "# fail 0",
+    "# cancelled 0",
+    "# skipped 0",
+    "# duration_ms 227985.539"
+  ]
+}

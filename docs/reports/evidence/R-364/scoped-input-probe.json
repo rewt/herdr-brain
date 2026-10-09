@@ -1,0 +1,30 @@
+{
+  "offline": true,
+  "ownPane": "refused",
+  "counterexamples": [
+    {
+      "target": "project:p1",
+      "route": "run",
+      "direct": "refused",
+      "throughSiblingShell": "closed"
+    },
+    {
+      "target": "project:p1",
+      "route": "send-text + send-keys",
+      "direct": "refused",
+      "throughSiblingShell": "closed"
+    },
+    {
+      "target": "chats:p3",
+      "route": "run",
+      "direct": "refused",
+      "throughSiblingShell": "closed"
+    },
+    {
+      "target": "chats:p3",
+      "route": "send-text + send-keys",
+      "direct": "refused",
+      "throughSiblingShell": "closed"
+    }
+  ]
+}

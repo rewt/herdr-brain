@@ -8,7 +8,7 @@ import { switches } from '../cutover.mjs';
 import { copyProduct } from '../../lib/product-files.mjs';
 
 test('switched external dispatch records launches and housekeeping previews only settled merged tabs', t => {
-  const { root, copy, spec, edits } = inventory(t);
+  const { root, copy, spec, edits } = inventory(t, { live: process.env.ACCEPTANCE_BCH_CLOAK });
   copyProduct(path.resolve('.'), spec.candidate);
   for (const [key, file] of switches) fs.writeFileSync(path.join(copy, file), edits[key]);
   const bin = path.join(root, 'bin'), org = path.join(path.dirname(copy), '.org'); fs.mkdirSync(bin);

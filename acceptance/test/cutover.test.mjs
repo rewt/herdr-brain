@@ -44,6 +44,116 @@ test('all current edits apply to relocated inventory scripts and refuse premise 
   assert.throws(() => switchedFiles(spec), /premise drift/);
 });
 
+test('tidy cutover accepts old and equivalent dry-run calls and refuses unrelated drift', (t) => {
+  const { copy, spec, edits } = inventory(t);
+  const file = path.join(copy, '.lane/supervisor/tidy-tabs.sh');
+  const original = fs.readFileSync(file, 'utf8');
+  const before = '/close-finished-agents.sh |';
+  assert.ok(original.includes(before));
+  for (const call of [
+    before,
+    '/close-finished-agents.sh $([ "$DRY" = 1 ] && echo --dry-run) |',
+    '/close-finished-agents.sh $( [ "$DRY" = 1 ] && echo --dry-run ) |',
+  ]) {
+    fs.writeFileSync(file, original.replace(before, call));
+    const tidy = switchedFiles(spec).tidy;
+    assert.equal(tidy, call === before ? edits.tidy : edits.tidy.replace(
+      '/close-finished-agents.sh $([ "$DRY" = 1 ] && echo --dry-run) |', call));
+    assert.equal(tidy.split('/close-finished-agents.sh').length - 1, 1);
+  }
+  for (const call of [
+    '/close-finished-agents.sh --force |',
+    '/close-finished-agents.sh $( [ "$DRY" = 0 ] && echo --dry-run ) |',
+    '/close-finished-agents.sh $( [ "$DRY" = 1 ] && echo --force ) |',
+    '/different-cleanup.sh |',
+  ]) {
+    fs.writeFileSync(file, original.replace(before, call));
+    assert.throws(() => switchedFiles(spec), /cutover premise drift: \/close-finished-agents.sh \|/);
+  }
+  fs.writeFileSync(file, original.replace(before,
+    '/close-finished-agents.sh $( [ "$DRY" = 1 ] && echo --dry-run ) |')
+    + '\n/close-finished-agents.sh --force | cat\n');
+  assert.throws(() => switchedFiles(spec), /cutover premise drift: \/close-finished-agents.sh \|/);
+});
+
+test('ambiguous deletion and shared labels still require their original premises', (t) => {
+  const { copy, spec } = inventory(t), originals = capture(copy);
+  const file = path.join(copy, '.lane/supervisor/se-test/run.sh');
+  const original = fs.readFileSync(file, 'utf8');
+  for (const before of ['; NW=${NW_UNDER_TEST:-$SUPD/notify-watch.sh}',
+    'supervisor-events.mjs and notify-watch.sh']) {
+    fs.writeFileSync(file, original.replace(before, '# unrelated drift'));
+    assert.throws(() => switchedFiles(spec), /cutover premise drift/);
+    restore(copy, originals);
+  }
+  // The unchanged workspace clause remains an identity premise, rather than
+  // an edit whose absence can be treated as successful migration.
+  const name = path.join(copy, '.lane/supervisor/session-start.sh');
+  fs.writeFileSync(name, fs.readFileSync(name, 'utf8').replace(`${spec.workspace}:*`, 'foreign-workspace:*'));
+  assert.throws(() => switchedFiles(spec), /cutover premise drift/);
+});
+
+test('independently switched exact clauses preserve the same cutover end state', (t) => {
+  const { copy, spec, edits } = inventory(t), originals = capture(copy);
+  // Apply one complete line/block from the proposed output, leaving the rest
+  // of each input legacy. This models individual edits by the adopting project.
+  const lines = [
+    ['launcher', 'contrib/settle-watch.mjs', 'supervisor/open-session.mjs'],
+    ['dispatch', 'env -u HERDR_PANE_ID nohup', 'env -u HERDR_PANE_ID -u HERDR_TAB_ID'],
+    ['dispatch', "sed -n 's/.*notify-watch", "sed -n 's/.*watch"],
+    ['dispatch', 'org set $RUN agent=$AG', 'dispatch/record-worker.mjs'],
+    ['name', `${spec.legacyTarget} >/dev/null`, `${spec.target} >/dev/null`],
+    ['tidy', 'LOG=$REPO/.lane/supervisor/notify-log.tsv', 'LOG=$REPO/.lane/supervisor/watch-logs'],
+    ['tidy', '[ -f "$LOG" ] && tail', 'find "$LOG" -type f'],
+    ['routes', 'for (const script of [continueScript, watchScript])', 'for (const script of [continueScript])'],
+    ['notifyTests', `notify target ${spec.legacyTarget} not found`, `notify target ${spec.target} not found`],
+    ['events', 'export function notify(msg)', 'export function notify(msg)'],
+  ];
+  for (const [key, oldMarker, newMarker] of lines) {
+    const { file, bytes } = originals.find(v => v.key === key);
+    const oldLine = bytes.toString().split('\n').find(line => line.includes(oldMarker));
+    const newLine = edits[key].split('\n').find(line => line.includes(newMarker));
+    assert.ok(oldLine && newLine, key);
+    fs.writeFileSync(path.join(copy, file), bytes.toString().replace(oldLine, newLine));
+    assert.deepEqual(switchedFiles(spec), edits, `${key}: ${oldMarker}`);
+    fs.writeFileSync(path.join(copy, file), bytes.toString().replace(oldLine, '# unrelated changed clause'));
+    assert.throws(() => switchedFiles(spec), /premise drift/, `${key}: unrelated drift`);
+    restore(copy, originals);
+  }
+  const notices = originals.find(v => v.key === 'notices');
+  const block = (text, start, end) => {
+    const from = text.indexOf(start), to = text.indexOf(end, from);
+    assert.ok(from >= 0 && to > from);
+    return text.slice(from, to);
+  };
+  for (const [oldMarker, newMarker, end] of [
+    ['**A finished worker closes itself', '**One-shot cleanup closes finished workers', '\n- **Result:'],
+    ['- Reports go to the agent named exactly', '- Reports go to the stable supervisor agent name', '\n\n'],
+  ]) {
+    const before = block(notices.bytes.toString(), oldMarker, end);
+    const after = block(edits.notices, newMarker, end);
+    fs.writeFileSync(path.join(copy, notices.file), notices.bytes.toString().replace(before, after));
+    assert.deepEqual(switchedFiles(spec), edits, oldMarker);
+    restore(copy, originals);
+  }
+});
+
+test('current live checkout accepts every cutover premise and restores its snapshot', {
+  skip: !process.env.ACCEPTANCE_BCH_CLOAK && 'set ACCEPTANCE_BCH_CLOAK to check a read-only live checkout',
+}, (t) => {
+  const { root, copy, spec, edits, manifest } = inventory(t, { live: process.env.ACCEPTANCE_BCH_CLOAK });
+  auditCopies(copy, { root, live: process.env.ACCEPTANCE_BCH_CLOAK, home: '/Users/rewt' });
+  const originals = capture(copy);
+  assert.equal(Object.keys(edits).length, switches.length);
+  assertNoticeContract(edits.protocol, edits.notices);
+  for (const [key, file] of switches) fs.writeFileSync(path.join(copy, file), edits[key]);
+  assert.deepEqual(callers(copy, 'contrib/settle-watch.mjs'), []);
+  assert.deepEqual(callers(copy, 'notify-watch.sh'), []);
+  restore(copy, originals);
+  assert.deepEqual(capture(copy), originals);
+  t.diagnostic(JSON.stringify({ source: process.env.ACCEPTANCE_BCH_CLOAK, manifest }));
+});
+
 test('current snapshot covers every switch and active caller and relocates all fixed temp paths', (t) => {
   const { root, copy, spec } = inventory(t);
   const snapshot = path.join(import.meta.dirname, 'fixtures/bch-cloak-20261004');

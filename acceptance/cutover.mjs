@@ -19,9 +19,15 @@ export const switches = [
   ['events', '.lane/supervisor/supervisor-events.mjs'],
 ];
 const q = (v) => "'" + v.replaceAll("'", "'\\''") + "'";
-function replace(text, before, after) {
-  assert.ok(text.includes(before), `cutover premise drift: ${before}`);
-  return text.replace(before, after);
+function replace(text, before, after, { acceptSwitched = true } = {}) {
+  const drift = `cutover premise drift: ${before}`;
+  if (text.includes(before)) text = text.replace(before, after);
+  // An empty replacement cannot prove retirement, and a short shared label
+  // may appear elsewhere without proving that its original clause was edited.
+  else assert.ok(acceptSwitched && after && text.includes(after), drift);
+  assert.ok(text.includes(after), drift);
+  if (!after.includes(before)) assert.ok(!text.includes(before), drift);
+  return text;
 }
 export function switchedFiles({ copy, candidate, workspace, target, legacyTarget, home }) {
   const contents = Object.fromEntries(switches.map(([key, file]) => [key, fs.readFileSync(path.join(copy, file), 'utf8')]));
@@ -42,14 +48,24 @@ export function switchedFiles({ copy, candidate, workspace, target, legacyTarget
   // The scheduler belongs to its separate acceptance case. Never start a loop.
   contents.name = contents.name.split('\n').filter((line) => !line.includes('janitor.sh start')).join('\n').replace('janitor running', 'scratch scheduler excluded');
   const sweepStart = contents.tidy.indexOf('echo "== watcher tabs in $WS"');
-  const sweepEnd = contents.tidy.indexOf('LOG=$REPO/.lane/supervisor/notify-log.tsv');
+  const oldLog = 'LOG=$REPO/.lane/supervisor/notify-log.tsv';
+  const newLog = 'LOG=$REPO/.lane/supervisor/watch-logs';
+  const sweepEnd = contents.tidy.indexOf(contents.tidy.includes(oldLog) ? oldLog : newLog);
   assert.ok(sweepStart >= 0 && sweepEnd > sweepStart, 'tidy sweep premise drift');
   // Branch absence, display labels and agentless tabs cannot authorize worker
   // deletion. Detached watches need no old watch-tab/workspace sweeper.
   contents.tidy = contents.tidy.slice(0, sweepStart) + '# Worker closures use only the recorded-outcome helper below.\n' + contents.tidy.slice(sweepEnd);
-  contents.tidy = replace(contents.tidy, 'LOG=$REPO/.lane/supervisor/notify-log.tsv', 'LOG=$REPO/.lane/supervisor/watch-logs');
+  contents.tidy = replace(contents.tidy, oldLog, newLog);
   contents.tidy = replace(contents.tidy, '[ -f "$LOG" ] && tail -n "$N" "$LOG" | cut -c1-220 || echo "(no log yet)"', `find "$LOG" -type f -name "R-*.log" -exec sh -c 'printf "\\n== %s\\n" "$1"; tail -n "$2" "$1"' sh {} "$N" \\; 2>/dev/null`);
-  contents.tidy = replace(contents.tidy, '/close-finished-agents.sh |', '/close-finished-agents.sh $([ \"$DRY\" = 1 ] && echo --dry-run) |');
+  // bch-cloak may already have applied this safety fix. Whitespace just inside
+  // command substitution is equivalent; other flags or conditions are drift.
+  const dryRun = /\/close-finished-agents\.sh \$\([ \t]*\[ "\$DRY" = 1 \] && echo --dry-run[ \t]*\) \|/;
+  const dryRunCall = contents.tidy.match(dryRun)?.[0]
+    ?? '/close-finished-agents.sh $([ "$DRY" = 1 ] && echo --dry-run) |';
+  contents.tidy = replace(contents.tidy, '/close-finished-agents.sh |', dryRunCall);
+  assert.match(contents.tidy, dryRun, 'cutover premise drift: /close-finished-agents.sh |');
+  assert.equal(contents.tidy.split('/close-finished-agents.sh').length - 1, 1,
+    'cutover premise drift: /close-finished-agents.sh |');
   // Cleanup is now an eleventh required edit. A file on disk is not a
   // recorded outcome, and an unknown/agentless pane is not proof of completion.
   assert.ok((/open=\$\((org|node [^\n]+) status --json/.test(contents.cleanup)) && contents.cleanup.includes('# tabs with no live agent'), 'cleanup premise drift');
@@ -96,7 +112,7 @@ exec node ${q(path.join(candidate, 'supervisor/tidy-tabs.mjs'))} --cwd ${q(copy)
   contents.notifyTests = contents.notifyTests.slice(0, notifyStart)
     + '# Legacy notify tests retired with that entry; standalone watch has its own offline suite.\n'
     + contents.notifyTests.slice(notifyEnd);
-  contents.notifyTests = replace(contents.notifyTests, 'supervisor-events.mjs and notify-watch.sh', 'supervisor-events.mjs');
+  contents.notifyTests = replace(contents.notifyTests, 'supervisor-events.mjs and notify-watch.sh', 'supervisor-events.mjs', { acceptSwitched: false });
   contents.notifyTests = replace(contents.notifyTests, `notify target ${legacyTarget} not found`, `notify target ${target} not found`);
   contents.events = replace(contents.events, 'export function notify(msg) { // other scripts do the same with a file: see notify-watch.sh',
     'export function notify(msg) { // Queue event-service notices in its outbox.');

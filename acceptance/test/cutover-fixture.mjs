@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { relocate } from '../security.mjs';
 import { switches, switchedFiles } from '../cutover.mjs';
+import { copyExistingProject } from '../existing-project.mjs';
 
 export function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cutover-boundary-')));
@@ -13,18 +14,20 @@ export function fixture(t) {
   }
   return root;
 }
-export function inventory(t) {
+export function inventory(t, { live } = {}) {
   const root = fixture(t), copy = path.join(root, 'existing/bch-cloak'), candidate = path.join(root, 'candidate');
   const snapshot = path.resolve(import.meta.dirname, 'fixtures/bch-cloak-20261004');
   const manifest = JSON.parse(fs.readFileSync(path.join(snapshot, 'manifest.json')));
   const spec = { copy, candidate, workspace: 'owned-workspace', target: 'new-target', legacyTarget: 'legacy-target', home: path.join(root, 'copy-home') };
-  for (const { file, mode } of manifest.files) {
-    const text = relocate(fs.readFileSync(path.join(snapshot, file), 'utf8'), {
-      live: manifest.source, home: '/Users/rewt', scratchHome: spec.home, copy, candidate, root,
+  const source = live ? path.join(root, 'raw') : snapshot;
+  const selected = live ? copyExistingProject({ live, copy: path.join(root, 'raw'), backup: path.join(root, 'backup') }) : manifest;
+  for (const { file, mode } of selected.files) {
+    const text = relocate(fs.readFileSync(path.join(source, file), 'utf8'), {
+      live: live ?? manifest.source, home: '/Users/rewt', scratchHome: spec.home, copy, candidate, root,
       launcher: file === 'scripts/lane/launch-supervisor.mjs',
     }).replaceAll('wFN', spec.workspace).replaceAll('supervisor-opus', spec.legacyTarget);
     fs.mkdirSync(path.dirname(path.join(copy, file)), { recursive: true });
     fs.writeFileSync(path.join(copy, file), text, { mode });
   }
-  return { root, copy, spec, edits: switchedFiles(spec) };
+  return { root, copy, spec, edits: switchedFiles(spec), manifest: selected };
 }

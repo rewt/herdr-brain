@@ -482,6 +482,20 @@ receipts, caches and current handoff snapshots stay out of the rehearsal. Source
 and support symlinks are refused. The copy still undergoes path relocation and
 the transitive audit before execution.
 
+For focused offline checks against a current read-only bch-cloak checkout:
+
+```sh
+TMPDIR=/private/tmp ACCEPTANCE_BCH_CLOAK=/path/to/bch-cloak node --test acceptance/test/cutover.test.mjs acceptance/test/cutover-housekeeping.test.mjs
+```
+
+The live premise check snapshots every current cutover input, relocates and
+audits the copy, checks the switched contracts and restores its bytes/modes.
+Housekeeping executes the copied dispatch and cleanup against scripted Herdr.
+The other regressions retain the pinned inventory. Exact equivalent replacement
+clauses are accepted unchanged; tidy also accepts whitespace inside the existing
+dry-run command substitution. Unrelated drift, duplicate cleanup calls and
+ambiguous deletion/shared-label premises still refuse.
+
 The rehearsal does **not** exercise dispatch's process-based in-flight cap:
 host `ps` can be denied by the sandbox, and a successful dispatch does not prove
 that count was observed. This limitation appears in the switch case result and

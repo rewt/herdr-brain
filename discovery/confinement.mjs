@@ -42,12 +42,15 @@ export const toml = (value) => typeof value === 'object'
   ? `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`).join(',')}}`
   : JSON.stringify(value);
 
-export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], temporaryPaths = [], runtimePaths = [], lifetime = null, native = false, network = native }) {
+export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], temporaryPaths = [], runtimePaths = [], lifetime = null, native = false, network = native, hostSuite = null }) {
   if (!binary) throw new Error('a native sandbox is required for main-checkout workers');
   if (!Array.isArray(sharedPaths) || !sharedPaths.length || [...sharedPaths, ...writablePaths, ...temporaryPaths, ...runtimePaths].some((file) => typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0'))) {
     throw new Error('sandbox requires absolute shared-state paths from the session parent');
   }
   binary = selectSandbox(binary);
+  if (hostSuite && (process.platform !== 'darwin' || binary !== '/usr/bin/sandbox-exec' || native || network || temporaryPaths.length !== 1))
+    throw Error('HOST_PROFILE_UNAVAILABLE: host suites require macOS sandbox-exec and one private run temp');
+  if (hostSuite?.external_network?.length) throw Error('HOST_PROFILE_UNAVAILABLE: Seatbelt cannot enforce external host:port addresses; refusing the declared allowlist');
   const experimentalBubblewrap = binary.startsWith(EXPERIMENTAL_BUBBLEWRAP);
   if (experimentalBubblewrap) binary = binary.slice(EXPERIMENTAL_BUBBLEWRAP.length);
   cwd = checkedDirectory(cwd);
@@ -87,7 +90,21 @@ export function sandboxCommand(binary, cwd, { sharedPaths, writablePaths = [], t
     });
     const profile = `(version 1)\n(allow default)\n${network ? '' : '(deny network*)\n'}${lifetime ? '(deny signal)\n(allow signal (target self) (target children) (target same-sandbox))\n' : ''}(deny file-write*)\n`
       + `(allow file-write* (literal "/dev/null") (require-all ${allowed} ${excluded})${exceptions.length ? ` ${exceptions.join(' ')}` : ''})\n`;
-    return { binary, args: ['-p', profile + (lifetime ? `(deny file-read* (literal ${JSON.stringify(lifetime.denied)}))\n` : '')] };
+    let host = '';
+    if (hostSuite) {
+      // Read-only process enumeration stays available; signals and task ports
+      // stay within this invocation's inherited sandbox, including descendants.
+      host += '(allow process-info*)\n(deny signal mach-priv-task-port)\n(allow signal (target self) (target children) (target same-sandbox))\n(allow mach-priv-task-port (target same-sandbox))\n';
+      // Seatbelt includes wildcard local addresses in localhost. The operator
+      // accepts inbound peers for these host tests; external egress stays denied.
+      if (hostSuite.localhost) host += '(allow network-bind network-inbound (local ip "localhost:*"))\n(allow network-outbound (remote ip "localhost:*"))\n';
+      if (hostSuite.unix_sockets) {
+        const temp = checkedDirectory(temporaryPaths[0]);
+        host += `(allow system-socket (socket-domain AF_UNIX))\n(allow network-bind (local unix-socket ${match(temp)}))\n(allow network-outbound (remote unix-socket ${match(temp)}))\n`;
+      }
+      if (hostSuite.pty) host += '(allow pseudo-tty)\n(allow file-ioctl file-read* file-write* (literal "/dev/ptmx") (regex #"^/dev/ttys"))\n';
+    }
+    return { binary, args: ['-p', profile + host + (lifetime ? `(deny file-read* (literal ${JSON.stringify(lifetime.denied)}))\n` : '')] };
   }
   if (experimentalBubblewrap) {
     for (const file of protectedInput) {

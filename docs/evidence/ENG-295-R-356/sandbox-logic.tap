@@ -1,0 +1,48 @@
+TAP version 13
+# monitor entry: keeping lane/entry-06429b3d78a4 at /Users/rewt/.herdr-monitor/t/c55c0e01688fa2f8/r-rGflDK/hs-pn2SfP/worktrees/lane-entry-06429b3d78a4: a run was started in this lane
+# Successfully rebased and updated refs/heads/lane/test.
+# Subtest: host authority requires committed canonical declarations and matching lane policy
+ok 1 - host authority requires committed canonical declarations and matching lane policy
+  ---
+  duration_ms: 423.441334
+  ...
+# Subtest: capability declarations and external endpoint allowlists reject broad grants
+ok 2 - capability declarations and external endpoint allowlists reject broad grants
+  ---
+  duration_ms: 0.30025
+  ...
+# Subtest: host profile protects writes and scopes sockets, PTYs and signals; unsupported policy refuses
+ok 3 - host profile protects writes and scopes sockets, PTYs and signals; unsupported policy refuses
+  ---
+  duration_ms: 169.293125
+  ...
+# Subtest: session request carries only a suite name and rejects execution inputs
+ok 4 - session request carries only a suite name and rejects execution inputs
+  ---
+  duration_ms: 1375.182542
+  ...
+# Subtest: sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, receipts and boundaries are exercised offline
+ok 5 - sandboxed worker asks the host parent; raw PTYs, TCP/Unix listeners, receipts and boundaries are exercised offline # SKIP set MONITOR_HOST_PROFILE_TESTS=1 from a host shell; uses only a private fixture slot
+  ---
+  duration_ms: 0.138208
+  ...
+# Subtest: host watchdog binds a timeout receipt and removes private temp after killing the suite
+ok 6 - host watchdog binds a timeout receipt and removes private temp after killing the suite # SKIP set MONITOR_HOST_PROFILE_TESTS=1 from a host shell; uses only a private fixture slot
+  ---
+  duration_ms: 0.07325
+  ...
+# Subtest: unenforceable external allowlist refuses before the slot, command and receipt
+ok 7 - unenforceable external allowlist refuses before the slot, command and receipt
+  ---
+  duration_ms: 838.256125
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 22 command files from other origins
+1..7
+# tests 7
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 2888.861584

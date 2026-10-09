@@ -1,0 +1,166 @@
+TAP version 13
+# Subtest: config, recent healthy clocks and conservative default resolve independently of slot waiting
+ok 1 - config, recent healthy clocks and conservative default resolve independently of slot waiting
+  ---
+  duration_ms: 287.574125
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild, releases slot and never retries under load
+ok 2 - wall timeout stops a forever-blocked grandchild, releases slot and never retries under load # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.249041
+  ...
+# Subtest: wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load
+ok 3 - wall timeout stops a forever-blocked grandchild in its own group, releases slot and never retries under load # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.112458
+  ...
+# Subtest: enabled idle limit stops silence, output refreshes it and healthy clocks record final silence
+ok 4 - enabled idle limit stops silence, output refreshes it and healthy clocks record final silence # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.046083
+  ...
+# Subtest: wall overrun and a descendant marker cannot spend a load retry
+ok 5 - wall overrun and a descendant marker cannot spend a load retry # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.035291
+  ...
+# Subtest: parent walk excludes unrelated processes and escaped-child signalling confirms birth
+ok 6 - parent walk excludes unrelated processes and escaped-child signalling confirms birth # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.027916
+  ...
+# Subtest: lane records timeout, isolates correction and leaves main unchanged
+ok 7 - lane records timeout, isolates correction and leaves main unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.084916
+  ...
+# Subtest: queue records timeout, isolates correction and leaves main unchanged
+ok 8 - queue records timeout, isolates correction and leaves main unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.115917
+  ...
+# Subtest: fast records timeout, isolates correction and leaves main unchanged
+ok 9 - fast records timeout, isolates correction and leaves main unchanged # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.139084
+  ...
+# Subtest: slot waiting consumes none of a short command deadline
+ok 10 - slot waiting consumes none of a short command deadline # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.130833
+  ...
+# Subtest: nested gates preserve the legacy holder pgid after both wrappers die
+ok 11 - nested gates preserve the legacy holder pgid after both wrappers die # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.056875
+  ...
+# Subtest: dead groups-lock owners recover and live or unknown owners fail with a coded path
+ok 12 - dead groups-lock owners recover and live or unknown owners fail with a coded path # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.039375
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=true)
+ok 13 - leftover group fails distinctly after bounded grace (inherited pipes=true) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.10125
+  ...
+# Subtest: leftover group fails distinctly after bounded grace (inherited pipes=false)
+ok 14 - leftover group fails distinctly after bounded grace (inherited pipes=false) # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.04875
+  ...
+# Subtest: canonical validation includes layered lane-only wall and idle settings for both envelopes
+ok 15 - canonical validation includes layered lane-only wall and idle settings for both envelopes # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.112416
+  ...
+# Subtest: nested watchdog stops its parent-walk children and preserves a sibling in the shared group
+ok 16 - nested watchdog stops its parent-walk children and preserves a sibling in the shared group # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.045708
+  ...
+# Subtest: printed descendant timeout marker follows command status 0
+ok 17 - printed descendant timeout marker follows command status 0 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.12475
+  ...
+# Subtest: printed descendant timeout marker follows command status 1
+ok 18 - printed descendant timeout marker follows command status 1 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.062875
+  ...
+# Subtest: printed descendant timeout marker follows command status 124
+ok 19 - printed descendant timeout marker follows command status 124 # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.033917
+  ...
+# Subtest: failed descendant identity source stops the owned hung group and retains the slot
+ok 20 - failed descendant identity source stops the owned hung group and retains the slot # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.068125
+  ...
+# Subtest: planned train file lists record and resolve one declared command history
+ok 21 - planned train file lists record and resolve one declared command history # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.028
+  ...
+# Subtest: healthy history prunes old command files while preserving the current key
+ok 22 - healthy history prunes old command files while preserving the current key # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.0295
+  ...
+# Subtest: unbatched queue maps wall timeout to correction wording
+ok 23 - unbatched queue maps wall timeout to correction wording # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024334
+  ...
+# Subtest: unbatched queue maps idle timeout to correction wording
+ok 24 - unbatched queue maps idle timeout to correction wording # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024875
+  ...
+# Subtest: an unknown escaped identity cannot prevent killing the owned group
+ok 25 - an unknown escaped identity cannot prevent killing the owned group # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.02575
+  ...
+# Subtest: fixture gates cannot create or modify the real repository history
+ok 26 - fixture gates cannot create or modify the real repository history # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023292
+  ...
+# Subtest: history origin guard handles a concurrent unattributed writer
+ok 27 - history origin guard handles a concurrent unattributed writer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023167
+  ...
+# Subtest: history origin guard handles a concurrent foreign writer
+ok 28 - history origin guard handles a concurrent foreign writer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022958
+  ...
+# Subtest: history origin guard handles a concurrent descendant-leak writer
+ok 29 - history origin guard handles a concurrent descendant-leak writer # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.022666
+  ...
+# Subtest: three sane samples are required for wall and idle derivation, including legacy fixture history
+ok 30 - three sane samples are required for wall and idle derivation, including legacy fixture history # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.023083
+  ...
+# Subtest: observed healthy full gates fit clean-history defaults and trained limits
+ok 31 - observed healthy full gates fit clean-history defaults and trained limits # SKIP test name does not match pattern
+  ---
+  duration_ms: 0.024
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 22 command files from other origins
+1..31
+# tests 31
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 30
+# todo 0
+# duration_ms 394.382167

@@ -34,6 +34,7 @@ import { ROUTE_PRESET } from './preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
+import { suiteName, hostSuitePlan } from './host-suites.mjs';
 
 import {
   markTopicSessionsDone,
@@ -463,6 +464,8 @@ function config() {
     ],
     ["worktree_root", WORKTREE_ROOT, WORKTREE_ROOT_SOURCE],
     ...VALIDATION_TIERS.map(tier => [`validation.${tier}`, validation.tiers[tier].command, validation.tiers[tier].source]),
+    ...VALIDATION_TIERS.map(tier => [`validation.${tier}.host_suites`, validation.tiers[tier].hostSuites, 'committed canonical']),
+    ['validation.host_suites', validation.host_suites, 'committed canonical'],
     ['validation.environment', validation.environment, validation.environment_source],
     ...VALIDATION_TIERS.flatMap(tier => [
       [`validation.${tier}.timeout_seconds`, validation.tiers[tier].timeoutSeconds ?? null, 'resolved'],
@@ -2318,22 +2321,30 @@ function prepareWorktree(path, { quiet = false } = {}) {
 }
 
 function check(args) {
+  if (process.env.MONITOR_REQUEST_DIR) {
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('../discovery/client.mjs', import.meta.url)), 'check', ...args], { stdio: 'inherit' });
+    process.exit(result.status ?? 1);
+  }
   repositoryRoot({ requiredBy: "check" });
-  let tier = 'fast', override;
+  let tier = 'fast', override, suite;
   for (let index = 0; index < args.length; index += 1) {
-    if (!["--cmd", "--tier"].includes(args[index])) {
+    if (!["--cmd", "--tier", "--suite"].includes(args[index])) {
       fail(`usage: lane check [--cmd <validate command>] (unknown option: ${args[index]})`);
     }
     if (args[index + 1] === undefined || args[index + 1] === "") {
       fail("usage: lane check [--cmd <validate command>]");
     }
     if (args[index] === '--tier') tier = args[index + 1];
+    else if (args[index] === '--suite') suite = args[index + 1];
     else override = args[index + 1];
     index += 1;
   }
   if (!['fast', 'promotion'].includes(tier)) fail('lane check tier must be fast or promotion; release gates are run by the release module');
   const settings = validationSettings();
-  const command = override ?? settings.tiers[tier].command;
+  if (suite !== undefined && (!suiteName(suite) || args.length !== 2)) fail('check --suite requires one declared name only');
+  const hostSuites = suite === undefined ? settings.tiers[tier].hostSuites : [suite];
+  try { if (hostSuites.length) hostSuitePlan(REPO, hostSuites); } catch (error) { fail(error.message); }
+  const command = suite === undefined ? override ?? settings.tiers[tier].command : process.env.LANE_VALIDATE ?? 'true';
 
   requireClean(REPO, "current worktree");
   const head = git(["rev-parse", "HEAD"]);
@@ -2343,7 +2354,7 @@ function check(args) {
   prepareWorktree(REPO);
   if (git(['rev-parse', 'HEAD']) !== head || git(['branch', '--show-current']) !== branch) fail('worktree branch or lane tip changed during preparation');
   let gate;
-  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, timeoutSeconds: settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: settings.tiers[tier].idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
+  try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier, hostSuites, sharedPaths: JSON.parse(process.env.MONITOR_HOST_SHARED_PATHS ?? '[]'), tempRoot: process.env.MONITOR_HOST_TEMP || undefined, timeoutSeconds: settings.tiers[tier].timeoutSeconds, idleTimeoutSeconds: settings.tiers[tier].idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75); // validateTree already emitted its one coded line.
     fail(error.message);
@@ -2431,7 +2442,7 @@ function promoteLocked(topic, root, options) {
   process.stdout.write(`validating in ${path}: ${validate}\n`);
   const validatedHead = git(["rev-parse", branch]);
   let gate;
-  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
+  try { gate = validateTree({ cwd: path, common: REPO_IDENTITY, command: validate, tier: 'promotion', hostSuites: settings.tiers.promotion.hostSuites, sharedPaths: JSON.parse(process.env.MONITOR_HOST_SHARED_PATHS ?? '[]'), tempRoot: process.env.MONITOR_HOST_TEMP || undefined, timeoutSeconds: settings.tiers.promotion.timeoutSeconds, idleTimeoutSeconds: settings.tiers.promotion.idleTimeoutSeconds, prepare: CONFIG.prepare ?? [], environment: settings.environment, label: 'validated lane worktree' }); }
   catch (error) {
     if (error.exitCode === 75) process.exit(75);
     fail(error.message);
@@ -2755,7 +2766,7 @@ switch (command) {
         "                   fresh worktree carries no gitignored state, and validation\n" +
         "                   then fails for environmental reasons that look real\n" +
         `  status           list open lanes vs ${MAIN}\n` +
-        "  check [--cmd <validate command>]\n" +
+        "  check [--cmd <validate command>] [--tier fast|promotion] | check --suite NAME\n" +
         "                   validate this clean worktree and record its HEAD gate\n" +
         "                   --tier fast (worker default) or promotion (integration CI); reuse exact trees\n" +
         `  promote <topic>  validate then fast-forward ${MAIN} (clean + rebased + green only)\n` +

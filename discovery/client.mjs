@@ -42,8 +42,14 @@ try {
   const root = process.env.MONITOR_REQUEST_DIR;
   if (!root) throw new Error('enter through the installed Monitor adapter first');
   const id = randomUUID();
+  let suite;
+  if (op === 'check' && words.length) {
+    const parsed = parseArgs({ args: words, options: { suite: { type: 'string' } } });
+    suite = parsed.values.suite;
+    if (!suite || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u.test(suite)) throw Error('check accepts only --suite NAME');
+  }
   const request = path.join(root, `${id}.request.json`), reply = path.join(root, `${id}.reply.json`);
-  fs.writeFileSync(`${request}.tmp`, JSON.stringify({ op, ...(words.length ? { text: words.join(' ') } : {}) }), { mode: 0o600 });
+  fs.writeFileSync(`${request}.tmp`, JSON.stringify({ op, ...(suite ? { suite } : words.length ? { text: words.join(' ') } : {}) }), { mode: 0o600 });
   fs.renameSync(`${request}.tmp`, request);
   const deadline = Date.now() + requestTimeout(op);
   while (!fs.existsSync(reply)) {

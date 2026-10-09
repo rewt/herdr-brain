@@ -16,8 +16,9 @@ import { entryLifecycle, worktreeDirectory } from './lifecycle.mjs';
 import { projectEntrySettings } from './settings.mjs';
 import { selectSandbox } from './confinement.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
+import { suiteName, hostSuitePlan } from '../lanes/host-suites.mjs';
 import { createHash } from 'node:crypto';
-import { DEFAULT_REQUEST_TIMEOUT, ENTRY_COMMAND_GRACE, entryValidationTimeout } from './deadlines.mjs';
+import { DEFAULT_REQUEST_TIMEOUT, ENTRY_COMMAND_GRACE, entryValidationTimeout, HOST_OPERATION_TIMEOUT } from './deadlines.mjs';
 
 const local = (p) => new URL(p, import.meta.url).pathname;
 export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -220,10 +221,12 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     const current = Object.assign({}, ...routes.files.map(file => JSON.parse(fs.readFileSync(file, 'utf8'))));
     const settings = resolveValidation({ root: project.canonical, config: current, env: {} });
     const tier = args[0] === 'promote' || args.includes('promotion') ? 'promotion' : 'fast';
-    const timeout = entryValidationTimeout(tier, current.prepare?.length ?? 0);
-    const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace, JSON.stringify(sharedPaths), settings.tiers[tier].command].map(quote).join(' ');
+    const hasHostSuites = args.includes('--suite') || settings.tiers[tier].hostSuites.length > 0;
+    const timeout = hasHostSuites ? HOST_OPERATION_TIMEOUT : entryValidationTimeout(tier, current.prepare?.length ?? 0);
+    const validation = [process.execPath, local('./validate.mjs'), sandboxBinary, workspace, JSON.stringify(sharedPaths), args.includes('--suite') ? 'true' : settings.tiers[tier].command].map(quote).join(' ');
     return command(process.execPath, [local('../lanes/lane.mjs'), ...args], location, {
       ...boundedGitEnv(), LANE_CONFIG: configFile, LANE_VALIDATE: validation,
+      MONITOR_REQUEST_DIR: '', MONITOR_HOST_SHARED_PATHS: JSON.stringify(sharedPaths), MONITOR_HOST_TEMP: fleet.project.temp,
       MONITOR_PROJECT_CONFIG: path.join(project.canonical, '.lane.json'),
       MONITOR_PROJECT_TEMP: fleet.project.temp,
       // This only selects a lifetime bound. Keep it out of the evidence key so
@@ -242,8 +245,10 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
     projects: Object.values(readFleet().projects).filter(p => p.identity !== project.identity),
     validation: resolveValidation({ root: project.canonical, config: lifecycle, env: {} }) });
   const dispatch = (request) => {
-    if (!request || typeof request !== 'object' || Object.keys(request).some((k) => !['op', 'text'].includes(k))) throw new Error('unknown request fields');
-    const { op, text } = request;
+    if (!request || typeof request !== 'object' || Object.keys(request).some((k) => !['op', 'text', 'suite'].includes(k))) throw new Error('unknown request fields');
+    const { op, text, suite } = request;
+    if (suite !== undefined && (op !== 'check' || text !== undefined || !suiteName(suite))) throw Error('check suite request requires a declared name only');
+    if (op === 'check' && text !== undefined) throw Error('check accepts no command text');
     if (text !== undefined && (typeof text !== 'string' || text.length > 4000 || text.includes('\0'))) throw new Error('invalid text');
     if (!['context', 'start', 'resume', 'commit', 'rebase', 'continue', 'abort', 'check', 'promote', 'apply-routes', 'finish'].includes(op)) throw new Error('unknown operation');
     verify(op);
@@ -302,7 +307,10 @@ export function createEntry({ cwd = process.cwd(), role = 'worker', runtimeDir, 
       return git(['-c', 'core.editor=true', 'rebase', '--continue'], workspace);
     }
     if (op === 'abort') return git(['rebase', '--abort'], workspace);
-    if (op === 'check') return lane(['check'], workspace);
+    if (op === 'check') {
+      if (suite !== undefined) hostSuitePlan(workspace, [suite]);
+      return lane(['check', ...(suite === undefined ? [] : ['--suite', suite])], workspace);
+    }
     if (op === 'promote') return withLock(coordination, () => {
       const document = readReport(readPlainFile(report));
       if (document.errors.length || document.report?.run !== run || document.report?.outcome !== 'done') throw new Error('promotion requires a valid done report for this run; record check explains report errors');

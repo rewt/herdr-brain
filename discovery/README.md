@@ -881,3 +881,100 @@ operator trust; its definition stays stable while launch environment carries the
 private run-temp/project binding. Permission hooks share the settings merge with
 lifecycle and question hooks, and never write persistent native settings/trust.
 See [steward policy, audit and operator alert setup](../brain/README.md#permission-decisions).
+
+### Declared host suites
+
+A sandboxed worker can request `lane check --suite NAME` (also
+`monitor check --suite NAME`). The session parent runs that name using the
+committed canonical `.lane.validation.json`; requests contain no command,
+arguments, checkout or deadline. Host declarations in `.lane.json`, uncommitted
+canonical edits, undeclared names, and committed lane edits to host policy are
+refused. Rebase the lane after the canonical declaration lands.
+
+For example, a project can commit:
+
+```json
+{
+  "fast": "node test/pure.mjs",
+  "promotion": "pnpm validate:ordinary",
+  "host_suites": {
+    "pool-wallet-host": {
+      "command": "pnpm --filter \"@bch-cloak/pool-wallet-host^...\" build && pnpm validate:pool-wallet-host",
+      "localhost": true,
+      "unix_sockets": true,
+      "pty": true,
+      "temp": true,
+      "external_network": []
+    }
+  },
+  "tier_suites": { "promotion": ["pool-wallet-host"] }
+}
+```
+
+`host_suites` maps safe names (letters, digits, underscores and hyphens) to
+commands and boolean capabilities. Capabilities default to false;
+`external_network` defaults to an empty host:port allowlist. `tier_suites` adds
+named suites after the ordinary fast or promotion command, including the merge
+train. Release snapshots use the separate release declaration and cannot select
+host suites through this field. An explicit suite request runs preparation in
+the ordinary validation sandbox and then the named suite. The worker session's
+native settings are unchanged.
+
+The host runner requires macOS `/usr/bin/sandbox-exec` and refuses unsupported
+providers. It permits host TCP listeners and loopback outbound connections, Unix
+socket bind/connect only beneath a private mode-0700 run temp, and declared raw
+PTY access (`openpty`, slave raw mode and `FIONREAD`). Process enumeration is
+available; signals and task ports stay within the suite's inherited sandbox and
+children. There is one native containment boundary for a suite, with the existing
+foreground owner cleaning up descendants; no per-syscall JavaScript mediation.
+
+Writes are limited to the assigned checkout and private run temp (plus the
+usual `/dev/null` and declared PTY devices). Git metadata, canonical `.lane` and
+the record, including their resolved aliases, remain protected. `TMPDIR`, `TMP`,
+`TEMP` and `os.tmpdir()` point to that temp. A project needing
+`POOL_WALLET_HOST_SCRATCH` can declare `POOL_WALLET_HOST_SCRATCH="$TMPDIR"`
+in its suite command. General
+`/private/tmp` writes remain denied, including the shared slot lock. Projects must
+move fixed temp filenames into `TMPDIR`; the runner never relaxes that restriction.
+The runner never sets `HOST` or `BIND`; a project can declare binding variables
+explicitly in its suite command (for example `HOST=127.0.0.1 node test.mjs`).
+Private temp is available as for ordinary validation, and `temp` documents the
+suite's requirement. The receipt owner removes it even after a watchdog timeout.
+
+All host suites acquire the existing host test slot, including named fast checks,
+and inherit the tier's ENG-274 wall and idle limits. They produce the ordinary
+`lane-validation/v1` receipts and immutable logs with the exact committed tree,
+command, environment fingerprint, suite names, capabilities and declaration
+hashes. Every host-suite receipt also records the TCP listener limitation below.
+Changing policy invalidates reuse; the same tree after an empty commit
+or rebase can reuse its evidence. A failing suite cannot authorize integration.
+
+**TCP listener limit (operator approved).** Seatbelt includes wildcard local
+addresses in its `localhost` binding predicate. Wildcard binds can accept
+non-loopback inbound connections for the suite duration; suites must bind
+`127.0.0.1`. External outbound traffic remains denied. The operator accepted
+this boundary for host tests because the previous manual reruns had no sandbox,
+and bch-cloak suites explicitly bind `127.0.0.1:0`. Listener auditing is follow-up
+work; this runner does not claim that it detects wildcard listeners.
+
+**External allowlists currently fail closed.** The format accepts entries such
+as `example.com:443`, but macOS Seatbelt's address filters accept only `localhost`
+or `*`, not specific external hosts or IPs. A nonempty list therefore refuses
+before launching the command. Supporting it requires a separately enforcing
+transport; this runner never substitutes a wildcard network grant. No current
+bch-cloak gate suite needs external network or DNS. Its chipnet live smoke stays
+supervisor-run under its separate per-run approval policy.
+
+Offline host applicability (private fixture slot, no live project operations):
+
+```sh
+MONITOR_HOST_PROFILE_TESTS=1 node --test discovery/test/host-suites.test.mjs
+```
+
+The fixture requests a named check from an actual sandboxed lane CLI and measures
+100 raw-mode PTY open/close/ioctl iterations both directly and under the profile.
+
+Host checks use a twelve-hour parent/owner transport envelope so ordinary fast
+validation's 120-second bound cannot cut off a host suite or its slot wait.
+ENG-274 still bounds the command clock and idle time inside that envelope;
+ordinary preparation and validation keep their existing native step bounds.

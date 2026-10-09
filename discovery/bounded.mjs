@@ -4,7 +4,7 @@
 import { spawn } from 'node:child_process';
 import { prepareOwner } from './owner.mjs';
 import { lifetimeScope, closeScope } from './lifetime.mjs';
-import { FAST_VALIDATION_TIMEOUT, MAX_ENTRY_TIMEOUT } from './deadlines.mjs';
+import { FAST_VALIDATION_TIMEOUT, MAX_ENTRY_TIMEOUT, HOST_OPERATION_TIMEOUT } from './deadlines.mjs';
 import { cliHelp, isMain } from '../lib/cli-help.mjs';
 cliHelp(import.meta.url, "Usage: node discovery/bounded.mjs [--timeout-ms N] [--scope JSON] BINARY [ARGS...] [--command COMMAND ARGS...]");
 let helper;
@@ -15,14 +15,14 @@ function supervisor() {
   process.once('exit', cleanup);
   return helper;
 }
-export function runBounded(binary, args, { timeoutMs = FAST_VALIDATION_TIMEOUT, scope = null, command = null } = {}) {
+export function runBounded(binary, args, { timeoutMs = FAST_VALIDATION_TIMEOUT, scope = null, command = null, hostValidation = false } = {}) {
   const ownedScope = process.platform === 'darwin' && !scope ? lifetimeScope() : null;
   scope ??= ownedScope;
   const suppliedScope = !ownedScope;
   return new Promise((resolve) => {
     let executable, ownerArgs;
     try {
-      if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_ENTRY_TIMEOUT) throw new Error('invalid validation deadline');
+      if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > (hostValidation ? HOST_OPERATION_TIMEOUT : MAX_ENTRY_TIMEOUT)) throw new Error('invalid validation deadline');
       executable = supervisor();
       if (process.platform === 'darwin') {
         if (!suppliedScope) {
@@ -50,10 +50,12 @@ if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   let timeoutMs = FAST_VALIDATION_TIMEOUT;
   if (args[0] === '--timeout-ms') { timeoutMs = Number(args[1]); args.splice(0, 2); }
+  const hostValidation = args[0] === '--host-validation';
+  if (hostValidation) args.shift();
   let scope = null, command = null;
   if (args[0] === '--scope') { scope = JSON.parse(args[1]); args.splice(0, 2); }
   const split = args.indexOf('--command');
   if (split >= 0) command = args.splice(split).slice(1);
   const [binary, ...rest] = args;
-  process.exitCode = await runBounded(binary, rest, { scope, command, timeoutMs });
+  process.exitCode = await runBounded(binary, rest, { scope, command, timeoutMs, hostValidation });
 }

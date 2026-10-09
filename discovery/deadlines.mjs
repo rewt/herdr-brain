@@ -4,6 +4,9 @@ export const PROMOTION_VALIDATION_TIMEOUT = 1_800_000;
 export const VALIDATION_WRAPPER_GRACE = 25_000; // compilation and descendant cleanup
 export const ENTRY_COMMAND_GRACE = 35_000; // Git preflight and final fast-forward
 export const MAX_ENTRY_TIMEOUT = 3_600_000;
+// Host suites spend their command clocks under ENG-274, after slot waiting.
+// The transport/owner cap must not impose the ordinary fast check's 120s cap.
+export const HOST_OPERATION_TIMEOUT = 43_200_000;
 export const DEFAULT_REQUEST_TIMEOUT = 180_000;
 export const REQUEST_REPLY_GRACE = 5_000;
 
@@ -27,4 +30,4 @@ export function validationStepTimeout(tier, expiresAt, now = Date.now()) {
   return remaining;
 }
 export const requestTimeout = op => ['check', 'promote', 'finish'].includes(op)
-  ? MAX_ENTRY_TIMEOUT + REQUEST_REPLY_GRACE : DEFAULT_REQUEST_TIMEOUT;
+  ? HOST_OPERATION_TIMEOUT + REQUEST_REPLY_GRACE : DEFAULT_REQUEST_TIMEOUT;

@@ -10,6 +10,7 @@ import { checkedDirectory, within } from './paths.mjs';
 import { runTemporary, temporaryEnvironment } from './temporary.mjs';
 import { toml } from './confinement.mjs';
 import { claudeSettingsSources, codexPermissionChoice } from './native-settings.mjs';
+import { chatHerdrMode, installedHerdrRead } from './chat-herdr.mjs';
 import { coordinatingRole, herdrControlSocket, socketProbeArguments } from './control-socket.mjs';
 import { resolveNative } from './native-binary.mjs';
 import { permissionHookArguments } from '../supervisor/permission-hooks.mjs';
@@ -138,7 +139,10 @@ function claudeSocketDirectories(temporary, warn) {
   }
 }
 
-export function nativeSandboxLaunch({ kind, binary, args, context, env = process.env, warn = console.error }) {
+export function nativeSandboxLaunch({ kind, binary, args, context, entryBin, env = process.env, warn = console.error }) {
+  const readChat = context.role === 'chat' && chatHerdrMode(context) === 'read';
+  if (readChat && kind !== 'claude') throw new Error('read-mode chats require Claude command-level sandbox exclusions; select --kind claude');
+  const reader = readChat ? installedHerdrRead(entryBin) : null;
   const coordinating = coordinatingRole(context.role);
   if (coordinating && checkedDirectory(context.workspace) !== checkedDirectory(context.canonical))
     throw new Error('coordinating launches require the canonical checkout');
@@ -158,7 +162,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
   if (extra.some(directory => protectedPaths.some(root => within(root, directory)))) throw new Error('extra directories cannot grant worker writes inside canonical coordination state');
   const preflight = kind === 'codex' && coordinating ? codexCoordinatingPreflight({ binary, args, context, env }) : null;
   const choice = preflight?.choice ?? (kind === 'codex' ? codexPermissionChoice(context, args, env) : null);
-  const controlSocket = coordinating ? herdrControlSocket(env) : null;
+  const controlSocket = coordinating && !readChat ? herdrControlSocket(env) : null;
   const requestedArgs = args;
   const selectedArgs = [];
   const checkExtra = directory => {
@@ -280,6 +284,18 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
         if (value === weaker) warnings.push(`sandbox.${key} from ${source}`);
       }
     }
+    if (readChat) {
+      // Native scopes merge arrays. Refuse inherited escape hatches rather than
+      // pretending an empty CLI array can remove a user/local socket grant.
+      for (const { source, settings: loaded } of sources) {
+        const sandbox = loaded.sandbox ?? {}, network = sandbox.network ?? {};
+        if (sandbox.enabled === false || sandbox.failIfUnavailable === false || sandbox.allowUnsandboxedCommands === true ||
+            sandbox.filesystem?.disabled === true || network.allowAllUnixSockets === true ||
+            network.allowUnixSockets?.some(socket => !socketDirectories.includes(resolvedPath(path.resolve(context.workspace, socket.replace(/^~(?=\/)/u, environment.HOME || process.env.HOME))))) ||
+            sandbox.excludedCommands?.some(command => command !== `${reader.wrapper}:*`))
+          throw new Error(`read-mode chat conflicts with sandbox escape grants in ${source}; remove those grants before restarting the chat`);
+      }
+    }
     if (warnings.length) warn(`monitor sandbox: WARNING: ${warnings.join('; ')} weakens generated project confinement; respecting the operator's native settings`);
     const configured = key => {
       const selected = [...sources.filter(s => !s.managed), ...sources.filter(s => s.managed)].reverse().find(s => s.settings.sandbox?.[key] !== undefined);
@@ -289,12 +305,13 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     // denies also contain inherited user write paths. Socket paths use native
     // subpath rules for both bind and connect, independently of TCP binding.
     const denied = (context.projects ?? []).flatMap(p => [p.checkout, p.record, p.worktrees, p.temp])
-      .concat(protectedPaths, otherLanes);
+      .concat(protectedPaths, otherLanes, reader?.protectedPaths ?? []);
     settings.sandbox = { ...settings.sandbox, enabled: configured('enabled') ?? true, failIfUnavailable: configured('failIfUnavailable') ?? true, allowUnsandboxedCommands: configured('allowUnsandboxedCommands') ?? false,
       // Leave inherited arrays in their native scopes: Claude merges them and
       // can exclude repository grants when the sandbox is admin-required.
       network: { ...settings.sandbox?.network, allowUnixSockets: [...new Set([...(settings.sandbox?.network?.allowUnixSockets ?? []), ...socketDirectories])] },
       filesystem: { ...settings.sandbox?.filesystem, allowRead: [...new Set([...(settings.sandbox?.filesystem?.allowRead ?? []), ...readable])], allowWrite: [...new Set([...(settings.sandbox?.filesystem?.allowWrite ?? []), ...writable])], denyWrite: [...new Set([...(settings.sandbox?.filesystem?.denyWrite ?? []), ...denied])] } };
+    if (reader) settings.sandbox.excludedCommands = [`${reader.wrapper}:*`];
     const temporaryEnv = temporaryEnvironment(temporary, env);
     const pythonKeys = ['PYTHONPYCACHEPREFIX', 'PYTHONDONTWRITEBYTECODE'];
     if (sources.some(source => pythonKeys.some(key => source.settings.env?.[key]))) {
@@ -310,7 +327,7 @@ export function nativeSandboxLaunch({ kind, binary, args, context, env = process
     // Native Write and NotebookEdit consult Edit(path), too. Absolute file-tool
     // rules require //; sandbox paths use ordinary absolute paths.
     settings.permissions = { ...settings.permissions,
-      allow: [...new Set([...(settings.permissions?.allow ?? []), ...readable.map(directory => `Read(/${directory}/**)`), ...writable.map(directory => `Edit(/${directory}/**)`)])],
+      allow: [...new Set([...(settings.permissions?.allow ?? []), ...(reader ? [`Bash(${reader.wrapper}:*)`] : []), ...readable.map(directory => `Read(/${directory}/**)`), ...writable.map(directory => `Edit(/${directory}/**)`)])],
       deny: [...new Set([...(settings.permissions?.deny ?? []), ...denied.map(directory => `Edit(/${directory}/**)`)])] };
     if (context.worktrees && !coordinating) {
       const quote = value => `'${value.replace(/'/gu, `'"'"'`)}'`;

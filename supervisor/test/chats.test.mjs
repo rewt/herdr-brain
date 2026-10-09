@@ -350,3 +350,31 @@ test('console --print refuses project chat keys for every profile without creati
   }
   assert.equal(f.state().tabs.length, 0); assert.equal(f.state().launches.length, 0); assert.equal(f.state().focus, 'operator-work');
 });
+
+
+test('read-mode chats select Claude before tab creation and refuse explicit Codex, stale full chats and prototypes', t => {
+  const f=fixture(t), p=f.projects[0], bin=f.env.HERDR_MONITOR_ENTRY_BIN;
+  const wrapper=path.join(bin,'herdr-read');fs.writeFileSync(wrapper,'#!/bin/sh\nexit 1\n',{mode:0o755});
+  const receipt=JSON.parse(fs.readFileSync(path.join(bin,'.monitor-entry.json')));
+  Object.assign(receipt,{product:new URL('../../',import.meta.url).pathname,herdrNative:f.env.HERDR_BIN_PATH,
+    files:{'herdr-read':fs.readFileSync(wrapper,'utf8')}});
+  fs.writeFileSync(path.join(bin,'.monitor-entry.json'),JSON.stringify(receipt));
+  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'read'}}));
+  assert.throws(()=>f.open(undefined,{kind:'codex'}),/read-mode chats require Claude/);
+  assert.equal(f.state().tabs.length,0);
+  const warnings=[],opened=f.open(undefined,{warn:s=>warnings.push(s)});
+  assert.equal(opened.kind,'claude');assert.equal(opened.herdr_mode,'read');
+  assert.match(warnings[0],/read-mode chats require Claude/);
+  assert.equal(f.open().reused,true);
+  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'full'}}));
+  assert.throws(()=>f.open(),/chat Herdr mode changed/);
+  assert.equal(f.state().launches.length,1);
+  // An old receipt with no mode represents the historical full launch.
+  fs.writeFileSync(path.join(p.checkout,'.lane.json'),JSON.stringify({chat:{herdr_mode:'read'}}));
+  const file=path.join(f.env.HERDR_MONITOR_FLEET,'chats.json'),state=JSON.parse(fs.readFileSync(file));
+  delete state.projects[p.identity].herdr_mode;fs.writeFileSync(file,JSON.stringify(state));
+  assert.throws(()=>f.open(),/chat Herdr mode changed/);
+  delete state.projects[p.identity];fs.writeFileSync(file,JSON.stringify(state));
+  f.change(s=>{s.agents[0].name=`chat-${p.name}`});
+  assert.throws(()=>f.open(),/cannot adopt an unverified prototype/);
+});

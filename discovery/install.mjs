@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { quote } from './runtime.mjs';
+import { resolveNative } from './native-binary.mjs';
 import { selectSandbox } from './confinement.mjs';
 const { values } = parseArgs({ options: { bin: { type: 'string' }, codex: { type: 'string' }, claude: { type: 'string' }, validator: { type: 'string' }, remove: { type: 'boolean' }, check: { type: 'boolean' } } });
 const product = fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/u, '');
@@ -35,7 +36,7 @@ try {
   if (exists(marker) && !fs.lstatSync(marker).isFile()) throw new Error(`install receipt is not a plain file: ${marker}`);
   const prior = fs.existsSync(marker) ? JSON.parse(fs.readFileSync(marker, 'utf8')) : null;
   // Receipts are machine-owned, but never let corrupted names escape the bin.
-  if (prior && Object.keys(prior.files ?? {}).some((name) => !['codex', 'monitor-codex', 'claude', 'monitor-claude', 'monitor'].includes(name))) throw new Error('invalid managed entry receipt');
+  if (prior && Object.keys(prior.files ?? {}).some((name) => !['codex', 'monitor-codex', 'claude', 'monitor-claude', 'monitor', 'herdr-read'].includes(name))) throw new Error('invalid managed entry receipt');
   if (values.remove) {
     if (!prior) throw new Error('no managed entry install at this destination');
     for (const [name, content] of Object.entries(prior.files)) {
@@ -66,6 +67,13 @@ try {
     const common = `${prefix}# Herdr Monitor: automatic fresh interactive entry only\nexec ${adapter} --auto-entry -- "$@"\n`;
     const files = { ...(native ? { codex: common, 'monitor-codex': `${prefix}exec ${adapter} "$@"\n` } : {}),
       monitor: `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(`${product}/discovery/client.mjs`)} "$@"\n` };
+    // Pin the real binary at installation; chat-controlled PATH/HERDR_BIN_PATH
+    // must never choose an unsandboxed program through this wrapper.
+    let herdrNative;
+    try { herdrNative = fs.realpathSync(resolveNative('herdr', { entryBin: directory,
+      fallback: process.env.HERDR_BIN_PATH || prior?.herdrNative, explicit: !!process.env.HERDR_BIN_PATH })); }
+    catch { /* Full-mode installations can work without a local Herdr binary. */ }
+    files['herdr-read'] = `#!/bin/sh\nunset NODE_OPTIONS NODE_PATH LD_PRELOAD DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH\nexec ${quote(process.execPath)} ${quote(`${product}/discovery/herdr-read.mjs`)} ${quote(herdrNative ?? '')} "$@"\n`;
     let claudeNative;
     if (values.claude) {
       if (!path.isAbsolute(values.claude)) throw new Error('--claude must name the native executable by absolute path');
@@ -81,7 +89,7 @@ try {
     if (values.check) { console.log('entry installation checked'); process.exit(0); }
     fs.mkdirSync(directory, { recursive: true });
     for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(directory, name), content, { mode: 0o755 });
-    fs.writeFileSync(marker, JSON.stringify({ product, native, nativeExplicit, claudeNative, claudeNativeExplicit, validator: values.validator ?? native ?? 'auto', files }, null, 2) + '\n', { mode: 0o600 });
+    fs.writeFileSync(marker, JSON.stringify({ product, herdrNative, native, nativeExplicit, claudeNative, claudeNativeExplicit, validator: values.validator ?? native ?? 'auto', files }, null, 2) + '\n', { mode: 0o600 });
     console.log(`installed entry adapters in ${directory}; put this machine directory before the native harness directories on PATH`);
   }
 } catch (e) { console.error(`monitor install: ${e.message}`); process.exitCode = 1; }

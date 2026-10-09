@@ -132,6 +132,82 @@ the chat uses the installed Claude adapter and shows the reason in a warning
 and its receipt's `fallback` field. No user configuration change is needed.
 An explicit `--kind codex` or Codex route refuses with the reason instead.
 
+### Chat Herdr access
+
+Commit the chat mode in the project's **canonical `.lane.json`** (not a lane,
+parent routing layer, native settings file or environment variable):
+
+```json
+{ "chat": { "herdr_mode": "read" } }
+```
+
+`full` is the default and retains the coordinating control socket grant from
+ENG-259. Supervisors retain full access and workers/reviewers retain their
+existing confinement regardless of this chat setting. `read` grants no control
+socket. It uses Claude's CLI-scope `sandbox.excludedCommands` for exactly the
+installed entry bin's absolute `herdr-read` path, plus a matching Bash permission
+rule. The chat policy prints its mode and the exact invocation path. Default
+Codex chats fall back visibly to Claude in read mode; an explicit Codex choice
+refuses before creating a tab because Codex has no supported command-level
+exclusion here.
+
+The machine installer ships `herdr-read`, pins the resolved real Herdr binary in
+its receipt and launcher, and updates/removes it transactionally with the entry
+adapters. Have Herdr on PATH (or set `HERDR_BIN_PATH` when installing). A missing
+binary permits full-mode installation but refuses read-mode launches. Runtime
+PATH and `HERDR_BIN_PATH` cannot choose another executable through the wrapper.
+The generated sandbox and Edit denies protect the entry bin, wrapper code, real
+Herdr binary and Node interpreter against chat writes. Interpreter preload
+variables are cleared by the launcher.
+
+Use the **absolute executable path without quotes**; Claude 2.1.295 does not
+match a quoted executable to this exclusion. Paths with spaces or shell/pattern
+characters refuse read-mode launch. Quoted arguments are supported. For example:
+
+```sh
+/absolute/entry/bin/herdr-read pane read w31W:p1 --lines 100
+/absolute/entry/bin/herdr-read pane list --workspace w31W
+/absolute/entry/bin/herdr-read tab list --workspace w31W
+/absolute/entry/bin/herdr-read pane wait-output w31W:p1 --match 'ready' --timeout 5000
+```
+
+The only accepted grammar is:
+
+- `pane read PANE_ID [--lines N]`
+- `pane list [--workspace ID]` or `tab list [--workspace ID]`
+- `pane wait-output PANE_ID (--match TEXT | --regex PATTERN)` with optional
+  `--source visible|recent|recent-unwrapped`, `--lines N` and `--timeout MS`
+
+IDs use strict ASCII patterns (`WORKSPACE:pNUMBER` for panes); numbers are
+positive decimal integers of at most nine digits. Match text is at most 256
+ASCII characters (letters, numbers, spaces and `. , ! ? _ : @ / + = -`);
+regex additionally permits `^ $ * ( ) [ ] { } |`. No control characters,
+backslashes, shell substitutions, duplicate flags, global options or mutations
+are forwarded. With no timeout, wait-output follows Herdr's indefinite wait.
+The wrapper reconstructs argv and spawns the pinned binary without a shell.
+
+Read-mode launch refuses inherited exclusions, socket escape grants and disabled
+sandbox settings that would widen this boundary. Remove an old bridge socket
+grant from `.claude/settings.local.json` before launching read mode. Existing
+chats keep their original native launch policy: after changing the mode, close
+the old chat tab and open a fresh one. Read mode refuses to adopt a prototype
+whose confinement cannot be verified.
+
+The offline regression uses a fake Herdr executable and socket. Its optional
+native probe loads the installed Claude 2.1.295 flag-settings parser, sandbox
+decision and macOS sandbox wrapper from a Bun preload, then exits before the
+CLI entry point. It starts no session, model, live Herdr pane or host test slot:
+
+```sh
+MONITOR_TEST_CLAUDE_READ=/absolute/path/to/native/claude.exe \
+  node --test discovery/test/herdr-read.test.mjs
+```
+
+Run the native probe outside a nested sandbox; it verifies CLI-scope exclusion,
+read access, wrapper refusal, compound-command confinement, direct socket EPERM
+and protected wrapper code. Its bundled symbols are discovered from the binary;
+the probe deliberately refuses unverified versions.
+
 Notices go to **ops**, never the chat name. `--to OPS` wins over
 `MONITOR_SUPERVISOR_AGENT` in the project's route environment, then the existing
 `supervisor-herdr` default. An inherited recipient from another project is

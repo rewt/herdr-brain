@@ -37,7 +37,7 @@ function passthrough() {
       const context = nativeSessionContext(values.repo);
       if (context) {
         context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
-        launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary,
+        launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'claude', binary: values.binary,
           args: [...native, ...unattendedHookArguments('claude', context, root, launch.env)], context,
           env: { ...launch.env, ORG_DIR: context.org } });
       }
@@ -63,11 +63,11 @@ try {
   else {
   // Native --worktree creates a different checkout than our capability owns.
   if (native.some((arg) => ['--worktree', '-w'].includes(arg) || arg.startsWith('--worktree='))) throw new Error('Monitor owns the checkout; native worktree overrides are unavailable');
-  const context = entry.context(), policy = entryPolicy(context, root);
+  const context = { ...entry.context(), entryBin: values['entry-bin'] }, policy = entryPolicy(context, root);
   if (values['policy-only']) { console.log(policy); entry.close(); }
   else {
     const environment = { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests };
-    const launch = nativeSandboxLaunch({ kind: 'claude', binary: values.binary,
+    const launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'claude', binary: values.binary,
       args: [...native, ...sessionHookArguments('claude', context, root, environment), '--append-system-prompt', policy], context,
       env: environment });
     let child;

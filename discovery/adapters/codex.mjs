@@ -46,7 +46,7 @@ function passthrough() {
       const context = nativeSessionContext(cwd);
       if (context) {
         context.role = resume ? (process.env.MONITOR_SESSION_ROLE || 'worker') : 'worker';
-        launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary,
+        launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'codex', binary: values.binary,
           args: [...native, ...unattendedHookArguments('codex', context, root, launch.env)], context,
           env: { ...launch.env, ORG_DIR: context.org } });
       }
@@ -66,7 +66,7 @@ try {
     worktreeRoot: values['worktree-root'] ?? process.env.MONITOR_WORKTREE_ROOT, sandboxBinary: values.validator ?? values.binary });
   if (!entry) passthrough();
   else {
-  const context = entry.context();
+  const context = { ...entry.context(), entryBin: values['entry-bin'] };
   const policy = entryPolicy(context, root);
   if (values['policy-only']) { console.log(policy); entry.close(); }
   else {
@@ -75,7 +75,7 @@ try {
     if (native.some((arg) => arg.startsWith('-C') || ['--cd', '--worktree'].includes(arg) || arg.startsWith('--cd='))) throw new Error('select project with adapter --repo; native checkout overrides are not allowed');
     const environment = { ...sessionEnvironment(context, root), ORG_DIR: context.org, MONITOR_REQUEST_DIR: context.requests };
     const nativeArgs = ['--no-daemon', ...native, ...sessionHookArguments('codex', context, root, environment), '-C', context.workspace, '-c', `developer_instructions=${JSON.stringify(policy)}`];
-    const launch = nativeSandboxLaunch({ kind: 'codex', binary: values.binary, args: nativeArgs, context,
+    const launch = nativeSandboxLaunch({ entryBin: values['entry-bin'], kind: 'codex', binary: values.binary, args: nativeArgs, context,
       env: environment });
     let child;
     try { child = spawnNative(entry, launch.binary, launch.args, { cwd: context.workspace, env: launch.env }); }

@@ -1,0 +1,43 @@
+{
+  "run": "R-353",
+  "implementation_commit": "344d5c2",
+  "checks": [
+    {
+      "command": "env -u ORG_DIR -u HERDR_AGENT_NAME NODE_OPTIONS=--import=$PWD/test/helpers/memory-fixture.mjs node --test test-slot/test/gate-profile.test.mjs test/memory.test.mjs promote/test/memory-gate.test.mjs",
+      "exit_code": 0,
+      "stats": {
+        "tests": 36,
+        "pass": 36,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log": "memory-profile.tap.gz"
+    },
+    {
+      "command": "env -u ORG_DIR -u HERDR_AGENT_NAME NODE_OPTIONS=--import=$PWD/test/helpers/memory-fixture.mjs node test/helpers/run.mjs --file-timeout=180000 --suite-timeout=300000 promote/test/*.test.mjs",
+      "exit_code": 0,
+      "stats": {
+        "tests": 128,
+        "pass": 128,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "log": "promote.tap.gz"
+    }
+  ],
+  "main_control": {
+    "command": "env -u ORG_DIR -u HERDR_AGENT_NAME NODE_OPTIONS=--import=/private/tmp/ENG-293-main.tOFmbs/test/helpers/memory-fixture.mjs node --test --test-name-pattern=\"a capped resume preserves\" test-slot/test/gate-profile.test.mjs",
+    "cwd": "/private/tmp/ENG-293-main.tOFmbs",
+    "exit_code": 0,
+    "passed": 1
+  },
+  "focused_stop_cases": {
+    "passed": 3,
+    "failed": 0,
+    "unselected": 22
+  }
+}

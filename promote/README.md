@@ -269,7 +269,9 @@ Host grant clocks are saved before the train child starts, including a slot
 grant followed by a competing-process refusal. Slot wait receipts now include
 `acquired_at` (their existing `finished_at` remains readable). Unconfigured
 trains retain the validation slot receipt via `gate.slot_receipt` and copy its
-grant into the train after validation returns. Each attempt saves `prepare`
+grant into the train after validation returns. These grant sidecars live in
+`lane-validation/slot-waits/`, keeping them separate from validation receipts
+enumerated by existing readers. Each attempt saves `prepare`
 start/end clocks around preparation commands and test planning, including
 failed preparation; resumed intervals move to `prepare_history`.
 

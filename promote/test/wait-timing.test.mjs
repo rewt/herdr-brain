@@ -4,6 +4,49 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fixture } from './helpers/conformance.mjs';
 
+for (const [kind, topics] of [['wall', ['timeout']], ['wall', ['timeout', 'other']], ['idle', ['timeout']]]) {
+  test(`${kind} timeout retains wait metrics and correction outcomes for ${topics.length} lane(s)`, t => {
+    const f = fixture(t);
+    const declaration = path.join(f.repo, '.lane.validation.json');
+    fs.writeFileSync(declaration, JSON.stringify({ ...JSON.parse(fs.readFileSync(declaration)),
+      timeout_seconds: kind === 'wall' ? .4 : 4, idle_timeout_seconds: kind === 'idle' ? .2 : 0 }));
+    f.git(['add', '.']); f.git(['commit', '-qm', 'Bound gate']);
+    f.lane(topics[0]);
+    if (topics.length > 1) {
+      const other = path.join(f.root, topics[1]);
+      f.git(['worktree', 'add', '-qb', `lane/${topics[1]}`, other]);
+      fs.writeFileSync(path.join(other, 'other'), 'disjoint change');
+      f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
+    }
+    const base = f.git(['rev-parse', 'main']);
+    f.body('setInterval(()=>{},1000);');
+    const b = f.batch(topics), r = b.run();
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const train = b.read(), attempt = train.attempts[0];
+    assert.equal(train.attempts.length, 1, 'no bisection or replay');
+    assert.equal(attempt.phase, 'timeout');
+    assert.equal(attempt.gate.outcome, 'timeout');
+    assert.equal(attempt.gate.gate_timeout.kind, kind);
+    assert.equal(attempt.gate.exit_code, 124);
+    for (const topic of topics) {
+      assert.equal(train.results[topic].outcome, 'timeout');
+      assert.equal(train.results[topic].reason, `gate ${kind === 'idle' ? 'no-output' : 'wall-clock'} limit exceeded; ${topics.length === 1 ? 'lane isolated for correction' : 'batch timed out; re-enqueue lanes individually'}`);
+    }
+    const directory = path.join(f.identity, 'lane-validation');
+    const gates = fs.readdirSync(directory).filter(n => n.endsWith('.json') && !n.endsWith('.execution.json'));
+    assert.equal(gates.length, 1, 'slot grants do not masquerade as validation receipts');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, gates[0]))).outcome, 'timeout');
+    const slot = JSON.parse(fs.readFileSync(attempt.gate.slot_receipt));
+    assert.equal(slot.acquired_at, train.slot_granted_at);
+    assert.ok(attempt.gate.command_started_at); assert.ok(attempt.gate.command_finished_at);
+    assert.ok(f.metrics().batches[0].timing.prepare_time_s >= 0);
+    assert.ok(f.metrics().batches[0].timing.slot_wait_s >= 0);
+    assert.ok(f.metrics().batches[0].timing.gate_time_s > 0);
+    assert.equal(f.git(['rev-parse', 'main']), base);
+    assert.equal(fs.existsSync(f.env.MONITOR_TEST_SLOT_PATH), false);
+  });
+}
+
 test('unconfigured train retains slot grants, prepare clocks and command evidence in its receipt', t => {
   const f = fixture(t); f.lane('timing'); const b = f.batch(['timing']);
   const queued = new Date(Date.now() - 1000).toISOString();

@@ -140,7 +140,11 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
     // The cache receipt can advance; every execution's log remains immutable.
     const log = path.join(directory, `${key}.${randomUUID()}.log`);
     const executionReceipt = `${log}.execution.json`;
-    const slotReceipt = `${log}.slot.json`;
+    // Keep grant sidecars out of the validation receipt namespace. Existing
+    // readers enumerate its JSON files, excluding watchdog execution receipts.
+    const slotReceipt = tier === 'promotion'
+      ? path.join(plainDirectory(path.join(directory, 'slot-waits')), `${path.basename(log)}.json`)
+      : undefined;
     const fd = fs.openSync(log, 'wx', 0o600);
     const startedAt = new Date(), started = process.hrtime.bigint();
     let run;

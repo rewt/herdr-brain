@@ -2,7 +2,8 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { joinFleet } from '../../lib/fleet.mjs';
 import { initOrg } from '../../lib/store.mjs';
@@ -43,10 +44,20 @@ if(a[0]==='pane'&&a[1]==='get')out={pane:s.panes.find(p=>p.pane_id===a[2])};
 else if(a[1]==='split'){const pane={pane_id:'chats:p'+ ++s.counter,workspace_id:'chats',tab_id:'chats:t1'};s.panes.push(pane);out={pane};}
 else if(a[1]==='close')s.panes=s.panes.filter(p=>p.pane_id!==a[2]);
 else if(a[1]==='process-info')out={process_info:{shell_pid:42,foreground_processes:[{pid:s.busy?43:42}]}};
-else if(a[1]==='neighbor')out={neighbor:{neighbor_pane_id:s.neighbor||'chats:p2'}};
+else if(a[1]==='neighbor')out={neighbor:s.neighbor===null?{}:{neighbor_pane_id:Object.hasOwn(s,'neighbor')?s.neighbor:'chats:p2'}};
 fs.writeFileSync(file,JSON.stringify(s));
 const c=net.connect(process.env.HERDR_SOCKET_PATH);c.once('error',e=>{console.error(e.code);process.exitCode=1});
-c.once('connect',()=>{c.destroy();console.log(a[1]==='read'?'checkout % ':JSON.stringify({ok:true,result:out}));});
+c.once('connect',()=>{
+  c.destroy();
+  if(a[1]==='read'&&s.streamFile){
+    process.stdout.write('first\\n');process.stderr.write('streaming\\n');
+    const timer=setInterval(()=>{if(fs.existsSync(s.streamFile)){clearInterval(timer);process.stdout.write('x'.repeat(9*1024*1024)+'last\\n');}},10);
+  }else if(a[1]==='read'&&s.signalRead){
+    const timer=setInterval(()=>{},1000);
+    for(const signal of ['SIGINT','SIGTERM','SIGHUP'])process.on(signal,()=>{clearInterval(timer);console.log(signal);process.exitCode=23;});
+    console.log('ready');
+  }else setTimeout(()=>console.log(a[1]==='read'?'checkout % ':JSON.stringify({ok:true,result:out})),a[1]==='wait-output'?(s.waitMs||0):0);
+});
 `, { mode: 0o755 });
   const binary = path.join(root, 'claude');
   fs.writeFileSync(binary, '#!/bin/sh\nif [ "$1" = --help ]; then echo --settings; elif [ "$1" = --version ]; then echo 2.1.295; fi\n', { mode: 0o755 });
@@ -62,6 +73,15 @@ c.once('connect',()=>{c.destroy();console.log(a[1]==='read'?'checkout % ':JSON.s
   const run = (args, extra = {}) => spawnSync(path.join(entryBin, 'herdr-scoped'), args, { env: { ...env, ...extra }, encoding: 'utf8' });
   const claim = () => claimScopedBinding(scopeRoot, context.canonical);
   return { root, context, config, configDir, commit, git, binary, herdr, socket, env, entryBin, scopeRoot, state, change, run, claim };
+}
+
+function spawnRead(t, f, args) {
+  const child = spawn(path.join(f.entryBin, 'herdr-scoped'), args, {
+    env: { ...f.env, HERDR_SOCKET_PATH: '/forged', HERDR_BIN_PATH: '/forged', PATH: '/forged' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); });
+  return child;
 }
 
 test('installed scoped wrapper permits only in-tab layout, bounded stop and committed presets', t => {
@@ -159,6 +179,77 @@ test('scoped grammar retains read-mode reads anywhere and denies targetless/defa
   for (const args of [['pane', 'read', 'agents:p1'], ['pane', 'list'], ['tab', 'list', '--workspace', 'agents'], ['pane', 'wait-output', 'agents:p1', '--match', 'ready', '--timeout', '100']])
     assert.equal(f.run(args).status, 0);
   for (const args of [['pane', 'close'], ['pane', 'stop', '--current'], ['tab', 'close', 'chats:t1'], ['pane', 'focus', 'chats:p2'], ['pane', 'resize', 'chats:p2', '--amount', '1']]) assert.throws(() => scopedArguments(args));
+});
+
+test('scoped reads require the caller binding before invoking Herdr', t => {
+  const f = fixture(t);
+  const result = f.run(['pane', 'list']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /caller has no unique live launcher-owned chat binding/);
+  assert.equal(f.state().calls.length, 0);
+});
+
+test('scoped wait-output without a timeout can outlive ten seconds', async t => {
+  const f = fixture(t); f.claim();
+  f.change(s => { s.waitMs = 11000; });
+  const child = spawnRead(t, f, ['pane', 'wait-output', 'agents:p1', '--match', 'ready']);
+  let output = '', errors = '';
+  child.stdout.on('data', data => { output += data; });
+  child.stderr.on('data', data => { errors += data; });
+  const started = Date.now();
+  const [code, signal] = await once(child, 'close');
+  assert.equal(code, 0, errors); assert.equal(signal, null);
+  assert.ok(Date.now() - started >= 11000);
+  assert.equal(JSON.parse(output).ok, true);
+  assert.deepEqual(f.state().calls, [['pane', 'wait-output', 'agents:p1', '--match', 'ready']]);
+});
+
+test('scoped read streams stdout and stderr before completion with no eight MiB cap', async t => {
+  const f = fixture(t); f.claim();
+  const finish = path.join(f.root, 'finish-stream');
+  f.change(s => { s.streamFile = finish; });
+  const child = spawnRead(t, f, ['pane', 'read', 'agents:p1']);
+  const closed = once(child, 'close');
+  const firstOutput = once(child.stdout, 'data', { signal: AbortSignal.timeout(5000) });
+  const firstError = once(child.stderr, 'data', { signal: AbortSignal.timeout(5000) });
+  let bytes = 0, tail = '';
+  child.stdout.on('data', data => { bytes += data.length; tail = (tail + data).slice(-5); });
+  const [[stdout], [stderr]] = await Promise.all([firstOutput, firstError]);
+  assert.equal(stdout.toString(), 'first\n'); assert.equal(stderr.toString(), 'streaming\n');
+  assert.equal(child.exitCode, null);
+  fs.writeFileSync(finish, 'finish');
+  assert.deepEqual(await closed, [0, null]);
+  assert.equal(bytes, 6 + 9 * 1024 * 1024 + 5); assert.equal(tail, 'last\n');
+  assert.deepEqual(f.state().calls, [['pane', 'read', 'agents:p1']]);
+});
+
+test('scoped read forwards signals and propagates the Herdr exit code', async t => {
+  const f = fixture(t); f.claim();
+  f.change(s => { s.signalRead = true; });
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    const child = spawnRead(t, f, ['pane', 'read', 'agents:p1']);
+    const closed = once(child, 'close');
+    let output = '', errors = '';
+    child.stdout.on('data', data => { output += data; });
+    child.stderr.on('data', data => { errors += data; });
+    const [ready] = await once(child.stdout, 'data', { signal: AbortSignal.timeout(5000) }); assert.equal(ready.toString(), 'ready\n');
+    child.kill(signal);
+    const [code, killed] = await closed;
+    assert.equal(code, 23, errors); assert.equal(killed, null);
+    assert.equal(output, `ready\n${signal}\n`);
+  }
+});
+
+test('scoped focus refuses absent or malformed neighbors before their membership lookup', t => {
+  const f = fixture(t); f.claim();
+  for (const neighbor of [null, '', 'invalid-pane', '--current', ['chats:p2']]) {
+    f.change(s => { s.neighbor = neighbor; s.calls = []; });
+    const result = f.run(['pane', 'focus', 'chats:p2', '--direction', 'right']);
+    assert.equal(result.status, 1); assert.equal(result.stdout, '');
+    assert.match(result.stderr, /scoped Herdr refused: no focus neighbor/);
+    assert.deepEqual(f.state().calls, [['pane', 'get', 'chats:p1'], ['pane', 'get', 'chats:p2'],
+      ['pane', 'neighbor', '--pane', 'chats:p2', '--direction', 'right']]);
+  }
 });
 
 test('native Claude honours scoped exclusion and protects the binding while raw sockets stay denied', {

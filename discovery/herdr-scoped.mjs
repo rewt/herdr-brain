@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { ownerProcess } from '../lib/process-owner.mjs';
 import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
-import { readArguments } from './herdr-read.mjs';
+import { readArguments, executeRead } from './herdr-read.mjs';
 import { chatHerdrPresets } from './chat-herdr.mjs';
 
 const paneID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}:p[1-9][0-9]{0,9}$/u;
@@ -100,9 +100,10 @@ export function scopedArguments(args) {
   if (['resize', 'focus'].includes(operation) && rest.length === 2 && rest[0] === '--direction' && /^(left|right|up|down)$/u.test(rest[1])) return { kind: operation, target, direction: rest[1] };
   fail('arbitrary run, send-keys, send-text and other commands are unavailable');
 }
+// Do not pass caller-selected socket/config/session/caller context to Herdr.
+const scopedEnvironment = socket => ({ PATH: '/usr/bin:/bin', HOME: process.env.HOME, HERDR_SOCKET_PATH: socket });
 export function scopedHerdr(binary, socket) {
-  // Do not pass caller-selected socket/config/session/caller context to Herdr.
-  const env = { PATH: '/usr/bin:/bin', HOME: process.env.HOME, HERDR_SOCKET_PATH: socket };
+  const env = scopedEnvironment(socket);
   return argv => {
     const result = spawnSync(binary, argv, { env, encoding: 'utf8', timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
     if (result.error || result.status !== 0) fail(`Herdr call failed: ${result.stderr || result.error?.message || result.status}`);
@@ -155,7 +156,6 @@ export function executeScoped(request, { binding, call, verifyCaller = () => {},
     if (result.ok === false || !paneID.test(result.result?.pane?.pane_id ?? '')) fail('Herdr returned no new pane');
     const id = result.result.pane.pane_id; member(id); return { id, output: JSON.stringify(result) };
   };
-  if (request.kind === 'read') return call(request.argv);
   if (request.kind === 'new') return create(binding.pane, 'right', true).output;
   if (request.kind === 'split') return create(request.target, request.direction).output;
   if (request.kind === 'close') return mutate(request.target, ['pane', 'close', request.target]);
@@ -169,6 +169,7 @@ export function executeScoped(request, { binding, call, verifyCaller = () => {},
   if (request.kind === 'focus') {
     member(request.target);
     const neighbor = json(['pane', 'neighbor', '--pane', request.target, '--direction', request.direction]).neighbor?.neighbor_pane_id;
+    if (typeof neighbor !== 'string' || !paneID.test(neighbor)) fail('no focus neighbor');
     member(neighbor);
     // Neighbor identity can change too; refuse a change observed before focus.
     if (json(['pane', 'neighbor', '--pane', request.target, '--direction', request.direction]).neighbor?.neighbor_pane_id !== neighbor) fail('focus neighbor changed');
@@ -196,15 +197,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const [binary, root, ...args] = process.argv.slice(2);
     if (!path.isAbsolute(binary ?? '') || !path.isAbsolute(root ?? '')) fail('installed launcher unavailable');
     const request = scopedArguments(args);
-    // Reads require no scope and retain the exact read wrapper semantics.
-    const binding = request.kind === 'read' ? null : callerBinding(root);
-    // For reads, use the socket from the caller's trusted binding as well.
-    const trusted = binding ?? callerBinding(root);
-    const call = scopedHerdr(binary, trusted.socket);
-    const verifyCaller = () => {
-      const live = callerBinding(root);
-      if (JSON.stringify(live) !== JSON.stringify(trusted)) fail('launcher binding changed');
-    };
-    process.stdout.write(executeScoped(request, { binding: trusted, call, verifyCaller }));
+    // Reads need no tab scope, but require the caller binding for its pinned socket.
+    const trusted = callerBinding(root);
+    if (request.kind === 'read') {
+      executeRead(binary, request.argv, { env: scopedEnvironment(trusted.socket), label: 'herdr-scoped' });
+    } else {
+      const call = scopedHerdr(binary, trusted.socket);
+      const verifyCaller = () => {
+        const live = callerBinding(root);
+        if (JSON.stringify(live) !== JSON.stringify(trusted)) fail('launcher binding changed');
+      };
+      process.stdout.write(executeScoped(request, { binding: trusted, call, verifyCaller }));
+    }
   } catch (error) { console.error(`herdr-scoped: ${error.message}`); process.exitCode = 1; }
 }

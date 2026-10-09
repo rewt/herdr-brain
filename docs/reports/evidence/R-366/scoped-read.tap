@@ -1,0 +1,147 @@
+TAP version 13
+# Subtest: read wrapper accepts a strict read-only grammar and refuses mutations and injection
+ok 1 - read wrapper accepts a strict read-only grammar and refuses mutations and injection
+  ---
+  duration_ms: 1585.230291
+  ...
+# Subtest: canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+ok 2 - canonical read-mode settings exclude only the installed wrapper and never grant the control socket
+  ---
+  duration_ms: 1442.732667
+  ...
+# Subtest: read launch refuses products within every writable root including resolved aliases; full mode is unchanged
+ok 3 - read launch refuses products within every writable root including resolved aliases; full mode is unchanged
+  ---
+  duration_ms: 760.09175
+  ...
+# Subtest: release product outside project roots is protected, and inherited write roots cannot contain it
+ok 4 - release product outside project roots is protected, and inherited write roots cannot contain it
+  ---
+  duration_ms: 498.305625
+  ...
+# Subtest: only an operator committed mode change affects the next launch
+ok 5 - only an operator committed mode change affects the next launch
+  ---
+  duration_ms: 715.783166
+  ...
+# Subtest: a fresh repository opens a full-mode chat without committed config
+ok 6 - a fresh repository opens a full-mode chat without committed config
+  ---
+  duration_ms: 442.099833
+  ...
+# Subtest: malformed committed and working-tree chat config reports invalid settings
+ok 7 - malformed committed and working-tree chat config reports invalid settings
+  ---
+  duration_ms: 875.604458
+  ...
+# Subtest: read chat protects resolved config and separate Git metadata paths
+ok 8 - read chat protects resolved config and separate Git metadata paths
+  ---
+  duration_ms: 340.928875
+  ...
+# Subtest: native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied
+ok 9 - native Claude honours CLI-scope read exclusions while sandboxed direct sockets and mutations stay denied # SKIP set MONITOR_TEST_CLAUDE_READ to the installed native binary outside a nested sandbox
+  ---
+  duration_ms: 0.113875
+  ...
+# Subtest: installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+ok 10 - installed chat adapter supplies the read launch policy and wrapper exclusion end to end
+  ---
+  duration_ms: 1046.688166
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 94 command files from other origins
+# Subtest: installed scoped wrapper permits only in-tab layout, bounded stop and committed presets
+ok 11 - installed scoped wrapper permits only in-tab layout, bounded stop and committed presets
+  ---
+  duration_ms: 6515.936083
+  ...
+# Subtest: another workspace and another chat tab refuse close, stop, split and preset start without input
+ok 12 - another workspace and another chat tab refuse close, stop, split and preset start without input
+  ---
+  duration_ms: 4407.823833
+  ...
+# Subtest: arbitrary input, commands, binding args and undeclared presets refuse even with forged environment
+ok 13 - arbitrary input, commands, binding args and undeclared presets refuse even with forged environment
+  ---
+  duration_ms: 1264.436708
+  ...
+# Subtest: binding rejects forged run-temp state, foreign ancestry, PID reuse and unreadable process identity
+ok 14 - binding rejects forged run-temp state, foreign ancestry, PID reuse and unreadable process identity
+  ---
+  duration_ms: 386.938916
+  ...
+# Subtest: scope is rechecked after stop wait and immediately before preset input; busy and changed panes refuse
+ok 15 - scope is rechecked after stop wait and immediately before preset input; busy and changed panes refuse
+  ---
+  duration_ms: 0.704709
+  ...
+# Subtest: scoped launch uses committed config, protects launcher and binding state and excludes only its wrapper
+ok 16 - scoped launch uses committed config, protects launcher and binding state and excludes only its wrapper
+  ---
+  duration_ms: 952.594083
+  ...
+# Subtest: scoped grammar retains read-mode reads anywhere and denies targetless/default-focus mutation
+ok 17 - scoped grammar retains read-mode reads anywhere and denies targetless/default-focus mutation
+  ---
+  duration_ms: 1010.226708
+  ...
+# Subtest: scoped reads require the caller binding before invoking Herdr
+ok 18 - scoped reads require the caller binding before invoking Herdr
+  ---
+  duration_ms: 388.459625
+  ...
+# Subtest: scoped wait-output without a timeout can outlive ten seconds
+ok 19 - scoped wait-output without a timeout can outlive ten seconds
+  ---
+  duration_ms: 11636.58525
+  ...
+# Subtest: scoped read streams stdout and stderr before completion with no eight MiB cap
+ok 20 - scoped read streams stdout and stderr before completion with no eight MiB cap
+  ---
+  duration_ms: 651.130208
+  ...
+# Subtest: scoped read forwards signals and propagates the Herdr exit code
+ok 21 - scoped read forwards signals and propagates the Herdr exit code
+  ---
+  duration_ms: 879.128083
+  ...
+# Subtest: scoped focus refuses absent or malformed neighbors before their membership lookup
+ok 22 - scoped focus refuses absent or malformed neighbors before their membership lookup
+  ---
+  duration_ms: 1773.9495
+  ...
+# Subtest: native Claude honours scoped exclusion and protects the binding while raw sockets stay denied
+ok 23 - native Claude honours scoped exclusion and protects the binding while raw sockets stay denied # SKIP set MONITOR_TEST_CLAUDE_SCOPED outside a nested sandbox (no model or host slot)
+  ---
+  duration_ms: 0.108584
+  ...
+# Subtest: installed scoped chat adapter claims only launcher ancestry and releases its owner on exit
+ok 24 - installed scoped chat adapter claims only launcher ancestry and releases its owner on exit
+  ---
+  duration_ms: 1690.24675
+  ...
+# Subtest: invalid committed presets and corrupt refs fail closed while uncommitted presets never widen the wrapper
+ok 25 - invalid committed presets and corrupt refs fail closed while uncommitted presets never widen the wrapper
+  ---
+  duration_ms: 724.852125
+  ...
+# Subtest: pure scoped grammar refuses arbitrary input and all caller-selected control paths
+ok 26 - pure scoped grammar refuses arbitrary input and all caller-selected control paths
+  ---
+  duration_ms: 0.284125
+  ...
+# Subtest: forged Git environment cannot redirect committed preset lookup to an attacker repository
+ok 27 - forged Git environment cannot redirect committed preset lookup to an attacker repository
+  ---
+  duration_ms: 1705.698333
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 94 command files from other origins
+1..27
+# tests 27
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 2
+# todo 0
+# duration_ms 34059.39675

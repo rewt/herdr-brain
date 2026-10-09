@@ -32,15 +32,20 @@ export function readArguments(args) {
   return ['pane', operation, id, ...['--lines', '--match', '--regex', '--source', '--timeout'].flatMap(flag => options.has(flag) ? [flag, options.get(flag)] : [])];
 }
 
+// Both read and scoped launchers use this unbuffered path without a deadline.
+export function executeRead(binary, argv, { env = process.env, label = 'herdr-read' } = {}) {
+  const child = spawn(binary, argv, { env, stdio: 'inherit', shell: false });
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
+  child.on('error', error => { console.error(`${label}: ${error.message}`); process.exitCode = 1; });
+  child.on('exit', (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });
+}
+
 // Comparing the module path avoids running this branch when tests import it.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const binary = process.argv[2];
     if (!binary?.startsWith('/')) throw new Error('installed Herdr binary is unavailable');
     const argv = readArguments(process.argv.slice(3));
-    const child = spawn(binary, argv, { stdio: 'inherit', shell: false });
-    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
-    child.on('error', error => { console.error(`herdr-read: ${error.message}`); process.exitCode = 1; });
-    child.on('exit', (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });
+    executeRead(binary, argv);
   } catch (error) { console.error(`herdr-read: ${error.message}`); process.exitCode = 1; }
 }

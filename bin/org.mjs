@@ -25,6 +25,7 @@ import { loadDiscoveredRoutes, resolveRoute } from '../lanes/routes.mjs';
 import { desksCommand } from '../settle/desks-command.mjs';
 import { routesCommand } from '../lanes/routes-command.mjs';
 import { housekeepingCommand } from '../housekeeping/command.mjs';
+import { completeBatchCommand } from '../lib/completion.mjs';
 import { releaseRecordCommand } from '../lib/release-record.mjs';
 import { prioritiesJson, itemServes, validateServes } from '../lib/priorities.mjs';
 import {
@@ -62,6 +63,7 @@ Questions for the operator
                                           budget.<key> meta.<key>) or record run metadata
                                           (e.g. record set R-3 tokens_in=48210 tokens_out=5120)
   record close <ID> [--dropped] [--note T] [--if-current-run R-n]
+  record complete-batch --file JSON       supervisor-attested batch reconciliation (all members)
   record reopen <ID> [--note T] [--if-current-run R-n]
 
 Lessons (durable knowledge, separate from work items)
@@ -1074,6 +1076,7 @@ function priorities(argv) {
 
 const COMMANDS = {
   lesson, lessons,
+  'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   release: argv => releaseRecordCommand(argv, { openOrg, mutate, out }),
   releases: argv => releaseRecordCommand(['list', ...argv], { openOrg, mutate, out }),
   init, add, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,

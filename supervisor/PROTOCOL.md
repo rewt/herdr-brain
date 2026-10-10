@@ -87,6 +87,15 @@ instead of being overwritten. Failed promotions receive a judgment handoff.
    `promote RUN --retry --why REASON --role supervisor` to recheck readiness and
    bind a new attempt while retaining the previous receipt.
 
+For a manually assembled or legacy promotion batch, use the shared
+[batch completion protocol](PROMOTION-COMPLETION.md). Bind every included item,
+excluded item and superseded open run before the gate; a green fast-forward is
+not complete until the whole batch has a reconciliation receipt. Cleanup follows
+record reconciliation. An exclusion needs a reason, next action and any real
+blocking links. A stale record stops completion for inspection; never silently
+close only the top lane's item or overwrite a newer attempt. Keep the successful
+Git/gate evidence and retry bookkeeping without repeating a successful gate.
+
 For `promotable_with_findings`, settle reached the configured review-round cap
 with Moderate/Minor findings and current clean/green readiness evidence. Inspect
 the findings and exact reviewed/head commits. Decide whether to accept them and

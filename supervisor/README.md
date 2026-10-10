@@ -538,3 +538,12 @@ receipt's exact lane head/tree, full-file command and immutable log hash, and
 rechecks all normal record, clean-tree, STOP and replay guards. Missing, stale,
 filtered, red or unrecorded evidence cannot discharge it. The resulting request
 retains the run binding and closes through the usual autopilot landing path.
+
+## Manual and legacy promotion batches
+
+Use [the shared completion protocol](PROMOTION-COMPLETION.md) to bind every member,
+exclusion and superseded attempt before the gate and reconcile the full batch
+before lane cleanup. `supervisor/reconcile.mjs prepare|finish` verifies project,
+Git and gate evidence; `record complete-batch --file JSON` applies the guarded
+record transaction. BCH Cloak can use this adapter during its release-gated
+migration to the native workflow.

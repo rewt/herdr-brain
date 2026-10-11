@@ -1,11 +1,25 @@
-# Promotion completion for manual batches
+# Promotion completion for native and manual batches
 
 Promotion is complete only when the integrated Git result and every batch member's
 record agree. A green gate or a closed top lane alone does not complete a batch.
 Use this shared Herdr Brain command for manually stacked lanes and legacy project
-promoters. Native queue notices continue through `supervisor.mjs handle`; a
-manual batch must use the reconciliation receipt below, including when it spans
-several original lanes.
+promoters. The native queue captures record fingerprints before gating, then calls the same
+`record complete-batch` transaction for all successful members before any lane
+cleanup. Its durable `train.json.record.json` binds every included member, the
+original base, integrated tip, and each successful attempt's retained gate proof.
+A bisected batch accounts for refused members as historical exclusions with a
+reason and next action; it does not mutate their newer runs or outcomes. Manual
+batches use the prepare/finish receipt below, including across original lanes.
+
+When native integration succeeds but completion refuses, the queue reports
+**integrated; reconciliation pending**, retains lanes and evidence, and keeps an
+owned resumable batch. The queue's supported recovery reuses the completed train
+and retries bookkeeping without host admission, validation or integration. A
+changed included run/blocker/report still requires inspection; it never refreshes
+the original fingerprint silently. Legacy successful trains without preparation
+need the guarded manual recovery path. Later notices verify the reconciliation
+marker instead of closing members individually. Git-only queues without a record
+make no organizational completion claim.
 
 1. Rebase and independently review the exact candidate. Record every included
    item's final report and finish its review/approval blockers. List every item

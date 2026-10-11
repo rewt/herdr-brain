@@ -1,0 +1,1105 @@
+TAP version 13
+# Subtest: native 1-member batch reconciles atomically before cleanup and duplicate recovery
+ok 1 - native 1-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 2351.528208
+  type: 'test'
+  ...
+# Subtest: native 3-member batch reconciles atomically before cleanup and duplicate recovery
+ok 2 - native 3-member batch reconciles atomically before cleanup and duplicate recovery
+  ---
+  duration_ms: 5298.953042
+  type: 'test'
+  ...
+# Subtest: integrated record refusal retains every lane and resumes records without another gate
+ok 3 - integrated record refusal retains every lane and resumes records without another gate
+  ---
+  duration_ms: 4768.936833
+  type: 'test'
+  ...
+# Subtest: bisected batch accounts for its exclusion without mutating newer excluded work
+ok 4 - bisected batch accounts for its exclusion without mutating newer excluded work
+  ---
+  duration_ms: 6826.169209
+  type: 'test'
+  ...
+# Subtest: recovery refuses new-run and retains all integrated lanes
+ok 5 - recovery refuses new-run and retains all integrated lanes
+  ---
+  duration_ms: 3828.288833
+  type: 'test'
+  ...
+# Subtest: recovery refuses blocker and retains all integrated lanes
+ok 6 - recovery refuses blocker and retains all integrated lanes
+  ---
+  duration_ms: 4193.661
+  type: 'test'
+  ...
+# Subtest: recovery refuses missing-member and retains all integrated lanes
+ok 7 - recovery refuses missing-member and retains all integrated lanes
+  ---
+  duration_ms: 4010.294583
+  type: 'test'
+  ...
+# Subtest: lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+ok 8 - lost record acknowledgement replays the receipt before cleanup without repeating the gate or completion events
+  ---
+  duration_ms: 5715.675708
+  type: 'test'
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins
+# Subtest: one batch reconciles every member and superseded run, preserving excluded work and older folds
+ok 9 - one batch reconciles every member and superseded run, preserving excluded work and older folds
+  ---
+  duration_ms: 2.205708
+  type: 'test'
+  ...
+# Subtest: omissions, stale evidence, unresolved questions and malformed plans refuse the whole batch
+ok 10 - omissions, stale evidence, unresolved questions and malformed plans refuse the whole batch
+  ---
+  duration_ms: 2.323167
+  type: 'test'
+  ...
+# Subtest: an excluded done report cannot satisfy an included dependency, and exclusion cycles refuse
+ok 11 - an excluded done report cannot satisfy an included dependency, and exclusion cycles refuse
+  ---
+  duration_ms: 0.664916
+  type: 'test'
+  ...
+# Subtest: blocked reports require recorded supervisor resolution, while unrelated writes do not invalidate preparation
+ok 12 - blocked reports require recorded supervisor resolution, while unrelated writes do not invalidate preparation
+  ---
+  duration_ms: 0.270041
+  type: 'test'
+  ...
+# Subtest: display-only session metadata never changes completion authority
+ok 13 - display-only session metadata never changes completion authority
+  ---
+  duration_ms: 0.164083
+  type: 'test'
+  ...
+# Subtest: replay is a no-op even after reopening, and different evidence cannot reuse the batch id
+ok 14 - replay is a no-op even after reopening, and different evidence cannot reuse the batch id
+  ---
+  duration_ms: 0.206667
+  type: 'test'
+  ...
+# Subtest: shared adapter verifies exact Git integration and uses explicit project record despite inherited ORG_DIR
+ok 15 - shared adapter verifies exact Git integration and uses explicit project record despite inherited ORG_DIR
+  ---
+  duration_ms: 1168.946791
+  type: 'test'
+  ...
+# Subtest: adapter refuses stale record, dirty trees, wrong record, STOP and the actual promotion lock
+ok 16 - adapter refuses stale record, dirty trees, wrong record, STOP and the actual promotion lock
+  ---
+  duration_ms: 903.878958
+  type: 'test'
+  ...
+# Subtest: historical exclusions preserve newer work and cannot mutate its state
+ok 17 - historical exclusions preserve newer work and cannot mutate its state
+  ---
+  duration_ms: 0.836375
+  type: 'test'
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins
+# Subtest: cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+ok 18 - cold start Lessons includes bounded active claims and counts proposals awaiting activation read-only
+  ---
+  duration_ms: 1455.403084
+  type: 'test'
+  ...
+# Subtest: cold start Lessons handles empty records and terminal controls in claims
+ok 19 - cold start Lessons handles empty records and terminal controls in claims
+  ---
+  duration_ms: 682.177584
+  type: 'test'
+  ...
+# Subtest: cold start surfaces host pressure and memory/CPU process evidence without changing record status
+ok 20 - cold start surfaces host pressure and memory/CPU process evidence without changing record status
+  ---
+  duration_ms: 165.907708
+  type: 'test'
+  ...
+# Subtest: cold start and entry policy expose command basenames and resource figures without process argv
+ok 21 - cold start and entry policy expose command basenames and resource figures without process argv
+  ---
+  duration_ms: 270.282208
+  type: 'test'
+  ...
+# Subtest: supervisor handle exposes review memory wait before pressure clears
+ok 22 - supervisor handle exposes review memory wait before pressure clears
+  ---
+  duration_ms: 9709.343084
+  type: 'test'
+  ...
+# Subtest: supervisor handle exposes correction memory wait before pressure clears
+ok 23 - supervisor handle exposes correction memory wait before pressure clears
+  ---
+  duration_ms: 11785.545125
+  type: 'test'
+  ...
+# Subtest: handle returns capped findings and promotion records explicit acceptance with exact heads
+ok 24 - handle returns capped findings and promotion records explicit acceptance with exact heads
+  ---
+  duration_ms: 8155.766042
+  type: 'test'
+  ...
+# Subtest: handle explicitly sends capped findings back once and adopts its saved correction
+ok 25 - handle explicitly sends capped findings back once and adopts its saved correction
+  ---
+  duration_ms: 8493.927417
+  type: 'test'
+  ...
+# Subtest: STOP arriving during review retains a resumable correction without launching another worker
+ok 26 - STOP arriving during review retains a resumable correction without launching another worker
+  ---
+  duration_ms: 7736.109417
+  type: 'test'
+  ...
+# Subtest: supervisor binds head and run into the queue and retries confirmed refusals with history
+ok 27 - supervisor binds head and run into the queue and retries confirmed refusals with history
+  ---
+  duration_ms: 11185.7475
+  type: 'test'
+  ...
+# Subtest: bound promotion rechecks queued runs and record changes during validation before integration
+ok 28 - bound promotion rechecks queued runs and record changes during validation before integration
+  ---
+  duration_ms: 20643.038
+  type: 'test'
+  ...
+# Subtest: late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+ok 29 - late final reports recover completed promotion after lane closure and retain binding, integration and current-run guards
+  ---
+  duration_ms: 11306.038
+  type: 'test'
+  ...
+# Subtest: late original and correction notices after lane removal preserve promotion guards and never replay settlement
+ok 30 - late original and correction notices after lane removal preserve promotion guards and never replay settlement
+  ---
+  duration_ms: 18109.310959
+  type: 'test'
+  ...
+# Subtest: refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+ok 31 - refusal retry cannot authorize a new unreviewed head or replay an interrupted attempt
+  ---
+  duration_ms: 6978.834375
+  type: 'test'
+  ...
+# Subtest: supervisor entry and final notices carry the unconfigured cycle through actual promotion
+ok 32 - supervisor entry and final notices carry the unconfigured cycle through actual promotion
+  ---
+  duration_ms: 22327.768458
+  type: 'test'
+  ...
+# Subtest: cold start includes routes, priorities, history across midnight and a durable explicit reading cursor
+ok 33 - cold start includes routes, priorities, history across midnight and a durable explicit reading cursor
+  ---
+  duration_ms: 1491.509958
+  type: 'test'
+  ...
+# Subtest: ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+ok 34 - ingested report decisions retain provenance and rationale after closure and across checkpoints, scoped by repository
+  ---
+  duration_ms: 1980.977417
+  type: 'test'
+  ...
+# Subtest: workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+ok 35 - workers, linked checkouts, STOP and intermediate notices cannot start supervisor mechanics
+  ---
+  duration_ms: 1907.106667
+  type: 'test'
+  ...
+# Subtest: non-done reports hand off substance without review; saved enqueue uncertainty never replays
+ok 36 - non-done reports hand off substance without review; saved enqueue uncertainty never replays
+  ---
+  duration_ms: 1633.347667
+  type: 'test'
+  ...
+# Subtest: full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+ok 37 - full JSON preserves overflow, file presence awaits watch and foreign runs are excluded by Git identity
+  ---
+  duration_ms: 1243.235416
+  type: 'test'
+  ...
+# Subtest: conditional record completion preserves newer work, unresolved and declined blockers
+ok 38 - conditional record completion preserves newer work, unresolved and declined blockers
+  ---
+  duration_ms: 1224.845
+  type: 'test'
+  ...
+# Subtest: a disappeared checkout retains its open record run through a dispatch identity receipt
+ok 39 - a disappeared checkout retains its open record run through a dispatch identity receipt
+  ---
+  duration_ms: 313.722833
+  type: 'test'
+  ...
+# Subtest: supervisor retries a confirmed timeout with the same reviewed binding
+ok 40 - supervisor retries a confirmed timeout with the same reviewed binding
+  ---
+  duration_ms: 6301.154208
+  type: 'test'
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins
+# Subtest: three ready lanes stack and fast-forward with one promotion-tier run
+ok 41 - three ready lanes stack and fast-forward with one promotion-tier run
+  ---
+  duration_ms: 3670.933375
+  type: 'test'
+  ...
+# Subtest: five pending lanes drain in arrival order with the unbounded default
+ok 42 - five pending lanes drain in arrival order with the unbounded default
+  ---
+  duration_ms: 5340.687042
+  type: 'test'
+  ...
+# Subtest: five pending lanes drain in arrival order with max_batch 3
+ok 43 - five pending lanes drain in arrival order with max_batch 3
+  ---
+  duration_ms: 5312.601125
+  type: 'test'
+  ...
+# Subtest: invalid committed max_batch values refuse enqueue and drain without consuming pending lanes
+ok 44 - invalid committed max_batch values refuse enqueue and drain without consuming pending lanes
+  ---
+  duration_ms: 2706.494708
+  type: 'test'
+  ...
+# Subtest: batch policy ignores untracked canonical config, uncommitted edits and lane copies
+ok 45 - batch policy ignores untracked canonical config, uncommitted edits and lane copies
+  ---
+  duration_ms: 479.548
+  type: 'test'
+  ...
+# Subtest: an unborn canonical branch uses default settings even with an untracked config
+ok 46 - an unborn canonical branch uses default settings even with an untracked config
+  ---
+  duration_ms: 1047.192084
+  type: 'test'
+  ...
+# Subtest: a failed settings git rev-parse retains a coded queue refusal and permits retry
+ok 47 - a failed settings git rev-parse retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 3274.51075
+  type: 'test'
+  ...
+# Subtest: a failed settings git ls-tree retains a coded queue refusal and permits retry
+ok 48 - a failed settings git ls-tree retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 3448.63175
+  type: 'test'
+  ...
+# Subtest: a failed settings git show retains a coded queue refusal and permits retry
+ok 49 - a failed settings git show retains a coded queue refusal and permits retry
+  ---
+  duration_ms: 3475.574167
+  type: 'test'
+  ...
+# Subtest: a invalid settings refusal after startup sends one queue notice and preserves the pending tail
+ok 50 - a invalid settings refusal after startup sends one queue notice and preserves the pending tail
+  ---
+  duration_ms: 2219.045917
+  type: 'test'
+  ...
+# Subtest: a git-failed settings refusal after startup sends one queue notice and preserves the pending tail
+ok 51 - a git-failed settings refusal after startup sends one queue notice and preserves the pending tail
+  ---
+  duration_ms: 2252.020084
+  type: 'test'
+  ...
+# Subtest: a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal
+ok 52 - a settings git rev-parse timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 4292.747375
+  type: 'test'
+  ...
+# Subtest: a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal
+ok 53 - a settings git ls-tree timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 4494.643292
+  type: 'test'
+  ...
+# Subtest: a settings git show timeout releases the queue for enqueuers and retains a coded refusal
+ok 54 - a settings git show timeout releases the queue for enqueuers and retains a coded refusal
+  ---
+  duration_ms: 4395.127292
+  type: 'test'
+  ...
+# Subtest: settings are read once for each new batch and not for an empty queue
+ok 55 - settings are read once for each new batch and not for an empty queue
+  ---
+  duration_ms: 2815.662875
+  type: 'test'
+  ...
+# Subtest: safe bisection lands two good lanes with the third red in exactly three runs
+ok 56 - safe bisection lands two good lanes with the third red in exactly three runs
+  ---
+  duration_ms: 3935.154292
+  type: 'test'
+  ...
+# culprit=third promotion-tier runs=3
+# Subtest: a lone ready lane goes immediately with one promotion run
+ok 57 - a lone ready lane goes immediately with one promotion run
+  ---
+  duration_ms: 1473.601375
+  type: 'test'
+  ...
+# Subtest: STOP during a batch memory wait refuses promotion and permits retry after clearing
+ok 58 - STOP during a batch memory wait refuses promotion and permits retry after clearing
+  ---
+  duration_ms: 7291.607041
+  type: 'test'
+  ...
+# Subtest: unprofiled batch waits before its project lock and proceeds when memory clears
+ok 59 - unprofiled batch waits before its project lock and proceeds when memory clears
+  ---
+  duration_ms: 6580.479209
+  type: 'test'
+  ...
+# Subtest: unprofiled memory re-check refuses with a code and releases the project lock
+ok 60 - unprofiled memory re-check refuses with a code and releases the project lock
+  ---
+  duration_ms: 7214.228166
+  type: 'test'
+  ...
+# Subtest: unprofiled memory re-check proceeds on clearing
+ok 61 - unprofiled memory re-check proceeds on clearing
+  ---
+  duration_ms: 2496.06875
+  type: 'test'
+  ...
+# Subtest: completed batch notices wait for empty input and deliver each lane once with one gate
+ok 62 - completed batch notices wait for empty input and deliver each lane once with one gate
+  ---
+  duration_ms: 2397.863375
+  type: 'test'
+  ...
+# Subtest: a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+ok 63 - a crash with a train notice queued resumes its saved outcome without repeating cleanup or promotion
+  ---
+  duration_ms: 3683.212458
+  type: 'test'
+  ...
+# Subtest: interrupted validation preserves main and drain resumes the batch
+ok 64 - interrupted validation preserves main and drain resumes the batch
+  ---
+  duration_ms: 3768.534583
+  type: 'test'
+  ...
+# Subtest: a previously green identical tree is reused by the batch
+ok 65 - a previously green identical tree is reused by the batch
+  ---
+  duration_ms: 1692.786334
+  type: 'test'
+  ...
+# Subtest: safe bisection lands all good work with first red in exactly five runs
+ok 66 - safe bisection lands all good work with first red in exactly five runs
+  ---
+  duration_ms: 4749.516167
+  type: 'test'
+  ...
+# culprit=first promotion-tier runs=5
+# Subtest: safe bisection lands all good work with second red in exactly five runs
+ok 67 - safe bisection lands all good work with second red in exactly five runs
+  ---
+  duration_ms: 4792.0405
+  type: 'test'
+  ...
+# culprit=second promotion-tier runs=5
+# Subtest: a changed queued head and a dirty lane are refused without holding a clean lane
+ok 68 - a changed queued head and a dirty lane are refused without holding a clean lane
+  ---
+  duration_ms: 2675.257166
+  type: 'test'
+  ...
+# Subtest: a crash after the fast-forward resumes bookkeeping without a second gate
+ok 69 - a crash after the fast-forward resumes bookkeeping without a second gate
+  ---
+  duration_ms: 6201.3575
+  type: 'test'
+  ...
+# Subtest: recovery: a lost fast-forward is adopted after a later batch advances main
+ok 70 - recovery: a lost fast-forward is adopted after a later batch advances main
+  ---
+  duration_ms: 11636.836834
+  type: 'test'
+  ...
+# Subtest: STOP and scratch mutation preserve main and produce refusals
+ok 71 - STOP and scratch mutation preserve main and produce refusals
+  ---
+  duration_ms: 2147.107334
+  type: 'test'
+  ...
+# Subtest: batch dirty canonical checkout returns refusals and notices before scratch work
+ok 72 - batch dirty canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2607.032375
+  type: 'test'
+  ...
+# Subtest: batch off-main canonical checkout returns refusals and notices before scratch work
+ok 73 - batch off-main canonical checkout returns refusals and notices before scratch work
+  ---
+  duration_ms: 2662.873875
+  type: 'test'
+  ...
+# Subtest: resuming a prepared batch after main moves replans and preserves upstream work
+ok 74 - resuming a prepared batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 5883.970833
+  type: 'test'
+  ...
+# Subtest: resuming a validated batch after main moves replans and preserves upstream work
+ok 75 - resuming a validated batch after main moves replans and preserves upstream work
+  ---
+  duration_ms: 6467.463333
+  type: 'test'
+  ...
+# Subtest: resuming prepared capture refuses dirty input and drains the remaining lanes
+ok 76 - resuming prepared capture refuses dirty input and drains the remaining lanes
+  ---
+  duration_ms: 8302.669083
+  type: 'test'
+  ...
+# Subtest: resuming prepared capture refuses moved input and drains the remaining lanes
+ok 77 - resuming prepared capture refuses moved input and drains the remaining lanes
+  ---
+  duration_ms: 8551.521125
+  type: 'test'
+  ...
+# Subtest: resuming prepared capture refuses stop input and drains the remaining lanes
+ok 78 - resuming prepared capture refuses stop input and drains the remaining lanes
+  ---
+  duration_ms: 6747.727834
+  type: 'test'
+  ...
+# Subtest: batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+ok 79 - batch exceptions deliver interrupted notices, preserve the receipt and continue later requests
+  ---
+  duration_ms: 9787.44375
+  type: 'test'
+  ...
+# Subtest: promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+ok 80 - promotion lock contention delivers an interrupted notice and resumes after the owner releases it
+  ---
+  duration_ms: 2466.875583
+  type: 'test'
+  ...
+# Subtest: batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+ok 81 - batch telemetry publishes every running phase before its work and preserves recovery checkpoints
+  ---
+  duration_ms: 7482.560083
+  type: 'test'
+  ...
+# Subtest: a paused check exposes its clock atomically while validation is still running
+ok 82 - a paused check exposes its clock atomically while validation is still running
+  ---
+  duration_ms: 1528.077583
+  type: 'test'
+  ...
+# Subtest: resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+ok 83 - resuming an in-flight gate keeps the prepared candidate and replaces the unfinished clock
+  ---
+  duration_ms: 5925.573416
+  type: 'test'
+  ...
+# Subtest: red validation finishes the published clock and retains its real exit
+ok 84 - red validation finishes the published clock and retains its real exit
+  ---
+  duration_ms: 1249.9725
+  type: 'test'
+  ...
+# Subtest: resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+ok 85 - resumed validated attempts checkpoint prepared before publishing a fresh unfinished clock
+  ---
+  duration_ms: 7288.736709
+  type: 'test'
+  ...
+# Subtest: validation that throws closes its telemetry clock without inventing green evidence
+ok 86 - validation that throws closes its telemetry clock without inventing green evidence
+  ---
+  duration_ms: 1866.987083
+  type: 'test'
+  ...
+# Subtest: affected test supplements run once in the batch gate, are recorded and block a red landing
+ok 87 - affected test supplements run once in the batch gate, are recorded and block a red landing
+  ---
+  duration_ms: 4534.767875
+  type: 'test'
+  ...
+# Subtest: a lane-modified planner cannot shrink canonical bound test coverage
+ok 88 - a lane-modified planner cannot shrink canonical bound test coverage
+  ---
+  duration_ms: 1709.794667
+  type: 'test'
+  ...
+# Subtest: a lane-modified planner cannot invent canonical bound test coverage
+ok 89 - a lane-modified planner cannot invent canonical bound test coverage
+  ---
+  duration_ms: 1555.113333
+  type: 'test'
+  ...
+# Subtest: a changed gate cannot omit a bound deferred test file
+ok 90 - a changed gate cannot omit a bound deferred test file
+  ---
+  duration_ms: 1292.518042
+  type: 'test'
+  ...
+# Subtest: canonical planning receives the union of bound required files and executes them beyond the extra cap
+ok 91 - canonical planning receives the union of bound required files and executes them beyond the extra cap
+  ---
+  duration_ms: 2757.040958
+  type: 'test'
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins
+# Subtest: done handles, PASS promotes with named policy, and duplicate notices do no work
+ok 92 - done handles, PASS promotes with named policy, and duplicate notices do no work
+  ---
+  duration_ms: 656.059167
+  type: 'test'
+  ...
+# Subtest: fix_round is left in flight
+ok 93 - fix_round is left in flight
+  ---
+  duration_ms: 527.64275
+  type: 'test'
+  ...
+# Subtest: base movement gets exactly one handle retry
+ok 94 - base movement gets exactly one handle retry
+  ---
+  duration_ms: 580.868042
+  type: 'test'
+  ...
+# Subtest: repeated base movement wakes and never repeats the retry
+ok 95 - repeated base movement wakes and never repeats the retry
+  ---
+  duration_ms: 613.349334
+  type: 'test'
+  ...
+# Subtest: exit-one unknown refusal retains evidence and never authorizes a retry
+ok 96 - exit-one unknown refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 523.015292
+  type: 'test'
+  ...
+# Subtest: exit-one wrong-run refusal retains evidence and never authorizes a retry
+ok 97 - exit-one wrong-run refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 535.675041
+  type: 'test'
+  ...
+# Subtest: exit-one wrong-journal refusal retains evidence and never authorizes a retry
+ok 98 - exit-one wrong-journal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 500.122625
+  type: 'test'
+  ...
+# Subtest: exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+ok 99 - exit-one wrong-receipt refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 550.177958
+  type: 'test'
+  ...
+# Subtest: exit-one wrong-exit refusal retains evidence and never authorizes a retry
+ok 100 - exit-one wrong-exit refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 495.513333
+  type: 'test'
+  ...
+# Subtest: exit-one signal refusal retains evidence and never authorizes a retry
+ok 101 - exit-one signal refusal retains evidence and never authorizes a retry
+  ---
+  duration_ms: 506.9775
+  type: 'test'
+  ...
+# Subtest: Moderate and Minor findings file one follow-up before accepting promotion
+ok 102 - Moderate and Minor findings file one follow-up before accepting promotion
+  ---
+  duration_ms: 710.088541
+  type: 'test'
+  ...
+# Subtest: unknown result wakes with the original notice, reason and receipt
+ok 103 - unknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 515.323209
+  type: 'test'
+  ...
+# Subtest: uncertain result wakes with the original notice, reason and receipt
+ok 104 - uncertain result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 491.51075
+  type: 'test'
+  ...
+# Subtest: interrupted result wakes with the original notice, reason and receipt
+ok 105 - interrupted result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 494.898334
+  type: 'test'
+  ...
+# Subtest: refusal result wakes with the original notice, reason and receipt
+ok 106 - refusal result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 483.560625
+  type: 'test'
+  ...
+# Subtest: fail result wakes with the original notice, reason and receipt
+ok 107 - fail result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 475.603584
+  type: 'test'
+  ...
+# Subtest: cappedMajor result wakes with the original notice, reason and receipt
+ok 108 - cappedMajor result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 503.053292
+  type: 'test'
+  ...
+# Subtest: unparsed result wakes with the original notice, reason and receipt
+ok 109 - unparsed result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 492.856125
+  type: 'test'
+  ...
+# Subtest: noPASS result wakes with the original notice, reason and receipt
+ok 110 - noPASS result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 499.914167
+  type: 'test'
+  ...
+# Subtest: cappedUnknown result wakes with the original notice, reason and receipt
+ok 111 - cappedUnknown result wakes with the original notice, reason and receipt
+  ---
+  duration_ms: 493.667875
+  type: 'test'
+  ...
+# Subtest: STOP disables automatic mutations and wakes
+ok 112 - STOP disables automatic mutations and wakes
+  ---
+  duration_ms: 423.816583
+  type: 'test'
+  ...
+# Subtest: paused disables automatic mutations and wakes
+ok 113 - paused disables automatic mutations and wakes
+  ---
+  duration_ms: 411.977792
+  type: 'test'
+  ...
+# Subtest: kill disables automatic mutations and wakes
+ok 114 - kill disables automatic mutations and wakes
+  ---
+  duration_ms: 412.509542
+  type: 'test'
+  ...
+# Subtest: invalidConfig disables automatic mutations and wakes
+ok 115 - invalidConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 424.825333
+  type: 'test'
+  ...
+# Subtest: nullConfig disables automatic mutations and wakes
+ok 116 - nullConfig disables automatic mutations and wakes
+  ---
+  duration_ms: 447.747041
+  type: 'test'
+  ...
+# Subtest: nullPolicy disables automatic mutations and wakes
+ok 117 - nullPolicy disables automatic mutations and wakes
+  ---
+  duration_ms: 426.779708
+  type: 'test'
+  ...
+# Subtest: reserved disables automatic mutations and wakes
+ok 118 - reserved disables automatic mutations and wakes
+  ---
+  duration_ms: 483.217916
+  type: 'test'
+  ...
+# Subtest: category disables automatic mutations and wakes
+ok 119 - category disables automatic mutations and wakes
+  ---
+  duration_ms: 479.855917
+  type: 'test'
+  ...
+# Subtest: questions disables automatic mutations and wakes
+ok 120 - questions disables automatic mutations and wakes
+  ---
+  duration_ms: 740.881083
+  type: 'test'
+  ...
+# Subtest: blocked disables automatic mutations and wakes
+ok 121 - blocked disables automatic mutations and wakes
+  ---
+  duration_ms: 423.603833
+  type: 'test'
+  ...
+# Subtest: foreign disables automatic mutations and wakes
+ok 122 - foreign disables automatic mutations and wakes
+  ---
+  duration_ms: 441.007667
+  type: 'test'
+  ...
+# Subtest: torn disables automatic mutations and wakes
+ok 123 - torn disables automatic mutations and wakes
+  ---
+  duration_ms: 403.508375
+  type: 'test'
+  ...
+# Subtest: superseded disables automatic mutations and wakes
+ok 124 - superseded disables automatic mutations and wakes
+  ---
+  duration_ms: 500.415542
+  type: 'test'
+  ...
+# Subtest: incomplete disables automatic mutations and wakes
+ok 125 - incomplete disables automatic mutations and wakes
+  ---
+  duration_ms: 450.623042
+  type: 'test'
+  ...
+# Subtest: an unacknowledged action wakes on replay instead of running again
+ok 126 - an unacknowledged action wakes on replay instead of running again
+  ---
+  duration_ms: 577.043083
+  type: 'test'
+  ...
+# Subtest: a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+ok 127 - a sequence interrupted after acknowledged actions wakes without repeating a follow-up
+  ---
+  duration_ms: 618.35925
+  type: 'test'
+  ...
+# Subtest: a corrupted action receipt wakes and preserves the evidence bytes
+ok 128 - a corrupted action receipt wakes and preserves the evidence bytes
+  ---
+  duration_ms: 551.8825
+  type: 'test'
+  ...
+# Subtest: reserved report decisions wake even when the work item has no category
+ok 129 - reserved report decisions wake even when the work item has no category
+  ---
+  duration_ms: 638.015375
+  type: 'test'
+  ...
+# Subtest: un-ingested missing report wakes before intake
+ok 130 - un-ingested missing report wakes before intake
+  ---
+  duration_ms: 423.471334
+  type: 'test'
+  ...
+# Subtest: un-ingested malformed report wakes before intake
+ok 131 - un-ingested malformed report wakes before intake
+  ---
+  duration_ms: 430.242041
+  type: 'test'
+  ...
+# Subtest: un-ingested wrong-run report wakes before intake
+ok 132 - un-ingested wrong-run report wakes before intake
+  ---
+  duration_ms: 424.825291
+  type: 'test'
+  ...
+# Subtest: un-ingested blocked report wakes before intake
+ok 133 - un-ingested blocked report wakes before intake
+  ---
+  duration_ms: 435.388958
+  type: 'test'
+  ...
+# Subtest: un-ingested needs_human report wakes before intake
+ok 134 - un-ingested needs_human report wakes before intake
+  ---
+  duration_ms: 428.122375
+  type: 'test'
+  ...
+# Subtest: un-ingested failed report wakes before intake
+ok 135 - un-ingested failed report wakes before intake
+  ---
+  duration_ms: 443.173542
+  type: 'test'
+  ...
+# Subtest: un-ingested questions report wakes before intake
+ok 136 - un-ingested questions report wakes before intake
+  ---
+  duration_ms: 443.459209
+  type: 'test'
+  ...
+# Subtest: un-ingested blockers report wakes before intake
+ok 137 - un-ingested blockers report wakes before intake
+  ---
+  duration_ms: 449.37575
+  type: 'test'
+  ...
+# Subtest: un-ingested reserved-decision report wakes before intake
+ok 138 - un-ingested reserved-decision report wakes before intake
+  ---
+  duration_ms: 447.50325
+  type: 'test'
+  ...
+# Subtest: un-ingested uncategorized-decision report wakes before intake
+ok 139 - un-ingested uncategorized-decision report wakes before intake
+  ---
+  duration_ms: 429.429875
+  type: 'test'
+  ...
+# Subtest: un-ingested category-evidence report wakes before intake
+ok 140 - un-ingested category-evidence report wakes before intake
+  ---
+  duration_ms: 421.1015
+  type: 'test'
+  ...
+# Subtest: a pending report cannot authorize promotion if handle did not perform intake
+ok 141 - a pending report cannot authorize promotion if handle did not perform intake
+  ---
+  duration_ms: 460.248709
+  type: 'test'
+  ...
+# Subtest: a pause appearing after handle prevents promotion
+ok 142 - a pause appearing after handle prevents promotion
+  ---
+  duration_ms: 499.425542
+  type: 'test'
+  ...
+# Subtest: reopening after a handled notice wakes and retains the operator change
+ok 143 - reopening after a handled notice wakes and retains the operator change
+  ---
+  duration_ms: 725.893125
+  type: 'test'
+  ...
+# Subtest: promotion refusal and every unknown notice wake without commands
+ok 144 - promotion refusal and every unknown notice wake without commands
+  ---
+  duration_ms: 438.711167
+  type: 'test'
+  ...
+# Subtest: intermediate notices pass through unchanged with a healthy record
+ok 145 - intermediate notices pass through unchanged with a healthy record
+  ---
+  duration_ms: 491.302791
+  type: 'test'
+  ...
+# Subtest: intermediate notices pass through unchanged with a missing record
+ok 146 - intermediate notices pass through unchanged with a missing record
+  ---
+  duration_ms: 516.774625
+  type: 'test'
+  ...
+# Subtest: intermediate notices pass through unchanged with a unreadable record
+ok 147 - intermediate notices pass through unchanged with a unreadable record
+  ---
+  duration_ms: 504.134209
+  type: 'test'
+  ...
+# Subtest: intermediate notices pass through unchanged with a malformed record
+ok 148 - intermediate notices pass through unchanged with a malformed record
+  ---
+  duration_ms: 487.148208
+  type: 'test'
+  ...
+# Subtest: a missing record prevents classification without changing a report notice
+ok 149 - a missing record prevents classification without changing a report notice
+  ---
+  duration_ms: 487.952667
+  type: 'test'
+  ...
+# Subtest: a unreadable record prevents classification without changing a report notice
+ok 150 - a unreadable record prevents classification without changing a report notice
+  ---
+  duration_ms: 489.58625
+  type: 'test'
+  ...
+# Subtest: a malformed record prevents classification without changing a report notice
+ok 151 - a malformed record prevents classification without changing a report notice
+  ---
+  duration_ms: 515.108458
+  type: 'test'
+  ...
+# Subtest: promoted queue notice handles its bound run and a closed item is a no-op
+ok 152 - promoted queue notice handles its bound run and a closed item is a no-op
+  ---
+  duration_ms: 762.235625
+  type: 'test'
+  ...
+# Subtest: runless completion fleet-membership retains an explicit binding diagnostic
+ok 153 - runless completion fleet-membership retains an explicit binding diagnostic
+  ---
+  duration_ms: 389.327416
+  type: 'test'
+  ...
+# Subtest: runless completion gate-profile retains an explicit binding diagnostic
+ok 154 - runless completion gate-profile retains an explicit binding diagnostic
+  ---
+  duration_ms: 413.387667
+  type: 'test'
+  ...
+# Subtest: completion after an interrupted promotion has its own receipt and closes once
+ok 155 - completion after an interrupted promotion has its own receipt and closes once
+  ---
+  duration_ms: 684.982875
+  type: 'test'
+  ...
+# Subtest: abandoned watch-no-report is journaled without waking or acting
+ok 156 - abandoned watch-no-report is journaled without waking or acting
+  ---
+  duration_ms: 374.017
+  type: 'test'
+  ...
+# Subtest: abandoned watch-long-running is journaled without waking or acting
+ok 157 - abandoned watch-long-running is journaled without waking or acting
+  ---
+  duration_ms: 373.821417
+  type: 'test'
+  ...
+# Subtest: abandoned watch-invalid-report is journaled without waking or acting
+ok 158 - abandoned watch-invalid-report is journaled without waking or acting
+  ---
+  duration_ms: 357.054292
+  type: 'test'
+  ...
+# Subtest: abandoned org-report is journaled without waking or acting
+ok 159 - abandoned org-report is journaled without waking or acting
+  ---
+  duration_ms: 371.850584
+  type: 'test'
+  ...
+# Subtest: awaited promotion closes before waking with one short plan line and later notices stay silent
+ok 160 - awaited promotion closes before waking with one short plan line and later notices stay silent
+  ---
+  duration_ms: 810.7095
+  type: 'test'
+  ...
+# Subtest: awaited PASS queued for promotion stays silent until closure
+ok 161 - awaited PASS queued for promotion stays silent until closure
+  ---
+  duration_ms: 644.807084
+  type: 'test'
+  ...
+# Subtest: a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+ok 162 - a delayed report can notify an awaited landing without a plan step and deduplicates the queue notice
+  ---
+  duration_ms: 795.860167
+  type: 'test'
+  ...
+# Subtest: abandoned watcher inbox entry is handled without Herdr delivery
+ok 163 - abandoned watcher inbox entry is handled without Herdr delivery
+  ---
+  duration_ms: 524.850667
+  type: 'test'
+  ...
+# Subtest: legacy uncertain promotion receipts still forbid command replay after the key upgrade
+ok 164 - legacy uncertain promotion receipts still forbid command replay after the key upgrade
+  ---
+  duration_ms: 487.420083
+  type: 'test'
+  ...
+# Subtest: inbox consumes routine results before any Herdr delivery and retains original notice
+ok 165 - inbox consumes routine results before any Herdr delivery and retains original notice
+  ---
+  duration_ms: 716.250708
+  type: 'test'
+  ...
+# Subtest: report exception delivery preserves the exact original notice through the existing input gate
+ok 166 - report exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1198.211125
+  type: 'test'
+  ...
+# Subtest: promotion exception delivery preserves the exact original notice through the existing input gate
+ok 167 - promotion exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1004.701708
+  type: 'test'
+  ...
+# Subtest: unknown exception delivery preserves the exact original notice through the existing input gate
+ok 168 - unknown exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 981.105708
+  type: 'test'
+  ...
+# Subtest: missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+ok 169 - missing-record-intermediate exception delivery preserves the exact original notice through the existing input gate
+  ---
+  duration_ms: 1050.558667
+  type: 'test'
+  ...
+# Subtest: a busy chat drain cannot prevent a routine policy action
+ok 170 - a busy chat drain cannot prevent a routine policy action
+  ---
+  duration_ms: 687.993541
+  type: 'test'
+  ...
+# Subtest: actual handle and promotion commands settle PASS and enqueue offline
+ok 171 - actual handle and promotion commands settle PASS and enqueue offline
+  ---
+  duration_ms: 6280.879084
+  type: 'test'
+  ...
+# Subtest: actual handle and promotion commands file findings and accept them offline
+ok 172 - actual handle and promotion commands file findings and accept them offline
+  ---
+  duration_ms: 7072.130125
+  type: 'test'
+  ...
+# Subtest: real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+ok 173 - real handle still wakes for a non-test claim alongside ingest proof and deferred tests
+  ---
+  duration_ms: 5031.30425
+  type: 'test'
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor
+ok 174 - automatic PASS reaches the real queue, lands and closes without waking the supervisor
+  ---
+  duration_ms: 7477.886666
+  type: 'test'
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes with one awaited wake
+ok 175 - automatic PASS reaches the real queue, lands and closes with one awaited wake
+  ---
+  duration_ms: 7682.614042
+  type: 'test'
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+ok 176 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence
+  ---
+  duration_ms: 8133.8605
+  type: 'test'
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+ok 177 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.
+  ---
+  duration_ms: 8177.762708
+  type: 'test'
+  ...
+# Subtest: automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+ok 178 - automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - The report says it passed `record check` before being committed; that step leaves no in-repository receipt, so this review could not confirm it.
+  ---
+  duration_ms: 7339.073625
+  type: 'test'
+  ...
+# Subtest: real CLIs retry an exit-one base-moved refusal with the saved request and land once
+ok 179 - real CLIs retry an exit-one base-moved refusal with the saved request and land once
+  ---
+  duration_ms: 8840.486375
+  type: 'test'
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: 
+ok 180 - stderr-only failed action preserves refusal instead of JSON parsing: 
+  ---
+  duration_ms: 485.562875
+  type: 'test'
+  ...
+# Subtest: stderr-only failed action preserves refusal instead of JSON parsing: {broken
+ok 181 - stderr-only failed action preserves refusal instead of JSON parsing: {broken
+  ---
+  duration_ms: 460.700666
+  type: 'test'
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins
+1..181
+# tests 181
+# suites 0
+# pass 181
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 266891.996792
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins

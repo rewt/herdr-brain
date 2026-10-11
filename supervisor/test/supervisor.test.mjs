@@ -248,15 +248,15 @@ test('late final reports recover completed promotion after lane closure and reta
   const notice = `[org-report] run=${run} item=${ready.item} outcome=done headline=The work is correct`;
   const handle = () => invoke(f, ['handle', '--notice', notice, '--role', 'supervisor']);
 
-  // The report can arrive before the queue notice has completed the record.
-  assert.equal(f.show(ready.item).closed, null);
+  // Native completion is durable before cleanup and before either notice.
+  assert.equal(f.show(ready.item).closed.as, 'done');
   h.queue.transaction((q) => { q.results[0].expectedHead = base; });
   assert.match(handle().stderr, /head or run binding differs/);
-  assert.equal(f.show(ready.item).closed, null);
+  assert.equal(f.show(ready.item).closed.as, 'done');
   h.queue.transaction((q) => { q.results[0].expectedHead = ready.head; });
   f.git(['reset', '--hard', base]);
   assert.match(handle().stderr, /not integrated/);
-  assert.equal(f.show(ready.item).closed, null);
+  assert.equal(f.show(ready.item).closed.as, 'done', 'a rejected late notice cannot undo durable reconciliation');
   f.git(['reset', '--hard', ready.head]);
   const promoted = h.queue.load().results[0];
   const closed = result(handle()); assert.equal(closed.result, 'recorded_promotion'); assert.equal(closed.promotion.id, promoted.id);
@@ -306,14 +306,14 @@ test('late original and correction notices after lane removal preserve promotion
   const handle = (id) => invoke(f, ['handle', '--notice', `[org-report] run=${id} item=${ready.item} outcome=done headline=The work is correct`,
     '--role', 'supervisor', '--settle-cli', path.join(f.root, 'must-not-settle.mjs')]);
   assert.equal(result(handle(original)).current_run, run);
-  assert.equal(f.show(ready.item).closed, null, 'an old notice only reports supersession, never completes the correction');
+  assert.equal(f.show(ready.item).closed.as, 'done', 'whole-batch completion already reconciled the correction; old notice only reports supersession');
   h.queue.transaction((q) => { q.results[0].expectedHead = base; });
   assert.match(handle(run).stderr, /head or run binding differs/);
   h.queue.transaction((q) => { q.results[0].expectedHead = ready.head; });
   f.git(['reset', '--hard', base]);
   assert.match(handle(run).stderr, /not integrated/);
   assert.equal(result(handle(original)).result, 'superseded');
-  assert.equal(f.show(ready.item).closed, null, 'a superseded result never attests integration');
+  assert.equal(f.show(ready.item).closed.as, 'done', 'a superseded notice cannot change the already reconciled correction');
   f.git(['reset', '--hard', ready.head]);
   assert.equal(result(handle(run)).result, 'recorded_promotion');
   const events = fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), calls = f.calls();

@@ -2,12 +2,13 @@
 // are authorization inputs and remain untouched until integration succeeds.
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { writeFileAtomic, readPlainFile } from '../lib/files.mjs';
+import { writeFileAtomic } from '../lib/files.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
+import { captureBatchCompletion } from './completion.mjs';
 import { validateTree, validationEnvironment } from '../lanes/validation.mjs';
 import { withPromotionGuard, withPromotionGuards } from './guard.mjs';
 import { resolveGateProfile, checkCompetingProcesses, HOST_ENV } from './gate-profile.mjs';
@@ -18,34 +19,7 @@ import { canonicalTestPlan } from '../settle/test-plan.mjs';
 
 const replacement = fileURLToPath(new URL('../settle/replace-lane-head.mjs', import.meta.url));
 
-export function verifyTrainResult(result, { project, saved }) {
-  try {
-    if (result.source_head !== saved.head || typeof result.receipt !== 'string' ||
-        path.relative(path.join(project.identity, 'promote/batches'), result.receipt).startsWith('..')) return false;
-    const plan = JSON.parse(readPlainFile(result.receipt));
-    const job = plan.jobs.find(j => j.id === result.id);
-    if (plan.schema !== 'promotion-train/v1' || plan.identity !== project.identity || plan.id !== result.batch ||
-        job?.expectedHead !== saved.head || job.run !== saved.run || job.org !== saved.org || job.topic !== saved.lane) return false;
-    const attempt = plan.attempts.find(a => ['integrated', 'complete'].includes(a.phase) && a.tips[result.id] === result.tip);
-    const captured = attempt?.jobs.find(j => j.id === result.id);
-    if (saved.test_evidence && !saved.test_evidence.reexecuted && JSON.stringify(job.requiredTests) !== JSON.stringify(saved.test_evidence.files)) return false;
-    if (captured?.sourceHead !== saved.head || attempt.gate?.exit_code !== 0 || attempt.gate.signal !== null || attempt.gate.head !== attempt.tip) return false;
-    const git = args => {
-      const r = spawnSync('git', ['-C', project.canonical, ...args], { encoding: 'utf8' });
-      if (r.error || r.status !== 0) throw new Error('train Git proof refused');
-      return r.stdout.trim();
-    };
-    const log = readPlainFile(attempt.gate.log);
-    if (createHash('sha256').update(JSON.stringify(log)).digest('hex') !== attempt.gate.log_hash ||
-        attempt.gate.tree !== git(['rev-parse', `${attempt.tip}^{tree}`])) return false;
-    git(['merge-base', '--is-ancestor', result.tip, attempt.tip]);
-    const index = attempt.jobs.findIndex(j => j.id === result.id);
-    const onto = index ? attempt.tips[attempt.jobs[index - 1].id] : attempt.base;
-    const expected = git(['merge-tree', '--write-tree', onto, saved.head]).split('\n')[0];
-    return expected === git(['rev-parse', `${result.tip}^{tree}`]) && git(['merge-base', onto, result.tip]) === onto &&
-      git(['rev-list', '--merges', `${onto}..${result.tip}`]) === '';
-  } catch { return false; }
-}
+export { verifyTrainResult } from './evidence.mjs';
 export async function runTrain({ file, canonical, identity, main, prepare, validation, workflow = process.env.PROMOTE_WORKFLOW_ENGINE === '1' }) {
   const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (plan.schema !== 'promotion-train/v1' || plan.identity !== identity || !Array.isArray(plan.jobs)) throw new Error('invalid train receipt');
@@ -95,6 +69,9 @@ export async function runTrain({ file, canonical, identity, main, prepare, valid
   // Batch phase is live telemetry; attempt.phase remains the recovery checkpoint.
   // In particular, an in-flight gate still resumes from its prepared candidate.
   const phase = value => { plan.phase = value; save(); };
+  // Capture completion inputs before any gate or integration, never on recovery
+  // of a legacy successful train that lacked this evidence.
+  if (!plan.completion && !plan.attempts?.length) plan.completion = captureBatchCompletion({ canonical, identity, jobs: plan.jobs, main });
   plan.started_at ??= new Date().toISOString();
   plan.external_lock_required ??= Boolean(profile?.externalLock);
   plan.results ??= {}; plan.attempts ??= []; plan.groups ??= [plan.jobs.map(j => j.id)];

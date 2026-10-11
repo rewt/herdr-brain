@@ -21,6 +21,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (tornTail) throw new Error('incomplete record event; nothing merged');
     const state = fold(events), current = state.runs.get(run), item = state.items.get(current?.item);
     if (!current || !item) throw new Error(`unknown promotion run ${run}; nothing merged`);
+    if (item.kind !== 'work' || item.role === 'human' || item.meta.operator_reserved) throw new Error(`${run} is not ordinary authorized work; nothing merged`);
     if (current.abandoned || current.report?.outcome !== 'done') throw new Error(`${run} requires a recorded done report; nothing merged`);
     if (laterRuns(state, run).length) throw new Error(`${run} is superseded; nothing merged`);
     if (!current.workspace || fs.realpathSync(current.workspace) !== fs.realpathSync(workspace) || (current.meta.lane && current.meta.lane !== topic)) throw new Error(`${run} does not belong to this lane workspace; nothing merged`);

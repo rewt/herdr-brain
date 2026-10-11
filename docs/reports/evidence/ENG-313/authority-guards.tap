@@ -1,0 +1,24 @@
+TAP version 13
+# Subtest: native completion refuses operator-reserved work before gating or integration
+ok 1 - native completion refuses operator-reserved work before gating or integration
+  ---
+  duration_ms: 1402.832125
+  type: 'test'
+  ...
+# Subtest: native completion refuses human work before gating or integration
+ok 2 - native completion refuses human work before gating or integration
+  ---
+  duration_ms: 1336.707417
+  type: 'test'
+  ...
+# TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2801.239042
+TEST_GATE_HISTORY_DIAGNOSTIC: shared history contains 104 command files from other origins

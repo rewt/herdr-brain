@@ -4,7 +4,7 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -13,6 +13,7 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { createHousekeeping } from '../housekeeping/housekeeping.mjs';
 import { promptSupervisor, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { runProjectGateSync } from './gate-profile.mjs';
+import { reconcileBatchCompletion } from './completion.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const LANE = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
@@ -204,6 +205,11 @@ function performBatch(batch, queue) {
   const receipt = path.join(directory, 'train.json'), log = path.join(directory, 'train.log');
   if (!fs.existsSync(receipt)) writeFileAtomic(receipt, JSON.stringify({ schema: 'promotion-train/v1', id: batch.id,
     identity: queue.project.identity, jobs: batch.jobs, phase: 'pending', started_at: new Date().toISOString() }, null, 2) + '\n');
+  // A completed train only needs record recovery. Do not re-enter its host
+  // admission, preparation, validation or integration command.
+  const retained = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+  if (retained.phase === 'complete') return batch.jobs.map(job => ({ job, result: { ...retained.results[job.id], log, receipt,
+    ...(retained.host_receipt ? { host_receipt: retained.host_receipt } : {}) } }));
   const output = fs.openSync(log, 'a');
   let r;
   try { r = runProjectGateSync({ canonical: cwd, receipt,
@@ -247,7 +253,7 @@ function performBatch(batch, queue) {
 }
 
 function finishBatchJob(job, result, queue) {
-  if (result.outcome !== 'promoted') return result;
+  if (result.outcome !== 'promoted' || result.reconciliation?.state === 'pending') return result;
   const warnings = [...(result.warnings ?? [])];
   if (result.report_to_main_s !== null && result.report_to_main_s !== undefined && job.org && job.run) {
     try {
@@ -257,7 +263,8 @@ function finishBatchJob(job, result, queue) {
       if (!run.notes.some(note => note.text === text)) invoke(process.execPath, [RECORD, 'note', job.run, text], { cwd: queue.project.canonical, env });
     } catch (error) { warnings.push(`velocity record: ${error.message}`); }
   }
-  // Only failed integration/replacement proof requires retaining the lane.
+  // Reconciliation precedes telemetry and every lifecycle cleanup operation.
+  // Failed integration/replacement proof also requires retaining the lane.
   // A velocity note is telemetry and must not prevent lifecycle cleanup.
   if ((result.warnings?.length ?? 0) === 0 && result.workspace) {
     warnings.push(...cleanup(job, queue, result.workspace));
@@ -276,10 +283,12 @@ export function notice(job, result) {
 async function deliver(job, result, queue) {
   const message = notice(job, result);
   const resumed = result.outcome !== 'interrupted' && queue.load().results.some(prior => prior.id === job.id && prior.outcome === 'interrupted');
+  const reconciled = result.reconciliation?.state === 'complete' && queue.load().results.some(prior => prior.id === job.id && prior.reconciliation?.state === 'pending');
+  const suffix = result.reconciliation?.state === 'pending' ? `:reconciliation-pending:${createHash('sha256').update(message).digest('hex').slice(0, 16)}` : reconciled ? ':reconciled' : resumed ? ':complete' : '';
   const { id: deliveryId, ...delivery } = await promptSupervisor(job.to, message, {
     inbox: inboxPath({ org: job.org, cwd: queue.project.canonical }),
     herdr: job.herdr, attempts: job.attempts, retrySeconds: job.retry,
-    id: `promote:${job.id}${resumed ? ':complete' : ''}`, title: 'Promotion notice undelivered',
+    id: `promote:${job.id}${suffix}`, title: 'Promotion notice undelivered',
     log: (line) => process.stderr.write(line + '\n'),
   });
   return { ...delivery, delivery_id: deliveryId };
@@ -381,8 +390,10 @@ export async function drain(queue) {
         if (batch.phase === 'batching') {
           try {
             const results = performBatch(batch, queue);
-            batch = { ...batch, phase: 'batch-delivering', results, deliveredCount: 0 };
-            delete batch.error;
+            const completion = reconcileBatchCompletion({ project: queue.project, jobs: batch.jobs, results });
+            batch = { ...batch, phase: 'batch-delivering', results: completion.results, deliveredCount: 0 };
+            if (completion.pending) batch.error = completion.reason;
+            else delete batch.error;
           } catch (error) {
             const directory = path.join(queue.directory, 'batches', batch.id);
             const receipt = path.join(directory, 'train.json'), log = path.join(directory, 'train.log');

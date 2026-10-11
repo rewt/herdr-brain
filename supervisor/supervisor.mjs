@@ -11,6 +11,7 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { coldStart, renderColdStart, briefSize, receiptDirectory } from './context.mjs';
 import { queueJobs } from '../promote/promote.mjs';
 import { verifyTrainResult } from '../promote/train.mjs';
+import { recordedBatchCompletion } from '../promote/completion.mjs';
 import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
 
@@ -82,11 +83,19 @@ export function main(argv = process.argv.slice(2)) {
     const saved = receipt && jobAttempt(receipt, result.id);
     if (!saved || saved.identity !== project.identity || saved.org !== project.org || saved.phase !== 'acknowledged' || saved.lane !== result.topic) throw new Error('promotion outcome is not bound to an acknowledged supervisor request; inspect evidence');
     if (result.run !== saved.run || result.expectedHead !== saved.head || result.org !== saved.org) throw new Error('promotion queue head or run binding differs from supervisor request; inspect evidence');
+    if (result.reconciliation?.state === 'pending') throw new Error('integrated; whole-batch reconciliation pending; retain lanes and retry bookkeeping');
     if (result.outcome !== 'promoted') return { result: 'judge_promotion', run: saved.run, promotion: result };
     if (result.tip !== saved.head && !verifyTrainResult(result, { project, saved })) throw new Error('promoted tip differs from authorized head without proved train replay; inspect evidence');
     const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', result.tip, 'HEAD'], { cwd: project.canonical, encoding: 'utf8' });
     if (ancestry.error || ancestry.status !== 0) throw new Error('promoted tip is not integrated in the canonical checkout; inspect evidence');
     const run = JSON.parse(call(local('../bin/org.mjs'), ['show', saved.run, '--json']));
+    if (result.reconciliation) {
+      if (!recordedBatchCompletion({ result, project, run })) throw new Error('whole-batch record completion proof is missing or changed');
+      const item = JSON.parse(call(local('../bin/org.mjs'), ['show', run.item, '--json']));
+      if (item.runs.at(-1) !== run.id) throw new Error(`${run.id} is superseded after completion`);
+      if (!item.closed) throw new Error('item reopened after completion');
+      return { result: 'recorded_promotion', run: saved.run, item: run.item, promotion: result };
+    }
     call(local('../bin/org.mjs'), ['close', run.item, '--if-current-run', saved.run, '--note', `Promoted locally at ${result.tip}; queue ${result.id}; reviewed ${saved.reviewed_commit}. Authority: ${saved.why}`]);
     return { result: 'recorded_promotion', run: saved.run, item: run.item, promotion: result };
   };

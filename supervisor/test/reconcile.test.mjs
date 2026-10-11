@@ -184,3 +184,24 @@ test('adapter refuses stale record, dirty trees, wrong record, STOP and the actu
   f.ok(['start', 'ENG-1', '--harness', 'fixture', '--workspace', f.lane]);
   const before = f.events(); assert.throws(f.finish, /changed/); assert.deepEqual(f.events(), before);
 });
+
+
+test('historical exclusions preserve newer work and cannot mutate its state', () => {
+  const f = fixture();
+  f.plan.excluded = [{ item: 'ENG-3', run: 'R-4', superseded: [], disposition: 'historical',
+    reason: 'Red in the earlier batch', next_action: 'Continue the newly assigned correction' }];
+  const events = [...f.events, { type: 'run.started', id: 'R-5', item: 'ENG-3' },
+    { type: 'note.added', id: 'ENG-3', text: 'New work is in progress' }];
+  const before = fold(events).items.get('ENG-3');
+  const completed = f.complete(f.plan, events);
+  assert.deepEqual(fold([...events, ...completed.add]).items.get('ENG-3'), before);
+  assert.deepEqual(completed.add.at(-1).historical_exclusions[0], {
+    item: 'ENG-3', run: 'R-4', reason: 'Red in the earlier batch', next_action: 'Continue the newly assigned correction' });
+  for (const mutation of [{ superseded: ['R-4'] }, { blocked_by: ['ENG-1'] }, { resolution: 'Override' }]) {
+    const p = structuredClone(f.plan); Object.assign(p.excluded[0], mutation);
+    assert.throws(() => f.complete(p, events), /cannot mutate/);
+  }
+  const dependent = [...events, { type: 'link.added', blocker: 'ENG-3', blocked: 'ENG-1' }];
+  for (const entry of f.plan.items) entry.expected = completionFingerprint(fold(dependent), entry.item);
+  assert.throws(() => f.complete(f.plan, dependent), /unresolved or declined blockers/);
+});

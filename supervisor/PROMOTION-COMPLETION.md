@@ -33,6 +33,23 @@ fingerprint, the canonical project supervisor can recover it as follows:
    every integrated member still has the same current done run and exact lane
    head, and resolve any new approval or blocker. Preserve the original receipts.
    A newer run needs its own reviewed work; this recovery cannot substitute it.
+   If a result has `replacement_pending` and its clean workspace still names
+   `source_head`, first apply that member's proved integrated `tip` with the
+   existing `settle/replace-lane-head.mjs` compare-and-swap helper. Hold the
+   canonical common directory's `lane-promote.lock` using
+   `lanes/promotion-lock.mjs`'s `acquireLock` for this foreground operation.
+   Pass one JSON argument with `workspace` and `repo` from the inspected result
+   and canonical checkout, `common` equal to the verified Git identity,
+   `branch` equal to `refs/heads/lane/TOPIC`, `from` equal to the original
+   `source_head`, `to` equal to the proved member `tip`, and `main` and
+   `mainHead` equal to the currently inspected clean integration branch and HEAD.
+   Verify the original attempt's gate log/hash, committed tree, reviewed diff and
+   ancestry before applying it. The helper refuses dirty/moved worktrees and
+   changed identities or refs; inspect a refusal rather than resetting the lane.
+   Release the lock before manual prepare. This operation neither validates nor
+   reconciles records. It makes the workspace match the exact manifest head;
+   automatic replacement retry after reconciliation cannot do this first step.
+   This ordering applies to both prepared native and legacy recovery.
 2. Create a new manual manifest with a new batch ID. Copy every included
    `item`, `run`, `head` and explicit `superseded` list from the native `.record.json`,
    add an inspection reason in `why` (and `resolution` for report questions), and

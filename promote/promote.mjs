@@ -291,7 +291,7 @@ function finishBatchJob(job, result, queue) {
         main: git(queue.project.canonical, ['symbolic-ref', '--short', 'HEAD']),
         mainHead: git(queue.project.canonical, ['rev-parse', 'HEAD']),
       })], { cwd: queue.project.canonical });
-      result = { ...result, replacement_pending: false, warnings, reason: 'green batch fast-forward; lane replacement recovered' };
+      result = { ...result, replacement_pending: false, warnings: [], reason: 'green batch fast-forward; lane replacement recovered' };
     } catch (error) { return { ...result, reason: `lane replacement pending: ${error.message}` }; }
     finally { release?.(); }
   }

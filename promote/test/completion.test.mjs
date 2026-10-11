@@ -12,6 +12,7 @@ import { receiptDirectory } from '../../supervisor/context.mjs';
 import { reconcile } from '../../supervisor/reconcile.mjs';
 import { withPromotionGuards } from '../guard.mjs';
 import { completionFingerprint } from '../../lib/completion.mjs';
+import { acquireLock } from '../../lanes/promotion-lock.mjs';
 import { fold } from '../../lib/state.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
@@ -466,4 +467,41 @@ test(`legacy queue and late notices recover only inspected exact coverage: ${mod
     else { assert.equal(late.status, 1, late.stdout); assert.match(late.stderr, recovered ? /reopened|superseded/ : /reconciliation pending/); }
   }
   assert.deepEqual(f.events(), before); assert.equal(f.gates(), 3);
+});
+
+for (const failTelemetry of [false, true]) test(`legacy replacement recovery cleans completed lanes with telemetry failure: ${failTelemetry}`, t => {
+  const f = fixture(t), first = f.lane('first'), second = f.lane('second');
+  fs.writeFileSync(path.join(f.queue.project.identity, 'hooks/post-merge'), '#!/bin/sh\ntouch canonical-dirty\n', { mode: 0o755 });
+  f.drain(); assert.equal(f.gates(), 1);
+  const rows = f.queue.load().results, receipt = rows[0].receipt;
+  assert.ok(rows.some(r => r.replacement_pending && f.git(['rev-parse', 'HEAD'], r.workspace) !== r.tip));
+  fs.unlinkSync(path.join(f.repo, 'canonical-dirty'));
+  const train = JSON.parse(fs.readFileSync(receipt)), attempts = train.attempts;
+  delete train.completion; fs.writeFileSync(receipt, JSON.stringify(train));
+  if (fs.existsSync(receipt + '.record.json')) fs.unlinkSync(receipt + '.record.json');
+  f.drain(); assert.equal(f.gates(), 1);
+  const original = fs.readFileSync(receipt + '.record.json', 'utf8');
+  assert.equal(JSON.parse(original).recovery_only, true);
+  assert.throws(() => manualRecovery(f, rows), /head\/workspace differs/);
+  for (const row of rows) {
+    if (f.git(['rev-parse', 'HEAD'], row.workspace) === row.tip) continue;
+    const release = acquireLock(path.join(f.queue.project.identity, 'lane-promote.lock'));
+    try {
+      const plan = { workspace: row.workspace, repo: f.repo, common: f.queue.project.identity,
+        branch: `refs/heads/lane/${row.topic}`, from: row.source_head, to: row.tip,
+        main: 'main', mainHead: f.git(['rev-parse', 'HEAD']) };
+      const r = spawnSync(process.execPath, [path.join(source, 'settle/replace-lane-head.mjs'), JSON.stringify(plan)],
+        { cwd: f.repo, env: f.env, encoding: 'utf8' });
+      assert.equal(r.status, 0, r.stderr);
+    } finally { release(); }
+  }
+  // The refused prepare wrote no receipt; inspection and clean CAS allow it.
+  manualRecovery(f, rows);
+  if (failTelemetry) fs.appendFileSync(f.preload, `\nif(process.argv[1]?.endsWith('org.mjs')&&process.argv.includes('note')&&process.argv.some(a=>a.startsWith('Promotion: report-to-main'))){console.error('injected telemetry refusal');process.exit(1);}`);
+  f.drain(); assert.equal(f.gates(), 1);
+  assert.equal((f.queue.load().interrupted ?? []).length, 0);
+  assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
+  assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);
+  for (const m of [first, second]) { assert.equal(f.show(m.item).closed.as, 'done'); assert.equal(fs.existsSync(m.workspace), false); }
+  if (failTelemetry) assert.ok(f.queue.load().results.slice(-2).every(r => r.warnings.some(w => w.includes('velocity record'))));
 });

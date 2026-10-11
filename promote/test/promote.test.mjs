@@ -77,6 +77,7 @@ function fixture(t) {
   const results = () => queue.load().results;
   const messages = () => fs.existsSync(notices) ? fs.readFileSync(notices, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
   let cleanupProcesses = async () => {};
+  let foreignInboxes = [];
   t.after(async () => {
     try {
       await cleanupProcesses();
@@ -89,17 +90,19 @@ function fixture(t) {
         // Child fixtures strip ambient ORG_DIR. Resolve cleanup only from
         // their recorded destination or the fixture's own Git inbox.
         ...jobs.map(job => job.inbox ?? path.join(job.org ?? path.join(repo, '.git'), 'supervisor/inbox.log'))]);
-      for (const file of inboxes) {
+      const ownedInboxes = [...inboxes].filter(file => {
         const relative = path.relative(root, file);
-        assert.ok(relative && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative), 'fixture inbox stays inside its owned root');
-      }
-      for (const file of inboxes) await stopFixtureInbox(file, {
+        return relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
+      });
+      foreignInboxes = [...inboxes].filter(file => !ownedInboxes.includes(file));
+      for (const file of ownedInboxes) await stopFixtureInbox(file, {
         script: fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url)),
       });
     } finally {
       for (const entry of processes.values()) killProcess(entry);
     }
     fs.rmSync(root, { recursive: true, force: true });
+    assert.equal(foreignInboxes.length, 0, 'fixture inbox stays inside its owned root');
   });
   return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, ownedProcess: (pid) => processes.get(pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
@@ -151,6 +154,23 @@ test('busy supervisor does not hold completed queue accounting by default', asyn
   assert.equal(f.messages().length, 1, 'retained owner delivers exactly once after input clears');
   assert.equal(f.results().length, 1, 'delivery does not replay promotion accounting');
   assert.equal(f.git(['rev-parse', 'main']), target);
+});
+
+test('idle supervisor receives a default queued promotion notice without a false alert', async (t) => {
+  const f = fixture(t);
+  delete f.env.SUPERVISOR_INPUT_WAIT_SECONDS;
+  const calls = path.join(f.root, 'herdr-calls.jsonl');
+  const script = fs.readFileSync(f.herdr, 'utf8');
+  fs.writeFileSync(f.herdr, script.replace('const args = process.argv.slice(2);',
+    'const args = process.argv.slice(2); fs.appendFileSync(' + JSON.stringify(calls) + ', JSON.stringify(args) + "\\n");'));
+  f.lane('idle-notice');
+  f.launch(['idle-notice']);
+  await until(() => f.results().length === 1 && f.queue.load().current === null);
+  const result = f.results()[0];
+  await until(() => readInbox(result.inbox).find(entry => entry.id === result.delivery_id)?.state === 'sent');
+  const observed = fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(observed.filter(args => args[0] === 'notification' && args[1] === 'show').length, 0, 'idle input receives no false undelivered alert');
+  assert.equal(f.messages().length, 1);
 });
 
 test('queued promotion waits before validation under low-memory pressure and proceeds when cleared', async t => {

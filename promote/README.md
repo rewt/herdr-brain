@@ -109,7 +109,10 @@ After every completed attempt, including unknown lanes, refusals and legacy inte
 `[promote-queue]` message before attempting `herdr agent prompt`. The pane must be
 idle/done with an empty composer on two ANSI reads three seconds apart. Typing or
 unavailable input queues the message and raises a non-focusing Herdr notification.
-`SUPERVISOR_INPUT_WAIT_SECONDS` defaults to 7200; capped messages stay in the inbox
+`SUPERVISOR_INPUT_WAIT_SECONDS` defaults to zero for promotion queue callers,
+which return after the independent inbox owner acknowledges delivery ownership.
+An explicit value retains a bounded caller wait. The owner uses its existing
+confirmation window and busy-input notification policy; capped messages stay in the inbox
 with an acknowledged delivery owner, and drain before newer notices when input
 clears, even after the queue caller exits. Housekeeping restarts a dead owner.
 The queue records delivery and its inbox/notice ID separately from promotion.

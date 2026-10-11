@@ -279,7 +279,14 @@ export async function promptSupervisor(to, message, options = {}) {
   // including a crash between the prompt side effect and its acknowledgement.
   // Routine policy never waits behind older exception delivery or busy input.
   applyPolicy(file, id, options);
-  await resumeInbox(file, options);
+  const owner = await resumeInbox(file, options);
+  // A zero-wait caller hands delivery to the acknowledged owner. Racing that
+  // owner with an already-expired drain deadline would create a false alert.
+  if (owner && seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'SUPERVISOR_INPUT_WAIT_SECONDS') === 0) {
+    const entry = snapshot(file).find((candidate) => candidate.id === id);
+    const delivered = complete(entry);
+    return { delivered, ...(entry?.state === 'handled' ? { handled: true, autopilot: entry.autopilot } : {}), id, inbox: file, queued: !delivered, owner_pid: owner, message };
+  }
   const receipt = await drainInbox(file, { ...options, retrySeconds, id });
   const entry = snapshot(file).find((candidate) => candidate.id === id);
   if (receipt.delivered && entry?.waited_seconds !== undefined)

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { queueFor, enqueue } from '../promote.mjs';
-import { readInbox, inboxPath } from '../../supervisor/prompt-supervisor.mjs';
+import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { stopFixtureInbox } from '../../test/helpers/inbox.mjs';
 import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
@@ -86,7 +86,13 @@ function fixture(t) {
       const data = queue.load();
       const jobs = [...data.results, ...data.pending, ...(data.current ? [data.current] : [])];
       const inboxes = new Set([path.join(repo, '.git/supervisor/inbox.log'),
-        ...jobs.map(job => job.inbox ?? inboxPath({ org: job.org, cwd: repo }))]);
+        // Child fixtures strip ambient ORG_DIR. Resolve cleanup only from
+        // their recorded destination or the fixture's own Git inbox.
+        ...jobs.map(job => job.inbox ?? path.join(job.org ?? path.join(repo, '.git'), 'supervisor/inbox.log'))]);
+      for (const file of inboxes) {
+        const relative = path.relative(root, file);
+        assert.ok(relative && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative), 'fixture inbox stays inside its owned root');
+      }
       for (const file of inboxes) await stopFixtureInbox(file, {
         script: fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url)),
       });
@@ -97,6 +103,55 @@ function fixture(t) {
   });
   return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, ownedProcess: (pid) => processes.get(pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
+
+test('fixture cleanup ignores an ambient record inbox owner', (t) => {
+  const f = fixture(t);
+  const foreign = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'pt-foreign-'));
+  const prior = process.env.ORG_DIR;
+  process.env.ORG_DIR = foreign;
+  const inbox = path.join(foreign, 'supervisor/inbox.log');
+  fs.mkdirSync(inbox + '.owner.lock', { recursive: true });
+  const owner = JSON.stringify({ pid: process.pid, argv: ['outside-this-fixture'] });
+  fs.writeFileSync(inbox + '.owner.lock/owner.json', owner);
+  // Registered after fixture cleanup: the ambient owner remains present while
+  // that hook resolves the queued job's destination. No process is signaled.
+  t.after(() => {
+    try { assert.equal(fs.readFileSync(inbox + '.owner.lock/owner.json', 'utf8'), owner); }
+    finally {
+      if (prior === undefined) delete process.env.ORG_DIR; else process.env.ORG_DIR = prior;
+      fs.rmSync(foreign, { recursive: true, force: true });
+    }
+  });
+  enqueue(f.queue, ['not-started'], { to: 'supervisor-herdr', attempts: 1, retry: 0, herdr: f.herdr, laneCLI: LANE, org: null });
+  assert.equal(f.queue.load().pending.length, 1);
+});
+
+test('busy supervisor does not hold completed queue accounting by default', async (t) => {
+  const f = fixture(t);
+  delete f.env.SUPERVISOR_INPUT_WAIT_SECONDS;
+  f.onCleanup(async () => {
+    fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
+  });
+  fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
+  const workspace = f.lane('first');
+  const target = f.git(['rev-parse', 'HEAD'], workspace);
+  const launched = f.launch(['first']);
+  await until(() => f.results().length === 1 && f.queue.load().current === null);
+  const result = f.results()[0];
+  assert.equal(result.outcome, 'promoted', result.reason);
+  assert.equal(f.git(['rev-parse', 'main']), target);
+  assert.equal(fs.existsSync(workspace), false);
+  assert.equal(result.delivered, false);
+  assert.equal(result.queued, true);
+  assert.equal(f.messages().length, 0, 'busy input receives no prompt');
+  const id = 'promote:' + launched.jobs[0].id;
+  assert.equal(readInbox(result.inbox).filter(entry => entry.id === id).length, 1, 'one durable notice owns delivery');
+  fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
+  await until(() => readInbox(result.inbox).find(entry => entry.id === id)?.state === 'sent');
+  assert.equal(f.messages().length, 1, 'retained owner delivers exactly once after input clears');
+  assert.equal(f.results().length, 1, 'delivery does not replay promotion accounting');
+  assert.equal(f.git(['rev-parse', 'main']), target);
+});
 
 test('queued promotion waits before validation under low-memory pressure and proceeds when cleared', async t => {
   const f = fixture(t), workspace = f.lane('memory-wait'), before = f.git(['rev-parse', 'main']);

@@ -317,6 +317,9 @@ async function deliver(job, result, queue) {
   const { id: deliveryId, ...delivery } = await promptSupervisor(job.to, message, {
     inbox: inboxPath({ org: job.org, cwd: queue.project.canonical }),
     herdr: job.herdr, attempts: job.attempts, retrySeconds: job.retry,
+    // Durable inbox ownership lets queue accounting finish without waiting for
+    // a busy composer. An explicitly configured caller wait remains supported.
+    waitSeconds: process.env.SUPERVISOR_INPUT_WAIT_SECONDS ?? 0,
     id: `promote:${job.id}${suffix}`, title: 'Promotion notice undelivered',
     log: (line) => process.stderr.write(line + '\n'),
   });

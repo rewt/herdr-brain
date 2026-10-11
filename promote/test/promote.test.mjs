@@ -149,6 +149,10 @@ test('busy supervisor does not hold completed queue accounting by default', asyn
   assert.equal(f.messages().length, 0, 'busy input receives no prompt');
   const id = 'promote:' + launched.jobs[0].id;
   assert.equal(readInbox(result.inbox).filter(entry => entry.id === id).length, 1, 'one durable notice owns delivery');
+  // Span several former short owner windows while input remains genuinely busy.
+  await delay((Number(f.env.SUPERVISOR_INPUT_CONFIRM_SECONDS) + 1) * 2200);
+  const events = fs.readFileSync(result.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(events.filter(entry => entry.id === id && entry.type === 'capped').length, 0, 'zero caller wait preserves the owner window without repeated cap journal entries');
   fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
   await until(() => readInbox(result.inbox).find(entry => entry.id === id)?.state === 'sent');
   assert.equal(f.messages().length, 1, 'retained owner delivers exactly once after input clears');

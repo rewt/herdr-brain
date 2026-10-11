@@ -348,7 +348,8 @@ async function ownInbox(file, options) {
     const pollSeconds = seconds(options.pollSeconds ?? process.env.SUPERVISOR_INPUT_POLL_SECONDS, 10, 'poll seconds');
     // The caller's cap limits its wait. The owner continues in bounded windows,
     // long enough for two reads even when the caller requested a zero-second cap.
-    const waitSeconds = Math.max(confirmSeconds + 1, seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'wait seconds'));
+    const requestedWait = seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'wait seconds');
+    const waitSeconds = Math.max(confirmSeconds + 1, requestedWait === 0 ? 7200 : requestedWait);
     for (;;) {
       await drainInbox(file, { ...options, waitSeconds, owner: true });
       const done = transaction(file, (entries) => {

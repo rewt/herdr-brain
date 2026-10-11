@@ -366,7 +366,8 @@ for (const failVelocity of [false, true]) test(failVelocity
   : 'queued cleanup closes the recorded finished tab and preserves operator and other lane tabs', async (t) => {
   const f = fixture(t); const wt = f.lane('first'); const other = f.lane('other');
   const orgCLI = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
-  const org = path.join(f.root, 'record');
+  const org = path.join(f.repo, '.org');
+  fs.appendFileSync(path.join(f.repo, '.git/info/exclude'), '.org/\n');
   const record = (args) => {
     const r = spawnSync(process.execPath, [orgCLI, ...args], { cwd: f.repo, env: { ...f.env, ORG_DIR: org }, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
@@ -411,7 +412,7 @@ cp.spawnSync=function(cmd,args,options){
   }
   f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run]);
   await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
-  assert.equal(f.results()[0].outcome, 'promoted');
+  assert.equal(f.results()[0].outcome, 'promoted', f.results()[0].reason);
   if (failVelocity) {
     assert.equal(fs.existsSync(failureMarker), true, 'the velocity note actually failed');
     assert.deepEqual(f.results()[0].warnings, ['velocity record: injected velocity note failure']);
